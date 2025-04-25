@@ -1,0 +1,47 @@
+@layer base {
+  .font-helvetica-neue {
+    font-family: 'Helvetica Neue', 'Helvetica-Neue', Helvetica, sans-serif;
+    font-weight: 600;
+  }
+
+  /* Use dynamic viewport units for better mobile handling */
+  .h-dvh {
+    height: 100dvh;
+  }
+
+  /* Safe area padding for mobile browsers */
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+  }
+
+  @media (min-width: 768px) {
+    .pb-safe {
+      padding-bottom: 0;
+    }
+  }
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Safari Mobile Scrolling Fix */
+@supports (-webkit-touch-callout: none) {
+  .safari-scroll-fix {
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+    height: 100%;
+  }
+}
+
+/* This ensures the sidebar height properly accounts for dynamic viewport height */
+.h-screen {
+  height: 100dvh; /* Dynamic viewport height - adjusts as the address bar appears/disappears */
+}
