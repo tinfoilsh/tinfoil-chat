@@ -1,13 +1,13 @@
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useEffect, useRef } from 'react'
 import { Verifier } from '../verifier/verifier'
+import Image from 'next/image'
 
 type VerifierSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   repo: string
   enclave: string
-  digest: string
   verificationComplete: boolean
   verificationSuccess?: boolean
   onVerificationComplete: (success: boolean) => void
@@ -21,7 +21,6 @@ export function VerifierSidebar({
   setIsOpen,
   repo,
   enclave,
-  digest,
   verificationComplete,
   verificationSuccess,
   onVerificationComplete,
@@ -61,30 +60,32 @@ export function VerifierSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : 'translate-x-full'
-        } fixed right-0 z-40 flex h-dvh w-[300px] flex-col ${
+        } fixed right-0 z-40 flex h-dvh w-[350px] flex-col border-l ${
           isDarkMode
-            ? 'bg-gray-900'
-            : 'bg-gray-900'
+            ? 'border-gray-700 bg-gray-900'
+            : 'border-gray-200 bg-white'
         } overflow-hidden transition-all duration-200 ease-in-out`}
       >
         {/* Header with title and close button */}
         <div
-          className={`flex h-12 flex-none items-center justify-between border-b ${
-            isDarkMode ? 'border-gray-700' : 'border-gray-700'
-          } sticky top-0 z-10 p-2 px-4`}
+          className={`flex h-16 flex-none items-center justify-between border-b ${
+            isDarkMode ? 'border-gray-800' : 'border-gray-200'
+          } p-4`}
         >
-          <h3
-            className={`text-lg font-medium ${
-              isDarkMode ? 'text-white' : 'text-white'
-            }`}
-          >
-            In-browser Enclave Verifier
-          </h3>
+          <div className="flex items-center gap-2">
+            <Image
+              src={isDarkMode ? "/icon-dark.png" : "/icon-light.png"}
+              alt="Tinfoil Logo"
+              width={24}
+              height={24}
+            />
+            <span className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Verification Center</span>
+          </div>
           <button
             className={`rounded-lg p-2 transition-all duration-200 ${
               isDarkMode
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
             onClick={() => setIsOpen(false)}
           >
@@ -101,9 +102,28 @@ export function VerifierSidebar({
               onVerificationComplete={onVerificationComplete}
               repo={repo}
               enclave={enclave}
-              digest={digest || ''}
+              isDarkMode={isDarkMode}
             />
           )}
+        </div>
+
+        {/* SOC2 Compliance Footer */}
+        <div className={`flex-none border-t h-[56px] flex items-center justify-center ${
+          isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'
+        } p-3`}>
+          <div className="flex items-center justify-center gap-2">
+            <Image
+              src="/verification-logos/soc2.png"
+              alt="SOC2 Type I Compliant"
+              width={24}
+              height={24}
+            />
+            <p className={`text-xs ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+            }`}>
+              Tinfoil is SOC2 Type I compliant
+            </p>
+          </div>
         </div>
       </div>
 

@@ -58,12 +58,12 @@ export function ModelSelector({
           >
             <img
               src={failedImages[model.modelName] ? '/icon.png' : model.image}
-              alt={model.modelNameSimple}
+              alt={model.name}
               className="h-5 w-5"
               onError={() => handleImageError(model.modelName)}
             />
             <div className="flex flex-col">
-              <span className="font-medium">{model.modelNameSimple}</span>
+              <span className="font-medium">{model.name}</span>
               <span
                 className={`text-xs ${
                   isDarkMode ? 'text-gray-400' : 'text-gray-500'

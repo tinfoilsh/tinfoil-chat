@@ -147,18 +147,26 @@ export function ChatSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed z-40 flex h-dvh w-[85vw] max-w-[300px] flex-col border-r border-gray-800 bg-gray-900 md:w-[300px] ${
+        } fixed z-40 flex h-dvh w-[85vw] max-w-[300px] flex-col border-r ${
+          isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'
+        } md:w-[300px] ${
           isInitialLoad ? '' : 'transition-all duration-200 ease-in-out'
         } overflow-hidden`}
       >
         {/* Header */}
-        <div className="flex h-16 flex-none items-center justify-between border-b border-gray-800 p-4">
+        <div className={`flex h-16 flex-none items-center justify-between border-b ${
+          isDarkMode ? 'border-gray-800' : 'border-gray-200'
+        } p-4`}>
           <Link href="https://www.tinfoil.sh" title="Home">
-            <Logo className="h-6 w-6" dark={true} />
+            <Logo className="h-6 w-auto" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
             <button
-              className="block rounded-lg bg-gray-800 p-2 text-gray-300 transition-all duration-200 hover:bg-gray-700"
+              className={`block rounded-lg p-2 transition-all duration-200 ${
+                isDarkMode 
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
               onClick={handleThemeToggle}
             >
               {isDarkMode ? (
@@ -168,7 +176,11 @@ export function ChatSidebar({
               )}
             </button>
             <button
-              className="hidden rounded-lg bg-gray-800 p-2 text-gray-300 transition-all duration-200 hover:bg-gray-700 md:block"
+              className={`hidden rounded-lg p-2 transition-all duration-200 md:block ${
+                isDarkMode 
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
               onClick={() => setIsOpen(!isOpen)}
             >
               {isOpen ? (
@@ -178,7 +190,11 @@ export function ChatSidebar({
               )}
             </button>
             <button
-              className="rounded-lg bg-gray-800 p-2 text-gray-300 transition-all duration-200 hover:bg-gray-700 md:hidden"
+              className={`rounded-lg p-2 transition-all duration-200 md:hidden ${
+                isDarkMode 
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
               onClick={() => setIsOpen(false)}
             >
               <XMarkIcon className="h-5 w-5" />
@@ -199,7 +215,11 @@ export function ChatSidebar({
                     setIsOpen(false)
                   }
                 }}
-                className="m-2 flex items-center gap-2 rounded-md border border-gray-700 p-2 pr-4 text-sm text-gray-300 hover:bg-gray-800"
+                className={`m-2 flex items-center gap-2 rounded-md border p-2 pr-4 text-sm hover:bg-opacity-10 ${
+                  isDarkMode 
+                    ? 'border-gray-700 text-gray-300 hover:bg-gray-800' 
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
               >
                 <PlusIcon className="h-5 w-5" />
                 New chat
@@ -209,9 +229,11 @@ export function ChatSidebar({
 
           {/* Message for non-premium users */}
           {!isPremium && (
-            <div className="m-2 flex-none rounded-md bg-gray-800 p-3">
+            <div className={`m-2 flex-none rounded-md p-3 ${
+              isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+            }`}>
               <p className="text-sm">
-                <span className="text-gray-400">
+                <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
                   Sign up to access chat history and create new chats.
                 </span>{' '}
                 {isSignedIn ? (
@@ -234,14 +256,20 @@ export function ChatSidebar({
 
           {/* Chat History Header */}
           <div
-            className={`flex-none ${isPremium ? 'border-b border-gray-800' : ''} bg-gray-900 px-3 py-2 sm:px-4 sm:py-3`}
+            className={`flex-none ${isPremium ? `border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}` : ''} ${
+              isDarkMode ? 'bg-gray-900' : 'bg-white'
+            } px-3 py-2 sm:px-4 sm:py-3`}
           >
             {isPremium && (
               <>
-                <h3 className="truncate text-sm font-medium text-gray-200">
+                <h3 className={`truncate text-sm font-medium ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                }`}>
                   Chat History
                 </h3>
-                <div className="mt-1 truncate text-xs text-gray-400">
+                <div className={`mt-1 truncate text-xs ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}>
                   Your chat history is stored locally in your browser.
                 </div>
               </>
@@ -264,8 +292,12 @@ export function ChatSidebar({
                       }}
                       className={`group flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-sm ${
                         currentChat?.id === chat.id
-                          ? 'bg-gray-800 text-white'
-                          : 'text-gray-300 hover:bg-gray-800'
+                          ? isDarkMode 
+                            ? 'bg-gray-800 text-white' 
+                            : 'bg-gray-100 text-gray-900'
+                          : isDarkMode
+                            ? 'text-gray-300 hover:bg-gray-800'
+                            : 'text-gray-700 hover:bg-gray-100'
                       }`}
                     >
                       {/* Chat item content */}
@@ -278,6 +310,7 @@ export function ChatSidebar({
                         setEditingChatId={setEditingChatId}
                         setDeletingChatId={setDeletingChatId}
                         isPremium={isPremium}
+                        isDarkMode={isDarkMode}
                       />
                     </div>
                     {/* Delete confirmation */}
@@ -286,11 +319,32 @@ export function ChatSidebar({
                         chatId={chat.id}
                         onDelete={deleteChat}
                         onCancel={() => setDeletingChatId(null)}
+                        isDarkMode={isDarkMode}
                       />
                     )}
                   </div>
                 ))}
             </div>
+          </div>
+
+          {/* Terms and privacy policy */}
+          <div className={`flex-none border-t h-[56px] flex items-center justify-center ${
+            isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'
+          } p-3`}>
+            <p
+              className={`text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              } text-center leading-relaxed`}
+            >
+              By using this service, you agree to Tinfoil&apos;s{' '}
+              <Link href="/terms" className="text-emerald-500 hover:text-emerald-600">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="text-emerald-500 hover:text-emerald-600">
+                Privacy Policy
+              </Link>
+            </p>
           </div>
         </div>
       </div>
@@ -316,6 +370,7 @@ function ChatListItem({
   setEditingChatId,
   setDeletingChatId,
   isPremium = true,
+  isDarkMode,
 }: {
   chat: Chat
   isEditing: boolean
@@ -325,6 +380,7 @@ function ChatListItem({
   setEditingChatId: (id: string | null) => void
   setDeletingChatId: (id: string | null) => void
   isPremium?: boolean
+  isDarkMode: boolean
 }) {
   // Handle edit form submission
   const handleSubmit = (e: React.FormEvent) => {
@@ -357,7 +413,9 @@ function ChatListItem({
     <>
       <div className="flex w-full items-center justify-between">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <ChatBubbleLeftIcon className="h-5 w-5 flex-shrink-0 text-gray-400" />
+          <ChatBubbleLeftIcon className={`h-5 w-5 flex-shrink-0 ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+          }`} />
 
           {isEditing && isPremium ? (
             <form
@@ -366,7 +424,11 @@ function ChatListItem({
               onClick={(e) => e.stopPropagation()}
             >
               <input
-                className="w-full rounded bg-gray-700 px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  isDarkMode 
+                    ? 'bg-gray-700 text-white' 
+                    : 'bg-gray-200 text-gray-900'
+                }`}
                 value={editingTitle}
                 onChange={(e) => setEditingTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -382,14 +444,22 @@ function ChatListItem({
         {!isEditing && isPremium && (
           <div className="ml-2 flex opacity-0 transition-opacity group-hover:opacity-100">
             <button
-              className="mr-1 rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+              className={`mr-1 rounded p-1 transition-colors ${
+                isDarkMode 
+                  ? 'text-gray-400 hover:bg-gray-700 hover:text-white' 
+                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+              }`}
               onClick={startEditing}
               title="Rename"
             >
               <PencilSquareIcon className="h-4 w-4" />
             </button>
             <button
-              className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+              className={`rounded p-1 transition-colors ${
+                isDarkMode 
+                  ? 'text-gray-400 hover:bg-gray-700 hover:text-white' 
+                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+              }`}
               onClick={(e) => {
                 e.stopPropagation()
                 setDeletingChatId(chat.id)
@@ -409,10 +479,12 @@ function DeleteConfirmation({
   chatId,
   onDelete,
   onCancel,
+  isDarkMode,
 }: {
   chatId: string
   onDelete: (chatId: string) => void
   onCancel: () => void
+  isDarkMode: boolean
 }) {
   return (
     <motion.div
@@ -431,10 +503,16 @@ function DeleteConfirmation({
           duration: 0.15,
         },
       }}
-      className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-gray-900 p-2 shadow-lg"
+      className={`absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md ${
+        isDarkMode ? 'bg-gray-900' : 'bg-white'
+      } p-2 shadow-lg`}
     >
       <button
-        className="flex-1 rounded-md bg-gray-600 p-2 text-sm font-medium text-white transition-colors hover:bg-gray-700"
+        className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
+          isDarkMode 
+            ? 'bg-gray-600 text-white hover:bg-gray-700' 
+            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+        }`}
         onClick={(e) => {
           e.stopPropagation()
           onCancel()
@@ -443,7 +521,11 @@ function DeleteConfirmation({
         Cancel
       </button>
       <button
-        className="flex-1 rounded-md bg-red-600 p-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+        className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
+          isDarkMode 
+            ? 'bg-red-600 text-white hover:bg-red-700' 
+            : 'bg-red-500 text-white hover:bg-red-600'
+        }`}
         onClick={(e) => {
           e.stopPropagation()
           onDelete(chatId)

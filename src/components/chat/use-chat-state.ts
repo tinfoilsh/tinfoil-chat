@@ -1,13 +1,13 @@
-import { CHAT_MODELS } from '@/app/config/models'
+import { AI_MODELS } from '@/app/config/models'
 import { API_BASE_URL } from '@/config'
-import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { generateTitle } from './title'
+import { generateTitle } from '../../utils/title'
 import { scrollToBottom } from './chat-messages'
 import { ChatError } from './chat-utils'
 import { CONSTANTS } from './constants'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from './types'
+import { useApiKey } from '@/hooks/use-api-key'
 
 export function useChatState({
   systemPrompt,
@@ -19,7 +19,7 @@ export function useChatState({
   isPremium?: boolean
 }) {
   const { getToken } = useAuth()
-  const [apiKey, setApiKey] = useState<string | null>(null)
+  const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const [chats, setChats] = useState<Chat[]>(() => {
     const defaultChat: Chat = {
       id: uuidv4(),
@@ -83,6 +83,7 @@ export function useChatState({
   const [verificationComplete, setVerificationComplete] = useState(false)
   const [verificationSuccess, setVerificationSuccess] = useState(false)
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
+  const hasCreatedInitialChatRef = useRef(false)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -98,7 +99,7 @@ export function useChatState({
         'selectedModel',
       ) as AIModel | null
       // Verify the saved model is valid
-      if (savedModel && Object.keys(CHAT_MODELS).includes(savedModel)) {
+      if (savedModel && Object.keys(AI_MODELS).includes(savedModel)) {
         return savedModel
       }
     }
@@ -112,7 +113,7 @@ export function useChatState({
 
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = (
-    chats: Chat[],
+    _chats: Chat[], // unused now – kept to avoid changing call-sites
     setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
     currentChat: Chat,
     setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
@@ -121,21 +122,28 @@ export function useChatState({
     immediate = false,
     isThinking = false,
   ) => {
-    const updatedChat = { ...currentChat, messages: newMessages }
-    setCurrentChat(updatedChat)
+    setChats((prevChats) => {
+      // Find the latest version of this chat (to preserve any recent title changes)
+      const existingChat = prevChats.find((c) => c.id === chatId) || currentChat
 
-    // Only update localStorage if storeHistory is true
-    if (storeHistory) {
-      const updatedChats = chats.map((chat) =>
-        chat.id === chatId ? updatedChat : chat,
-      )
-      setChats(updatedChats)
-
-      // Save to localStorage with a small delay to avoid excessive writes
-      if (!isThinking || immediate) {
-        localStorage.setItem('chats', JSON.stringify(updatedChats))
+      const updatedChat: Chat = {
+        ...existingChat,
+        messages: newMessages,
       }
-    }
+
+      // Build new array
+      const newChats = prevChats.map((c) => (c.id === chatId ? updatedChat : c))
+
+      // Persist if needed
+      if (storeHistory && (!isThinking || immediate)) {
+        localStorage.setItem('chats', JSON.stringify(newChats))
+      }
+
+      // Also replace currentChat state
+      setCurrentChat(updatedChat)
+
+      return newChats
+    })
   }
 
   // Cancel generation function
@@ -181,7 +189,7 @@ export function useChatState({
   }, [abortController, storeHistory])
 
   // Handle chat query
-  async function handleQuery(query: string) {
+  async function handleQuery(query: string, documentContent?: string, documents?: Array<{ name: string }>) {
     if (!query.trim() || loadingState !== 'idle') return
 
     const controller = new AbortController()
@@ -192,37 +200,58 @@ export function useChatState({
     const userMessage: Message = {
       role: 'user',
       content: query,
+      documentContent: documentContent,
+      documents,
       timestamp: new Date(),
     }
 
-    const updatedMessages = [...currentChat.messages, userMessage]
-    updateChatWithHistoryCheck(
-      chats,
-      setChats,
-      currentChat,
-      setCurrentChat,
-      currentChat.id,
-      updatedMessages,
-      true,
-    )
-    setInput('')
+    // Generate title immediately if this is the first message
+    let updatedChat = { ...currentChat };
+    
+    if (currentChat.messages.length === 0 && storeHistory) {
+      const title = generateTitle(query);
+      // Make sure title is not empty
+      const safeTitle = title.trim() || 'Chat about ' + query.slice(0, 20) + '...';
+      
+      // Update the current chat with the new title
+      updatedChat = { ...currentChat, title: safeTitle };
+      setCurrentChat(updatedChat);
+      
+      // Update all chats in state and localStorage
+      const updatedChatsWithTitle = chats.map(chat => 
+        chat.id === currentChat.id ? { ...chat, title: safeTitle } : chat
+      );
+      
+      setChats(updatedChatsWithTitle);
+      if (storeHistory) {
+        localStorage.setItem('chats', JSON.stringify(updatedChatsWithTitle));
+      }
+    }
+
+    const updatedMessages = [...currentChat.messages, userMessage];
+    updatedChat = { ...updatedChat, messages: updatedMessages };
+    
+    // Update the current chat with the new messages
+    setCurrentChat(updatedChat);
+    
+    // Update chats array with both title and messages
+    setChats(prevChats => {
+      const newChats = prevChats.map(chat => 
+        chat.id === currentChat.id ? updatedChat : chat
+      );
+      
+      if (storeHistory) {
+        localStorage.setItem('chats', JSON.stringify(newChats));
+      }
+      
+      return newChats;
+    });
+    
+    setInput('');
 
     // Reset textarea height
     if (inputRef.current) {
-      inputRef.current.style.height = 'auto'
-    }
-
-    // Generate title immediately if this is the first message
-    if (currentChat.messages.length === 0 && storeHistory) {
-      const title = generateTitle(query)
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === currentChat.id ? { ...chat, title } : chat,
-        ),
-      )
-      if (currentChat?.id === currentChat.id) {
-        setCurrentChat((prev) => ({ ...prev, title }))
-      }
+      inputRef.current.style.height = 'auto';
     }
 
     // Initial scroll after user message is added
@@ -237,17 +266,20 @@ export function useChatState({
         timestamp: new Date(),
       }
 
-      const model = CHAT_MODELS(isPremium).find(
+      const model = AI_MODELS(isPremium).find(
         (model) => model.modelName === effectiveModel,
       )
       if (!model) {
         throw new Error(`Model ${effectiveModel} not found`)
       }
 
+      const chatEndpoint = 'endpoint' in model
+        ? (model.endpoint as string)
+        : `https://${model.enclave}/v1/chat/completions`;
+      
+    
       const response = await fetch(
-        'endpoint' in model
-          ? (model.endpoint as string)
-          : `https://${model.enclave}/v1/chat/completions`,
+        chatEndpoint,
         {
           method: 'POST',
           headers: {
@@ -265,7 +297,9 @@ export function useChatState({
               // Include message history with a limit
               ...updatedMessages.slice(-10).map((msg) => ({
                 role: msg.role,
-                content: msg.content,
+                content: msg.documentContent
+                  ? `${msg.content}\n\nDocument contents:\n${msg.documentContent}`
+                  : msg.content,
               })),
             ],
             stream: true,
@@ -281,9 +315,6 @@ export function useChatState({
         )
       }
 
-      // Remove loading dots as soon as we get the response
-      setIsWaitingForResponse(false)
-
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       let thoughtsBuffer = ''
@@ -295,9 +326,32 @@ export function useChatState({
       while (true) {
         const { done, value } = await reader!.read()
         if (done || currentChatIdRef.current !== currentChat.id) {
+          // Handle any remaining buffered content when stream ends
+          if (isFirstChunk && initialContentBuffer.trim()) {
+            // Process the buffered content even if it's less than 20 characters
+            assistantMessage = {
+              role: 'assistant',
+              content: initialContentBuffer.trim(),
+              timestamp: new Date(),
+              isThinking: false,
+            }
+            if (currentChatIdRef.current === currentChat.id) {
+              const newMessages = [...updatedMessages, assistantMessage]
+              updateChatWithHistoryCheck(
+                chats,
+                setChats,
+                currentChat,
+                setCurrentChat,
+                currentChat.id,
+                newMessages,
+                false,
+                false,
+              )
+            }
+          }
           // If we're still in thinking mode when the stream ends,
           // convert thoughts into regular message content
-          if (isInThinkingMode && thoughtsBuffer.trim()) {
+          else if (isInThinkingMode && thoughtsBuffer.trim()) {
             isInThinkingMode = false
             setIsThinking(false)
             assistantMessage = {
@@ -353,7 +407,7 @@ export function useChatState({
               // Check if we have enough content to determine if it starts with <think>
               if (
                 initialContentBuffer.includes('<think>') ||
-                initialContentBuffer.length > 20
+                initialContentBuffer.length > 5  // Reduced from 20 to 5 for better responsiveness
               ) {
                 isFirstChunk = false
                 content = initialContentBuffer
@@ -365,6 +419,9 @@ export function useChatState({
                   setIsThinking(true)
                   content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
                 }
+                
+                // Remove loading dots only after processing the first chunk
+                setIsWaitingForResponse(false)
               } else {
                 continue // Keep buffering
               }
@@ -420,10 +477,14 @@ export function useChatState({
               }
               if (currentChatIdRef.current === currentChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
+                
+                // Get the current chat with its potentially updated title
+                const currentChatWithTitle = chats.find(c => c.id === currentChat.id) || currentChat;
+                
                 updateChatWithHistoryCheck(
                   chats,
                   setChats,
-                  currentChat,
+                  currentChatWithTitle,
                   setCurrentChat,
                   currentChat.id,
                   newMessages,
@@ -441,10 +502,14 @@ export function useChatState({
               }
               if (currentChatIdRef.current === currentChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
+                
+                // Get the current chat with its potentially updated title
+                const currentChatWithTitle = chats.find(c => c.id === currentChat.id) || currentChat;
+                
                 updateChatWithHistoryCheck(
                   chats,
                   setChats,
-                  currentChat,
+                  currentChatWithTitle,
                   setCurrentChat,
                   currentChat.id,
                   newMessages,
@@ -472,10 +537,13 @@ export function useChatState({
           isError: true,
         }
 
+        // Get the current chat with its potentially updated title
+        const currentChatWithTitle = chats.find(c => c.id === currentChat.id) || currentChat;
+        
         updateChatWithHistoryCheck(
           chats,
           setChats,
-          currentChat,
+          currentChatWithTitle,
           setCurrentChat,
           currentChat.id,
           [...updatedMessages, errorMessage],
@@ -488,6 +556,7 @@ export function useChatState({
       setAbortController(null)
       isStreamingRef.current = false
       setIsThinking(false)
+      setIsWaitingForResponse(false) // Always ensure loading state is cleared
     }
   }
 
@@ -508,7 +577,16 @@ export function useChatState({
       createdAt: new Date(),
     }
     setCurrentChat(newChat)
-    setChats((prev) => [newChat, ...prev])
+    
+    // Update chats array by adding the new chat at the beginning
+    setChats((prev) => {
+      const updatedChats = [newChat, ...prev];
+      // Save to localStorage explicitly
+      if (storeHistory) {
+        localStorage.setItem('chats', JSON.stringify(updatedChats));
+      }
+      return updatedChats;
+    });
   }, [storeHistory])
 
   // Delete a chat
@@ -586,42 +664,8 @@ export function useChatState({
     })
   }, [])
 
-  // Get API key from the server
-  const getApiKey = async () => {
-    // If we already have the API key in state, return it
-    if (apiKey) {
-      return apiKey
-    }
-
-    try {
-      // Get auth token from Clerk
-      const token = await getToken()
-      // Return empty string if no token (user not logged in)
-      if (!token) {
-        return ''
-      }
-
-      // Fetch API key from the server
-      const response = await fetch(`${API_BASE_URL}/api/keys/chat`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to get API key: ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      setApiKey(data.key)
-
-      return data.key
-    } catch (error) {
-      console.error('Error fetching API key:', error)
-      return ''
-    }
-  }
+  // Use the abstracted API key hook
+  const getApiKey = getApiKeyFromHook;
 
   // Handle verifier expansion
   const openAndExpandVerifier = useCallback(() => {
@@ -776,16 +820,22 @@ export function useChatState({
 
   // Add effect to create a new chat on initial load
   useEffect(() => {
-    if (isClient) {
+    if (isClient && !hasCreatedInitialChatRef.current) {
+      hasCreatedInitialChatRef.current = true
+      
       if (!storeHistory) {
         // For non-premium users, just clear the loading state
         setIsInitialLoad(false)
-      } else {
+      } else if (chats.length === 0) {
+        // Only create a new chat if there are no chats
         createNewChat()
+      } else {
+        // Just ensure loading state is cleared
+        setIsInitialLoad(false)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClient]) // Only run when isClient becomes true, ignoring createNewChat dependency
+  }, [isClient]) // Only depend on isClient
 
   // Add effect to prevent body and html scrolling
   useEffect(() => {
@@ -836,6 +886,7 @@ export function useChatState({
     selectedModel,
     expandedLabel,
     windowWidth,
+    apiKey,
 
     // Setters
     setInput,
@@ -846,6 +897,7 @@ export function useChatState({
 
     // Actions
     handleSubmit,
+    handleQuery,
     createNewChat,
     deleteChat,
     handleChatSelect,
@@ -856,5 +908,6 @@ export function useChatState({
     handleModelSelect,
     cancelGeneration,
     updateChatTitle,
+    getApiKey,
   }
 }

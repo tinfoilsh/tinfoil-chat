@@ -1,3 +1,8 @@
+export { ChatInput } from './chat-input'
 export { ChatInterface } from './chat-interface'
+export { ChatLabels } from './chat-labels'
 export * from './chat-utils'
+export * from './constants'
 export { ModelSelector } from './model-selector'
+export * from './types'
+export { useDocumentUploader } from './document-uploader'
