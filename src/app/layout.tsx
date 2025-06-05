@@ -1,6 +1,7 @@
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import type { Metadata } from 'next'
+import { ClerkProvider } from '@clerk/nextjs'
 
 export const metadata: Metadata = {
   title: {
@@ -54,8 +55,10 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-gray-900 text-gray-900 antialiased">
-        {children}
-        <Toaster />
+        <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+          {children}
+          <Toaster />
+        </ClerkProvider>
       </body>
     </html>
   )

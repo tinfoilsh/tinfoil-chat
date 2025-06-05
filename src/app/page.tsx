@@ -4,4 +4,6 @@
 
 import { ChatInterface } from '../components/chat'
 
-export default ChatInterface
+export default function Page() {
+  return <ChatInterface />
+}

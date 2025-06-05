@@ -8,6 +8,7 @@ import { ChatError } from './chat-utils'
 import { CONSTANTS } from './constants'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from './types'
 import { useApiKey } from '@/hooks/use-api-key'
+import { useAuth } from '@clerk/nextjs'
 
 export function useChatState({
   systemPrompt,
