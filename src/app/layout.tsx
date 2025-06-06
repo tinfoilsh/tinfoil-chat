@@ -42,6 +42,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  // Validate Clerk key at runtime
+  if (!CLERK_PUBLISHABLE_KEY) {
+    console.error('Missing NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY environment variable')
+  }
+
   return (
     <html lang="en" className="overflow-x-hidden">
       <head>
