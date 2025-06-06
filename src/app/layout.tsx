@@ -47,6 +47,14 @@ export default function RootLayout({
     console.error('Missing NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY environment variable')
   }
 
+  // Conditionally wrap with ClerkProvider only if the key is available
+  const content = (
+    <>
+      {children}
+      <Toaster />
+    </>
+  )
+
   return (
     <html lang="en" className="overflow-x-hidden">
       <head>
@@ -61,20 +69,23 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-gray-900 text-gray-900 antialiased">
-        <ClerkProvider 
-          publishableKey={CLERK_PUBLISHABLE_KEY} 
-          telemetry={false} 
-          afterSignOutUrl="/"
-          appearance={{
-            elements: {
-              formButtonPrimary: 'bg-emerald-500 hover:bg-emerald-600',
-              card: 'bg-gray-800',
-            }
-          }}
-        >
-          {children}
-          <Toaster />
-        </ClerkProvider>
+        {CLERK_PUBLISHABLE_KEY ? (
+          <ClerkProvider 
+            publishableKey={CLERK_PUBLISHABLE_KEY} 
+            telemetry={false} 
+            afterSignOutUrl="/"
+            appearance={{
+              elements: {
+                formButtonPrimary: 'bg-emerald-500 hover:bg-emerald-600',
+                card: 'bg-gray-800',
+              }
+            }}
+          >
+            {content}
+          </ClerkProvider>
+        ) : (
+          content
+        )}
       </body>
     </html>
   )
