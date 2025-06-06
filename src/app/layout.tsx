@@ -1,8 +1,7 @@
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import type { Metadata } from 'next'
-import { ClerkProvider } from '@clerk/nextjs'
-import { CLERK_PUBLISHABLE_KEY } from '@/config'
+import { ClerkProviderWrapper } from '@/components/clerk-provider-wrapper'
 
 export const metadata: Metadata = {
   title: {
@@ -42,19 +41,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  // Validate Clerk key at runtime
-  if (!CLERK_PUBLISHABLE_KEY) {
-    console.error('Missing NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY environment variable')
-  }
-
-  // Conditionally wrap with ClerkProvider only if the key is available
-  const content = (
-    <>
-      {children}
-      <Toaster />
-    </>
-  )
-
   return (
     <html lang="en" className="overflow-x-hidden">
       <head>
@@ -69,23 +55,10 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-gray-900 text-gray-900 antialiased">
-        {CLERK_PUBLISHABLE_KEY ? (
-          <ClerkProvider 
-            publishableKey={CLERK_PUBLISHABLE_KEY} 
-            telemetry={false} 
-            afterSignOutUrl="/"
-            appearance={{
-              elements: {
-                formButtonPrimary: 'bg-emerald-500 hover:bg-emerald-600',
-                card: 'bg-gray-800',
-              }
-            }}
-          >
-            {content}
-          </ClerkProvider>
-        ) : (
-          content
-        )}
+        <ClerkProviderWrapper>
+          {children}
+          <Toaster />
+        </ClerkProviderWrapper>
       </body>
     </html>
   )
