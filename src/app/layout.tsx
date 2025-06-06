@@ -55,7 +55,7 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-gray-900 text-gray-900 antialiased">
-        <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+        <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY} telemetry={false} afterSignOutUrl="/">
           {children}
           <Toaster />
         </ClerkProvider>

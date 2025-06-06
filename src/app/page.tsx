@@ -1,9 +1,11 @@
-/* eslint-disable react/no-unescaped-entities */
-
 'use client'
 
-import { ChatInterface } from '../components/chat'
+import { ChatWrapper } from '@/components/chat/chat-wrapper'
 
-export default function Page() {
-  return <ChatInterface />
+export default function Chat() {
+  return (
+    <div className="h-screen">
+      <ChatWrapper />
+    </div>
+  )
 }
