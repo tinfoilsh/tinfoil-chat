@@ -2,6 +2,7 @@ import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
+import { CLERK_PUBLISHABLE_KEY } from '@/config'
 
 export const metadata: Metadata = {
   title: {
@@ -56,7 +57,7 @@ export default function RootLayout({
       </head>
       <body className="bg-gray-900 text-gray-900 antialiased">
         <ClerkProvider 
-          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!} 
+          publishableKey={CLERK_PUBLISHABLE_KEY} 
           telemetry={false} 
           afterSignOutUrl="/"
           appearance={{
