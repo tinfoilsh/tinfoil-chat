@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
 import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
-import { useRouter } from 'next/navigation'
+
 import { useEffect, useState, useCallback } from 'react'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -86,7 +86,6 @@ export function ChatInterface({
   isPremium: propIsPremium,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
-  const router = useRouter()
   const { isSignedIn } = useAuth()
   const { user } = useUser()
   const {
@@ -468,20 +467,11 @@ export function ChatInterface({
                 >
                   Basic preview.
                 </span>
-                {isSignedIn ? (
-                  <button
-                    onClick={() => router.push('/dashboard?tab=billing')}
-                    className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
-                  >
+                <SignInButton mode="modal">
+                  <button className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
                     Get unrestricted access
                   </button>
-                ) : (
-                  <SignInButton mode="modal">
-                    <button className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
-                      Get unrestricted access
-                    </button>
-                  </SignInButton>
-                )}
+                </SignInButton>
               </div>
             </div>
           )}

@@ -31,7 +31,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^11.2.10",
     "lucide-react": "^0.473.0",
-    "next": "^14.2.22",
+    "next": "^15.3.3",
     "react": "^18",
     "react-dom": "^18",
     "react-icons": "^5.5.0",

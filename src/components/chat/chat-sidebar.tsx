@@ -10,7 +10,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+
 import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
@@ -101,7 +101,6 @@ export function ChatSidebar({
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
   const { isSignedIn } = useAuth()
-  const router = useRouter()
 
   // Apply zoom prevention for mobile
   usePreventZoom()
@@ -236,20 +235,11 @@ export function ChatSidebar({
                 <span className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
                   Sign up to access chat history and create new chats.
                 </span>{' '}
-                {isSignedIn ? (
-                  <button
-                    onClick={() => router.push('/dashboard?tab=billing')}
-                    className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
-                  >
+                <SignInButton mode="modal">
+                  <button className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
                     Get unrestricted access
                   </button>
-                ) : (
-                  <SignInButton mode="modal">
-                    <button className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
-                      Get unrestricted access
-                    </button>
-                  </SignInButton>
-                )}
+                </SignInButton>
               </p>
             </div>
           )}
