@@ -1,9 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
 // Define which routes should be protected
-const isProtectedRoute = createRouteMatcher([
-  '/api/billing(.*)',
-])
+const isProtectedRoute = createRouteMatcher(['/api/billing(.*)'])
 
 export default clerkMiddleware(async (auth, req) => {
   // Protect API routes

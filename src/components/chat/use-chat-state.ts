@@ -1,5 +1,6 @@
 import { AI_MODELS } from '@/app/config/models'
-import { API_BASE_URL } from '@/config'
+import { useApiKey } from '@/hooks/use-api-key'
+import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { generateTitle } from '../../utils/title'
@@ -7,8 +8,6 @@ import { scrollToBottom } from './chat-messages'
 import { ChatError } from './chat-utils'
 import { CONSTANTS } from './constants'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from './types'
-import { useApiKey } from '@/hooks/use-api-key'
-import { useAuth } from '@clerk/nextjs'
 
 export function useChatState({
   systemPrompt,
@@ -190,7 +189,11 @@ export function useChatState({
   }, [abortController, storeHistory])
 
   // Handle chat query
-  async function handleQuery(query: string, documentContent?: string, documents?: Array<{ name: string }>) {
+  async function handleQuery(
+    query: string,
+    documentContent?: string,
+    documents?: Array<{ name: string }>,
+  ) {
     if (!query.trim() || loadingState !== 'idle') return
 
     const controller = new AbortController()
@@ -207,52 +210,53 @@ export function useChatState({
     }
 
     // Generate title immediately if this is the first message
-    let updatedChat = { ...currentChat };
-    
+    let updatedChat = { ...currentChat }
+
     if (currentChat.messages.length === 0 && storeHistory) {
-      const title = generateTitle(query);
+      const title = generateTitle(query)
       // Make sure title is not empty
-      const safeTitle = title.trim() || 'Chat about ' + query.slice(0, 20) + '...';
-      
+      const safeTitle =
+        title.trim() || 'Chat about ' + query.slice(0, 20) + '...'
+
       // Update the current chat with the new title
-      updatedChat = { ...currentChat, title: safeTitle };
-      setCurrentChat(updatedChat);
-      
+      updatedChat = { ...currentChat, title: safeTitle }
+      setCurrentChat(updatedChat)
+
       // Update all chats in state and localStorage
-      const updatedChatsWithTitle = chats.map(chat => 
-        chat.id === currentChat.id ? { ...chat, title: safeTitle } : chat
-      );
-      
-      setChats(updatedChatsWithTitle);
+      const updatedChatsWithTitle = chats.map((chat) =>
+        chat.id === currentChat.id ? { ...chat, title: safeTitle } : chat,
+      )
+
+      setChats(updatedChatsWithTitle)
       if (storeHistory) {
-        localStorage.setItem('chats', JSON.stringify(updatedChatsWithTitle));
+        localStorage.setItem('chats', JSON.stringify(updatedChatsWithTitle))
       }
     }
 
-    const updatedMessages = [...currentChat.messages, userMessage];
-    updatedChat = { ...updatedChat, messages: updatedMessages };
-    
+    const updatedMessages = [...currentChat.messages, userMessage]
+    updatedChat = { ...updatedChat, messages: updatedMessages }
+
     // Update the current chat with the new messages
-    setCurrentChat(updatedChat);
-    
+    setCurrentChat(updatedChat)
+
     // Update chats array with both title and messages
-    setChats(prevChats => {
-      const newChats = prevChats.map(chat => 
-        chat.id === currentChat.id ? updatedChat : chat
-      );
-      
+    setChats((prevChats) => {
+      const newChats = prevChats.map((chat) =>
+        chat.id === currentChat.id ? updatedChat : chat,
+      )
+
       if (storeHistory) {
-        localStorage.setItem('chats', JSON.stringify(newChats));
+        localStorage.setItem('chats', JSON.stringify(newChats))
       }
-      
-      return newChats;
-    });
-    
-    setInput('');
+
+      return newChats
+    })
+
+    setInput('')
 
     // Reset textarea height
     if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = 'auto'
     }
 
     // Initial scroll after user message is added
@@ -274,40 +278,37 @@ export function useChatState({
         throw new Error(`Model ${effectiveModel} not found`)
       }
 
-      const chatEndpoint = 'endpoint' in model
-        ? (model.endpoint as string)
-        : `https://${model.enclave}/v1/chat/completions`;
-      
-    
-      const response = await fetch(
-        chatEndpoint,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${await getApiKey()}`,
-          },
-          body: JSON.stringify({
-            model: model.modelName,
-            messages: [
-              // System prompt is always included even when messages are cut off
-              {
-                role: 'system',
-                content: systemPrompt.replace('<MODEL_NAME>', model.name),
-              },
-              // Include message history with a limit
-              ...updatedMessages.slice(-10).map((msg) => ({
-                role: msg.role,
-                content: msg.documentContent
-                  ? `${msg.content}\n\nDocument contents:\n${msg.documentContent}`
-                  : msg.content,
-              })),
-            ],
-            stream: true,
-          }),
-          signal: controller.signal,
+      const chatEndpoint =
+        'endpoint' in model
+          ? (model.endpoint as string)
+          : `https://${model.enclave}/v1/chat/completions`
+
+      const response = await fetch(chatEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await getApiKey()}`,
         },
-      )
+        body: JSON.stringify({
+          model: model.modelName,
+          messages: [
+            // System prompt is always included even when messages are cut off
+            {
+              role: 'system',
+              content: systemPrompt.replace('<MODEL_NAME>', model.name),
+            },
+            // Include message history with a limit
+            ...updatedMessages.slice(-10).map((msg) => ({
+              role: msg.role,
+              content: msg.documentContent
+                ? `${msg.content}\n\nDocument contents:\n${msg.documentContent}`
+                : msg.content,
+            })),
+          ],
+          stream: true,
+        }),
+        signal: controller.signal,
+      })
 
       if (!response.ok) {
         throw new ChatError(
@@ -408,7 +409,7 @@ export function useChatState({
               // Check if we have enough content to determine if it starts with <think>
               if (
                 initialContentBuffer.includes('<think>') ||
-                initialContentBuffer.length > 5  // Reduced from 20 to 5 for better responsiveness
+                initialContentBuffer.length > 5 // Reduced from 20 to 5 for better responsiveness
               ) {
                 isFirstChunk = false
                 content = initialContentBuffer
@@ -420,7 +421,7 @@ export function useChatState({
                   setIsThinking(true)
                   content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
                 }
-                
+
                 // Remove loading dots only after processing the first chunk
                 setIsWaitingForResponse(false)
               } else {
@@ -478,10 +479,11 @@ export function useChatState({
               }
               if (currentChatIdRef.current === currentChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
-                
+
                 // Get the current chat with its potentially updated title
-                const currentChatWithTitle = chats.find(c => c.id === currentChat.id) || currentChat;
-                
+                const currentChatWithTitle =
+                  chats.find((c) => c.id === currentChat.id) || currentChat
+
                 updateChatWithHistoryCheck(
                   chats,
                   setChats,
@@ -503,10 +505,11 @@ export function useChatState({
               }
               if (currentChatIdRef.current === currentChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
-                
+
                 // Get the current chat with its potentially updated title
-                const currentChatWithTitle = chats.find(c => c.id === currentChat.id) || currentChat;
-                
+                const currentChatWithTitle =
+                  chats.find((c) => c.id === currentChat.id) || currentChat
+
                 updateChatWithHistoryCheck(
                   chats,
                   setChats,
@@ -539,8 +542,9 @@ export function useChatState({
         }
 
         // Get the current chat with its potentially updated title
-        const currentChatWithTitle = chats.find(c => c.id === currentChat.id) || currentChat;
-        
+        const currentChatWithTitle =
+          chats.find((c) => c.id === currentChat.id) || currentChat
+
         updateChatWithHistoryCheck(
           chats,
           setChats,
@@ -578,16 +582,16 @@ export function useChatState({
       createdAt: new Date(),
     }
     setCurrentChat(newChat)
-    
+
     // Update chats array by adding the new chat at the beginning
     setChats((prev) => {
-      const updatedChats = [newChat, ...prev];
+      const updatedChats = [newChat, ...prev]
       // Save to localStorage explicitly
       if (storeHistory) {
-        localStorage.setItem('chats', JSON.stringify(updatedChats));
+        localStorage.setItem('chats', JSON.stringify(updatedChats))
       }
-      return updatedChats;
-    });
+      return updatedChats
+    })
   }, [storeHistory])
 
   // Delete a chat
@@ -666,7 +670,7 @@ export function useChatState({
   }, [])
 
   // Use the abstracted API key hook
-  const getApiKey = getApiKeyFromHook;
+  const getApiKey = getApiKeyFromHook
 
   // Handle verifier expansion
   const openAndExpandVerifier = useCallback(() => {
@@ -823,7 +827,7 @@ export function useChatState({
   useEffect(() => {
     if (isClient && !hasCreatedInitialChatRef.current) {
       hasCreatedInitialChatRef.current = true
-      
+
       if (!storeHistory) {
         // For non-premium users, just clear the loading state
         setIsInitialLoad(false)

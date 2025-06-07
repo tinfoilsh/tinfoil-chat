@@ -1,7 +1,7 @@
 export type Message = {
   role: 'user' | 'assistant'
   content: string
-  documentContent?: string  // Separate field for document content
+  documentContent?: string // Separate field for document content
   documents?: Array<{ name: string }> // New field for document names and types
   timestamp: Date
   thoughts?: string
@@ -58,7 +58,12 @@ export type VerificationState = {
 }
 
 // Document processing types
-export type DocumentProcessingStatus = 'idle' | 'uploading' | 'processing' | 'complete' | 'error'
+export type DocumentProcessingStatus =
+  | 'idle'
+  | 'uploading'
+  | 'processing'
+  | 'complete'
+  | 'error'
 
 export interface DocumentMetadata {
   filename?: string
@@ -69,16 +74,16 @@ export interface DocumentMetadata {
 
 export interface DocumentProcessingResult {
   document?: {
-    md_content: string;
-    filename?: string;
-  } & DocumentMetadata;
-  status?: DocumentProcessingStatus;
-  error?: string;
+    md_content: string
+    filename?: string
+  } & DocumentMetadata
+  status?: DocumentProcessingStatus
+  error?: string
 }
 
 export interface DocumentUploadProps {
-  onUploadStart: () => void;
-  onUploadComplete: (content: string) => void;
-  onUploadError: (error: Error) => void;
-  setIsUploading: (isUploading: boolean) => void;
+  onUploadStart: () => void
+  onUploadComplete: (content: string) => void
+  onUploadError: (error: Error) => void
+  setIsUploading: (isUploading: boolean) => void
 }

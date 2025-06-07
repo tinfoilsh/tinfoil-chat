@@ -1,11 +1,10 @@
 import { AI_MODELS } from '@/app/config/models'
 import {
   ExclamationTriangleIcon,
-  LockOpenIcon,
   LockClosedIcon,
+  LockOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
-import { Link } from '../link'
 import { ModelSelector } from './model-selector'
 import type { AIModel } from './types'
 
@@ -112,7 +111,7 @@ export function ChatLabels({
           {!verificationComplete ? (
             <LockOpenIcon className="h-5 w-5 animate-pulse text-yellow-500" />
           ) : verificationSuccess ? (
-            <LockClosedIcon className="h-5 w-5 text-emerald-500 lock-close-animation" />
+            <LockClosedIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
           ) : (
             <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
           )}
@@ -129,7 +128,7 @@ export function ChatLabels({
           </span>
         </button>
       </div>
-      
+
       <style jsx>{`
         @keyframes lock-close {
           0% {

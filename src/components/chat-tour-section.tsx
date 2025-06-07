@@ -4,7 +4,14 @@ import { Container } from '@/components/container'
 
 export function ArcadeEmbed() {
   return (
-    <div style={{ position: 'relative', paddingBottom: 'calc(64.64120370370371% + 41px)', height: 0, width: '100%' }}>
+    <div
+      style={{
+        position: 'relative',
+        paddingBottom: 'calc(64.64120370370371% + 41px)',
+        height: 0,
+        width: '100%',
+      }}
+    >
       <iframe
         src="https://demo.arcade.software/hos7yfPtCMRnZqlMWghZ?embed&embed_mobile=inline&embed_desktop=inline&show_copy_link=true"
         title="Tinfoil Chat Security Flow"
@@ -12,7 +19,14 @@ export function ArcadeEmbed() {
         loading="lazy"
         allowFullScreen
         allow="clipboard-write"
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', colorScheme: 'light' }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          colorScheme: 'light',
+        }}
       />
     </div>
   )
@@ -29,7 +43,8 @@ export function ChatTourSection() {
             Tour of the Private Chat
           </h2>
           <p className="mt-6 text-center text-xl">
-            See how our confidential chat works to keep your conversations completely private.
+            See how our confidential chat works to keep your conversations
+            completely private.
           </p>
         </div>
 
@@ -39,4 +54,4 @@ export function ChatTourSection() {
       </div>
     </Container>
   )
-} 
+}

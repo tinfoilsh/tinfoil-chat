@@ -1,29 +1,28 @@
 'use client'
 
 import { CHAT_CONFIG } from '@/app/config/models'
-import { CONSTANTS } from './constants'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FaFile,
+  FaFileAlt,
+  FaFileArchive,
+  FaFileAudio,
+  FaFileCode,
+  FaFileExcel,
+  FaFileImage,
+  FaFilePdf,
+  FaFilePowerpoint,
+  FaFileVideo,
+  FaFileWord,
+} from 'react-icons/fa'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
+import { getFileIconType } from './document-uploader'
 import type { Message } from './types'
-import { 
-  FaFile, 
-  FaFileImage, 
-  FaFilePdf, 
-  FaFileWord, 
-  FaFileExcel,
-  FaFileCode,
-  FaFileAudio,
-  FaFileVideo,
-  FaFileArchive,
-  FaFilePowerpoint,
-  FaFileAlt
-} from 'react-icons/fa';
-import { getFileIconType } from './document-uploader';
 
 // Add new types
 type MessageWithThoughts = Message & {
@@ -263,27 +262,40 @@ const ChatMessage = memo(function ChatMessage({
     (message.thoughts?.trim() !== '' || message.isThinking)
 
   const getFileIcon = (filename: string) => {
-    const type = getFileIconType(filename);
-    const iconProps = { className: `h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}` };
-    switch (type) {
-      case 'pdf': return <FaFilePdf {...iconProps} />;
-      case 'docx': return <FaFileWord {...iconProps} />;
-      case 'pptx': return <FaFilePowerpoint {...iconProps} />;
-      case 'xlsx':
-      case 'csv': return <FaFileExcel {...iconProps} />;
-      case 'image': return <FaFileImage {...iconProps} />;
-      case 'audio': return <FaFileAudio {...iconProps} />;
-      case 'video': return <FaFileVideo {...iconProps} />;
-      case 'zip': return <FaFileArchive {...iconProps} />;
-      case 'html': 
-      case 'js': 
-      case 'ts': 
-      case 'css': 
-      case 'md': return <FaFileCode {...iconProps} />;
-      case 'txt': return <FaFileAlt {...iconProps} />;
-      default: return <FaFile {...iconProps} />;
+    const type = getFileIconType(filename)
+    const iconProps = {
+      className: `h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`,
     }
-  };
+    switch (type) {
+      case 'pdf':
+        return <FaFilePdf {...iconProps} />
+      case 'docx':
+        return <FaFileWord {...iconProps} />
+      case 'pptx':
+        return <FaFilePowerpoint {...iconProps} />
+      case 'xlsx':
+      case 'csv':
+        return <FaFileExcel {...iconProps} />
+      case 'image':
+        return <FaFileImage {...iconProps} />
+      case 'audio':
+        return <FaFileAudio {...iconProps} />
+      case 'video':
+        return <FaFileVideo {...iconProps} />
+      case 'zip':
+        return <FaFileArchive {...iconProps} />
+      case 'html':
+      case 'js':
+      case 'ts':
+      case 'css':
+      case 'md':
+        return <FaFileCode {...iconProps} />
+      case 'txt':
+        return <FaFileAlt {...iconProps} />
+      default:
+        return <FaFile {...iconProps} />
+    }
+  }
 
   return (
     <div
@@ -312,18 +324,18 @@ const ChatMessage = memo(function ChatMessage({
       {isUser && message.documents && message.documents.length > 0 && (
         <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
           {message.documents.map((doc, index) => (
-            <div 
-              key={index} 
-              className={`
-                flex items-center rounded-lg 
-                ${isDarkMode 
-                  ? 'bg-gray-700/50 hover:bg-gray-700/70' 
-                  : 'bg-gray-100 hover:bg-gray-200'} 
-                px-3 py-1.5 transition-colors duration-200
-              `}
+            <div
+              key={index}
+              className={`flex items-center rounded-lg ${
+                isDarkMode
+                  ? 'bg-gray-700/50 hover:bg-gray-700/70'
+                  : 'bg-gray-100 hover:bg-gray-200'
+              } px-3 py-1.5 transition-colors duration-200`}
             >
               <div className="mr-2">{getFileIcon(doc.name)}</div>
-              <span className={`text-sm truncate max-w-[150px] ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              <span
+                className={`max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
+              >
                 {doc.name}
               </span>
             </div>
@@ -437,7 +449,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
           } text-lg`}
         >
-          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center mt-1">
+          <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
             <svg
               className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
               fill="none"
@@ -445,21 +457,31 @@ const WelcomeScreen = memo(function WelcomeScreen({
               viewBox="0 0 24 24"
               xmlns="http://www.w3.org/2000/svg"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5c-5 0-9.27 3.11-10.5 7.5 1.23 4.39 5.5 7.5 10.5 7.5s9.27-3.11 10.5-7.5c-1.23-4.39-5.5-7.5-10.5-7.5z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4.5c-5 0-9.27 3.11-10.5 7.5 1.23 4.39 5.5 7.5 10.5 7.5s9.27-3.11 10.5-7.5c-1.23-4.39-5.5-7.5-10.5-7.5z"
+              />
               <circle cx="12" cy="12" r="3" strokeWidth={2} />
-              <line x1="3" y1="3" x2="21" y2="21" strokeWidth={2} strokeLinecap="round" />
+              <line
+                x1="3"
+                y1="3"
+                x2="21"
+                y2="21"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
             </svg>
           </div>
-          <div>
-            Your conversations are completely private.
-          </div>
+          <div>Your conversations are completely private.</div>
         </li>
         <li
           className={`flex items-start gap-3 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
           } text-lg`}
         >
-          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center mt-1">
+          <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
             <svg
               className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
               fill="none"
@@ -468,19 +490,24 @@ const WelcomeScreen = memo(function WelcomeScreen({
               xmlns="http://www.w3.org/2000/svg"
             >
               <circle cx="12" cy="12" r="9" strokeWidth={2} />
-              <line x1="6.75" y1="6.75" x2="17.25" y2="17.25" strokeWidth={2} strokeLinecap="round" />
+              <line
+                x1="6.75"
+                y1="6.75"
+                x2="17.25"
+                y2="17.25"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
             </svg>
           </div>
-          <div>
-            Nobody can see your messages, not even Tinfoil.
-          </div>
+          <div>Nobody can see your messages, not even Tinfoil.</div>
         </li>
         <li
           className={`flex items-start gap-3 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
           } text-lg`}
         >
-          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center mt-1">
+          <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
             <svg
               className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
               fill="none"

@@ -1,36 +1,40 @@
 /* eslint-disable react/no-unescaped-entities */
 
-import { DocumentIcon, PaperAirplaneIcon, StopIcon, MicrophoneIcon } from '@heroicons/react/24/outline'
-import { 
-  FaFile, 
-  FaFileImage, 
-  FaFilePdf, 
-  FaFileWord, 
-  FaFileExcel,
-  FaFileCode,
-  FaFileAudio,
-  FaFileVideo,
-  FaFileArchive,
-  FaFilePowerpoint,
-  FaFileAlt
-} from 'react-icons/fa'
-import type { FormEvent, RefObject } from 'react'
-import { Link } from '../link'
-import type { LoadingState } from './types'
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { getFileIconType } from './document-uploader'
-import { useToast } from '@/hooks/use-toast'
-import { CONSTANTS } from './constants'
-import toWav from 'audiobuffer-to-wav'
 import { useApiKey } from '@/hooks/use-api-key'
+import { useToast } from '@/hooks/use-toast'
+import {
+  DocumentIcon,
+  MicrophoneIcon,
+  PaperAirplaneIcon,
+  StopIcon,
+} from '@heroicons/react/24/outline'
+import toWav from 'audiobuffer-to-wav'
+import type { FormEvent, RefObject } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import {
+  FaFile,
+  FaFileAlt,
+  FaFileArchive,
+  FaFileAudio,
+  FaFileCode,
+  FaFileExcel,
+  FaFileImage,
+  FaFilePdf,
+  FaFilePowerpoint,
+  FaFileVideo,
+  FaFileWord,
+} from 'react-icons/fa'
+import { CONSTANTS } from './constants'
+import { getFileIconType } from './document-uploader'
+import type { LoadingState } from './types'
 
 // Add type for processed documents
 type ProcessedDocument = {
-  id: string;
-  name: string;
-  time: Date;
-  content?: string;
-  isUploading?: boolean;
+  id: string
+  name: string
+  time: Date
+  content?: string
+  isUploading?: boolean
 }
 
 type ChatInputProps = {
@@ -50,130 +54,148 @@ type ChatInputProps = {
 }
 
 // Component for Mac-style file icons
-const MacFileIcon = ({ 
-  filename, 
-  size = 20, 
-  isDarkMode = false, 
-  isUploading = false 
-}: { 
-  filename: string, 
-  size?: number, 
-  isDarkMode?: boolean,
+const MacFileIcon = ({
+  filename,
+  size = 20,
+  isDarkMode = false,
+  isUploading = false,
+}: {
+  filename: string
+  size?: number
+  isDarkMode?: boolean
   isUploading?: boolean
 }) => {
-  const type = getFileIconType(filename);
-  
+  const type = getFileIconType(filename)
+
   // If uploading, show spinner instead of file icon
   if (isUploading) {
     return (
       <div className="flex flex-col items-center">
-        <div className={`flex items-center justify-center rounded-md p-1 ${
-          isDarkMode ? 'bg-gray-800/40' : 'bg-gray-100'
-        } shadow-sm`}>
-          <svg className={`h-${size/4} w-${size/4} animate-spin text-emerald-500`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        <div
+          className={`flex items-center justify-center rounded-md p-1 ${
+            isDarkMode ? 'bg-gray-800/40' : 'bg-gray-100'
+          } shadow-sm`}
+        >
+          <svg
+            className={`h-${size / 4} w-${size / 4} animate-spin text-emerald-500`}
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
         </div>
       </div>
-    );
+    )
   }
-  
+
   // Get appropriate icon based on file type
-  let FileIcon = FaFile;
-  let bgColorLight = 'bg-gray-100';
-  let bgColorDark = 'bg-gray-800/40';
-  let iconColor = 'text-gray-500';
-  
+  let FileIcon = FaFile
+  let bgColorLight = 'bg-gray-100'
+  let bgColorDark = 'bg-gray-800/40'
+  let iconColor = 'text-gray-500'
+
   switch (type) {
     case 'pdf':
-      FileIcon = FaFilePdf;
-      bgColorLight = 'bg-red-50';
-      bgColorDark = 'bg-red-900/20';
-      iconColor = 'text-red-500';
-      break;
+      FileIcon = FaFilePdf
+      bgColorLight = 'bg-red-50'
+      bgColorDark = 'bg-red-900/20'
+      iconColor = 'text-red-500'
+      break
     case 'docx':
-      FileIcon = FaFileWord;
-      bgColorLight = 'bg-blue-50';
-      bgColorDark = 'bg-blue-900/20';
-      iconColor = 'text-blue-500';
-      break;
+      FileIcon = FaFileWord
+      bgColorLight = 'bg-blue-50'
+      bgColorDark = 'bg-blue-900/20'
+      iconColor = 'text-blue-500'
+      break
     case 'xlsx':
-      FileIcon = FaFileExcel;
-      bgColorLight = 'bg-green-50';
-      bgColorDark = 'bg-green-900/20';
-      iconColor = 'text-green-500';
-      break;
+      FileIcon = FaFileExcel
+      bgColorLight = 'bg-green-50'
+      bgColorDark = 'bg-green-900/20'
+      iconColor = 'text-green-500'
+      break
     case 'pptx':
-      FileIcon = FaFilePowerpoint;
-      bgColorLight = 'bg-orange-50';
-      bgColorDark = 'bg-orange-900/20';
-      iconColor = 'text-orange-500';
-      break;
+      FileIcon = FaFilePowerpoint
+      bgColorLight = 'bg-orange-50'
+      bgColorDark = 'bg-orange-900/20'
+      iconColor = 'text-orange-500'
+      break
     case 'image':
-      FileIcon = FaFileImage;
-      bgColorLight = 'bg-indigo-50';
-      bgColorDark = 'bg-indigo-900/20';
-      iconColor = 'text-indigo-500';
-      break;
+      FileIcon = FaFileImage
+      bgColorLight = 'bg-indigo-50'
+      bgColorDark = 'bg-indigo-900/20'
+      iconColor = 'text-indigo-500'
+      break
     case 'audio':
-      FileIcon = FaFileAudio;
-      bgColorLight = 'bg-purple-50';
-      bgColorDark = 'bg-purple-900/20';
-      iconColor = 'text-purple-500';
-      break;
+      FileIcon = FaFileAudio
+      bgColorLight = 'bg-purple-50'
+      bgColorDark = 'bg-purple-900/20'
+      iconColor = 'text-purple-500'
+      break
     case 'video':
-      FileIcon = FaFileVideo;
-      bgColorLight = 'bg-yellow-50';
-      bgColorDark = 'bg-yellow-900/20';
-      iconColor = 'text-yellow-500';
-      break;
+      FileIcon = FaFileVideo
+      bgColorLight = 'bg-yellow-50'
+      bgColorDark = 'bg-yellow-900/20'
+      iconColor = 'text-yellow-500'
+      break
     case 'zip':
-      FileIcon = FaFileArchive;
-      bgColorLight = 'bg-amber-50';
-      bgColorDark = 'bg-amber-900/20';
-      iconColor = 'text-amber-500';
-      break;
+      FileIcon = FaFileArchive
+      bgColorLight = 'bg-amber-50'
+      bgColorDark = 'bg-amber-900/20'
+      iconColor = 'text-amber-500'
+      break
     case 'html':
     case 'js':
     case 'ts':
     case 'css':
-      FileIcon = FaFileCode;
-      bgColorLight = 'bg-cyan-50';
-      bgColorDark = 'bg-cyan-900/20';
-      iconColor = 'text-cyan-500';
-      break;
+      FileIcon = FaFileCode
+      bgColorLight = 'bg-cyan-50'
+      bgColorDark = 'bg-cyan-900/20'
+      iconColor = 'text-cyan-500'
+      break
     case 'txt':
-      FileIcon = FaFileAlt;
-      bgColorLight = 'bg-slate-50';
-      bgColorDark = 'bg-slate-700/30';
-      iconColor = 'text-slate-500';
-      break;
+      FileIcon = FaFileAlt
+      bgColorLight = 'bg-slate-50'
+      bgColorDark = 'bg-slate-700/30'
+      iconColor = 'text-slate-500'
+      break
     case 'md':
-      FileIcon = FaFileAlt;
-      bgColorLight = 'bg-emerald-50';
-      bgColorDark = 'bg-emerald-900/20';
-      iconColor = 'text-emerald-500';
-      break;
+      FileIcon = FaFileAlt
+      bgColorLight = 'bg-emerald-50'
+      bgColorDark = 'bg-emerald-900/20'
+      iconColor = 'text-emerald-500'
+      break
     default:
-      FileIcon = FaFile;
-      bgColorLight = 'bg-gray-50';
-      bgColorDark = 'bg-gray-700/30';
-      iconColor = 'text-gray-500';
+      FileIcon = FaFile
+      bgColorLight = 'bg-gray-50'
+      bgColorDark = 'bg-gray-700/30'
+      iconColor = 'text-gray-500'
   }
-  
-  const bgColor = isDarkMode ? bgColorDark : bgColorLight;
-  
+
+  const bgColor = isDarkMode ? bgColorDark : bgColorLight
+
   return (
     <div className="flex flex-col items-center">
-      <div className={`flex items-center justify-center rounded-md p-1 ${bgColor} shadow-sm`}>
+      <div
+        className={`flex items-center justify-center rounded-md p-1 ${bgColor} shadow-sm`}
+      >
         <FileIcon className={`${iconColor}`} style={{ fontSize: size }} />
       </div>
     </div>
-  );
-};
-
-
+  )
+}
 
 export function ChatInput({
   input,
@@ -190,249 +212,286 @@ export function ChatInput({
   removeDocument,
   isPremium,
 }: ChatInputProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { toast } = useToast()
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
-  
   // Use the abstracted API key hook
-  const { getApiKey } = useApiKey();
+  const { getApiKey } = useApiKey()
 
   // --- Speech-to-text state ---
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isConverting, setIsConverting] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [isConverting, setIsConverting] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Convert WebM to WAV using audiobuffer-to-wav library
-  const convertWebMToWAV = useCallback(async (webmBlob: Blob): Promise<Blob> => {
-    try {
-      const arrayBuffer = await webmBlob.arrayBuffer();
-      const audioContext = new AudioContext();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      
-      // Convert AudioBuffer to WAV using the library
-      const wavArrayBuffer = toWav(audioBuffer);
-      
-      return new Blob([wavArrayBuffer], { type: 'audio/wav' });
-    } catch (error) {
-      throw error;
-    }
-  }, []);
+  const convertWebMToWAV = useCallback(
+    async (webmBlob: Blob): Promise<Blob> => {
+      try {
+        const arrayBuffer = await webmBlob.arrayBuffer()
+        const audioContext = new AudioContext()
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
 
+        // Convert AudioBuffer to WAV using the library
+        const wavArrayBuffer = toWav(audioBuffer)
 
-
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
-      handleDocumentUpload(e.target.files[0]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        return new Blob([wavArrayBuffer], { type: 'audio/wav' })
+      } catch (error) {
+        throw error
       }
-    }
-  }, [handleDocumentUpload]);
+    },
+    [],
+  )
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
+        handleDocumentUpload(e.target.files[0])
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+    },
+    [handleDocumentUpload],
+  )
 
   const triggerFileInput = () => {
     if (fileInputRef.current) {
-      fileInputRef.current.click();
+      fileInputRef.current.click()
     }
-  };
+  }
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== 'inactive'
+    ) {
+      mediaRecorderRef.current.stop()
     }
     if (recordingTimeoutRef.current) {
-      clearTimeout(recordingTimeoutRef.current);
-      recordingTimeoutRef.current = null;
+      clearTimeout(recordingTimeoutRef.current)
+      recordingTimeoutRef.current = null
     }
-    setIsRecording(false);
-  }, []);
+    setIsRecording(false)
+  }, [])
 
-  const sendAudioForTranscription = useCallback(async (blob: Blob) => {
-    try {
-      setIsTranscribing(true);
-      const formData = new FormData();
-      formData.append('file', blob, 'audio.wav');
-      formData.append('model', 'whisper-large-v3-turbo');
-      formData.append('response_format', 'text');
-      
-      // Get the API key (will use cached value if available)
-      const apiKey = await getApiKey();
-      if (!apiKey) {
-        throw new Error('No API key available for transcription');
-      }
+  const sendAudioForTranscription = useCallback(
+    async (blob: Blob) => {
+      try {
+        setIsTranscribing(true)
+        const formData = new FormData()
+        formData.append('file', blob, 'audio.wav')
+        formData.append('model', 'whisper-large-v3-turbo')
+        formData.append('response_format', 'text')
 
-      const response = await fetch(CONSTANTS.WHISPER_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Transcription failed: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const text = data.text || data.transcription || '';
-
-      if (text) {
-        const currentInput = input.trim();
-        const newText = text.trim();
-        
-        if (currentInput) {
-          // There's existing text, append the new transcription
-          setInput(currentInput + ' ' + newText);
-        } else {
-          // No existing text, set the transcription
-          setInput(newText);
+        // Get the API key (will use cached value if available)
+        const apiKey = await getApiKey()
+        if (!apiKey) {
+          throw new Error('No API key available for transcription')
         }
-      } else {
-        throw new Error('No transcription text received');
+
+        const response = await fetch(CONSTANTS.WHISPER_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: formData,
+        })
+
+        if (!response.ok) {
+          throw new Error(
+            `Transcription failed: ${response.status} ${response.statusText}`,
+          )
+        }
+
+        const data = await response.json()
+        const text = data.text || data.transcription || ''
+
+        if (text) {
+          const currentInput = input.trim()
+          const newText = text.trim()
+
+          if (currentInput) {
+            // There's existing text, append the new transcription
+            setInput(currentInput + ' ' + newText)
+          } else {
+            // No existing text, set the transcription
+            setInput(newText)
+          }
+        } else {
+          throw new Error('No transcription text received')
+        }
+      } catch (err) {
+        toast({
+          title: 'Transcription Error',
+          description:
+            err instanceof Error ? err.message : 'Failed to transcribe audio',
+          variant: 'destructive',
+          position: 'top-left',
+        })
+      } finally {
+        setIsTranscribing(false)
       }
-    } catch (err) {
-      toast({
-        title: "Transcription Error",
-        description: err instanceof Error ? err.message : 'Failed to transcribe audio',
-        variant: "destructive",
-        position: "top-left"
-      });
-    } finally {
-      setIsTranscribing(false);
-    }
-  }, [setInput, toast, getApiKey, input]);
+    },
+    [setInput, toast, getApiKey, input],
+  )
 
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 44100,
           echoCancellation: true,
           noiseSuppression: true,
-        } 
-      });
-      
+        },
+      })
+
       if (!MediaRecorder.isTypeSupported('audio/webm')) {
-        throw new Error('WebM audio recording is not supported in this browser');
+        throw new Error('WebM audio recording is not supported in this browser')
       }
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm',
-        audioBitsPerSecond: 128000
-      });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+        audioBitsPerSecond: 128000,
+      })
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
 
       mediaRecorder.ondataavailable = (event: any) => {
         if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+          audioChunksRef.current.push(event.data)
         }
-      };
+      }
 
       mediaRecorder.onstop = async () => {
         try {
           // Stop all tracks
-          stream.getTracks().forEach((track) => track.stop());
-          
+          stream.getTracks().forEach((track) => track.stop())
+
           // Create WebM blob
-          const webmBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          audioChunksRef.current = [];
-          
+          const webmBlob = new Blob(audioChunksRef.current, {
+            type: 'audio/webm',
+          })
+          audioChunksRef.current = []
+
           if (webmBlob.size === 0) {
-            throw new Error('No audio data recorded');
+            throw new Error('No audio data recorded')
           }
-          
-          setIsConverting(true);
-          
+
+          setIsConverting(true)
+
           // Convert WebM to WAV
-          const wavBlob = await convertWebMToWAV(webmBlob);
-          
-          setIsConverting(false);
-          
+          const wavBlob = await convertWebMToWAV(webmBlob)
+
+          setIsConverting(false)
+
           // Send WAV for transcription
-          sendAudioForTranscription(wavBlob);
+          sendAudioForTranscription(wavBlob)
         } catch (err) {
           toast({
-            title: "Recording Error",
-            description: err instanceof Error ? err.message : "Failed to process audio recording.",
-            variant: "destructive",
-            position: "top-left"
-          });
-          setIsRecording(false);
-          setIsTranscribing(false);
-          setIsConverting(false);
+            title: 'Recording Error',
+            description:
+              err instanceof Error
+                ? err.message
+                : 'Failed to process audio recording.',
+            variant: 'destructive',
+            position: 'top-left',
+          })
+          setIsRecording(false)
+          setIsTranscribing(false)
+          setIsConverting(false)
         }
-      };
+      }
 
-      mediaRecorder.start(1000);
-      setIsRecording(true);
+      mediaRecorder.start(1000)
+      setIsRecording(true)
 
       // Auto-stop after 30 seconds
       recordingTimeoutRef.current = setTimeout(() => {
-        stopRecording();
-      }, 30000);
+        stopRecording()
+      }, 30000)
     } catch (err) {
       toast({
-        title: "Recording Error",
-        description: err instanceof Error ? err.message : "Could not start recording. Please make sure you have granted microphone permissions.",
-        variant: "destructive",
-        position: "top-left"
-      });
+        title: 'Recording Error',
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Could not start recording. Please make sure you have granted microphone permissions.',
+        variant: 'destructive',
+        position: 'top-left',
+      })
     }
-  }, [sendAudioForTranscription, stopRecording, toast, convertWebMToWAV]);
+  }, [sendAudioForTranscription, stopRecording, toast, convertWebMToWAV])
 
   return (
     <div className="flex flex-col gap-2">
       {/* Display processed documents above input area */}
       {processedDocuments && processedDocuments.length > 0 && (
-        <div className={`flex items-center gap-2 overflow-x-auto py-2 px-2 rounded-lg mb-2 ${
-          isDarkMode ? 'bg-gray-700/40 border border-gray-600' : 'bg-gray-100/70 border border-gray-200'
-        }`}>
-          {processedDocuments.map(doc => (
-            <div 
-              key={doc.id} 
-              className="flex flex-col items-center relative px-2 py-1.5 group"
+        <div
+          className={`mb-2 flex items-center gap-2 overflow-x-auto rounded-lg px-2 py-2 ${
+            isDarkMode
+              ? 'border border-gray-600 bg-gray-700/40'
+              : 'border border-gray-200 bg-gray-100/70'
+          }`}
+        >
+          {processedDocuments.map((doc) => (
+            <div
+              key={doc.id}
+              className="group relative flex flex-col items-center px-2 py-1.5"
               title={doc.name}
             >
               <div className="relative">
-                <MacFileIcon 
-                  filename={doc.name} 
-                  size={20} 
+                <MacFileIcon
+                  filename={doc.name}
+                  size={20}
                   isDarkMode={isDarkMode}
                   isUploading={doc.isUploading}
                 />
                 {removeDocument && !doc.isUploading && (
                   <button
                     onClick={(e) => {
-                      e.stopPropagation();
-                      removeDocument(doc.id);
+                      e.stopPropagation()
+                      removeDocument(doc.id)
                     }}
-                    className={`absolute -top-1.5 -right-1.5 rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${
-                      isDarkMode 
-                        ? 'bg-gray-600 hover:bg-gray-500 text-gray-300' 
-                        : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+                    className={`absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${
+                      isDarkMode
+                        ? 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                        : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
                     }`}
                     aria-label="Remove document"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-3 w-3"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                 )}
               </div>
-              <span className={`text-xs truncate mt-1 max-w-[60px] ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                {doc.name.length > 10 ? doc.name.substring(0, 8) + '...' : doc.name}
+              <span
+                className={`mt-1 max-w-[60px] truncate text-xs ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}
+              >
+                {doc.name.length > 10
+                  ? doc.name.substring(0, 8) + '...'
+                  : doc.name}
               </span>
             </div>
           ))}
         </div>
       )}
-      
+
       <div
         className={`flex items-end gap-2 rounded-xl border py-2 pl-2 shadow-lg ${
           isDarkMode
@@ -440,10 +499,10 @@ export function ChatInput({
             : 'border-gray-300 bg-gray-100'
         }`}
       >
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileChange} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
           className="hidden"
           accept=".pdf,.doc,.docx,.txt,.md"
         />
@@ -494,26 +553,42 @@ export function ChatInput({
                 onClick={isRecording ? stopRecording : startRecording}
                 className={`mr-2 rounded-lg p-1.5 ${
                   isRecording
-                    ? 'text-red-500 animate-pulse'
+                    ? 'animate-pulse text-red-500'
                     : isDarkMode
-                    ? 'text-gray-300 hover:bg-gray-600'
-                    : 'text-gray-600 hover:bg-gray-200'
+                      ? 'text-gray-300 hover:bg-gray-600'
+                      : 'text-gray-600 hover:bg-gray-200'
                 } disabled:opacity-50`}
                 title={
-                  isRecording 
-                    ? 'Stop recording' 
-                    : isConverting 
-                    ? 'Converting to WAV...'
-                    : 'Start recording'
+                  isRecording
+                    ? 'Stop recording'
+                    : isConverting
+                      ? 'Converting to WAV...'
+                      : 'Start recording'
                 }
                 disabled={isTranscribing || isConverting}
               >
                 {isRecording ? (
                   <StopIcon className="h-5 w-5" />
-                ) : (isTranscribing || isConverting) ? (
-                  <svg className="h-5 w-5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                ) : isTranscribing || isConverting ? (
+                  <svg
+                    className="h-5 w-5 animate-spin"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
                   </svg>
                 ) : (
                   <MicrophoneIcon className="h-5 w-5" />
@@ -530,7 +605,9 @@ export function ChatInput({
                   ? 'text-gray-300 hover:bg-gray-600'
                   : 'text-gray-600 hover:bg-gray-200'
               } disabled:opacity-50`}
-              disabled={loadingState === 'loading' || isTranscribing || isConverting}
+              disabled={
+                loadingState === 'loading' || isTranscribing || isConverting
+              }
             >
               {loadingState === 'loading' ? (
                 <StopIcon className="h-5 w-5" />

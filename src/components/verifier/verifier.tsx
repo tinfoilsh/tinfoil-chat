@@ -1,10 +1,10 @@
-import { ShieldCheckIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
 import '../../../wasm_exec.js'
+import { CONSTANTS } from '../chat/constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
 import VerificationStatus from './verification-status'
-import { CONSTANTS } from '../chat/constants'
 
 // Define proper types for WASM Go interface
 interface GoInterface {
@@ -72,7 +72,7 @@ const VERIFICATION_STEPS = {
     loading: 'Fetching Source Code...',
     success: 'Source Code Verified',
     key: 'CODE_INTEGRITY' as VerificationStepKey,
-  },  
+  },
   CODE_CONSISTENCY: {
     base: 'Security Verification',
     loading: 'Checking Security...',
@@ -103,7 +103,9 @@ interface GitHubRelease {
 
 const fetchLatestDigest = async (repo: string): Promise<string> => {
   // First fetch the latest release to get the tag
-  const releaseResponse = await fetch(`https://github-proxy.tinfoil.sh/repos/${repo}/releases/latest`)
+  const releaseResponse = await fetch(
+    `https://github-proxy.tinfoil.sh/repos/${repo}/releases/latest`,
+  )
   if (!releaseResponse.ok) {
     throw new Error('Failed to fetch latest release')
   }
@@ -111,7 +113,9 @@ const fetchLatestDigest = async (repo: string): Promise<string> => {
   const tag = releaseData.tag_name
 
   // Fetch the hash file directly using the tag with correct URL format
-  const hashResponse = await fetch(`https://github-proxy.tinfoil.sh/${repo}/releases/download/${tag}/tinfoil.hash`)
+  const hashResponse = await fetch(
+    `https://github-proxy.tinfoil.sh/${repo}/releases/download/${tag}/tinfoil.hash`,
+  )
   if (!hashResponse.ok) {
     throw new Error('Failed to fetch hash file')
   }
@@ -178,9 +182,7 @@ export function Verifier({
       try {
         const go = new window.Go()
         const result = await WebAssembly.instantiateStreaming(
-          fetch(
-            CONSTANTS.VERIFIER_WASM_URL,
-          ),
+          fetch(CONSTANTS.VERIFIER_WASM_URL),
           go.importObject,
         )
         go.run(result.instance)
@@ -198,25 +200,30 @@ export function Verifier({
       return
     }
 
-    let codeMeasurement = ""
-    let runtimeMeasurement = ""
+    let codeMeasurement = ''
+    let runtimeMeasurement = ''
 
     try {
-
       // Reset all states to loading
       updateStepStatus('runtime', 'loading', null, null)
       updateStepStatus('code', 'loading', null, null)
       updateStepStatus('security', 'loading', null, null)
 
-      let latestDigest: string | null = null;
+      let latestDigest: string | null = null
 
       // Fetch the latest digest first
       try {
         latestDigest = await fetchLatestDigest(repo)
         setDigest(latestDigest)
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        updateStepStatus('code', 'error', null, `Failed to fetch latest digest: ${errorMessage}`)
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error'
+        updateStepStatus(
+          'code',
+          'error',
+          null,
+          `Failed to fetch latest digest: ${errorMessage}`,
+        )
         updateStepStatus('runtime', 'pending', null, null)
         updateStepStatus('security', 'pending', null, null)
         return
@@ -226,15 +233,11 @@ export function Verifier({
       try {
         const { certificate, measurement } = await window.verifyEnclave(enclave)
         runtimeMeasurement = measurement
-        updateStepStatus(
-          'runtime',
-          'success',
-          measurement,
-          null,
-        )
+        updateStepStatus('runtime', 'success', measurement, null)
       } catch (error) {
         // If runtime verification failed, mark as error and exit
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
         updateStepStatus('runtime', 'error', null, errorMessage)
         updateStepStatus('code', 'pending', null, null)
         updateStepStatus('security', 'pending', null, null)
@@ -249,15 +252,21 @@ export function Verifier({
         const measurement = await window.verifyCode(repo, latestDigest)
         codeMeasurement = measurement
         updateStepStatus('code', 'success', { measurement }, null)
-        
+
         // Only check security status if both steps succeeded
         if (codeMeasurement === runtimeMeasurement) {
           updateStepStatus('security', 'success', null, null)
         } else {
-          updateStepStatus('security', 'error', null, 'Code and runtime measurements do not match.')
+          updateStepStatus(
+            'security',
+            'error',
+            null,
+            'Code and runtime measurements do not match.',
+          )
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
         updateStepStatus('code', 'error', null, errorMessage)
         updateStepStatus('security', 'pending', null, null)
         return
@@ -316,10 +325,15 @@ export function Verifier({
   }, [verificationState, onVerificationComplete])
 
   return (
-    <div className={`flex h-full w-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+    <div
+      className={`flex h-full w-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}
+    >
       {/* Header with Verification Status */}
       <div className="flex-none">
-        <VerificationStatus verificationState={verificationState} isDarkMode={isDarkMode} />
+        <VerificationStatus
+          verificationState={verificationState}
+          isDarkMode={isDarkMode}
+        />
       </div>
 
       {/* Scrollable Content */}
@@ -332,14 +346,20 @@ export function Verifier({
         }}
       >
         {/* Info Section */}
-        <div className={`border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} px-3 py-2 sm:px-4 sm:py-3`}>
-          <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+        <div
+          className={`border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} px-3 py-2 sm:px-4 sm:py-3`}
+        >
+          <p
+            className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
+          >
             This automated verification tool lets you independently confirm that
             the model is running in the secure enclave, ensuring your
             conversations remain completely private.
           </p>
           <div className="mt-2">
-            <h4 className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+            <h4
+              className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+            >
               Related Links
             </h4>
             <ul className="space-y-2">
@@ -375,7 +395,7 @@ export function Verifier({
           >
             <div className="flex items-center justify-center gap-2">
               <div
-                className={`h-5 w-5 ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')}`}
+                className={`h-5 w-5 ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
               >
                 {isWasmLoaded ? (
                   <ShieldCheckIcon />
@@ -384,7 +404,7 @@ export function Verifier({
                 )}
               </div>
               <span
-                className={`text-sm ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')}`}
+                className={`text-sm ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
               >
                 {isWasmLoaded ? (
                   <>
@@ -409,8 +429,8 @@ export function Verifier({
                 onClick={verifyAll}
                 disabled={isVerifying}
                 className={`w-full max-w-[200px] rounded-lg border px-3 py-2 text-sm disabled:opacity-50 md:w-auto ${
-                  isDarkMode 
-                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  isDarkMode
+                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
                     : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >

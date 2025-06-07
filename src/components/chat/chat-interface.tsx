@@ -12,17 +12,16 @@ import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
 import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
-import { useChatState } from './use-chat-state'
-import { VerifierSidebar } from './verifier-sidebar'
 import { useDocumentUploader } from './document-uploader'
 import type { VerificationState } from './types'
-
+import { useChatState } from './use-chat-state'
+import { VerifierSidebar } from './verifier-sidebar'
 
 type ChatInterfaceProps = {
   verificationState?: VerificationState
@@ -35,11 +34,11 @@ type ChatInterfaceProps = {
 
 // Type for processed documents
 type ProcessedDocument = {
-  id: string;
-  name: string;
-  time: Date;
-  content?: string;
-  isUploading?: boolean;
+  id: string
+  name: string
+  time: Date
+  content?: string
+  isUploading?: boolean
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -91,13 +90,15 @@ export function ChatInterface({
     }
     return false
   })
-  
+
   // State for tracking processed documents
-  const [processedDocuments, setProcessedDocuments] = useState<ProcessedDocument[]>([])
-  
+  const [processedDocuments, setProcessedDocuments] = useState<
+    ProcessedDocument[]
+  >([])
+
   // Get the user's email
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
-  
+
   // Initialize document uploader hook
   const { handleDocumentUpload } = useDocumentUploader()
 
@@ -194,112 +195,130 @@ export function ChatInterface({
   ) as BaseModel | undefined
 
   // Document upload handler wrapper
-  const handleFileUpload = useCallback(async (file: File) => {
-    // Create a temporary document entry with uploading status
-    const tempDocId = Math.random().toString(36).substring(2, 9);
-    
-    // Add placeholder document that shows as uploading
-    setProcessedDocuments(prev => [
-      ...prev,
-      {
-        id: tempDocId,
-        name: file.name,
-        time: new Date(),
-        isUploading: true
-      }
-    ]);
-    
-    await handleDocumentUpload(
-      file,
-      (content, documentId) => {
-        const newDocTokens = estimateTokenCount(content);
-        const contextLimit = parseContextWindowTokens(selectedModelDetails?.contextWindow);
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      // Create a temporary document entry with uploading status
+      const tempDocId = Math.random().toString(36).substring(2, 9)
 
-        // Check if adding would exceed context window
-        const existingTokens = processedDocuments.reduce(
-          (total, doc) => total + estimateTokenCount(doc.content),
-          0
-        );
+      // Add placeholder document that shows as uploading
+      setProcessedDocuments((prev) => [
+        ...prev,
+        {
+          id: tempDocId,
+          name: file.name,
+          time: new Date(),
+          isUploading: true,
+        },
+      ])
 
-        if (existingTokens + newDocTokens > contextLimit) {
-          // Remove the document if it would exceed the context limit
-          setProcessedDocuments(prev => prev.filter(doc => doc.id !== tempDocId));
-          
+      await handleDocumentUpload(
+        file,
+        (content, documentId) => {
+          const newDocTokens = estimateTokenCount(content)
+          const contextLimit = parseContextWindowTokens(
+            selectedModelDetails?.contextWindow,
+          )
+
+          // Check if adding would exceed context window
+          const existingTokens = processedDocuments.reduce(
+            (total, doc) => total + estimateTokenCount(doc.content),
+            0,
+          )
+
+          if (existingTokens + newDocTokens > contextLimit) {
+            // Remove the document if it would exceed the context limit
+            setProcessedDocuments((prev) =>
+              prev.filter((doc) => doc.id !== tempDocId),
+            )
+
+            toast({
+              title: 'Context window saturated',
+              description:
+                "The selected model's context window is full. Remove a document or choose a model with a larger context window before uploading more files.",
+              variant: 'destructive',
+              position: 'top-left',
+            })
+            return
+          }
+
+          // Replace the placeholder with the actual document
+          setProcessedDocuments((prev) => {
+            return prev.map((doc) =>
+              doc.id === tempDocId
+                ? {
+                    id: documentId,
+                    name: file.name,
+                    time: new Date(),
+                    content,
+                  }
+                : doc,
+            )
+          })
+        },
+        (error, documentId) => {
+          // On error, remove the placeholder document
+          setProcessedDocuments((prev) =>
+            prev.filter((doc) => doc.id !== tempDocId),
+          )
+
           toast({
-            title: 'Context window saturated',
-            description:
-              'The selected model\'s context window is full. Remove a document or choose a model with a larger context window before uploading more files.',
+            title: 'Processing failed',
+            description: error.message || 'Failed to process document',
             variant: 'destructive',
             position: 'top-left',
-          });
-          return;
-        }
-        
-        // Replace the placeholder with the actual document
-        setProcessedDocuments(prev => {
-          return prev.map(doc => 
-            doc.id === tempDocId ? {
-              id: documentId,
-              name: file.name,
-              time: new Date(),
-              content
-            } : doc
-          );
-        });
-      },
-      (error, documentId) => {
-        // On error, remove the placeholder document
-        setProcessedDocuments(prev => prev.filter(doc => doc.id !== tempDocId));
-        
-        toast({
-          title: 'Processing failed',
-          description: error.message || 'Failed to process document',
-          variant: 'destructive',
-          position: 'top-left',
-        });
-      },
-    );
-  }, [handleDocumentUpload, processedDocuments, selectedModelDetails?.contextWindow, toast])
+          })
+        },
+      )
+    },
+    [
+      handleDocumentUpload,
+      processedDocuments,
+      selectedModelDetails?.contextWindow,
+      toast,
+    ],
+  )
 
   // Handler for removing documents
   const removeDocument = (id: string) => {
-    setProcessedDocuments(prev => prev.filter(doc => doc.id !== id));
+    setProcessedDocuments((prev) => prev.filter((doc) => doc.id !== id))
   }
 
   // Wrap handleSubmit to include document content
   const wrappedHandleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
     // Don't proceed if there's no input text
     if (!input.trim()) {
-      return;
+      return
     }
 
     // Filter out documents that are still uploading
-    const completedDocuments = processedDocuments.filter(doc => 
-      !doc.isUploading
-    );
+    const completedDocuments = processedDocuments.filter(
+      (doc) => !doc.isUploading,
+    )
 
     // If we have completed documents, create a message with their content
-    const docContent = completedDocuments.length > 0 
-      ? completedDocuments
-          .map(doc => doc.content)
-          .filter(content => content)
-          .join('\n')
-      : undefined;
-    
-    const documentNames = completedDocuments.length > 0
-      ? completedDocuments.map(doc => ({ name: doc.name }))
-      : undefined;
+    const docContent =
+      completedDocuments.length > 0
+        ? completedDocuments
+            .map((doc) => doc.content)
+            .filter((content) => content)
+            .join('\n')
+        : undefined
+
+    const documentNames =
+      completedDocuments.length > 0
+        ? completedDocuments.map((doc) => ({ name: doc.name }))
+        : undefined
 
     // Call handleQuery with the input and document content
-    handleQuery(input, docContent, documentNames);
-    
+    handleQuery(input, docContent, documentNames)
+
     // Only remove the completed documents from the state
-    const remainingDocuments = processedDocuments.filter(doc => 
-      doc.isUploading
-    );
-    setProcessedDocuments(remainingDocuments);
+    const remainingDocuments = processedDocuments.filter(
+      (doc) => doc.isUploading,
+    )
+    setProcessedDocuments(remainingDocuments)
   }
 
   // --- Drag & Drop across bottom input area ---
@@ -492,9 +511,7 @@ export function ChatInterface({
           {isClient && (
             <div
               className={`fixed bottom-0 left-0 right-0 z-10 ${
-                isDarkMode
-                  ? 'bg-gray-800'
-                  : 'bg-white'
+                isDarkMode ? 'bg-gray-800' : 'bg-white'
               } p-4`}
               style={{
                 position: 'absolute',
@@ -507,22 +524,28 @@ export function ChatInterface({
                 transform: 'translateZ(0)',
                 willChange: 'transform',
                 transition: 'border 0.2s ease-in-out',
-                borderTop: isBottomDragActive 
+                borderTop: isBottomDragActive
                   ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
-                  : isDarkMode 
+                  : isDarkMode
                     ? '1px solid rgb(55, 65, 81)' // gray-700
                     : '1px solid rgb(229, 231, 235)', // gray-200
-                borderLeft: isBottomDragActive ? '2px solid rgba(52, 211, 153, 0.5)' : 'none',
-                borderRight: isBottomDragActive ? '2px solid rgba(52, 211, 153, 0.5)' : 'none',
-                borderBottom: isBottomDragActive ? '2px solid rgba(52, 211, 153, 0.5)' : 'none',
+                borderLeft: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)'
+                  : 'none',
+                borderRight: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)'
+                  : 'none',
+                borderBottom: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)'
+                  : 'none',
               }}
               onDragOver={handleBottomDragOver}
               onDragLeave={handleBottomDragLeave}
               onDrop={(e) => {
-                e.preventDefault();
-                setIsBottomDragActive(false);
+                e.preventDefault()
+                setIsBottomDragActive(false)
                 if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                  handleFileUpload(e.dataTransfer.files[0]);
+                  handleFileUpload(e.dataTransfer.files[0])
                 }
               }}
             >

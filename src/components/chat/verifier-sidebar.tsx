@@ -1,7 +1,7 @@
 import { XMarkIcon } from '@heroicons/react/24/outline'
+import Image from 'next/image'
 import { useEffect, useRef } from 'react'
 import { Verifier } from '../verifier/verifier'
-import Image from 'next/image'
 
 type VerifierSidebarProps = {
   isOpen: boolean
@@ -74,12 +74,16 @@ export function VerifierSidebar({
         >
           <div className="flex items-center gap-2">
             <Image
-              src={isDarkMode ? "/icon-dark.png" : "/icon-light.png"}
+              src={isDarkMode ? '/icon-dark.png' : '/icon-light.png'}
               alt="Tinfoil Logo"
               width={24}
               height={24}
             />
-            <span className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Verification Center</span>
+            <span
+              className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+            >
+              Verification Center
+            </span>
           </div>
           <button
             className={`rounded-lg p-2 transition-all duration-200 ${
@@ -108,9 +112,13 @@ export function VerifierSidebar({
         </div>
 
         {/* SOC2 Compliance Footer */}
-        <div className={`flex-none border-t h-[56px] flex items-center justify-center ${
-          isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'
-        } p-3`}>
+        <div
+          className={`flex h-[56px] flex-none items-center justify-center border-t ${
+            isDarkMode
+              ? 'border-gray-800 bg-gray-900'
+              : 'border-gray-200 bg-white'
+          } p-3`}
+        >
           <div className="flex items-center justify-center gap-2">
             <Image
               src="/verification-logos/soc2.png"
@@ -118,9 +126,11 @@ export function VerifierSidebar({
               width={24}
               height={24}
             />
-            <p className={`text-xs ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`}>
+            <p
+              className={`text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}
+            >
               Tinfoil is SOC2 Type I compliant
             </p>
           </div>

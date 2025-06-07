@@ -13,7 +13,7 @@ export type BaseModel = {
   contextWindow?: string
   recommendedUse?: string
   supportedLanguages?: string
-  type: "chat" | "embedding" | "audio" | "tts"
+  type: 'chat' | 'embedding' | 'audio' | 'tts'
   chat?: boolean
   paid?: boolean
   endpoint?: string
@@ -41,7 +41,7 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
         'Ideal for complex reasoning tasks, mathematical problems, and advanced coding applications requiring strong logical capabilities.',
       supportedLanguages:
         'Multilingual with strong performance across major languages',
-      type: "chat",
+      type: 'chat',
       chat: true,
       paid: true,
     },
@@ -54,14 +54,14 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
       description:
         'Latest reasoning model with significantly enhanced depth and performance approaching top-tier models',
       details:
-        "DeepSeek's latest R1-0528 model with significantly enhanced reasoning capabilities. Shows major improvements in mathematical problem-solving (87.5% AIME 2025 accuracy), coding tasks, and tool calling, with performance approaching top-tier models like O3 and Gemini 2.5 Pro.",  
+        "DeepSeek's latest R1-0528 model with significantly enhanced reasoning capabilities. Shows major improvements in mathematical problem-solving (87.5% AIME 2025 accuracy), coding tasks, and tool calling, with performance approaching top-tier models like O3 and Gemini 2.5 Pro.",
       parameters: '685 billion',
       contextWindow: '64k tokens',
       recommendedUse:
         'Ideal for complex mathematical problems, advanced programming tasks, and deep analytical reasoning requiring extensive thought processes.',
       supportedLanguages:
         'Multilingual with strong performance across major languages',
-      type: "chat",
+      type: 'chat',
       chat: true,
       paid: true,
     },
@@ -82,7 +82,7 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
         'Ideal for multimodal applications, virtual assistants, and specialized domain fine-tuning requiring both text and vision capabilities.',
       supportedLanguages:
         'Multilingual with strong performance across major languages',
-      type: "chat",
+      type: 'chat',
       chat: true,
       paid: true,
     },
@@ -107,7 +107,7 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
         'Ideal for assistant-style chat, multilingual tasks, and general text generation. Should be deployed as part of a system with additional safety guardrails.',
       supportedLanguages:
         'English, German, French, Italian, Portuguese, Hindi, Spanish, and Thai',
-      type: "chat",
+      type: 'chat',
       chat: true,
     },
     {
@@ -127,7 +127,7 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
         'Ideal for complex reasoning tasks, advanced coding applications, mathematical problems, structured data processing, and long-form content generation.',
       supportedLanguages:
         'Multilingual support for 29+ languages including Chinese, English, French, Spanish, Portuguese, German, Italian, Russian, Japanese, Korean, Vietnamese, Thai, Arabic, and more',
-      type: "chat",
+      type: 'chat',
       chat: true,
       paid: true,
     },
@@ -138,13 +138,17 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
       repo: 'tinfoilsh/confidential-audio-processing',
       name: 'Whisper Large V3 Turbo',
       nameShort: 'Whisper Turbo',
-      description: 'High-performance speech recognition and transcription model',
-      details: 'Advanced speech recognition model with great accuracy, speed, and multilingual support. Optimized for real-time transcription with enhanced performance on diverse audio conditions, accents, and terminology.',
+      description:
+        'High-performance speech recognition and transcription model',
+      details:
+        'Advanced speech recognition model with great accuracy, speed, and multilingual support. Optimized for real-time transcription with enhanced performance on diverse audio conditions, accents, and terminology.',
       parameters: '809 million',
       contextWindow: '30 seconds of audio',
-      recommendedUse: 'Ideal for transcription services, captioning, voice interfaces, and multilingual audio processing applications.',
-      supportedLanguages: 'Supports 90+ languages with high accuracy across diverse accents and dialects',
-      type: "audio",
+      recommendedUse:
+        'Ideal for transcription services, captioning, voice interfaces, and multilingual audio processing applications.',
+      supportedLanguages:
+        'Supports 90+ languages with high accuracy across diverse accents and dialects',
+      type: 'audio',
       paid: true,
     },
     {
@@ -164,7 +168,7 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
       recommendedUse:
         'Ideal for retrieval-augmented generation (RAG), semantic search, clustering, and document similarity tasks.',
       supportedLanguages: 'Multilingual',
-      type: "embedding",
+      type: 'embedding',
     },
     {
       modelName: 'kokoro',
@@ -174,12 +178,14 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
       name: 'Kokoro TTS',
       nameShort: 'Kokoro',
       description: 'Fast and efficient open-weight text-to-speech model',
-      details: 'A lightweight 82M parameter TTS model that delivers high-quality speech synthesis with minimal computational requirements.',
+      details:
+        'A lightweight 82M parameter TTS model that delivers high-quality speech synthesis with minimal computational requirements.',
       parameters: '82 million',
       contextWindow: '512 tokens',
-      recommendedUse: 'Ideal for text-to-speech applications requiring fast inference and high-quality output.',
+      recommendedUse:
+        'Ideal for text-to-speech applications requiring fast inference and high-quality output.',
       supportedLanguages: 'Multilingual',
-      type: "tts",
+      type: 'tts',
     },
   ]
 }
