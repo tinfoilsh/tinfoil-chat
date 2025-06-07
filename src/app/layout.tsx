@@ -1,7 +1,7 @@
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import type { Metadata } from 'next'
-import { ClerkProviderWrapper } from '@/components/clerk-provider-wrapper'
+import { ClerkProvider } from '@clerk/nextjs'
 
 export const metadata: Metadata = {
   title: {
@@ -55,10 +55,19 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-gray-900 text-gray-900 antialiased">
-        <ClerkProviderWrapper>
+        <ClerkProvider 
+          telemetry={false} 
+          afterSignOutUrl="/"
+          appearance={{
+            elements: {
+              formButtonPrimary: 'bg-emerald-500 hover:bg-emerald-600',
+              card: 'bg-gray-800',
+            }
+          }}
+        >
           {children}
           <Toaster />
-        </ClerkProviderWrapper>
+        </ClerkProvider>
       </body>
     </html>
   )
