@@ -10,8 +10,13 @@ import { MeasurementDiff } from './measurement-diff'
 
 type DigestType = 'SOURCE' | 'RUNTIME' | 'CODE_INTEGRITY' | 'GENERIC'
 
+interface MeasurementData {
+  measurement?: string
+  certificate?: string
+}
+
 // Utility function to extract measurement value
-const extractMeasurement = (data: any): string => {
+const extractMeasurement = (data: MeasurementData | string): string => {
   if (typeof data === 'string') {
     return data.replace(/^"|"$/g, '');
   }
@@ -26,7 +31,7 @@ type ProcessStepProps = {
   description: string
   status: 'pending' | 'loading' | 'success' | 'error'
   error?: string
-  measurements?: any
+  measurements?: MeasurementData | string
   technicalDetails?: string
   links?: Array<{ text: string; url: string }>
   children?: React.ReactNode

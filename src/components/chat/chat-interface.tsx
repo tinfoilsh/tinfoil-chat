@@ -10,7 +10,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
 import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
-import { Bars3Icon, ShieldCheckIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
 import { useEffect, useState, useCallback } from 'react'
 import { ChatInput } from './chat-input'
@@ -18,32 +18,14 @@ import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
-import { isRateLimitExceeded, recordMessage } from './rate-limit'
 import { useChatState } from './use-chat-state'
 import { VerifierSidebar } from './verifier-sidebar'
 import { useDocumentUploader } from './document-uploader'
-import { DocumentIcon, PaperAirplaneIcon, StopIcon } from '@heroicons/react/24/outline'
-import { 
-  FaFile, 
-  FaFileImage, 
-  FaFilePdf, 
-  FaFileWord, 
-  FaFileExcel,
-  FaFileCode,
-  FaFileAudio,
-  FaFileVideo,
-  FaFileArchive,
-  FaFilePowerpoint,
-  FaFileAlt
-} from 'react-icons/fa'
-import type { FormEvent, RefObject } from 'react'
-import { Link } from '../link'
-import type { LoadingState } from './types'
-import { useRef } from 'react'
-import { getFileIconType } from './document-uploader'
+import type { VerificationState } from './types'
+
 
 type ChatInterfaceProps = {
-  verificationState?: any
+  verificationState?: VerificationState
   showVerifyButton?: boolean
   minHeight?: string
   inputMinHeight?: string

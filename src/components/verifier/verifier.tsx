@@ -6,16 +6,19 @@ import { ProcessStep } from './process-step'
 import VerificationStatus from './verification-status'
 import { CONSTANTS } from '../chat/constants'
 
+// Define proper types for WASM Go interface
+interface GoInterface {
+  run(instance: WebAssembly.Instance): void
+  importObject: WebAssembly.Imports
+}
 
 declare global {
   interface Window {
-    Go: any
-
+    Go: new () => GoInterface
     verifyEnclave(enclaveHostname: string): Promise<{
       certificate: string
       measurement: string
     }>
-
     verifyCode(repo: string, digest: string): Promise<string>
   }
 }
@@ -30,15 +33,20 @@ type VerifierProps = {
 
 type VerificationStatus = 'error' | 'pending' | 'loading' | 'success'
 
+interface MeasurementData {
+  measurement?: string
+  certificate?: string
+}
+
 type VerificationState = {
   code: {
     status: VerificationStatus
-    measurements: any
+    measurements?: MeasurementData
     error?: string
   }
   runtime: {
     status: VerificationStatus
-    measurements: any
+    measurements?: string
     error?: string
   }
   security: {
@@ -89,13 +97,17 @@ const getStepTitle = (
   }
 }
 
+interface GitHubRelease {
+  tag_name: string
+}
+
 const fetchLatestDigest = async (repo: string): Promise<string> => {
   // First fetch the latest release to get the tag
   const releaseResponse = await fetch(`https://github-proxy.tinfoil.sh/repos/${repo}/releases/latest`)
   if (!releaseResponse.ok) {
     throw new Error('Failed to fetch latest release')
   }
-  const releaseData = await releaseResponse.json()
+  const releaseData: GitHubRelease = await releaseResponse.json()
   const tag = releaseData.tag_name
 
   // Fetch the hash file directly using the tag with correct URL format
@@ -142,7 +154,7 @@ export function Verifier({
     (
       section: 'code' | 'runtime' | 'security',
       status: string,
-      measurements: any = null,
+      measurements: MeasurementData | string | null = null,
       error: string | null = null,
     ) => {
       setVerificationState((prev) => ({
@@ -202,8 +214,9 @@ export function Verifier({
       try {
         latestDigest = await fetchLatestDigest(repo)
         setDigest(latestDigest)
-      } catch (error: any) {
-        updateStepStatus('code', 'error', null, `Failed to fetch latest digest: ${error.message}`)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        updateStepStatus('code', 'error', null, `Failed to fetch latest digest: ${errorMessage}`)
         updateStepStatus('runtime', 'pending', null, null)
         updateStepStatus('security', 'pending', null, null)
         return
@@ -219,9 +232,10 @@ export function Verifier({
           measurement,
           null,
         )
-      } catch (error: any) {
+      } catch (error) {
         // If runtime verification failed, mark as error and exit
-        updateStepStatus('runtime', 'error', null, error.toString())
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        updateStepStatus('runtime', 'error', null, errorMessage)
         updateStepStatus('code', 'pending', null, null)
         updateStepStatus('security', 'pending', null, null)
         return
@@ -242,8 +256,9 @@ export function Verifier({
         } else {
           updateStepStatus('security', 'error', null, 'Code and runtime measurements do not match.')
         }
-      } catch (error: any) {
-        updateStepStatus('code', 'error', null, error.toString())
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        updateStepStatus('code', 'error', null, errorMessage)
         updateStepStatus('security', 'pending', null, null)
         return
       }

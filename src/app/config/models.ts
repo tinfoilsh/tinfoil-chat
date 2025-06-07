@@ -131,62 +131,6 @@ export const AI_MODELS = (paid: boolean): AIModel[] => {
       chat: true,
       paid: true,
     },
-    // {
-    //   modelName: 'llama3.2-1b',
-    //   name: 'Llama 3.2 1B',
-    //   nameShort: 'Llama',
-    //   image: '/model-icons/llama.png',
-    //   enclave: 'models.default.tinfoil.sh',
-    //   repo: 'tinfoilsh/default-models-nitro',
-    //   description: 'Multilingual large language model optimized for dialogue',
-    //   details:
-    //     'The Meta Llama 3.2 1B model is optimized for multilingual dialogue use cases, including personal information management, knowledge retrieval, and rewriting tasks running locally on edge devices. It is competitive with other 1-3B parameter models.',
-    //   parameters: '1.24 billion',
-    //   contextWindow: '128k tokens',
-    //   recommendedUse:
-    //     'Best suited for personal information management, multilingual knowledge retrieval, and rewriting tasks running locally on edge.',
-    //   supportedLanguages:
-    //     'English, French, German, Hindi, Italian, Portuguese, Spanish, Thai',
-    //   type: "chat",
-    // },
-    // {
-    //   modelName: 'llama-guard3-1b',
-    //   image: '/model-icons/llama.png',
-    //   enclave: 'models.default.tinfoil.sh',
-    //   repo: 'tinfoilsh/default-models-nitro',
-    //   name: 'Llama Guard 3 1B',
-    //   nameShort: 'Llama Guard',
-    //   description: 'Safety-focused model for content filtering and moderation',
-    //   details:
-    //     'Llama Guard 3 is specialized in content moderation and safety checks, designed to evaluate both input prompts and output responses for safety and policy compliance. The model evaluates content across 13 safety categories based on the MLCommons hazards taxonomy, including violent/non-violent crimes, hate speech, and more.',
-    //   parameters: '1.5 billion',
-    //   contextWindow: '4k tokens',
-    //   recommendedUse:
-    //     'Designed for content moderation, safety filtering, and evaluating both input prompts and model outputs for policy compliance.',
-    //   supportedLanguages:
-    //     'English, French, German, Hindi, Italian, Portuguese, Spanish, Thai',
-    //   type: "chat",
-    // },
-    // {
-    //   modelName: 'qwen2.5-coder-0.5b',
-    //   image: '/model-icons/qwen.png',
-    //   enclave: 'models.default.tinfoil.sh',
-    //   endpoint: 'https://models.default.tinfoil.sh/api/generate',
-    //   repo: 'tinfoilsh/default-models-nitro',
-    //   name: 'Qwen 2.5 Coder 0.5B',
-    //   nameShort: 'Qwen Coder',
-    //   description:
-    //     'Compact code-specialized model for lightweight applications',
-    //   details:
-    //     'Part of the Qwen 2.5 Coder series, optimized for code generation, reasoning, and fixing. The 0.5B model offers a balanced combination of performance and efficiency.',
-    //   parameters: '494 M',
-    //   contextWindow: '32k tokens',
-    //   recommendedUse:
-    //     'Perfect for lightweight coding applications, prototyping, and quick development tasks.',
-    //   supportedLanguages:
-    //     'Multilingual code support across 40+ programming languages',
-    //   type: "chat",
-    // },
     {
       modelName: 'whisper-large-v3-turbo',
       image: '/model-icons/openai.png',

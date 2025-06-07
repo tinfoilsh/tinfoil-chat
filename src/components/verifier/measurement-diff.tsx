@@ -1,14 +1,22 @@
 import { CheckIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 
+interface MeasurementData {
+  measurement?: string
+  certificate?: string
+}
+
 type MeasurementDiffProps = {
-  sourceMeasurements: any
-  runtimeMeasurements: any
+  sourceMeasurements: MeasurementData | string
+  runtimeMeasurements: MeasurementData | string
   isVerified: boolean
   isDarkMode?: boolean
 }
 
 // Utility function to extract measurement value
-const extractMeasurement = (data: any): string => {
+const extractMeasurement = (data: MeasurementData | string): string => {
+  if (typeof data === 'string') {
+    return data;
+  }
   if (typeof data === 'object' && data?.measurement) {
     return data.measurement;
   }
