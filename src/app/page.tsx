@@ -1,11 +1,11 @@
 'use client'
 
-import { ChatWrapper } from '@/components/chat/chat-wrapper'
+import { ChatInterface } from '@/components/chat'
 
 export default function Chat() {
   return (
     <div className="h-screen">
-      <ChatWrapper />
+      <ChatInterface />
     </div>
   )
 }
