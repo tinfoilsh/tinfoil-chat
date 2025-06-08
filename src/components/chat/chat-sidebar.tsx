@@ -344,14 +344,14 @@ export function ChatSidebar({
             >
               By using this service, you agree to Tinfoil&apos;s{' '}
               <Link
-                href="/terms"
+                href="https://tinfoil.sh/terms"
                 className="text-emerald-500 hover:text-emerald-600"
               >
                 Terms of Service
               </Link>{' '}
               and{' '}
               <Link
-                href="/privacy"
+                href="https://tinfoil.sh/privacy"
                 className="text-emerald-500 hover:text-emerald-600"
               >
                 Privacy Policy
