@@ -1,13 +1,13 @@
 'use client'
 
-import { ChatWrapper } from '@/components/chat/chat-wrapper'
+import { ChatInterface } from '@/components/chat'
 
 export const dynamic = 'force-dynamic'
 
 export default function Chat() {
   return (
     <div className="h-screen">
-      <ChatWrapper />
+      <ChatInterface />
     </div>
   )
 }

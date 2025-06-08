@@ -29,7 +29,6 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
-  isPremium?: boolean
 }
 
 // Type for processed documents
@@ -64,7 +63,6 @@ export function ChatInterface({
   minHeight,
   inputMinHeight = '28px',
   isDarkMode: propIsDarkMode,
-  isPremium: propIsPremium,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn } = useAuth()
@@ -73,8 +71,20 @@ export function ChatInterface({
     chat_subscription_active,
     is_subscribed,
     api_subscription_active,
-    isLoading,
+    isLoading: subscriptionLoading,
   } = useSubscriptionStatus()
+
+  // Show loading state while checking subscription
+  if (subscriptionLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
+        <div className="relative h-10 w-10">
+          <div className="absolute inset-0 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-gray-200 opacity-30"></div>
+        </div>
+      </div>
+    )
+  }
 
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(() => {
@@ -102,11 +112,8 @@ export function ChatInterface({
   // Initialize document uploader hook
   const { handleDocumentUpload } = useDocumentUploader()
 
-  // Use subscription status from hook or fallback to prop
-  let isPremium = chat_subscription_active || propIsPremium
-  if (isPremium === undefined) {
-    isPremium = false
-  }
+  // Use subscription status from hook
+  const isPremium = chat_subscription_active ?? false
 
   const {
     // State
