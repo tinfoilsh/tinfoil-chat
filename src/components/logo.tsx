@@ -11,17 +11,14 @@ export function Logo({
   dark?: boolean
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <Mark className={clsx(className)} dark={dark} />
-      <span
-        className={clsx(
-          'font-helvetica-neue text-3xl font-semibold tracking-wide',
-          dark ? 'text-white' : 'text-emerald-900',
-        )}
-      >
-        Tinfoil
-      </span>
-    </div>
+    <Image
+      src={dark ? '/tinfoill-logo.png' : '/tinfoill-logo-light.png'}
+      alt="Tinfoil"
+      width={200}
+      height={90}
+      className={clsx(className)}
+      priority
+    />
   )
 }
 

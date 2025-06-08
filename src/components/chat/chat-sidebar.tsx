@@ -160,8 +160,8 @@ export function ChatSidebar({
             isDarkMode ? 'border-gray-800' : 'border-gray-200'
           } p-4`}
         >
-          <Link href="https://www.tinfoil.sh" title="Home">
-            <Logo className="h-6 w-auto" dark={isDarkMode} />
+          <Link href="https://www.tinfoil.sh" title="Home" className="flex items-center">
+            <Logo className="h-8 w-auto mt-1" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
             <button
