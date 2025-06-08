@@ -7,8 +7,6 @@ export const CONSTANTS = {
   MOBILE_BREAKPOINT: 768,
   DEFAULT_MODEL: 'llama3-3-70b' as AIModel,
   DEFAULT_FREE_MODEL: 'llama3-3-70b' as AIModel,
-  RATE_LIMIT_STORAGE_KEY: 'chat_messages_timestamps',
-  RATE_LIMIT_WINDOW_HOURS: 12,
   VERIFIER_VERSION,
   VERIFIER_WASM_URL: `https://tinfoilsh.github.io/verifier-js/tinfoil-verifier-${VERIFIER_VERSION}.wasm`,
   MAX_MESSAGES: 100,
@@ -18,5 +16,3 @@ export const CONSTANTS = {
   WHISPER_ENDPOINT:
     'https://audio-processing.model.tinfoil.sh/v1/audio/transcriptions',
 } as const
-
-export const MAX_PROMPT_MESSAGES = 10
