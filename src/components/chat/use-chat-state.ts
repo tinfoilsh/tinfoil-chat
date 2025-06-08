@@ -1,4 +1,4 @@
-import { AI_MODELS } from '@/app/config/models'
+import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -13,10 +13,12 @@ export function useChatState({
   systemPrompt,
   storeHistory = true,
   isPremium = true,
+  models = [],
 }: {
   systemPrompt: string
   storeHistory?: boolean
   isPremium?: boolean
+  models?: BaseModel[]
 }) {
   const { getToken } = useAuth()
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
@@ -99,7 +101,7 @@ export function useChatState({
         'selectedModel',
       ) as AIModel | null
       // Verify the saved model is valid
-      if (savedModel && Object.keys(AI_MODELS).includes(savedModel)) {
+      if (savedModel && models.some(model => model.modelName === savedModel)) {
         return savedModel
       }
     }
@@ -271,7 +273,7 @@ export function useChatState({
         timestamp: new Date(),
       }
 
-      const model = AI_MODELS(isPremium).find(
+      const model = models.find(
         (model) => model.modelName === effectiveModel,
       )
       if (!model) {

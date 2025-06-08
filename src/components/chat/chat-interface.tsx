@@ -3,8 +3,8 @@
 'use client'
 
 import {
-  AI_MODELS,
-  BASE_SYSTEM_PROMPT,
+  getAIModels,
+  getSystemPrompt,
   type BaseModel,
 } from '@/app/config/models'
 import { useToast } from '@/hooks/use-toast'
@@ -74,6 +74,11 @@ export function ChatInterface({
     isLoading: subscriptionLoading,
   } = useSubscriptionStatus()
 
+  // State for API data
+  const [models, setModels] = useState<BaseModel[]>([])
+  const [systemPrompt, setSystemPrompt] = useState<string>('')
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true)
+
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(() => {
     // Check if user has a saved preference
@@ -102,6 +107,34 @@ export function ChatInterface({
 
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
+
+  // Load models and system prompt
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const [modelsData, systemPromptData] = await Promise.all([
+          getAIModels(isPremium),
+          getSystemPrompt(),
+        ])
+        setModels(modelsData)
+        setSystemPrompt(systemPromptData)
+      } catch (error) {
+        console.error('Failed to load configuration:', error)
+        toast({
+          title: 'Configuration Error',
+          description: 'Failed to load chat configuration. Please refresh the page.',
+          variant: 'destructive',
+          position: 'top-left',
+        })
+      } finally {
+        setIsLoadingConfig(false)
+      }
+    }
+
+    if (!subscriptionLoading) {
+      loadConfig()
+    }
+  }, [isPremium, subscriptionLoading, toast])
 
   const {
     // State
@@ -146,9 +179,10 @@ export function ChatInterface({
     updateChatTitle,
     getApiKey,
   } = useChatState({
-    systemPrompt: BASE_SYSTEM_PROMPT,
+    systemPrompt: systemPrompt,
     storeHistory: isPremium,
     isPremium: isPremium,
+    models: models,
   }) as any
 
   // Handler for opening verifier sidebar
@@ -172,10 +206,10 @@ export function ChatInterface({
 
   // Always create a new chat when visiting the chat page
   useEffect(() => {
-    if (isClient) {
+    if (isClient && !isLoadingConfig) {
       createNewChat()
     }
-  }, [isClient, createNewChat])
+  }, [isClient, createNewChat, isLoadingConfig])
 
   // Modified openAndExpandVerifier to use the right sidebar
   const modifiedOpenAndExpandVerifier = () => {
@@ -185,7 +219,7 @@ export function ChatInterface({
   }
 
   // Get the selected model details
-  const selectedModelDetails = AI_MODELS(isPremium).find(
+  const selectedModelDetails = models.find(
     (model) => model.modelName === selectedModel,
   ) as BaseModel | undefined
 
@@ -341,8 +375,8 @@ export function ChatInterface({
     [handleFileUpload],
   )
 
-  // Show loading state while checking subscription
-  if (subscriptionLoading) {
+  // Show loading state while checking subscription or loading config
+  if (subscriptionLoading || isLoadingConfig) {
     return (
       <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
         <div className="relative h-10 w-10">
@@ -571,6 +605,7 @@ export function ChatInterface({
                   handleModelSelect={handleModelSelect}
                   isDarkMode={isDarkMode}
                   isPremium={isPremium}
+                  models={models}
                 />
 
                 {/* Input */}

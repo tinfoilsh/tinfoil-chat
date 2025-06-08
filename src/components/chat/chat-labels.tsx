@@ -1,4 +1,4 @@
-import { AI_MODELS } from '@/app/config/models'
+import { type BaseModel } from '@/app/config/models'
 import {
   ExclamationTriangleIcon,
   LockClosedIcon,
@@ -21,6 +21,7 @@ type ChatLabelsProps = {
   handleModelSelect?: (model: AIModel) => void
   isDarkMode: boolean
   isPremium: boolean
+  models: BaseModel[]
 }
 
 export function ChatLabels({
@@ -33,6 +34,7 @@ export function ChatLabels({
   handleModelSelect,
   isDarkMode,
   isPremium,
+  models,
 }: ChatLabelsProps) {
   // Model selection handler - enforces handleModelSelect is defined
   const onModelSelect = useCallback(
@@ -44,7 +46,7 @@ export function ChatLabels({
     [handleModelSelect],
   )
 
-  const model = AI_MODELS(isPremium).find(
+  const model = models.find(
     (model) => model.modelName === selectedModel,
   )
   if (!model) {
@@ -96,6 +98,7 @@ export function ChatLabels({
               onSelect={onModelSelect}
               isDarkMode={isDarkMode}
               isPremium={isPremium}
+              models={models}
             />
           )}
         </div>

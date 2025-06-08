@@ -1,6 +1,6 @@
 'use client'
 
-import { AI_MODELS } from '@/app/config/models'
+import { type BaseModel } from '@/app/config/models'
 import { useState } from 'react'
 import type { AIModel } from './types'
 
@@ -9,6 +9,7 @@ type ModelSelectorProps = {
   onSelect: (model: AIModel) => void
   isDarkMode: boolean
   isPremium: boolean
+  models: BaseModel[]
 }
 
 export function ModelSelector({
@@ -16,6 +17,7 @@ export function ModelSelector({
   onSelect,
   isDarkMode,
   isPremium,
+  models,
 }: ModelSelectorProps) {
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
@@ -31,7 +33,7 @@ export function ModelSelector({
         isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
       }`}
     >
-      {AI_MODELS(isPremium)
+      {models
         .filter(
           (model) =>
             'chat' in model &&
