@@ -74,18 +74,6 @@ export function ChatInterface({
     isLoading: subscriptionLoading,
   } = useSubscriptionStatus()
 
-  // Show loading state while checking subscription
-  if (subscriptionLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
-        <div className="relative h-10 w-10">
-          <div className="absolute inset-0 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900"></div>
-          <div className="absolute inset-0 rounded-full border-4 border-gray-200 opacity-30"></div>
-        </div>
-      </div>
-    )
-  }
-
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(() => {
     // Check if user has a saved preference
@@ -352,6 +340,18 @@ export function ChatInterface({
     },
     [handleFileUpload],
   )
+
+  // Show loading state while checking subscription
+  if (subscriptionLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
+        <div className="relative h-10 w-10">
+          <div className="absolute inset-0 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-gray-200 opacity-30"></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
