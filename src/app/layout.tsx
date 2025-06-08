@@ -5,11 +5,38 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s - Tinfoil Chat',
-    default: 'Tinfoil Chat',
+    template: '%s - Tinfoil Private Chat',
+    default: 'Tinfoil Private Chat',
   },
   description:
-    "Experience confidential AI chat with multiple models, powered by Tinfoil's secure infrastructure.",
+    'Confidential AI chat application supporting multiple open source models through Tinfoil',
+  keywords: [
+    'AI chat',
+    'privacy',
+    'confidential computing',
+    'open source',
+    'secure AI',
+    'private chat',
+  ],
+  authors: [{ name: 'Tinfoil' }],
+  creator: 'Tinfoil',
+  openGraph: {
+    title: 'Tinfoil Private Chat',
+    description:
+      'Confidential AI chat application supporting multiple open source models through Tinfoil',
+    type: 'website',
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Tinfoil Private Chat',
+    description:
+      'Confidential AI chat application supporting multiple open source models through Tinfoil',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   icons: {
     icon: [
       {
