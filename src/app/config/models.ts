@@ -63,9 +63,3 @@ export const getSystemPrompt = async (): Promise<string> => {
     return `<system> You are an intelligent and helpful assistant named Tin. </system>`
   }
 }
-
-// Configuration for chat features
-export const CHAT_CONFIG = {
-  // Maximum number of messages to include in the context window
-  MAX_PROMPT_MESSAGES: 15,
-}

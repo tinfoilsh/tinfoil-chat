@@ -1,6 +1,6 @@
 'use client'
 
-import { CHAT_CONFIG } from '@/app/config/models'
+import { CONSTANTS } from './constants'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
@@ -583,12 +583,12 @@ export function ChatMessages({
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
-      messages.length > CHAT_CONFIG.MAX_PROMPT_MESSAGES
-        ? messages.slice(0, -CHAT_CONFIG.MAX_PROMPT_MESSAGES)
+      messages.length > CONSTANTS.MAX_PROMPT_MESSAGES
+        ? messages.slice(0, -CONSTANTS.MAX_PROMPT_MESSAGES)
         : []
     const live =
-      messages.length > CHAT_CONFIG.MAX_PROMPT_MESSAGES
-        ? messages.slice(-CHAT_CONFIG.MAX_PROMPT_MESSAGES)
+      messages.length > CONSTANTS.MAX_PROMPT_MESSAGES
+        ? messages.slice(-CONSTANTS.MAX_PROMPT_MESSAGES)
         : messages
     return { archivedMessages: archived, liveMessages: live }
   }, [messages])
