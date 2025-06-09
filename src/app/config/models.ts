@@ -27,7 +27,7 @@ export type AIModel = BaseModel
 export const getAIModels = async (paid: boolean): Promise<AIModel[]> => {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''
-    const endpoint = paid ? '/api/webapp/models?paid=true' : '/api/webapp/models'
+    const endpoint = paid ? '/api/app/models?paid=true' : '/api/app/models'
     const url = `${baseUrl}${endpoint}`
     const response = await fetch(url)
     
@@ -48,7 +48,7 @@ export const getAIModels = async (paid: boolean): Promise<AIModel[]> => {
 export const getSystemPrompt = async (): Promise<string> => {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''
-    const url = `${baseUrl}/api/webapp/system-prompt`
+    const url = `${baseUrl}/api/app/system-prompt`
     const response = await fetch(url)
     
     if (!response.ok) {
