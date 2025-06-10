@@ -10,7 +10,7 @@ import {
 } from '@/app/config/models'
 import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
-import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
+import { useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -522,28 +522,6 @@ export function ChatInterface({
         <div
           className={`absolute inset-0 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} overflow-hidden`}
         >
-          {/* Premium upgrade notice for basic users */}
-          {!isPremium && (
-            <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 transform">
-              <div
-                className={`flex flex-col items-center space-y-1 rounded-lg px-4 py-2 sm:flex-row sm:space-x-2 sm:space-y-0 ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                }`}
-              >
-                <span
-                  className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-                >
-                  Basic preview.
-                </span>
-                <SignInButton mode="modal">
-                  <button className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
-                    Get unrestricted access
-                  </button>
-                </SignInButton>
-              </div>
-            </div>
-          )}
-
           <div
             className={`${currentChat?.messages?.length > 0 ? 'overflow-y-auto' : 'overflow-hidden'} md:pt-0 ${
               isDarkMode ? 'bg-gray-800' : 'bg-white'
@@ -570,6 +548,8 @@ export function ChatInterface({
                 isInitialLoad={isInitialLoad}
                 setIsInitialLoad={setIsInitialLoad}
                 isWaitingForResponse={isWaitingForResponse}
+                isPremium={isPremium}
+                models={models}
               />
             </div>
           </div>

@@ -23,6 +23,8 @@ import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
 import type { Message } from './types'
+import { type BaseModel } from '@/app/config/models'
+import { MicrophoneIcon } from '@heroicons/react/24/outline'
 
 // Add new types
 type MessageWithThoughts = Message & {
@@ -40,6 +42,8 @@ type ChatMessagesProps = {
   isInitialLoad: boolean
   setIsInitialLoad: (value: boolean) => void
   isWaitingForResponse?: boolean
+  isPremium?: boolean
+  models?: BaseModel[]
 }
 
 // Add new component for thought process display
@@ -429,21 +433,32 @@ export const scrollToBottom = (
 const WelcomeScreen = memo(function WelcomeScreen({
   isDarkMode,
   openAndExpandVerifier,
+  isPremium,
+  models,
 }: {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
+  isPremium?: boolean
+  models?: BaseModel[]
 }) {
+  // Get premium models for display - include both premium-only and conditional models
+  const premiumModels = models?.filter(model => 
+    model.type === 'chat' && 
+    model.chat === true && 
+    (model.paid === true || model.paid === 'conditional')
+  ) || []
+
   return (
-    <div className="text-center">
+    <div className="w-full">
       <h1
         className={`font-display text-3xl font-medium tracking-tight ${
           isDarkMode ? 'text-gray-100' : 'text-gray-800'
-        } mx-auto mb-10 max-w-lg text-left`}
+        } mb-6`}
       >
-        Private Chat with Tin
+        Tinfoil Private Chat
       </h1>
 
-      <ul className="mx-auto max-w-lg space-y-6 text-left">
+      <ul className="space-y-4">
         <li
           className={`flex items-start gap-3 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
@@ -529,11 +544,65 @@ const WelcomeScreen = memo(function WelcomeScreen({
               onClick={openAndExpandVerifier}
               className="inline text-emerald-500 hover:underline"
             >
-              in-browser verifier.
+              in-browser verifier →
             </button>
           </div>
         </li>
       </ul>
+
+      {/* Premium upgrade section for non-premium users */}
+      {!isPremium && (
+        <div className="mt-12">
+          <div>
+            <div className="flex items-center gap-4 mb-4">
+              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                Get more out of Tinfoil Chat
+              </h3>
+              <a
+                href="https://tinfoil.sh/pricing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
+                  isDarkMode 
+                    ? 'text-emerald-400 hover:text-emerald-300' 
+                    : 'text-emerald-600 hover:text-emerald-500'
+                }`}
+              >
+                Upgrade to Pro
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
+            </div>
+            <div className="space-y-3">
+              <div className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                <MicrophoneIcon className="h-4 w-4 flex-shrink-0" />
+                <span>Speech-to-text voice input</span>
+              </div>
+              
+              <div className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Premium AI models</span>
+                {premiumModels.length > 0 && (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    {premiumModels.map((model) => (
+                      <img
+                        key={model.modelName}
+                        src={model.image}
+                        alt={model.name}
+                        className="h-4 w-4 opacity-50"
+                        title={model.name}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 })
@@ -568,6 +637,8 @@ export function ChatMessages({
   isInitialLoad,
   setIsInitialLoad,
   isWaitingForResponse = false,
+  isPremium,
+  models,
 }: ChatMessagesProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
@@ -700,7 +771,7 @@ export function ChatMessages({
         ref={scrollContainerRef}
         className="flex h-full items-center justify-center"
         style={{
-          overflow: 'hidden',
+          overflow: 'auto',
           height: '100%',
           position: 'relative',
         }}
@@ -709,6 +780,8 @@ export function ChatMessages({
           <WelcomeScreen
             isDarkMode={isDarkMode}
             openAndExpandVerifier={openAndExpandVerifier}
+            isPremium={isPremium}
+            models={models}
           />
         </div>
         <div ref={messagesEndRef} className="hidden" />
