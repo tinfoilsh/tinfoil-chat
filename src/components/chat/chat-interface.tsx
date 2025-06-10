@@ -207,12 +207,8 @@ export function ChatInterface({
     }
   }
 
-  // Always create a new chat when visiting the chat page
-  useEffect(() => {
-    if (isClient && !isLoadingConfig) {
-      createNewChat()
-    }
-  }, [isClient, createNewChat, isLoadingConfig])
+  // Don't automatically create new chats - let the chat state handle initialization
+  // This effect has been removed to prevent unnecessary chat creation
 
   // Modified openAndExpandVerifier to use the right sidebar
   const modifiedOpenAndExpandVerifier = () => {

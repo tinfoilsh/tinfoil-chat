@@ -56,7 +56,25 @@ export function useChatState({
               createdAt: new Date(chat.createdAt),
             }))
             setChats(parsedChats)
-            setCurrentChat(parsedChats[0])
+            
+            // Check if the first (most recent) chat has messages
+            const firstChat = parsedChats[0]
+            if (firstChat.messages && firstChat.messages.length > 0) {
+              // If the latest chat has messages, create a new empty chat
+              const newChat: Chat = {
+                id: uuidv4(),
+                title: 'New Chat',
+                messages: [],
+                createdAt: new Date(),
+              }
+              const updatedChats = [newChat, ...parsedChats]
+              setChats(updatedChats)
+              setCurrentChat(newChat)
+              localStorage.setItem('chats', JSON.stringify(updatedChats))
+            } else {
+              // If the latest chat is empty, use it
+              setCurrentChat(firstChat)
+            }
           }
         }
         // Clear initial load state after loading chats
@@ -573,6 +591,11 @@ export function useChatState({
   const createNewChat = useCallback(() => {
     if (!storeHistory) return // Prevent creating new chats for basic users
 
+    // Don't create a new chat if the current chat is already empty
+    if (currentChat?.messages?.length === 0) {
+      return // Current chat is already empty, no need to create a new one
+    }
+
     const newChat: Chat = {
       id: uuidv4(),
       title: 'New Chat',
@@ -590,7 +613,7 @@ export function useChatState({
       }
       return updatedChats
     })
-  }, [storeHistory])
+  }, [storeHistory, currentChat?.messages?.length])
 
   // Delete a chat
   const deleteChat = useCallback(
@@ -599,20 +622,24 @@ export function useChatState({
 
       setChats((prevChats) => {
         const newChats = prevChats.filter((chat) => chat.id !== chatId)
-        if (currentChat?.id === chatId) {
-          // Switch to first remaining chat or create new one if none left
-          if (newChats.length === 0) {
-            const newChat: Chat = {
-              id: uuidv4(),
-              title: 'New Chat',
-              messages: [],
-              createdAt: new Date(),
-            }
-            setCurrentChat(newChat)
-            return [newChat]
+        
+        // Always ensure there's at least one chat
+        if (newChats.length === 0) {
+          const newChat: Chat = {
+            id: uuidv4(),
+            title: 'New Chat',
+            messages: [],
+            createdAt: new Date(),
           }
+          setCurrentChat(newChat)
+          return [newChat]
+        }
+        
+        // If we deleted the current chat, switch to the first remaining chat
+        if (currentChat?.id === chatId) {
           setCurrentChat(newChats[0])
         }
+        
         localStorage.setItem('chats', JSON.stringify(newChats))
         return newChats
       })
