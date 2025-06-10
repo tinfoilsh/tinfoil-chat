@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API_BASE_URL } from '@/config'
 
 export function useSubscriptionStatus() {
   const [isLoading, setIsLoading] = useState(true)
@@ -12,7 +13,7 @@ export function useSubscriptionStatus() {
   useEffect(() => {
     const fetchSubscriptionStatus = async () => {
       try {
-        const response = await fetch('/api/billing/subscription-status')
+        const response = await fetch(`${API_BASE_URL}/api/billing/subscription-status`)
         if (!response.ok) {
           throw new Error('Failed to fetch subscription status')
         }

@@ -1,9 +1,14 @@
+import { API_BASE_URL } from '@/config'
+
+// Type for enclave/repo that can be either string or object with free/paid options
+type EnclaveRepo = string | { free: string; paid: string }
+
 // Base model type with all possible properties
 export type BaseModel = {
   modelName: string
   image: string
-  enclave: string
-  repo?: string
+  enclave: EnclaveRepo
+  repo?: EnclaveRepo
   digest?: string
   name: string
   nameShort: string
@@ -15,20 +20,31 @@ export type BaseModel = {
   supportedLanguages?: string
   type: "chat" | "embedding" | "audio" | "tts"
   chat?: boolean
-  paid?: boolean
+  paid?: boolean | "conditional"
   endpoint?: string
 }
 
 // Define the return type of getAIModels
 export type AIModel = BaseModel
 
+// Helper function to resolve enclave/repo based on subscription status
+export const resolveEnclaveOrRepo = (
+  value: EnclaveRepo, 
+  isPaid: boolean
+): string => {
+  if (typeof value === 'string') {
+    return value
+  }
+  
+  // For object format, return paid if user has subscription, otherwise free
+  return isPaid ? value.paid : value.free
+}
 
 // Fetch models from the API
 export const getAIModels = async (paid: boolean): Promise<AIModel[]> => {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''
     const endpoint = paid ? '/api/app/models?paid=true' : '/api/app/models'
-    const url = `${baseUrl}${endpoint}`
+    const url = `${API_BASE_URL}${endpoint}`
     const response = await fetch(url)
     
     if (!response.ok) {
@@ -47,8 +63,7 @@ export const getAIModels = async (paid: boolean): Promise<AIModel[]> => {
 // Fetch system prompt from the API
 export const getSystemPrompt = async (): Promise<string> => {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''
-    const url = `${baseUrl}/api/app/system-prompt`
+    const url = `${API_BASE_URL}/api/app/system-prompt`
     const response = await fetch(url)
     
     if (!response.ok) {

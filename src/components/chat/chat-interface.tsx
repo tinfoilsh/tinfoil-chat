@@ -6,6 +6,7 @@ import {
   getAIModels,
   getSystemPrompt,
   type BaseModel,
+  resolveEnclaveOrRepo,
 } from '@/app/config/models'
 import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
@@ -464,8 +465,8 @@ export function ChatInterface({
       <VerifierSidebar
         isOpen={isVerifierSidebarOpen}
         setIsOpen={handleSetVerifierSidebarOpen}
-        repo={selectedModelDetails?.repo || ''}
-        enclave={selectedModelDetails?.enclave || ''}
+        repo={selectedModelDetails?.repo ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium) : ''}
+        enclave={selectedModelDetails?.enclave ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium) : ''}
         verificationComplete={verificationComplete}
         verificationSuccess={verificationSuccess}
         onVerificationComplete={(success) => {

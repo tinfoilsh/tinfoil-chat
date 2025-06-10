@@ -1,4 +1,4 @@
-import { type BaseModel } from '@/app/config/models'
+import { type BaseModel, resolveEnclaveOrRepo } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -283,7 +283,7 @@ export function useChatState({
       const chatEndpoint =
         'endpoint' in model
           ? (model.endpoint as string)
-          : `https://${model.enclave}/v1/chat/completions`
+          : `https://${resolveEnclaveOrRepo(model.enclave, isPremium)}/v1/chat/completions`
 
       const response = await fetch(chatEndpoint, {
         method: 'POST',
