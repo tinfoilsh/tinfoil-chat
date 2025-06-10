@@ -1,36 +1,59 @@
-# Tinfoil
+# Tinfoil Chat
 
-## Getting started
+A secure, verifiable AI chat interface with cryptographic verification of AI models.
 
-To get started with this template, first install the npm dependencies:
+## Prerequisites
 
-```bash
-npm install
-```
+- Node.js 18+
+- npm
+- Clerk account
+- Access to Tinfoil API
 
-Next, run the development server:
+## Setup
 
-```bash
-npm run dev
-```
+1. **Clone and install**
 
-Finally, open [http://localhost:3000](http://localhost:3000) in your browser to view the website.
+   ```bash
+   git clone https://github.com/your-org/tinfoil-chat.git
+   cd tinfoil-chat
+   npm install
+   ```
 
-To manage your blog content, visit the embedded Sanity Studio at [http://localhost:3000/studio](http://localhost:3000/studio).
+2. **Configure environment**
 
-## Customizing
+   ```bash
+   cp .env.example .env.local
+   ```
 
-You can start editing this template by modifying the files in the `/src` folder. The site will auto-update as you edit these files.
+   Update `.env.local`:
 
-## License
+   ```env
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_key
+   CLERK_SECRET_KEY=your_secret
+   NEXT_PUBLIC_API_BASE_URL=https://api.tinfoil.sh
+   ```
 
-This site template is a commercial product and is licensed under the [Tailwind UI license](https://tailwindui.com/license).
+3. **Run**
+   ```bash
+   npm run dev
+   ```
 
-## Learn more
+## Scripts
 
-To learn more about the technologies used in this site template, see the following resources:
+- `npm run dev` - Development server
+- `npm run build` - Production build
+- `npm run start` - Production server
+- `npm run lint` - Lint code
+- `npm run format` - Format code
 
-- [Tailwind CSS](https://tailwindcss.com/docs) - the official Tailwind CSS documentation
-- [Next.js](https://nextjs.org/docs) - the official Next.js documentation
-- [Headless UI](https://headlessui.dev) - the official Headless UI documentation
-- [Sanity](https://www.sanity.io) - the Sanity website
+## Tech Stack
+
+- Next.js 15
+- TypeScript
+- Tailwind CSS
+- Clerk (auth)
+- Radix UI
+
+## Support
+
+Open an issue on GitHub or contact support@tinfoil.sh.

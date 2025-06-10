@@ -1,6 +1,6 @@
 'use client'
 
-import { AI_MODELS } from '@/app/config/models'
+import { type BaseModel, getAvailableChatModels } from '@/app/config/models'
 import { useState } from 'react'
 import type { AIModel } from './types'
 
@@ -9,6 +9,7 @@ type ModelSelectorProps = {
   onSelect: (model: AIModel) => void
   isDarkMode: boolean
   isPremium: boolean
+  models: BaseModel[]
 }
 
 export function ModelSelector({
@@ -16,6 +17,7 @@ export function ModelSelector({
   onSelect,
   isDarkMode,
   isPremium,
+  models,
 }: ModelSelectorProps) {
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
@@ -31,13 +33,7 @@ export function ModelSelector({
         isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
       }`}
     >
-      {AI_MODELS(isPremium)
-        .filter(
-          (model) =>
-            'chat' in model &&
-            model.chat &&
-            (!('paid' in model) || !model.paid || isPremium),
-        )
+      {getAvailableChatModels(models, isPremium)
         .map((model) => (
           <button
             key={model.modelName}
@@ -58,12 +54,12 @@ export function ModelSelector({
           >
             <img
               src={failedImages[model.modelName] ? '/icon.png' : model.image}
-              alt={model.modelNameSimple}
+              alt={model.name}
               className="h-5 w-5"
               onError={() => handleImageError(model.modelName)}
             />
             <div className="flex flex-col">
-              <span className="font-medium">{model.modelNameSimple}</span>
+              <span className="font-medium">{model.name}</span>
               <span
                 className={`text-xs ${
                   isDarkMode ? 'text-gray-400' : 'text-gray-500'

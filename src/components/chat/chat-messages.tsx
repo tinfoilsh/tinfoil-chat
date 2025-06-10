@@ -1,13 +1,27 @@
 'use client'
 
-import { CHAT_CONFIG } from '@/app/config/models'
+import { CONSTANTS } from './constants'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  FaFile,
+  FaFileAlt,
+  FaFileArchive,
+  FaFileAudio,
+  FaFileCode,
+  FaFileExcel,
+  FaFileImage,
+  FaFilePdf,
+  FaFilePowerpoint,
+  FaFileVideo,
+  FaFileWord,
+} from 'react-icons/fa'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
+import { getFileIconType } from './document-uploader'
 import type { Message } from './types'
 
 // Add new types
@@ -247,8 +261,41 @@ const ChatMessage = memo(function ChatMessage({
     !shouldDiscardThoughts &&
     (message.thoughts?.trim() !== '' || message.isThinking)
 
-  // Check if this is just a thinking message with no content yet
-  const isThinkingOnlyMessage = message.isThinking && !message.content
+  const getFileIcon = (filename: string) => {
+    const type = getFileIconType(filename)
+    const iconProps = {
+      className: `h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`,
+    }
+    switch (type) {
+      case 'pdf':
+        return <FaFilePdf {...iconProps} />
+      case 'docx':
+        return <FaFileWord {...iconProps} />
+      case 'pptx':
+        return <FaFilePowerpoint {...iconProps} />
+      case 'xlsx':
+      case 'csv':
+        return <FaFileExcel {...iconProps} />
+      case 'image':
+        return <FaFileImage {...iconProps} />
+      case 'audio':
+        return <FaFileAudio {...iconProps} />
+      case 'video':
+        return <FaFileVideo {...iconProps} />
+      case 'zip':
+        return <FaFileArchive {...iconProps} />
+      case 'html':
+      case 'js':
+      case 'ts':
+      case 'css':
+      case 'md':
+        return <FaFileCode {...iconProps} />
+      case 'txt':
+        return <FaFileAlt {...iconProps} />
+      default:
+        return <FaFile {...iconProps} />
+    }
+  }
 
   return (
     <div
@@ -273,6 +320,28 @@ const ChatMessage = memo(function ChatMessage({
           </span>
         </div>
       )}
+      {/* Display document icons for user messages */}
+      {isUser && message.documents && message.documents.length > 0 && (
+        <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
+          {message.documents.map((doc, index) => (
+            <div
+              key={index}
+              className={`flex items-center rounded-lg ${
+                isDarkMode
+                  ? 'bg-gray-700/50 hover:bg-gray-700/70'
+                  : 'bg-gray-100 hover:bg-gray-200'
+              } px-3 py-1.5 transition-colors duration-200`}
+            >
+              <div className="mr-2">{getFileIcon(doc.name)}</div>
+              <span
+                className={`max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
+              >
+                {doc.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Only show thoughts component if we have thoughts or are thinking */}
       {!isUser && shouldShowThoughts && (
         <div className="mb-2 w-full">
@@ -285,7 +354,7 @@ const ChatMessage = memo(function ChatMessage({
           />
         </div>
       )}
-      {/* Always show content if it exists */}
+      {/* Only show content if it exists and is not just document content */}
       {message.content && (
         <div className={`w-full px-4 py-2 ${isUser ? 'flex justify-end' : ''}`}>
           <div
@@ -380,32 +449,79 @@ const WelcomeScreen = memo(function WelcomeScreen({
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
           } text-lg`}
         >
-          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-500 mt-1.5">
-            <span className="text-xs font-medium text-white leading-none">1</span>
+          <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
+            <svg
+              className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4.5c-5 0-9.27 3.11-10.5 7.5 1.23 4.39 5.5 7.5 10.5 7.5s9.27-3.11 10.5-7.5c-1.23-4.39-5.5-7.5-10.5-7.5z"
+              />
+              <circle cx="12" cy="12" r="3" strokeWidth={2} />
+              <line
+                x1="3"
+                y1="3"
+                x2="21"
+                y2="21"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            </svg>
           </div>
-          <div>
-            Your conversations are completely private.
-          </div>
+          <div>Your conversations are completely private.</div>
         </li>
         <li
           className={`flex items-start gap-3 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
           } text-lg`}
         >
-          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-500 mt-1.5">
-            <span className="text-xs font-medium text-white leading-none">2</span>
+          <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
+            <svg
+              className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle cx="12" cy="12" r="9" strokeWidth={2} />
+              <line
+                x1="6.75"
+                y1="6.75"
+                x2="17.25"
+                y2="17.25"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            </svg>
           </div>
-          <div>
-            Nobody can see your messages, not even Tinfoil.
-          </div>
+          <div>Nobody can see your messages, not even Tinfoil.</div>
         </li>
         <li
           className={`flex items-start gap-3 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
           } text-lg`}
         >
-          <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-500 mt-1.5">
-            <span className="text-xs font-medium text-white leading-none">3</span>
+          <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
+            <svg
+              className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
           </div>
           <div>
             Confidentiality is enforced by the{' '}
@@ -467,12 +583,12 @@ export function ChatMessages({
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
-      messages.length > CHAT_CONFIG.MAX_PROMPT_MESSAGES
-        ? messages.slice(0, -CHAT_CONFIG.MAX_PROMPT_MESSAGES)
+      messages.length > CONSTANTS.MAX_PROMPT_MESSAGES
+        ? messages.slice(0, -CONSTANTS.MAX_PROMPT_MESSAGES)
         : []
     const live =
-      messages.length > CHAT_CONFIG.MAX_PROMPT_MESSAGES
-        ? messages.slice(-CHAT_CONFIG.MAX_PROMPT_MESSAGES)
+      messages.length > CONSTANTS.MAX_PROMPT_MESSAGES
+        ? messages.slice(-CONSTANTS.MAX_PROMPT_MESSAGES)
         : messages
     return { archivedMessages: archived, liveMessages: live }
   }, [messages])

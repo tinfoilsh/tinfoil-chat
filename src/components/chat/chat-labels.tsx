@@ -1,10 +1,10 @@
-import { AI_MODELS } from '@/app/config/models'
+import { type BaseModel } from '@/app/config/models'
 import {
   ExclamationTriangleIcon,
-  ShieldCheckIcon,
+  LockClosedIcon,
+  LockOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
-import { Link } from '../link'
 import { ModelSelector } from './model-selector'
 import type { AIModel } from './types'
 
@@ -21,6 +21,7 @@ type ChatLabelsProps = {
   handleModelSelect?: (model: AIModel) => void
   isDarkMode: boolean
   isPremium: boolean
+  models: BaseModel[]
 }
 
 export function ChatLabels({
@@ -33,6 +34,7 @@ export function ChatLabels({
   handleModelSelect,
   isDarkMode,
   isPremium,
+  models,
 }: ChatLabelsProps) {
   // Model selection handler - enforces handleModelSelect is defined
   const onModelSelect = useCallback(
@@ -44,7 +46,7 @@ export function ChatLabels({
     [handleModelSelect],
   )
 
-  const model = AI_MODELS(isPremium).find(
+  const model = models.find(
     (model) => model.modelName === selectedModel,
   )
   if (!model) {
@@ -86,7 +88,7 @@ export function ChatLabels({
                 isDarkMode ? 'text-gray-200' : 'text-gray-600'
               }`}
             >
-              Running {model.modelNameSimple}
+              Running {model.name}
             </span>
           </button>
 
@@ -96,6 +98,7 @@ export function ChatLabels({
               onSelect={onModelSelect}
               isDarkMode={isDarkMode}
               isPremium={isPremium}
+              models={models}
             />
           )}
         </div>
@@ -109,22 +112,9 @@ export function ChatLabels({
           }`}
         >
           {!verificationComplete ? (
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="h-5 w-5 animate-pulse text-yellow-500"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
-              />
-            </svg>
+            <LockOpenIcon className="h-5 w-5 animate-pulse text-yellow-500" />
           ) : verificationSuccess ? (
-            <ShieldCheckIcon className="h-5 w-5 text-emerald-500" />
+            <LockClosedIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
           ) : (
             <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
           )}
@@ -136,43 +126,28 @@ export function ChatLabels({
             {!verificationComplete
               ? 'Verifying...'
               : verificationSuccess
-                ? 'Connection verified'
+                ? 'Chat is private'
                 : 'Verification failed'}
           </span>
         </button>
       </div>
 
-      {/* Info button */}
-      <Link
-        href="/technology"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-          isDarkMode
-            ? 'bg-gray-700/50 hover:bg-gray-600'
-            : 'bg-gray-200 hover:bg-gray-300'
-        } transition-colors`}
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-          className={`h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
-          />
-        </svg>
-        <span
-          className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} hidden md:inline`}
-        >
-          Learn how it works
-        </span>
-      </Link>
+      <style jsx>{`
+        @keyframes lock-close {
+          0% {
+            transform: scale(1.2) rotate(-15deg);
+          }
+          60% {
+            transform: scale(1.05) rotate(0deg);
+          }
+          100% {
+            transform: scale(1) rotate(0deg);
+          }
+        }
+        .lock-close-animation {
+          animation: lock-close 0.4s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

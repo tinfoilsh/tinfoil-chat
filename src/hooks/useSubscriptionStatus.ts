@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '@clerk/nextjs'
+import { API_BASE_URL } from '@/config'
 
 export function useSubscriptionStatus() {
+  const { getToken, isSignedIn } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState({
@@ -12,12 +15,32 @@ export function useSubscriptionStatus() {
   useEffect(() => {
     const fetchSubscriptionStatus = async () => {
       try {
-        const response = await fetch('/api/billing/subscription-status')
-        if (!response.ok) {
-          throw new Error('Failed to fetch subscription status')
+        // Don't fetch if user is not signed in
+        if (!isSignedIn) {
+          setIsLoading(false)
+          return
         }
-        setSubscriptionStatus(await response.json())
+
+        // Get authentication token
+        const token = await getToken()
+        if (!token) {
+          throw new Error('No authentication token available')
+        }
+
+        const response = await fetch(`/api/billing/subscription-status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch subscription status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        setSubscriptionStatus(data)
       } catch (err) {
+        console.error('Subscription status error:', err)
         setError(err instanceof Error ? err.message : 'An error occurred')
       } finally {
         setIsLoading(false)
@@ -25,7 +48,7 @@ export function useSubscriptionStatus() {
     }
 
     fetchSubscriptionStatus()
-  }, [])
+  }, [getToken, isSignedIn])
 
   return {
     isLoading,

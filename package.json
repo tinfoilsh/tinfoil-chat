@@ -1,7 +1,6 @@
 {
-  "name": "tinfoil-landing",
-  "version": "0.1.0",
-  "private": true,
+  "name": "tinfoil-chat",
+  "version": "1.0.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,7 +10,7 @@
     "find-unused": "ts-unused-exports tsconfig.json"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.9.15",
+    "@clerk/nextjs": "^6.21.0",
     "@headlessui/react": "^2.1.1",
     "@heroicons/react": "^2.1.4",
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -24,11 +23,14 @@
     "@radix-ui/react-tooltip": "^1.2.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/uuid": "^10.0.0",
+    "@xyflow/react": "^12.6.0",
+    "audiobuffer-to-wav": "^1.0.0",
+    "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^11.2.10",
     "lucide-react": "^0.473.0",
-    "next": "^14.2.22",
+    "next": "^15.3.3",
     "react": "^18",
     "react-dom": "^18",
     "react-icons": "^5.5.0",
@@ -40,12 +42,16 @@
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",
+    "@types/audiobuffer-to-wav": "^1.0.4",
+    "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.11",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "^15.3.3",
     "prettier": "^3.3.2",
+    "prettier-plugin-organize-imports": "^4.1.0",
+    "prettier-plugin-tailwindcss": "^0.6.12",
     "tailwindcss": "^3.4.7",
     "ts-unused-exports": "^11.0.1",
     "typescript": "^5"

@@ -3,67 +3,141 @@
 'use client'
 
 import {
-  AI_MODELS,
-  BASE_SYSTEM_PROMPT,
+  getAIModels,
+  getSystemPrompt,
   type BaseModel,
+  resolveEnclaveOrRepo,
 } from '@/app/config/models'
 import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
-import { SignInButton, useAuth } from '@clerk/nextjs'
+import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+
+import { useCallback, useEffect, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
-import { isRateLimitExceeded, recordMessage } from './rate-limit'
+import { useDocumentUploader } from './document-uploader'
+import type { VerificationState } from './types'
 import { useChatState } from './use-chat-state'
 import { VerifierSidebar } from './verifier-sidebar'
 
 type ChatInterfaceProps = {
-  verificationState?: any
+  verificationState?: VerificationState
   showVerifyButton?: boolean
   minHeight?: string
   inputMinHeight?: string
-  isPremium?: boolean
+  isDarkMode?: boolean
+}
+
+// Type for processed documents
+type ProcessedDocument = {
+  id: string
+  name: string
+  time: Date
+  content?: string
+  isUploading?: boolean
+}
+
+// Helper to roughly estimate token count based on character length (≈4 chars per token)
+const estimateTokenCount = (text: string | undefined): number => {
+  if (!text) return 0
+  return Math.ceil(text.length / 4)
+}
+
+// Helper to parse values like "64k tokens" → 64000
+const parseContextWindowTokens = (contextWindow?: string): number => {
+  if (!contextWindow) return 64000 // sensible default
+  const match = contextWindow.match(/(\d+)(k)?/i)
+  if (!match) return 64000
+  let tokens = parseInt(match[1], 10)
+  if (match[2]) {
+    tokens *= 1000
+  }
+  return tokens
 }
 
 export function ChatInterface({
   verificationState,
   minHeight,
   inputMinHeight = '28px',
-  isPremium: propIsPremium,
+  isDarkMode: propIsDarkMode,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
-  const router = useRouter()
   const { isSignedIn } = useAuth()
+  const { user } = useUser()
   const {
     chat_subscription_active,
     is_subscribed,
     api_subscription_active,
-    isLoading,
+    isLoading: subscriptionLoading,
   } = useSubscriptionStatus()
 
+  // State for API data
+  const [models, setModels] = useState<BaseModel[]>([])
+  const [systemPrompt, setSystemPrompt] = useState<string>('')
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true)
+
   // State for right sidebar
-  const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
-
-  // Initialize verifier sidebar state based on screen size
-  useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      window.innerWidth >= CONSTANTS.MOBILE_BREAKPOINT
-    ) {
-      setIsVerifierSidebarOpen(true)
+  const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(() => {
+    // Check if user has a saved preference
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('verifierSidebarClosed')
+      // If user explicitly closed it before, respect that preference
+      if (saved === 'true') {
+        return false
+      }
+      // Otherwise, default to open on desktop
+      return window.innerWidth >= CONSTANTS.MOBILE_BREAKPOINT
     }
-  }, [])
+    return false
+  })
 
-  // Use subscription status from hook or fallback to prop
-  let isPremium = chat_subscription_active || propIsPremium
-  if (isPremium === undefined) {
-    isPremium = false
-  }
+  // State for tracking processed documents
+  const [processedDocuments, setProcessedDocuments] = useState<
+    ProcessedDocument[]
+  >([])
+
+  // Get the user's email
+  const userEmail = user?.primaryEmailAddress?.emailAddress || ''
+
+  // Initialize document uploader hook
+  const { handleDocumentUpload } = useDocumentUploader()
+
+  // Use subscription status from hook
+  const isPremium = chat_subscription_active ?? false
+
+
+
+  // Load models and system prompt
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const [modelsData, systemPromptData] = await Promise.all([
+          getAIModels(isPremium),
+          getSystemPrompt(),
+        ])
+        setModels(modelsData)
+        setSystemPrompt(systemPromptData)
+      } catch (error) {
+        console.error('Failed to load configuration:', error)
+        toast({
+          title: 'Configuration Error',
+          description: 'Failed to load chat configuration. Please refresh the page.',
+          variant: 'destructive',
+          position: 'top-left',
+        })
+      } finally {
+        setIsLoadingConfig(false)
+      }
+    }
+
+    if (!subscriptionLoading) {
+      loadConfig()
+    }
+  }, [isPremium, subscriptionLoading, toast])
 
   const {
     // State
@@ -84,6 +158,7 @@ export function ChatInterface({
     selectedModel,
     expandedLabel,
     windowWidth,
+    apiKey,
 
     // Setters
     setInput,
@@ -93,7 +168,8 @@ export function ChatInterface({
     setVerificationSuccess,
 
     // Actions
-    handleSubmit: originalHandleSubmit,
+    handleSubmit,
+    handleQuery,
     createNewChat,
     deleteChat,
     handleChatSelect,
@@ -104,56 +180,238 @@ export function ChatInterface({
     handleModelSelect,
     cancelGeneration,
     updateChatTitle,
+    getApiKey,
   } = useChatState({
-    systemPrompt: BASE_SYSTEM_PROMPT,
+    systemPrompt: systemPrompt,
     storeHistory: isPremium,
     isPremium: isPremium,
+    models: models,
   }) as any
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
     setIsVerifierSidebarOpen(true)
+    // Clear the saved preference when user opens it
+    localStorage.removeItem('verifierSidebarClosed')
   }
+
+  // Handler for setting verifier sidebar state with preference management
+  const handleSetVerifierSidebarOpen = (isOpen: boolean) => {
+    setIsVerifierSidebarOpen(isOpen)
+    if (!isOpen) {
+      // Save preference when user closes it
+      localStorage.setItem('verifierSidebarClosed', 'true')
+    } else {
+      // Clear the saved preference when user opens it
+      localStorage.removeItem('verifierSidebarClosed')
+    }
+  }
+
+  // Always create a new chat when visiting the chat page
+  useEffect(() => {
+    if (isClient && !isLoadingConfig) {
+      createNewChat()
+    }
+  }, [isClient, createNewChat, isLoadingConfig])
 
   // Modified openAndExpandVerifier to use the right sidebar
   const modifiedOpenAndExpandVerifier = () => {
     // Always open the verifier sidebar when called
-    setIsVerifierSidebarOpen(!isVerifierSidebarOpen)
-  }
-
-  // Wrap the original handleSubmit with rate limiting
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!isPremium && isRateLimitExceeded()) {
-      toast({
-        title: 'Message limit reached',
-        description: `You've reached your daily usage limit. Please try again tomorrow or subscribe.`,
-        variant: 'destructive',
-        position: 'top-right',
-      })
-      return
-    }
-
-    // Record the message attempt and show remaining count
-    if (!isPremium) {
-      const remaining = recordMessage()
-      if (remaining <= 3) {
-        toast({
-          title: 'Message limit approaching',
-          description: `You are approaching your daily usage limit.`,
-          position: 'top-right',
-        })
-      }
-    }
-
-    return originalHandleSubmit(e)
+    const newState = !isVerifierSidebarOpen
+    handleSetVerifierSidebarOpen(newState)
   }
 
   // Get the selected model details
-  const selectedModelDetails = AI_MODELS(isPremium).find(
+  const selectedModelDetails = models.find(
     (model) => model.modelName === selectedModel,
   ) as BaseModel | undefined
+
+  // Document upload handler wrapper
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      // Create a temporary document entry with uploading status
+      const tempDocId = Math.random().toString(36).substring(2, 9)
+
+      // Add placeholder document that shows as uploading
+      setProcessedDocuments((prev) => [
+        ...prev,
+        {
+          id: tempDocId,
+          name: file.name,
+          time: new Date(),
+          isUploading: true,
+        },
+      ])
+
+      await handleDocumentUpload(
+        file,
+        (content, documentId) => {
+          const newDocTokens = estimateTokenCount(content)
+          const contextLimit = parseContextWindowTokens(
+            selectedModelDetails?.contextWindow,
+          )
+
+          // Check if adding would exceed context window
+          const existingTokens = processedDocuments.reduce(
+            (total, doc) => total + estimateTokenCount(doc.content),
+            0,
+          )
+
+          if (existingTokens + newDocTokens > contextLimit) {
+            // Remove the document if it would exceed the context limit
+            setProcessedDocuments((prev) =>
+              prev.filter((doc) => doc.id !== tempDocId),
+            )
+
+            toast({
+              title: 'Context window saturated',
+              description:
+                "The selected model's context window is full. Remove a document or choose a model with a larger context window before uploading more files.",
+              variant: 'destructive',
+              position: 'top-left',
+            })
+            return
+          }
+
+          // Replace the placeholder with the actual document
+          setProcessedDocuments((prev) => {
+            return prev.map((doc) =>
+              doc.id === tempDocId
+                ? {
+                    id: documentId,
+                    name: file.name,
+                    time: new Date(),
+                    content,
+                  }
+                : doc,
+            )
+          })
+        },
+        (error, documentId) => {
+          // On error, remove the placeholder document
+          setProcessedDocuments((prev) =>
+            prev.filter((doc) => doc.id !== tempDocId),
+          )
+
+          toast({
+            title: 'Processing failed',
+            description: error.message || 'Failed to process document',
+            variant: 'destructive',
+            position: 'top-left',
+          })
+        },
+      )
+    },
+    [
+      handleDocumentUpload,
+      processedDocuments,
+      selectedModelDetails?.contextWindow,
+      toast,
+    ],
+  )
+
+  // Handler for removing documents
+  const removeDocument = (id: string) => {
+    setProcessedDocuments((prev) => prev.filter((doc) => doc.id !== id))
+  }
+
+  // Wrap handleSubmit to include document content
+  const wrappedHandleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // Don't proceed if there's no input text
+    if (!input.trim()) {
+      return
+    }
+
+    // Filter out documents that are still uploading
+    const completedDocuments = processedDocuments.filter(
+      (doc) => !doc.isUploading,
+    )
+
+    // If we have completed documents, create a message with their content
+    const docContent =
+      completedDocuments.length > 0
+        ? completedDocuments
+            .map((doc) => doc.content)
+            .filter((content) => content)
+            .join('\n')
+        : undefined
+
+    const documentNames =
+      completedDocuments.length > 0
+        ? completedDocuments.map((doc) => ({ name: doc.name }))
+        : undefined
+
+    // Call handleQuery with the input and document content
+    handleQuery(input, docContent, documentNames)
+
+    // Only remove the completed documents from the state
+    const remainingDocuments = processedDocuments.filter(
+      (doc) => doc.isUploading,
+    )
+    setProcessedDocuments(remainingDocuments)
+  }
+
+  // --- Drag & Drop across bottom input area ---
+  const [isBottomDragActive, setIsBottomDragActive] = useState(false)
+
+  const handleBottomDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsBottomDragActive(true)
+  }, [])
+
+  const handleBottomDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsBottomDragActive(false)
+  }, [])
+
+  const handleBottomDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsBottomDragActive(false)
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFileUpload(e.dataTransfer.files[0])
+      }
+    },
+    [handleFileUpload],
+  )
+
+  // Show loading state while checking subscription or loading config
+  if (subscriptionLoading || isLoadingConfig) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
+        <div className="relative h-10 w-10">
+          <div className="absolute inset-0 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-gray-200 opacity-30"></div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state if no models are available (configuration error)
+  if (!isLoadingConfig && models.length === 0) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
+        <div className="text-center">
+          <div className="text-red-500 text-xl mb-2">⚠️</div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Configuration Error
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            No models are available. Please check the API configuration.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -222,9 +480,8 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
-        repo=""
-        enclave=""
-        digest=""
+        repo={selectedModelDetails?.repo ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium) : ''}
+        enclave={selectedModelDetails?.enclave ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium) : ''}
         selectedModel={selectedModel}
         isPremium={isPremium}
       />
@@ -232,10 +489,9 @@ export function ChatInterface({
       {/* Right Verifier Sidebar */}
       <VerifierSidebar
         isOpen={isVerifierSidebarOpen}
-        setIsOpen={setIsVerifierSidebarOpen}
-        repo={selectedModelDetails?.repo || ''}
-        enclave={selectedModelDetails?.enclave || ''}
-        digest={selectedModelDetails?.digest || ''}
+        setIsOpen={handleSetVerifierSidebarOpen}
+        repo={selectedModelDetails?.repo ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium) : ''}
+        enclave={selectedModelDetails?.enclave ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium) : ''}
         verificationComplete={verificationComplete}
         verificationSuccess={verificationSuccess}
         onVerificationComplete={(success) => {
@@ -279,20 +535,11 @@ export function ChatInterface({
                 >
                   Basic preview.
                 </span>
-                {isSignedIn ? (
-                  <button
-                    onClick={() => router.push('/dashboard?tab=billing')}
-                    className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
-                  >
+                <SignInButton mode="modal">
+                  <button className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
                     Get unrestricted access
                   </button>
-                ) : (
-                  <SignInButton mode="modal">
-                    <button className="text-sm font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
-                      Get unrestricted access
-                    </button>
-                  </SignInButton>
-                )}
+                </SignInButton>
               </div>
             </div>
           )}
@@ -313,16 +560,6 @@ export function ChatInterface({
             }}
           >
             <div className="h-full w-full">
-              {/* Top fade gradient to prevent content from being hidden behind buttons/toast */}
-              {currentChat?.messages?.length > 0 && (
-                <div
-                  className={`pointer-events-none sticky top-0 z-10 h-40 w-full md:h-[52px] ${
-                    isDarkMode
-                      ? 'bg-gradient-to-b from-gray-800 to-transparent'
-                      : 'bg-gradient-to-b from-white to-transparent'
-                  }`}
-                />
-              )}
               <ChatMessages
                 messages={currentChat?.messages || []}
                 isThinking={isThinking}
@@ -341,9 +578,7 @@ export function ChatInterface({
           {isClient && (
             <div
               className={`fixed bottom-0 left-0 right-0 z-10 ${
-                isDarkMode
-                  ? 'border-t border-gray-700 bg-gray-800'
-                  : 'border-t border-gray-200 bg-white'
+                isDarkMode ? 'bg-gray-800' : 'bg-white'
               } p-4`}
               style={{
                 position: 'absolute',
@@ -355,10 +590,34 @@ export function ChatInterface({
                 paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
                 transform: 'translateZ(0)',
                 willChange: 'transform',
+                transition: 'border 0.2s ease-in-out',
+                borderTop: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
+                  : isDarkMode
+                    ? '1px solid rgb(55, 65, 81)' // gray-700
+                    : '1px solid rgb(229, 231, 235)', // gray-200
+                borderLeft: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)'
+                  : 'none',
+                borderRight: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)'
+                  : 'none',
+                borderBottom: isBottomDragActive
+                  ? '2px solid rgba(52, 211, 153, 0.5)'
+                  : 'none',
+              }}
+              onDragOver={handleBottomDragOver}
+              onDragLeave={handleBottomDragLeave}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsBottomDragActive(false)
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleFileUpload(e.dataTransfer.files[0])
+                }
               }}
             >
               <form
-                onSubmit={handleSubmit}
+                onSubmit={wrappedHandleSubmit}
                 className="mx-auto max-w-3xl px-3 md:px-8"
               >
                 {/* Labels - Model selection only for premium users */}
@@ -372,19 +631,24 @@ export function ChatInterface({
                   handleModelSelect={handleModelSelect}
                   isDarkMode={isDarkMode}
                   isPremium={isPremium}
+                  models={models}
                 />
 
                 {/* Input */}
                 <ChatInput
                   input={input}
                   setInput={setInput}
-                  handleSubmit={handleSubmit}
+                  handleSubmit={wrappedHandleSubmit}
                   loadingState={loadingState}
                   cancelGeneration={cancelGeneration}
                   inputRef={inputRef}
                   handleInputFocus={handleInputFocus}
                   inputMinHeight={inputMinHeight}
                   isDarkMode={isDarkMode}
+                  handleDocumentUpload={handleFileUpload}
+                  processedDocuments={processedDocuments}
+                  removeDocument={removeDocument}
+                  isPremium={isPremium}
                 />
               </form>
             </div>

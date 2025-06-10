@@ -1,6 +1,8 @@
 export type Message = {
   role: 'user' | 'assistant'
   content: string
+  documentContent?: string // Separate field for document content
+  documents?: Array<{ name: string }> // New field for document names and types
   timestamp: Date
   thoughts?: string
   isThinking?: boolean
@@ -20,7 +22,7 @@ export type AIModel = string
 
 export type ModelInfo = {
   name: string
-  modelNameSimple: string
+  nameShort: string
   description: string
   image: string
   repo?: string
@@ -30,3 +32,58 @@ export type ModelInfo = {
 }
 
 export type LabelType = 'verify' | 'model' | 'info' | null
+
+export type VerificationStatus = 'error' | 'pending' | 'loading' | 'success'
+
+export interface MeasurementData {
+  measurement?: string
+  certificate?: string
+}
+
+export type VerificationState = {
+  code: {
+    status: VerificationStatus
+    measurements?: MeasurementData
+    error?: string
+  }
+  runtime: {
+    status: VerificationStatus
+    measurements?: string
+    error?: string
+  }
+  security: {
+    status: VerificationStatus
+    error?: string
+  }
+}
+
+// Document processing types
+export type DocumentProcessingStatus =
+  | 'idle'
+  | 'uploading'
+  | 'processing'
+  | 'complete'
+  | 'error'
+
+export interface DocumentMetadata {
+  filename?: string
+  size?: number
+  type?: string
+  lastModified?: number
+}
+
+export interface DocumentProcessingResult {
+  document?: {
+    md_content: string
+    filename?: string
+  } & DocumentMetadata
+  status?: DocumentProcessingStatus
+  error?: string
+}
+
+export interface DocumentUploadProps {
+  onUploadStart: () => void
+  onUploadComplete: (content: string) => void
+  onUploadError: (error: Error) => void
+  setIsUploading: (isUploading: boolean) => void
+}
