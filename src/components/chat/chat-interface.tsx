@@ -9,7 +9,7 @@ import {
   type BaseModel,
 } from '@/app/config/models'
 import { useToast } from '@/hooks/use-toast'
-import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
+import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
