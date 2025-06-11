@@ -2,7 +2,7 @@
 
 import { Inconsolata } from 'next/font/google'
 
-const inconsolata = Inconsolata({
+const INCONSOLATA_FONT = Inconsolata({
   subsets: ['latin'],
   weight: ['500'],
 })
@@ -36,7 +36,7 @@ export function MdxButton({
           transition: 'all 0.2s ease-in-out',
           boxShadow: '0 0 0 rgba(17,24,39,0)',
         }}
-        className={inconsolata.className}
+        className={INCONSOLATA_FONT.className}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-2px)'
           e.currentTarget.style.boxShadow = '0 0 20px rgba(17,24,39,0.8)'

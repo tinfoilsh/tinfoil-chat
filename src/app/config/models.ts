@@ -100,7 +100,7 @@ export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
   } catch (error) {
     logError('Failed to fetch AI models', error, { 
       component: 'getAIModels',
-      metadata: { isPremium }
+      metadata: { paid }
     })
     // Return empty array as fallback
     return []

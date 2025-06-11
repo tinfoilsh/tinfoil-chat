@@ -8,7 +8,7 @@ import {
 } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { CONSTANTS } from './chat/constants'
 
-const darkTheme = {
+const DARK_THEME = {
   ...oneDark,
   'pre[class*="language-"]': {
     ...oneDark['pre[class*="language-"]'],
@@ -24,7 +24,7 @@ const darkTheme = {
   },
 }
 
-const lightTheme = {
+const LIGHT_THEME = {
   ...oneLight,
   'pre[class*="language-"]': {
     ...oneLight['pre[class*="language-"]'],
@@ -99,7 +99,7 @@ export function CodeBlock({
       </button>
       <SyntaxHighlighter
         language={language}
-        style={isDarkMode ? darkTheme : lightTheme}
+        style={isDarkMode ? DARK_THEME : LIGHT_THEME}
         customStyle={{
           borderRadius: '0.5rem',
           margin: 0,

@@ -11,39 +11,6 @@ export class ChatError extends Error {
   }
 }
 
-export function updateChat(
-  chats: Chat[],
-  setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
-  currentChat: Chat,
-  setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
-  chatId: string,
-  updatedMessages: Message[],
-  isUserMessage: boolean,
-  skipPersist = false,
-) {
-  setChats((prevChats: Chat[]) => {
-    const newChats = prevChats.map((chat: Chat) =>
-      chat.id === chatId
-        ? { ...chat, messages: updatedMessages, isUserMessage }
-        : chat,
-    )
-
-    // Only save to localStorage if not skipping persist
-    if (!skipPersist) {
-      localStorage.setItem('chats', JSON.stringify(newChats))
-    }
-
-    return newChats
-  })
-
-  if (currentChat?.id === chatId) {
-    setCurrentChat((prev: Chat) => ({
-      ...prev,
-      messages: updatedMessages,
-      isUserMessage,
-    }))
-  }
-}
 
 export function updateChatTitle(
   chats: Chat[],

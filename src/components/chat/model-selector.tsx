@@ -1,6 +1,6 @@
 'use client'
 
-import { type BaseModel, getAvailableChatModels, isModelAvailable } from '@/app/config/models'
+import { type BaseModel, isModelAvailable } from '@/app/config/models'
 import { LockClosedIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import type { AIModel } from './types'
