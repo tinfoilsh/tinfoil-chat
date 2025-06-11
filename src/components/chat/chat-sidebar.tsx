@@ -17,6 +17,12 @@ import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 
+// Utility function to detect iOS devices
+function isIOSDevice() {
+  if (typeof navigator === 'undefined') return false
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+}
+
 type Message = {
   role: 'user' | 'assistant'
   content: string
@@ -168,17 +174,21 @@ export function ChatSidebar({
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
+  const [isIOS, setIsIOS] = useState(false)
   const { isSignedIn } = useAuth()
 
   // Apply zoom prevention for mobile
   usePreventZoom()
 
-  // Add window resize listener
+  // Add window resize listener and iOS detection
   useEffect(() => {
     if (isClient) {
       const handleResize = () => {
         setWindowWidth(window.innerWidth)
       }
+
+      // Detect iOS device
+      setIsIOS(isIOSDevice())
 
       window.addEventListener('resize', handleResize)
       return () => {
@@ -411,6 +421,37 @@ export function ChatSidebar({
                 ))}
             </div>
           </div>
+
+          {/* App Store button for iOS users */}
+          {isClient && isIOS && (
+            <div
+              className={`flex-none border-t ${
+                isDarkMode ? 'border-gray-800' : 'border-gray-200'
+              } p-3`}
+            >
+              <div className="text-center">
+                <p
+                  className={`mb-2 text-sm font-medium ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}
+                >
+                  Get the native app
+                </p>
+                <a
+                  href="https://apps.apple.com/app/tinfoil/id6745201750"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full"
+                >
+                  <img
+                    src={isDarkMode ? "/appstore-dark.svg" : "/appstore-light.svg"}
+                    alt="Download on the App Store"
+                    className="mx-auto h-10 w-auto transition-opacity hover:opacity-80"
+                  />
+                </a>
+              </div>
+            </div>
+          )}
 
           {/* Terms and privacy policy */}
           <div
