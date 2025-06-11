@@ -1,4 +1,4 @@
-import { SignInButton, useAuth } from '@clerk/nextjs'
+import { useAuth } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
@@ -13,8 +13,8 @@ import {
 import { motion } from 'framer-motion'
 import JSZip from 'jszip'
 
-import { useEffect, useState } from 'react'
 import { logError } from '@/utils/error-handling'
+import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 
@@ -68,49 +68,53 @@ function downloadChats(chats: Chat[]) {
 
   // Create markdown content for each chat
   const chatFiles: { [filename: string]: string } = {}
-  
+
   chats.forEach((chat, index) => {
     const date = new Date(chat.createdAt).toISOString().split('T')[0]
     const sanitizedTitle = chat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()
     const filename = `${date}_${sanitizedTitle || `chat_${index + 1}`}.md`
-    
+
     let markdown = `# ${chat.title}\n\n`
     markdown += `**Created:** ${new Date(chat.createdAt).toLocaleString()}\n`
     markdown += `**Messages:** ${chat.messages.length}\n\n---\n\n`
-    
+
     chat.messages.forEach((message, messageIndex) => {
       const timestamp = new Date(message.timestamp).toLocaleString()
       const role = message.role === 'user' ? 'User' : 'Assistant'
-      
+
       markdown += `## ${role}\n`
       markdown += `*${timestamp}*\n\n`
       markdown += `${message.content}\n\n---\n\n`
     })
-    
+
     chatFiles[filename] = markdown
   })
 
   // Create and download zip file
   try {
     const zip = new JSZip()
-    
+
     // Add each chat file to the zip
     Object.entries(chatFiles).forEach(([filename, content]) => {
       zip.file(filename, content)
     })
-    
+
     // Add a summary file
-    const summary = `# Chat Export Summary\n\n` +
+    const summary =
+      `# Chat Export Summary\n\n` +
       `**Export Date:** ${new Date().toLocaleString()}\n` +
       `**Total Chats:** ${chats.length}\n` +
       `**Total Messages:** ${chats.reduce((sum, chat) => sum + chat.messages.length, 0)}\n\n` +
       `## Chat List\n\n` +
-      chats.map((chat, index) => 
-        `${index + 1}. **${chat.title}** (${chat.messages.length} messages) - ${new Date(chat.createdAt).toLocaleDateString()}`
-      ).join('\n')
-    
+      chats
+        .map(
+          (chat, index) =>
+            `${index + 1}. **${chat.title}** (${chat.messages.length} messages) - ${new Date(chat.createdAt).toLocaleDateString()}`,
+        )
+        .join('\n')
+
     zip.file('_chat_summary.md', summary)
-    
+
     // Generate and download the zip
     zip.generateAsync({ type: 'blob' }).then((content) => {
       const url = window.URL.createObjectURL(content)
@@ -123,9 +127,9 @@ function downloadChats(chats: Chat[]) {
       window.URL.revokeObjectURL(url)
     })
   } catch (error) {
-    logError('Failed to create chat export zip file', error, { 
+    logError('Failed to create chat export zip file', error, {
       component: 'ChatSidebar',
-      action: 'downloadChats'
+      action: 'downloadChats',
     })
     alert('Failed to download chats. Please try again.')
   }
@@ -242,8 +246,12 @@ export function ChatSidebar({
             isDarkMode ? 'border-gray-800' : 'border-gray-200'
           } p-4`}
         >
-          <Link href="https://www.tinfoil.sh" title="Home" className="flex items-center">
-            <Logo className="h-8 w-auto mt-1" dark={isDarkMode} />
+          <Link
+            href="https://www.tinfoil.sh"
+            title="Home"
+            className="flex items-center"
+          >
+            <Logo className="mt-1 h-8 w-auto" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
             <button
@@ -325,11 +333,12 @@ export function ChatSidebar({
                 >
                   Sign up to access chat history and create new chats.
                 </span>{' '}
-                <SignInButton mode="modal">
-                  <button className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
-                    Get unrestricted access
-                  </button>
-                </SignInButton>
+                <Link
+                  href="/pricing"
+                  className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
+                >
+                  Upgrade to Pro
+                </Link>
               </p>
             </div>
           )}
@@ -448,7 +457,9 @@ export function ChatSidebar({
                   className="block w-full"
                 >
                   <img
-                    src={isDarkMode ? "/appstore-dark.svg" : "/appstore-light.svg"}
+                    src={
+                      isDarkMode ? '/appstore-dark.svg' : '/appstore-light.svg'
+                    }
                     alt="Download on the App Store"
                     className="mx-auto h-10 w-auto transition-opacity hover:opacity-80"
                   />

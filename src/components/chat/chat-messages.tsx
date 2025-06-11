@@ -1,6 +1,7 @@
 'use client'
 
-import { CONSTANTS } from './constants'
+import { type BaseModel } from '@/app/config/models'
+import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
@@ -21,10 +22,9 @@ import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
+import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
 import type { Message } from './types'
-import { type BaseModel } from '@/app/config/models'
-import { MicrophoneIcon } from '@heroicons/react/24/outline'
 
 // Add new types
 type MessageWithThoughts = Message & {
@@ -445,58 +445,72 @@ const WelcomeScreen = memo(function WelcomeScreen({
   subscriptionLoading?: boolean
 }) {
   // Get premium models for display - include both premium-only and conditional models
-  const premiumModels = models?.filter(model => 
-    model.type === 'chat' && 
-    model.chat === true && 
-    (model.paid === true || model.paid === 'conditional')
-  ) || []
+  const premiumModels =
+    models?.filter(
+      (model) =>
+        model.type === 'chat' &&
+        model.chat === true &&
+        (model.paid === true || model.paid === 'conditional'),
+    ) || []
 
   // Show loading state while subscription is loading
   if (subscriptionLoading) {
     return (
       <div className="w-full animate-pulse">
-        <div className={`h-9 rounded-lg mb-6 bg-gradient-to-r ${
-          isDarkMode 
-            ? 'from-gray-700 to-gray-600' 
-            : 'from-gray-200 to-gray-300'
-        }`} />
-        
+        <div
+          className={`mb-6 h-9 rounded-lg bg-gradient-to-r ${
+            isDarkMode
+              ? 'from-gray-700 to-gray-600'
+              : 'from-gray-200 to-gray-300'
+          }`}
+        />
+
         <div className="space-y-4">
           {[1, 2, 3].map((index) => (
             <div key={index} className="flex items-start gap-3">
-              <div className={`mt-1 h-5 w-5 flex-shrink-0 rounded bg-gradient-to-r ${
-                isDarkMode 
-                  ? 'from-gray-700 to-gray-600' 
-                  : 'from-gray-200 to-gray-300'
-              }`} />
-              <div className={`h-5 flex-1 rounded bg-gradient-to-r ${
-                isDarkMode 
-                  ? 'from-gray-700 to-gray-600' 
-                  : 'from-gray-200 to-gray-300'
-              }`} />
+              <div
+                className={`mt-1 h-5 w-5 flex-shrink-0 rounded bg-gradient-to-r ${
+                  isDarkMode
+                    ? 'from-gray-700 to-gray-600'
+                    : 'from-gray-200 to-gray-300'
+                }`}
+              />
+              <div
+                className={`h-5 flex-1 rounded bg-gradient-to-r ${
+                  isDarkMode
+                    ? 'from-gray-700 to-gray-600'
+                    : 'from-gray-200 to-gray-300'
+                }`}
+              />
             </div>
           ))}
         </div>
-        
+
         <div className="mt-12">
-          <div className={`h-6 w-64 rounded bg-gradient-to-r mb-4 ${
-            isDarkMode 
-              ? 'from-gray-700 to-gray-600' 
-              : 'from-gray-200 to-gray-300'
-          }`} />
+          <div
+            className={`mb-4 h-6 w-64 rounded bg-gradient-to-r ${
+              isDarkMode
+                ? 'from-gray-700 to-gray-600'
+                : 'from-gray-200 to-gray-300'
+            }`}
+          />
           <div className="space-y-3">
             {[1, 2].map((index) => (
               <div key={index} className="flex items-center gap-3">
-                <div className={`h-4 w-4 flex-shrink-0 rounded bg-gradient-to-r ${
-                  isDarkMode 
-                    ? 'from-gray-700 to-gray-600' 
-                    : 'from-gray-200 to-gray-300'
-                }`} />
-                <div className={`h-4 w-32 rounded bg-gradient-to-r ${
-                  isDarkMode 
-                    ? 'from-gray-700 to-gray-600' 
-                    : 'from-gray-200 to-gray-300'
-                }`} />
+                <div
+                  className={`h-4 w-4 flex-shrink-0 rounded bg-gradient-to-r ${
+                    isDarkMode
+                      ? 'from-gray-700 to-gray-600'
+                      : 'from-gray-200 to-gray-300'
+                  }`}
+                />
+                <div
+                  className={`h-4 w-32 rounded bg-gradient-to-r ${
+                    isDarkMode
+                      ? 'from-gray-700 to-gray-600'
+                      : 'from-gray-200 to-gray-300'
+                  }`}
+                />
               </div>
             ))}
           </div>
@@ -506,14 +520,14 @@ const WelcomeScreen = memo(function WelcomeScreen({
   }
 
   return (
-    <motion.div 
+    <motion.div
       className="w-full"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ 
-        duration: 0.6, 
-        ease: "easeOut",
-        delay: 0.1
+      transition={{
+        duration: 0.6,
+        ease: 'easeOut',
+        delay: 0.1,
       }}
     >
       <motion.h1
@@ -522,23 +536,23 @@ const WelcomeScreen = memo(function WelcomeScreen({
         } mb-6`}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ 
-          duration: 0.5, 
-          ease: "easeOut",
-          delay: 0.2
+        transition={{
+          duration: 0.5,
+          ease: 'easeOut',
+          delay: 0.2,
         }}
       >
         Tinfoil Private Chat
       </motion.h1>
 
-      <motion.ul 
+      <motion.ul
         className="space-y-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ 
-          duration: 0.5, 
-          ease: "easeOut",
-          delay: 0.3
+        transition={{
+          duration: 0.5,
+          ease: 'easeOut',
+          delay: 0.3,
         }}
       >
         <li
@@ -548,7 +562,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
         >
           <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
             <svg
-              className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -580,7 +594,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
         >
           <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
             <svg
-              className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -606,7 +620,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
         >
           <div className="mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center">
             <svg
-              className={`h-5 w-5 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -634,19 +648,21 @@ const WelcomeScreen = memo(function WelcomeScreen({
 
       {/* Premium upgrade section for non-premium users */}
       {!isPremium && (
-        <motion.div 
+        <motion.div
           className="mt-12"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ 
-            duration: 0.5, 
-            ease: "easeOut",
-            delay: 0.5
+          transition={{
+            duration: 0.5,
+            ease: 'easeOut',
+            delay: 0.5,
           }}
         >
           <div>
-            <div className="flex items-center gap-4 mb-4">
-              <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+            <div className="mb-4 flex items-center gap-4">
+              <h3
+                className={`text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+              >
                 Get more out of Tinfoil Chat
               </h3>
               <a
@@ -654,30 +670,54 @@ const WelcomeScreen = memo(function WelcomeScreen({
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
-                  isDarkMode 
-                    ? 'text-emerald-400 hover:text-emerald-300' 
+                  isDarkMode
+                    ? 'text-emerald-400 hover:text-emerald-300'
                     : 'text-emerald-600 hover:text-emerald-500'
                 }`}
               >
                 Upgrade to Pro
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </a>
             </div>
             <div className="space-y-3">
-              <div className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              <div
+                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+              >
                 <MicrophoneIcon className="h-4 w-4 flex-shrink-0" />
                 <span>Speech-to-text voice input</span>
               </div>
-              
-              <div className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-                <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+
+              <div
+                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+              >
+                <svg
+                  className="h-4 w-4 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
                 </svg>
                 <span>Premium AI models</span>
                 {premiumModels.length > 0 && (
-                  <div className="flex items-center gap-1.5 ml-2">
+                  <div className="ml-2 flex items-center gap-1.5">
                     {premiumModels.map((model) => (
                       <img
                         key={model.modelName}
