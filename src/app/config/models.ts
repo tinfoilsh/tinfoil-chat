@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/config'
+import { logError } from '@/utils/error-handling'
 
 // Type for enclave/repo that can be either string or object with free/paid options
 type EnclaveRepo = string | { free: string; paid: string }
@@ -97,7 +98,10 @@ export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
     const models: BaseModel[] = await response.json()
     return models
   } catch (error) {
-    console.error('Error fetching models:', error)
+    logError('Failed to fetch AI models', error, { 
+      component: 'getAIModels',
+      metadata: { isPremium }
+    })
     // Return empty array as fallback
     return []
   }
@@ -116,7 +120,9 @@ export const getSystemPrompt = async (): Promise<string> => {
     const data = await response.json()
     return `<system>\n${data.systemPrompt}\n</system>`
   } catch (error) {
-    console.error('Error fetching system prompt:', error)
+    logError('Failed to fetch system prompt', error, { 
+      component: 'getSystemPrompt'
+    })
     // Return a basic fallback system prompt
     return `<system> You are an intelligent and helpful assistant named Tin. </system>`
   }

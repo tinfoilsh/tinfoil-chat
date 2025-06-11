@@ -209,7 +209,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
           children,
           ...props
         }: {
-          node?: any
+          node?: unknown
           className?: string
           children?: React.ReactNode
           inline?: boolean

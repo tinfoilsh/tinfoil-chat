@@ -17,4 +17,12 @@ export const CONSTANTS = {
     'https://audio-processing.model.tinfoil.sh/v1/audio/transcriptions',
   // Maximum number of messages to include in the context window
   MAX_PROMPT_MESSAGES: 15,
+  // Voice recording timeout in milliseconds (30 seconds)
+  RECORDING_TIMEOUT_MS: 30000,
+  // Copy button timeout in milliseconds (2 seconds)
+  COPY_TIMEOUT_MS: 2000,
+  // Chat initialization delay in milliseconds
+  CHAT_INIT_DELAY_MS: 300,
+  // State update delay for async operations
+  ASYNC_STATE_DELAY_MS: 50,
 } as const

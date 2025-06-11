@@ -14,6 +14,7 @@ import { motion } from 'framer-motion'
 import JSZip from 'jszip'
 
 import { useEffect, useState } from 'react'
+import { logError } from '@/utils/error-handling'
 import { Link } from '../link'
 import { Logo } from '../logo'
 
@@ -122,7 +123,10 @@ function downloadChats(chats: Chat[]) {
       window.URL.revokeObjectURL(url)
     })
   } catch (error) {
-    console.error('Failed to create zip file:', error)
+    logError('Failed to create chat export zip file', error, { 
+      component: 'ChatSidebar',
+      action: 'downloadChats'
+    })
     alert('Failed to download chats. Please try again.')
   }
 }

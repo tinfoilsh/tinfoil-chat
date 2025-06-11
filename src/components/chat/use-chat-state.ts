@@ -4,6 +4,7 @@ import {
   isModelNameAvailable
 } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
+import { logError, logWarning, handleError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
@@ -12,6 +13,51 @@ import { scrollToBottom } from './chat-messages'
 import { ChatError } from './chat-utils'
 import { CONSTANTS } from './constants'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from './types'
+
+// Return type for useChatState hook
+interface UseChatStateReturn {
+  // State
+  chats: Chat[]
+  currentChat: Chat
+  input: string
+  loadingState: LoadingState
+  inputRef: React.RefObject<HTMLTextAreaElement>
+  isClient: boolean
+  isSidebarOpen: boolean
+  isDarkMode: boolean
+  messagesEndRef: React.RefObject<HTMLDivElement>
+  isInitialLoad: boolean
+  isThinking: boolean
+  verificationComplete: boolean
+  verificationSuccess: boolean
+  isWaitingForResponse: boolean
+  selectedModel: AIModel
+  expandedLabel: LabelType
+  windowWidth: number
+  apiKey: string | null
+
+  // Setters
+  setInput: (input: string) => void
+  setIsSidebarOpen: (isOpen: boolean) => void
+  setIsInitialLoad: (isLoading: boolean) => void
+  setVerificationComplete: (complete: boolean) => void
+  setVerificationSuccess: (success: boolean) => void
+
+  // Actions
+  handleSubmit: (e: React.FormEvent) => void
+  handleQuery: (query: string, documentContent?: string, documents?: Array<{ name: string }>) => void
+  createNewChat: () => void
+  deleteChat: (chatId: string) => void
+  handleChatSelect: (chatId: string) => void
+  toggleTheme: () => void
+  openAndExpandVerifier: () => void
+  handleInputFocus: () => void
+  handleLabelClick: (label: 'verify' | 'model' | 'info', action: () => void) => void
+  handleModelSelect: (modelName: AIModel) => void
+  cancelGeneration: () => Promise<void>
+  updateChatTitle: (chatId: string, newTitle: string) => void
+  getApiKey: () => Promise<string>
+}
 
 export function useChatState({
   systemPrompt,
@@ -23,7 +69,7 @@ export function useChatState({
   storeHistory?: boolean
   isPremium?: boolean
   models?: BaseModel[]
-}) {
+}): UseChatStateReturn {
   const { getToken } = useAuth()
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const [chats, setChats] = useState<Chat[]>(() => {
@@ -80,7 +126,7 @@ export function useChatState({
         // Clear initial load state after loading chats
         setIsInitialLoad(false)
       } catch (error) {
-        console.error('Error loading chats from localStorage:', error)
+        logError('Failed to load chats from localStorage', error, { component: 'useChatState' })
         setIsInitialLoad(false)
       }
     } else {
@@ -201,7 +247,7 @@ export function useChatState({
     }
 
     // Wait for any pending state updates
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, CONSTANTS.ASYNC_STATE_DELAY_MS))
   }, [abortController, storeHistory])
 
   // Handle chat query
@@ -539,7 +585,11 @@ export function useChatState({
               }
             }
           } catch (error) {
-            console.error('Error parsing SSE line:', error, line)
+            logError('Failed to parse SSE line', error, { 
+              component: 'useChatState',
+              action: 'handleQuery',
+              metadata: { line }
+            })
             continue
           }
         }
@@ -548,7 +598,10 @@ export function useChatState({
       setIsWaitingForResponse(false) // Make sure to clear waiting state on error
       // Only log and show error message if it's not an abort error
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        console.error('Chat error:', error)
+        logError('Chat query failed', error, { 
+          component: 'useChatState',
+          action: 'handleQuery'
+        })
 
         const errorMessage: Message = {
           role: 'assistant',
@@ -661,7 +714,7 @@ export function useChatState({
       // Set isInitialLoad back to false after a brief delay to show the chat
       setTimeout(() => {
         setIsInitialLoad(false)
-      }, 300)
+      }, CONSTANTS.CHAT_INIT_DELAY_MS)
     },
     [loadingState, cancelGeneration, storeHistory],
   )
@@ -753,7 +806,11 @@ export function useChatState({
           setSelectedModel(CONSTANTS.DEFAULT_MODEL)
           sessionStorage.setItem('selectedModel', CONSTANTS.DEFAULT_MODEL)
         } else {
-          console.error('Default model not available. This is a configuration error.')
+          logError('Default model not available - configuration error', undefined, { 
+            component: 'useChatState',
+            action: 'validateModel',
+            metadata: { defaultModel: CONSTANTS.DEFAULT_MODEL, isPremium }
+          })
           // Don't crash, but log the error - the interface should handle this gracefully
         }
       }
@@ -768,7 +825,11 @@ export function useChatState({
 
       // Verify the model is available for the user
       if (!isModelNameAvailable(modelName, models, isPremium)) {
-        console.warn(`Model ${modelName} is not available for the current subscription level`)
+        logWarning(`Model ${modelName} is not available for the current subscription level`, {
+          component: 'useChatState',
+          action: 'handleModelSelect',
+          metadata: { modelName, isPremium }
+        })
         return
       }
 

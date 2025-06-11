@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { API_BASE_URL } from '@/config'
+import { logError } from '@/utils/error-handling'
 
 export function useSubscriptionStatus() {
   const { getToken, isSignedIn } = useAuth()
@@ -40,7 +41,9 @@ export function useSubscriptionStatus() {
         const data = await response.json()
         setSubscriptionStatus(data)
       } catch (err) {
-        console.error('Subscription status error:', err)
+        logError('Failed to fetch subscription status', err, { 
+          component: 'useSubscriptionStatus'
+        })
         setError(err instanceof Error ? err.message : 'An error occurred')
       } finally {
         setIsLoading(false)

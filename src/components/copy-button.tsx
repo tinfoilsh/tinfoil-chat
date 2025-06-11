@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Check, Copy } from 'lucide-react'
 import { useState } from 'react'
+import { CONSTANTS } from './chat/constants'
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
@@ -8,7 +9,7 @@ function CopyButton({ text }: { text: string }) {
   const handleCopy = () => {
     navigator.clipboard.writeText(text)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => setCopied(false), CONSTANTS.COPY_TIMEOUT_MS)
   }
 
   return (

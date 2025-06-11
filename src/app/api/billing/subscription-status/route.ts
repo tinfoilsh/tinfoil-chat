@@ -1,5 +1,6 @@
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+import { logError } from '@/utils/error-handling'
 
 export const runtime = 'edge'
 
@@ -26,7 +27,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Error checking subscription status:', error)
+    logError('Failed to check subscription status', error, { 
+      component: 'subscription-status-api'
+    })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 },

@@ -6,6 +6,7 @@ import {
   oneDark,
   oneLight,
 } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { CONSTANTS } from './chat/constants'
 
 const darkTheme = {
   ...oneDark,
@@ -53,7 +54,7 @@ export function CodeBlock({
   const copyToClipboard = () => {
     navigator.clipboard.writeText(code)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => setCopied(false), CONSTANTS.COPY_TIMEOUT_MS)
   }
 
   return (

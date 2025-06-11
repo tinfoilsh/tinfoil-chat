@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { logError } from '@/utils/error-handling'
 import { CONSTANTS } from './constants'
 import type { DocumentProcessingResult } from './types'
 
@@ -180,8 +181,11 @@ export const useDocumentUploader = () => {
       // Check if submission successful
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`Upload failed with status: ${response.status}`)
-        console.error('Error details:', errorText)
+        logError(`Document upload failed with status: ${response.status}`, undefined, {
+          component: 'DocumentUploader',
+          action: 'uploadDocument',
+          metadata: { status: response.status, errorText }
+        })
 
         // Special handling for 404 errors, which might mean we need to retry or use another approach
         if (response.status === 404) {
@@ -207,7 +211,11 @@ export const useDocumentUploader = () => {
         throw new Error('No document content received')
       }
     } catch (error) {
-      console.error('Document processing error:', error)
+      logError('Document processing failed', error, {
+        component: 'DocumentUploader',
+        action: 'uploadDocument',
+        metadata: { fileName: file.name }
+      })
       onError(
         error instanceof Error
           ? error

@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '@/config'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useState } from 'react'
+import { logError } from '@/utils/error-handling'
 
 export function useApiKey() {
   const [apiKey, setApiKey] = useState<string | null>(null)
@@ -35,7 +36,9 @@ export function useApiKey() {
       setApiKey(data.key)
       return data.key
     } catch (error) {
-      console.error('Error fetching API key:', error)
+      logError('Failed to fetch API key', error, { 
+        component: 'useApiKey'
+      })
       return ''
     }
   }, [apiKey, getToken])

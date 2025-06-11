@@ -67,6 +67,14 @@ const MacFileIcon = ({
 }) => {
   const type = getFileIconType(filename)
 
+  // Get spinner size based on file icon size - using proper Tailwind classes
+  const getSpinnerClasses = (iconSize: number) => {
+    if (iconSize <= 16) return 'h-4 w-4'
+    if (iconSize <= 24) return 'h-5 w-5' 
+    if (iconSize <= 32) return 'h-6 w-6'
+    return 'h-8 w-8'
+  }
+
   // If uploading, show spinner instead of file icon
   if (isUploading) {
     return (
@@ -77,7 +85,7 @@ const MacFileIcon = ({
           } shadow-sm`}
         >
           <svg
-            className={`h-${size / 4} w-${size / 4} animate-spin text-emerald-500`}
+            className={`${getSpinnerClasses(size)} animate-spin text-emerald-500`}
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -360,7 +368,7 @@ export function ChatInput({
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
 
-      mediaRecorder.ondataavailable = (event: any) => {
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data)
         }
@@ -409,10 +417,10 @@ export function ChatInput({
       mediaRecorder.start(1000)
       setIsRecording(true)
 
-      // Auto-stop after 30 seconds
+      // Auto-stop after configured timeout
       recordingTimeoutRef.current = setTimeout(() => {
         stopRecording()
-      }, 30000)
+      }, CONSTANTS.RECORDING_TIMEOUT_MS)
     } catch (err) {
       toast({
         title: 'Recording Error',

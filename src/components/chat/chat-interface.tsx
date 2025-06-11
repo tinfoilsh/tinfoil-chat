@@ -14,6 +14,7 @@ import { useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
 import { useCallback, useEffect, useState } from 'react'
+import { logError } from '@/utils/error-handling'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
@@ -122,7 +123,10 @@ export function ChatInterface({
         setModels(modelsData)
         setSystemPrompt(systemPromptData)
       } catch (error) {
-        console.error('Failed to load configuration:', error)
+        logError('Failed to load chat configuration', error, { 
+          component: 'ChatInterface',
+          action: 'loadConfig'
+        })
         toast({
           title: 'Configuration Error',
           description: 'Failed to load chat configuration. Please refresh the page.',
@@ -186,7 +190,7 @@ export function ChatInterface({
     storeHistory: isPremium,
     isPremium: isPremium,
     models: models,
-  }) as any
+  })
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
