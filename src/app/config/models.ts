@@ -19,27 +19,30 @@ export type BaseModel = {
   contextWindow?: string
   recommendedUse?: string
   supportedLanguages?: string
-  type: "chat" | "embedding" | "audio" | "tts"
+  type: 'chat' | 'embedding' | 'audio' | 'tts'
   chat?: boolean
-  paid?: boolean | "conditional"
+  paid?: boolean | 'conditional'
   endpoint?: string
 }
 
 // Helper function to resolve enclave/repo based on subscription status
 export const resolveEnclaveOrRepo = (
-  value: EnclaveRepo, 
-  isPaid: boolean
+  value: EnclaveRepo,
+  isPaid: boolean,
 ): string => {
   if (typeof value === 'string') {
     return value
   }
-  
+
   // For object format, return paid if user has subscription, otherwise free
   return isPaid ? value.paid : value.free
 }
 
 // Helper function to determine if a model is available for a given subscription status
-export const isModelAvailable = (model: BaseModel, isPremium: boolean): boolean => {
+export const isModelAvailable = (
+  model: BaseModel,
+  isPremium: boolean,
+): boolean => {
   // Handle different paid model types
   if (model.paid === undefined || model.paid === false) {
     // Free models - always available
@@ -51,38 +54,42 @@ export const isModelAvailable = (model: BaseModel, isPremium: boolean): boolean 
     // Conditional models (available for both free and premium) - always available
     return true
   }
-  
+
   return false
 }
 
 // Helper function to filter models for chat interface
-export const getAvailableChatModels = (models: BaseModel[], isPremium: boolean): BaseModel[] => {
-  return models.filter(model => 
-    // Must be a chat model
-    model.type === 'chat' &&
-    model.chat === true &&
-    // Must be available for the user's subscription level
-    isModelAvailable(model, isPremium)
+export const getAvailableChatModels = (
+  models: BaseModel[],
+  isPremium: boolean,
+): BaseModel[] => {
+  return models.filter(
+    (model) =>
+      // Must be a chat model
+      model.type === 'chat' &&
+      model.chat === true &&
+      // Must be available for the user's subscription level
+      isModelAvailable(model, isPremium),
   )
 }
 
 // Helper function to validate if a specific model name is available for a user
 export const isModelNameAvailable = (
-  modelName: string, 
-  models: BaseModel[], 
-  isPremium: boolean
+  modelName: string,
+  models: BaseModel[],
+  isPremium: boolean,
 ): boolean => {
-  const model = models.find(m => m.modelName === modelName)
+  const model = models.find((m) => m.modelName === modelName)
   if (!model) {
     return false
   }
-  
-  return model.type === 'chat' && 
-         model.chat === true && 
-         isModelAvailable(model, isPremium)
+
+  return (
+    model.type === 'chat' &&
+    model.chat === true &&
+    isModelAvailable(model, isPremium)
+  )
 }
-
-
 
 // Fetch models from the API
 export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
@@ -90,17 +97,17 @@ export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
     const endpoint = paid ? '/api/app/models?paid=true' : '/api/app/models'
     const url = `${API_BASE_URL}${endpoint}`
     const response = await fetch(url)
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch models: ${response.status}`)
     }
-    
+
     const models: BaseModel[] = await response.json()
     return models
   } catch (error) {
-    logError('Failed to fetch AI models', error, { 
+    logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
-      metadata: { paid }
+      metadata: { paid },
     })
     // Return empty array as fallback
     return []
@@ -112,16 +119,16 @@ export const getSystemPrompt = async (): Promise<string> => {
   try {
     const url = `${API_BASE_URL}/api/app/system-prompt`
     const response = await fetch(url)
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch system prompt: ${response.status}`)
     }
-    
+
     const data = await response.json()
     return `<system>\n${data.systemPrompt}\n</system>`
   } catch (error) {
-    logError('Failed to fetch system prompt', error, { 
-      component: 'getSystemPrompt'
+    logError('Failed to fetch system prompt', error, {
+      component: 'getSystemPrompt',
     })
     // Return a basic fallback system prompt
     return `<system> You are an intelligent and helpful assistant named Tin. </system>`

@@ -70,7 +70,7 @@ const MacFileIcon = ({
   // Get spinner size based on file icon size - using proper Tailwind classes
   const getSpinnerClasses = (iconSize: number) => {
     if (iconSize <= 16) return 'h-4 w-4'
-    if (iconSize <= 24) return 'h-5 w-5' 
+    if (iconSize <= 24) return 'h-5 w-5'
     if (iconSize <= 32) return 'h-6 w-6'
     return 'h-8 w-8'
   }

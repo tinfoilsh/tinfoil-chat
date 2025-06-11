@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
 import { isModelNameAvailable, type BaseModel } from '@/app/config/models'
 import { logError, logWarning } from '@/utils/error-handling'
+import { useCallback, useEffect, useState } from 'react'
 import { CONSTANTS } from '../constants'
 import type { AIModel, LabelType } from '../types'
 
@@ -20,7 +20,10 @@ interface UseModelManagementReturn {
   verificationComplete: boolean
   verificationSuccess: boolean
   handleModelSelect: (modelName: AIModel) => void
-  handleLabelClick: (label: 'verify' | 'model' | 'info', action: () => void) => void
+  handleLabelClick: (
+    label: 'verify' | 'model' | 'info',
+    action: () => void,
+  ) => void
 }
 
 export function useModelManagement({
@@ -38,7 +41,7 @@ export function useModelManagement({
 
   // Add state for expanded label
   const [expandedLabel, setExpandedLabel] = useState<LabelType>(null)
-  
+
   // Verification state
   const [verificationComplete, setVerificationComplete] = useState(false)
   const [verificationSuccess, setVerificationSuccess] = useState(false)
@@ -47,10 +50,10 @@ export function useModelManagement({
   useEffect(() => {
     if (models.length > 0 && isClient) {
       const savedModel = sessionStorage.getItem('selectedModel')
-      
+
       // Try saved model first, then current selected model, then default
       const preferredModel = savedModel || selectedModel
-      
+
       if (isModelNameAvailable(preferredModel, models, isPremium)) {
         // Preferred model is available, use it
         if (preferredModel !== selectedModel) {
@@ -64,11 +67,15 @@ export function useModelManagement({
           setSelectedModel(CONSTANTS.DEFAULT_MODEL)
           sessionStorage.setItem('selectedModel', CONSTANTS.DEFAULT_MODEL)
         } else {
-          logError('Default model not available - configuration error', undefined, { 
-            component: 'useModelManagement',
-            action: 'validateModel',
-            metadata: { defaultModel: CONSTANTS.DEFAULT_MODEL, isPremium }
-          })
+          logError(
+            'Default model not available - configuration error',
+            undefined,
+            {
+              component: 'useModelManagement',
+              action: 'validateModel',
+              metadata: { defaultModel: CONSTANTS.DEFAULT_MODEL, isPremium },
+            },
+          )
           // Don't crash, but log the error - the interface should handle this gracefully
         }
       }
@@ -83,11 +90,14 @@ export function useModelManagement({
 
       // Verify the model is available for the user
       if (!isModelNameAvailable(modelName, models, isPremium)) {
-        logWarning(`Model ${modelName} is not available for the current subscription level`, {
-          component: 'useModelManagement',
-          action: 'handleModelSelect',
-          metadata: { modelName, isPremium }
-        })
+        logWarning(
+          `Model ${modelName} is not available for the current subscription level`,
+          {
+            component: 'useModelManagement',
+            action: 'handleModelSelect',
+            metadata: { modelName, isPremium },
+          },
+        )
         return
       }
 

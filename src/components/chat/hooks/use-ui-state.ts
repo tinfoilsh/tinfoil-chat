@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import type { LabelType } from '../types'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface UseUIStateReturn {
   isClient: boolean
@@ -20,7 +19,7 @@ export function useUIState(): UseUIStateReturn {
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Client-side initialization

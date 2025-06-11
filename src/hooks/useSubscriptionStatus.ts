@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
-import { useAuth } from '@clerk/nextjs'
-import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
+import { useAuth } from '@clerk/nextjs'
+import { useEffect, useState } from 'react'
 
 export function useSubscriptionStatus() {
   const { getToken, isSignedIn } = useAuth()
@@ -30,19 +29,21 @@ export function useSubscriptionStatus() {
 
         const response = await fetch(`/api/billing/subscription-status`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
         })
-        
+
         if (!response.ok) {
-          throw new Error(`Failed to fetch subscription status: ${response.status}`)
+          throw new Error(
+            `Failed to fetch subscription status: ${response.status}`,
+          )
         }
-        
+
         const data = await response.json()
         setSubscriptionStatus(data)
       } catch (err) {
-        logError('Failed to fetch subscription status', err, { 
-          component: 'useSubscriptionStatus'
+        logError('Failed to fetch subscription status', err, {
+          component: 'useSubscriptionStatus',
         })
         setError(err instanceof Error ? err.message : 'An error occurred')
       } finally {

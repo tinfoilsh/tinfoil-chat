@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
-import { v4 as uuidv4 } from 'uuid'
 import { logError } from '@/utils/error-handling'
+import { useCallback, useEffect, useState } from 'react'
+import { v4 as uuidv4 } from 'uuid'
 import { CONSTANTS } from '../constants'
-import type { Chat, Message } from '../types'
+import type { Chat } from '../types'
 
 interface UseChatStorageProps {
   storeHistory: boolean
@@ -23,12 +23,12 @@ interface UseChatStorageReturn {
   isInitialLoad: boolean
 }
 
-export function useChatStorage({ 
-  storeHistory, 
-  isClient 
+export function useChatStorage({
+  storeHistory,
+  isClient,
 }: UseChatStorageProps): UseChatStorageReturn {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  
+
   const [chats, setChats] = useState<Chat[]>(() => {
     const defaultChat: Chat = {
       id: uuidv4(),
@@ -62,7 +62,7 @@ export function useChatStorage({
               createdAt: new Date(chat.createdAt),
             }))
             setChats(parsedChats)
-            
+
             // Check if the first (most recent) chat has messages
             const firstChat = parsedChats[0]
             if (firstChat.messages && firstChat.messages.length > 0) {
@@ -86,7 +86,9 @@ export function useChatStorage({
         // Clear initial load state after loading chats
         setIsInitialLoad(false)
       } catch (error) {
-        logError('Failed to load chats from localStorage', error, { component: 'useChatStorage' })
+        logError('Failed to load chats from localStorage', error, {
+          component: 'useChatStorage',
+        })
         setIsInitialLoad(false)
       }
     } else {
@@ -130,7 +132,7 @@ export function useChatStorage({
 
       setChats((prevChats) => {
         const newChats = prevChats.filter((chat) => chat.id !== chatId)
-        
+
         // Always ensure there's at least one chat
         if (newChats.length === 0) {
           const newChat: Chat = {
@@ -142,12 +144,12 @@ export function useChatStorage({
           setCurrentChat(newChat)
           return [newChat]
         }
-        
+
         // If we deleted the current chat, switch to the first remaining chat
         if (currentChat?.id === chatId) {
           setCurrentChat(newChats[0])
         }
-        
+
         localStorage.setItem('chats', JSON.stringify(newChats))
         return newChats
       })

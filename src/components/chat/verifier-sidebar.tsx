@@ -110,7 +110,6 @@ export function VerifierSidebar({
             />
           )}
         </div>
-
       </div>
 
       {/* Mobile overlay */}

@@ -5,16 +5,16 @@
 import {
   getAIModels,
   getSystemPrompt,
-  type BaseModel,
   resolveEnclaveOrRepo,
+  type BaseModel,
 } from '@/app/config/models'
 import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
-import { useCallback, useEffect, useState } from 'react'
 import { logError } from '@/utils/error-handling'
+import { useCallback, useEffect, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
@@ -110,8 +110,6 @@ export function ChatInterface({
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
 
-
-
   // Load models and system prompt
   useEffect(() => {
     const loadConfig = async () => {
@@ -123,13 +121,14 @@ export function ChatInterface({
         setModels(modelsData)
         setSystemPrompt(systemPromptData)
       } catch (error) {
-        logError('Failed to load chat configuration', error, { 
+        logError('Failed to load chat configuration', error, {
           component: 'ChatInterface',
-          action: 'loadConfig'
+          action: 'loadConfig',
         })
         toast({
           title: 'Configuration Error',
-          description: 'Failed to load chat configuration. Please refresh the page.',
+          description:
+            'Failed to load chat configuration. Please refresh the page.',
           variant: 'destructive',
           position: 'top-left',
         })
@@ -395,16 +394,16 @@ export function ChatInterface({
     return (
       <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
         <div className="text-center">
-          <div className="text-red-500 text-xl mb-2">⚠️</div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          <div className="mb-2 text-xl text-red-500">⚠️</div>
+          <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
             Configuration Error
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4 text-gray-600 dark:text-gray-400">
             No models are available. Please check the API configuration.
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-600"
           >
             Refresh Page
           </button>
@@ -480,8 +479,16 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
-        repo={selectedModelDetails?.repo ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium) : ''}
-        enclave={selectedModelDetails?.enclave ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium) : ''}
+        repo={
+          selectedModelDetails?.repo
+            ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
+            : ''
+        }
+        enclave={
+          selectedModelDetails?.enclave
+            ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
+            : ''
+        }
         selectedModel={selectedModel}
         isPremium={isPremium}
       />
@@ -490,8 +497,16 @@ export function ChatInterface({
       <VerifierSidebar
         isOpen={isVerifierSidebarOpen}
         setIsOpen={handleSetVerifierSidebarOpen}
-        repo={selectedModelDetails?.repo ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium) : ''}
-        enclave={selectedModelDetails?.enclave ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium) : ''}
+        repo={
+          selectedModelDetails?.repo
+            ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
+            : ''
+        }
+        enclave={
+          selectedModelDetails?.enclave
+            ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
+            : ''
+        }
         verificationComplete={verificationComplete}
         verificationSuccess={verificationSuccess}
         onVerificationComplete={(success) => {

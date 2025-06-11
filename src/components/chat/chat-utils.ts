@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Chat, Message } from './types'
+import type { Chat } from './types'
 
 export class ChatError extends Error {
   constructor(
@@ -10,7 +10,6 @@ export class ChatError extends Error {
     this.name = 'ChatError'
   }
 }
-
 
 export function updateChatTitle(
   chats: Chat[],

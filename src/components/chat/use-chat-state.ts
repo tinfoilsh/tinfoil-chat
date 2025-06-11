@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react'
 import type { BaseModel } from '@/app/config/models'
-import type { AIModel, Chat, LabelType, LoadingState } from './types'
-import { useChatStorage } from './hooks/use-chat-storage'
+import { useEffect, useRef } from 'react'
 import { useChatMessaging } from './hooks/use-chat-messaging'
+import { useChatStorage } from './hooks/use-chat-storage'
 import { useModelManagement } from './hooks/use-model-management'
 import { useUIState } from './hooks/use-ui-state'
+import type { AIModel, Chat, LabelType, LoadingState } from './types'
 
 // Return type for useChatState hook
 interface UseChatStateReturn {
@@ -37,14 +37,21 @@ interface UseChatStateReturn {
 
   // Actions
   handleSubmit: (e: React.FormEvent) => void
-  handleQuery: (query: string, documentContent?: string, documents?: Array<{ name: string }>) => void
+  handleQuery: (
+    query: string,
+    documentContent?: string,
+    documents?: Array<{ name: string }>,
+  ) => void
   createNewChat: () => void
   deleteChat: (chatId: string) => void
   handleChatSelect: (chatId: string) => void
   toggleTheme: () => void
   openAndExpandVerifier: () => void
   handleInputFocus: () => void
-  handleLabelClick: (label: 'verify' | 'model' | 'info', action: () => void) => void
+  handleLabelClick: (
+    label: 'verify' | 'model' | 'info',
+    action: () => void,
+  ) => void
   handleModelSelect: (modelName: AIModel) => void
   cancelGeneration: () => Promise<void>
   updateChatTitle: (chatId: string, newTitle: string) => void

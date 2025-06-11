@@ -83,10 +83,7 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-gray-900 text-gray-100 antialiased">
-        <ClerkProvider
-          telemetry={false}
-          afterSignOutUrl="/"
-        >
+        <ClerkProvider telemetry={false} afterSignOutUrl="/">
           {children}
           <Toaster />
         </ClerkProvider>

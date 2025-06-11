@@ -46,9 +46,7 @@ export function ChatLabels({
     [handleModelSelect],
   )
 
-  const model = models.find(
-    (model) => model.modelName === selectedModel,
-  )
+  const model = models.find((model) => model.modelName === selectedModel)
   if (!model) {
     return (
       <div className="mb-2 flex items-center gap-2">
