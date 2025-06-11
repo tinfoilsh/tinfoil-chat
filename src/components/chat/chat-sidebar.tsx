@@ -1,5 +1,6 @@
 import { SignInButton, useAuth } from '@clerk/nextjs'
 import {
+  ArrowDownTrayIcon,
   Bars3Icon,
   ChatBubbleLeftIcon,
   MoonIcon,
@@ -10,6 +11,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import JSZip from 'jszip'
 
 import { useEffect, useState } from 'react'
 import { Link } from '../link'
@@ -52,6 +54,72 @@ type ChatSidebarProps = {
 
 // Add this constant at the top of the file
 const MOBILE_BREAKPOINT = 1024 // Same as in chat-interface.tsx
+
+// Function to download all chats as markdown files in a zip
+function downloadChats(chats: Chat[]) {
+  if (chats.length === 0) return
+
+  // Create markdown content for each chat
+  const chatFiles: { [filename: string]: string } = {}
+  
+  chats.forEach((chat, index) => {
+    const date = new Date(chat.createdAt).toISOString().split('T')[0]
+    const sanitizedTitle = chat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+    const filename = `${date}_${sanitizedTitle || `chat_${index + 1}`}.md`
+    
+    let markdown = `# ${chat.title}\n\n`
+    markdown += `**Created:** ${new Date(chat.createdAt).toLocaleString()}\n`
+    markdown += `**Messages:** ${chat.messages.length}\n\n---\n\n`
+    
+    chat.messages.forEach((message, messageIndex) => {
+      const timestamp = new Date(message.timestamp).toLocaleString()
+      const role = message.role === 'user' ? 'User' : 'Assistant'
+      
+      markdown += `## ${role}\n`
+      markdown += `*${timestamp}*\n\n`
+      markdown += `${message.content}\n\n---\n\n`
+    })
+    
+    chatFiles[filename] = markdown
+  })
+
+  // Create and download zip file
+  try {
+    const zip = new JSZip()
+    
+    // Add each chat file to the zip
+    Object.entries(chatFiles).forEach(([filename, content]) => {
+      zip.file(filename, content)
+    })
+    
+    // Add a summary file
+    const summary = `# Chat Export Summary\n\n` +
+      `**Export Date:** ${new Date().toLocaleString()}\n` +
+      `**Total Chats:** ${chats.length}\n` +
+      `**Total Messages:** ${chats.reduce((sum, chat) => sum + chat.messages.length, 0)}\n\n` +
+      `## Chat List\n\n` +
+      chats.map((chat, index) => 
+        `${index + 1}. **${chat.title}** (${chat.messages.length} messages) - ${new Date(chat.createdAt).toLocaleDateString()}`
+      ).join('\n')
+    
+    zip.file('_chat_summary.md', summary)
+    
+    // Generate and download the zip
+    zip.generateAsync({ type: 'blob' }).then((content) => {
+      const url = window.URL.createObjectURL(content)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `tinfoil_chat_export_${new Date().toISOString().split('T')[0]}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    })
+  } catch (error) {
+    console.error('Failed to create zip file:', error)
+    alert('Failed to download chats. Please try again.')
+  }
+}
 
 // Add this useEffect function to prevent zooming on mobile Safari
 function usePreventZoom() {
@@ -260,13 +328,28 @@ export function ChatSidebar({
           >
             {isPremium && (
               <>
-                <h3
-                  className={`truncate text-sm font-medium ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                  }`}
-                >
-                  Chat History
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3
+                    className={`truncate text-sm font-medium ${
+                      isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                    }`}
+                  >
+                    Chat History
+                  </h3>
+                  {chats.length > 0 && (
+                    <button
+                      onClick={() => downloadChats(chats)}
+                      className={`rounded-lg p-1.5 transition-all duration-200 ${
+                        isDarkMode
+                          ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                      }`}
+                      title="Download all chats as ZIP"
+                    >
+                      <ArrowDownTrayIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <div
                   className={`mt-1 truncate text-xs ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
