@@ -44,6 +44,7 @@ type ChatMessagesProps = {
   isWaitingForResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
+  subscriptionLoading?: boolean
 }
 
 // Add new component for thought process display
@@ -435,11 +436,13 @@ const WelcomeScreen = memo(function WelcomeScreen({
   openAndExpandVerifier,
   isPremium,
   models,
+  subscriptionLoading,
 }: {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
   isPremium?: boolean
   models?: BaseModel[]
+  subscriptionLoading?: boolean
 }) {
   // Get premium models for display - include both premium-only and conditional models
   const premiumModels = models?.filter(model => 
@@ -448,17 +451,96 @@ const WelcomeScreen = memo(function WelcomeScreen({
     (model.paid === true || model.paid === 'conditional')
   ) || []
 
+  // Show loading state while subscription is loading
+  if (subscriptionLoading) {
+    return (
+      <div className="w-full animate-pulse">
+        <div className={`h-9 rounded-lg mb-6 bg-gradient-to-r ${
+          isDarkMode 
+            ? 'from-gray-700 to-gray-600' 
+            : 'from-gray-200 to-gray-300'
+        }`} />
+        
+        <div className="space-y-4">
+          {[1, 2, 3].map((index) => (
+            <div key={index} className="flex items-start gap-3">
+              <div className={`mt-1 h-5 w-5 flex-shrink-0 rounded bg-gradient-to-r ${
+                isDarkMode 
+                  ? 'from-gray-700 to-gray-600' 
+                  : 'from-gray-200 to-gray-300'
+              }`} />
+              <div className={`h-5 flex-1 rounded bg-gradient-to-r ${
+                isDarkMode 
+                  ? 'from-gray-700 to-gray-600' 
+                  : 'from-gray-200 to-gray-300'
+              }`} />
+            </div>
+          ))}
+        </div>
+        
+        <div className="mt-12">
+          <div className={`h-6 w-64 rounded bg-gradient-to-r mb-4 ${
+            isDarkMode 
+              ? 'from-gray-700 to-gray-600' 
+              : 'from-gray-200 to-gray-300'
+          }`} />
+          <div className="space-y-3">
+            {[1, 2].map((index) => (
+              <div key={index} className="flex items-center gap-3">
+                <div className={`h-4 w-4 flex-shrink-0 rounded bg-gradient-to-r ${
+                  isDarkMode 
+                    ? 'from-gray-700 to-gray-600' 
+                    : 'from-gray-200 to-gray-300'
+                }`} />
+                <div className={`h-4 w-32 rounded bg-gradient-to-r ${
+                  isDarkMode 
+                    ? 'from-gray-700 to-gray-600' 
+                    : 'from-gray-200 to-gray-300'
+                }`} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full">
-      <h1
+    <motion.div 
+      className="w-full"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ 
+        duration: 0.6, 
+        ease: "easeOut",
+        delay: 0.1
+      }}
+    >
+      <motion.h1
         className={`font-display text-3xl font-medium tracking-tight ${
           isDarkMode ? 'text-gray-100' : 'text-gray-800'
         } mb-6`}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ 
+          duration: 0.5, 
+          ease: "easeOut",
+          delay: 0.2
+        }}
       >
         Tinfoil Private Chat
-      </h1>
+      </motion.h1>
 
-      <ul className="space-y-4">
+      <motion.ul 
+        className="space-y-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ 
+          duration: 0.5, 
+          ease: "easeOut",
+          delay: 0.3
+        }}
+      >
         <li
           className={`flex items-start gap-3 ${
             isDarkMode ? 'text-gray-100' : 'text-gray-900'
@@ -548,11 +630,20 @@ const WelcomeScreen = memo(function WelcomeScreen({
             </button>
           </div>
         </li>
-      </ul>
+      </motion.ul>
 
       {/* Premium upgrade section for non-premium users */}
       {!isPremium && (
-        <div className="mt-12">
+        <motion.div 
+          className="mt-12"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5, 
+            ease: "easeOut",
+            delay: 0.5
+          }}
+        >
           <div>
             <div className="flex items-center gap-4 mb-4">
               <h3 className={`text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -601,9 +692,9 @@ const WelcomeScreen = memo(function WelcomeScreen({
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   )
 })
 
@@ -639,6 +730,7 @@ export function ChatMessages({
   isWaitingForResponse = false,
   isPremium,
   models,
+  subscriptionLoading,
 }: ChatMessagesProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
@@ -782,6 +874,7 @@ export function ChatMessages({
             openAndExpandVerifier={openAndExpandVerifier}
             isPremium={isPremium}
             models={models}
+            subscriptionLoading={subscriptionLoading}
           />
         </div>
         <div ref={messagesEndRef} className="hidden" />

@@ -550,6 +550,7 @@ export function ChatInterface({
                 isWaitingForResponse={isWaitingForResponse}
                 isPremium={isPremium}
                 models={models}
+                subscriptionLoading={subscriptionLoading}
               />
             </div>
           </div>
