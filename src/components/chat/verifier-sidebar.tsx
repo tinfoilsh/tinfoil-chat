@@ -111,30 +111,6 @@ export function VerifierSidebar({
           )}
         </div>
 
-        {/* SOC2 Compliance Footer */}
-        <div
-          className={`flex h-[56px] flex-none items-center justify-center border-t ${
-            isDarkMode
-              ? 'border-gray-800 bg-gray-900'
-              : 'border-gray-200 bg-white'
-          } p-3`}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <Image
-              src="/verification-logos/soc2.png"
-              alt="SOC2 Type I Compliant"
-              width={24}
-              height={24}
-            />
-            <p
-              className={`text-xs ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-              }`}
-            >
-              Tinfoil is SOC2 Type I compliant
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Mobile overlay */}
