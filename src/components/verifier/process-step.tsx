@@ -234,7 +234,7 @@ export function ProcessStep({
                     className={`flex h-12 w-24 flex-col items-center justify-center ${isDarkMode ? 'bg-white/5' : 'bg-gray-100'} rounded-lg p-2`}
                   >
                     <a
-                      href="https://www.amd.com/en/technologies/infinity-guard"
+                      href="https://www.amd.com/en/developer/sev.html"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex h-full w-full flex-col items-center justify-between"

@@ -8,8 +8,8 @@ import {
   resolveEnclaveOrRepo,
   type BaseModel,
 } from '@/app/config/models'
-import { useToast } from '@/hooks/use-toast'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
+import { useToast } from '@/hooks/use-toast'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
@@ -23,7 +23,7 @@ import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import type { VerificationState } from './types'
 import { useChatState } from './use-chat-state'
-import { VerifierSidebar } from './verifier-sidebar'
+import { VerifierSidebar, type VerifierModel } from './verifier-sidebar'
 
 type ChatInterfaceProps = {
   verificationState?: VerificationState
@@ -224,6 +224,39 @@ export function ChatInterface({
   const selectedModelDetails = models.find(
     (model) => model.modelName === selectedModel,
   ) as BaseModel | undefined
+
+  // Prepare models for verifier sidebar
+  const verifierModels: VerifierModel[] = models
+    .filter((model) => {
+      // Include chat models
+      if (model.chat) return true
+      // Include audio models only for premium users
+      if (model.type === 'audio' && isPremium) return true
+      return false
+    })
+    .map((model) => ({
+      id: model.modelName,
+      name: model.name,
+      displayName: model.nameShort || model.name,
+      type: model.type === 'audio' ? 'audio' : 'chat',
+      image: model.image,
+      repo: resolveEnclaveOrRepo(model.repo || '', isPremium),
+      enclave: resolveEnclaveOrRepo(model.enclave || '', isPremium),
+    }))
+
+  // Add document upload model for all users
+  verifierModels.push({
+    id: 'document-upload',
+    name: 'Document Upload',
+    displayName: 'Document Upload',
+    type: 'document',
+    repo: selectedModelDetails?.repo
+      ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
+      : '',
+    enclave: selectedModelDetails?.enclave
+      ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
+      : '',
+  })
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
@@ -516,6 +549,7 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
         isClient={isClient}
         selectedModel={selectedModel}
+        models={verifierModels}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
