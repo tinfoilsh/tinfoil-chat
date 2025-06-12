@@ -232,31 +232,52 @@ export function ChatInterface({
       if (model.chat) return true
       // Include audio models only for premium users
       if (model.type === 'audio' && isPremium) return true
+      // Include document models (docling)
+      if (model.type === 'document') return true
       return false
     })
     .map((model) => ({
       id: model.modelName,
       name: model.name,
       displayName: model.nameShort || model.name,
-      type: model.type === 'audio' ? 'audio' : 'chat',
+      type: model.type === 'audio' ? 'audio' : model.type === 'document' ? 'document' : 'chat',
       image: model.image,
       repo: resolveEnclaveOrRepo(model.repo || '', isPremium),
       enclave: resolveEnclaveOrRepo(model.enclave || '', isPremium),
     }))
 
-  // Add document upload model for all users
-  verifierModels.push({
-    id: 'document-upload',
-    name: 'Document Upload',
-    displayName: 'Document Upload',
-    type: 'document',
-    repo: selectedModelDetails?.repo
-      ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
-      : '',
-    enclave: selectedModelDetails?.enclave
-      ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
-      : '',
-  })
+  // If no docling model found in API, add fallback document upload model
+  const hasDoclingModel = verifierModels.some(model => 
+    model.type === 'document' || 
+    model.name.toLowerCase().includes('docling')
+  )
+  
+  if (!hasDoclingModel) {
+    // Try to find a docling model from all models (including non-chat ones) to get its icon
+    const doclingModel = models.find(model => 
+      model.modelName === 'docling' || 
+      model.name.toLowerCase().includes('docling') ||
+      model.type === 'document'
+    )
+    
+    verifierModels.push({
+      id: 'document-upload',
+      name: 'Docling',
+      displayName: 'Docling',
+      type: 'document',
+      image: doclingModel?.image,
+      repo: doclingModel?.repo
+        ? resolveEnclaveOrRepo(doclingModel.repo, isPremium)
+        : selectedModelDetails?.repo
+        ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
+        : '',
+      enclave: doclingModel?.enclave
+        ? resolveEnclaveOrRepo(doclingModel.enclave, isPremium)
+        : selectedModelDetails?.enclave
+        ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
+        : '',
+    })
+  }
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(

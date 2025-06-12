@@ -170,9 +170,7 @@ export function VerifierSidebar({
 
                     return (
                       <>
-                        {activeModel.type === 'document' ? (
-                          <DocumentIcon className="h-4 w-4" />
-                        ) : activeModel.image ? (
+                        {activeModel.image ? (
                           <img
                             src={activeModel.image}
                             alt={activeModel.name}
@@ -181,6 +179,8 @@ export function VerifierSidebar({
                               e.currentTarget.style.display = 'none'
                             }}
                           />
+                        ) : activeModel.type === 'document' ? (
+                          <DocumentIcon className="h-4 w-4" />
                         ) : null}
                         <span>
                           {activeModel.displayName || activeModel.name}
@@ -222,6 +222,8 @@ export function VerifierSidebar({
                         onClick={() => {
                           setActiveModelTab(model.id)
                           setIsDropdownOpen(false)
+                          // Reset verification when model changes
+                          onVerificationComplete(false)
                         }}
                         className={`flex w-full items-center gap-2 px-4 py-2.5 text-sm transition-all ${
                           isActive
@@ -233,9 +235,7 @@ export function VerifierSidebar({
                               : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
-                        {model.type === 'document' ? (
-                          <DocumentIcon className="h-4 w-4 flex-shrink-0" />
-                        ) : model.image ? (
+                        {model.image ? (
                           <img
                             src={model.image}
                             alt={model.name}
@@ -244,6 +244,8 @@ export function VerifierSidebar({
                               e.currentTarget.style.display = 'none'
                             }}
                           />
+                        ) : model.type === 'document' ? (
+                          <DocumentIcon className="h-4 w-4 flex-shrink-0" />
                         ) : (
                           <div className="h-4 w-4" />
                         )}
