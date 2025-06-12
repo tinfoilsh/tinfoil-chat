@@ -1,3 +1,4 @@
+import { getAIModels } from '@/app/config/models'
 import { logError } from '@/utils/error-handling'
 import { useState } from 'react'
 import { CONSTANTS } from './constants'
@@ -71,6 +72,43 @@ export const useDocumentUploader = () => {
 
   // Get a unique ID for the document
   const getDocumentId = () => Math.random().toString(36).substring(2, 9)
+
+  // Get docling model endpoint
+  const getDoclingEndpoint = async (): Promise<string> => {
+    try {
+      const models = await getAIModels(true) // Try with premium first
+      const doclingModel = models.find(model => 
+        model.modelName === 'docling' || 
+        model.name.toLowerCase().includes('docling') ||
+        model.type === 'document'
+      )
+      
+      if (doclingModel?.endpoint) {
+        return doclingModel.endpoint
+      }
+      
+      // Fallback to free models
+      const freeModels = await getAIModels(false)
+      const freeDoclingModel = freeModels.find(model => 
+        model.modelName === 'docling' || 
+        model.name.toLowerCase().includes('docling') ||
+        model.type === 'document'
+      )
+      
+      if (freeDoclingModel?.endpoint) {
+        return freeDoclingModel.endpoint
+      }
+      
+      // Ultimate fallback to hardcoded URL
+      return 'https://doc-upload.model.tinfoil.sh/v1alpha/convert/file'
+    } catch (error) {
+      logError('Failed to fetch docling endpoint, using fallback', error, {
+        component: 'DocumentUploader',
+        action: 'getDoclingEndpoint',
+      })
+      return 'https://doc-upload.model.tinfoil.sh/v1alpha/convert/file'
+    }
+  }
 
   // Determine the format based on file extension
   const getFormatFromFileType = (file: File): string => {
@@ -170,13 +208,11 @@ export const useDocumentUploader = () => {
       formData.append('do_picture_description', 'false')
       formData.append('image_export_mode', 'placeholder') // Use placeholder instead of skip for images
 
-      const response = await fetch(
-        'https://doc-upload.model.tinfoil.sh/v1alpha/convert/file',
-        {
-          method: 'POST',
-          body: formData,
-        },
-      )
+      const endpoint = await getDoclingEndpoint()
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+      })
 
       // Check if submission successful
       if (!response.ok) {
