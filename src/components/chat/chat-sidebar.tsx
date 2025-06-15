@@ -334,7 +334,7 @@ export function ChatSidebar({
                   Sign up to access chat history and create new chats.
                 </span>{' '}
                 <Link
-                  href="/pricing"
+                  href="https://tinfoil.sh/pricing"
                   className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
                 >
                   Upgrade to Pro
