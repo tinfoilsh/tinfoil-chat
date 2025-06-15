@@ -1,6 +1,5 @@
 import {
   ChevronDownIcon,
-  DocumentIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import Image from 'next/image'
@@ -170,7 +169,7 @@ export function VerifierSidebar({
 
                     return (
                       <>
-                        {activeModel.image ? (
+                        {activeModel.image && (
                           <img
                             src={activeModel.image}
                             alt={activeModel.name}
@@ -179,9 +178,7 @@ export function VerifierSidebar({
                               e.currentTarget.style.display = 'none'
                             }}
                           />
-                        ) : activeModel.type === 'document' ? (
-                          <DocumentIcon className="h-4 w-4" />
-                        ) : null}
+                        )}
                         <span>
                           {activeModel.displayName || activeModel.name}
                         </span>
@@ -235,7 +232,7 @@ export function VerifierSidebar({
                               : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
-                        {model.image ? (
+                        {model.image && (
                           <img
                             src={model.image}
                             alt={model.name}
@@ -244,10 +241,6 @@ export function VerifierSidebar({
                               e.currentTarget.style.display = 'none'
                             }}
                           />
-                        ) : model.type === 'document' ? (
-                          <DocumentIcon className="h-4 w-4 flex-shrink-0" />
-                        ) : (
-                          <div className="h-4 w-4" />
                         )}
                         <span className="flex-1 text-left">
                           {model.displayName || model.name}
