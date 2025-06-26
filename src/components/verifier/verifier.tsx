@@ -42,6 +42,20 @@ import VerificationStatus from './verification-status'
  * - WASM build: https://github.com/tinfoilsh/verifier-js
  * 
  * This ensures no third-party services can interfere with the verification process.
+ * 
+ * PROXY USAGE AND SECURITY:
+ * The verifier uses proxies for external services to prevent rate limiting:
+ * 
+ * 1. GitHub Proxy (github-proxy.tinfoil.sh): Used to fetch release data without hitting
+ *    GitHub's rate limits. This doesn't compromise security because the fetched data
+ *    is verified through Sigstore's transparency logs.
+ * 
+ * 2. AMD KDS Proxy (kds-proxy.tinfoil.sh): Used to fetch AMD attestation certificates.
+ *    This proxy is safe to use because the root AMD Genoa CPU certificate is embedded
+ *    in the verifier code and validates the entire certificate chain, preventing any
+ *    possibility of forged attestations. The proxy simply caches AMD's responses to
+ *    prevent rate limiting. Users can optionally modify the verifier source to use
+ *    AMD's server directly (kdsintf.amd.com) if desired.
  */
 
 // TypeScript interface for the Go WebAssembly runtime
@@ -146,6 +160,14 @@ interface GitHubRelease {
 }
 
 const fetchLatestDigest = async (repo: string): Promise<string> => {
+  // GitHub Proxy Note:
+  // We use github-proxy.tinfoil.sh instead of direct GitHub API access to prevent
+  // rate limiting issues that would break the UI for users. The proxy caches 
+  // responses while preserving the integrity of the data. Since the fetched data
+  // (release tags and hash files) is verified through Sigstore's transparency logs
+  // in the verifyCode function, using a proxy does not compromise security.
+  // These values are also signed by AMD/Sigstore.
+  
   // First fetch the latest release to get the tag
   const releaseResponse = await fetch(
     `https://github-proxy.tinfoil.sh/repos/${repo}/releases/latest`,
