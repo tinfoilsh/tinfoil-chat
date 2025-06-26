@@ -16,6 +16,7 @@ import amdLogo from './assets/amd.svg'
 import githubLogo from './assets/github.svg'
 import sigstoreLogo from './assets/sigstore.svg'
 import sigstoreLightLogo from './assets/sigstore-light.svg'
+import certLogo from './assets/cert.svg'
 
 type DigestType = 'SOURCE' | 'RUNTIME' | 'CODE_INTEGRITY' | 'GENERIC'
 
@@ -33,6 +34,14 @@ const extractMeasurement = (data: MeasurementData | string): string => {
     return data.measurement
   }
   return JSON.stringify(data, null, 2)
+}
+
+// Utility function to extract certificate value
+const extractCertificate = (data: MeasurementData | string): string | null => {
+  if (typeof data === 'object' && data?.certificate) {
+    return data.certificate
+  }
+  return null
 }
 
 type ProcessStepProps = {
@@ -207,6 +216,35 @@ export function ProcessStep({
                         />
                       </>
                     )}
+                  </div>
+                </pre>
+              </div>
+            )}
+
+            {measurements && extractCertificate(measurements) && (
+              <div>
+                <h4
+                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                >
+                  TLS Certificate Fingerprint
+                  <span
+                    className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
+                  >
+                    Fingerprint of the TLS certificate used by the enclave
+                  </span>
+                </h4>
+                <pre
+                  className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} p-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} border ${status === 'success' ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+                >
+                  {extractCertificate(measurements)}
+                  <div className="mt-2 flex items-center justify-end gap-2">
+                    <Image
+                      src={certLogo}
+                      alt="Certificate"
+                      width={24}
+                      height={24}
+                      className={`${isDarkMode ? 'invert' : ''} opacity-50`}
+                    />
                   </div>
                 </pre>
               </div>
