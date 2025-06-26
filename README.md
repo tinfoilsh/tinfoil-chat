@@ -1,56 +1,66 @@
 # Tinfoil Chat
 
-Chat interface for Tinfoil AIs.
+**Live at:** [chat.tinfoil.sh](https://chat.tinfoil.sh)
 
-## Prerequisites
+## Quick Start
+
+### Prerequisites
 
 - Node.js 18+
 - npm
 
-## Setup
+### Setup
 
 1. **Clone and install**
 
    ```bash
-   git clone https://github.com/your-org/tinfoil-chat.git
+   git clone https://github.com/tinfoilsh/tinfoil-chat.git
    cd tinfoil-chat
    npm install
    ```
 
-2. **Configure environment**
+2. **Environment setup**
 
    ```bash
    cp .env.example .env.local
    ```
 
-   Update `.env.local`:
+   Configure your `.env.local` with the required keys:
 
    ```env
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_key
-   CLERK_SECRET_KEY=your_secret
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_key
+   CLERK_SECRET_KEY=your_clerk_secret
    NEXT_PUBLIC_API_BASE_URL=https://api.tinfoil.sh
    ```
 
-3. **Run**
+3. **Start development server**
    ```bash
    npm run dev
    ```
 
 ## Scripts
 
-- `npm run dev` - Development server
-- `npm run build` - Production build
-- `npm run start` - Production server
-- `npm run lint` - Lint code
-- `npm run format` - Format code
+| Command          | Description               |
+| ---------------- | ------------------------- |
+| `npm run dev`    | Start development server  |
+| `npm run build`  | Create production build   |
+| `npm run start`  | Start production server   |
+| `npm run lint`   | Lint codebase             |
+| `npm run format` | Format code with Prettier |
 
-## Tech Stack
+## Built With
 
-- Next.js 15
-- TypeScript
-- Tailwind CSS
-- Radix UI
+- **[Next.js 15](https://nextjs.org/)** - React framework
+- **[TypeScript](https://www.typescriptlang.org/)** - Type safety
+- **[Tailwind CSS](https://tailwindcss.com/)** - Styling
+- **[Radix UI](https://www.radix-ui.com/)** - Accessible components
 
-## Support
+## Reporting Vulnerabilities
 
-Open an issue on GitHub or contact support@tinfoil.sh.
+Please report security vulnerabilities by either:
+
+- Emailing [security@tinfoil.sh](mailto:security@tinfoil.sh)
+
+- Opening an issue on GitHub on this repository
+
+We aim to respond to security reports within 24 hours and will keep you updated on our progress.

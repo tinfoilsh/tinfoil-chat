@@ -1,10 +1,10 @@
 import type { BaseModel } from '@/app/config/models'
 import { useEffect, useRef } from 'react'
+import type { AIModel, Chat, LabelType, LoadingState } from '../types'
 import { useChatMessaging } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
 import { useModelManagement } from './use-model-management'
 import { useUIState } from './use-ui-state'
-import type { AIModel, Chat, LabelType, LoadingState } from '../types'
 
 // Return type for useChatState hook
 interface UseChatStateReturn {

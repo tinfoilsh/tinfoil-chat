@@ -3,7 +3,6 @@
 import { getAIModels } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
-import { logError } from '@/utils/error-handling'
 import {
   DocumentIcon,
   MicrophoneIcon,
@@ -239,17 +238,18 @@ export function ChatInput({
   // Get audio model endpoint dynamically
   const getAudioEndpoint = useCallback(async (): Promise<string> => {
     const models = await getAIModels(isPremium ?? false)
-    const audioModel = models.find(model => 
-      model.type === 'audio' || 
-      model.modelName === 'whisper-large-v3-turbo' ||
-      model.name.toLowerCase().includes('whisper')
+    const audioModel = models.find(
+      (model) =>
+        model.type === 'audio' ||
+        model.modelName === 'whisper-large-v3-turbo' ||
+        model.name.toLowerCase().includes('whisper'),
     )
-    
+
     if (audioModel?.enclave) {
       // Construct endpoint from enclave
       return `https://${audioModel.enclave}/v1/audio/transcriptions`
     }
-    
+
     throw new Error('No audio model found in configuration')
   }, [isPremium])
 

@@ -15,15 +15,18 @@ import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
+import {
+  VerifierSidebar,
+  type VerifierModel,
+} from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
-import type { VerificationState } from './types'
 import { useChatState } from './hooks/use-chat-state'
-import { VerifierSidebar, type VerifierModel } from '../verifier/verifier-sidebar'
+import type { VerificationState } from './types'
 
 type ChatInterfaceProps = {
   verificationState?: VerificationState
@@ -240,12 +243,16 @@ export function ChatInterface({
       id: model.modelName,
       name: model.name,
       displayName: model.nameShort || model.name,
-      type: model.type === 'audio' ? 'audio' : model.type === 'document' ? 'document' : 'chat',
+      type:
+        model.type === 'audio'
+          ? 'audio'
+          : model.type === 'document'
+            ? 'document'
+            : 'chat',
       image: model.image,
       repo: resolveEnclaveOrRepo(model.repo || '', isPremium),
       enclave: resolveEnclaveOrRepo(model.enclave || '', isPremium),
     }))
-
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
