@@ -1,13 +1,11 @@
 # Tinfoil Chat
 
-A secure, verifiable AI chat interface with cryptographic verification of AI models.
+Chat interface for Tinfoil AIs.
 
 ## Prerequisites
 
 - Node.js 18+
 - npm
-- Clerk account
-- Access to Tinfoil API
 
 ## Setup
 
@@ -51,7 +49,6 @@ A secure, verifiable AI chat interface with cryptographic verification of AI mod
 - Next.js 15
 - TypeScript
 - Tailwind CSS
-- Clerk (auth)
 - Radix UI
 
 ## Support
