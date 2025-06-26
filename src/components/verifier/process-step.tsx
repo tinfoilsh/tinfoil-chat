@@ -7,6 +7,17 @@ import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { StatusIcon } from './status-icon'
 
+// Import verification logos
+import gitLogo from './assets/git.svg'
+import cpuLogo from './assets/cpu.svg'
+import gpuLogo from './assets/gpu.svg'
+import nvidiaLogo from './assets/nvidia.svg'
+import amdLogo from './assets/amd.svg'
+import githubLogo from './assets/github.svg'
+import sigstoreLogo from './assets/sigstore.svg'
+import sigstoreLightLogo from './assets/sigstore-light.svg'
+import certLogo from './assets/cert.svg'
+
 type DigestType = 'SOURCE' | 'RUNTIME' | 'CODE_INTEGRITY' | 'GENERIC'
 
 interface MeasurementData {
@@ -23,6 +34,14 @@ const extractMeasurement = (data: MeasurementData | string): string => {
     return data.measurement
   }
   return JSON.stringify(data, null, 2)
+}
+
+// Utility function to extract certificate value
+const extractCertificate = (data: MeasurementData | string): string | null => {
+  if (typeof data === 'object' && data?.certificate) {
+    return data.certificate
+  }
+  return null
 }
 
 type ProcessStepProps = {
@@ -168,7 +187,7 @@ export function ProcessStep({
                   <div className="mt-2 flex items-center justify-end gap-2">
                     {digestType === 'SOURCE' ? (
                       <Image
-                        src="/verification-logos/git.svg"
+                        src={gitLogo}
                         alt="Source Code"
                         width={24}
                         height={24}
@@ -177,7 +196,7 @@ export function ProcessStep({
                     ) : (
                       <>
                         <Image
-                          src="/verification-logos/cpu.svg"
+                          src={cpuLogo}
                           alt="CPU"
                           width={24}
                           height={12}
@@ -189,7 +208,7 @@ export function ProcessStep({
                           +
                         </span>
                         <Image
-                          src="/verification-logos/gpu.svg"
+                          src={gpuLogo}
                           alt="GPU"
                           width={32}
                           height={16}
@@ -197,6 +216,35 @@ export function ProcessStep({
                         />
                       </>
                     )}
+                  </div>
+                </pre>
+              </div>
+            )}
+
+            {measurements && extractCertificate(measurements) && (
+              <div>
+                <h4
+                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                >
+                  TLS Certificate Fingerprint
+                  <span
+                    className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
+                  >
+                    Fingerprint of the TLS certificate used by the enclave
+                  </span>
+                </h4>
+                <pre
+                  className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} p-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} border ${status === 'success' ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+                >
+                  {extractCertificate(measurements)}
+                  <div className="mt-2 flex items-center justify-end gap-2">
+                    <Image
+                      src={certLogo}
+                      alt="Certificate"
+                      width={24}
+                      height={24}
+                      className={`${isDarkMode ? 'invert' : ''} opacity-50`}
+                    />
                   </div>
                 </pre>
               </div>
@@ -221,7 +269,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src="/verification-logos/nvidia.svg"
+                          src={nvidiaLogo}
                           alt="NVIDIA"
                           width={80}
                           height={24}
@@ -241,7 +289,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src="/verification-logos/amd.svg"
+                          src={amdLogo}
                           alt="AMD"
                           width={48}
                           height={24}
@@ -273,7 +321,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src="/verification-logos/github.svg"
+                          src={githubLogo}
                           alt="GitHub"
                           width={80}
                           height={24}
@@ -300,8 +348,8 @@ export function ProcessStep({
                         <Image
                           src={
                             isDarkMode
-                              ? '/verification-logos/sigstore.svg'
-                              : '/verification-logos/sigstore-light.svg'
+                              ? sigstoreLogo
+                              : sigstoreLightLogo
                           }
                           alt="Sigstore"
                           width={80}

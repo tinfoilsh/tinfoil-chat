@@ -1,6 +1,10 @@
 import { CheckIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import Image from 'next/image'
 
+// Import verification logos
+import nvidiaLogo from './assets/nvidia.svg'
+import amdLogo from './assets/amd.svg'
+
 type VerificationState = {
   [key: string]: {
     status: string
@@ -42,10 +46,10 @@ export function VerificationStatus({
   if (allSuccess) {
     return (
       <div
-        className={`flex items-start gap-2 p-3 ${
+        className={`flex items-start gap-2 border-b p-3 ${
           isDarkMode
-            ? 'bg-emerald-500/10 text-emerald-400'
-            : 'bg-emerald-50 text-emerald-600'
+            ? 'border-gray-800 bg-emerald-500/10 text-emerald-400'
+            : 'border-gray-200 bg-emerald-50 text-emerald-600'
         }`}
       >
         <CheckIcon className="h-5 w-5 flex-shrink-0" />
@@ -58,7 +62,7 @@ export function VerificationStatus({
           >
             <span className="text-sm">Attested by</span>
             <Image
-              src="/verification-logos/nvidia.svg"
+              src={nvidiaLogo}
               alt="NVIDIA"
               width={50}
               height={15}
@@ -66,7 +70,7 @@ export function VerificationStatus({
             />
             <span className="text-sm">and</span>
             <Image
-              src="/verification-logos/amd.svg"
+              src={amdLogo}
               alt="AMD"
               width={35}
               height={15}

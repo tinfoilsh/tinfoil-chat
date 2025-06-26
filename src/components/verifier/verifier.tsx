@@ -1,33 +1,91 @@
 import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
-import '../../../wasm_exec.js'
-import { CONSTANTS } from '../chat/constants'
+// Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute 
+// the enclave verification functions written in Go
+import './wasm_exec.js'
+import { VERIFIER_CONSTANTS } from './constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
 import VerificationStatus from './verification-status'
 
-// Define proper types for WASM Go interface
+/**
+ * VERIFIER COMPONENT OVERVIEW
+ * ==========================
+ * 
+ * This component performs three critical security verifications:
+ * 
+ * 1. REMOTE ATTESTATION (Enclave Verification): 
+ *    - Fetches attestation from the secure enclave 
+ *    - Validates signatures from hardware manufacturers (NVIDIA/AMD)
+ *    - Extracts the measurement (hash) of code currently running in the enclave
+ * 
+ * 2. CODE INTEGRITY (Source Code Verification):
+ *    - Fetches the latest release hash from GitHub
+ *    - Retrieves measurement from Sigstore transparency log 
+ *    - Verifies that GitHub Actions properly built and signed the code
+ * 
+ * 3. CODE CONSISTENCY (Security Verification):
+ *    - Compares the enclave measurement with the GitHub Actions/Sigstore measurement
+ *    - Ensures the code running in the enclave matches the published and verified source
+ *    - Prevents supply chain attacks by confirming code consistency
+ * 
+ * VERIFICATION MODE:
+ * This component implements "audit-time verification" - verifying enclave integrity 
+ * out-of-band rather than during the actual connection. This approach relies on 
+ * attestation transparency and certificate transparency logs to create an immutable 
+ * audit trail. Learn more: https://docs.tinfoil.sh/verification/comparison
+ * 
+ * All verification runs client-side using WebAssembly compiled from Go source code.
+ * 
+ * WASM Implementation:
+ * - Go source: https://github.com/tinfoilsh/verifier-go
+ * - WASM build: https://github.com/tinfoilsh/verifier-js
+ * 
+ * This ensures no third-party services can interfere with the verification process.
+ * 
+ * PROXY USAGE AND SECURITY:
+ * The verifier uses proxies for external services to prevent rate limiting:
+ * 
+ * 1. GitHub Proxy (github-proxy.tinfoil.sh): Used to fetch release data without hitting
+ *    GitHub's rate limits. This doesn't compromise security because the fetched data
+ *    is verified through Sigstore's transparency logs.
+ * 
+ * 2. AMD KDS Proxy (kds-proxy.tinfoil.sh): Used to fetch AMD attestation certificates.
+ *    This proxy is safe to use because the root AMD Genoa CPU certificate is embedded
+ *    in the verifier code and validates the entire certificate chain, preventing any
+ *    possibility of forged attestations. The proxy simply caches AMD's responses to
+ *    prevent rate limiting. Users can optionally modify the verifier source to use
+ *    AMD's server directly (kdsintf.amd.com) if desired.
+ */
+
+// TypeScript interface for the Go WebAssembly runtime
 interface GoInterface {
   run(instance: WebAssembly.Instance): void
   importObject: WebAssembly.Imports
 }
 
+// Global functions provided by the WASM module after loading
+// Implementation details: https://github.com/tinfoilsh/verifier-go
 declare global {
   interface Window {
     Go: new () => GoInterface
+    // Performs enclave verification - validates attestation and extracts measurement
     verifyEnclave(enclaveHostname: string): Promise<{
       certificate: string
       measurement: string
     }>
+    // Performs source code verification using GitHub Actions and Sigstore
+    // Returns the measurement from the verified build process
     verifyCode(repo: string, digest: string): Promise<string>
   }
 }
 
+// Props passed to the main Verifier component
 type VerifierProps = {
-  onVerificationUpdate?: (state: VerificationState) => void
-  onVerificationComplete?: (success: boolean) => void
-  repo: string
-  enclave: string
+  onVerificationUpdate?: (state: VerificationState) => void // Callback for state changes
+  onVerificationComplete?: (success: boolean) => void     // Callback when verification finishes
+  repo: string      // GitHub repository to verify (e.g., "tinfoilsh/confidential-model-name")
+  enclave: string   // Hostname of the enclave to verify
   isDarkMode?: boolean
 }
 
@@ -46,7 +104,7 @@ type VerificationState = {
   }
   runtime: {
     status: VerificationStatus
-    measurements?: string
+    measurements?: MeasurementData  // Changed to MeasurementData to include certificate
     error?: string
   }
   security: {
@@ -102,6 +160,14 @@ interface GitHubRelease {
 }
 
 const fetchLatestDigest = async (repo: string): Promise<string> => {
+  // GitHub Proxy Note:
+  // We use github-proxy.tinfoil.sh instead of direct GitHub API access to prevent
+  // rate limiting issues that would break the UI for users. The proxy caches 
+  // responses while preserving the integrity of the data. Since the fetched data
+  // (release tags and hash files) is verified through Sigstore's transparency logs
+  // in the verifyCode function, using a proxy does not compromise security.
+  // These values are also signed by AMD/Sigstore.
+  
   // First fetch the latest release to get the tag
   const releaseResponse = await fetch(
     `https://github-proxy.tinfoil.sh/repos/${repo}/releases/latest`,
@@ -158,7 +224,7 @@ export function Verifier({
     (
       section: 'code' | 'runtime' | 'security',
       status: string,
-      measurements: MeasurementData | string | null = null,
+      measurements: MeasurementData | null = null,
       error: string | null = null,
     ) => {
       setVerificationState((prev) => ({
@@ -182,7 +248,7 @@ export function Verifier({
       try {
         const go = new window.Go()
         const result = await WebAssembly.instantiateStreaming(
-          fetch(CONSTANTS.VERIFIER_WASM_URL),
+          fetch(VERIFIER_CONSTANTS.WASM_URL),
           go.importObject,
         )
         go.run(result.instance)
@@ -233,7 +299,7 @@ export function Verifier({
       try {
         const { certificate, measurement } = await window.verifyEnclave(enclave)
         runtimeMeasurement = measurement
-        updateStepStatus('runtime', 'success', measurement, null)
+        updateStepStatus('runtime', 'success', { measurement, certificate }, null)
       } catch (error) {
         // If runtime verification failed, mark as error and exit
         const errorMessage =
@@ -416,7 +482,7 @@ export function Verifier({
                     >
                       Verification Engine
                     </a>
-                    {` Loaded (${CONSTANTS.VERIFIER_VERSION})`}
+                    {` Loaded (${VERIFIER_CONSTANTS.VERSION})`}
                   </>
                 ) : (
                   'Loading verification module...'

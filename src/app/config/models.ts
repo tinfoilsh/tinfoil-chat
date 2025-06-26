@@ -45,13 +45,13 @@ export const isModelAvailable = (
 ): boolean => {
   // Handle different paid model types
   if (model.paid === undefined || model.paid === false) {
-    // Free models - always available
+    // Free models: always available
     return true
   } else if (model.paid === true) {
-    // Premium-only models - only available if user is premium
+    // Premium-only models: only available if user is premium
     return isPremium
   } else if (model.paid === 'conditional') {
-    // Conditional models (available for both free and premium) - always available
+    // Conditional models: available for both free and premium, but with different endpoints
     return true
   }
 
