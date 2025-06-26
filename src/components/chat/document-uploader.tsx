@@ -77,28 +77,30 @@ export const useDocumentUploader = () => {
   const getDoclingEndpoint = async (): Promise<string> => {
     try {
       const models = await getAIModels(true) // Try with premium first
-      const doclingModel = models.find(model => 
-        model.modelName === 'docling' || 
-        model.name.toLowerCase().includes('docling') ||
-        model.type === 'document'
+      const doclingModel = models.find(
+        (model) =>
+          model.modelName === 'docling' ||
+          model.name.toLowerCase().includes('docling') ||
+          model.type === 'document',
       )
-      
+
       if (doclingModel?.endpoint) {
         return doclingModel.endpoint
       }
-      
+
       // Fallback to free models
       const freeModels = await getAIModels(false)
-      const freeDoclingModel = freeModels.find(model => 
-        model.modelName === 'docling' || 
-        model.name.toLowerCase().includes('docling') ||
-        model.type === 'document'
+      const freeDoclingModel = freeModels.find(
+        (model) =>
+          model.modelName === 'docling' ||
+          model.name.toLowerCase().includes('docling') ||
+          model.type === 'document',
       )
-      
+
       if (freeDoclingModel?.endpoint) {
         return freeDoclingModel.endpoint
       }
-      
+
       // Ultimate fallback to hardcoded URL
       return 'https://doc-upload.model.tinfoil.sh/v1alpha/convert/file'
     } catch (error) {

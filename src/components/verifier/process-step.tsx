@@ -8,15 +8,15 @@ import { useEffect, useState } from 'react'
 import { StatusIcon } from './status-icon'
 
 // Import verification logos
-import gitLogo from './assets/git.svg'
+import amdLogo from './assets/amd.svg'
+import certLogo from './assets/cert.svg'
 import cpuLogo from './assets/cpu.svg'
+import gitLogo from './assets/git.svg'
+import githubLogo from './assets/github.svg'
 import gpuLogo from './assets/gpu.svg'
 import nvidiaLogo from './assets/nvidia.svg'
-import amdLogo from './assets/amd.svg'
-import githubLogo from './assets/github.svg'
-import sigstoreLogo from './assets/sigstore.svg'
 import sigstoreLightLogo from './assets/sigstore-light.svg'
-import certLogo from './assets/cert.svg'
+import sigstoreLogo from './assets/sigstore.svg'
 
 type DigestType = 'SOURCE' | 'RUNTIME' | 'CODE_INTEGRITY' | 'GENERIC'
 
@@ -346,11 +346,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src={
-                            isDarkMode
-                              ? sigstoreLogo
-                              : sigstoreLightLogo
-                          }
+                          src={isDarkMode ? sigstoreLogo : sigstoreLightLogo}
                           alt="Sigstore"
                           width={80}
                           height={24}

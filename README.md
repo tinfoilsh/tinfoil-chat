@@ -5,12 +5,14 @@
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js 18+
 - npm
 
 ### Setup
 
 1. **Clone and install**
+
    ```bash
    git clone https://github.com/tinfoilsh/tinfoil-chat.git
    cd tinfoil-chat
@@ -18,11 +20,13 @@
    ```
 
 2. **Environment setup**
+
    ```bash
    cp .env.example .env.local
    ```
-   
+
    Configure your `.env.local` with the required keys:
+
    ```env
    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_key
    CLERK_SECRET_KEY=your_clerk_secret
@@ -36,12 +40,12 @@
 
 ## Scripts
 
-| Command | Description |
-|---------|------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Create production build |
-| `npm run start` | Start production server |
-| `npm run lint` | Lint codebase |
+| Command          | Description               |
+| ---------------- | ------------------------- |
+| `npm run dev`    | Start development server  |
+| `npm run build`  | Create production build   |
+| `npm run start`  | Start production server   |
+| `npm run lint`   | Lint codebase             |
 | `npm run format` | Format code with Prettier |
 
 ## Built With
@@ -50,7 +54,6 @@
 - **[TypeScript](https://www.typescriptlang.org/)** - Type safety
 - **[Tailwind CSS](https://tailwindcss.com/)** - Styling
 - **[Radix UI](https://www.radix-ui.com/)** - Accessible components
-
 
 ## Reporting Vulnerabilities
 

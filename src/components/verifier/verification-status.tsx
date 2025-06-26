@@ -2,8 +2,8 @@ import { CheckIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import Image from 'next/image'
 
 // Import verification logos
-import nvidiaLogo from './assets/nvidia.svg'
 import amdLogo from './assets/amd.svg'
+import nvidiaLogo from './assets/nvidia.svg'
 
 type VerificationState = {
   [key: string]: {
