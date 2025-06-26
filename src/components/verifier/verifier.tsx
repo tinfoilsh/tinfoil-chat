@@ -1,7 +1,7 @@
 import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
-import '../../../wasm_exec.js'
-import { CONSTANTS } from '../chat/constants'
+import './wasm_exec.js'
+import { VERIFIER_CONSTANTS } from './constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
 import VerificationStatus from './verification-status'
@@ -182,7 +182,7 @@ export function Verifier({
       try {
         const go = new window.Go()
         const result = await WebAssembly.instantiateStreaming(
-          fetch(CONSTANTS.VERIFIER_WASM_URL),
+          fetch(VERIFIER_CONSTANTS.WASM_URL),
           go.importObject,
         )
         go.run(result.instance)
@@ -416,7 +416,7 @@ export function Verifier({
                     >
                       Verification Engine
                     </a>
-                    {` Loaded (${CONSTANTS.VERIFIER_VERSION})`}
+                    {` Loaded (${VERIFIER_CONSTANTS.VERSION})`}
                   </>
                 ) : (
                   'Loading verification module...'

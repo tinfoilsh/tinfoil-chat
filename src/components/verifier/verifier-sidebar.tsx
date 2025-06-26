@@ -7,6 +7,10 @@ import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import { Verifier } from './verifier'
 
+// Import icons
+import iconDark from './assets/icon-dark.png'
+import iconLight from './assets/icon-light.png'
+
 export type VerifierModel = {
   id: string
   name: string
@@ -117,7 +121,7 @@ export function VerifierSidebar({
         >
           <div className="flex items-center gap-2">
             <Image
-              src={isDarkMode ? '/icon-dark.png' : '/icon-light.png'}
+              src={isDarkMode ? iconDark : iconLight}
               alt="Tinfoil Logo"
               width={24}
               height={24}

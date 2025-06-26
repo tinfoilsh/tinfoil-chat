@@ -7,6 +7,16 @@ import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { StatusIcon } from './status-icon'
 
+// Import verification logos
+import gitLogo from './assets/git.svg'
+import cpuLogo from './assets/cpu.svg'
+import gpuLogo from './assets/gpu.svg'
+import nvidiaLogo from './assets/nvidia.svg'
+import amdLogo from './assets/amd.svg'
+import githubLogo from './assets/github.svg'
+import sigstoreLogo from './assets/sigstore.svg'
+import sigstoreLightLogo from './assets/sigstore-light.svg'
+
 type DigestType = 'SOURCE' | 'RUNTIME' | 'CODE_INTEGRITY' | 'GENERIC'
 
 interface MeasurementData {
@@ -168,7 +178,7 @@ export function ProcessStep({
                   <div className="mt-2 flex items-center justify-end gap-2">
                     {digestType === 'SOURCE' ? (
                       <Image
-                        src="/verification-logos/git.svg"
+                        src={gitLogo}
                         alt="Source Code"
                         width={24}
                         height={24}
@@ -177,7 +187,7 @@ export function ProcessStep({
                     ) : (
                       <>
                         <Image
-                          src="/verification-logos/cpu.svg"
+                          src={cpuLogo}
                           alt="CPU"
                           width={24}
                           height={12}
@@ -189,7 +199,7 @@ export function ProcessStep({
                           +
                         </span>
                         <Image
-                          src="/verification-logos/gpu.svg"
+                          src={gpuLogo}
                           alt="GPU"
                           width={32}
                           height={16}
@@ -221,7 +231,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src="/verification-logos/nvidia.svg"
+                          src={nvidiaLogo}
                           alt="NVIDIA"
                           width={80}
                           height={24}
@@ -241,7 +251,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src="/verification-logos/amd.svg"
+                          src={amdLogo}
                           alt="AMD"
                           width={48}
                           height={24}
@@ -273,7 +283,7 @@ export function ProcessStep({
                     >
                       <div className="flex flex-1 items-center justify-center">
                         <Image
-                          src="/verification-logos/github.svg"
+                          src={githubLogo}
                           alt="GitHub"
                           width={80}
                           height={24}
@@ -300,8 +310,8 @@ export function ProcessStep({
                         <Image
                           src={
                             isDarkMode
-                              ? '/verification-logos/sigstore.svg'
-                              : '/verification-logos/sigstore-light.svg'
+                              ? sigstoreLogo
+                              : sigstoreLightLogo
                           }
                           alt="Sigstore"
                           width={80}
