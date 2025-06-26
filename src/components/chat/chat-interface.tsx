@@ -23,7 +23,7 @@ import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import type { VerificationState } from './types'
 import { useChatState } from './hooks/use-chat-state'
-import { VerifierSidebar, type VerifierModel } from './verifier-sidebar'
+import { VerifierSidebar, type VerifierModel } from '../verifier/verifier-sidebar'
 
 type ChatInterfaceProps = {
   verificationState?: VerificationState

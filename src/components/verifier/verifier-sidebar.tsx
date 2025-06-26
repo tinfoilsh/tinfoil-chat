@@ -5,7 +5,7 @@ import {
 } from '@heroicons/react/24/outline'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
-import { Verifier } from '../verifier/verifier'
+import { Verifier } from './verifier'
 
 export type VerifierModel = {
   id: string
