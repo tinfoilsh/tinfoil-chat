@@ -13,8 +13,6 @@ export const CONSTANTS = {
   MAX_MESSAGE_LENGTH: 4000,
   MAX_DOCUMENT_SIZE_MB: 10,
   MAX_DOCUMENT_SIZE_BYTES: 10 * 1024 * 1024, // 10MB in bytes
-  WHISPER_ENDPOINT:
-    'https://audio-processing.model.tinfoil.sh/v1/audio/transcriptions',
   // Maximum number of messages to include in the context window
   MAX_PROMPT_MESSAGES: 15,
   // Voice recording timeout in milliseconds (30 seconds)
