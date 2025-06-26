@@ -246,38 +246,6 @@ export function ChatInterface({
       enclave: resolveEnclaveOrRepo(model.enclave || '', isPremium),
     }))
 
-  // If no docling model found in API, add fallback document upload model
-  const hasDoclingModel = verifierModels.some(model => 
-    model.type === 'document' || 
-    model.name.toLowerCase().includes('docling')
-  )
-  
-  if (!hasDoclingModel) {
-    // Try to find a docling model from all models (including non-chat ones) to get its icon
-    const doclingModel = models.find(model => 
-      model.modelName === 'docling' || 
-      model.name.toLowerCase().includes('docling') ||
-      model.type === 'document'
-    )
-    
-    verifierModels.push({
-      id: 'document-upload',
-      name: 'Docling',
-      displayName: 'Docling',
-      type: 'document',
-      image: doclingModel?.image,
-      repo: doclingModel?.repo
-        ? resolveEnclaveOrRepo(doclingModel.repo, isPremium)
-        : selectedModelDetails?.repo
-        ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
-        : '',
-      enclave: doclingModel?.enclave
-        ? resolveEnclaveOrRepo(doclingModel.enclave, isPremium)
-        : selectedModelDetails?.enclave
-        ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
-        : '',
-    })
-  }
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
