@@ -532,7 +532,7 @@ export function ChatInput({
           ref={fileInputRef}
           onChange={handleFileChange}
           className="hidden"
-          accept=".pdf,.doc,.docx,.txt,.md"
+          accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
         />
         <button
           type="button"
