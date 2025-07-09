@@ -1,16 +1,10 @@
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
 
-// Type for enclave/repo that can be either string or object with free/paid options
-type EnclaveRepo = string | { free: string; paid: string }
-
 // Base model type with all possible properties
 export type BaseModel = {
   modelName: string
   image: string
-  enclave: EnclaveRepo
-  repo?: EnclaveRepo
-  digest?: string
   name: string
   nameShort: string
   description: string
@@ -21,41 +15,23 @@ export type BaseModel = {
   supportedLanguages?: string
   type: 'chat' | 'embedding' | 'audio' | 'tts' | 'document'
   chat?: boolean
-  paid?: boolean | 'conditional'
+  paid?: boolean
   endpoint?: string
 }
 
-// Helper function to resolve enclave/repo based on subscription status
-export const resolveEnclaveOrRepo = (
-  value: EnclaveRepo,
-  isPaid: boolean,
-): string => {
-  if (typeof value === 'string') {
-    return value
-  }
-
-  // For object format, return paid if user has subscription, otherwise free
-  return isPaid ? value.paid : value.free
-}
 
 // Helper function to determine if a model is available for a given subscription status
 export const isModelAvailable = (
   model: BaseModel,
   isPremium: boolean,
 ): boolean => {
-  // Handle different paid model types
+  // If paid is undefined or false, it's a free model - always available
   if (model.paid === undefined || model.paid === false) {
-    // Free models: always available
-    return true
-  } else if (model.paid === true) {
-    // Premium-only models: only available if user is premium
-    return isPremium
-  } else if (model.paid === 'conditional') {
-    // Conditional models: available for both free and premium, but with different endpoints
     return true
   }
-
-  return false
+  
+  // If paid is true, it's only available for premium users
+  return isPremium
 }
 
 // Helper function to filter models for chat interface

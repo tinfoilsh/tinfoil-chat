@@ -1,4 +1,4 @@
-import { resolveEnclaveOrRepo, type BaseModel } from '@/app/config/models'
+import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -243,12 +243,10 @@ export function useChatMessaging({
           throw new Error(`Model ${effectiveModel} not found`)
         }
 
-        const chatEndpoint =
-          'endpoint' in model
-            ? (model.endpoint as string)
-            : `https://${resolveEnclaveOrRepo(model.enclave, isPremium)}/v1/chat/completions`
+        // Always use the proxy
+        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
-        const response = await fetch(chatEndpoint, {
+        const response = await fetch(proxyUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -540,7 +538,6 @@ export function useChatMessaging({
       models,
       effectiveModel,
       systemPrompt,
-      isPremium,
       getApiKeyFromHook,
       messagesEndRef,
       updateChatWithHistoryCheck,

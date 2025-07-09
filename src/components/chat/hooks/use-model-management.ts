@@ -61,19 +61,30 @@ export function useModelManagement({
           sessionStorage.setItem('selectedModel', preferredModel)
         }
       } else {
-        // Preferred model not available, use the default
-        // If default isn't available either, that's a configuration error
-        if (isModelNameAvailable(CONSTANTS.DEFAULT_MODEL, models, isPremium)) {
-          setSelectedModel(CONSTANTS.DEFAULT_MODEL)
-          sessionStorage.setItem('selectedModel', CONSTANTS.DEFAULT_MODEL)
+        // Preferred model not available, find the first available chat model
+        const availableChatModels = models.filter(
+          (model) =>
+            model.type === 'chat' &&
+            model.chat === true &&
+            (model.paid === undefined || model.paid === false || (model.paid === true && isPremium))
+        )
+
+        if (availableChatModels.length > 0) {
+          const fallbackModel = availableChatModels[0].modelName as AIModel
+          setSelectedModel(fallbackModel)
+          sessionStorage.setItem('selectedModel', fallbackModel)
         } else {
           logError(
-            'Default model not available - configuration error',
+            'No chat models available for current subscription level',
             undefined,
             {
               component: 'useModelManagement',
               action: 'validateModel',
-              metadata: { defaultModel: CONSTANTS.DEFAULT_MODEL, isPremium },
+              metadata: { 
+                defaultModel: CONSTANTS.DEFAULT_MODEL, 
+                isPremium,
+                availableModels: models.map(m => ({ name: m.modelName, paid: m.paid, type: m.type }))
+              },
             },
           )
           // Don't crash, but log the error - the interface should handle this gracefully
@@ -103,14 +114,7 @@ export function useModelManagement({
 
       setSelectedModel(modelName)
       setExpandedLabel(null)
-      setVerificationComplete(false) // Reset verification state
-      setVerificationSuccess(false) // Reset verification success state
-
-      // Trigger re-verification in the sidebar by dispatching a custom event
-      if (typeof window !== 'undefined') {
-        const resetEvent = new CustomEvent('reset-verification')
-        window.dispatchEvent(resetEvent)
-      }
+      // No need to reset verification when switching models since we only verify the proxy once
 
       // Save to session storage
       sessionStorage.setItem('selectedModel', modelName)

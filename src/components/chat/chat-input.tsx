@@ -235,19 +235,20 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Get audio model endpoint dynamically
-  const getAudioEndpoint = useCallback(async (): Promise<string> => {
+  // Get audio model config dynamically
+  const getAudioConfig = useCallback(async (): Promise<{endpoint: string, modelName: string}> => {
     const models = await getAIModels(isPremium ?? false)
     const audioModel = models.find(
       (model) =>
         model.type === 'audio' ||
-        model.modelName === 'whisper-large-v3-turbo' ||
-        model.name.toLowerCase().includes('whisper'),
+        model.modelName === 'whisper-large-v3-turbo'
     )
 
-    if (audioModel?.enclave) {
-      // Construct endpoint from enclave
-      return `https://${audioModel.enclave}/v1/audio/transcriptions`
+    if (audioModel && audioModel.endpoint) {
+      return {
+        endpoint: audioModel.endpoint,
+        modelName: audioModel.modelName
+      }
     }
 
     throw new Error('No audio model found in configuration')
@@ -308,9 +309,13 @@ export function ChatInput({
     async (blob: Blob) => {
       try {
         setIsTranscribing(true)
+        
+        // Get audio model config
+        const { endpoint, modelName } = await getAudioConfig()
+        
         const formData = new FormData()
         formData.append('file', blob, 'audio.wav')
-        formData.append('model', 'whisper-large-v3-turbo')
+        formData.append('model', modelName)
         formData.append('response_format', 'text')
 
         // Get the API key (will use cached value if available)
@@ -319,8 +324,10 @@ export function ChatInput({
           throw new Error('No API key available for transcription')
         }
 
-        const audioEndpoint = await getAudioEndpoint()
-        const response = await fetch(audioEndpoint, {
+        // Use the proxy
+        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${endpoint}`
+        
+        const response = await fetch(proxyUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -363,7 +370,7 @@ export function ChatInput({
         setIsTranscribing(false)
       }
     },
-    [setInput, toast, getApiKey, input, getAudioEndpoint],
+    [setInput, toast, getApiKey, input, getAudioConfig],
   )
 
   const startRecording = useCallback(async () => {

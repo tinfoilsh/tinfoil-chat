@@ -5,7 +5,6 @@
 import {
   getAIModels,
   getSystemPrompt,
-  resolveEnclaveOrRepo,
   type BaseModel,
 } from '@/app/config/models'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
@@ -107,11 +106,11 @@ export function ChatInterface({
   // Get the user's email
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
-  // Initialize document uploader hook
-  const { handleDocumentUpload } = useDocumentUploader()
-
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
+
+  // Initialize document uploader hook
+  const { handleDocumentUpload } = useDocumentUploader(isPremium)
 
   // Load models and system prompt
   useEffect(() => {
@@ -250,8 +249,6 @@ export function ChatInterface({
             ? 'document'
             : 'chat',
       image: model.image,
-      repo: resolveEnclaveOrRepo(model.repo || '', isPremium),
-      enclave: resolveEnclaveOrRepo(model.enclave || '', isPremium),
     }))
 
   // Document upload handler wrapper
@@ -508,16 +505,6 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
-        repo={
-          selectedModelDetails?.repo
-            ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
-            : ''
-        }
-        enclave={
-          selectedModelDetails?.enclave
-            ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
-            : ''
-        }
         selectedModel={selectedModel}
         isPremium={isPremium}
       />
@@ -526,16 +513,6 @@ export function ChatInterface({
       <VerifierSidebar
         isOpen={isVerifierSidebarOpen}
         setIsOpen={handleSetVerifierSidebarOpen}
-        repo={
-          selectedModelDetails?.repo
-            ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
-            : ''
-        }
-        enclave={
-          selectedModelDetails?.enclave
-            ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
-            : ''
-        }
         verificationComplete={verificationComplete}
         verificationSuccess={verificationSuccess}
         onVerificationComplete={(success) => {

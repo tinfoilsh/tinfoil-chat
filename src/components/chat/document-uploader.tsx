@@ -65,7 +65,7 @@ export const getFileIconType = (filename: string): string => {
 /**
  * Handles the document upload and processing logic
  */
-export const useDocumentUploader = () => {
+export const useDocumentUploader = (isPremium?: boolean) => {
   const [uploadingDocuments, setUploadingDocuments] = useState<
     Record<string, boolean>
   >({})
@@ -73,42 +73,32 @@ export const useDocumentUploader = () => {
   // Get a unique ID for the document
   const getDocumentId = () => Math.random().toString(36).substring(2, 9)
 
-  // Get docling model endpoint
-  const getDoclingEndpoint = async (): Promise<string> => {
+  // Get docling model from config
+  const getDoclingModel = async (): Promise<{endpoint: string, modelName: string}> => {
     try {
-      const models = await getAIModels(true) // Try with premium first
+      // Try to get models based on user's subscription status
+      const models = await getAIModels(isPremium ?? false)
       const doclingModel = models.find(
         (model) =>
           model.modelName === 'docling' ||
-          model.name.toLowerCase().includes('docling') ||
           model.type === 'document',
       )
 
       if (doclingModel?.endpoint) {
-        return doclingModel.endpoint
+        return {
+          endpoint: doclingModel.endpoint,
+          modelName: doclingModel.modelName
+        }
       }
 
-      // Fallback to free models
-      const freeModels = await getAIModels(false)
-      const freeDoclingModel = freeModels.find(
-        (model) =>
-          model.modelName === 'docling' ||
-          model.name.toLowerCase().includes('docling') ||
-          model.type === 'document',
-      )
-
-      if (freeDoclingModel?.endpoint) {
-        return freeDoclingModel.endpoint
-      }
-
-      // Ultimate fallback to hardcoded URL
-      return 'https://doc-upload.model.tinfoil.sh/v1alpha/convert/file'
+      // If not found, throw error - no fallbacks
+      throw new Error('Document processing model not found in configuration')
     } catch (error) {
-      logError('Failed to fetch docling endpoint, using fallback', error, {
+      logError('Failed to fetch docling model configuration', error, {
         component: 'DocumentUploader',
-        action: 'getDoclingEndpoint',
+        action: 'getDoclingModel',
       })
-      return 'https://doc-upload.model.tinfoil.sh/v1alpha/convert/file'
+      throw error
     }
   }
 
@@ -210,8 +200,15 @@ export const useDocumentUploader = () => {
       formData.append('do_picture_description', 'false')
       formData.append('image_export_mode', 'placeholder') // Use placeholder instead of skip for images
 
-      const endpoint = await getDoclingEndpoint()
-      const response = await fetch(endpoint, {
+      const { endpoint, modelName } = await getDoclingModel()
+      
+      // Use the proxy
+      const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${endpoint}`
+      
+      // Add model parameter to formData
+      formData.append('model', modelName)
+      
+      const response = await fetch(proxyUrl, {
         method: 'POST',
         body: formData,
       })
@@ -246,7 +243,6 @@ export const useDocumentUploader = () => {
         (await response.json()) as DocumentProcessingResult
 
       if (processingResult.document && processingResult.document.md_content) {
-        const filename = processingResult.document.filename || file.name
         // Pass the content directly without delimiters
         onSuccess(processingResult.document.md_content, documentId)
       } else {

@@ -84,8 +84,6 @@ declare global {
 type VerifierProps = {
   onVerificationUpdate?: (state: VerificationState) => void // Callback for state changes
   onVerificationComplete?: (success: boolean) => void // Callback when verification finishes
-  repo: string // GitHub repository to verify (e.g., "tinfoilsh/confidential-model-name")
-  enclave: string // Hostname of the enclave to verify
   isDarkMode?: boolean
 }
 
@@ -192,13 +190,16 @@ const fetchLatestDigest = async (repo: string): Promise<string> => {
 export function Verifier({
   onVerificationUpdate,
   onVerificationComplete,
-  repo,
-  enclave,
   isDarkMode = true,
 }: VerifierProps) {
   const [isWasmLoaded, setIsWasmLoaded] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
+  
+  // All models are hosted on inference.tinfoil.sh
+  const repo = 'tinfoilsh/confidential-inference-proxy'
+  const enclave = 'inference.tinfoil.sh'
+
   const [verificationState, setVerificationState] = useState<VerificationState>(
     {
       code: {
@@ -277,7 +278,7 @@ export function Verifier({
 
       let latestDigest: string | null = null
 
-      // Fetch the latest digest first
+      // Fetch the latest digest first using the actual repo
       try {
         latestDigest = await fetchLatestDigest(repo)
         setDigest(latestDigest)
@@ -295,7 +296,7 @@ export function Verifier({
         return
       }
 
-      // Step 1: Verify runtime attestation
+      // Step 1: Verify runtime attestation using the actual enclave
       try {
         const { certificate, measurement } = await window.verifyEnclave(enclave)
         runtimeMeasurement = measurement
@@ -315,7 +316,7 @@ export function Verifier({
         return
       }
 
-      // Step 2: Verify code integrity
+      // Step 2: Verify code integrity using the actual repo
       try {
         if (!latestDigest) {
           throw new Error('Digest not available')
@@ -345,7 +346,7 @@ export function Verifier({
     } finally {
       setIsVerifying(false)
     }
-  }, [enclave, repo, isVerifying, updateStepStatus])
+  }, [repo, enclave, isVerifying, updateStepStatus])
 
   useEffect(() => {
     if (!isWasmLoaded) {

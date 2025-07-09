@@ -9,6 +9,10 @@ export const CONSTANTS = {
   DEFAULT_FREE_MODEL: 'llama3-3-70b' as AIModel,
   VERIFIER_VERSION,
   VERIFIER_WASM_URL: `https://tinfoilsh.github.io/verifier-js/tinfoil-verifier-${VERIFIER_VERSION}.wasm`,
+  // Inference proxy URL for all model requests
+  INFERENCE_PROXY_URL: 'https://inference.tinfoil.sh',
+  // Inference proxy repository for verification
+  INFERENCE_PROXY_REPO: 'tinfoilsh/confidential-inference-proxy',
   MAX_MESSAGES: 100,
   MAX_MESSAGE_LENGTH: 4000,
   MAX_DOCUMENT_SIZE_MB: 10,

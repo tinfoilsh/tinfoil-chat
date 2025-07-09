@@ -450,7 +450,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
       (model) =>
         model.type === 'chat' &&
         model.chat === true &&
-        (model.paid === true || model.paid === 'conditional'),
+        model.paid === true,
     ) || []
 
   // Show loading state while subscription is loading

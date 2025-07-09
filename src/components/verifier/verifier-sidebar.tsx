@@ -17,15 +17,11 @@ export type VerifierModel = {
   displayName?: string
   type?: 'chat' | 'audio' | 'document'
   image?: string
-  repo: string
-  enclave: string
 }
 
 type VerifierSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  repo: string
-  enclave: string
   verificationComplete: boolean
   verificationSuccess?: boolean
   onVerificationComplete: (success: boolean) => void
@@ -38,8 +34,6 @@ type VerifierSidebarProps = {
 export function VerifierSidebar({
   isOpen,
   setIsOpen,
-  repo,
-  enclave,
   verificationComplete,
   verificationSuccess,
   onVerificationComplete,
@@ -276,37 +270,14 @@ export function VerifierSidebar({
 
         {/* Verifier content */}
         <div className="flex-1 overflow-y-auto">
-          {isClient &&
-            (() => {
-              const activeModel =
-                models.find((m) => m.id === activeModelTab) ||
-                (models.length > 0 ? models[0] : null)
-
-              if (!activeModel) {
-                // Fallback to original props if no models provided
-                return (
-                  <Verifier
-                    key={verifierKey.current}
-                    onVerificationUpdate={() => {}}
-                    onVerificationComplete={onVerificationComplete}
-                    repo={repo}
-                    enclave={enclave}
-                    isDarkMode={isDarkMode}
-                  />
-                )
-              }
-
-              return (
-                <Verifier
-                  key={verifierKey.current}
-                  onVerificationUpdate={() => {}}
-                  onVerificationComplete={onVerificationComplete}
-                  repo={activeModel.repo}
-                  enclave={activeModel.enclave}
-                  isDarkMode={isDarkMode}
-                />
-              )
-            })()}
+          {isClient && (
+            <Verifier
+              key={verifierKey.current}
+              onVerificationUpdate={() => {}}
+              onVerificationComplete={onVerificationComplete}
+              isDarkMode={isDarkMode}
+            />
+          )}
         </div>
       </div>
 

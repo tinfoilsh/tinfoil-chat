@@ -25,10 +25,7 @@ export type ModelInfo = {
   nameShort: string
   description: string
   image: string
-  repo?: string
-  enclave: string
   endpoint?: string
-  digest?: string
 }
 
 export type LabelType = 'verify' | 'model' | 'info' | null
