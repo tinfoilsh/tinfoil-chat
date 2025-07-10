@@ -49,7 +49,7 @@ export function useModelManagement({
   // Effect to validate and update selected model when models are loaded
   useEffect(() => {
     if (models.length > 0 && isClient) {
-      const savedModel = sessionStorage.getItem('selectedModel')
+      const savedModel = localStorage.getItem('selectedModel')
 
       // Try saved model first, then current selected model, then default
       const preferredModel = savedModel || selectedModel
@@ -58,7 +58,7 @@ export function useModelManagement({
         // Preferred model is available, use it
         if (preferredModel !== selectedModel) {
           setSelectedModel(preferredModel)
-          sessionStorage.setItem('selectedModel', preferredModel)
+          localStorage.setItem('selectedModel', preferredModel)
         }
       } else {
         // Preferred model not available, find the first available chat model
@@ -72,7 +72,7 @@ export function useModelManagement({
         if (availableChatModels.length > 0) {
           const fallbackModel = availableChatModels[0].modelName as AIModel
           setSelectedModel(fallbackModel)
-          sessionStorage.setItem('selectedModel', fallbackModel)
+          localStorage.setItem('selectedModel', fallbackModel)
         } else {
           logError(
             'No chat models available for current subscription level',
@@ -115,8 +115,8 @@ export function useModelManagement({
       setSelectedModel(modelName)
       setExpandedLabel(null)
 
-      // Save to session storage
-      sessionStorage.setItem('selectedModel', modelName)
+      // Save to local storage
+      localStorage.setItem('selectedModel', modelName)
     },
     [storeHistory, models, isPremium],
   )
