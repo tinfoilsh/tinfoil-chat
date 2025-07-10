@@ -1,6 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
 
-import { getAIModels } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -235,24 +234,6 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Get audio model config dynamically
-  const getAudioConfig = useCallback(async (): Promise<{endpoint: string, modelName: string}> => {
-    const models = await getAIModels(isPremium ?? false)
-    const audioModel = models.find(
-      (model) =>
-        model.type === 'audio' ||
-        model.modelName === 'whisper-large-v3-turbo'
-    )
-
-    if (audioModel && audioModel.endpoint) {
-      return {
-        endpoint: audioModel.endpoint,
-        modelName: audioModel.modelName
-      }
-    }
-
-    throw new Error('No audio model found in configuration')
-  }, [isPremium])
 
   // Convert WebM to WAV using audiobuffer-to-wav library
   const convertWebMToWAV = useCallback(
@@ -310,12 +291,9 @@ export function ChatInput({
       try {
         setIsTranscribing(true)
         
-        // Get audio model config
-        const { endpoint, modelName } = await getAudioConfig()
-        
         const formData = new FormData()
         formData.append('file', blob, 'audio.wav')
-        formData.append('model', modelName)
+        formData.append('model', 'whisper-large-v3-turbo')
         formData.append('response_format', 'text')
 
         // Get the API key (will use cached value if available)
@@ -324,8 +302,8 @@ export function ChatInput({
           throw new Error('No API key available for transcription')
         }
 
-        // Use the proxy
-        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${endpoint}`
+        // Use the proxy with the audio transcription endpoint
+        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
         
         const response = await fetch(proxyUrl, {
           method: 'POST',
@@ -370,7 +348,7 @@ export function ChatInput({
         setIsTranscribing(false)
       }
     },
-    [setInput, toast, getApiKey, input, getAudioConfig],
+    [setInput, toast, getApiKey, input],
   )
 
   const startRecording = useCallback(async () => {
