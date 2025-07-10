@@ -2,6 +2,7 @@ import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
 // Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute
 // the enclave verification functions written in Go
+import { CONSTANTS } from '../chat/constants'
 import { VERIFIER_CONSTANTS } from './constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
@@ -84,8 +85,6 @@ declare global {
 type VerifierProps = {
   onVerificationUpdate?: (state: VerificationState) => void // Callback for state changes
   onVerificationComplete?: (success: boolean) => void // Callback when verification finishes
-  repo: string // GitHub repository to verify (e.g., "tinfoilsh/confidential-model-name")
-  enclave: string // Hostname of the enclave to verify
   isDarkMode?: boolean
 }
 
@@ -192,13 +191,17 @@ const fetchLatestDigest = async (repo: string): Promise<string> => {
 export function Verifier({
   onVerificationUpdate,
   onVerificationComplete,
-  repo,
-  enclave,
   isDarkMode = true,
 }: VerifierProps) {
   const [isWasmLoaded, setIsWasmLoaded] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
+  
+  // The inference proxy handles all model requests
+  // Use the proxy constants from the shared constants file
+  const repo = CONSTANTS.INFERENCE_PROXY_REPO
+  const enclave = CONSTANTS.INFERENCE_PROXY_URL.replace('https://', '')
+
   const [verificationState, setVerificationState] = useState<VerificationState>(
     {
       code: {
@@ -277,7 +280,7 @@ export function Verifier({
 
       let latestDigest: string | null = null
 
-      // Fetch the latest digest first
+      // Fetch the latest digest first using the actual repo
       try {
         latestDigest = await fetchLatestDigest(repo)
         setDigest(latestDigest)
@@ -295,7 +298,7 @@ export function Verifier({
         return
       }
 
-      // Step 1: Verify runtime attestation
+      // Step 1: Verify runtime attestation using the actual enclave
       try {
         const { certificate, measurement } = await window.verifyEnclave(enclave)
         runtimeMeasurement = measurement
@@ -315,7 +318,7 @@ export function Verifier({
         return
       }
 
-      // Step 2: Verify code integrity
+      // Step 2: Verify code integrity using the actual repo
       try {
         if (!latestDigest) {
           throw new Error('Digest not available')
@@ -345,7 +348,7 @@ export function Verifier({
     } finally {
       setIsVerifying(false)
     }
-  }, [enclave, repo, isVerifying, updateStepStatus])
+  }, [repo, enclave, isVerifying, updateStepStatus])
 
   useEffect(() => {
     if (!isWasmLoaded) {
@@ -424,7 +427,7 @@ export function Verifier({
             className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
           >
             This automated verification tool lets you independently confirm that
-            the model is running in the secure enclave, ensuring your
+            the models are running in secure enclaves, ensuring your
             conversations remain completely private.
           </p>
           <div className="mt-2">

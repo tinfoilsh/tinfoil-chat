@@ -1,6 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
 
-import { getAIModels } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -235,23 +234,6 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Get audio model endpoint dynamically
-  const getAudioEndpoint = useCallback(async (): Promise<string> => {
-    const models = await getAIModels(isPremium ?? false)
-    const audioModel = models.find(
-      (model) =>
-        model.type === 'audio' ||
-        model.modelName === 'whisper-large-v3-turbo' ||
-        model.name.toLowerCase().includes('whisper'),
-    )
-
-    if (audioModel?.enclave) {
-      // Construct endpoint from enclave
-      return `https://${audioModel.enclave}/v1/audio/transcriptions`
-    }
-
-    throw new Error('No audio model found in configuration')
-  }, [isPremium])
 
   // Convert WebM to WAV using audiobuffer-to-wav library
   const convertWebMToWAV = useCallback(
@@ -308,6 +290,7 @@ export function ChatInput({
     async (blob: Blob) => {
       try {
         setIsTranscribing(true)
+        
         const formData = new FormData()
         formData.append('file', blob, 'audio.wav')
         formData.append('model', 'whisper-large-v3-turbo')
@@ -319,8 +302,10 @@ export function ChatInput({
           throw new Error('No API key available for transcription')
         }
 
-        const audioEndpoint = await getAudioEndpoint()
-        const response = await fetch(audioEndpoint, {
+        // Use the proxy with the audio transcription endpoint
+        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
+        
+        const response = await fetch(proxyUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -363,7 +348,7 @@ export function ChatInput({
         setIsTranscribing(false)
       }
     },
-    [setInput, toast, getApiKey, input, getAudioEndpoint],
+    [setInput, toast, getApiKey, input],
   )
 
   const startRecording = useCallback(async () => {

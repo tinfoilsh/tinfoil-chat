@@ -5,7 +5,6 @@
 import {
   getAIModels,
   getSystemPrompt,
-  resolveEnclaveOrRepo,
   type BaseModel,
 } from '@/app/config/models'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
@@ -15,10 +14,7 @@ import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
-import {
-  VerifierSidebar,
-  type VerifierModel,
-} from '../verifier/verifier-sidebar'
+import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
@@ -107,11 +103,11 @@ export function ChatInterface({
   // Get the user's email
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
-  // Initialize document uploader hook
-  const { handleDocumentUpload } = useDocumentUploader()
-
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
+
+  // Initialize document uploader hook
+  const { handleDocumentUpload } = useDocumentUploader(isPremium)
 
   // Load models and system prompt
   useEffect(() => {
@@ -228,31 +224,6 @@ export function ChatInterface({
     (model) => model.modelName === selectedModel,
   ) as BaseModel | undefined
 
-  // Prepare models for verifier sidebar
-  const verifierModels: VerifierModel[] = models
-    .filter((model) => {
-      // Include chat models
-      if (model.chat) return true
-      // Include audio models only for premium users
-      if (model.type === 'audio' && isPremium) return true
-      // Include document models (docling)
-      if (model.type === 'document') return true
-      return false
-    })
-    .map((model) => ({
-      id: model.modelName,
-      name: model.name,
-      displayName: model.nameShort || model.name,
-      type:
-        model.type === 'audio'
-          ? 'audio'
-          : model.type === 'document'
-            ? 'document'
-            : 'chat',
-      image: model.image,
-      repo: resolveEnclaveOrRepo(model.repo || '', isPremium),
-      enclave: resolveEnclaveOrRepo(model.enclave || '', isPremium),
-    }))
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
@@ -508,16 +479,6 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
-        repo={
-          selectedModelDetails?.repo
-            ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
-            : ''
-        }
-        enclave={
-          selectedModelDetails?.enclave
-            ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
-            : ''
-        }
         selectedModel={selectedModel}
         isPremium={isPremium}
       />
@@ -526,16 +487,6 @@ export function ChatInterface({
       <VerifierSidebar
         isOpen={isVerifierSidebarOpen}
         setIsOpen={handleSetVerifierSidebarOpen}
-        repo={
-          selectedModelDetails?.repo
-            ? resolveEnclaveOrRepo(selectedModelDetails.repo, isPremium)
-            : ''
-        }
-        enclave={
-          selectedModelDetails?.enclave
-            ? resolveEnclaveOrRepo(selectedModelDetails.enclave, isPremium)
-            : ''
-        }
         verificationComplete={verificationComplete}
         verificationSuccess={verificationSuccess}
         onVerificationComplete={(success) => {
@@ -544,8 +495,6 @@ export function ChatInterface({
         }}
         isDarkMode={isDarkMode}
         isClient={isClient}
-        selectedModel={selectedModel}
-        models={verifierModels}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}

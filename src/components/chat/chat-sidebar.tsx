@@ -51,9 +51,6 @@ type ChatSidebarProps = {
   isClient: boolean
   verificationComplete: boolean
   verificationSuccess?: boolean
-  repo: string
-  enclave: string
-  digest?: string
   selectedModel: string
   isPremium?: boolean
   onVerificationComplete: (success: boolean) => void
@@ -169,9 +166,6 @@ export function ChatSidebar({
   verificationComplete,
   verificationSuccess,
   onVerificationComplete,
-  repo,
-  enclave,
-  digest,
   selectedModel,
   isPremium = true,
 }: ChatSidebarProps) {
