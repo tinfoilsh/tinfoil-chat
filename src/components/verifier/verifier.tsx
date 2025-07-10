@@ -2,6 +2,7 @@ import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
 // Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute
 // the enclave verification functions written in Go
+import { CONSTANTS } from '../chat/constants'
 import { VERIFIER_CONSTANTS } from './constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
@@ -196,9 +197,10 @@ export function Verifier({
   const [isSafari, setIsSafari] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
   
-  // All models are hosted on inference.tinfoil.sh
-  const repo = 'tinfoilsh/confidential-inference-proxy'
-  const enclave = 'inference.tinfoil.sh'
+  // The inference proxy handles all model requests
+  // Use the proxy constants from the shared constants file
+  const repo = CONSTANTS.INFERENCE_PROXY_REPO
+  const enclave = CONSTANTS.INFERENCE_PROXY_URL.replace('https://', '')
 
   const [verificationState, setVerificationState] = useState<VerificationState>(
     {
@@ -425,7 +427,7 @@ export function Verifier({
             className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
           >
             This automated verification tool lets you independently confirm that
-            the model is running in the secure enclave, ensuring your
+            the models are running in secure enclaves, ensuring your
             conversations remain completely private.
           </p>
           <div className="mt-2">

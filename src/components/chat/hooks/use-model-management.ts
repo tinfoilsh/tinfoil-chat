@@ -114,7 +114,6 @@ export function useModelManagement({
 
       setSelectedModel(modelName)
       setExpandedLabel(null)
-      // No need to reset verification when switching models since we only verify the proxy once
 
       // Save to session storage
       sessionStorage.setItem('selectedModel', modelName)
