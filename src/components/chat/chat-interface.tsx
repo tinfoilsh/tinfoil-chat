@@ -664,6 +664,7 @@ export function ChatInterface({
                   isDarkMode={isDarkMode}
                   isPremium={isPremium}
                   models={models}
+                  onSettingsClick={handleOpenSettingsSidebar}
                 />
 
                 {/* Input */}
@@ -681,7 +682,6 @@ export function ChatInterface({
                   processedDocuments={processedDocuments}
                   removeDocument={removeDocument}
                   isPremium={isPremium}
-                  onSettingsClick={handleOpenSettingsSidebar}
                 />
               </form>
             </div>
