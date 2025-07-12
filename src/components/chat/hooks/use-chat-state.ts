@@ -63,11 +63,13 @@ export function useChatState({
   storeHistory = true,
   isPremium = true,
   models = [],
+  subscriptionLoading = false,
 }: {
   systemPrompt: string
   storeHistory?: boolean
   isPremium?: boolean
   models?: BaseModel[]
+  subscriptionLoading?: boolean
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -109,7 +111,13 @@ export function useChatState({
     verificationSuccess,
     handleModelSelect,
     handleLabelClick,
-  } = useModelManagement({ models, isPremium, isClient, storeHistory })
+  } = useModelManagement({
+    models,
+    isPremium,
+    isClient,
+    storeHistory,
+    subscriptionLoading,
+  })
 
   // Chat Messaging
   const {

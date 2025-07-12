@@ -610,7 +610,7 @@ export function ChatInput({
             <button
               type="submit"
               onClick={
-                loadingState === 'loading' ? cancelGeneration : undefined
+                loadingState === 'loading' ? cancelGeneration : handleSubmit
               }
               className={`mr-2 rounded-lg p-1.5 ${
                 isDarkMode
@@ -618,7 +618,7 @@ export function ChatInput({
                   : 'text-gray-600 hover:bg-gray-200'
               } disabled:opacity-50`}
               disabled={
-                loadingState === 'loading' || isTranscribing || isConverting
+                loadingState !== 'loading' && (isTranscribing || isConverting)
               }
             >
               {loadingState === 'loading' ? (
