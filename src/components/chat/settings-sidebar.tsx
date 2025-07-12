@@ -18,7 +18,9 @@ export function SettingsSidebar({
   toggleTheme,
   isClient,
 }: SettingsSidebarProps) {
-  const [maxMessages, setMaxMessages] = useState(CONSTANTS.MAX_PROMPT_MESSAGES)
+  const [maxMessages, setMaxMessages] = useState<number>(
+    CONSTANTS.MAX_PROMPT_MESSAGES,
+  )
 
   // Load max messages setting from localStorage
   useEffect(() => {
