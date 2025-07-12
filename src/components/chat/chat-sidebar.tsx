@@ -3,10 +3,8 @@ import {
   ArrowDownTrayIcon,
   Bars3Icon,
   ChatBubbleLeftIcon,
-  MoonIcon,
   PencilSquareIcon,
   PlusIcon,
-  SunIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -43,7 +41,6 @@ type ChatSidebarProps = {
   chats: Chat[]
   currentChat: Chat
   isDarkMode: boolean
-  toggleTheme: () => void
   createNewChat: () => void
   handleChatSelect: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
@@ -157,7 +154,6 @@ export function ChatSidebar({
   chats,
   currentChat,
   isDarkMode,
-  toggleTheme,
   createNewChat,
   handleChatSelect,
   updateChatTitle,
@@ -204,10 +200,6 @@ export function ChatSidebar({
     setIsInitialLoad(false)
   }, [])
 
-  const handleThemeToggle = () => {
-    toggleTheme()
-  }
-
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
   useEffect(() => {
@@ -248,20 +240,6 @@ export function ChatSidebar({
             <Logo className="mt-1 h-8 w-auto" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
-            <button
-              className={`block rounded-lg p-2 transition-all duration-200 ${
-                isDarkMode
-                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-              onClick={handleThemeToggle}
-            >
-              {isDarkMode ? (
-                <SunIcon className="h-5 w-5" />
-              ) : (
-                <MoonIcon className="h-5 w-5" />
-              )}
-            </button>
             <button
               className={`hidden rounded-lg p-2 transition-all duration-200 md:block ${
                 isDarkMode

@@ -22,8 +22,8 @@ import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
-import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
+import { useMaxMessages } from './hooks/use-max-messages'
 import type { Message } from './types'
 
 // Add new types
@@ -775,6 +775,7 @@ export function ChatMessages({
   const [mounted, setMounted] = useState(false)
   const userScrollingRef = useRef(false)
   const lastScrollPositionRef = useRef(0)
+  const maxMessages = useMaxMessages()
 
   // Check if there's already a thinking message in the chat
   const hasThinkingMessage = messages.some(
@@ -784,15 +785,11 @@ export function ChatMessages({
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
-      messages.length > CONSTANTS.MAX_PROMPT_MESSAGES
-        ? messages.slice(0, -CONSTANTS.MAX_PROMPT_MESSAGES)
-        : []
+      messages.length > maxMessages ? messages.slice(0, -maxMessages) : []
     const live =
-      messages.length > CONSTANTS.MAX_PROMPT_MESSAGES
-        ? messages.slice(-CONSTANTS.MAX_PROMPT_MESSAGES)
-        : messages
+      messages.length > maxMessages ? messages.slice(-maxMessages) : messages
     return { archivedMessages: archived, liveMessages: live }
-  }, [messages])
+  }, [messages, maxMessages])
 
   useEffect(() => {
     setMounted(true)
