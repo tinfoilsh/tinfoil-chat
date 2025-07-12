@@ -39,6 +39,7 @@ type ProcessedDocument = {
   time: Date
   content?: string
   isUploading?: boolean
+  imageData?: { base64: string; mimeType: string }
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -244,7 +245,7 @@ export function ChatInterface({
 
       await handleDocumentUpload(
         file,
-        (content, documentId) => {
+        (content, documentId, imageData) => {
           const newDocTokens = estimateTokenCount(content)
           const contextLimit = parseContextWindowTokens(
             selectedModelDetails?.contextWindow,
@@ -281,6 +282,7 @@ export function ChatInterface({
                     name: file.name,
                     time: new Date(),
                     content,
+                    imageData, // Store the base64 image data
                   }
                 : doc,
             )
@@ -342,8 +344,19 @@ export function ChatInterface({
         ? completedDocuments.map((doc) => ({ name: doc.name }))
         : undefined
 
-    // Call handleQuery with the input and document content
-    handleQuery(input, docContent, documentNames)
+    // Collect image data from documents
+    const imageData =
+      completedDocuments.length > 0
+        ? completedDocuments
+            .map((doc) => doc.imageData)
+            .filter(
+              (imgData): imgData is { base64: string; mimeType: string } =>
+                imgData !== undefined,
+            )
+        : undefined
+
+    // Call handleQuery with the input, document content, and image data
+    handleQuery(input, docContent, documentNames, imageData)
 
     // Only remove the completed documents from the state
     const remainingDocuments = processedDocuments.filter(

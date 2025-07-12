@@ -149,10 +149,63 @@ export const useDocumentUploader = (isPremium?: boolean) => {
     return `# ${file.name}\n\n${fileContents}`
   }
 
+  // Check if file is an image type
+  const isImageFile = (file: File): boolean => {
+    const filename = file.name.toLowerCase()
+    return (
+      filename.endsWith('.jpg') ||
+      filename.endsWith('.jpeg') ||
+      filename.endsWith('.png') ||
+      filename.endsWith('.gif') ||
+      filename.endsWith('.webp') ||
+      filename.endsWith('.bmp') ||
+      filename.endsWith('.tiff')
+    )
+  }
+
+  // Convert image file to base64
+  const fileToBase64 = async (file: File): Promise<string> => {
+    const reader = new FileReader()
+
+    return new Promise<string>((resolve, reject) => {
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          const base64String = e.target.result as string
+          // Remove the data URL prefix to get just the base64 data
+          const base64Data = base64String.split(',')[1]
+          resolve(base64Data)
+        } else {
+          reject(new Error('Failed to convert file to base64'))
+        }
+      }
+      reader.onerror = () =>
+        reject(new Error('Error reading file for base64 conversion'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // Get MIME type for image files
+  const getImageMimeType = (file: File): string => {
+    const filename = file.name.toLowerCase()
+    if (filename.endsWith('.jpg') || filename.endsWith('.jpeg'))
+      return 'image/jpeg'
+    if (filename.endsWith('.png')) return 'image/png'
+    if (filename.endsWith('.gif')) return 'image/gif'
+    if (filename.endsWith('.webp')) return 'image/webp'
+    if (filename.endsWith('.bmp')) return 'image/bmp'
+    if (filename.endsWith('.tiff')) return 'image/tiff'
+    // Default fallback
+    return 'image/jpeg'
+  }
+
   // Main upload function
   const handleDocumentUpload = async (
     file: File,
-    onSuccess: (content: string, documentId: string) => void,
+    onSuccess: (
+      content: string,
+      documentId: string,
+      imageData?: { base64: string; mimeType: string },
+    ) => void,
     onError: (error: Error, documentId: string) => void,
   ) => {
     const documentId = getDocumentId()
@@ -180,6 +233,17 @@ export const useDocumentUploader = (isPremium?: boolean) => {
         const formattedContent = await handleTextFile(file)
         onSuccess(formattedContent, documentId)
         return
+      }
+
+      // For image files, we need to handle both OCR and base64 encoding
+      const isImage = isImageFile(file)
+      let imageData: { base64: string; mimeType: string } | undefined
+
+      if (isImage) {
+        // Get base64 data for the image
+        const base64Data = await fileToBase64(file)
+        const mimeType = getImageMimeType(file)
+        imageData = { base64: base64Data, mimeType }
       }
 
       // For non-txt files, proceed with API processing
@@ -244,8 +308,8 @@ export const useDocumentUploader = (isPremium?: boolean) => {
         (await response.json()) as DocumentProcessingResult
 
       if (processingResult.document && processingResult.document.md_content) {
-        // Pass the content directly without delimiters
-        onSuccess(processingResult.document.md_content, documentId)
+        // Pass the content and image data if it's an image
+        onSuccess(processingResult.document.md_content, documentId, imageData)
       } else {
         throw new Error('No document content received')
       }
