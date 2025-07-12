@@ -74,20 +74,21 @@ export const useDocumentUploader = (isPremium?: boolean) => {
   const getDocumentId = () => Math.random().toString(36).substring(2, 9)
 
   // Get docling model from config
-  const getDoclingModel = async (): Promise<{endpoint: string, modelName: string}> => {
+  const getDoclingModel = async (): Promise<{
+    endpoint: string
+    modelName: string
+  }> => {
     try {
       // Try to get models based on user's subscription status
       const models = await getAIModels(isPremium ?? false)
       const doclingModel = models.find(
-        (model) =>
-          model.modelName === 'docling' ||
-          model.type === 'document',
+        (model) => model.modelName === 'docling' || model.type === 'document',
       )
 
       if (doclingModel?.endpoint) {
         return {
           endpoint: doclingModel.endpoint,
-          modelName: doclingModel.modelName
+          modelName: doclingModel.modelName,
         }
       }
 
@@ -201,13 +202,13 @@ export const useDocumentUploader = (isPremium?: boolean) => {
       formData.append('image_export_mode', 'placeholder') // Use placeholder instead of skip for images
 
       const { endpoint, modelName } = await getDoclingModel()
-      
+
       // Use the proxy
       const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${endpoint}`
-      
+
       // Add model parameter to formData
       formData.append('model', modelName)
-      
+
       const response = await fetch(proxyUrl, {
         method: 'POST',
         body: formData,

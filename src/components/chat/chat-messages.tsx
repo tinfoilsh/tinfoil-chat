@@ -448,9 +448,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
   const premiumModels =
     models?.filter(
       (model) =>
-        model.type === 'chat' &&
-        model.chat === true &&
-        model.paid === true,
+        model.type === 'chat' && model.chat === true && model.paid === true,
     ) || []
 
   // Show loading state while subscription is loading

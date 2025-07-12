@@ -71,7 +71,6 @@ export function VerifierSidebar({
           </button>
         </div>
 
-
         {/* Verifier content */}
         <div className="flex-1 overflow-y-auto">
           {isClient && (

@@ -196,7 +196,7 @@ export function Verifier({
   const [isWasmLoaded, setIsWasmLoaded] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
-  
+
   // The inference proxy handles all model requests
   // Use the proxy constants from the shared constants file
   const repo = CONSTANTS.INFERENCE_PROXY_REPO
