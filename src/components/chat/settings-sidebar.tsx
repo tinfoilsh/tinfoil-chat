@@ -1,5 +1,8 @@
+/* eslint-disable react/no-unescaped-entities */
 import { MoonIcon, SunIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { CONSTANTS } from './constants'
 
 type SettingsSidebarProps = {
   isOpen: boolean
@@ -16,6 +19,39 @@ export function SettingsSidebar({
   toggleTheme,
   isClient,
 }: SettingsSidebarProps) {
+  const [maxMessages, setMaxMessages] = useState<number>(
+    CONSTANTS.MAX_PROMPT_MESSAGES,
+  )
+
+  // Load max messages setting from localStorage
+  useEffect(() => {
+    if (isClient) {
+      const saved = localStorage.getItem('maxPromptMessages')
+      if (saved) {
+        const parsedValue = parseInt(saved, 10)
+        if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
+          setMaxMessages(parsedValue)
+        }
+      }
+    }
+  }, [isClient])
+
+  // Save max messages setting to localStorage
+  const handleMaxMessagesChange = (value: number) => {
+    if (value > 0 && value <= 50) {
+      setMaxMessages(value)
+      if (isClient) {
+        localStorage.setItem('maxPromptMessages', value.toString())
+        // Trigger a custom event to notify other components
+        window.dispatchEvent(
+          new CustomEvent('maxPromptMessagesChanged', {
+            detail: value,
+          }),
+        )
+      }
+    }
+  }
+
   const handleThemeToggle = () => {
     toggleTheme()
   }
@@ -116,26 +152,60 @@ export function SettingsSidebar({
               </div>
             </div>
 
-            {/* Placeholder for future settings */}
+            {/* Chat Settings */}
             <div>
               <h3
                 className={`mb-3 text-sm font-medium ${
                   isDarkMode ? 'text-gray-200' : 'text-gray-800'
                 }`}
               >
-                More Settings
+                Chat Settings
               </h3>
-              <div
-                className={`rounded-lg p-3 text-center ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                }`}
-              >
+              <div className="space-y-2">
                 <div
-                  className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  className={`rounded-lg p-3 ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
                   }`}
                 >
-                  Additional settings will be added here
+                  <div className="flex items-center justify-between">
+                    <div className="mr-3 flex-1">
+                      <div
+                        className={`text-sm font-medium ${
+                          isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                        }`}
+                      >
+                        Messages in Context
+                      </div>
+                      <div
+                        className={`text-xs ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}
+                      >
+                        Maximum number of recent messages sent to the model
+                        (1-50). Longer contexts increase network usage and slow
+                        down responses.
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={maxMessages}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value, 10)
+                          if (!isNaN(value)) {
+                            handleMaxMessagesChange(value)
+                          }
+                        }}
+                        className={`w-16 rounded-md border px-2 py-1 text-center text-sm ${
+                          isDarkMode
+                            ? 'border-gray-600 bg-gray-700 text-gray-200'
+                            : 'border-gray-300 bg-white text-gray-900'
+                        } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
