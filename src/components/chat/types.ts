@@ -3,6 +3,7 @@ export type Message = {
   content: string
   documentContent?: string // Separate field for document content
   documents?: Array<{ name: string }> // New field for document names and types
+  imageData?: Array<{ base64: string; mimeType: string }> // Base64 image data for multimodal support
   timestamp: Date
   thoughts?: string
   isThinking?: boolean

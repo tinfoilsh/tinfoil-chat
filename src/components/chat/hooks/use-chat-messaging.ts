@@ -160,6 +160,7 @@ export function useChatMessaging({
       query: string,
       documentContent?: string,
       documents?: Array<{ name: string }>,
+      imageData?: Array<{ base64: string; mimeType: string }>,
     ) => {
       if (!query.trim() || loadingState !== 'idle') return
 
@@ -173,6 +174,7 @@ export function useChatMessaging({
         content: query,
         documentContent: documentContent,
         documents,
+        imageData,
         timestamp: new Date(),
       }
 
@@ -261,12 +263,40 @@ export function useChatMessaging({
                 content: systemPrompt.replace('<MODEL_NAME>', model.name),
               },
               // Include message history with a limit
-              ...updatedMessages.slice(-10).map((msg) => ({
-                role: msg.role,
-                content: msg.documentContent
-                  ? `${msg.content}\n\nDocument contents:\n${msg.documentContent}`
-                  : msg.content,
-              })),
+              ...updatedMessages.slice(-10).map((msg) => {
+                // Check if this message has image data
+                if (msg.imageData && msg.imageData.length > 0) {
+                  // Create multimodal content array
+                  const content = [
+                    {
+                      type: 'text',
+                      text: msg.documentContent
+                        ? `${msg.content}\n\n${msg.documents?.map((doc) => `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`).join('\n\n') || `Document contents:\n${msg.documentContent}`}`
+                        : msg.content,
+                    },
+                    // Add each image as a separate content item
+                    ...msg.imageData.map((imgData) => ({
+                      type: 'image_url',
+                      image_url: {
+                        url: `data:${imgData.mimeType};base64,${imgData.base64}`,
+                      },
+                    })),
+                  ]
+
+                  return {
+                    role: msg.role,
+                    content,
+                  }
+                } else {
+                  // Standard text message
+                  return {
+                    role: msg.role,
+                    content: msg.documentContent
+                      ? `${msg.content}\n\n${msg.documents?.map((doc) => `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`).join('\n\n') || `Document contents:\n${msg.documentContent}`}`
+                      : msg.content,
+                  }
+                }
+              }),
             ],
             stream: true,
           }),
