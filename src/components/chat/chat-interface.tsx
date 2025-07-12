@@ -10,7 +10,11 @@ import {
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth, useUser } from '@clerk/nextjs'
-import { Bars3Icon, ShieldCheckIcon } from '@heroicons/react/24/outline'
+import {
+  Bars3Icon,
+  Cog6ToothIcon,
+  ShieldCheckIcon,
+} from '@heroicons/react/24/outline'
 
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
@@ -22,6 +26,7 @@ import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
+import { SettingsSidebar } from './settings-sidebar'
 import type { VerificationState } from './types'
 
 type ChatInterfaceProps = {
@@ -95,6 +100,9 @@ export function ChatInterface({
     }
     return false
   })
+
+  // State for settings sidebar
+  const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -208,6 +216,15 @@ export function ChatInterface({
     } else {
       // Clear the saved preference when user opens it
       localStorage.removeItem('verifierSidebarClosed')
+    }
+  }
+
+  // Handler for settings sidebar
+  const handleOpenSettingsSidebar = () => {
+    setIsSettingsSidebarOpen(true)
+    // Close verifier sidebar on mobile to avoid overlap
+    if (windowWidth < CONSTANTS.MOBILE_BREAKPOINT) {
+      setIsVerifierSidebarOpen(false)
     }
   }
 
@@ -458,20 +475,38 @@ export function ChatInterface({
           </button>
         )}
 
-      {/* Verifier toggle button - visible when verifier sidebar is closed, hidden when open */}
-      {!isVerifierSidebarOpen &&
-        !(windowWidth < CONSTANTS.MOBILE_BREAKPOINT && isSidebarOpen) && (
-          <button
-            className={`fixed right-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-              isDarkMode
-                ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-            onClick={handleOpenVerifierSidebar}
-          >
-            <ShieldCheckIcon className="h-5 w-5" />
-          </button>
-        )}
+      {/* Right side toggle buttons */}
+      {!(windowWidth < CONSTANTS.MOBILE_BREAKPOINT && isSidebarOpen) && (
+        <div className="fixed right-4 top-4 z-50 flex gap-2">
+          {/* Verifier toggle button - visible when verifier sidebar is closed */}
+          {!isVerifierSidebarOpen && (
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+                isDarkMode
+                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+              onClick={handleOpenVerifierSidebar}
+            >
+              <ShieldCheckIcon className="h-5 w-5" />
+            </button>
+          )}
+
+          {/* Settings toggle button - visible when settings sidebar is closed AND verifier sidebar is closed */}
+          {!isSettingsSidebarOpen && !isVerifierSidebarOpen && (
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+                isDarkMode
+                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+              onClick={handleOpenSettingsSidebar}
+            >
+              <Cog6ToothIcon className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Left Sidebar Component - For all users, but with limited functionality for basic */}
       <ChatSidebar
@@ -480,7 +515,6 @@ export function ChatInterface({
         chats={isPremium ? chats : [currentChat]}
         currentChat={currentChat}
         isDarkMode={isDarkMode}
-        toggleTheme={toggleTheme}
         createNewChat={createNewChat}
         handleChatSelect={handleChatSelect}
         updateChatTitle={updateChatTitle}
@@ -510,12 +544,22 @@ export function ChatInterface({
         isClient={isClient}
       />
 
+      {/* Settings Sidebar */}
+      <SettingsSidebar
+        isOpen={isSettingsSidebarOpen}
+        setIsOpen={setIsSettingsSidebarOpen}
+        isDarkMode={isDarkMode}
+        toggleTheme={toggleTheme}
+        isClient={isClient}
+      />
+
       {/* Main Chat Area - Modified for sliding effect */}
       <div
         className="fixed inset-0 overflow-hidden transition-all duration-200"
         style={{
           right:
-            isVerifierSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+            (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
+            windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
               ? '300px'
               : '0',
           bottom: 0,
@@ -637,6 +681,7 @@ export function ChatInterface({
                   processedDocuments={processedDocuments}
                   removeDocument={removeDocument}
                   isPremium={isPremium}
+                  onSettingsClick={handleOpenSettingsSidebar}
                 />
               </form>
             </div>

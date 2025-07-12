@@ -3,6 +3,7 @@
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
 import {
+  Cog6ToothIcon,
   DocumentIcon,
   MicrophoneIcon,
   PaperAirplaneIcon,
@@ -51,6 +52,7 @@ type ChatInputProps = {
   processedDocuments?: ProcessedDocument[]
   removeDocument?: (id: string) => void
   isPremium?: boolean
+  onSettingsClick?: () => void
 }
 
 // Component for Mac-style file icons
@@ -219,6 +221,7 @@ export function ChatInput({
   processedDocuments,
   removeDocument,
   isPremium,
+  onSettingsClick,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -530,6 +533,20 @@ export function ChatInput({
         >
           <DocumentIcon className="h-5 w-5" />
         </button>
+        {onSettingsClick && (
+          <button
+            type="button"
+            onClick={onSettingsClick}
+            className={`rounded-lg p-1.5 ${
+              isDarkMode
+                ? 'text-gray-300 hover:bg-gray-600'
+                : 'text-gray-600 hover:bg-gray-200'
+            }`}
+            title="Settings"
+          >
+            <Cog6ToothIcon className="h-5 w-5" />
+          </button>
+        )}
         <div className="relative flex flex-1 self-center">
           <textarea
             ref={inputRef}
