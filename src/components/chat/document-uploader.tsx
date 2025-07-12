@@ -1,4 +1,4 @@
-import { getAIModels } from '@/app/config/models'
+import { getAIModels, type BaseModel } from '@/app/config/models'
 import { logError } from '@/utils/error-handling'
 import { useState } from 'react'
 import { CONSTANTS } from './constants'
@@ -65,7 +65,10 @@ export const getFileIconType = (filename: string): string => {
 /**
  * Handles the document upload and processing logic
  */
-export const useDocumentUploader = (isPremium?: boolean) => {
+export const useDocumentUploader = (
+  isPremium?: boolean,
+  selectedModelDetails?: BaseModel,
+) => {
   const [uploadingDocuments, setUploadingDocuments] = useState<
     Record<string, boolean>
   >({})
@@ -239,8 +242,8 @@ export const useDocumentUploader = (isPremium?: boolean) => {
       const isImage = isImageFile(file)
       let imageData: { base64: string; mimeType: string } | undefined
 
-      if (isImage) {
-        // Get base64 data for the image
+      if (isImage && selectedModelDetails?.multimodal) {
+        // Only generate base64 data if the selected model supports multimodal
         const base64Data = await fileToBase64(file)
         const mimeType = getImageMimeType(file)
         imageData = { base64: base64Data, mimeType }
