@@ -116,9 +116,6 @@ export function ChatInterface({
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
 
-  // Initialize document uploader hook
-  const { handleDocumentUpload } = useDocumentUploader(isPremium)
-
   // Use custom system prompt hook
   const { effectiveSystemPrompt } = useCustomSystemPrompt(systemPrompt)
 
@@ -204,6 +201,17 @@ export function ChatInterface({
     subscriptionLoading: subscriptionLoading,
   })
 
+  // Get the selected model details
+  const selectedModelDetails = models.find(
+    (model) => model.modelName === selectedModel,
+  ) as BaseModel | undefined
+
+  // Initialize document uploader hook
+  const { handleDocumentUpload } = useDocumentUploader(
+    isPremium,
+    selectedModelDetails,
+  )
+
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
     setIsVerifierSidebarOpen(true)
@@ -241,11 +249,6 @@ export function ChatInterface({
     const newState = !isVerifierSidebarOpen
     handleSetVerifierSidebarOpen(newState)
   }
-
-  // Get the selected model details
-  const selectedModelDetails = models.find(
-    (model) => model.modelName === selectedModel,
-  ) as BaseModel | undefined
 
   // Document upload handler wrapper
   const handleFileUpload = useCallback(

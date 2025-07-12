@@ -16,6 +16,7 @@ export type BaseModel = {
   type: 'chat' | 'embedding' | 'audio' | 'tts' | 'document'
   chat?: boolean
   paid?: boolean
+  multimodal?: boolean
   endpoint?: string
 }
 
