@@ -7,6 +7,7 @@ import { scrollToBottom } from '../chat-messages'
 import { ChatError, generateTitle } from '../chat-utils'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
+import { useMaxMessages } from './use-max-messages'
 
 interface UseChatMessagingProps {
   systemPrompt: string
@@ -53,6 +54,7 @@ export function useChatMessaging({
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken } = useAuth()
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
+  const maxMessages = useMaxMessages()
 
   const [input, setInput] = useState('')
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
@@ -248,6 +250,11 @@ export function useChatMessaging({
         // Always use the proxy
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
+        const finalSystemPrompt = systemPrompt.replace(
+          '{MODEL_NAME}',
+          model.name,
+        )
+
         const response = await fetch(proxyUrl, {
           method: 'POST',
           headers: {
@@ -260,10 +267,10 @@ export function useChatMessaging({
               // System prompt is always included even when messages are cut off
               {
                 role: 'system',
-                content: systemPrompt.replace('<MODEL_NAME>', model.name),
+                content: finalSystemPrompt,
               },
               // Include message history with a limit
-              ...updatedMessages.slice(-10).map((msg) => {
+              ...updatedMessages.slice(-maxMessages).map((msg) => {
                 // Check if this message has image data
                 if (msg.imageData && msg.imageData.length > 0) {
                   // Create multimodal content array
@@ -571,6 +578,7 @@ export function useChatMessaging({
       getApiKeyFromHook,
       messagesEndRef,
       updateChatWithHistoryCheck,
+      maxMessages,
     ],
   )
 

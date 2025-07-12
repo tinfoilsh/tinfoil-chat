@@ -1,5 +1,6 @@
 import { type BaseModel } from '@/app/config/models'
 import {
+  Cog6ToothIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
   LockOpenIcon,
@@ -22,6 +23,7 @@ type ChatLabelsProps = {
   isDarkMode: boolean
   isPremium: boolean
   models: BaseModel[]
+  onSettingsClick?: () => void
 }
 
 export function ChatLabels({
@@ -35,6 +37,7 @@ export function ChatLabels({
   isDarkMode,
   isPremium,
   models,
+  onSettingsClick,
 }: ChatLabelsProps) {
   // Model selection handler - enforces handleModelSelect is defined
   const onModelSelect = useCallback(
@@ -100,6 +103,27 @@ export function ChatLabels({
             />
           )}
         </div>
+
+        {/* Settings button */}
+        {onSettingsClick && (
+          <button
+            type="button"
+            onClick={onSettingsClick}
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
+              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+            } transition-colors hover:bg-opacity-80`}
+            title="Settings"
+          >
+            <Cog6ToothIcon className="h-5 w-5 text-gray-500" />
+            <span
+              className={`hidden text-xs md:inline ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-600'
+              }`}
+            >
+              Settings
+            </span>
+          </button>
+        )}
 
         {/* Verification label */}
         <button
