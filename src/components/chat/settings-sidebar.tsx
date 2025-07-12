@@ -10,6 +10,7 @@ type SettingsSidebarProps = {
   isDarkMode: boolean
   toggleTheme: () => void
   isClient: boolean
+  defaultSystemPrompt?: string
 }
 
 export function SettingsSidebar({
@@ -18,23 +19,134 @@ export function SettingsSidebar({
   isDarkMode,
   toggleTheme,
   isClient,
+  defaultSystemPrompt = '',
 }: SettingsSidebarProps) {
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
   )
 
-  // Load max messages setting from localStorage
+  // Structured personalization fields
+  const [nickname, setNickname] = useState<string>('')
+  const [profession, setProfession] = useState<string>('')
+  const [selectedTraits, setSelectedTraits] = useState<string[]>([])
+  const [additionalContext, setAdditionalContext] = useState<string>('')
+  const [isUsingPersonalization, setIsUsingPersonalization] =
+    useState<boolean>(false)
+
+  // Language setting (separate from personalization)
+  const [language, setLanguage] = useState<string>('')
+
+  // Available personality traits
+  const availableTraits = [
+    'witty',
+    'encouraging',
+    'formal',
+    'casual',
+    'analytical',
+    'creative',
+    'direct',
+    'patient',
+    'enthusiastic',
+    'thoughtful',
+    'forward thinking',
+    'traditional',
+    'skeptical',
+    'optimistic',
+  ]
+
+  // Cycling profession placeholders
+  const professionPlaceholders = [
+    'Software engineer',
+    'Designer',
+    'Product manager',
+    'Teacher',
+    'Student',
+    'Writer',
+    'Entrepreneur',
+    'Researcher',
+    'Marketing specialist',
+    'Data scientist',
+  ]
+
+  // Use a cycling placeholder based on current time
+  const getCurrentPlaceholder = () => {
+    const index = Math.floor(Date.now() / 2000) % professionPlaceholders.length
+    return professionPlaceholders[index]
+  }
+
+  // Available languages for dropdown
+  const availableLanguages = [
+    'English',
+    'Spanish',
+    'French',
+    'German',
+    'Italian',
+    'Portuguese',
+    'Russian',
+    'Japanese',
+    'Korean',
+    'Chinese (Simplified)',
+    'Chinese (Traditional)',
+    'Arabic',
+    'Hindi',
+    'Dutch',
+    'Swedish',
+    'Norwegian',
+    'Danish',
+    'Finnish',
+    'Polish',
+    'Turkish',
+  ]
+
+  // Load settings from localStorage
   useEffect(() => {
     if (isClient) {
-      const saved = localStorage.getItem('maxPromptMessages')
-      if (saved) {
-        const parsedValue = parseInt(saved, 10)
+      // Load max messages setting
+      const savedMaxMessages = localStorage.getItem('maxPromptMessages')
+      if (savedMaxMessages) {
+        const parsedValue = parseInt(savedMaxMessages, 10)
         if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
           setMaxMessages(parsedValue)
         }
       }
+
+      // Load personalization settings
+      const savedNickname = localStorage.getItem('userNickname')
+      const savedProfession = localStorage.getItem('userProfession')
+      const savedTraits = localStorage.getItem('userTraits')
+      const savedContext = localStorage.getItem('userAdditionalContext')
+      const savedUsingPersonalization = localStorage.getItem(
+        'isUsingPersonalization',
+      )
+
+      if (savedNickname) setNickname(savedNickname)
+      if (savedProfession) setProfession(savedProfession)
+      if (savedTraits) {
+        try {
+          setSelectedTraits(JSON.parse(savedTraits))
+        } catch {
+          setSelectedTraits([])
+        }
+      }
+      if (savedContext) setAdditionalContext(savedContext)
+      if (savedUsingPersonalization === 'true') setIsUsingPersonalization(true)
+
+      // Load language setting (separate from personalization)
+      const savedLanguage = localStorage.getItem('userLanguage')
+      if (savedLanguage) {
+        setLanguage(savedLanguage)
+      } else {
+        // Get user's locale and set as default
+        const userLocale = navigator.language || 'en-US'
+        const languageName =
+          new Intl.DisplayNames([userLocale], { type: 'language' }).of(
+            userLocale.split('-')[0],
+          ) || 'English'
+        setLanguage(languageName)
+        localStorage.setItem('userLanguage', languageName)
+      }
     }
-  }, [isClient])
+  }, [isClient, defaultSystemPrompt])
 
   // Save max messages setting to localStorage
   const handleMaxMessagesChange = (value: number) => {
@@ -49,6 +161,127 @@ export function SettingsSidebar({
           }),
         )
       }
+    }
+  }
+
+  // Save personalization settings and notify components
+  const savePersonalizationSettings = () => {
+    if (isClient) {
+      localStorage.setItem('userNickname', nickname)
+      localStorage.setItem('userProfession', profession)
+      localStorage.setItem('userTraits', JSON.stringify(selectedTraits))
+      localStorage.setItem('userAdditionalContext', additionalContext)
+      localStorage.setItem(
+        'isUsingPersonalization',
+        isUsingPersonalization.toString(),
+      )
+
+      // Trigger event to notify other components
+      window.dispatchEvent(
+        new CustomEvent('personalizationChanged', {
+          detail: {
+            nickname,
+            profession,
+            traits: selectedTraits,
+            additionalContext,
+            language,
+            isEnabled: isUsingPersonalization,
+            defaultSystemPrompt,
+          },
+        }),
+      )
+    }
+  }
+
+  // Save language setting separately
+  const saveLanguageSetting = () => {
+    if (isClient) {
+      localStorage.setItem('userLanguage', language)
+
+      // Trigger event to notify other components about language change
+      window.dispatchEvent(
+        new CustomEvent('languageChanged', {
+          detail: {
+            language,
+            defaultSystemPrompt,
+          },
+        }),
+      )
+    }
+  }
+
+  // Handle individual field changes
+  const handleNicknameChange = (value: string) => {
+    setNickname(value)
+    if (isClient) {
+      localStorage.setItem('userNickname', value)
+      setTimeout(savePersonalizationSettings, 100)
+    }
+  }
+
+  const handleProfessionChange = (value: string) => {
+    setProfession(value)
+    if (isClient) {
+      localStorage.setItem('userProfession', value)
+      setTimeout(savePersonalizationSettings, 100)
+    }
+  }
+
+  const handleTraitToggle = (trait: string) => {
+    const newTraits = selectedTraits.includes(trait)
+      ? selectedTraits.filter((t) => t !== trait)
+      : [...selectedTraits, trait]
+    setSelectedTraits(newTraits)
+    if (isClient) {
+      localStorage.setItem('userTraits', JSON.stringify(newTraits))
+      setTimeout(savePersonalizationSettings, 100)
+    }
+  }
+
+  const handleContextChange = (value: string) => {
+    setAdditionalContext(value)
+    if (isClient) {
+      localStorage.setItem('userAdditionalContext', value)
+      setTimeout(savePersonalizationSettings, 100)
+    }
+  }
+
+  const handleLanguageChange = (value: string) => {
+    setLanguage(value)
+    if (isClient) {
+      localStorage.setItem('userLanguage', value)
+      setTimeout(saveLanguageSetting, 100)
+    }
+  }
+
+  const handleTogglePersonalization = (enabled: boolean) => {
+    setIsUsingPersonalization(enabled)
+    if (isClient) {
+      localStorage.setItem('isUsingPersonalization', enabled.toString())
+      savePersonalizationSettings()
+    }
+  }
+
+  const handleResetPersonalization = () => {
+    setNickname('')
+    setProfession('')
+    setSelectedTraits([])
+    setAdditionalContext('')
+    // Reset language to user's locale
+    const userLocale = navigator.language || 'en-US'
+    const languageName =
+      new Intl.DisplayNames([userLocale], { type: 'language' }).of(
+        userLocale.split('-')[0],
+      ) || 'English'
+    setLanguage(languageName)
+
+    if (isClient) {
+      localStorage.removeItem('userNickname')
+      localStorage.removeItem('userProfession')
+      localStorage.removeItem('userTraits')
+      localStorage.removeItem('userAdditionalContext')
+      localStorage.setItem('userLanguage', languageName)
+      savePersonalizationSettings()
     }
   }
 
@@ -205,6 +438,220 @@ export function SettingsSidebar({
                         } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Language Setting */}
+                <div
+                  className={`rounded-lg p-3 ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div>
+                      <div
+                        className={`text-sm font-medium ${
+                          isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                        }`}
+                      >
+                        Response Language
+                      </div>
+                      <div
+                        className={`text-xs ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}
+                      >
+                        Language for AI responses
+                      </div>
+                    </div>
+                    <select
+                      value={language}
+                      onChange={(e) => handleLanguageChange(e.target.value)}
+                      className={`w-full rounded-md border px-3 py-2 text-sm ${
+                        isDarkMode
+                          ? 'border-gray-600 bg-gray-700 text-gray-200'
+                          : 'border-gray-300 bg-white text-gray-900'
+                      } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                    >
+                      {availableLanguages.map((lang) => (
+                        <option key={lang} value={lang}>
+                          {lang}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Personalization Settings */}
+                <div
+                  className={`rounded-lg p-3 ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div
+                          className={`text-sm font-medium ${
+                            isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                          }`}
+                        >
+                          Personalization
+                        </div>
+                        <div
+                          className={`text-xs ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}
+                        >
+                          Customize the AI's behavior and responses
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={isUsingPersonalization}
+                            onChange={(e) =>
+                              handleTogglePersonalization(e.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <div
+                            className={`peer h-5 w-9 rounded-full after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-focus:outline-none ${
+                              isDarkMode
+                                ? 'bg-gray-600 after:border-gray-300 peer-checked:bg-emerald-600'
+                                : 'bg-gray-300 after:border-gray-300 peer-checked:bg-emerald-600'
+                            }`}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {isUsingPersonalization && (
+                      <div className="space-y-4">
+                        {/* Nickname Field */}
+                        <div>
+                          <label
+                            className={`mb-1 block text-xs font-medium ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}
+                          >
+                            How should Tin call you?
+                          </label>
+                          <input
+                            type="text"
+                            value={nickname}
+                            onChange={(e) =>
+                              handleNicknameChange(e.target.value)
+                            }
+                            placeholder="Nickname"
+                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                              isDarkMode
+                                ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
+                                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                            } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                          />
+                        </div>
+
+                        {/* Profession Field */}
+                        <div>
+                          <label
+                            className={`mb-1 block text-xs font-medium ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}
+                          >
+                            What do you do?
+                          </label>
+                          <input
+                            type="text"
+                            value={profession}
+                            onChange={(e) =>
+                              handleProfessionChange(e.target.value)
+                            }
+                            placeholder={getCurrentPlaceholder()}
+                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                              isDarkMode
+                                ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
+                                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                            } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                          />
+                        </div>
+
+                        {/* Traits Selection */}
+                        <div>
+                          <label
+                            className={`mb-2 block text-xs font-medium ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}
+                          >
+                            What conversational traits should Tin have?
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {availableTraits.map((trait) => (
+                              <button
+                                key={trait}
+                                onClick={() => handleTraitToggle(trait)}
+                                className={`rounded-full px-2 py-1 text-xs transition-colors ${
+                                  selectedTraits.includes(trait)
+                                    ? 'bg-emerald-600 text-white'
+                                    : isDarkMode
+                                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                {selectedTraits.includes(trait) ? '✓ ' : '+ '}
+                                {trait}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Additional Context */}
+                        <div>
+                          <label
+                            className={`mb-1 block text-xs font-medium ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                            }`}
+                          >
+                            Anything else Tin should know about you?
+                          </label>
+                          <textarea
+                            value={additionalContext}
+                            onChange={(e) =>
+                              handleContextChange(e.target.value)
+                            }
+                            placeholder="Interests and other preferences you'd like Tin to know about you."
+                            rows={3}
+                            className={`w-full resize-none rounded-md border px-3 py-2 text-sm ${
+                              isDarkMode
+                                ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
+                                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                            } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                          />
+                        </div>
+
+                        {/* Reset Button */}
+                        <div className="flex items-center justify-between">
+                          <button
+                            onClick={handleResetPersonalization}
+                            className={`rounded px-2 py-1 text-xs ${
+                              isDarkMode
+                                ? 'text-gray-400 hover:text-gray-300'
+                                : 'text-gray-600 hover:text-gray-500'
+                            }`}
+                          >
+                            Reset all fields
+                          </button>
+                          <div
+                            className={`text-xs ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}
+                          >
+                            {selectedTraits.length} traits selected
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

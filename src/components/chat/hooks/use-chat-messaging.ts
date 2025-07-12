@@ -250,6 +250,11 @@ export function useChatMessaging({
         // Always use the proxy
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
+        const finalSystemPrompt = systemPrompt.replace(
+          '{MODEL_NAME}',
+          model.name,
+        )
+
         const response = await fetch(proxyUrl, {
           method: 'POST',
           headers: {
@@ -262,7 +267,7 @@ export function useChatMessaging({
               // System prompt is always included even when messages are cut off
               {
                 role: 'system',
-                content: systemPrompt.replace('<MODEL_NAME>', model.name),
+                content: finalSystemPrompt,
               },
               // Include message history with a limit
               ...updatedMessages.slice(-maxMessages).map((msg) => {

@@ -26,6 +26,7 @@ import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
+import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { SettingsSidebar } from './settings-sidebar'
 import type { VerificationState } from './types'
 
@@ -118,6 +119,9 @@ export function ChatInterface({
   // Initialize document uploader hook
   const { handleDocumentUpload } = useDocumentUploader(isPremium)
 
+  // Use custom system prompt hook
+  const { effectiveSystemPrompt } = useCustomSystemPrompt(systemPrompt)
+
   // Load models and system prompt
   useEffect(() => {
     const loadConfig = async () => {
@@ -193,7 +197,7 @@ export function ChatInterface({
     updateChatTitle,
     getApiKey,
   } = useChatState({
-    systemPrompt: systemPrompt,
+    systemPrompt: effectiveSystemPrompt,
     storeHistory: isPremium,
     isPremium: isPremium,
     models: models,
@@ -551,6 +555,7 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
         isClient={isClient}
+        defaultSystemPrompt={systemPrompt}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
