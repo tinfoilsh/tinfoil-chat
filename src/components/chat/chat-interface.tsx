@@ -188,6 +188,7 @@ export function ChatInterface({
     storeHistory: isPremium,
     isPremium: isPremium,
     models: models,
+    subscriptionLoading: subscriptionLoading,
   })
 
   // Handler for opening verifier sidebar

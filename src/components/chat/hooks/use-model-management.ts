@@ -1,5 +1,5 @@
 import { isModelNameAvailable, type BaseModel } from '@/app/config/models'
-import { logError, logWarning } from '@/utils/error-handling'
+import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
 import { CONSTANTS } from '../constants'
 import type { AIModel, LabelType } from '../types'
@@ -9,6 +9,7 @@ interface UseModelManagementProps {
   isPremium: boolean
   isClient: boolean
   storeHistory: boolean
+  subscriptionLoading?: boolean
 }
 
 interface UseModelManagementReturn {
@@ -31,13 +32,21 @@ export function useModelManagement({
   isPremium,
   isClient,
   storeHistory,
+  subscriptionLoading = false,
 }: UseModelManagementProps): UseModelManagementReturn {
-  // Model state
+  // Model state - initialize with saved model if available
   const [selectedModel, setSelectedModel] = useState<AIModel>(() => {
-    // For initial load, use the constant default
-    // The effect below will update it with proper validation
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('selectedModel')
+      if (saved) {
+        return saved as AIModel
+      }
+    }
     return CONSTANTS.DEFAULT_MODEL
   })
+
+  // Track if we've validated against the loaded models
+  const [hasValidated, setHasValidated] = useState(false)
 
   // Add state for expanded label
   const [expandedLabel, setExpandedLabel] = useState<LabelType>(null)
@@ -46,58 +55,55 @@ export function useModelManagement({
   const [verificationComplete, setVerificationComplete] = useState(false)
   const [verificationSuccess, setVerificationSuccess] = useState(false)
 
-  // Effect to validate and update selected model when models are loaded
+  // Effect to validate selected model when models are available and subscription status is loaded
   useEffect(() => {
-    if (models.length > 0 && isClient) {
-      const savedModel = localStorage.getItem('selectedModel')
+    if (
+      models.length > 0 &&
+      isClient &&
+      !hasValidated &&
+      !subscriptionLoading
+    ) {
+      setHasValidated(true)
 
-      // Try saved model first, then current selected model, then default
-      const preferredModel = savedModel || selectedModel
+      // Check if current selected model exists in the available models list
+      const modelExists = models.find((m) => m.modelName === selectedModel)
 
-      if (isModelNameAvailable(preferredModel, models, isPremium)) {
-        // Preferred model is available, use it
-        if (preferredModel !== selectedModel) {
-          setSelectedModel(preferredModel)
-          localStorage.setItem('selectedModel', preferredModel)
-        }
-      } else {
-        // Preferred model not available, find the first available chat model
-        const availableChatModels = models.filter(
-          (model) =>
-            model.type === 'chat' &&
-            model.chat === true &&
-            (model.paid === undefined ||
-              model.paid === false ||
-              (model.paid === true && isPremium)),
-        )
-
-        if (availableChatModels.length > 0) {
-          const fallbackModel = availableChatModels[0].modelName as AIModel
-          setSelectedModel(fallbackModel)
-          localStorage.setItem('selectedModel', fallbackModel)
+      if (!modelExists) {
+        // Model doesn't exist at all, find a fallback
+        if (models.find((m) => m.modelName === CONSTANTS.DEFAULT_MODEL)) {
+          setSelectedModel(CONSTANTS.DEFAULT_MODEL)
+          localStorage.setItem('selectedModel', CONSTANTS.DEFAULT_MODEL)
         } else {
-          logError(
-            'No chat models available for current subscription level',
-            undefined,
-            {
-              component: 'useModelManagement',
-              action: 'validateModel',
-              metadata: {
-                defaultModel: CONSTANTS.DEFAULT_MODEL,
-                isPremium,
-                availableModels: models.map((m) => ({
-                  name: m.modelName,
-                  paid: m.paid,
-                  type: m.type,
-                })),
-              },
-            },
+          // Find first available chat model
+          const availableChatModels = models.filter(
+            (model) => model.type === 'chat' && model.chat === true,
           )
-          // Don't crash, but log the error - the interface should handle this gracefully
+
+          if (availableChatModels.length > 0) {
+            const fallbackModel = availableChatModels[0].modelName as AIModel
+            setSelectedModel(fallbackModel)
+            localStorage.setItem('selectedModel', fallbackModel)
+          }
         }
+
+        logWarning(
+          `Previously selected model ${selectedModel} does not exist, falling back`,
+          {
+            component: 'useModelManagement',
+            action: 'validateModel',
+            metadata: { previousModel: selectedModel, isPremium },
+          },
+        )
       }
     }
-  }, [models, isPremium, isClient, selectedModel])
+  }, [
+    models,
+    isPremium,
+    isClient,
+    hasValidated,
+    selectedModel,
+    subscriptionLoading,
+  ])
 
   // Handle model selection
   const handleModelSelect = useCallback(
