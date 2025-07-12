@@ -234,7 +234,6 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-
   // Convert WebM to WAV using audiobuffer-to-wav library
   const convertWebMToWAV = useCallback(
     async (webmBlob: Blob): Promise<Blob> => {
@@ -290,7 +289,7 @@ export function ChatInput({
     async (blob: Blob) => {
       try {
         setIsTranscribing(true)
-        
+
         const formData = new FormData()
         formData.append('file', blob, 'audio.wav')
         formData.append('model', 'whisper-large-v3-turbo')
@@ -304,7 +303,7 @@ export function ChatInput({
 
         // Use the proxy with the audio transcription endpoint
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
-        
+
         const response = await fetch(proxyUrl, {
           method: 'POST',
           headers: {

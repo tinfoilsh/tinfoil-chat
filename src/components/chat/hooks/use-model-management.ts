@@ -66,7 +66,9 @@ export function useModelManagement({
           (model) =>
             model.type === 'chat' &&
             model.chat === true &&
-            (model.paid === undefined || model.paid === false || (model.paid === true && isPremium))
+            (model.paid === undefined ||
+              model.paid === false ||
+              (model.paid === true && isPremium)),
         )
 
         if (availableChatModels.length > 0) {
@@ -80,10 +82,14 @@ export function useModelManagement({
             {
               component: 'useModelManagement',
               action: 'validateModel',
-              metadata: { 
-                defaultModel: CONSTANTS.DEFAULT_MODEL, 
+              metadata: {
+                defaultModel: CONSTANTS.DEFAULT_MODEL,
                 isPremium,
-                availableModels: models.map(m => ({ name: m.modelName, paid: m.paid, type: m.type }))
+                availableModels: models.map((m) => ({
+                  name: m.modelName,
+                  paid: m.paid,
+                  type: m.type,
+                })),
               },
             },
           )

@@ -19,7 +19,6 @@ export type BaseModel = {
   endpoint?: string
 }
 
-
 // Helper function to determine if a model is available for a given subscription status
 export const isModelAvailable = (
   model: BaseModel,
@@ -29,7 +28,7 @@ export const isModelAvailable = (
   if (model.paid === undefined || model.paid === false) {
     return true
   }
-  
+
   // If paid is true, it's only available for premium users
   return isPremium
 }

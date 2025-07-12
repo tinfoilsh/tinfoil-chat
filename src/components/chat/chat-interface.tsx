@@ -224,7 +224,6 @@ export function ChatInterface({
     (model) => model.modelName === selectedModel,
   ) as BaseModel | undefined
 
-
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
     async (file: File) => {
