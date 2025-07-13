@@ -114,7 +114,11 @@ export function ChatLabels({
             } transition-colors hover:bg-opacity-80`}
             title="Settings"
           >
-            <Cog6ToothIcon className="h-5 w-5 text-gray-500" />
+            <Cog6ToothIcon
+              className={`h-5 w-5 ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-600'
+              }`}
+            />
             <span
               className={`hidden text-xs md:inline ${
                 isDarkMode ? 'text-gray-200' : 'text-gray-600'

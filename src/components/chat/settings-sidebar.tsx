@@ -165,27 +165,36 @@ export function SettingsSidebar({
   }
 
   // Save personalization settings and notify components
-  const savePersonalizationSettings = () => {
+  const savePersonalizationSettings = (values?: {
+    nickname?: string
+    profession?: string
+    traits?: string[]
+    additionalContext?: string
+    isEnabled?: boolean
+  }) => {
     if (isClient) {
-      localStorage.setItem('userNickname', nickname)
-      localStorage.setItem('userProfession', profession)
-      localStorage.setItem('userTraits', JSON.stringify(selectedTraits))
-      localStorage.setItem('userAdditionalContext', additionalContext)
-      localStorage.setItem(
-        'isUsingPersonalization',
-        isUsingPersonalization.toString(),
-      )
+      const currentNickname = values?.nickname ?? nickname
+      const currentProfession = values?.profession ?? profession
+      const currentTraits = values?.traits ?? selectedTraits
+      const currentContext = values?.additionalContext ?? additionalContext
+      const currentEnabled = values?.isEnabled ?? isUsingPersonalization
+
+      localStorage.setItem('userNickname', currentNickname)
+      localStorage.setItem('userProfession', currentProfession)
+      localStorage.setItem('userTraits', JSON.stringify(currentTraits))
+      localStorage.setItem('userAdditionalContext', currentContext)
+      localStorage.setItem('isUsingPersonalization', currentEnabled.toString())
 
       // Trigger event to notify other components
       window.dispatchEvent(
         new CustomEvent('personalizationChanged', {
           detail: {
-            nickname,
-            profession,
-            traits: selectedTraits,
-            additionalContext,
+            nickname: currentNickname,
+            profession: currentProfession,
+            traits: currentTraits,
+            additionalContext: currentContext,
             language,
-            isEnabled: isUsingPersonalization,
+            isEnabled: currentEnabled,
             defaultSystemPrompt,
           },
         }),
@@ -194,15 +203,15 @@ export function SettingsSidebar({
   }
 
   // Save language setting separately
-  const saveLanguageSetting = () => {
+  const saveLanguageSetting = (newLanguage: string) => {
     if (isClient) {
-      localStorage.setItem('userLanguage', language)
+      localStorage.setItem('userLanguage', newLanguage)
 
       // Trigger event to notify other components about language change
       window.dispatchEvent(
         new CustomEvent('languageChanged', {
           detail: {
-            language,
+            language: newLanguage,
             defaultSystemPrompt,
           },
         }),
@@ -214,16 +223,14 @@ export function SettingsSidebar({
   const handleNicknameChange = (value: string) => {
     setNickname(value)
     if (isClient) {
-      localStorage.setItem('userNickname', value)
-      setTimeout(savePersonalizationSettings, 100)
+      savePersonalizationSettings({ nickname: value })
     }
   }
 
   const handleProfessionChange = (value: string) => {
     setProfession(value)
     if (isClient) {
-      localStorage.setItem('userProfession', value)
-      setTimeout(savePersonalizationSettings, 100)
+      savePersonalizationSettings({ profession: value })
     }
   }
 
@@ -233,32 +240,28 @@ export function SettingsSidebar({
       : [...selectedTraits, trait]
     setSelectedTraits(newTraits)
     if (isClient) {
-      localStorage.setItem('userTraits', JSON.stringify(newTraits))
-      setTimeout(savePersonalizationSettings, 100)
+      savePersonalizationSettings({ traits: newTraits })
     }
   }
 
   const handleContextChange = (value: string) => {
     setAdditionalContext(value)
     if (isClient) {
-      localStorage.setItem('userAdditionalContext', value)
-      setTimeout(savePersonalizationSettings, 100)
+      savePersonalizationSettings({ additionalContext: value })
     }
   }
 
   const handleLanguageChange = (value: string) => {
     setLanguage(value)
     if (isClient) {
-      localStorage.setItem('userLanguage', value)
-      setTimeout(saveLanguageSetting, 100)
+      saveLanguageSetting(value)
     }
   }
 
   const handleTogglePersonalization = (enabled: boolean) => {
     setIsUsingPersonalization(enabled)
     if (isClient) {
-      localStorage.setItem('isUsingPersonalization', enabled.toString())
-      savePersonalizationSettings()
+      savePersonalizationSettings({ isEnabled: enabled })
     }
   }
 
@@ -281,7 +284,14 @@ export function SettingsSidebar({
       localStorage.removeItem('userTraits')
       localStorage.removeItem('userAdditionalContext')
       localStorage.setItem('userLanguage', languageName)
-      savePersonalizationSettings()
+      saveLanguageSetting(languageName)
+      savePersonalizationSettings({
+        nickname: '',
+        profession: '',
+        traits: [],
+        additionalContext: '',
+        isEnabled: isUsingPersonalization,
+      })
     }
   }
 
@@ -642,13 +652,6 @@ export function SettingsSidebar({
                           >
                             Reset all fields
                           </button>
-                          <div
-                            className={`text-xs ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}
-                          >
-                            {selectedTraits.length} traits selected
-                          </div>
                         </div>
                       </div>
                     )}
