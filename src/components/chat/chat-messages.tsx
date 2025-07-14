@@ -1,6 +1,7 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
+import { useUser } from '@clerk/nextjs'
 import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
@@ -444,6 +445,47 @@ const WelcomeScreen = memo(function WelcomeScreen({
   models?: BaseModel[]
   subscriptionLoading?: boolean
 }) {
+  const { user } = useUser()
+  const [nickname, setNickname] = useState<string>('')
+
+  // Load nickname from localStorage and listen for changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedNickname = localStorage.getItem('userNickname')
+      if (savedNickname) {
+        setNickname(savedNickname)
+      }
+
+      // Listen for personalization changes
+      const handlePersonalizationChange = (event: CustomEvent) => {
+        setNickname(event.detail.nickname || '')
+      }
+
+      window.addEventListener(
+        'personalizationChanged',
+        handlePersonalizationChange as EventListener,
+      )
+
+      return () => {
+        window.removeEventListener(
+          'personalizationChanged',
+          handlePersonalizationChange as EventListener,
+        )
+      }
+    }
+  }, [])
+
+  // Determine the greeting text
+  const getGreeting = () => {
+    if (nickname) {
+      return `Hello, ${nickname}`
+    }
+    if (user?.firstName) {
+      return `Hello, ${user.firstName}`
+    }
+    return 'Tinfoil Private Chat'
+  }
+
   // Get premium models for display - include both premium-only and conditional models
   const premiumModels =
     models?.filter(
@@ -540,7 +582,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
           delay: 0.2,
         }}
       >
-        Tinfoil Private Chat
+        {getGreeting()}
       </motion.h1>
 
       <motion.ul
