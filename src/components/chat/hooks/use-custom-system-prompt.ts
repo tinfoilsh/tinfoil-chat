@@ -173,10 +173,28 @@ export const useCustomSystemPrompt = (
     // Get the effective language (default to English if not set)
     const effectiveLanguage = personalization.language.trim() || 'English'
 
-    // Replace both placeholders in the default system prompt
+    // Generate current date/time string and timezone
+    const now = new Date()
+    const currentDateTime = now.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    })
+
+    // Extract timezone separately
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    // Replace all placeholders in the default system prompt
     const result = defaultSystemPrompt
       .replace('{USER_PREFERENCES}', userPreferencesXML)
       .replace('{LANGUAGE}', effectiveLanguage)
+      .replace('{CURRENT_DATETIME}', currentDateTime)
+      .replace('{TIMEZONE}', timezone)
 
     return result
   }
