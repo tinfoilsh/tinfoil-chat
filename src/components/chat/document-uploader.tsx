@@ -1,5 +1,6 @@
 import { getAIModels, type BaseModel } from '@/app/config/models'
 import { logError } from '@/utils/error-handling'
+import { scaleImage } from '@/utils/preprocessing'
 import { useState } from 'react'
 import { CONSTANTS } from './constants'
 import type { DocumentProcessingResult } from './types'
@@ -244,7 +245,18 @@ export const useDocumentUploader = (
 
       if (isImage && selectedModelDetails?.multimodal) {
         // Only generate base64 data if the selected model supports multimodal
-        const base64Data = await fileToBase64(file)
+        // Scale the image down to 500px max width/height before encoding
+        const scaledBlob = await scaleImage(file, {
+          maxWidth: 500,
+          maxHeight: 500,
+          quality: 0.9,
+        })
+
+        // Convert the scaled blob to a File object to use with fileToBase64
+        const scaledFile = new File([scaledBlob], file.name, {
+          type: scaledBlob.type,
+        })
+        const base64Data = await fileToBase64(scaledFile)
         const mimeType = getImageMimeType(file)
         imageData = { base64: base64Data, mimeType }
       }
