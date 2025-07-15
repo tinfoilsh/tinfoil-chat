@@ -9,6 +9,18 @@ import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import { useMaxMessages } from './use-max-messages'
 
+// Utility function to remove imageData from messages before localStorage storage
+// This prevents hitting browser storage quotas since base64 images can be very large
+const stripImageDataForStorage = (chats: Chat[]): Chat[] => {
+  return chats.map((chat) => ({
+    ...chat,
+    messages: chat.messages.map((msg) => {
+      const { imageData, ...msgWithoutImageData } = msg
+      return msgWithoutImageData
+    }),
+  }))
+}
+
 interface UseChatMessagingProps {
   systemPrompt: string
   storeHistory: boolean
@@ -98,9 +110,12 @@ export function useChatMessaging({
           c.id === chatId ? updatedChat : c,
         )
 
-        // Persist if needed
+        // Persist if needed (strip imageData to prevent quota issues)
         if (storeHistory && (!isThinking || immediate)) {
-          localStorage.setItem('chats', JSON.stringify(newChats))
+          localStorage.setItem(
+            'chats',
+            JSON.stringify(stripImageDataForStorage(newChats)),
+          )
         }
 
         // Also replace currentChat state
@@ -136,7 +151,10 @@ export function useChatMessaging({
           return chat
         })
         if (storeHistory) {
-          localStorage.setItem('chats', JSON.stringify(newChats))
+          localStorage.setItem(
+            'chats',
+            JSON.stringify(stripImageDataForStorage(newChats)),
+          )
         }
         return newChats
       })
@@ -200,7 +218,10 @@ export function useChatMessaging({
 
         setChats(updatedChatsWithTitle)
         if (storeHistory) {
-          localStorage.setItem('chats', JSON.stringify(updatedChatsWithTitle))
+          localStorage.setItem(
+            'chats',
+            JSON.stringify(stripImageDataForStorage(updatedChatsWithTitle)),
+          )
         }
       }
 
@@ -217,7 +238,10 @@ export function useChatMessaging({
         )
 
         if (storeHistory) {
-          localStorage.setItem('chats', JSON.stringify(newChats))
+          localStorage.setItem(
+            'chats',
+            JSON.stringify(stripImageDataForStorage(newChats)),
+          )
         }
 
         return newChats
