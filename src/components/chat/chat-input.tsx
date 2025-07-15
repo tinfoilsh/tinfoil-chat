@@ -550,7 +550,7 @@ export function ChatInput({
             }}
             placeholder="Message Tin..."
             rows={1}
-            className={`w-full resize-none overflow-y-auto bg-transparent px-2 text-base leading-8 placeholder-gray-400 focus:outline-none ${
+            className={`w-full resize-none overflow-y-auto bg-transparent px-2 text-base leading-normal placeholder-gray-400 focus:outline-none ${
               isDarkMode ? 'text-gray-100' : 'text-gray-900'
             } ${isPremium ? 'pr-20' : 'pr-10'}`}
             style={{
