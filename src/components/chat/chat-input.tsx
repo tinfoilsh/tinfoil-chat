@@ -2,13 +2,13 @@
 
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
+import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
   MicrophoneIcon,
   PaperAirplaneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
-import toWav from 'audiobuffer-to-wav'
 import type { FormEvent, RefObject } from 'react'
 import { useCallback, useRef, useState } from 'react'
 import {
@@ -234,25 +234,6 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Convert WebM to WAV using audiobuffer-to-wav library
-  const convertWebMToWAV = useCallback(
-    async (webmBlob: Blob): Promise<Blob> => {
-      try {
-        const arrayBuffer = await webmBlob.arrayBuffer()
-        const audioContext = new AudioContext()
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-
-        // Convert AudioBuffer to WAV using the library
-        const wavArrayBuffer = toWav(audioBuffer)
-
-        return new Blob([wavArrayBuffer], { type: 'audio/wav' })
-      } catch (error) {
-        throw error
-      }
-    },
-    [],
-  )
-
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
@@ -361,7 +342,7 @@ export function ChatInput({
         },
       })
 
-      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+      if (!isWebMAudioSupported()) {
         throw new Error('WebM audio recording is not supported in this browser')
       }
 
@@ -550,7 +531,7 @@ export function ChatInput({
             }}
             placeholder="Message Tin..."
             rows={1}
-            className={`w-full resize-none overflow-y-auto bg-transparent px-2 text-base leading-normal placeholder-gray-400 focus:outline-none ${
+            className={`w-full resize-none overflow-y-auto bg-transparent px-2 pt-[0.2rem] text-base leading-relaxed placeholder-gray-400 focus:outline-none ${
               isDarkMode ? 'text-gray-100' : 'text-gray-900'
             } ${isPremium ? 'pr-20' : 'pr-10'}`}
             style={{
