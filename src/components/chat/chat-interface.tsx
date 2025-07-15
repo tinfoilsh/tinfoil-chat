@@ -306,7 +306,7 @@ export function ChatInterface({
                     name: file.name,
                     time: new Date(),
                     content,
-                    imageData, // Store the base64 image data
+                    imageData, // Store imageData in live session
                   }
                 : doc,
             )
@@ -368,7 +368,7 @@ export function ChatInterface({
         ? completedDocuments.map((doc) => ({ name: doc.name }))
         : undefined
 
-    // Collect image data from documents
+    // Collect image data from documents for multimodal support
     const imageData =
       completedDocuments.length > 0
         ? completedDocuments
@@ -379,7 +379,7 @@ export function ChatInterface({
             )
         : undefined
 
-    // Call handleQuery with the input, document content, and image data
+    // Call handleQuery with the input, document content, document names, and image data
     handleQuery(input, docContent, documentNames, imageData)
 
     // Only remove the completed documents from the state

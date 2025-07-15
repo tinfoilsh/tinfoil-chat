@@ -4,6 +4,18 @@ import { v4 as uuidv4 } from 'uuid'
 import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 
+// Utility function to remove imageData from messages before localStorage storage
+// This prevents hitting browser storage quotas since base64 images can be very large
+const stripImageDataForStorage = (chats: Chat[]): Chat[] => {
+  return chats.map((chat) => ({
+    ...chat,
+    messages: chat.messages.map((msg) => {
+      const { imageData, ...msgWithoutImageData } = msg
+      return msgWithoutImageData
+    }),
+  }))
+}
+
 interface UseChatStorageProps {
   storeHistory: boolean
   isClient: boolean
@@ -76,7 +88,10 @@ export function useChatStorage({
               const updatedChats = [newChat, ...parsedChats]
               setChats(updatedChats)
               setCurrentChat(newChat)
-              localStorage.setItem('chats', JSON.stringify(updatedChats))
+              localStorage.setItem(
+                'chats',
+                JSON.stringify(stripImageDataForStorage(updatedChats)),
+              )
             } else {
               // If the latest chat is empty, use it
               setCurrentChat(firstChat)
@@ -119,7 +134,10 @@ export function useChatStorage({
       const updatedChats = [newChat, ...prev]
       // Save to localStorage explicitly
       if (storeHistory) {
-        localStorage.setItem('chats', JSON.stringify(updatedChats))
+        localStorage.setItem(
+          'chats',
+          JSON.stringify(stripImageDataForStorage(updatedChats)),
+        )
       }
       return updatedChats
     })
@@ -150,7 +168,10 @@ export function useChatStorage({
           setCurrentChat(newChats[0])
         }
 
-        localStorage.setItem('chats', JSON.stringify(newChats))
+        localStorage.setItem(
+          'chats',
+          JSON.stringify(stripImageDataForStorage(newChats)),
+        )
         return newChats
       })
     },
@@ -193,7 +214,10 @@ export function useChatStorage({
         const updatedChats = prevChats.map((chat) =>
           chat.id === chatId ? { ...chat, title: newTitle } : chat,
         )
-        localStorage.setItem('chats', JSON.stringify(updatedChats))
+        localStorage.setItem(
+          'chats',
+          JSON.stringify(stripImageDataForStorage(updatedChats)),
+        )
         return updatedChats
       })
 
