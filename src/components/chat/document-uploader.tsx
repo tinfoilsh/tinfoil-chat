@@ -1,6 +1,6 @@
 import { getAIModels, type BaseModel } from '@/app/config/models'
 import { logError } from '@/utils/error-handling'
-import { scaleImage } from '@/utils/preprocessing'
+import { isImageFile, scaleAndEncodeImage } from '@/utils/preprocessing'
 import { useState } from 'react'
 import { CONSTANTS } from './constants'
 import type { DocumentProcessingResult } from './types'
@@ -153,55 +153,6 @@ export const useDocumentUploader = (
     return `# ${file.name}\n\n${fileContents}`
   }
 
-  // Check if file is an image type
-  const isImageFile = (file: File): boolean => {
-    const filename = file.name.toLowerCase()
-    return (
-      filename.endsWith('.jpg') ||
-      filename.endsWith('.jpeg') ||
-      filename.endsWith('.png') ||
-      filename.endsWith('.gif') ||
-      filename.endsWith('.webp') ||
-      filename.endsWith('.bmp') ||
-      filename.endsWith('.tiff')
-    )
-  }
-
-  // Convert image file to base64
-  const fileToBase64 = async (file: File): Promise<string> => {
-    const reader = new FileReader()
-
-    return new Promise<string>((resolve, reject) => {
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          const base64String = e.target.result as string
-          // Remove the data URL prefix to get just the base64 data
-          const base64Data = base64String.split(',')[1]
-          resolve(base64Data)
-        } else {
-          reject(new Error('Failed to convert file to base64'))
-        }
-      }
-      reader.onerror = () =>
-        reject(new Error('Error reading file for base64 conversion'))
-      reader.readAsDataURL(file)
-    })
-  }
-
-  // Get MIME type for image files
-  const getImageMimeType = (file: File): string => {
-    const filename = file.name.toLowerCase()
-    if (filename.endsWith('.jpg') || filename.endsWith('.jpeg'))
-      return 'image/jpeg'
-    if (filename.endsWith('.png')) return 'image/png'
-    if (filename.endsWith('.gif')) return 'image/gif'
-    if (filename.endsWith('.webp')) return 'image/webp'
-    if (filename.endsWith('.bmp')) return 'image/bmp'
-    if (filename.endsWith('.tiff')) return 'image/tiff'
-    // Default fallback
-    return 'image/jpeg'
-  }
-
   // Main upload function
   const handleDocumentUpload = async (
     file: File,
@@ -244,21 +195,19 @@ export const useDocumentUploader = (
       let imageData: { base64: string; mimeType: string } | undefined
 
       if (isImage && selectedModelDetails?.multimodal) {
-        // Only generate base64 data if the selected model supports multimodal
-        // Scale the image down to 500px max width/height before encoding
-        const scaledBlob = await scaleImage(file, {
-          maxWidth: 500,
-          maxHeight: 500,
-          quality: 0.9,
-        })
-
-        // Convert the scaled blob to a File object to use with fileToBase64
-        const scaledFile = new File([scaledBlob], file.name, {
-          type: scaledBlob.type,
-        })
-        const base64Data = await fileToBase64(scaledFile)
-        const mimeType = getImageMimeType(file)
-        imageData = { base64: base64Data, mimeType }
+        try {
+          imageData = await scaleAndEncodeImage(file, {
+            maxWidth: 500,
+            maxHeight: 500,
+            quality: 0.9,
+          })
+        } catch (error) {
+          // If scaling fails, skip image data
+          logError('Image scaling failed', error, {
+            component: 'DocumentUploader',
+            metadata: { fileName: file.name },
+          })
+        }
       }
 
       // For non-txt files, proceed with API processing
@@ -306,16 +255,9 @@ export const useDocumentUploader = (
           },
         )
 
-        // Special handling for 404 errors, which might mean we need to retry or use another approach
-        if (response.status === 404) {
-          throw new Error(
-            `API endpoint not found or not accessible. Please check the API URL.`,
-          )
-        } else {
-          throw new Error(
-            `Document upload failed with status: ${response.status}. ${errorText}`,
-          )
-        }
+        throw new Error(
+          `Document upload failed with status: ${response.status}. ${errorText}`,
+        )
       }
 
       // Process the direct response
@@ -325,6 +267,9 @@ export const useDocumentUploader = (
       if (processingResult.document && processingResult.document.md_content) {
         // Pass the content and image data if it's an image
         onSuccess(processingResult.document.md_content, documentId, imageData)
+      } else if (isImage && imageData) {
+        // For images with no text content, still pass the image data with empty content
+        onSuccess('', documentId, imageData)
       } else {
         throw new Error('No document content received')
       }

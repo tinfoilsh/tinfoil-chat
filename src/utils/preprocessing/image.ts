@@ -91,3 +91,44 @@ export async function scaleImage(
 export function isImageFile(file: File): boolean {
   return file.type.startsWith('image/')
 }
+
+/**
+ * Converts a blob to base64 string
+ * @param blob - The blob to convert
+ * @returns A promise that resolves to the base64 string (without data URL prefix)
+ */
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const reader = new FileReader()
+
+  return new Promise<string>((resolve, reject) => {
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        const base64String = e.target.result as string
+        // Remove the data URL prefix to get just the base64 data
+        const base64Data = base64String.split(',')[1]
+        resolve(base64Data)
+      } else {
+        reject(new Error('Failed to convert blob to base64'))
+      }
+    }
+    reader.onerror = () => reject(new Error('Error reading blob'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Scales an image and converts it to base64
+ * @param file - The image file to process
+ * @param options - Scaling options
+ * @returns A promise that resolves to an object with base64 data and mime type
+ */
+export async function scaleAndEncodeImage(
+  file: File,
+  options: ImageScaleOptions = {},
+): Promise<{ base64: string; mimeType: string }> {
+  const scaledBlob = await scaleImage(file, options)
+  const base64 = await blobToBase64(scaledBlob)
+  const mimeType = scaledBlob.type || file.type
+
+  return { base64, mimeType }
+}

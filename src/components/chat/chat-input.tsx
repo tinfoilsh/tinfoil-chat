@@ -35,6 +35,7 @@ type ProcessedDocument = {
   time: Date
   content?: string
   isUploading?: boolean
+  imageData?: { base64: string; mimeType: string }
 }
 
 type ChatInputProps = {
@@ -437,22 +438,37 @@ export function ChatInput({
               title={doc.name}
             >
               <div className="relative">
-                <MacFileIcon
-                  filename={doc.name}
-                  size={20}
-                  isDarkMode={isDarkMode}
-                  isUploading={doc.isUploading}
-                />
+                {doc.imageData ? (
+                  <div className="relative h-12 w-12 overflow-hidden rounded-md">
+                    <img
+                      src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
+                      alt={doc.name}
+                      className="h-full w-full object-cover"
+                    />
+                    {doc.isUploading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <MacFileIcon
+                    filename={doc.name}
+                    size={20}
+                    isDarkMode={isDarkMode}
+                    isUploading={doc.isUploading}
+                  />
+                )}
                 {removeDocument && !doc.isUploading && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       removeDocument(doc.id)
                     }}
-                    className={`absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${
+                    className={`absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${
                       isDarkMode
-                        ? 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                        : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                     aria-label="Remove document"
                   >
@@ -476,9 +492,7 @@ export function ChatInput({
                   isDarkMode ? 'text-gray-300' : 'text-gray-600'
                 }`}
               >
-                {doc.name.length > 10
-                  ? doc.name.substring(0, 8) + '...'
-                  : doc.name}
+                {doc.name}
               </span>
             </div>
           ))}
