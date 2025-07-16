@@ -329,23 +329,50 @@ const ChatMessage = memo(function ChatMessage({
       {/* Display document icons for user messages */}
       {isUser && message.documents && message.documents.length > 0 && (
         <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
-          {message.documents.map((doc, index) => (
-            <div
-              key={index}
-              className={`flex items-center rounded-lg ${
-                isDarkMode
-                  ? 'bg-gray-700/50 hover:bg-gray-700/70'
-                  : 'bg-gray-100 hover:bg-gray-200'
-              } px-3 py-1.5 transition-colors duration-200`}
-            >
-              <div className="mr-2">{getFileIcon(doc.name)}</div>
-              <span
-                className={`max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
+          {message.documents.map((doc, index) => {
+            // Check if we have corresponding image data
+            const hasImageData = message.imageData && message.imageData[index]
+            const isImage = doc.name
+              .toLowerCase()
+              .match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff)$/i)
+
+            return (
+              <div
+                key={index}
+                className={`flex items-center rounded-lg ${
+                  isDarkMode
+                    ? 'bg-gray-700/50 hover:bg-gray-700/70'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                } overflow-hidden transition-colors duration-200`}
               >
-                {doc.name}
-              </span>
-            </div>
-          ))}
+                {hasImageData && isImage ? (
+                  <div className="flex items-center">
+                    <div className="h-10 w-10 overflow-hidden">
+                      <img
+                        src={`data:${message.imageData![index].mimeType};base64,${message.imageData![index].base64}`}
+                        alt={doc.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <span
+                      className={`ml-2 mr-3 max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                    >
+                      {doc.name}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center px-3 py-1.5">
+                    <div className="mr-2">{getFileIcon(doc.name)}</div>
+                    <span
+                      className={`max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
+                    >
+                      {doc.name}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
       {/* Only show thoughts component if we have thoughts or are thinking */}
