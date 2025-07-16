@@ -267,8 +267,9 @@ export const useDocumentUploader = (
       if (processingResult.document && processingResult.document.md_content) {
         // Pass the content and image data if it's an image
         onSuccess(processingResult.document.md_content, documentId, imageData)
-      } else if (isImage && imageData) {
+      } else if (isImage) {
         // For images with no text content, still pass the image data with empty content
+        // (imageData might be undefined if the model doesn't support multimodal)
         onSuccess('', documentId, imageData)
       } else {
         throw new Error('No document content received')
