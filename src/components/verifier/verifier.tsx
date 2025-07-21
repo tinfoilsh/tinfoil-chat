@@ -519,7 +519,7 @@ export function Verifier({
               'REMOTE_ATTESTATION',
               verificationState.runtime.status,
             )}
-            description="Verifies that the secure enclave environment is set up correctly. The response consists of a signed attestation by NVIDIA and AMD of the enclave environment and the measurement of the code running inside it."
+            description="Verifies that the secure enclave environment is set up correctly. The response consists of a signed attestation by NVIDIA and AMD of the enclave environment and the digest of the binary (i.e., code) running inside it."
             status={verificationState.runtime.status}
             error={verificationState.runtime.error}
             measurements={verificationState.runtime.measurements}
@@ -533,7 +533,7 @@ export function Verifier({
               'CODE_INTEGRITY',
               verificationState.code.status,
             )}
-            description="Verifies that the source code published publicly by Tinfoil on GitHub was correctly built through GitHub Actions and the resulting measurement is available and immutable on the Sigstore transparency log."
+            description="Verifies that the source code published publicly by Tinfoil on GitHub was correctly built through GitHub Actions and the resulting binary is available and immutable on the Sigstore transparency log."
             status={verificationState.code.status}
             error={verificationState.code.error}
             measurements={verificationState.code.measurements}
@@ -554,7 +554,7 @@ export function Verifier({
               'CODE_CONSISTENCY',
               verificationState.security.status,
             )}
-            description="Verifies that the measurement from the source code matches the measurement from the enclave by comparing measurements from the enclave and the transparency log."
+            description="Verifies that the binary built from the source code matches the binary running in the enclave by comparing digests from the enclave and the transparency log."
             status={verificationState.security.status}
             error={verificationState.security.error}
             digestType="CODE_INTEGRITY"
