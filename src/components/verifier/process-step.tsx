@@ -28,9 +28,35 @@ interface MeasurementData {
 // Utility function to extract measurement value
 const extractMeasurement = (data: MeasurementData | string): string => {
   if (typeof data === 'string') {
+    // Check if it's a JSON string that needs parsing
+    try {
+      const parsed = JSON.parse(data.replace(/^"|"$/g, ''))
+      if (
+        parsed.registers &&
+        Array.isArray(parsed.registers) &&
+        parsed.registers.length > 0
+      ) {
+        return parsed.registers[0]
+      }
+    } catch {
+      // Not JSON, return as is
+    }
     return data.replace(/^"|"$/g, '')
   }
   if (typeof data === 'object' && data?.measurement) {
+    // Check if measurement contains JSON
+    try {
+      const parsed = JSON.parse(data.measurement)
+      if (
+        parsed.registers &&
+        Array.isArray(parsed.registers) &&
+        parsed.registers.length > 0
+      ) {
+        return parsed.registers[0]
+      }
+    } catch {
+      // Not JSON, return as is
+    }
     return data.measurement
   }
   return JSON.stringify(data, null, 2)
@@ -152,31 +178,31 @@ export function ProcessStep({
                   className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
                 >
                   {digestType === 'SOURCE'
-                    ? 'Source digest (code measurement)'
+                    ? 'Source Measurement'
                     : digestType === 'RUNTIME'
-                      ? 'Runtime digest (enclave measurement)'
+                      ? 'Runtime Measurement'
                       : digestType === 'CODE_INTEGRITY'
-                        ? 'Binary digest (code measurement)'
-                        : 'Digest'}
+                        ? 'Source Measurement'
+                        : 'Measurement'}
                   {digestType === 'SOURCE' && (
                     <span
                       className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
                     >
-                      Received from GitHub and Sigstore
+                      Received from GitHub and Sigstore.
                     </span>
                   )}
                   {digestType === 'RUNTIME' && (
                     <span
                       className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
                     >
-                      Received from the enclave
+                      Received from the enclave.
                     </span>
                   )}
                   {digestType === 'CODE_INTEGRITY' && (
                     <span
                       className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
                     >
-                      Received from the enclave
+                      Received from the enclave.
                     </span>
                   )}
                 </h4>
@@ -226,11 +252,12 @@ export function ProcessStep({
                 <h4
                   className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
                 >
-                  TLS Certificate Fingerprint
+                  TLS Public Key Fingerprint
                   <span
                     className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
                   >
-                    Fingerprint of the TLS certificate used by the enclave
+                    Fingerprint of the TLS public key used by the enclave to
+                    encrypt the connection.
                   </span>
                 </h4>
                 <pre
