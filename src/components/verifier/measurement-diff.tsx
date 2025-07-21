@@ -15,9 +15,35 @@ type MeasurementDiffProps = {
 // Utility function to extract measurement value
 const extractMeasurement = (data: MeasurementData | string): string => {
   if (typeof data === 'string') {
+    // Check if it's a JSON string that needs parsing
+    try {
+      const parsed = JSON.parse(data)
+      if (
+        parsed.registers &&
+        Array.isArray(parsed.registers) &&
+        parsed.registers.length > 0
+      ) {
+        return parsed.registers[0]
+      }
+    } catch {
+      // Not JSON, return as is
+    }
     return data
   }
   if (typeof data === 'object' && data?.measurement) {
+    // Check if measurement contains JSON
+    try {
+      const parsed = JSON.parse(data.measurement)
+      if (
+        parsed.registers &&
+        Array.isArray(parsed.registers) &&
+        parsed.registers.length > 0
+      ) {
+        return parsed.registers[0]
+      }
+    } catch {
+      // Not JSON, return as is
+    }
     return data.measurement
   }
   return JSON.stringify(data, null, 2).replace(/"/g, '')
@@ -34,7 +60,7 @@ export function MeasurementDiff({
       <h3
         className={`mb-4 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
       >
-        Digest Comparison
+        Measurement Comparison
       </h3>
 
       <div
@@ -53,7 +79,9 @@ export function MeasurementDiff({
         ) : (
           <ExclamationTriangleIcon className="h-5 w-5" />
         )}
-        <span>{isVerified ? 'Digests match' : 'Digests do not match'}</span>
+        <span>
+          {isVerified ? 'Measurements Match' : 'Measurement mismatch detected'}
+        </span>
       </div>
 
       <div className="space-y-4">
@@ -61,11 +89,11 @@ export function MeasurementDiff({
           <h4
             className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
           >
-            Source binary digest
+            Source Measurement
             <span
               className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
             >
-              Received from GitHub and Sigstore
+              Received from GitHub and Sigstore.
             </span>
           </h4>
           <div className="max-h-[200px] overflow-auto">
@@ -81,11 +109,11 @@ export function MeasurementDiff({
           <h4
             className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
           >
-            Runtime binary digest
+            Runtime Measurement
             <span
               className={`block text-xs font-normal ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
             >
-              Received from the enclave
+              Received from the enclave.
             </span>
           </h4>
           <div className="max-h-[200px] overflow-auto">
