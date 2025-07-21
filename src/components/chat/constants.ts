@@ -1,6 +1,6 @@
 import type { AIModel } from './types'
 
-const VERIFIER_VERSION = 'v0.0.8'
+const VERIFIER_VERSION = 'v0.0.9'
 
 export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
