@@ -15,34 +15,24 @@ type MeasurementDiffProps = {
 // Utility function to extract measurement value
 const extractMeasurement = (data: MeasurementData | string): string => {
   if (typeof data === 'string') {
-    // Check if it's a JSON string that needs parsing
-    try {
-      const parsed = JSON.parse(data)
-      if (
-        parsed.registers &&
-        Array.isArray(parsed.registers) &&
-        parsed.registers.length > 0
-      ) {
-        return parsed.registers[0]
-      }
-    } catch {
-      // Not JSON, return as is
+    const parsed = JSON.parse(data)
+    if (
+      parsed.registers &&
+      Array.isArray(parsed.registers) &&
+      parsed.registers.length > 0
+    ) {
+      return String(parsed.registers[0])
     }
     return data
   }
   if (typeof data === 'object' && data?.measurement) {
-    // Check if measurement contains JSON
-    try {
-      const parsed = JSON.parse(data.measurement)
-      if (
-        parsed.registers &&
-        Array.isArray(parsed.registers) &&
-        parsed.registers.length > 0
-      ) {
-        return parsed.registers[0]
-      }
-    } catch {
-      // Not JSON, return as is
+    const parsed = JSON.parse(data.measurement)
+    if (
+      parsed.registers &&
+      Array.isArray(parsed.registers) &&
+      parsed.registers.length > 0
+    ) {
+      return String(parsed.registers[0])
     }
     return data.measurement
   }
