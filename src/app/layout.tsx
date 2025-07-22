@@ -81,6 +81,11 @@ export default function RootLayout({
           rel="stylesheet"
           href="https://api.fontshare.com/css?f%5B%5D=switzer@400,500,600,700&amp;display=swap"
         />
+        <script
+          defer
+          data-domain="chat.tinfoil.sh"
+          src="https://plausible.io/js/script.js"
+        ></script>
       </head>
       <body className="bg-gray-900 text-gray-100 antialiased">
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
