@@ -317,10 +317,10 @@ export function ChatSidebar({
                     setIsOpen(false)
                   }
                 }}
-                className={`m-2 flex items-center gap-2 rounded-md border p-2 pr-4 text-sm hover:bg-opacity-10 ${
+                className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
                   isDarkMode
-                    ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                    ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                    : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
                 }`}
               >
                 <PlusIcon className="h-5 w-5" />
@@ -438,14 +438,14 @@ export function ChatSidebar({
                           setIsOpen(false)
                         }
                       }}
-                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-3 text-left text-sm ${
+                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
                         currentChat?.id === chat.id
                           ? isDarkMode
-                            ? 'bg-gray-800 text-white'
-                            : 'bg-gray-100 text-gray-900'
+                            ? 'border-gray-700 bg-gray-800 text-white'
+                            : 'border-gray-300 bg-gray-100 text-gray-900'
                           : isDarkMode
-                            ? 'text-gray-300 hover:bg-gray-800'
-                            : 'text-gray-700 hover:bg-gray-100'
+                            ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                            : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
                       }`}
                     >
                       {/* Chat item content */}
