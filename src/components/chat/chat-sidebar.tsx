@@ -370,6 +370,15 @@ export function ChatSidebar({
                           setIsOpen(false)
                         }
                       }}
+                      onTouchEnd={(e) => {
+                        // Prevent the click event from firing after touch
+                        e.preventDefault()
+                        handleChatSelect(chat.id)
+                        // Only close sidebar on mobile
+                        if (windowWidth < MOBILE_BREAKPOINT) {
+                          setIsOpen(false)
+                        }
+                      }}
                       className={`group flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-sm ${
                         currentChat?.id === chat.id
                           ? isDarkMode
