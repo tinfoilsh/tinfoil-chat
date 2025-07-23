@@ -505,10 +505,10 @@ const WelcomeScreen = memo(function WelcomeScreen({
   // Determine the greeting text
   const getGreeting = () => {
     if (nickname) {
-      return `Hello, ${nickname}`
+      return `Hello, ${nickname}!`
     }
     if (user?.firstName) {
-      return `Hello, ${user.firstName}`
+      return `Hello, ${user.firstName}!`
     }
     return 'Tinfoil Private Chat'
   }
@@ -609,11 +609,11 @@ const WelcomeScreen = memo(function WelcomeScreen({
           delay: 0.2,
         }}
       >
-        {getGreeting()}!
+        {getGreeting()}
       </motion.h1>
 
       <motion.p
-        className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
+        className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-12 text-lg`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{
@@ -629,7 +629,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
       {/* Premium upgrade section for non-premium users */}
       {!isPremium && (
         <motion.div
-          className="mt-12"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{
@@ -638,52 +637,37 @@ const WelcomeScreen = memo(function WelcomeScreen({
             delay: 0.5,
           }}
         >
-          <div>
-            <div className="mb-4 flex items-center gap-4">
-              <h3
-                className={`text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
-              >
-                Get more out of Tinfoil Chat
-              </h3>
-              <a
-                href="https://tinfoil.sh/pricing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
-                  isDarkMode
-                    ? 'text-emerald-400 hover:text-emerald-300'
-                    : 'text-emerald-600 hover:text-emerald-500'
-                }`}
-              >
-                Upgrade to Pro
-                <svg
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </a>
-            </div>
+          <div
+            className={`rounded-xl border ${
+              isDarkMode
+                ? 'border-emerald-500/30 bg-emerald-950/20'
+                : 'border-emerald-500/30 bg-emerald-50/50'
+            } p-6`}
+          >
+            <h3
+              className={`mb-4 text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
+            >
+              Get more out of Tinfoil Chat
+            </h3>
             <div className="space-y-3">
               <div
-                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
               >
-                <MicrophoneIcon className="h-4 w-4 flex-shrink-0" />
+                <MicrophoneIcon
+                  className={`h-4 w-4 flex-shrink-0 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}
+                />
                 <span>Speech-to-text voice input</span>
               </div>
 
               <div
-                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
               >
                 <svg
-                  className="h-4 w-4 flex-shrink-0"
+                  className={`h-4 w-4 flex-shrink-0 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -710,6 +694,33 @@ const WelcomeScreen = memo(function WelcomeScreen({
                   </div>
                 )}
               </div>
+            </div>
+            <div className="mt-6">
+              <a
+                href="https://tinfoil.sh/pricing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'text-emerald-400 hover:text-emerald-300'
+                    : 'text-emerald-600 hover:text-emerald-500'
+                }`}
+              >
+                Upgrade to Pro
+                <svg
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </a>
             </div>
           </div>
         </motion.div>
