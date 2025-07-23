@@ -1,8 +1,7 @@
-import { useAuth } from '@clerk/nextjs'
+import { SignInButton, useAuth } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
-  ChatBubbleLeftIcon,
   PencilSquareIcon,
   PlusIcon,
   TrashIcon,
@@ -20,6 +19,44 @@ import { Logo } from '../logo'
 function isIOSDevice() {
   if (typeof navigator === 'undefined') return false
   return /iPad|iPhone|iPod/.test(navigator.userAgent)
+}
+
+// Utility function to format relative timestamps
+function formatRelativeTime(date: Date): string {
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+  if (seconds < 60) {
+    return `${seconds}s ago`
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) {
+    return `${minutes}m ago`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) {
+    return `${hours}h ago`
+  }
+
+  const days = Math.floor(hours / 24)
+  if (days < 7) {
+    return `${days}d ago`
+  }
+
+  const weeks = Math.floor(days / 7)
+  if (weeks < 4) {
+    return `${weeks}w ago`
+  }
+
+  const months = Math.floor(days / 30)
+  if (months < 12) {
+    return `${months}mo ago`
+  }
+
+  const years = Math.floor(days / 365)
+  return `${years}y ago`
 }
 
 type Message = {
@@ -292,8 +329,8 @@ export function ChatSidebar({
             </div>
           )}
 
-          {/* Message for non-premium users */}
-          {!isPremium && (
+          {/* Message for non-signed-in users */}
+          {!isPremium && !isSignedIn && (
             <div
               className={`m-2 flex-none rounded-md p-3 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
@@ -303,13 +340,35 @@ export function ChatSidebar({
                 <span
                   className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}
                 >
-                  Sign up to access chat history and create new chats.
+                  Sign in to access chat history and create new chats.
+                </span>{' '}
+                <SignInButton mode="modal">
+                  <button className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
+                    Sign in
+                  </button>
+                </SignInButton>
+              </p>
+            </div>
+          )}
+
+          {/* Message for signed-in non-premium users */}
+          {!isPremium && isSignedIn && (
+            <div
+              className={`m-2 flex-none rounded-md p-3 ${
+                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+              }`}
+            >
+              <p className="text-sm">
+                <span
+                  className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}
+                >
+                  Upgrade to access premium features.
                 </span>{' '}
                 <Link
                   href="https://tinfoil.sh/pricing"
                   className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
                 >
-                  Upgrade to Pro
+                  View Plans
                 </Link>
               </p>
             </div>
@@ -370,7 +429,16 @@ export function ChatSidebar({
                           setIsOpen(false)
                         }
                       }}
-                      className={`group flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-sm ${
+                      onTouchEnd={(e) => {
+                        // Prevent the click event from firing after touch
+                        e.preventDefault()
+                        handleChatSelect(chat.id)
+                        // Only close sidebar on mobile
+                        if (windowWidth < MOBILE_BREAKPOINT) {
+                          setIsOpen(false)
+                        }
+                      }}
+                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-3 text-left text-sm ${
                         currentChat?.id === chat.id
                           ? isDarkMode
                             ? 'bg-gray-800 text-white'
@@ -534,18 +602,12 @@ function ChatListItem({
 
   return (
     <>
-      <div className="flex w-full items-center justify-between">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <ChatBubbleLeftIcon
-            className={`h-5 w-5 flex-shrink-0 ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`}
-          />
-
+      <div className="flex w-full items-start justify-between">
+        <div className="min-w-0 flex-1">
           {isEditing && isPremium ? (
             <form
               onSubmit={handleSubmit}
-              className="min-w-0 flex-1"
+              className="w-full"
               onClick={(e) => e.stopPropagation()}
             >
               <input
@@ -562,7 +624,22 @@ function ChatListItem({
               />
             </form>
           ) : (
-            <span className="truncate">{chat.title}</span>
+            <>
+              <div
+                className={`truncate text-sm font-medium ${
+                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                }`}
+              >
+                {chat.title}
+              </div>
+              <div
+                className={`text-xs ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}
+              >
+                {formatRelativeTime(chat.createdAt)}
+              </div>
+            </>
           )}
         </div>
 
