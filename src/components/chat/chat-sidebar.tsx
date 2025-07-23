@@ -1,4 +1,4 @@
-import { useAuth } from '@clerk/nextjs'
+import { SignInButton, useAuth } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
@@ -329,8 +329,8 @@ export function ChatSidebar({
             </div>
           )}
 
-          {/* Message for non-premium users */}
-          {!isPremium && (
+          {/* Message for non-signed-in users */}
+          {!isPremium && !isSignedIn && (
             <div
               className={`m-2 flex-none rounded-md p-3 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
@@ -340,13 +340,35 @@ export function ChatSidebar({
                 <span
                   className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}
                 >
-                  Sign up to access chat history and create new chats.
+                  Sign in to access chat history and create new chats.
+                </span>{' '}
+                <SignInButton mode="modal">
+                  <button className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
+                    Sign in
+                  </button>
+                </SignInButton>
+              </p>
+            </div>
+          )}
+
+          {/* Message for signed-in non-premium users */}
+          {!isPremium && isSignedIn && (
+            <div
+              className={`m-2 flex-none rounded-md p-3 ${
+                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+              }`}
+            >
+              <p className="text-sm">
+                <span
+                  className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}
+                >
+                  Upgrade to access premium features.
                 </span>{' '}
                 <Link
                   href="https://tinfoil.sh/pricing"
                   className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600"
                 >
-                  Upgrade to Pro
+                  View Plans
                 </Link>
               </p>
             </div>
