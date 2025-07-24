@@ -52,6 +52,7 @@ type ChatInputProps = {
   processedDocuments?: ProcessedDocument[]
   removeDocument?: (id: string) => void
   isPremium?: boolean
+  hasMessages?: boolean
 }
 
 // Component for Mac-style file icons
@@ -220,6 +221,7 @@ export function ChatInput({
   processedDocuments,
   removeDocument,
   isPremium,
+  hasMessages,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -532,7 +534,9 @@ export function ChatInput({
                 }
               }
             }}
-            placeholder="Message Tinfoil"
+            placeholder={
+              hasMessages ? 'Reply to Tin...' : "What's on your mind?"
+            }
             rows={1}
             className={`w-full resize-none overflow-y-auto bg-transparent text-base leading-relaxed placeholder-gray-400 focus:outline-none ${
               isDarkMode ? 'text-gray-100' : 'text-gray-900'
