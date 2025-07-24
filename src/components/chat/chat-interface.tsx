@@ -399,26 +399,43 @@ export function ChatInterface({
 
   // Set up scroll detection
   useEffect(() => {
-    const scrollContainer = scrollContainerRef.current
-    if (!scrollContainer) return
+    // Small delay to ensure ref is attached
+    const setupScrollListener = () => {
+      const scrollContainer = scrollContainerRef.current
+      if (!scrollContainer) {
+        // Retry if container not ready
+        setTimeout(setupScrollListener, 100)
+        return
+      }
 
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
-      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
 
-      // Show button when scrolled up more than 200px from bottom
-      setShowScrollButton(distanceFromBottom > 200)
+        // Show button when scrolled up more than 200px from bottom
+        const shouldShow = distanceFromBottom > 200
+        setShowScrollButton(shouldShow)
+      }
+
+      scrollContainer.addEventListener('scroll', handleScroll, {
+        passive: true,
+      })
+
+      // Initial check
+      handleScroll()
+
+      // Store cleanup function
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll)
+      }
     }
 
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-
-    // Initial check
-    handleScroll()
+    const cleanup = setupScrollListener()
 
     return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll)
+      if (cleanup) cleanup()
     }
-  }, [currentChat?.messages]) // Re-run when messages change
+  }, [currentChat?.id]) // Re-run when chat changes
 
   // Function to scroll to bottom
   const handleScrollToBottom = () => {
@@ -618,7 +635,7 @@ export function ChatInterface({
         }}
       >
         <div
-          className={`flex h-full flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+          className={`relative flex h-full flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
         >
           {/* Messages Area */}
           <div
@@ -627,7 +644,8 @@ export function ChatInterface({
               isDarkMode ? 'bg-gray-800' : 'bg-white'
             }`}
             style={{
-              overscrollBehavior: 'none',
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
             }}
           >
             <ChatMessages
@@ -644,34 +662,12 @@ export function ChatInterface({
               models={models}
               subscriptionLoading={subscriptionLoading}
             />
-
-            {/* Scroll to bottom button */}
-            {showScrollButton && currentChat?.messages?.length > 0 && (
-              <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
-                <button
-                  onClick={handleScrollToBottom}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                    isDarkMode
-                      ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
-                      : 'border border-gray-200 bg-white/90 shadow-md hover:bg-gray-50'
-                  }`}
-                  aria-label="Scroll to bottom"
-                >
-                  <ArrowDownIcon
-                    className={`h-4 w-4 ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                    }`}
-                    strokeWidth={2}
-                  />
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Input Form */}
           {isClient && (
             <div
-              className={`flex-shrink-0 ${
+              className={`relative flex-shrink-0 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-white'
               } p-4`}
               style={{
@@ -743,6 +739,28 @@ export function ChatInterface({
                   }
                 />
               </form>
+
+              {/* Scroll to bottom button - absolutely positioned in parent */}
+              {showScrollButton && currentChat?.messages?.length > 0 && (
+                <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
+                  <button
+                    onClick={handleScrollToBottom}
+                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                      isDarkMode
+                        ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
+                        : 'border border-gray-200 bg-white/90 shadow-md hover:bg-gray-50'
+                    }`}
+                    aria-label="Scroll to bottom"
+                  >
+                    <ArrowDownIcon
+                      className={`h-4 w-4 ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                      }`}
+                      strokeWidth={2}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

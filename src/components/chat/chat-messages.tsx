@@ -733,6 +733,7 @@ export function ChatMessages({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [mounted, setMounted] = useState(false)
   const lastMessageCountRef = useRef(messages.length)
+  const userScrollingRef = useRef(false)
   const maxMessages = useMaxMessages()
 
   // Check if there's already a thinking message in the chat
@@ -775,22 +776,67 @@ export function ChatMessages({
 
     if (!scrollContainer) return
 
+    let scrollTimeout: NodeJS.Timeout
+    let lastScrollTop = scrollContainer.scrollTop
+    let isScrolling = false
+
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainer
       const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
 
-      // Enable auto-scroll only when very close to bottom
-      const isNearBottom = distanceFromBottom < 100
-      setShouldAutoScroll(isNearBottom)
+      // Detect if user is scrolling up
+      if (scrollTop < lastScrollTop && distanceFromBottom > 10) {
+        userScrollingRef.current = true
+        setShouldAutoScroll(false)
+      }
+
+      lastScrollTop = scrollTop
+
+      // Clear existing timeout
+      clearTimeout(scrollTimeout)
+      isScrolling = true
+
+      // Set a new timeout to detect when scrolling stops
+      scrollTimeout = setTimeout(() => {
+        isScrolling = false
+        userScrollingRef.current = false
+
+        // Only re-enable auto-scroll if we're at the very bottom AND stable
+        const checkStablePosition = () => {
+          const {
+            scrollTop: currentTop,
+            scrollHeight: currentHeight,
+            clientHeight: currentClient,
+          } = scrollContainer
+          const currentDistance = currentHeight - (currentTop + currentClient)
+
+          // Wait a bit more to ensure position is stable (no overscroll bounce)
+          setTimeout(() => {
+            const {
+              scrollTop: newTop,
+              scrollHeight: newHeight,
+              clientHeight: newClient,
+            } = scrollContainer
+            const newDistance = newHeight - (newTop + newClient)
+
+            // Only enable if position hasn't changed (stable) and we're at bottom
+            if (
+              Math.abs(newDistance - currentDistance) < 2 &&
+              newDistance < 10
+            ) {
+              setShouldAutoScroll(true)
+            }
+          }, 100)
+        }
+
+        checkStablePosition()
+      }, 250) // Increased to 250ms to allow overscroll to settle
     }
 
     const handleUserInteraction = () => {
-      // Check if at bottom after interaction
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
-      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
-      if (distanceFromBottom > 100) {
-        setShouldAutoScroll(false)
-      }
+      // Mark user interaction
+      userScrollingRef.current = true
+      setShouldAutoScroll(false)
     }
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
@@ -805,6 +851,7 @@ export function ChatMessages({
     handleScroll()
 
     return () => {
+      clearTimeout(scrollTimeout)
       scrollContainer.removeEventListener('scroll', handleScroll)
       scrollContainer.removeEventListener('wheel', handleUserInteraction)
       scrollContainer.removeEventListener('touchmove', handleUserInteraction)
@@ -813,17 +860,19 @@ export function ChatMessages({
 
   // Auto-scroll when new messages arrive or content changes
   useEffect(() => {
-    if (!shouldAutoScroll) return
+    if (!shouldAutoScroll || userScrollingRef.current) return
 
     // Detect if this is a new message or just an update
     const isNewMessage = messages.length > lastMessageCountRef.current
     lastMessageCountRef.current = messages.length
 
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: 'auto',
-        block: 'end',
-      })
+      if (!userScrollingRef.current) {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: 'auto',
+          block: 'end',
+        })
+      }
       if (isInitialLoad) {
         setIsInitialLoad(false)
       }
@@ -837,11 +886,11 @@ export function ChatMessages({
 
   // Continuous scrolling during streaming
   useEffect(() => {
-    if (!shouldAutoScroll) return
+    if (!shouldAutoScroll || userScrollingRef.current) return
 
     if (isThinking || isWaitingForResponse) {
       const scrollInterval = setInterval(() => {
-        if (shouldAutoScroll) {
+        if (shouldAutoScroll && !userScrollingRef.current) {
           messagesEndRef.current?.scrollIntoView({
             behavior: 'auto',
             block: 'end',
