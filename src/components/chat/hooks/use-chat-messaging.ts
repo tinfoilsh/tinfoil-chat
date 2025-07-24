@@ -295,8 +295,12 @@ export function useChatMessaging({
               },
               // Include message history with a limit
               ...updatedMessages.slice(-maxMessages).map((msg) => {
-                // Check if this message has image data
-                if (msg.imageData && msg.imageData.length > 0) {
+                // Check if this message has image data AND the current model supports multimodal
+                if (
+                  msg.imageData &&
+                  msg.imageData.length > 0 &&
+                  model.multimodal
+                ) {
                   // Create multimodal content array
                   const content = [
                     {
@@ -319,7 +323,7 @@ export function useChatMessaging({
                     content,
                   }
                 } else {
-                  // Standard text message
+                  // Standard text message (or image data stripped for non-multimodal models)
                   return {
                     role: msg.role,
                     content: msg.documentContent
