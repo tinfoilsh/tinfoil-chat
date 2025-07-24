@@ -630,6 +630,17 @@ export function ChatInput({
           </div>
         </div>
       </div>
+
+      {/* Disclaimer */}
+      <div className="mt-0 text-center">
+        <p
+          className={`text-xs ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+          }`}
+        >
+          AI can make mistakes. Verify important information.
+        </p>
+      </div>
     </div>
   )
 }

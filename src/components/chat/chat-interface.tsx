@@ -590,10 +590,9 @@ export function ChatInterface({
               top: 0,
               left: 0,
               right: 0,
-              bottom: '120px',
+              bottom: '140px',
               height: 'auto',
               overscrollBehavior: 'none',
-              paddingBottom: 'env(safe-area-inset-bottom)',
             }}
           >
             <div className="h-full w-full">

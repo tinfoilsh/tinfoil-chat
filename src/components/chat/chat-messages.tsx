@@ -880,7 +880,7 @@ export function ChatMessages({
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-y-auto pb-16 sm:pb-24"
+      className="h-full overflow-y-auto pb-8"
       style={{
         height: '100%',
         overflowY: 'auto',
