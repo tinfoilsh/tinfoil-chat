@@ -730,11 +730,9 @@ export function ChatMessages({
   models,
   subscriptionLoading,
 }: ChatMessagesProps) {
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [mounted, setMounted] = useState(false)
-  const userScrollingRef = useRef(false)
-  const lastScrollPositionRef = useRef(0)
+  const lastMessageCountRef = useRef(messages.length)
   const maxMessages = useMaxMessages()
 
   // Check if there's already a thinking message in the chat
@@ -753,100 +751,111 @@ export function ChatMessages({
 
   useEffect(() => {
     setMounted(true)
+  }, [])
 
-    const container = scrollContainerRef.current
-    if (container) {
-      const handleScrollWrapper = () => {
-        const { scrollTop, scrollHeight, clientHeight } = container
-        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
-
-        // Store current scroll position for comparison
-        lastScrollPositionRef.current = scrollTop
-
-        // Only enable auto-scroll if user has scrolled very close to bottom
-        // This is the key part - we only re-enable auto-scroll when user goes back to bottom
-        setShouldAutoScroll(distanceFromBottom < 20)
-      }
-
-      const handleWheel = () => {
-        // When user actively scrolls, immediately disable auto-scrolling
-        if (shouldAutoScroll) {
-          setShouldAutoScroll(false)
-        }
-        userScrollingRef.current = true
-        // Reset after a short delay
-        setTimeout(() => {
-          userScrollingRef.current = false
-        }, 150)
-      }
-
-      const handleTouchStart = () => {
-        // Also handle touch events for mobile
-        if (shouldAutoScroll) {
-          setShouldAutoScroll(false)
-        }
-        userScrollingRef.current = true
-      }
-
-      const handleTouchEnd = () => {
-        setTimeout(() => {
-          userScrollingRef.current = false
-
-          // Check if user scrolled to bottom after touch
-          const { scrollTop, scrollHeight, clientHeight } = container
-          const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
-          if (distanceFromBottom < 20) {
-            setShouldAutoScroll(true)
-          }
-        }, 150)
-      }
-
-      container.addEventListener('scroll', handleScrollWrapper, {
-        passive: true,
-      })
-      container.addEventListener('wheel', handleWheel, { passive: true })
-      container.addEventListener('touchstart', handleTouchStart, {
-        passive: true,
-      })
-      container.addEventListener('touchend', handleTouchEnd, { passive: true })
-
-      return () => {
-        container.removeEventListener('scroll', handleScrollWrapper)
-        container.removeEventListener('wheel', handleWheel)
-        container.removeEventListener('touchstart', handleTouchStart)
-        container.removeEventListener('touchend', handleTouchEnd)
-      }
-    }
-  }, [shouldAutoScroll]) // Add shouldAutoScroll as dependency
-
-  // Auto-scroll effect when messages change or when streaming
+  // Set up scroll detection on parent scroll container
   useEffect(() => {
-    if (!shouldAutoScroll || userScrollingRef.current) {
-      return // Don't auto-scroll if user has scrolled up
+    // Find the parent scroll container
+    const findScrollParent = (
+      element: HTMLElement | null,
+    ): HTMLElement | null => {
+      if (!element) return null
+      const parent = element.parentElement
+      if (!parent) return null
+
+      const overflow = window.getComputedStyle(parent).overflowY
+      if (overflow === 'auto' || overflow === 'scroll') {
+        return parent
+      }
+      return findScrollParent(parent)
     }
 
-    // Only scroll if we're at the bottom or a new message has been added
-    requestAnimationFrame(() => {
+    const messageContainer = messagesEndRef.current?.parentElement
+    const scrollContainer = findScrollParent(messageContainer)
+
+    if (!scrollContainer) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
+
+      // Enable auto-scroll only when very close to bottom
+      const isNearBottom = distanceFromBottom < 100
+      setShouldAutoScroll(isNearBottom)
+    }
+
+    const handleUserInteraction = () => {
+      // Check if at bottom after interaction
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
+      if (distanceFromBottom > 100) {
+        setShouldAutoScroll(false)
+      }
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+    scrollContainer.addEventListener('wheel', handleUserInteraction, {
+      passive: true,
+    })
+    scrollContainer.addEventListener('touchmove', handleUserInteraction, {
+      passive: true,
+    })
+
+    // Initial check
+    handleScroll()
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll)
+      scrollContainer.removeEventListener('wheel', handleUserInteraction)
+      scrollContainer.removeEventListener('touchmove', handleUserInteraction)
+    }
+  }, [messagesEndRef])
+
+  // Auto-scroll when new messages arrive or content changes
+  useEffect(() => {
+    if (!shouldAutoScroll) return
+
+    // Detect if this is a new message or just an update
+    const isNewMessage = messages.length > lastMessageCountRef.current
+    lastMessageCountRef.current = messages.length
+
+    const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({
-        behavior: isInitialLoad ? 'auto' : 'smooth',
+        behavior: 'auto',
+        block: 'end',
       })
       if (isInitialLoad) {
         setIsInitialLoad(false)
       }
-    })
-  }, [
-    messages.length, // Only depend on message count, not entire messages array
-    shouldAutoScroll,
-    isInitialLoad,
-    setIsInitialLoad,
-    messagesEndRef,
-    isThinking,
-    isWaitingForResponse, // Add these as dependencies to respond to streaming state
-  ])
+    }
+
+    // Use a small delay to ensure DOM is updated
+    const timeoutId = setTimeout(scrollToBottom, 10)
+
+    return () => clearTimeout(timeoutId)
+  }, [messages, shouldAutoScroll, isInitialLoad, setIsInitialLoad])
+
+  // Continuous scrolling during streaming
+  useEffect(() => {
+    if (!shouldAutoScroll) return
+
+    if (isThinking || isWaitingForResponse) {
+      const scrollInterval = setInterval(() => {
+        if (shouldAutoScroll) {
+          messagesEndRef.current?.scrollIntoView({
+            behavior: 'auto',
+            block: 'end',
+          })
+        }
+      }, 300) // Scroll every 300ms during streaming
+
+      return () => clearInterval(scrollInterval)
+    }
+  }, [isThinking, isWaitingForResponse, shouldAutoScroll])
 
   if (!mounted) {
     return (
-      <div ref={scrollContainerRef} className="h-full overflow-y-auto">
+      <div className="h-full">
         <div ref={messagesEndRef} />
       </div>
     )
@@ -855,10 +864,8 @@ export function ChatMessages({
   if (messages.length === 0) {
     return (
       <div
-        ref={scrollContainerRef}
         className="flex h-full items-center justify-center"
         style={{
-          overflow: 'auto',
           height: '100%',
           position: 'relative',
         }}
@@ -879,17 +886,13 @@ export function ChatMessages({
 
   return (
     <div
-      ref={scrollContainerRef}
-      className="h-full overflow-y-auto pb-8"
+      className="h-full"
       style={{
         height: '100%',
-        overflowY: 'auto',
         position: 'relative',
-        WebkitOverflowScrolling: 'touch',
-        overscrollBehavior: 'none',
       }}
     >
-      <div className="mx-auto w-full max-w-3xl pt-24">
+      <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
         {/* Archived Messages - only shown if there are more than the max prompt messages */}
         {archivedMessages.length > 0 && (
           <>
