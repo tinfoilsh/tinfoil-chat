@@ -234,9 +234,10 @@ export function ChatInterface({
 
   // Handler for settings sidebar
   const handleOpenSettingsSidebar = () => {
-    setIsSettingsSidebarOpen(true)
-    // Close verifier sidebar on mobile to avoid overlap
-    if (windowWidth < CONSTANTS.MOBILE_BREAKPOINT) {
+    const newSettingsState = !isSettingsSidebarOpen
+    setIsSettingsSidebarOpen(newSettingsState)
+    // Close verifier sidebar when opening settings
+    if (newSettingsState) {
       setIsVerifierSidebarOpen(false)
     }
   }
@@ -249,6 +250,10 @@ export function ChatInterface({
     // Always open the verifier sidebar when called
     const newState = !isVerifierSidebarOpen
     handleSetVerifierSidebarOpen(newState)
+    // Close settings sidebar when opening verifier
+    if (newState) {
+      setIsSettingsSidebarOpen(false)
+    }
   }
 
   // Document upload handler wrapper
