@@ -532,7 +532,7 @@ export function ChatInput({
                 }
               }
             }}
-            placeholder="Message Tinfoil"
+            placeholder="What's on your mind?"
             rows={1}
             className={`w-full resize-none overflow-y-auto bg-transparent text-base leading-relaxed placeholder-gray-400 focus:outline-none ${
               isDarkMode ? 'text-gray-100' : 'text-gray-900'
