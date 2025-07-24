@@ -500,7 +500,7 @@ export function ChatInput({
       )}
 
       <div
-        className={`flex items-end gap-2 rounded-xl border py-2 pl-2 shadow-lg ${
+        className={`flex flex-col rounded-2xl border shadow-lg ${
           isDarkMode
             ? 'border-gray-600 bg-gray-700'
             : 'border-gray-300 bg-gray-100'
@@ -513,19 +513,8 @@ export function ChatInput({
           className="hidden"
           accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
         />
-        <button
-          type="button"
-          onClick={triggerFileInput}
-          className={`rounded-lg p-1.5 ${
-            isDarkMode
-              ? 'text-gray-300 hover:bg-gray-600'
-              : 'text-gray-600 hover:bg-gray-200'
-          }`}
-          title="Upload document"
-        >
-          <DocumentIcon className="h-5 w-5" />
-        </button>
-        <div className="relative flex flex-1 self-center">
+
+        <div className="px-4 pb-1 pt-3">
           <textarea
             ref={inputRef}
             value={input}
@@ -533,7 +522,7 @@ export function ChatInput({
             onChange={(e) => {
               setInput(e.target.value)
               e.target.style.height = inputMinHeight
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -543,27 +532,43 @@ export function ChatInput({
                 }
               }
             }}
-            placeholder="Message Tin..."
+            placeholder="Message Tinfoil"
             rows={1}
-            className={`w-full resize-none overflow-y-auto bg-transparent px-2 pt-[0.2rem] text-base leading-relaxed placeholder-gray-400 focus:outline-none ${
+            className={`w-full resize-none overflow-y-auto bg-transparent text-base leading-relaxed placeholder-gray-400 focus:outline-none ${
               isDarkMode ? 'text-gray-100' : 'text-gray-900'
-            } ${isPremium ? 'pr-20' : 'pr-10'}`}
+            }`}
             style={{
-              minHeight: inputMinHeight,
-              maxHeight: '200px',
+              minHeight: '28px',
+              maxHeight: '240px',
             }}
           />
-          <div className="absolute bottom-0 right-0 flex items-center">
+        </div>
+
+        <div className="flex items-center justify-between px-4 pb-3">
+          <button
+            type="button"
+            onClick={triggerFileInput}
+            className={`rounded-lg p-1.5 ${
+              isDarkMode
+                ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
+            }`}
+            title="Upload document"
+          >
+            <DocumentIcon className="h-5 w-5" />
+          </button>
+
+          <div className="flex items-center gap-2">
             {isPremium && (
               <button
                 type="button"
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`mr-2 rounded-lg p-1.5 ${
+                className={`rounded-lg p-1.5 ${
                   isRecording
                     ? 'animate-pulse text-red-500'
                     : isDarkMode
-                      ? 'text-gray-300 hover:bg-gray-600'
-                      : 'text-gray-600 hover:bg-gray-200'
+                      ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                      : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
                 } disabled:opacity-50`}
                 title={
                   isRecording
@@ -607,10 +612,10 @@ export function ChatInput({
               onClick={
                 loadingState === 'loading' ? cancelGeneration : handleSubmit
               }
-              className={`mr-2 rounded-lg p-1.5 ${
+              className={`rounded-lg p-1.5 ${
                 isDarkMode
-                  ? 'text-gray-300 hover:bg-gray-600'
-                  : 'text-gray-600 hover:bg-gray-200'
+                  ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                  : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
               } disabled:opacity-50`}
               disabled={
                 loadingState !== 'loading' && (isTranscribing || isConverting)
