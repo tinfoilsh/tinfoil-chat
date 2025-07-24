@@ -689,6 +689,9 @@ export function ChatInterface({
                   processedDocuments={processedDocuments}
                   removeDocument={removeDocument}
                   isPremium={isPremium}
+                  hasMessages={
+                    currentChat?.messages && currentChat.messages.length > 0
+                  }
                 />
               </form>
             </div>
