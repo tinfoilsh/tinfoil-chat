@@ -590,7 +590,7 @@ export function ChatInterface({
               top: 0,
               left: 0,
               right: 0,
-              bottom: '80px',
+              bottom: '120px',
               height: 'auto',
               overscrollBehavior: 'none',
               paddingBottom: 'env(safe-area-inset-bottom)',

@@ -4,7 +4,6 @@ import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import Image from 'next/image'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FaFile,
@@ -202,6 +201,9 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
   content: string
   isDarkMode: boolean
 }) {
+  // Convert single newlines to markdown line breaks (two spaces + newline)
+  const processedContent = content.replace(/\n/g, '  \n')
+
   return (
     <ReactMarkdown
       components={{
@@ -236,7 +238,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
         },
       }}
     >
-      {content}
+      {processedContent}
     </ReactMarkdown>
   )
 })
@@ -307,25 +309,6 @@ const ChatMessage = memo(function ChatMessage({
     <div
       className={`flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
     >
-      {/* Always show the "Tin" header for assistant messages, regardless of content */}
-      {!isUser && (
-        <div className="mb-1 ml-4 flex items-center gap-2">
-          <div className="rounded-sm bg-black p-1 transition-colors">
-            <Image
-              src="/icon-dark.png"
-              alt="Assistant icon"
-              width={8}
-              height={8}
-              className="text-gray-300"
-            />
-          </div>
-          <span
-            className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-          >
-            Tin
-          </span>
-        </div>
-      )}
       {/* Display document icons for user messages */}
       {isUser && message.documents && message.documents.length > 0 && (
         <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
@@ -428,22 +411,6 @@ const LoadingMessage = memo(function LoadingMessage({
 }) {
   return (
     <div className="group mb-6 flex w-full flex-col items-start">
-      <div className="mb-1 ml-4 flex items-center gap-2">
-        <div className="rounded-sm bg-black p-1 transition-colors">
-          <Image
-            src="/icon-dark.png"
-            alt="Assistant icon"
-            width={8}
-            height={8}
-            className="text-gray-300"
-          />
-        </div>
-        <span
-          className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-        >
-          Tin
-        </span>
-      </div>
       <div className="px-4 py-2">
         <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
       </div>
@@ -913,7 +880,7 @@ export function ChatMessages({
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-y-auto pb-8 sm:pb-16"
+      className="h-full overflow-y-auto pb-16 sm:pb-24"
       style={{
         height: '100%',
         overflowY: 'auto',
