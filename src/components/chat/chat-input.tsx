@@ -420,7 +420,7 @@ export function ChatInput({
         position: 'top-left',
       })
     }
-  }, [sendAudioForTranscription, stopRecording, toast, convertWebMToWAV])
+  }, [sendAudioForTranscription, stopRecording, toast])
 
   return (
     <div className="flex flex-col gap-2">

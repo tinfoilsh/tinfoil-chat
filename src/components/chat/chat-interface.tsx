@@ -11,13 +11,14 @@ import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth, useUser } from '@clerk/nextjs'
 import {
+  ArrowDownIcon,
   Bars3Icon,
   Cog6ToothIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 
 import { logError } from '@/utils/error-handling'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -233,9 +234,10 @@ export function ChatInterface({
 
   // Handler for settings sidebar
   const handleOpenSettingsSidebar = () => {
-    setIsSettingsSidebarOpen(true)
-    // Close verifier sidebar on mobile to avoid overlap
-    if (windowWidth < CONSTANTS.MOBILE_BREAKPOINT) {
+    const newSettingsState = !isSettingsSidebarOpen
+    setIsSettingsSidebarOpen(newSettingsState)
+    // Close verifier sidebar when opening settings
+    if (newSettingsState) {
       setIsVerifierSidebarOpen(false)
     }
   }
@@ -248,6 +250,10 @@ export function ChatInterface({
     // Always open the verifier sidebar when called
     const newState = !isVerifierSidebarOpen
     handleSetVerifierSidebarOpen(newState)
+    // Close settings sidebar when opening verifier
+    if (newState) {
+      setIsSettingsSidebarOpen(false)
+    }
   }
 
   // Document upload handler wrapper
@@ -391,6 +397,61 @@ export function ChatInterface({
 
   // --- Drag & Drop across bottom input area ---
   const [isBottomDragActive, setIsBottomDragActive] = useState(false)
+
+  // State for scroll button
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  // Set up scroll detection
+  useEffect(() => {
+    // Small delay to ensure ref is attached
+    const setupScrollListener = () => {
+      const scrollContainer = scrollContainerRef.current
+      if (!scrollContainer) {
+        // Retry if container not ready
+        setTimeout(setupScrollListener, 100)
+        return
+      }
+
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
+
+        // Show button when scrolled up more than 200px from bottom
+        const shouldShow = distanceFromBottom > 200
+        setShowScrollButton(shouldShow)
+      }
+
+      scrollContainer.addEventListener('scroll', handleScroll, {
+        passive: true,
+      })
+
+      // Initial check
+      handleScroll()
+
+      // Store cleanup function
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll)
+      }
+    }
+
+    const cleanup = setupScrollListener()
+
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [currentChat?.id]) // Re-run when chat changes
+
+  // Function to scroll to bottom
+  const handleScrollToBottom = () => {
+    const scrollContainer = scrollContainerRef.current
+    if (scrollContainer) {
+      scrollContainer.scrollTo({
+        top: scrollContainer.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
+  }
 
   const handleBottomDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -579,56 +640,45 @@ export function ChatInterface({
         }}
       >
         <div
-          className={`absolute inset-0 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} overflow-hidden`}
+          className={`relative flex h-full flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
         >
+          {/* Messages Area */}
           <div
-            className={`${currentChat?.messages?.length > 0 ? 'overflow-y-auto' : 'overflow-hidden'} md:pt-0 ${
+            ref={scrollContainerRef}
+            className={`relative flex-1 overflow-y-auto ${
               isDarkMode ? 'bg-gray-800' : 'bg-white'
             }`}
             style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: '140px',
-              height: 'auto',
-              overscrollBehavior: 'none',
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
             }}
           >
-            <div className="h-full w-full">
-              <ChatMessages
-                messages={currentChat?.messages || []}
-                isThinking={isThinking}
-                isDarkMode={isDarkMode}
-                chatId={currentChat.id}
-                messagesEndRef={messagesEndRef}
-                openAndExpandVerifier={modifiedOpenAndExpandVerifier}
-                isInitialLoad={isInitialLoad}
-                setIsInitialLoad={setIsInitialLoad}
-                isWaitingForResponse={isWaitingForResponse}
-                isPremium={isPremium}
-                models={models}
-                subscriptionLoading={subscriptionLoading}
-              />
-            </div>
+            <ChatMessages
+              messages={currentChat?.messages || []}
+              isThinking={isThinking}
+              isDarkMode={isDarkMode}
+              chatId={currentChat.id}
+              messagesEndRef={messagesEndRef}
+              openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+              isInitialLoad={isInitialLoad}
+              setIsInitialLoad={setIsInitialLoad}
+              isWaitingForResponse={isWaitingForResponse}
+              isPremium={isPremium}
+              models={models}
+              subscriptionLoading={subscriptionLoading}
+            />
           </div>
 
-          {/* Input Form - Modified for Safari mobile fix */}
+          {/* Input Form */}
           {isClient && (
             <div
-              className={`fixed bottom-0 left-0 right-0 z-10 ${
+              className={`relative flex-shrink-0 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-white'
               } p-4`}
               style={{
-                position: 'absolute',
                 minHeight: '80px',
                 maxHeight: '50vh',
-                bottom: 0,
-                left: 0,
-                right: 0,
                 paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
-                transform: 'translateZ(0)',
-                willChange: 'transform',
                 transition: 'border 0.2s ease-in-out',
                 borderTop: isBottomDragActive
                   ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
@@ -694,6 +744,28 @@ export function ChatInterface({
                   }
                 />
               </form>
+
+              {/* Scroll to bottom button - absolutely positioned in parent */}
+              {showScrollButton && currentChat?.messages?.length > 0 && (
+                <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
+                  <button
+                    onClick={handleScrollToBottom}
+                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                      isDarkMode
+                        ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
+                        : 'border border-gray-200 bg-white/90 shadow-md hover:bg-gray-50'
+                    }`}
+                    aria-label="Scroll to bottom"
+                  >
+                    <ArrowDownIcon
+                      className={`h-4 w-4 ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                      }`}
+                      strokeWidth={2}
+                    />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
