@@ -772,7 +772,7 @@ export function ChatMessages({
     }
 
     const messageContainer = messagesEndRef.current?.parentElement
-    const scrollContainer = findScrollParent(messageContainer)
+    const scrollContainer = findScrollParent(messageContainer ?? null)
 
     if (!scrollContainer) return
 
@@ -882,7 +882,13 @@ export function ChatMessages({
     const timeoutId = setTimeout(scrollToBottom, 10)
 
     return () => clearTimeout(timeoutId)
-  }, [messages, shouldAutoScroll, isInitialLoad, setIsInitialLoad])
+  }, [
+    messages,
+    shouldAutoScroll,
+    isInitialLoad,
+    setIsInitialLoad,
+    messagesEndRef,
+  ])
 
   // Continuous scrolling during streaming
   useEffect(() => {
@@ -900,7 +906,7 @@ export function ChatMessages({
 
       return () => clearInterval(scrollInterval)
     }
-  }, [isThinking, isWaitingForResponse, shouldAutoScroll])
+  }, [isThinking, isWaitingForResponse, shouldAutoScroll, messagesEndRef])
 
   if (!mounted) {
     return (
