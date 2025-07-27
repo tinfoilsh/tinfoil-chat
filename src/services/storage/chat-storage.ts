@@ -1,5 +1,7 @@
 import type { Chat } from '@/components/chat/types'
 import { logError } from '@/utils/error-handling'
+import { cloudSync } from '../cloud/cloud-sync'
+import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
 
@@ -17,7 +19,7 @@ export class ChatStorageService {
 
     // Start initialization and store the promise
     this.initializePromise = this.doInitialize()
-
+    
     try {
       await this.initializePromise
       this.initialized = true
@@ -39,9 +41,19 @@ export class ChatStorageService {
         if (result.success) {
           // Clean up legacy data after successful migration
           await storageMigration.cleanupLegacyData()
+
+          // Store migration flag to trigger sync later when auth is ready
+          if (result.migratedCount > 0) {
+            console.log(
+              `[ChatStorage] Migration complete: ${result.migratedCount} chats migrated`,
+            )
+            // Store a flag to indicate migration just completed
+            sessionStorage.setItem('pendingMigrationSync', 'true')
+          }
         } else {
           logError('Migration failed', new Error(result.errors.join(', ')), {
             component: 'ChatStorageService',
+            action: 'migrate',
           })
           throw new Error('Migration to IndexedDB failed')
         }
@@ -49,9 +61,13 @@ export class ChatStorageService {
 
       // Initialize IndexedDB
       await indexedDBStorage.initialize()
+
+      // Initialize encryption (for cloud sync)
+      await encryptionService.initialize()
     } catch (error) {
       logError('Failed to initialize chat storage', error, {
         component: 'ChatStorageService',
+        action: 'initialize',
       })
       throw error
     }
@@ -70,6 +86,15 @@ export class ChatStorageService {
       updatedAt: new Date().toISOString(),
     }
     await indexedDBStorage.saveChat(storageChat)
+
+    // Auto-backup to cloud (non-blocking)
+    cloudSync.backupChat(chat.id).catch((error) => {
+      logError('Failed to backup chat to cloud', error, {
+        component: 'ChatStorageService',
+        action: 'saveChat',
+        metadata: { chatId: chat.id },
+      })
+    })
   }
 
   async getChat(id: string): Promise<Chat | null> {

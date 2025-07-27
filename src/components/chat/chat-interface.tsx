@@ -17,6 +17,7 @@ import {
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 
+import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
@@ -82,6 +83,9 @@ export function ChatInterface({
     api_subscription_active,
     isLoading: subscriptionLoading,
   } = useSubscriptionStatus()
+
+  // Initialize cloud sync
+  const { syncing, syncChats } = useCloudSync()
 
   // State for API data
   const [models, setModels] = useState<BaseModel[]>([])
@@ -194,6 +198,7 @@ export function ChatInterface({
     cancelGeneration,
     updateChatTitle,
     getApiKey,
+    reloadChats,
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
     storeHistory: isPremium,
@@ -212,6 +217,41 @@ export function ChatInterface({
     isPremium,
     selectedModelDetails,
   )
+
+  // Sync chats when user signs in and periodically
+  useEffect(() => {
+    if (!isSignedIn) return
+
+    // Initial sync on page load/refresh
+    syncChats()
+      .then(() => {
+        // Reload chats from IndexedDB after sync completes
+        return reloadChats()
+      })
+      .catch((error) => {
+        logError('Failed to sync chats', error, {
+          component: 'ChatInterface',
+          action: 'syncChats',
+        })
+      })
+
+    // Sync every 30 seconds
+    const interval = setInterval(() => {
+      syncChats()
+        .then(() => {
+          // Reload chats from IndexedDB after sync completes
+          return reloadChats()
+        })
+        .catch((error) => {
+          logError('Failed to sync chats (periodic)', error, {
+            component: 'ChatInterface',
+            action: 'periodicSync',
+          })
+        })
+    }, 30 * 1000)
+
+    return () => clearInterval(interval)
+  }, [isSignedIn, syncChats, reloadChats])
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {

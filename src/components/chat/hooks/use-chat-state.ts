@@ -57,6 +57,7 @@ interface UseChatStateReturn {
   cancelGeneration: () => Promise<void>
   updateChatTitle: (chatId: string, newTitle: string) => void
   getApiKey: () => Promise<string>
+  reloadChats: () => Promise<void>
 }
 
 export function useChatState({
@@ -99,6 +100,7 @@ export function useChatState({
     handleChatSelect,
     setIsInitialLoad,
     isInitialLoad,
+    reloadChats,
   } = useChatStorage({ storeHistory, isClient })
 
   // Model Management
@@ -238,5 +240,6 @@ export function useChatState({
     cancelGeneration,
     updateChatTitle,
     getApiKey,
+    reloadChats,
   }
 }

@@ -61,6 +61,11 @@ export class IndexedDBStorage {
             store.createIndex('createdAt', 'createdAt', { unique: false })
             // Add index on id for sorting by reverse timestamp
             store.createIndex('id', 'id', { unique: true })
+            // Add sync-related indexes
+            store.createIndex('syncedAt', 'syncedAt', { unique: false })
+            store.createIndex('locallyModified', 'locallyModified', {
+              unique: false,
+            })
           }
         } catch (error) {
           logError('Failed to create object store', error, {
@@ -135,7 +140,6 @@ export class IndexedDBStorage {
       }
 
       const request = store.put(storedChat)
-
       request.onsuccess = () => resolve()
       request.onerror = () => reject(new Error('Failed to save chat'))
     })
@@ -251,6 +255,42 @@ export class IndexedDBStorage {
         request.onsuccess = () => resolve()
         request.onerror = () =>
           reject(new Error('Failed to update last accessed'))
+      })
+    }
+  }
+
+  async getUnsyncedChats(): Promise<StoredChat[]> {
+    // Get all chats and filter for those that need syncing
+    const allChats = await this.getAllChats()
+
+    // Return chats that are either:
+    // 1. Marked as locally modified
+    // 2. Never synced (syncedAt is undefined/null)
+    return allChats.filter(
+      (chat) =>
+        chat.locallyModified === true ||
+        chat.syncedAt === undefined ||
+        chat.syncedAt === null,
+    )
+  }
+
+  async markAsSynced(id: string, syncVersion: number): Promise<void> {
+    const db = await this.ensureDB()
+    const chat = await this.getChatInternal(id)
+
+    if (chat) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const store = transaction.objectStore(CHATS_STORE)
+
+        chat.syncedAt = Date.now()
+        chat.locallyModified = false
+        chat.syncVersion = syncVersion
+
+        const request = store.put(chat)
+
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(new Error('Failed to mark as synced'))
       })
     }
   }
