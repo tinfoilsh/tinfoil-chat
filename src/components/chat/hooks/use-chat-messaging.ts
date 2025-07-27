@@ -1,5 +1,6 @@
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -95,34 +96,47 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
+      // Create the updated chat object first
+      const updatedChat: Chat = {
+        ...currentChat,
+        messages: newMessages,
+      }
+
       setChats((prevChats) => {
         // Find the latest version of this chat (to preserve any recent title changes)
-        const existingChat =
-          prevChats.find((c) => c.id === chatId) || currentChat
+        const existingChat = prevChats.find((c) => c.id === chatId)
 
-        const updatedChat: Chat = {
-          ...existingChat,
-          messages: newMessages,
-        }
+        if (existingChat) {
+          // Merge with existing chat to preserve title and other properties
+          const mergedChat = {
+            ...existingChat,
+            messages: newMessages,
+          }
 
-        // Build new array
-        const newChats = prevChats.map((c) =>
-          c.id === chatId ? updatedChat : c,
-        )
-
-        // Persist if needed (strip imageData to prevent quota issues)
-        if (storeHistory && (!isThinking || immediate)) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(newChats)),
+          // Build new array
+          const newChats = prevChats.map((c) =>
+            c.id === chatId ? mergedChat : c,
           )
+
+          return newChats
         }
 
-        // Also replace currentChat state
-        setCurrentChat(updatedChat)
-
-        return newChats
+        // If chat doesn't exist in the array, add it
+        return prevChats
       })
+
+      // Update current chat state
+      setCurrentChat(updatedChat)
+
+      // Persist if needed
+      if (storeHistory && (!isThinking || immediate)) {
+        // Save the updated chat to storage asynchronously
+        chatStorage.saveChat(updatedChat).catch((error) => {
+          logError('Failed to save chat during update', error, {
+            component: 'useChatMessaging',
+          })
+        })
+      }
     },
     [storeHistory],
   )
@@ -151,10 +165,17 @@ export function useChatMessaging({
           return chat
         })
         if (storeHistory) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(newChats)),
+          // Find and save the updated chat
+          const updatedChat = newChats.find(
+            (c) => c.id === currentChatIdRef.current,
           )
+          if (updatedChat) {
+            chatStorage.saveChat(updatedChat).catch((error) => {
+              logError('Failed to save chat after cancellation', error, {
+                component: 'useChatMessaging',
+              })
+            })
+          }
         }
         return newChats
       })
@@ -218,10 +239,12 @@ export function useChatMessaging({
 
         setChats(updatedChatsWithTitle)
         if (storeHistory) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(updatedChatsWithTitle)),
-          )
+          // Save the updated chat with new title
+          chatStorage.saveChat(updatedChat).catch((error) => {
+            logError('Failed to save chat with new title', error, {
+              component: 'useChatMessaging',
+            })
+          })
         }
       }
 
@@ -238,10 +261,12 @@ export function useChatMessaging({
         )
 
         if (storeHistory) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(newChats)),
-          )
+          // Save the updated chat with user message
+          chatStorage.saveChat(updatedChat).catch((error) => {
+            logError('Failed to save chat with user message', error, {
+              component: 'useChatMessaging',
+            })
+          })
         }
 
         return newChats

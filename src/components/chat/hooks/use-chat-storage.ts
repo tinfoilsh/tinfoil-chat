@@ -1,3 +1,4 @@
+import { chatStorage } from '@/services/storage/chat-storage'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
@@ -64,10 +65,9 @@ export function useChatStorage({
   // Load chats from storage asynchronously
   useEffect(() => {
     if (storeHistory && typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('chats')
-        if (saved) {
-          const savedChats = JSON.parse(saved)
+      const loadChats = async () => {
+        try {
+          const savedChats = await chatStorage.getAllChats()
           if (savedChats.length > 0) {
             const parsedChats = savedChats.map((chat: Chat) => ({
               ...chat,
@@ -88,24 +88,24 @@ export function useChatStorage({
               const updatedChats = [newChat, ...parsedChats]
               setChats(updatedChats)
               setCurrentChat(newChat)
-              localStorage.setItem(
-                'chats',
-                JSON.stringify(stripImageDataForStorage(updatedChats)),
-              )
+              // Save the new chat
+              await chatStorage.saveChat(newChat)
             } else {
               // If the latest chat is empty, use it
               setCurrentChat(firstChat)
             }
           }
+          // Clear initial load state after loading chats
+          setIsInitialLoad(false)
+        } catch (error) {
+          logError('Failed to load chats from storage', error, {
+            component: 'useChatStorage',
+          })
+          setIsInitialLoad(false)
         }
-        // Clear initial load state after loading chats
-        setIsInitialLoad(false)
-      } catch (error) {
-        logError('Failed to load chats from localStorage', error, {
-          component: 'useChatStorage',
-        })
-        setIsInitialLoad(false)
       }
+
+      loadChats()
     } else {
       // If not storing history, clear initial load immediately
       setIsInitialLoad(false)
@@ -132,12 +132,13 @@ export function useChatStorage({
     // Update chats array by adding the new chat at the beginning
     setChats((prev) => {
       const updatedChats = [newChat, ...prev]
-      // Save to localStorage explicitly
+      // Save to storage
       if (storeHistory) {
-        localStorage.setItem(
-          'chats',
-          JSON.stringify(stripImageDataForStorage(updatedChats)),
-        )
+        chatStorage.saveChat(newChat).catch((error) => {
+          logError('Failed to save new chat', error, {
+            component: 'useChatStorage',
+          })
+        })
       }
       return updatedChats
     })
@@ -160,6 +161,12 @@ export function useChatStorage({
             createdAt: new Date(),
           }
           setCurrentChat(newChat)
+          // Save the new chat
+          chatStorage.saveChat(newChat).catch((error) => {
+            logError('Failed to save new chat after deletion', error, {
+              component: 'useChatStorage',
+            })
+          })
           return [newChat]
         }
 
@@ -168,10 +175,12 @@ export function useChatStorage({
           setCurrentChat(newChats[0])
         }
 
-        localStorage.setItem(
-          'chats',
-          JSON.stringify(stripImageDataForStorage(newChats)),
-        )
+        // Delete from storage
+        chatStorage.deleteChat(chatId).catch((error) => {
+          logError('Failed to delete chat from storage', error, {
+            component: 'useChatStorage',
+          })
+        })
         return newChats
       })
     },
@@ -214,10 +223,17 @@ export function useChatStorage({
         const updatedChats = prevChats.map((chat) =>
           chat.id === chatId ? { ...chat, title: newTitle } : chat,
         )
-        localStorage.setItem(
-          'chats',
-          JSON.stringify(stripImageDataForStorage(updatedChats)),
-        )
+
+        // Update in storage
+        const chatToUpdate = updatedChats.find((c) => c.id === chatId)
+        if (chatToUpdate) {
+          chatStorage.saveChat(chatToUpdate).catch((error) => {
+            logError('Failed to update chat title in storage', error, {
+              component: 'useChatStorage',
+            })
+          })
+        }
+
         return updatedChats
       })
 
