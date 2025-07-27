@@ -18,10 +18,23 @@ export class IndexedDBStorage {
   private db: IDBDatabase | null = null
 
   async initialize(): Promise<void> {
+    // Check if IndexedDB is available
+    if (typeof window === 'undefined' || !window.indexedDB) {
+      throw new Error('IndexedDB not available')
+    }
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
 
-      request.onerror = () => reject(new Error('Failed to open database'))
+      request.onerror = (event) => {
+        const error = (event.target as IDBOpenDBRequest).error
+        console.error('IndexedDB open error:', error)
+        reject(
+          new Error(
+            `Failed to open database: ${error?.message || 'Unknown error'}`,
+          ),
+        )
+      }
 
       request.onsuccess = () => {
         this.db = request.result
@@ -31,13 +44,23 @@ export class IndexedDBStorage {
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result
 
-        if (!db.objectStoreNames.contains(CHATS_STORE)) {
-          const store = db.createObjectStore(CHATS_STORE, { keyPath: 'id' })
-          store.createIndex('lastAccessedAt', 'lastAccessedAt', {
-            unique: false,
-          })
-          store.createIndex('createdAt', 'createdAt', { unique: false })
+        try {
+          if (!db.objectStoreNames.contains(CHATS_STORE)) {
+            const store = db.createObjectStore(CHATS_STORE, { keyPath: 'id' })
+            store.createIndex('lastAccessedAt', 'lastAccessedAt', {
+              unique: false,
+            })
+            store.createIndex('createdAt', 'createdAt', { unique: false })
+          }
+        } catch (error) {
+          console.error('Failed to create object store:', error)
+          reject(new Error(`Failed to upgrade database: ${error}`))
         }
+      }
+
+      request.onblocked = () => {
+        console.warn('IndexedDB upgrade blocked - close other tabs')
+        reject(new Error('Database upgrade blocked'))
       }
     })
   }
