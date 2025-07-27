@@ -8,10 +8,13 @@ export interface Chat extends Omit<ChatType, 'createdAt'> {
 
 export interface StoredChat extends Chat {
   lastAccessedAt: number
+  syncedAt?: number
+  locallyModified?: boolean
+  syncVersion?: number
 }
 
 const DB_NAME = 'tinfoil-chat'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const CHATS_STORE = 'chats'
 
 export class IndexedDBStorage {
@@ -43,14 +46,26 @@ export class IndexedDBStorage {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result
+        const oldVersion = event.oldVersion
 
         try {
+          let store: IDBObjectStore
           if (!db.objectStoreNames.contains(CHATS_STORE)) {
-            const store = db.createObjectStore(CHATS_STORE, { keyPath: 'id' })
+            store = db.createObjectStore(CHATS_STORE, { keyPath: 'id' })
             store.createIndex('lastAccessedAt', 'lastAccessedAt', {
               unique: false,
             })
             store.createIndex('createdAt', 'createdAt', { unique: false })
+          } else {
+            const transaction = (event.target as IDBOpenDBRequest).transaction!
+            store = transaction.objectStore(CHATS_STORE)
+          }
+
+          if (oldVersion < 2) {
+            store.createIndex('syncedAt', 'syncedAt', { unique: false })
+            store.createIndex('locallyModified', 'locallyModified', {
+              unique: false,
+            })
           }
         } catch (error) {
           console.error('Failed to create object store:', error)
@@ -95,6 +110,8 @@ export class IndexedDBStorage {
         ...chat,
         messages: messagesForStorage as any, // Type assertion needed due to timestamp conversion
         lastAccessedAt: Date.now(),
+        locallyModified: true,
+        syncVersion: (chat as any).syncVersion || 0,
       }
 
       const request = store.put(storedChat)
@@ -208,6 +225,56 @@ export class IndexedDBStorage {
         request.onsuccess = () => resolve()
         request.onerror = () =>
           reject(new Error('Failed to update last accessed'))
+      })
+    }
+  }
+
+  async getUnsyncedChats(): Promise<StoredChat[]> {
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([CHATS_STORE], 'readonly')
+      const store = transaction.objectStore(CHATS_STORE)
+      const index = store.index('locallyModified')
+      const request = index.openCursor(IDBKeyRange.only(true))
+
+      const chats: StoredChat[] = []
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result
+        if (cursor) {
+          const chat = cursor.value
+          chat.messages = chat.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          }))
+          chats.push(chat)
+          cursor.continue()
+        } else {
+          resolve(chats)
+        }
+      }
+      request.onerror = () => reject(new Error('Failed to get unsynced chats'))
+    })
+  }
+
+  async markAsSynced(id: string, syncVersion: number): Promise<void> {
+    const db = await this.ensureDB()
+    const chat = await this.getChatInternal(id)
+
+    if (chat) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const store = transaction.objectStore(CHATS_STORE)
+
+        chat.syncedAt = Date.now()
+        chat.locallyModified = false
+        chat.syncVersion = syncVersion
+
+        const request = store.put(chat)
+
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(new Error('Failed to mark as synced'))
       })
     }
   }

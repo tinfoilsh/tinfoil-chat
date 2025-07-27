@@ -1,4 +1,6 @@
 import type { Chat } from '@/components/chat/types'
+import { cloudSync } from '../cloud/cloud-sync'
+import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
 
@@ -33,6 +35,9 @@ export class ChatStorageService {
         await indexedDBStorage.initialize()
       }
 
+      // Initialize encryption (for cloud sync)
+      await encryptionService.initialize()
+
       this.initialized = true
     } catch (error) {
       console.error('Failed to initialize chat storage:', error)
@@ -58,6 +63,11 @@ export class ChatStorageService {
         updatedAt: new Date().toISOString(),
       }
       await indexedDBStorage.saveChat(storageChat)
+
+      // Auto-backup to cloud (non-blocking)
+      cloudSync.backupChat(chat.id).catch(() => {
+        // Silently fail - cloud sync might not be enabled
+      })
     }
   }
 
