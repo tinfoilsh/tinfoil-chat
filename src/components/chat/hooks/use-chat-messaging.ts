@@ -96,12 +96,6 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
-      // Create the updated chat object first
-      const updatedChat: Chat = {
-        ...currentChat,
-        messages: newMessages,
-      }
-
       setChats((prevChats) => {
         // Find the latest version of this chat (to preserve any recent title changes)
         const existingChat = prevChats.find((c) => c.id === chatId)
@@ -118,23 +112,35 @@ export function useChatMessaging({
             c.id === chatId ? mergedChat : c,
           )
 
+          // Update current chat state with the merged chat (preserving title)
+          setCurrentChat(mergedChat)
+
           return newChats
         }
 
         // If chat doesn't exist in the array, add it
+        const updatedChat: Chat = {
+          ...currentChat,
+          messages: newMessages,
+        }
+        setCurrentChat(updatedChat)
         return prevChats
       })
 
-      // Update current chat state
-      setCurrentChat(updatedChat)
-
       // Persist if needed
       if (storeHistory && (!isThinking || immediate)) {
-        // Save the updated chat to storage asynchronously
-        chatStorage.saveChat(updatedChat).catch((error) => {
-          logError('Failed to save chat during update', error, {
-            component: 'useChatMessaging',
-          })
+        // Get the latest version of the chat to save (with preserved title)
+        setChats((prevChats) => {
+          const chatToSave = prevChats.find((c) => c.id === chatId)
+          if (chatToSave) {
+            // Save the chat with all its properties including title
+            chatStorage.saveChat(chatToSave).catch((error) => {
+              logError('Failed to save chat during update', error, {
+                component: 'useChatMessaging',
+              })
+            })
+          }
+          return prevChats
         })
       }
     },
