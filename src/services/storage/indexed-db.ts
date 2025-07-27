@@ -114,36 +114,46 @@ export class IndexedDBStorage {
       const transaction = db.transaction([CHATS_STORE], 'readwrite')
       const store = transaction.objectStore(CHATS_STORE)
 
-      // Convert Date timestamps to strings for storage
-      const messagesForStorage = chat.messages.map((msg) => ({
-        ...msg,
-        timestamp:
-          msg.timestamp instanceof Date
-            ? msg.timestamp.toISOString()
-            : msg.timestamp,
-      }))
+      // First, get the existing chat if it exists
+      const getRequest = store.get(chat.id)
 
-      const storedChat: StoredChat = {
-        ...chat,
-        messages: messagesForStorage as any, // Type assertion needed due to timestamp conversion
-        lastAccessedAt: Date.now(),
-        // Preserve sync metadata if it exists
-        syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
-        locallyModified:
-          existingChat?.locallyModified ?? (chat as StoredChat).locallyModified,
-        syncVersion:
-          existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
-        decryptionFailed:
-          existingChat?.decryptionFailed ??
-          (chat as StoredChat).decryptionFailed,
-        encryptedData:
-          existingChat?.encryptedData ?? (chat as StoredChat).encryptedData,
-        version: 1, // Current storage format version
+      getRequest.onsuccess = () => {
+        const existingChat = getRequest.result as StoredChat | undefined
+
+        // Convert Date timestamps to strings for storage
+        const messagesForStorage = chat.messages.map((msg) => ({
+          ...msg,
+          timestamp:
+            msg.timestamp instanceof Date
+              ? msg.timestamp.toISOString()
+              : msg.timestamp,
+        }))
+
+        const storedChat: StoredChat = {
+          ...chat,
+          messages: messagesForStorage as any, // Type assertion needed due to timestamp conversion
+          lastAccessedAt: Date.now(),
+          // Preserve sync metadata if it exists
+          syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
+          locallyModified:
+            existingChat?.locallyModified ?? (chat as StoredChat).locallyModified,
+          syncVersion:
+            existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
+          decryptionFailed:
+            existingChat?.decryptionFailed ??
+            (chat as StoredChat).decryptionFailed,
+          encryptedData:
+            existingChat?.encryptedData ?? (chat as StoredChat).encryptedData,
+          version: 1, // Current storage format version
+        }
+
+        const putRequest = store.put(storedChat)
+        putRequest.onsuccess = () => resolve()
+        putRequest.onerror = () => reject(new Error('Failed to save chat'))
       }
 
-      const request = store.put(storedChat)
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(new Error('Failed to save chat'))
+      getRequest.onerror = () =>
+        reject(new Error('Failed to check existing chat'))
     })
   }
 
