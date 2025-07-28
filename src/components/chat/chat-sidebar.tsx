@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import JSZip from 'jszip'
+import { AiOutlineCloudSync } from 'react-icons/ai'
 
 import { logError } from '@/utils/error-handling'
 import { useEffect, useState } from 'react'
@@ -70,6 +71,8 @@ type Chat = {
   title: string
   messages: Message[]
   createdAt: Date
+  syncedAt?: number
+  locallyModified?: boolean
 }
 
 type ChatSidebarProps = {
@@ -625,19 +628,42 @@ function ChatListItem({
             </form>
           ) : (
             <>
-              <div
-                className={`truncate text-sm font-medium ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}
-              >
-                {chat.title}
+              <div className="flex items-center gap-1">
+                <div
+                  className={`truncate text-sm font-medium ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}
+                >
+                  {chat.title}
+                </div>
+                {/* New chat indicator */}
+                {chat.title === 'New Chat' && chat.messages.length === 0 && (
+                  <div
+                    className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                    title="New chat"
+                  />
+                )}
               </div>
-              <div
-                className={`text-xs ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}
-              >
-                {formatRelativeTime(chat.createdAt)}
+              {/* Show timestamp with sync indicator */}
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`text-xs ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}
+                >
+                  {chat.title === 'New Chat' && chat.messages.length === 0
+                    ? '\u00A0' // Non-breaking space for consistent height
+                    : formatRelativeTime(chat.createdAt)}
+                </div>
+                {/* Cloud sync indicator - show when chat has messages but not synced */}
+                {chat.messages.length > 0 && !chat.syncedAt && (
+                  <AiOutlineCloudSync
+                    className={`h-3 w-3 ${
+                      isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                    }`}
+                    title="Not synced to cloud"
+                  />
+                )}
               </div>
             </>
           )}
