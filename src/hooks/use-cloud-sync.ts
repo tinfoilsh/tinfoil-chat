@@ -1,6 +1,7 @@
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -38,7 +39,10 @@ export function useCloudSync() {
           encryptionKey: key,
         }))
       } catch (error) {
-        console.error('Failed to initialize cloud sync:', error)
+        logError('Failed to initialize cloud sync', error, {
+          component: 'useCloudSync',
+          action: 'initializeSync',
+        })
       }
     }
 
