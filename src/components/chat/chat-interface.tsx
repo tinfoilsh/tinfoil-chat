@@ -20,6 +20,7 @@ import {
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { EncryptionKeyModal } from '../modals/encryption-key-modal'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -115,6 +116,10 @@ export function ChatInterface({
 
   // State for settings sidebar
   const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
+
+  // State for encryption key modal
+  const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
+    useState(false)
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -286,6 +291,11 @@ export function ChatInterface({
     if (newSettingsState) {
       setIsVerifierSidebarOpen(false)
     }
+  }
+
+  // Handler for encryption key button
+  const handleOpenEncryptionKeyModal = () => {
+    setIsEncryptionKeyModalOpen(true)
   }
 
   // Don't automatically create new chats - let the chat state handle initialization
@@ -642,6 +652,9 @@ export function ChatInterface({
         }}
         selectedModel={selectedModel}
         isPremium={isPremium}
+        onEncryptionKeyClick={
+          isSignedIn ? handleOpenEncryptionKeyModal : undefined
+        }
       />
 
       {/* Right Verifier Sidebar */}
@@ -816,6 +829,15 @@ export function ChatInterface({
           )}
         </div>
       </div>
+
+      {/* Encryption Key Modal */}
+      <EncryptionKeyModal
+        isOpen={isEncryptionKeyModalOpen}
+        onClose={() => setIsEncryptionKeyModalOpen(false)}
+        encryptionKey={encryptionKey}
+        onKeyChange={setEncryptionKey}
+        isDarkMode={isDarkMode}
+      />
     </div>
   )
 }

@@ -10,8 +10,10 @@ import {
 import { motion } from 'framer-motion'
 import JSZip from 'jszip'
 import { AiOutlineCloudSync } from 'react-icons/ai'
+import { FaLock } from 'react-icons/fa'
 
 import { logError } from '@/utils/error-handling'
+import { KeyIcon } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
@@ -83,6 +85,7 @@ type ChatSidebarProps = {
   selectedModel: string
   isPremium?: boolean
   onVerificationComplete: (success: boolean) => void
+  onEncryptionKeyClick?: () => void
 }
 
 // Add this constant at the top of the file
@@ -196,6 +199,7 @@ export function ChatSidebar({
   onVerificationComplete,
   selectedModel,
   isPremium = true,
+  onEncryptionKeyClick,
 }: ChatSidebarProps) {
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
@@ -385,26 +389,43 @@ export function ChatSidebar({
                   >
                     Chat History
                   </h3>
-                  {chats.length > 0 && (
-                    <button
-                      onClick={() => downloadChats(chats)}
-                      className={`rounded-lg p-1.5 transition-all duration-200 ${
-                        isDarkMode
-                          ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                      }`}
-                      title="Download all chats as ZIP"
-                    >
-                      <ArrowDownTrayIcon className="h-4 w-4" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {onEncryptionKeyClick && (
+                      <button
+                        onClick={onEncryptionKeyClick}
+                        className={`rounded-lg p-1.5 transition-all duration-200 ${
+                          isDarkMode
+                            ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        }`}
+                        title="Manage encryption key"
+                      >
+                        <KeyIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                    {chats.length > 0 && (
+                      <button
+                        onClick={() => downloadChats(chats)}
+                        className={`rounded-lg p-1.5 transition-all duration-200 ${
+                          isDarkMode
+                            ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        }`}
+                        title="Download all chats as ZIP"
+                      >
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div
-                  className={`mt-1 truncate text-xs ${
+                  className={`mt-1 text-xs ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}
                 >
-                  Your chat history is stored locally in your browser.
+                  Your chats are encrypted and synced to the cloud.
+                  <br />
+                  The encryption key is stored in your browser.
                 </div>
               </>
             )}
@@ -626,26 +647,41 @@ function ChatListItem({
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
-                  {chat.title}
+                  {chat.decryptionFailed ? 'Encrypted' : chat.title}
                 </div>
+                {/* Lock icon for encrypted chats */}
+                {chat.decryptionFailed && (
+                  <FaLock
+                    className={`h-3 w-3 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}
+                    title="Encrypted chat"
+                  />
+                )}
                 {/* New chat indicator */}
-                {chat.messages.length === 0 && (
+                {chat.messages.length === 0 && !chat.decryptionFailed && (
                   <div
                     className="h-1.5 w-1.5 rounded-full bg-blue-500"
                     title="New chat"
                   />
                 )}
               </div>
-              {/* Show timestamp with sync indicator */}
+              {/* Show timestamp with sync indicator or decryption error */}
               <div className="flex items-center gap-1.5">
                 <div
                   className={`text-xs ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                    chat.decryptionFailed
+                      ? 'text-red-500'
+                      : isDarkMode
+                        ? 'text-gray-400'
+                        : 'text-gray-500'
                   }`}
                 >
-                  {chat.messages.length === 0
-                    ? '\u00A0' // Non-breaking space for consistent height
-                    : formatRelativeTime(chat.createdAt)}
+                  {chat.decryptionFailed
+                    ? 'Failed to decrypt: wrong key'
+                    : chat.messages.length === 0
+                      ? '\u00A0' // Non-breaking space for consistent height
+                      : formatRelativeTime(chat.createdAt)}
                 </div>
                 {/* Cloud sync indicator - show when chat has messages but not synced */}
                 {chat.messages.length > 0 && !chat.syncedAt && (

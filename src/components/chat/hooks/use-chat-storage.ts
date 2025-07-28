@@ -3,6 +3,7 @@ import { chatStorage } from '@/services/storage/chat-storage'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 
 // Generate a chat ID with proper format for cloud storage (synchronous fallback)
@@ -107,39 +108,61 @@ export function useChatStorage({
 
     try {
       const savedChats = await chatStorage.getAllChats()
-      if (savedChats.length > 0) {
-        const parsedChats = savedChats.map((chat: Chat) => ({
-          ...chat,
-          createdAt: new Date(chat.createdAt),
-        }))
-        setChats(parsedChats)
+      const savedChatIds = new Set(savedChats.map((chat) => chat.id))
 
-        // Check if the current chat still exists after reload
-        const currentChatStillExists = parsedChats.some(
-          (chat) => chat.id === currentChatRef.current?.id,
+      // Get current chats state to preserve unsaved empty chats
+      setChats((prevChats) => {
+        // Find all unsaved empty chats (not just the current one)
+        const unsavedEmptyChats = prevChats.filter(
+          (chat) =>
+            (!chat.messages || chat.messages.length === 0) &&
+            !savedChatIds.has(chat.id),
         )
 
-        // If current chat was deleted, switch to the first chat
-        if (!currentChatStillExists) {
-          const firstChat = parsedChats[0]
-          if (firstChat.messages && firstChat.messages.length > 0) {
-            // If the latest chat has messages, create a new empty chat
-            const newChat = createNewChatObjectSync()
-            const updatedChats = [newChat, ...parsedChats]
-            setChats(updatedChats)
-            setCurrentChat(newChat)
-            // Don't save empty chats - they'll be saved when the first message is added
-          } else {
-            setCurrentChat(firstChat)
+        if (savedChats.length > 0) {
+          const parsedChats = savedChats.map((chat: Chat) => ({
+            ...chat,
+            createdAt: new Date(chat.createdAt),
+          }))
+
+          // Combine unsaved empty chats with saved chats
+          const combinedChats = [...unsavedEmptyChats, ...parsedChats]
+
+          // Sort by ID to maintain consistent order (newer first)
+          const finalChats = combinedChats.sort((a, b) =>
+            a.id.localeCompare(b.id),
+          )
+
+          // Determine which chat should be current
+          const currentChatStillExists = finalChats.some(
+            (chat) => chat.id === currentChatRef.current?.id,
+          )
+
+          const currentChatIsUsable =
+            currentChatStillExists &&
+            !(currentChatRef.current as any)?.decryptionFailed
+
+          if (!currentChatIsUsable) {
+            // Need to find a new current chat
+            // Find all usable (non-encrypted) chats
+            const usableChats = finalChats.filter(
+              (chat) => !(chat as any).decryptionFailed,
+            )
+
+            // Find the best usable chat
+            const emptyUsableChat = usableChats.find(
+              (chat) => !chat.messages || chat.messages.length === 0,
+            )
+            setCurrentChat(emptyUsableChat || usableChats[0] || finalChats[0])
           }
+          // Otherwise keep the current chat as is
+
+          return finalChats
+        } else {
+          // No saved chats found, keep unsaved empty chats
+          return unsavedEmptyChats.length > 0 ? unsavedEmptyChats : prevChats
         }
-      } else {
-        // No chats found, create a new one
-        const newChat = createNewChatObjectSync()
-        setChats([newChat])
-        setCurrentChat(newChat)
-        // Don't save empty chats - they'll be saved when the first message is added
-      }
+      })
     } catch (error) {
       logError('Failed to reload chats from storage', error, {
         component: 'useChatStorage',
@@ -164,26 +187,39 @@ export function useChatStorage({
               ...chat,
               createdAt: new Date(chat.createdAt),
             }))
-            setChats(parsedChats)
+            
+            // Find all usable (non-encrypted) chats
+            const usableChats = parsedChats.filter(
+              (chat) => !(chat as any).decryptionFailed,
+            )
 
-            // Check if the first (most recent) chat has messages
-            const firstChat = parsedChats[0]
-            if (firstChat.messages && firstChat.messages.length > 0) {
-              // If the latest chat has messages, create a new empty chat
-              const newChat = createNewChatObjectSync()
-              const updatedChats = [newChat, ...parsedChats]
+            // Check if we need to add a new empty chat (only on initial load)
+            const hasEmptyUsableChat = usableChats.some(
+              (chat) => !chat.messages || chat.messages.length === 0,
+            )
 
-              // Check again before updating state
-              if (!isMounted) return
+            let finalChats = parsedChats
+            let newChat = null
 
-              setChats(updatedChats)
+            if (!hasEmptyUsableChat) {
+              // No empty usable chat exists, create one for initial load
+              newChat = createNewChatObjectSync()
+              finalChats = [newChat, ...parsedChats]
+            }
+
+            setChats(finalChats)
+
+            // Set initial current chat
+            if (newChat) {
               setCurrentChat(newChat)
-              // Don't save empty chats - they'll be saved when the first message is added
             } else {
-              // If the latest chat is empty, use it
-              if (isMounted) {
-                setCurrentChat(firstChat)
-              }
+              // Find the best usable chat to start with
+              const emptyUsableChat = usableChats.find(
+                (chat) => !chat.messages || chat.messages.length === 0,
+              )
+              setCurrentChat(
+                emptyUsableChat || usableChats[0] || parsedChats[0],
+              )
             }
           }
           // Clear initial load state after loading chats
@@ -268,84 +304,73 @@ export function useChatStorage({
         }
 
         // Delete from storage
-        if (storeHistory) {
-          chatStorage.deleteChat(chatId).catch((error) => {
-            logError('Failed to delete chat from storage', error, {
-              component: 'useChatStorage',
-            })
+        chatStorage.deleteChat(chatId).catch((error) => {
+          logError('Failed to delete chat from storage', error, {
+            component: 'useChatStorage',
           })
-        }
-
+        })
         return newChats
       })
     },
-    [storeHistory, currentChat],
-  )
-
-  // Update chat title
-  const updateChatTitle = useCallback(
-    (chatId: string, newTitle: string) => {
-      setChats((prevChats) => {
-        const updatedChats = prevChats.map((chat) =>
-          chat.id === chatId ? { ...chat, title: newTitle } : chat,
-        )
-
-        // Update current chat if it's the one being updated
-        if (currentChat?.id === chatId) {
-          setCurrentChat((prev) => ({ ...prev, title: newTitle }))
-        }
-
-        // Save to storage
-        if (storeHistory) {
-          const chatToUpdate = updatedChats.find((c) => c.id === chatId)
-          if (chatToUpdate) {
-            chatStorage.saveChat(chatToUpdate).catch((error) => {
-              logError('Failed to update chat title in storage', error, {
-                component: 'useChatStorage',
-              })
-            })
-          }
-        }
-
-        return updatedChats
-      })
-    },
-    [storeHistory, currentChat],
+    [currentChat?.id, storeHistory],
   )
 
   // Switch to a different chat
   const switchChat = useCallback(
     async (chat: Chat) => {
-      // Save current chat before switching
-      if (
-        storeHistory &&
-        currentChat &&
-        currentChat.messages.length > 0 &&
-        currentChat.id !== chat.id
-      ) {
-        try {
-          await chatStorage.saveChat(currentChat)
-        } catch (error) {
-          logError('Failed to save current chat before switching', error, {
-            component: 'useChatStorage',
-          })
-        }
-      }
+      if (!storeHistory) return // Prevent switching chats for basic users
 
       setCurrentChat(chat)
+      setIsInitialLoad(true)
+
+      // Set isInitialLoad back to false after a brief delay to show the chat
+      setTimeout(() => {
+        setIsInitialLoad(false)
+      }, CONSTANTS.CHAT_INIT_DELAY_MS)
     },
-    [storeHistory, currentChat],
+    [storeHistory],
   )
 
-  // Handle chat selection from sidebar
+  // Handle chat selection
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      const selectedChat = chats.find((chat) => chat.id === chatId)
-      if (selectedChat) {
-        setCurrentChat(selectedChat)
+      if (!storeHistory) return // Prevent chat selection for basic users
+
+      const selectedChat = chats.find((chat) => chat.id === chatId) || chats[0]
+      switchChat(selectedChat)
+    },
+    [chats, switchChat, storeHistory],
+  )
+
+  // Update chat title
+  const updateChatTitle = useCallback(
+    (chatId: string, newTitle: string) => {
+      if (!storeHistory) return // Prevent updating titles for basic users
+
+      setChats((prevChats) => {
+        const updatedChats = prevChats.map((chat) =>
+          chat.id === chatId ? { ...chat, title: newTitle } : chat,
+        )
+
+        // Update in storage
+        const chatToUpdate = updatedChats.find((c) => c.id === chatId)
+        if (chatToUpdate) {
+          chatStorage.saveChat(chatToUpdate).catch((error) => {
+            logError('Failed to update chat title in storage', error, {
+              component: 'useChatStorage',
+            })
+          })
+        }
+
+        return updatedChats
+      })
+
+      // Also update current chat if it's the one being edited
+      if (currentChat?.id === chatId) {
+        setCurrentChat((prev) => ({ ...prev, title: newTitle }))
       }
     },
-    [chats],
+    [storeHistory, currentChat?.id],
   )
 
   return {
