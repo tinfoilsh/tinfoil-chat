@@ -58,6 +58,9 @@ export class EncryptionService {
         false,
         ['encrypt', 'decrypt'],
       )
+
+      // Store the key in localStorage
+      localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
     } catch (error) {
       throw new Error(`Invalid encryption key: ${error}`)
     }

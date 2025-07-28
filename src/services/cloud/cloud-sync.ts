@@ -150,11 +150,13 @@ export class CloudSyncService {
         // Download if:
         // 1. Chat doesn't exist locally
         // 2. Remote is newer (based on updatedAt)
+        // 3. Chat failed decryption (to retry with new key)
         const remoteTimestamp = Date.parse(remoteChat.updatedAt)
         const shouldDownload =
           !localChat ||
           (!isNaN(remoteTimestamp) &&
-            remoteTimestamp > (localChat.syncedAt || 0))
+            remoteTimestamp > (localChat.syncedAt || 0)) ||
+          (localChat as any).decryptionFailed === true
 
         if (shouldDownload) {
           try {
@@ -200,6 +202,42 @@ export class CloudSyncService {
   // Check if currently syncing
   get syncing(): boolean {
     return this.isSyncing
+  }
+
+  // Retry decryption for chats that failed to decrypt
+  async retryDecryptionWithNewKey(): Promise<number> {
+    let decryptedCount = 0
+
+    try {
+      // Get all chats that have encrypted data
+      const chatsWithEncryptedData =
+        await indexedDBStorage.getChatsWithEncryptedData()
+
+      for (const chat of chatsWithEncryptedData) {
+        if (chat.encryptedData) {
+          try {
+            const encrypted = JSON.parse(chat.encryptedData)
+            const downloadedChat = await r2Storage.downloadChat(chat.id)
+
+            if (downloadedChat && !downloadedChat.decryptionFailed) {
+              // Successfully decrypted - save the decrypted chat
+              await indexedDBStorage.saveChat(downloadedChat)
+              decryptedCount++
+            }
+          } catch (error) {
+            // Silent fail - keep the encrypted placeholder
+            console.error(
+              `Failed to retry decryption for chat ${chat.id}:`,
+              error,
+            )
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to retry decryptions:', error)
+    }
+
+    return decryptedCount
   }
 }
 

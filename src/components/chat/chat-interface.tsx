@@ -85,7 +85,13 @@ export function ChatInterface({
   } = useSubscriptionStatus()
 
   // Initialize cloud sync
-  const { syncing, syncChats } = useCloudSync()
+  const {
+    syncing,
+    syncChats,
+    encryptionKey,
+    setEncryptionKey,
+    retryDecryptionWithNewKey,
+  } = useCloudSync()
 
   // State for API data
   const [models, setModels] = useState<BaseModel[]>([])

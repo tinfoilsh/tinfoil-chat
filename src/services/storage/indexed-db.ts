@@ -195,7 +195,9 @@ export class IndexedDBStorage {
     })
   }
 
-  async getAllChats(): Promise<StoredChat[]> {
+  async getAllChats(
+    sortBy: 'lastAccessedAt' | 'createdAt' = 'createdAt',
+  ): Promise<StoredChat[]> {
     const db = await this.ensureDB()
 
     return new Promise((resolve, reject) => {

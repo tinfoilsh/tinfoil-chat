@@ -146,7 +146,7 @@ export class R2StorageService {
         const decrypted = await encryptionService.decrypt(encrypted)
         return decrypted
       } catch (decryptError) {
-        // If decryption fails, return a placeholder encrypted chat
+        // If decryption fails, store the encrypted data for later retry
         // Extract timestamp from the chat ID to use as createdAt
         const timestamp = chatId.split('_')[0]
         const createdAtMs = timestamp
@@ -161,10 +161,11 @@ export class R2StorageService {
           updatedAt: new Date().toISOString(),
           lastAccessedAt: Date.now(),
           decryptionFailed: true,
+          encryptedData: JSON.stringify(encrypted),
           syncedAt: Date.now(),
           locallyModified: false,
           syncVersion: 1,
-        } as StoredChat & { decryptionFailed: boolean }
+        } as StoredChat
       }
     } catch (error) {
       logError(`Failed to download chat ${chatId}`, error, {

@@ -91,10 +91,16 @@ export function useCloudSync() {
     }
   }, [])
 
+  // Retry decryption for failed chats
+  const retryDecryptionWithNewKey = useCallback(async () => {
+    return await cloudSync.retryDecryptionWithNewKey()
+  }, [])
+
   return {
     ...state,
     syncChats,
     backupChat,
     setEncryptionKey,
+    retryDecryptionWithNewKey,
   }
 }
