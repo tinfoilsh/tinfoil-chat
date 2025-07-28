@@ -9,6 +9,40 @@ export interface EncryptedData {
 export class EncryptionService {
   private encryptionKey: CryptoKey | null = null
 
+  // Helper to convert bytes to alphanumeric string (a-z, 0-9)
+  private bytesToAlphanumeric(bytes: Uint8Array): string {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    let result = ''
+
+    for (let i = 0; i < bytes.length; i++) {
+      // Convert each byte to base36 (0-9, a-z)
+      const byte = bytes[i]
+      result += chars[Math.floor(byte / chars.length)]
+      result += chars[byte % chars.length]
+    }
+
+    return result
+  }
+
+  // Helper to convert alphanumeric string back to bytes
+  private alphanumericToBytes(str: string): Uint8Array {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    const bytes = new Uint8Array(str.length / 2)
+
+    for (let i = 0; i < str.length; i += 2) {
+      const high = chars.indexOf(str[i])
+      const low = chars.indexOf(str[i + 1])
+
+      if (high === -1 || low === -1) {
+        throw new Error('Invalid character in key')
+      }
+
+      bytes[i / 2] = high * chars.length + low
+    }
+
+    return bytes
+  }
+
   // Generate a new encryption key
   async generateKey(): Promise<string> {
     const key = await crypto.subtle.generateKey(
@@ -23,8 +57,8 @@ export class EncryptionService {
     // Export key to raw format
     const rawKey = await crypto.subtle.exportKey('raw', key)
 
-    // Convert to base64 for storage
-    return btoa(String.fromCharCode(...new Uint8Array(rawKey)))
+    // Convert to alphanumeric format with key_ prefix
+    return 'key_' + this.bytesToAlphanumeric(new Uint8Array(rawKey))
   }
 
   // Initialize with existing key or generate new one
@@ -33,8 +67,39 @@ export class EncryptionService {
     const storedKey = localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
 
     if (storedKey) {
-      await this.setKey(storedKey)
-      return storedKey
+      // Check if it's an old base64 key and convert it
+      if (
+        storedKey.includes('+') ||
+        storedKey.includes('/') ||
+        storedKey.includes('=')
+      ) {
+        try {
+          // Convert old base64 key to new format
+          const keyData = Uint8Array.from(atob(storedKey), (c) =>
+            c.charCodeAt(0),
+          )
+          const newKey = 'key_' + this.bytesToAlphanumeric(keyData)
+          localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
+          await this.setKey(newKey)
+          return newKey
+        } catch (error) {
+          // If conversion fails, generate a new key
+          console.warn('Failed to convert old key format, generating new key')
+          const newKey = await this.generateKey()
+          localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
+          await this.setKey(newKey)
+          return newKey
+        }
+      } else if (!storedKey.startsWith('key_')) {
+        // Old alphanumeric key without prefix - add prefix
+        const newKey = 'key_' + storedKey
+        localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
+        await this.setKey(newKey)
+        return newKey
+      } else {
+        await this.setKey(storedKey)
+        return storedKey
+      }
     } else {
       // Generate new key
       const newKey = await this.generateKey()
@@ -44,11 +109,27 @@ export class EncryptionService {
     }
   }
 
-  // Set encryption key from base64 string
+  // Set encryption key from alphanumeric string
   async setKey(keyString: string): Promise<void> {
     try {
-      // Convert base64 to ArrayBuffer
-      const keyData = Uint8Array.from(atob(keyString), (c) => c.charCodeAt(0))
+      let processedKey = keyString
+
+      // Check if the key has the prefix
+      if (keyString.startsWith('key_')) {
+        processedKey = keyString.substring(4)
+      } else {
+        throw new Error('Key must start with "key_" prefix')
+      }
+
+      // Validate that the key only contains allowed characters after prefix
+      if (!/^[a-z0-9]+$/.test(processedKey)) {
+        throw new Error(
+          'Key must only contain lowercase letters and numbers after the prefix',
+        )
+      }
+
+      // Convert alphanumeric to bytes
+      const keyData = this.alphanumericToBytes(processedKey)
 
       // Import as CryptoKey
       this.encryptionKey = await crypto.subtle.importKey(
@@ -59,14 +140,14 @@ export class EncryptionService {
         ['encrypt', 'decrypt'],
       )
 
-      // Store the key in localStorage
+      // Store the key in localStorage with prefix
       localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
     } catch (error) {
       throw new Error(`Invalid encryption key: ${error}`)
     }
   }
 
-  // Get current encryption key as base64 string
+  // Get current encryption key as alphanumeric string
   getKey(): string | null {
     return localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
   }

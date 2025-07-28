@@ -179,7 +179,8 @@ export function EncryptionKeyModal({
                       }`}
                     >
                       Keep this key safe. You'll need it to decrypt your chats
-                      on other devices.
+                      on other devices. Keys start with "key_" followed by
+                      lowercase letters and numbers.
                     </p>
                   </div>
 
@@ -205,7 +206,7 @@ export function EncryptionKeyModal({
                         type="password"
                         value={inputKey}
                         onChange={(e) => setInputKey(e.target.value)}
-                        placeholder="Enter encryption key"
+                        placeholder="Enter encryption key (e.g., key_abc123...)"
                         className={`flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                           isDarkMode
                             ? 'border-gray-700 bg-gray-900 text-white placeholder-gray-500'
