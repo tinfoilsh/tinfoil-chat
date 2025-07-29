@@ -15,6 +15,13 @@ import { logError } from '@/utils/error-handling'
 import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
+import type { Chat } from './types'
+
+// Chat with sync metadata for UI display
+type ChatWithSyncStatus = Chat & {
+  syncedAt?: number
+  locallyModified?: boolean
+}
 
 // Utility function to detect iOS devices
 function isIOSDevice() {
@@ -60,26 +67,11 @@ function formatRelativeTime(date: Date): string {
   return `${years}y ago`
 }
 
-type Message = {
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-}
-
-type Chat = {
-  id: string
-  title: string
-  messages: Message[]
-  createdAt: Date
-  syncedAt?: number
-  locallyModified?: boolean
-}
-
 type ChatSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  chats: Chat[]
-  currentChat: Chat
+  chats: ChatWithSyncStatus[]
+  currentChat: ChatWithSyncStatus
   isDarkMode: boolean
   createNewChat: () => void
   handleChatSelect: (chatId: string) => void
