@@ -4,10 +4,30 @@ import { storageMigration } from './migration'
 
 export class ChatStorageService {
   private initialized = false
+  private initializePromise: Promise<void> | null = null
 
   async initialize(): Promise<void> {
     if (this.initialized) return
 
+    // If initialization is already in progress, wait for it
+    if (this.initializePromise) {
+      return this.initializePromise
+    }
+
+    // Start initialization and store the promise
+    this.initializePromise = this.doInitialize()
+
+    try {
+      await this.initializePromise
+      this.initialized = true
+    } catch (error) {
+      // Reset on failure so initialization can be retried
+      this.initializePromise = null
+      throw error
+    }
+  }
+
+  private async doInitialize(): Promise<void> {
     try {
       // Check if we need to migrate
       const needsMigration = await storageMigration.needsMigration()
@@ -26,7 +46,6 @@ export class ChatStorageService {
 
       // Initialize IndexedDB
       await indexedDBStorage.initialize()
-      this.initialized = true
     } catch (error) {
       console.error('Failed to initialize chat storage:', error)
       throw error
