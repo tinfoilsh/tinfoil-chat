@@ -151,6 +151,27 @@ export class ChatStorageService {
       }),
     )
   }
+
+  async getAllChatsWithSyncStatus(): Promise<Chat[]> {
+    await this.initialize()
+
+    const storedChats = await indexedDBStorage.getAllChats()
+    // Convert StoredChat[] to Chat[] but preserve sync metadata
+    return storedChats.map(
+      ({
+        lastAccessedAt,
+        syncVersion,
+        encryptedData,
+        updatedAt,
+        model,
+        version,
+        ...chatWithSyncData
+      }) => ({
+        ...chatWithSyncData,
+        createdAt: new Date(chatWithSyncData.createdAt),
+      }),
+    )
+  }
 }
 
 export const chatStorage = new ChatStorageService()

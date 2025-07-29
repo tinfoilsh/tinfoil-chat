@@ -107,7 +107,7 @@ export function useChatStorage({
     if (!storeHistory || typeof window === 'undefined') return
 
     try {
-      const savedChats = await chatStorage.getAllChats()
+      const savedChats = await chatStorage.getAllChatsWithSyncStatus()
       const savedChatIds = new Set(savedChats.map((chat) => chat.id))
 
       // Get current chats state to preserve unsaved empty chats
@@ -177,13 +177,13 @@ export function useChatStorage({
     if (storeHistory && typeof window !== 'undefined') {
       const loadChats = async () => {
         try {
-          const savedChats = await chatStorage.getAllChats()
+          const savedChats = await chatStorage.getAllChatsWithSyncStatus()
 
           // Check if component is still mounted before updating state
           if (!isMounted) return
 
           if (savedChats.length > 0) {
-            const parsedChats = savedChats.map((chat: Chat) => ({
+            const parsedChats = savedChats.map((chat) => ({
               ...chat,
               createdAt: new Date(chat.createdAt),
             }))

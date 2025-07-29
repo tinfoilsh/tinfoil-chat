@@ -19,13 +19,6 @@ import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
 
-// Chat with sync metadata for UI display
-type ChatWithSyncStatus = Chat & {
-  syncedAt?: number
-  locallyModified?: boolean
-  decryptionFailed?: boolean
-}
-
 // Utility function to detect iOS devices
 function isIOSDevice() {
   if (typeof navigator === 'undefined') return false
@@ -73,8 +66,8 @@ function formatRelativeTime(date: Date): string {
 type ChatSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  chats: ChatWithSyncStatus[]
-  currentChat: ChatWithSyncStatus
+  chats: Chat[]
+  currentChat: Chat
   isDarkMode: boolean
   createNewChat: () => void
   handleChatSelect: (chatId: string) => void
@@ -592,7 +585,7 @@ function ChatListItem({
   isPremium = true,
   isDarkMode,
 }: {
-  chat: ChatWithSyncStatus
+  chat: Chat
   isEditing: boolean
   editingTitle: string
   setEditingTitle: (title: string) => void

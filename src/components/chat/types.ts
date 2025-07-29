@@ -15,6 +15,10 @@ export type Chat = {
   title: string
   messages: Message[]
   createdAt: Date
+  // Sync metadata - optional for backward compatibility
+  syncedAt?: number
+  locallyModified?: boolean
+  decryptionFailed?: boolean
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming'
