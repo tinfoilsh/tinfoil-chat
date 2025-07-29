@@ -637,7 +637,7 @@ function ChatListItem({
                   {chat.title}
                 </div>
                 {/* New chat indicator */}
-                {chat.title === 'New Chat' && chat.messages.length === 0 && (
+                {chat.messages.length === 0 && (
                   <div
                     className="h-1.5 w-1.5 rounded-full bg-blue-500"
                     title="New chat"
@@ -651,7 +651,7 @@ function ChatListItem({
                     isDarkMode ? 'text-gray-400' : 'text-gray-500'
                   }`}
                 >
-                  {chat.title === 'New Chat' && chat.messages.length === 0
+                  {chat.messages.length === 0
                     ? '\u00A0' // Non-breaking space for consistent height
                     : formatRelativeTime(chat.createdAt)}
                 </div>
