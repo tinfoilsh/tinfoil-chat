@@ -1,4 +1,5 @@
 import type { Chat as ChatType } from '@/components/chat/types'
+import { logError, logWarning } from '@/utils/error-handling'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
   createdAt: string
@@ -33,7 +34,9 @@ export class IndexedDBStorage {
 
       request.onerror = (event) => {
         const error = (event.target as IDBOpenDBRequest).error
-        console.error('IndexedDB open error:', error)
+        logError('IndexedDB open error', error, {
+          component: 'IndexedDBStorage',
+        })
         reject(
           new Error(
             `Failed to open database: ${error?.message || 'Unknown error'}`,
@@ -60,13 +63,17 @@ export class IndexedDBStorage {
             store.createIndex('id', 'id', { unique: true })
           }
         } catch (error) {
-          console.error('Failed to create object store:', error)
+          logError('Failed to create object store', error, {
+            component: 'IndexedDBStorage',
+          })
           reject(new Error(`Failed to upgrade database: ${error}`))
         }
       }
 
       request.onblocked = () => {
-        console.warn('IndexedDB upgrade blocked - close other tabs')
+        logWarning('IndexedDB upgrade blocked - close other tabs', {
+          component: 'IndexedDBStorage',
+        })
         reject(new Error('Database upgrade blocked'))
       }
     })
@@ -91,7 +98,9 @@ export class IndexedDBStorage {
       existingChat = await this.getChatInternal(chat.id)
     } catch (error) {
       // Log database errors but continue with save operation
-      console.error('Database error while retrieving existing chat:', error)
+      logError('Database error while retrieving existing chat', error, {
+        component: 'IndexedDBStorage',
+      })
       // existingChat remains null, so sync metadata won't be preserved
     }
 
@@ -159,7 +168,12 @@ export class IndexedDBStorage {
     const chat = await this.getChatInternal(id)
     if (chat) {
       // Update last accessed time
-      this.updateLastAccessed(id).catch(console.error)
+      this.updateLastAccessed(id).catch((error) =>
+        logError('Failed to update last accessed time', error, {
+          component: 'IndexedDBStorage',
+          metadata: { chatId: id },
+        }),
+      )
     }
     return chat
   }

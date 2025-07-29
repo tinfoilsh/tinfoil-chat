@@ -1,4 +1,5 @@
 import type { Chat } from '@/components/chat/types'
+import { logError } from '@/utils/error-handling'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
 
@@ -39,7 +40,9 @@ export class ChatStorageService {
           // Clean up legacy data after successful migration
           await storageMigration.cleanupLegacyData()
         } else {
-          console.error('Migration failed:', result.errors)
+          logError('Migration failed', new Error(result.errors.join(', ')), {
+            component: 'ChatStorageService',
+          })
           throw new Error('Migration to IndexedDB failed')
         }
       }
@@ -47,7 +50,9 @@ export class ChatStorageService {
       // Initialize IndexedDB
       await indexedDBStorage.initialize()
     } catch (error) {
-      console.error('Failed to initialize chat storage:', error)
+      logError('Failed to initialize chat storage', error, {
+        component: 'ChatStorageService',
+      })
       throw error
     }
   }
