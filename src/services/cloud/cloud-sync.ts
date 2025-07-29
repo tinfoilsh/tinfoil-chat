@@ -60,6 +60,11 @@ export class CloudSyncService {
         return // Chat might have been deleted
       }
 
+      // Don't sync empty chats
+      if (!chat.messages || chat.messages.length === 0) {
+        return
+      }
+
       await r2Storage.uploadChat(chat)
 
       // Mark as synced with incremented version
@@ -88,7 +93,20 @@ export class CloudSyncService {
     try {
       const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
 
-      for (const chat of unsyncedChats) {
+      // Debug logging
+      console.log('[CloudSync] Found unsynced chats:', unsyncedChats.length)
+
+      // Filter out empty chats - they shouldn't be synced
+      const chatsToSync = unsyncedChats.filter(
+        (chat) => chat.messages && chat.messages.length > 0,
+      )
+
+      console.log(
+        '[CloudSync] Chats with messages to sync:',
+        chatsToSync.length,
+      )
+
+      for (const chat of chatsToSync) {
         try {
           await r2Storage.uploadChat(chat)
           const newVersion = (chat.syncVersion || 0) + 1
