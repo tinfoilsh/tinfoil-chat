@@ -101,7 +101,7 @@ export function useChatState({
     setIsInitialLoad,
     isInitialLoad,
     reloadChats,
-  } = useChatStorage({ storeHistory, isClient })
+  } = useChatStorage({ storeHistory })
 
   // Model Management
   const {
