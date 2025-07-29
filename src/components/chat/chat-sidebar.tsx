@@ -558,7 +558,7 @@ function ChatListItem({
   isPremium = true,
   isDarkMode,
 }: {
-  chat: Chat
+  chat: ChatWithSyncStatus
   isEditing: boolean
   editingTitle: string
   setEditingTitle: (title: string) => void
