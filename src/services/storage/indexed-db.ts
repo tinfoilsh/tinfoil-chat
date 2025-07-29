@@ -14,6 +14,7 @@ export interface StoredChat extends Chat {
   syncVersion?: number
   decryptionFailed?: boolean
   encryptedData?: string
+  version?: number // Storage format version
 }
 
 const DB_NAME = 'tinfoil-chat'
@@ -137,6 +138,7 @@ export class IndexedDBStorage {
           (chat as StoredChat).decryptionFailed,
         encryptedData:
           existingChat?.encryptedData ?? (chat as StoredChat).encryptedData,
+        version: 1, // Current storage format version
       }
 
       const request = store.put(storedChat)

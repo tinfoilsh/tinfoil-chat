@@ -19,7 +19,7 @@ export class ChatStorageService {
 
     // Start initialization and store the promise
     this.initializePromise = this.doInitialize()
-    
+
     try {
       await this.initializePromise
       this.initialized = true
@@ -113,6 +113,7 @@ export class ChatStorageService {
       encryptedData,
       updatedAt,
       model,
+      version,
       ...baseChat
     } = storedChat
     return {
@@ -141,6 +142,7 @@ export class ChatStorageService {
         encryptedData,
         updatedAt,
         model,
+        version,
         ...baseChat
       }) => ({
         ...baseChat,
