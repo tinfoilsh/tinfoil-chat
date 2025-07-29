@@ -16,7 +16,7 @@ function generateChatIdSync(): string {
 async function generateChatId(): Promise<string> {
   try {
     // Try to get a properly formatted ID from the backend
-    if (r2Storage.isAuthenticated()) {
+    if (await r2Storage.isAuthenticated()) {
       const result = await r2Storage.generateConversationId()
       return result.conversationId
     }

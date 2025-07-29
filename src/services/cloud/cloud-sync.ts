@@ -21,7 +21,7 @@ export class CloudSyncService {
   // Backup a single chat to the cloud with rate limiting
   async backupChat(chatId: string): Promise<void> {
     // Don't attempt backup if not authenticated
-    if (!r2Storage.isAuthenticated()) {
+    if (!(await r2Storage.isAuthenticated())) {
       return
     }
 
