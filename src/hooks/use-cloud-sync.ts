@@ -38,6 +38,26 @@ export function useCloudSync() {
           ...prev,
           encryptionKey: key,
         }))
+
+        // Check if there's a pending migration sync
+        const pendingSync = sessionStorage.getItem('pendingMigrationSync')
+        if (pendingSync === 'true') {
+          console.log(
+            '[CloudSync] Detected pending migration sync, triggering immediate sync',
+          )
+          sessionStorage.removeItem('pendingMigrationSync')
+
+          // Trigger sync for migrated chats
+          try {
+            const result = await cloudSync.syncAllChats()
+            console.log('[CloudSync] Migration sync complete:', result)
+          } catch (error) {
+            logError('Failed to sync migrated chats', error, {
+              component: 'useCloudSync',
+              action: 'migration-sync',
+            })
+          }
+        }
       } catch (error) {
         logError('Failed to initialize cloud sync', error, {
           component: 'useCloudSync',
