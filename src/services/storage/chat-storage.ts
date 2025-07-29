@@ -54,8 +54,18 @@ export class ChatStorageService {
     const storedChat = await indexedDBStorage.getChat(id)
     if (!storedChat) return null
 
-    // Convert StoredChat back to Chat
-    const { lastAccessedAt, updatedAt, model, ...baseChat } = storedChat
+    // Convert StoredChat back to Chat, removing all sync metadata
+    const {
+      lastAccessedAt,
+      syncedAt,
+      locallyModified,
+      syncVersion,
+      decryptionFailed,
+      encryptedData,
+      updatedAt,
+      model,
+      ...baseChat
+    } = storedChat
     return {
       ...baseChat,
       createdAt: new Date(storedChat.createdAt),
@@ -71,9 +81,19 @@ export class ChatStorageService {
     await this.initialize()
 
     const storedChats = await indexedDBStorage.getAllChats()
-    // Convert StoredChat[] to Chat[]
+    // Convert StoredChat[] to Chat[], removing all sync metadata
     return storedChats.map(
-      ({ lastAccessedAt, updatedAt, model, ...baseChat }) => ({
+      ({
+        lastAccessedAt,
+        syncedAt,
+        locallyModified,
+        syncVersion,
+        decryptionFailed,
+        encryptedData,
+        updatedAt,
+        model,
+        ...baseChat
+      }) => ({
         ...baseChat,
         createdAt: new Date(baseChat.createdAt),
       }),
