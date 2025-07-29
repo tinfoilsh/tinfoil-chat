@@ -23,6 +23,7 @@ import type { Chat } from './types'
 type ChatWithSyncStatus = Chat & {
   syncedAt?: number
   locallyModified?: boolean
+  decryptionFailed?: boolean
 }
 
 // Utility function to detect iOS devices
