@@ -5,6 +5,13 @@ import { v4 as uuidv4 } from 'uuid'
 import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 
+// Generate a chat ID with proper format for cloud storage
+function generateChatId(): string {
+  const timestamp = Date.now()
+  const reverseTimestamp = 9999999999999 - timestamp
+  return `${reverseTimestamp}_${uuidv4()}`
+}
+
 // Utility function to remove imageData from messages before localStorage storage
 // This prevents hitting browser storage quotas since base64 images can be very large
 const stripImageDataForStorage = (chats: Chat[]): Chat[] => {
@@ -44,7 +51,7 @@ export function useChatStorage({
 
   const [chats, setChats] = useState<Chat[]>(() => {
     const defaultChat: Chat = {
-      id: uuidv4(),
+      id: generateChatId(),
       title: 'New Chat',
       messages: [],
       createdAt: new Date(),
@@ -80,7 +87,7 @@ export function useChatStorage({
             if (firstChat.messages && firstChat.messages.length > 0) {
               // If the latest chat has messages, create a new empty chat
               const newChat: Chat = {
-                id: uuidv4(),
+                id: generateChatId(),
                 title: 'New Chat',
                 messages: [],
                 createdAt: new Date(),
@@ -122,7 +129,7 @@ export function useChatStorage({
     }
 
     const newChat: Chat = {
-      id: uuidv4(),
+      id: generateChatId(),
       title: 'New Chat',
       messages: [],
       createdAt: new Date(),
@@ -155,7 +162,7 @@ export function useChatStorage({
         // Always ensure there's at least one chat
         if (newChats.length === 0) {
           const newChat: Chat = {
-            id: uuidv4(),
+            id: generateChatId(),
             title: 'New Chat',
             messages: [],
             createdAt: new Date(),

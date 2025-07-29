@@ -26,6 +26,19 @@ export interface MigrationResult {
   errors: string[]
 }
 
+// Helper function to convert legacy ID to new format
+function convertToNewIdFormat(legacyId: string): string {
+  // If ID already has the new format, return as is
+  if (legacyId.includes('_') && /^\d+_/.test(legacyId)) {
+    return legacyId
+  }
+
+  // Convert legacy ID to new format using current timestamp
+  const timestamp = Date.now()
+  const reverseTimestamp = 9999999999999 - timestamp
+  return `${reverseTimestamp}_${legacyId}`
+}
+
 export class StorageMigration {
   async needsMigration(): Promise<boolean> {
     // Simply check if chats exist in localStorage
@@ -72,7 +85,7 @@ export class StorageMigration {
       for (const legacyChat of chats) {
         try {
           const chat: Chat = {
-            id: legacyChat.id,
+            id: convertToNewIdFormat(legacyChat.id),
             title: legacyChat.title || 'Untitled Chat',
             messages: legacyChat.messages
               .filter((msg) => msg.content?.trim() || msg.thoughts?.trim())

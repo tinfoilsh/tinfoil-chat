@@ -51,6 +51,8 @@ export class IndexedDBStorage {
               unique: false,
             })
             store.createIndex('createdAt', 'createdAt', { unique: false })
+            // Add index on id for sorting by reverse timestamp
+            store.createIndex('id', 'id', { unique: true })
           }
         } catch (error) {
           console.error('Failed to create object store:', error)
@@ -155,8 +157,9 @@ export class IndexedDBStorage {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readonly')
       const store = transaction.objectStore(CHATS_STORE)
-      const index = store.index('lastAccessedAt')
-      const request = index.openCursor(null, 'prev') // Most recent first
+      // Sort by ID which now contains reverse timestamp
+      const index = store.index('id')
+      const request = index.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
 
       const chats: StoredChat[] = []
 
