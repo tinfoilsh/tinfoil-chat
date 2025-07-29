@@ -10,18 +10,6 @@ import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import { useMaxMessages } from './use-max-messages'
 
-// Utility function to remove imageData from messages before localStorage storage
-// This prevents hitting browser storage quotas since base64 images can be very large
-const stripImageDataForStorage = (chats: Chat[]): Chat[] => {
-  return chats.map((chat) => ({
-    ...chat,
-    messages: chat.messages.map((msg) => {
-      const { imageData, ...msgWithoutImageData } = msg
-      return msgWithoutImageData
-    }),
-  }))
-}
-
 interface UseChatMessagingProps {
   systemPrompt: string
   storeHistory: boolean
@@ -127,9 +115,9 @@ export function useChatMessaging({
         return prevChats
       })
 
-      // Persist if needed
+      // Save to storage if enabled (skip during thinking state unless immediate)
       if (storeHistory && (!isThinking || immediate)) {
-        // Get the latest version of the chat to save (with preserved title)
+        // Get the latest version of the chat to save
         setChats((prevChats) => {
           const chatToSave = prevChats.find((c) => c.id === chatId)
           if (chatToSave) {
