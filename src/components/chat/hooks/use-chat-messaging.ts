@@ -112,7 +112,7 @@ export function useChatMessaging({
           messages: newMessages,
         }
         setCurrentChat(updatedChat)
-        return prevChats
+        return [updatedChat, ...prevChats]
       })
 
       // Save to storage if enabled (skip during thinking state unless immediate)
