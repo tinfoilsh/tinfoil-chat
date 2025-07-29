@@ -59,10 +59,16 @@ export function useChatStorage({
 
   // Load chats from storage asynchronously
   useEffect(() => {
+    let isMounted = true
+
     if (storeHistory && typeof window !== 'undefined') {
       const loadChats = async () => {
         try {
           const savedChats = await chatStorage.getAllChats()
+
+          // Check if component is still mounted before updating state
+          if (!isMounted) return
+
           if (savedChats.length > 0) {
             const parsedChats = savedChats.map((chat: Chat) => ({
               ...chat,
@@ -81,22 +87,32 @@ export function useChatStorage({
                 createdAt: new Date(),
               }
               const updatedChats = [newChat, ...parsedChats]
+
+              // Check again before updating state
+              if (!isMounted) return
+
               setChats(updatedChats)
               setCurrentChat(newChat)
               // Save the new chat
               await chatStorage.saveChat(newChat)
             } else {
               // If the latest chat is empty, use it
-              setCurrentChat(firstChat)
+              if (isMounted) {
+                setCurrentChat(firstChat)
+              }
             }
           }
           // Clear initial load state after loading chats
-          setIsInitialLoad(false)
+          if (isMounted) {
+            setIsInitialLoad(false)
+          }
         } catch (error) {
           logError('Failed to load chats from storage', error, {
             component: 'useChatStorage',
           })
-          setIsInitialLoad(false)
+          if (isMounted) {
+            setIsInitialLoad(false)
+          }
         }
       }
 
@@ -104,6 +120,11 @@ export function useChatStorage({
     } else {
       // If not storing history, clear initial load immediately
       setIsInitialLoad(false)
+    }
+
+    // Cleanup function to set isMounted to false
+    return () => {
+      isMounted = false
     }
   }, [storeHistory])
 
