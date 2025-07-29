@@ -354,11 +354,17 @@ export function useChatStorage({
         // Update in storage
         const chatToUpdate = updatedChats.find((c) => c.id === chatId)
         if (chatToUpdate) {
-          chatStorage.saveChat(chatToUpdate).catch((error) => {
-            logError('Failed to update chat title in storage', error, {
-              component: 'useChatStorage',
+          chatStorage
+            .saveChatAndSync(chatToUpdate)
+            .then(() => {
+              // Reload after sync to update syncedAt
+              reloadChats()
             })
-          })
+            .catch((error) => {
+              logError('Failed to update chat title in storage', error, {
+                component: 'useChatStorage',
+              })
+            })
         }
 
         return updatedChats
@@ -369,7 +375,7 @@ export function useChatStorage({
         setCurrentChat((prev) => ({ ...prev, title: newTitle }))
       }
     },
-    [storeHistory, currentChat?.id],
+    [storeHistory, currentChat?.id, reloadChats],
   )
 
   return {

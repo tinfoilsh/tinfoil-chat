@@ -73,6 +73,31 @@ export function useChatMessaging({
     ? CONSTANTS.DEFAULT_FREE_MODEL
     : selectedModel
 
+  // Add reload function to refresh chats from storage
+  const reloadChatsFromStorage = useCallback(async () => {
+    if (!storeHistory) return
+
+    try {
+      const updatedChat = await chatStorage.getChat(currentChat.id)
+      if (updatedChat) {
+        // Update the current chat with the latest sync metadata
+        setCurrentChat(updatedChat)
+
+        // Update the chats array
+        setChats((prevChats) =>
+          prevChats.map((chat) =>
+            chat.id === updatedChat.id ? updatedChat : chat,
+          ),
+        )
+      }
+    } catch (error) {
+      logError('Failed to reload chat after sync', error, {
+        component: 'useChatMessaging',
+        action: 'reloadChatsFromStorage',
+      })
+    }
+  }, [currentChat.id, storeHistory, setCurrentChat, setChats])
+
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = useCallback(
     (
@@ -122,17 +147,23 @@ export function useChatMessaging({
           const chatToSave = prevChats.find((c) => c.id === chatId)
           if (chatToSave) {
             // Save the chat with all its properties including title
-            chatStorage.saveChat(chatToSave).catch((error) => {
-              logError('Failed to save chat during update', error, {
-                component: 'useChatMessaging',
+            chatStorage
+              .saveChatAndSync(chatToSave)
+              .then(() => {
+                // After sync completes, reload to get updated syncedAt
+                reloadChatsFromStorage()
               })
-            })
+              .catch((error) => {
+                logError('Failed to save chat during update', error, {
+                  component: 'useChatMessaging',
+                })
+              })
           }
           return prevChats
         })
       }
     },
-    [storeHistory],
+    [storeHistory, reloadChatsFromStorage],
   )
 
   // Cancel generation function
@@ -164,11 +195,17 @@ export function useChatMessaging({
             (c) => c.id === currentChatIdRef.current,
           )
           if (updatedChat) {
-            chatStorage.saveChat(updatedChat).catch((error) => {
-              logError('Failed to save chat after cancellation', error, {
-                component: 'useChatMessaging',
+            chatStorage
+              .saveChatAndSync(updatedChat)
+              .then(() => {
+                // Reload after sync to update syncedAt
+                reloadChatsFromStorage()
               })
-            })
+              .catch((error) => {
+                logError('Failed to save chat after cancellation', error, {
+                  component: 'useChatMessaging',
+                })
+              })
           }
         }
         return newChats
@@ -234,11 +271,17 @@ export function useChatMessaging({
         setChats(updatedChatsWithTitle)
         if (storeHistory) {
           // Save the updated chat with new title
-          chatStorage.saveChat(updatedChat).catch((error) => {
-            logError('Failed to save chat with new title', error, {
-              component: 'useChatMessaging',
+          chatStorage
+            .saveChatAndSync(updatedChat)
+            .then(() => {
+              // Reload after sync to update syncedAt
+              reloadChatsFromStorage()
             })
-          })
+            .catch((error) => {
+              logError('Failed to save chat with new title', error, {
+                component: 'useChatMessaging',
+              })
+            })
         }
       }
 
@@ -256,11 +299,17 @@ export function useChatMessaging({
 
         if (storeHistory) {
           // Save the updated chat with user message
-          chatStorage.saveChat(updatedChat).catch((error) => {
-            logError('Failed to save chat with user message', error, {
-              component: 'useChatMessaging',
+          chatStorage
+            .saveChatAndSync(updatedChat)
+            .then(() => {
+              // Reload after sync to update syncedAt
+              reloadChatsFromStorage()
             })
-          })
+            .catch((error) => {
+              logError('Failed to save chat with user message', error, {
+                component: 'useChatMessaging',
+              })
+            })
         }
 
         return newChats

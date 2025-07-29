@@ -98,16 +98,42 @@ export class ChatStorageService {
     })
   }
 
+  async saveChatAndSync(chat: Chat): Promise<void> {
+    await this.initialize()
+
+    // Convert Chat type to storage format
+    const storageChat: StorageChat = {
+      ...chat,
+      createdAt:
+        chat.createdAt instanceof Date
+          ? chat.createdAt.toISOString()
+          : chat.createdAt,
+      updatedAt: new Date().toISOString(),
+    }
+    await indexedDBStorage.saveChat(storageChat)
+
+    // Wait for cloud backup to complete
+    try {
+      await cloudSync.backupChat(chat.id)
+    } catch (error) {
+      logError('Failed to backup chat to cloud', error, {
+        component: 'ChatStorageService',
+        action: 'saveChatAndSync',
+        metadata: { chatId: chat.id },
+      })
+      // Don't throw - local save succeeded even if cloud sync failed
+    }
+  }
+
   async getChat(id: string): Promise<Chat | null> {
     await this.initialize()
 
     const storedChat = await indexedDBStorage.getChat(id)
     if (!storedChat) return null
 
-    // Convert StoredChat back to Chat, removing all sync metadata
+    // Convert StoredChat back to Chat, keeping syncedAt for UI display
     const {
       lastAccessedAt,
-      syncedAt,
       locallyModified,
       syncVersion,
       decryptionFailed,
@@ -120,6 +146,7 @@ export class ChatStorageService {
     return {
       ...baseChat,
       createdAt: new Date(storedChat.createdAt),
+      syncedAt: storedChat.syncedAt,
     }
   }
 
@@ -132,11 +159,10 @@ export class ChatStorageService {
     await this.initialize()
 
     const storedChats = await indexedDBStorage.getAllChats()
-    // Convert StoredChat[] to Chat[], removing all sync metadata
+    // Convert StoredChat[] to Chat[], keeping syncedAt for UI display
     return storedChats.map(
       ({
         lastAccessedAt,
-        syncedAt,
         locallyModified,
         syncVersion,
         decryptionFailed,
@@ -148,6 +174,7 @@ export class ChatStorageService {
       }) => ({
         ...baseChat,
         createdAt: new Date(baseChat.createdAt),
+        syncedAt: baseChat.syncedAt,
       }),
     )
   }
