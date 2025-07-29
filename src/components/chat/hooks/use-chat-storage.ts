@@ -3,7 +3,6 @@ import { chatStorage } from '@/services/storage/chat-storage'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 
 // Generate a chat ID with proper format for cloud storage (synchronous fallback)
@@ -152,10 +151,10 @@ export function useChatStorage({
       const loadChats = async () => {
         try {
           const savedChats = await chatStorage.getAllChats()
-          
+
           // Check if component is still mounted before updating state
           if (!isMounted) return
-          
+
           if (savedChats.length > 0) {
             const parsedChats = savedChats.map((chat: Chat) => ({
               ...chat,
@@ -169,10 +168,10 @@ export function useChatStorage({
               // If the latest chat has messages, create a new empty chat
               const newChat = createNewChatObjectSync()
               const updatedChats = [newChat, ...parsedChats]
-              
+
               // Check again before updating state
               if (!isMounted) return
-              
+
               setChats(updatedChats)
               setCurrentChat(newChat)
               // Don't save empty chats - they'll be saved when the first message is added
@@ -335,12 +334,15 @@ export function useChatStorage({
   )
 
   // Handle chat selection from sidebar
-  const handleChatSelect = useCallback((chatId: string) => {
-    const selectedChat = chats.find((chat) => chat.id === chatId)
-    if (selectedChat) {
-      setCurrentChat(selectedChat)
-    }
-  }, [chats])
+  const handleChatSelect = useCallback(
+    (chatId: string) => {
+      const selectedChat = chats.find((chat) => chat.id === chatId)
+      if (selectedChat) {
+        setCurrentChat(selectedChat)
+      }
+    },
+    [chats],
+  )
 
   return {
     chats,
