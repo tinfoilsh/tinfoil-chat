@@ -419,7 +419,7 @@ export function ChatSidebar({
                 >
                   Your chats are encrypted and synced to the cloud.
                   <br />
-                  The encryption key is stored in your browser.
+                  The encryption key is only stored in your browser.
                 </div>
               </>
             )}
