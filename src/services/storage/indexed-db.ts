@@ -8,6 +8,11 @@ export interface Chat extends Omit<ChatType, 'createdAt'> {
 
 export interface StoredChat extends Chat {
   lastAccessedAt: number
+  syncedAt?: number
+  locallyModified?: boolean
+  syncVersion?: number
+  decryptionFailed?: boolean
+  encryptedData?: string
 }
 
 const DB_NAME = 'tinfoil-chat'
@@ -93,10 +98,24 @@ export class IndexedDBStorage {
             : msg.timestamp,
       }))
 
+      // Get existing chat to preserve sync metadata
+      const existingChat = await this.getChatInternal(chat.id).catch(() => null)
+
       const storedChat: StoredChat = {
         ...chat,
         messages: messagesForStorage as any, // Type assertion needed due to timestamp conversion
         lastAccessedAt: Date.now(),
+        // Preserve sync metadata if it exists
+        syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
+        locallyModified:
+          existingChat?.locallyModified ?? (chat as StoredChat).locallyModified,
+        syncVersion:
+          existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
+        decryptionFailed:
+          existingChat?.decryptionFailed ??
+          (chat as StoredChat).decryptionFailed,
+        encryptedData:
+          existingChat?.encryptedData ?? (chat as StoredChat).encryptedData,
       }
 
       const request = store.put(storedChat)
@@ -213,6 +232,13 @@ export class IndexedDBStorage {
           reject(new Error('Failed to update last accessed'))
       })
     }
+  }
+
+  async getChatsWithEncryptedData(): Promise<StoredChat[]> {
+    const allChats = await this.getAllChats()
+    return allChats.filter(
+      (chat) => chat.decryptionFailed && chat.encryptedData,
+    )
   }
 }
 
