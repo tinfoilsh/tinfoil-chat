@@ -112,20 +112,39 @@ export function useCloudSync() {
     await cloudSync.backupChat(chatId)
   }, [])
 
-  // Set encryption key (for syncing across devices)
-  const setEncryptionKey = useCallback(async (key: string) => {
-    try {
-      await encryptionService.setKey(key)
-      setState((prev) => ({ ...prev, encryptionKey: key }))
-    } catch (error) {
-      throw new Error('Invalid encryption key')
-    }
-  }, [])
-
   // Retry decryption for failed chats
   const retryDecryptionWithNewKey = useCallback(async () => {
     return await cloudSync.retryDecryptionWithNewKey()
   }, [])
+
+  // Set encryption key (for syncing across devices)
+  const setEncryptionKey = useCallback(
+    async (key: string) => {
+      try {
+        // Store the old key to detect if it changed
+        const oldKey = encryptionService.getKey()
+
+        await encryptionService.setKey(key)
+        setState((prev) => ({ ...prev, encryptionKey: key }))
+
+        // If the key changed, retry decryption and sync
+        if (oldKey && oldKey !== key) {
+          // First retry decryption for chats that failed with the old key
+          const decryptedCount = await retryDecryptionWithNewKey()
+
+          // Then trigger a full sync to ensure everything is up to date
+          return syncChats()
+        }
+      } catch (error) {
+        logError('Failed to set encryption key', error, {
+          component: 'useCloudSync',
+          action: 'setEncryptionKey',
+        })
+        throw new Error('Invalid encryption key')
+      }
+    },
+    [syncChats, retryDecryptionWithNewKey],
+  )
 
   return {
     ...state,

@@ -187,7 +187,6 @@ export function useChatStorage({
               ...chat,
               createdAt: new Date(chat.createdAt),
             }))
-            
             // Find all usable (non-encrypted) chats
             const usableChats = parsedChats.filter(
               (chat) => !(chat as any).decryptionFailed,

@@ -1,4 +1,5 @@
 import { logError, logInfo } from '@/utils/error-handling'
+import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
 
@@ -242,13 +243,24 @@ export class CloudSyncService {
         if (chat.encryptedData) {
           try {
             const encrypted = JSON.parse(chat.encryptedData)
-            const downloadedChat = await r2Storage.downloadChat(chat.id)
 
-            if (downloadedChat && !downloadedChat.decryptionFailed) {
-              // Successfully decrypted - save the decrypted chat
-              await indexedDBStorage.saveChat(downloadedChat)
-              decryptedCount++
+            // Try to decrypt with the current key (already set by setKey)
+            const decrypted = await encryptionService.decrypt(encrypted)
+
+            // Successfully decrypted - update the chat
+            // Need to preserve the ID and sync metadata
+            const updatedChat = {
+              ...decrypted,
+              id: chat.id, // Preserve the original ID
+              decryptionFailed: false,
+              encryptedData: undefined,
+              syncedAt: chat.syncedAt,
+              locallyModified: false,
+              syncVersion: chat.syncVersion,
             }
+
+            await indexedDBStorage.saveChat(updatedChat)
+            decryptedCount++
           } catch (error) {
             // Silent fail - keep the encrypted placeholder
             logError(`Failed to retry decryption for chat ${chat.id}`, error, {

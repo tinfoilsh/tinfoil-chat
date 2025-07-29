@@ -439,6 +439,10 @@ export function ChatSidebar({
                   <div key={chat.id} className="relative">
                     <div
                       onClick={() => {
+                        // Don't allow selecting encrypted chats
+                        if (chat.decryptionFailed) {
+                          return
+                        }
                         handleChatSelect(chat.id)
                         // Only close sidebar on mobile
                         if (windowWidth < MOBILE_BREAKPOINT) {
@@ -448,20 +452,28 @@ export function ChatSidebar({
                       onTouchEnd={(e) => {
                         // Prevent the click event from firing after touch
                         e.preventDefault()
+                        // Don't allow selecting encrypted chats
+                        if (chat.decryptionFailed) {
+                          return
+                        }
                         handleChatSelect(chat.id)
                         // Only close sidebar on mobile
                         if (windowWidth < MOBILE_BREAKPOINT) {
                           setIsOpen(false)
                         }
                       }}
-                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
-                        currentChat?.id === chat.id
+                      className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
+                        chat.decryptionFailed
                           ? isDarkMode
-                            ? 'border-gray-700 bg-gray-800 text-white'
-                            : 'border-gray-300 bg-gray-100 text-gray-900'
-                          : isDarkMode
-                            ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                            : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                            ? 'cursor-not-allowed border-gray-700 text-gray-500'
+                            : 'cursor-not-allowed border-gray-300 text-gray-400'
+                          : currentChat?.id === chat.id
+                            ? isDarkMode
+                              ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
+                              : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
+                            : isDarkMode
+                              ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                              : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
                       }`}
                     >
                       {/* Chat item content */}
@@ -699,17 +711,19 @@ function ChatListItem({
 
         {!isEditing && isPremium && (
           <div className="ml-2 flex opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              className={`mr-1 rounded p-1 transition-colors ${
-                isDarkMode
-                  ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
-              }`}
-              onClick={startEditing}
-              title="Rename"
-            >
-              <PencilSquareIcon className="h-4 w-4" />
-            </button>
+            {!chat.decryptionFailed && (
+              <button
+                className={`mr-1 rounded p-1 transition-colors ${
+                  isDarkMode
+                    ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                    : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                }`}
+                onClick={startEditing}
+                title="Rename"
+              >
+                <PencilSquareIcon className="h-4 w-4" />
+              </button>
+            )}
             <button
               className={`rounded p-1 transition-colors ${
                 isDarkMode

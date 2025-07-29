@@ -1,4 +1,6 @@
 // Encryption service for end-to-end encryption of chat data
+import { logWarning } from '@/utils/error-handling'
+
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
 
 export interface EncryptedData {
@@ -84,7 +86,10 @@ export class EncryptionService {
           return newKey
         } catch (error) {
           // If conversion fails, generate a new key
-          console.warn('Failed to convert old key format, generating new key')
+          logWarning('Failed to convert old key format, generating new key', {
+            component: 'EncryptionService',
+            action: 'initialize',
+          })
           const newKey = await this.generateKey()
           localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
           await this.setKey(newKey)

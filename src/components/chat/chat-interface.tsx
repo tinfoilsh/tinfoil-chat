@@ -835,7 +835,13 @@ export function ChatInterface({
         isOpen={isEncryptionKeyModalOpen}
         onClose={() => setIsEncryptionKeyModalOpen(false)}
         encryptionKey={encryptionKey}
-        onKeyChange={setEncryptionKey}
+        onKeyChange={async (key: string) => {
+          const syncResult = await setEncryptionKey(key)
+          // If sync happened (key changed), reload chats
+          if (syncResult) {
+            await reloadChats()
+          }
+        }}
         isDarkMode={isDarkMode}
       />
     </div>

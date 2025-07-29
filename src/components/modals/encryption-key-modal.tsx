@@ -59,7 +59,7 @@ export function EncryptionKeyModal({
       await onKeyChange(inputKey)
       toast({
         title: 'Key updated',
-        description: 'Your encryption key has been updated successfully',
+        description: 'Decrypting chats with the new key...',
       })
       setInputKey('')
       onClose()
