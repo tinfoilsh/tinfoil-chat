@@ -1,3 +1,4 @@
+import { logError, logInfo } from '@/utils/error-handling'
 import { indexedDBStorage } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
 
@@ -94,17 +95,20 @@ export class CloudSyncService {
       const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
 
       // Debug logging
-      console.log('[CloudSync] Found unsynced chats:', unsyncedChats.length)
+      logInfo(`Found unsynced chats: ${unsyncedChats.length}`, {
+        component: 'CloudSync',
+        action: 'backupUnsyncedChats',
+      })
 
       // Filter out empty chats - they shouldn't be synced
       const chatsToSync = unsyncedChats.filter(
         (chat) => chat.messages && chat.messages.length > 0,
       )
 
-      console.log(
-        '[CloudSync] Chats with messages to sync:',
-        chatsToSync.length,
-      )
+      logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
+        component: 'CloudSync',
+        action: 'backupUnsyncedChats',
+      })
 
       for (const chat of chatsToSync) {
         try {
@@ -148,7 +152,10 @@ export class CloudSyncService {
         remoteList = await r2Storage.listChats()
       } catch (error) {
         // Log the error but continue with sync
-        console.error('Failed to list remote chats:', error)
+        logError('Failed to list remote chats', error, {
+          component: 'CloudSync',
+          action: 'syncAllChats',
+        })
         this.isSyncing = false
         return result
       }
@@ -244,15 +251,19 @@ export class CloudSyncService {
             }
           } catch (error) {
             // Silent fail - keep the encrypted placeholder
-            console.error(
-              `Failed to retry decryption for chat ${chat.id}:`,
-              error,
-            )
+            logError(`Failed to retry decryption for chat ${chat.id}`, error, {
+              component: 'CloudSync',
+              action: 'retryDecryptionWithNewKey',
+              metadata: { chatId: chat.id },
+            })
           }
         }
       }
     } catch (error) {
-      console.error('Failed to retry decryptions:', error)
+      logError('Failed to retry decryptions', error, {
+        component: 'CloudSync',
+        action: 'retryDecryptionWithNewKey',
+      })
     }
 
     return decryptedCount

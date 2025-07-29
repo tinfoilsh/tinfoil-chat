@@ -1,6 +1,6 @@
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { chatStorage } from '@/services/storage/chat-storage'
-import { logError } from '@/utils/error-handling'
+import { logError, logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Chat } from '../types'
@@ -22,9 +22,13 @@ async function generateChatId(): Promise<string> {
     }
   } catch (error) {
     // Fallback to client-side generation if offline or not authenticated
-    console.warn(
-      'Failed to generate ID from backend, using client-side generation:',
-      error,
+    logWarning(
+      'Failed to generate ID from backend, using client-side generation',
+      {
+        component: 'useChatStorage',
+        action: 'generateChatId',
+        metadata: { error },
+      },
     )
   }
 

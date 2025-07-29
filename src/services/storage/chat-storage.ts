@@ -1,5 +1,5 @@
 import type { Chat } from '@/components/chat/types'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
@@ -44,8 +44,9 @@ export class ChatStorageService {
 
           // Store migration flag to trigger sync later when auth is ready
           if (result.migratedCount > 0) {
-            console.log(
-              `[ChatStorage] Migration complete: ${result.migratedCount} chats migrated`,
+            logInfo(
+              `Migration complete: ${result.migratedCount} chats migrated`,
+              { component: 'ChatStorageService', action: 'migrate' },
             )
             // Store a flag to indicate migration just completed
             sessionStorage.setItem('pendingMigrationSync', 'true')

@@ -1,7 +1,7 @@
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -42,15 +42,26 @@ export function useCloudSync() {
         // Check if there's a pending migration sync
         const pendingSync = sessionStorage.getItem('pendingMigrationSync')
         if (pendingSync === 'true') {
-          console.log(
-            '[CloudSync] Detected pending migration sync, triggering immediate sync',
+          logInfo(
+            'Detected pending migration sync, triggering immediate sync',
+            {
+              component: 'useCloudSync',
+              action: 'initializeSync',
+            },
           )
           sessionStorage.removeItem('pendingMigrationSync')
 
           // Trigger sync for migrated chats
           try {
             const result = await cloudSync.syncAllChats()
-            console.log('[CloudSync] Migration sync complete:', result)
+            logInfo(
+              `Migration sync complete: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
+              {
+                component: 'useCloudSync',
+                action: 'migration-sync',
+                metadata: { result },
+              },
+            )
           } catch (error) {
             logError('Failed to sync migrated chats', error, {
               component: 'useCloudSync',
