@@ -197,15 +197,13 @@ export class IndexedDBStorage {
     })
   }
 
-  async getAllChats(
-    sortBy: 'lastAccessedAt' | 'createdAt' = 'createdAt',
-  ): Promise<StoredChat[]> {
+  async getAllChats(): Promise<StoredChat[]> {
     const db = await this.ensureDB()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readonly')
       const store = transaction.objectStore(CHATS_STORE)
-      // Sort by ID which now contains reverse timestamp
+      // Sort by ID which contains reverse timestamp
       const index = store.index('id')
       const request = index.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
 
