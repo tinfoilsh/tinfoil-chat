@@ -85,6 +85,9 @@ export class IndexedDBStorage {
   async saveChat(chat: Chat): Promise<void> {
     const db = await this.ensureDB()
 
+    // Get existing chat to preserve sync metadata
+    const existingChat = await this.getChatInternal(chat.id).catch(() => null)
+
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readwrite')
       const store = transaction.objectStore(CHATS_STORE)
@@ -97,9 +100,6 @@ export class IndexedDBStorage {
             ? msg.timestamp.toISOString()
             : msg.timestamp,
       }))
-
-      // Get existing chat to preserve sync metadata
-      const existingChat = await this.getChatInternal(chat.id).catch(() => null)
 
       const storedChat: StoredChat = {
         ...chat,
