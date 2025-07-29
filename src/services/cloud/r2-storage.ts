@@ -70,7 +70,7 @@ export class R2StorageService {
   async isAuthenticated(): Promise<boolean> {
     if (!this.getToken) return false
     const token = await this.getToken()
-    return token !== null
+    return token !== null && token !== ''
   }
 
   async getPresignedUrl(
