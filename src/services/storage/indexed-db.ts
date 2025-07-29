@@ -136,7 +136,8 @@ export class IndexedDBStorage {
           // Preserve sync metadata if it exists
           syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
           locallyModified:
-            existingChat?.locallyModified ?? (chat as StoredChat).locallyModified,
+            existingChat?.locallyModified ??
+            (chat as StoredChat).locallyModified,
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed:

@@ -1,3 +1,5 @@
+/* eslint-disable react/no-unescaped-entities */
+
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, Transition } from '@headlessui/react'
 import {
