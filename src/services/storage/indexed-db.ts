@@ -86,7 +86,14 @@ export class IndexedDBStorage {
     const db = await this.ensureDB()
 
     // Get existing chat to preserve sync metadata
-    const existingChat = await this.getChatInternal(chat.id).catch(() => null)
+    let existingChat: StoredChat | null = null
+    try {
+      existingChat = await this.getChatInternal(chat.id)
+    } catch (error) {
+      // Log database errors but continue with save operation
+      console.error('Database error while retrieving existing chat:', error)
+      // existingChat remains null, so sync metadata won't be preserved
+    }
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readwrite')
