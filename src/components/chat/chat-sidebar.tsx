@@ -432,12 +432,12 @@ export function ChatSidebar({
                 // Sort chats to ensure empty chats appear at the top
                 [...chats]
                   .sort((a, b) => {
-                    // Empty chats should always be at the top
-                    const aIsEmpty = !a.messages || a.messages.length === 0
-                    const bIsEmpty = !b.messages || b.messages.length === 0
+                    // Blank chats should always be at the top
+                    const aIsBlank = a.isBlankChat === true
+                    const bIsBlank = b.isBlankChat === true
 
-                    if (aIsEmpty && !bIsEmpty) return -1
-                    if (!aIsEmpty && bIsEmpty) return 1
+                    if (aIsBlank && !bIsBlank) return -1
+                    if (!aIsBlank && bIsBlank) return 1
 
                     // For non-empty chats, sort by createdAt (newest first)
                     const timeA = new Date(a.createdAt).getTime()

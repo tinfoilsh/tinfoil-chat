@@ -109,61 +109,39 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
-      setChats((prevChats) => {
-        // Find the latest version of this chat (to preserve any recent title changes)
-        const existingChat = prevChats.find((c) => c.id === chatId)
+      const updatedChat = {
+        ...currentChat,
+        messages: newMessages,
+      }
 
-        if (existingChat) {
-          // Merge with existing chat to preserve title and other properties
-          const mergedChat = {
-            ...existingChat,
-            messages: newMessages,
-          }
-
-          // Build new array
-          const newChats = prevChats.map((c) =>
-            c.id === chatId ? mergedChat : c,
-          )
-
-          // Update current chat state with the merged chat (preserving title)
-          setCurrentChat(mergedChat)
-
-          return newChats
-        }
-
-        // If chat doesn't exist in the array, add it
-        const updatedChat: Chat = {
-          ...currentChat,
-          messages: newMessages,
-        }
-        setCurrentChat(updatedChat)
-        return [updatedChat, ...prevChats]
-      })
+      // Update state immediately
+      setCurrentChat(updatedChat)
+      setChats((prevChats) =>
+        prevChats.map((c) => (c.id === chatId ? updatedChat : c)),
+      )
 
       // Save to storage if enabled (skip during thinking state unless immediate)
       if (storeHistory && (!isThinking || immediate)) {
-        // Get the latest version of the chat to save
-        setChats((prevChats) => {
-          const chatToSave = prevChats.find((c) => c.id === chatId)
-          if (chatToSave) {
-            // Save the chat with all its properties including title
-            chatStorage
-              .saveChatAndSync(chatToSave)
-              .then(() => {
-                // After sync completes, reload to get updated syncedAt
-                reloadChatsFromStorage()
-              })
-              .catch((error) => {
-                logError('Failed to save chat during update', error, {
-                  component: 'useChatMessaging',
-                })
-              })
-          }
-          return prevChats
-        })
+        chatStorage
+          .saveChatAndSync(updatedChat)
+          .then((savedChat) => {
+            // Only update if the ID actually changed
+            if (savedChat.id !== updatedChat.id) {
+              currentChatIdRef.current = savedChat.id
+              setCurrentChat(savedChat)
+              setChats((prevChats) =>
+                prevChats.map((c) => (c.id === updatedChat.id ? savedChat : c)),
+              )
+            }
+          })
+          .catch((error) => {
+            logError('Failed to save chat during update', error, {
+              component: 'useChatMessaging',
+            })
+          })
       }
     },
-    [storeHistory, reloadChatsFromStorage],
+    [storeHistory],
   )
 
   // Cancel generation function
@@ -197,9 +175,17 @@ export function useChatMessaging({
           if (updatedChat) {
             chatStorage
               .saveChatAndSync(updatedChat)
-              .then(() => {
-                // Reload after sync to update syncedAt
-                reloadChatsFromStorage()
+              .then((savedChat) => {
+                // Only update if the ID actually changed
+                if (savedChat.id !== updatedChat.id) {
+                  currentChatIdRef.current = savedChat.id
+                  setCurrentChat(savedChat)
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === updatedChat.id ? savedChat : c,
+                    ),
+                  )
+                }
               })
               .catch((error) => {
                 logError('Failed to save chat after cancellation', error, {
@@ -252,68 +238,62 @@ export function useChatMessaging({
 
       // Generate title immediately if this is the first message
       let updatedChat = { ...currentChat }
+      const isFirstMessage = currentChat.messages.length === 0
 
-      if (currentChat.messages.length === 0 && storeHistory) {
+      if (isFirstMessage && storeHistory) {
         const title = generateTitle(query)
         // Make sure title is not empty
         const safeTitle =
           title.trim() || 'Chat about ' + query.slice(0, 20) + '...'
 
-        // Update the current chat with the new title
-        updatedChat = { ...currentChat, title: safeTitle }
-        setCurrentChat(updatedChat)
-
-        // Update all chats in state and localStorage
-        const updatedChatsWithTitle = chats.map((chat) =>
-          chat.id === currentChat.id ? { ...chat, title: safeTitle } : chat,
-        )
-
-        setChats(updatedChatsWithTitle)
-        if (storeHistory) {
-          // Save the updated chat with new title
-          chatStorage
-            .saveChatAndSync(updatedChat)
-            .then(() => {
-              // Reload after sync to update syncedAt
-              reloadChatsFromStorage()
-            })
-            .catch((error) => {
-              logError('Failed to save chat with new title', error, {
-                component: 'useChatMessaging',
-              })
-            })
+        // Update the current chat with:
+        // - New title
+        // - Clear blank flag
+        // - Update createdAt to now (when first message is sent)
+        updatedChat = {
+          ...currentChat,
+          title: safeTitle,
+          isBlankChat: false,
+          createdAt: new Date(), // Set creation time to when first message is sent
         }
       }
 
       const updatedMessages = [...currentChat.messages, userMessage]
-      updatedChat = { ...updatedChat, messages: updatedMessages }
+      updatedChat = {
+        ...updatedChat,
+        messages: updatedMessages,
+        isBlankChat: false, // Clear blank chat flag when first message is sent
+      }
 
-      // Update the current chat with the new messages
+      // Update the current chat and chats array immediately
       setCurrentChat(updatedChat)
-
-      // Update chats array with both title and messages
-      setChats((prevChats) => {
-        const newChats = prevChats.map((chat) =>
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
           chat.id === currentChat.id ? updatedChat : chat,
-        )
+        ),
+      )
 
-        if (storeHistory) {
-          // Save the updated chat with user message
-          chatStorage
-            .saveChatAndSync(updatedChat)
-            .then(() => {
-              // Reload after sync to update syncedAt
-              reloadChatsFromStorage()
+      // Save once at the end if storing history
+      if (storeHistory) {
+        // This save will handle server ID assignment if needed
+        chatStorage
+          .saveChatAndSync(updatedChat)
+          .then((savedChat) => {
+            // Only update if the ID actually changed
+            if (savedChat.id !== updatedChat.id) {
+              currentChatIdRef.current = savedChat.id
+              setCurrentChat(savedChat)
+              setChats((prevChats) =>
+                prevChats.map((c) => (c.id === updatedChat.id ? savedChat : c)),
+              )
+            }
+          })
+          .catch((error) => {
+            logError('Failed to save chat', error, {
+              component: 'useChatMessaging',
             })
-            .catch((error) => {
-              logError('Failed to save chat with user message', error, {
-                component: 'useChatMessaging',
-              })
-            })
-        }
-
-        return newChats
-      })
+          })
+      }
 
       setInput('')
 
@@ -573,13 +553,9 @@ export function useChatMessaging({
                 if (currentChatIdRef.current === currentChat.id) {
                   const newMessages = [...updatedMessages, assistantMessage]
 
-                  // Get the current chat with its potentially updated title
-                  const currentChatWithTitle =
-                    chats.find((c) => c.id === currentChat.id) || currentChat
-
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChatWithTitle,
+                    currentChat,
                     setCurrentChat,
                     currentChat.id,
                     newMessages,
@@ -598,13 +574,9 @@ export function useChatMessaging({
                 if (currentChatIdRef.current === currentChat.id) {
                   const newMessages = [...updatedMessages, assistantMessage]
 
-                  // Get the current chat with its potentially updated title
-                  const currentChatWithTitle =
-                    chats.find((c) => c.id === currentChat.id) || currentChat
-
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChatWithTitle,
+                    currentChat,
                     setCurrentChat,
                     currentChat.id,
                     newMessages,
@@ -639,13 +611,9 @@ export function useChatMessaging({
             isError: true,
           }
 
-          // Get the current chat with its potentially updated title
-          const currentChatWithTitle =
-            chats.find((c) => c.id === currentChat.id) || currentChat
-
           updateChatWithHistoryCheck(
             setChats,
-            currentChatWithTitle,
+            currentChat,
             setCurrentChat,
             currentChat.id,
             [...updatedMessages, errorMessage],
@@ -675,6 +643,7 @@ export function useChatMessaging({
       messagesEndRef,
       updateChatWithHistoryCheck,
       maxMessages,
+      reloadChatsFromStorage,
     ],
   )
 

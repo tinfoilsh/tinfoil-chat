@@ -1,5 +1,5 @@
 import type { Chat } from '@/components/chat/types'
-import { logError, logInfo, logWarning } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
 import { r2Storage } from '../cloud/r2-storage'
 import { encryptionService } from '../encryption/encryption-service'
@@ -10,6 +10,7 @@ import { migrationEvents } from './migration-events'
 export class ChatStorageService {
   private initialized = false
   private initializePromise: Promise<void> | null = null
+  private serverIdCache = new Map<string, string>() // Cache temp ID -> server ID mappings
 
   async initialize(): Promise<void> {
     if (this.initialized) return
@@ -82,96 +83,99 @@ export class ChatStorageService {
     }
   }
 
-  async saveChat(chat: Chat): Promise<void> {
+  async saveChat(chat: Chat): Promise<Chat> {
     await this.initialize()
 
-    // Only try to get server ID if chat still has temporary ID
-    // (initial attempt in createNewChat may have failed)
+    let chatToSave = chat
+
+    // If this is the first save (has temporary ID), try to get server ID
     if (chat.hasTemporaryId) {
-      try {
-        const serverId = await r2Storage.generateConversationId()
-        if (serverId) {
-          // Delete any existing chat with temporary ID
-          try {
-            await indexedDBStorage.deleteChat(chat.id)
-          } catch (error) {
-            // Ignore - chat might not exist yet
-          }
+      // Check if we already have a server ID for this temp ID
+      const cachedServerId = this.serverIdCache.get(chat.id)
 
-          // Save with server ID
-          const chatWithServerId = {
-            ...chat,
-            id: serverId.conversationId,
-            hasTemporaryId: false,
-          }
+      if (cachedServerId) {
+        // Use the cached server ID
+        chatToSave = {
+          ...chat,
+          id: cachedServerId,
+          hasTemporaryId: false,
+        }
+      } else {
+        // Try to get a new server ID
+        try {
+          const result = await r2Storage.generateConversationId()
+          if (result) {
+            // Cache the mapping
+            this.serverIdCache.set(chat.id, result.conversationId)
 
-          const storageChat: StorageChat = {
-            ...chatWithServerId,
-            createdAt:
-              chatWithServerId.createdAt instanceof Date
-                ? chatWithServerId.createdAt.toISOString()
-                : chatWithServerId.createdAt,
-            updatedAt: new Date().toISOString(),
-          }
-          await indexedDBStorage.saveChat(storageChat)
+            // Update the chat with server ID
+            chatToSave = {
+              ...chat,
+              id: result.conversationId,
+              hasTemporaryId: false,
+            }
 
-          // Backup to cloud
-          cloudSync.backupChat(chatWithServerId.id).catch((error) => {
-            logError('Failed to backup chat to cloud', error, {
+            // Delete any existing chat with the temporary ID
+            try {
+              await indexedDBStorage.deleteChat(chat.id)
+            } catch (error) {
+              // Ignore - chat might not exist yet
+            }
+
+            logInfo('Replaced temporary ID with server ID on first save', {
               component: 'ChatStorageService',
               action: 'saveChat',
-              metadata: { chatId: chatWithServerId.id },
+              metadata: {
+                oldId: chat.id,
+                newId: result.conversationId,
+              },
             })
-          })
-
-          logInfo('Saved chat with server ID', {
-            component: 'ChatStorageService',
-            action: 'saveChat',
-            metadata: {
-              oldId: chat.id,
-              newId: serverId.conversationId,
-            },
-          })
-          return
-        }
-      } catch (error) {
-        logWarning(
-          'Failed to get server ID during save, keeping temporary ID',
-          {
+          }
+        } catch (error) {
+          logInfo('Failed to get server ID, keeping temporary ID', {
             component: 'ChatStorageService',
             action: 'saveChat',
             metadata: { error, chatId: chat.id },
-          },
-        )
+          })
+        }
       }
     }
 
-    // Normal save (either has server ID or keeping temporary ID)
+    // Save the chat
     const storageChat: StorageChat = {
-      ...chat,
+      ...chatToSave,
       createdAt:
-        chat.createdAt instanceof Date
-          ? chat.createdAt.toISOString()
-          : chat.createdAt,
+        chatToSave.createdAt instanceof Date
+          ? chatToSave.createdAt.toISOString()
+          : chatToSave.createdAt,
       updatedAt: new Date().toISOString(),
     }
     await indexedDBStorage.saveChat(storageChat)
 
     // Auto-backup to cloud (non-blocking) - only if not temporary
-    if (!chat.hasTemporaryId) {
-      cloudSync.backupChat(chat.id).catch((error) => {
+    if (!chatToSave.hasTemporaryId) {
+      cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
           component: 'ChatStorageService',
           action: 'saveChat',
-          metadata: { chatId: chat.id },
+          metadata: { chatId: chatToSave.id },
         })
       })
     }
+
+    // Return the potentially updated chat
+    return {
+      ...chatToSave,
+      createdAt:
+        chatToSave.createdAt instanceof Date
+          ? chatToSave.createdAt
+          : new Date(chatToSave.createdAt),
+    }
   }
 
-  async saveChatAndSync(chat: Chat): Promise<void> {
+  async saveChatAndSync(chat: Chat): Promise<Chat> {
     // Just use the regular saveChat method
-    await this.saveChat(chat)
+    return await this.saveChat(chat)
   }
 
   async getChat(id: string): Promise<Chat | null> {

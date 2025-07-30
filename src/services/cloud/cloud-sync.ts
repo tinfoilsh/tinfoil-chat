@@ -61,17 +61,16 @@ export class CloudSyncService {
         return // Chat might have been deleted
       }
 
-      // Don't sync empty chats
-      if (!chat.messages || chat.messages.length === 0) {
-        return
-      }
-
-      // Don't sync chats with temporary IDs
-      if ((chat as any).hasTemporaryId) {
-        logInfo('Skipping sync for chat with temporary ID', {
+      // Don't sync blank chats or chats with temporary IDs
+      if ((chat as any).isBlankChat || (chat as any).hasTemporaryId) {
+        logInfo('Skipping sync for blank or temporary chat', {
           component: 'CloudSync',
           action: 'backupChat',
-          metadata: { chatId },
+          metadata: {
+            chatId,
+            isBlankChat: (chat as any).isBlankChat,
+            hasTemporaryId: (chat as any).hasTemporaryId,
+          },
         })
         return
       }
@@ -110,12 +109,9 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Filter out empty chats and chats with temporary IDs - they shouldn't be synced
+      // Filter out blank chats and chats with temporary IDs - they shouldn't be synced
       const chatsToSync = unsyncedChats.filter(
-        (chat) =>
-          chat.messages &&
-          chat.messages.length > 0 &&
-          !(chat as any).hasTemporaryId,
+        (chat) => !(chat as any).isBlankChat && !(chat as any).hasTemporaryId,
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
@@ -200,19 +196,14 @@ export class CloudSyncService {
           try {
             const downloadedChat = await r2Storage.downloadChat(remoteChat.id)
             if (downloadedChat) {
-              // Don't save empty chats to IndexedDB during sync
-              // Empty chats should only exist in memory until they have messages
-              if (
-                downloadedChat.messages &&
-                downloadedChat.messages.length > 0
-              ) {
-                await indexedDBStorage.saveChat(downloadedChat)
-                await indexedDBStorage.markAsSynced(
-                  downloadedChat.id,
-                  downloadedChat.syncVersion || 0,
-                )
-                result.downloaded++
-              }
+              // Save all downloaded chats (including encrypted ones)
+              // The isBlankChat check in IndexedDB will prevent blank chats from being saved
+              await indexedDBStorage.saveChat(downloadedChat)
+              await indexedDBStorage.markAsSynced(
+                downloadedChat.id,
+                downloadedChat.syncVersion || 0,
+              )
+              result.downloaded++
             }
           } catch (error) {
             result.errors.push(
@@ -281,26 +272,42 @@ export class CloudSyncService {
         await indexedDBStorage.getChatsWithEncryptedData()
 
       for (const chat of chatsWithEncryptedData) {
-        // Simply update the flags - the chat already has decrypted data
-        const updatedChat = {
-          ...chat,
-          decryptionFailed: false,
-          encryptedData: undefined,
-        }
-
         try {
+          // Parse the stored encrypted data
+          const encryptedData = JSON.parse(chat.encryptedData)
+
+          // Decrypt the chat data
+          const decryptedData = await encryptionService.decrypt(encryptedData)
+
+          logInfo(`Decrypted chat ${chat.id}`, {
+            component: 'CloudSync',
+            action: 'retryDecryptionWithNewKey',
+            metadata: {
+              chatId: chat.id,
+              decryptedTitle: decryptedData.title,
+              messageCount: decryptedData.messages?.length || 0,
+            },
+          })
+
+          // Create properly decrypted chat with original data
+          const updatedChat: StoredChat = {
+            ...decryptedData, // Use all decrypted data first
+            id: chat.id, // Preserve the original ID
+            decryptionFailed: false,
+            encryptedData: undefined,
+            syncedAt: chat.syncedAt,
+            syncVersion: chat.syncVersion,
+            locallyModified: false,
+          }
+
           await indexedDBStorage.saveChat(updatedChat)
           decryptedCount++
         } catch (error) {
-          logError(
-            `Failed to update decryption status for chat ${chat.id}`,
-            error,
-            {
-              component: 'CloudSync',
-              action: 'retryDecryptionWithNewKey',
-              metadata: { chatId: chat.id },
-            },
-          )
+          logError(`Failed to decrypt chat ${chat.id}`, error, {
+            component: 'CloudSync',
+            action: 'retryDecryptionWithNewKey',
+            metadata: { chatId: chat.id },
+          })
         }
       }
     } catch (error) {

@@ -21,6 +21,8 @@ export type Chat = {
   decryptionFailed?: boolean
   // Temporary ID flag - true if chat has a temporary UUID awaiting server ID
   hasTemporaryId?: boolean
+  // Blank chat flag - true for new chats that haven't been used yet
+  isBlankChat?: boolean
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming'

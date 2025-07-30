@@ -36,6 +36,7 @@ function createNewChatObjectSync(): Chat {
     messages: [],
     createdAt: new Date(),
     hasTemporaryId: true,
+    isBlankChat: true,
   }
 }
 
@@ -90,63 +91,64 @@ export function useChatStorage({
 
     try {
       const savedChats = await chatStorage.getAllChatsWithSyncStatus()
-      const savedChatIds = new Set(savedChats.map((chat) => chat.id))
 
-      // Get current chats state to preserve unsaved empty chats
+      // Get current chats state to preserve blank chats
       setChats((prevChats) => {
-        // Find all unsaved empty chats (not just the current one)
-        const unsavedEmptyChats = prevChats.filter(
-          (chat) =>
-            (!chat.messages || chat.messages.length === 0) &&
-            !savedChatIds.has(chat.id),
-        )
+        // Create a map to track chats by ID for deduplication
+        const chatMap = new Map<string, Chat>()
 
-        if (savedChats.length > 0) {
-          const parsedChats = savedChats.map((chat: Chat) => ({
+        // First add saved chats
+        savedChats.forEach((chat: Chat) => {
+          chatMap.set(chat.id, {
             ...chat,
             createdAt: new Date(chat.createdAt),
-          }))
-
-          // Combine unsaved empty chats with saved chats
-          const combinedChats = [...unsavedEmptyChats, ...parsedChats]
-
-          // Sort by ID to maintain consistent order (newer first)
-          // Since IDs can have different formats, let's sort by createdAt instead
-          const finalChats = combinedChats.sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime()
-            const timeB = new Date(b.createdAt).getTime()
-            return timeB - timeA // Descending order (newest first)
           })
+        })
 
-          // Determine which chat should be current
-          const currentChatStillExists = finalChats.some(
-            (chat) => chat.id === currentChatRef.current?.id,
+        // Then add blank chats that aren't saved yet
+        prevChats.forEach((chat) => {
+          if (chat.isBlankChat && !chatMap.has(chat.id)) {
+            chatMap.set(chat.id, chat)
+          }
+        })
+
+        // Convert map to array and sort
+        const finalChats = Array.from(chatMap.values()).sort((a, b) => {
+          // Blank chats first
+          if (a.isBlankChat && !b.isBlankChat) return -1
+          if (!a.isBlankChat && b.isBlankChat) return 1
+
+          // Then by creation date
+          const timeA = new Date(a.createdAt).getTime()
+          const timeB = new Date(b.createdAt).getTime()
+          return timeB - timeA
+        })
+
+        // Determine which chat should be current
+        const currentChatStillExists = finalChats.some(
+          (chat) => chat.id === currentChatRef.current?.id,
+        )
+
+        const currentChatIsUsable =
+          currentChatStillExists &&
+          !(currentChatRef.current as any)?.decryptionFailed
+
+        if (!currentChatIsUsable) {
+          // Need to find a new current chat
+          // Find all usable (non-encrypted) chats
+          const usableChats = finalChats.filter(
+            (chat) => !(chat as any).decryptionFailed,
           )
 
-          const currentChatIsUsable =
-            currentChatStillExists &&
-            !(currentChatRef.current as any)?.decryptionFailed
-
-          if (!currentChatIsUsable) {
-            // Need to find a new current chat
-            // Find all usable (non-encrypted) chats
-            const usableChats = finalChats.filter(
-              (chat) => !(chat as any).decryptionFailed,
-            )
-
-            // Find the best usable chat
-            const emptyUsableChat = usableChats.find(
-              (chat) => !chat.messages || chat.messages.length === 0,
-            )
-            setCurrentChat(emptyUsableChat || usableChats[0] || finalChats[0])
-          }
-          // Otherwise keep the current chat as is
-
-          return finalChats
-        } else {
-          // No saved chats found, keep unsaved empty chats
-          return unsavedEmptyChats.length > 0 ? unsavedEmptyChats : prevChats
+          // Find the best usable chat
+          const emptyUsableChat = usableChats.find(
+            (chat) => !chat.messages || chat.messages.length === 0,
+          )
+          setCurrentChat(emptyUsableChat || usableChats[0] || finalChats[0])
         }
+        // Otherwise keep the current chat as is
+
+        return finalChats
       })
     } catch (error) {
       logError('Failed to reload chats from storage', error, {
@@ -177,16 +179,16 @@ export function useChatStorage({
               (chat) => !(chat as any).decryptionFailed,
             )
 
-            // Check if we need to add a new empty chat (only on initial load)
-            const hasEmptyUsableChat = usableChats.some(
-              (chat) => !chat.messages || chat.messages.length === 0,
+            // Check if we need to add a new blank chat (only on initial load)
+            const hasBlankUsableChat = usableChats.some(
+              (chat) => chat.isBlankChat === true,
             )
 
             let finalChats = parsedChats
             let newChat = null
 
-            if (!hasEmptyUsableChat) {
-              // No empty usable chat exists, create one for initial load
+            if (!hasBlankUsableChat) {
+              // No blank usable chat exists, create one for initial load
               newChat = createNewChatObjectSync()
               finalChats = [newChat, ...parsedChats]
             }
@@ -198,11 +200,11 @@ export function useChatStorage({
               setCurrentChat(newChat)
             } else {
               // Find the best usable chat to start with
-              const emptyUsableChat = usableChats.find(
-                (chat) => !chat.messages || chat.messages.length === 0,
+              const blankUsableChat = usableChats.find(
+                (chat) => chat.isBlankChat === true,
               )
               setCurrentChat(
-                emptyUsableChat || usableChats[0] || parsedChats[0],
+                blankUsableChat || usableChats[0] || parsedChats[0],
               )
             }
           }
@@ -236,53 +238,27 @@ export function useChatStorage({
   const createNewChat = useCallback(() => {
     if (!storeHistory) return // Prevent creating new chats for basic users
 
-    // Don't create a new chat if the current chat is already empty
-    if (currentChat?.messages?.length === 0) {
-      return // Current chat is already empty, no need to create a new one
+    // Check if any chat in the list is blank (not just current chat)
+    const hasBlankChat = chats.some((chat) => chat.isBlankChat === true)
+
+    if (hasBlankChat) {
+      // Find the blank chat and switch to it
+      const blankChat = chats.find((chat) => chat.isBlankChat === true)
+      if (blankChat) {
+        setCurrentChat(blankChat)
+      }
+      return
     }
 
     // Create new chat instantly with temporary ID
     const tempChat = createNewChatObjectSync()
-    const tempId = tempChat.id
 
     setCurrentChat(tempChat)
     setChats((prev) => [tempChat, ...prev])
 
-    // Immediately try to get server ID in the background
-    getServerChatId().then((serverId) => {
-      if (serverId) {
-        // Update both chats array and currentChat if this chat still exists
-        setChats((prevChats) => {
-          const chatStillExists = prevChats.some((chat) => chat.id === tempId)
-          if (!chatStillExists) return prevChats
-
-          return prevChats.map((chat) => {
-            if (chat.id === tempId) {
-              return { ...chat, id: serverId, hasTemporaryId: false }
-            }
-            return chat
-          })
-        })
-
-        // Update current chat if it's still the active one
-        setCurrentChat((prev) => {
-          if (prev.id === tempId) {
-            return { ...prev, id: serverId, hasTemporaryId: false }
-          }
-          return prev
-        })
-
-        // Update the ref as well
-        if (currentChatRef.current?.id === tempId) {
-          currentChatRef.current = {
-            ...currentChatRef.current,
-            id: serverId,
-            hasTemporaryId: false,
-          }
-        }
-      }
-    })
-  }, [storeHistory, currentChat?.messages?.length])
+    // Don't request server ID here - wait until first message is sent
+    // This ensures createdAt reflects when the chat actually has content
+  }, [storeHistory, chats])
 
   // Delete a chat
   const deleteChat = useCallback(

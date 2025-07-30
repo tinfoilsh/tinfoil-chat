@@ -98,10 +98,10 @@ export class IndexedDBStorage {
   async saveChat(chat: Chat): Promise<void> {
     const db = await this.ensureDB()
 
-    // Don't save empty chats to IndexedDB
-    // Empty chats should only exist in memory until they have messages
-    if (!chat.messages || chat.messages.length === 0) {
-      logWarning('Attempted to save empty chat to IndexedDB, skipping', {
+    // Don't save blank chats to IndexedDB
+    // Blank chats are new chats that haven't been used yet
+    if ((chat as any).isBlankChat === true) {
+      logWarning('Attempted to save blank chat to IndexedDB, skipping', {
         component: 'IndexedDBStorage',
         metadata: { chatId: chat.id },
       })
