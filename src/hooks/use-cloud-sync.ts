@@ -83,6 +83,11 @@ export function useCloudSync() {
   // Sync chats
   const syncChats = useCallback(async () => {
     if (syncingRef.current) {
+      // Log when sync is blocked
+      logInfo('Sync request blocked - sync already in progress', {
+        component: 'useCloudSync',
+        action: 'syncChats',
+      })
       return false
     }
 
@@ -97,6 +102,15 @@ export function useCloudSync() {
         syncing: false,
         lastSyncTime: Date.now(),
       }))
+
+      logInfo(
+        `Sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
+        {
+          component: 'useCloudSync',
+          action: 'syncChats',
+          metadata: { result },
+        },
+      )
 
       return result
     } catch (error) {

@@ -1,5 +1,6 @@
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
+import { r2Storage } from '@/services/cloud/r2-storage'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -57,6 +58,11 @@ export function useChatMessaging({
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const maxMessages = useMaxMessages()
 
+  // Initialize r2Storage with token getter
+  useEffect(() => {
+    r2Storage.setTokenGetter(getToken)
+  }, [getToken])
+
   const [input, setInput] = useState('')
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
   const [abortController, setAbortController] =
@@ -65,7 +71,7 @@ export function useChatMessaging({
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const currentChatIdRef = useRef<string>(currentChat.id)
+  const currentChatIdRef = useRef<string>(currentChat?.id || '')
   const isStreamingRef = useRef(false)
 
   // Override model selection for free users
@@ -75,7 +81,7 @@ export function useChatMessaging({
 
   // Add reload function to refresh chats from storage
   const reloadChatsFromStorage = useCallback(async () => {
-    if (!storeHistory) return
+    if (!storeHistory || !currentChat) return
 
     try {
       const updatedChat = await chatStorage.getChat(currentChat.id)
@@ -96,7 +102,7 @@ export function useChatMessaging({
         action: 'reloadChatsFromStorage',
       })
     }
-  }, [currentChat.id, storeHistory, setCurrentChat, setChats])
+  }, [currentChat?.id, storeHistory, setCurrentChat, setChats])
 
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = useCallback(
@@ -222,6 +228,15 @@ export function useChatMessaging({
     ) => {
       if (!query.trim() || loadingState !== 'idle') return
 
+      // Safety check - ensure we have a current chat
+      if (!currentChat) {
+        logError('No current chat available', undefined, {
+          component: 'useChatMessaging',
+          action: 'handleQuery',
+        })
+        return
+      }
+
       const controller = new AbortController()
       setAbortController(controller)
       setLoadingState('loading')
@@ -273,26 +288,49 @@ export function useChatMessaging({
         ),
       )
 
-      // Save once at the end if storing history
-      if (storeHistory) {
-        // This save will handle server ID assignment if needed
-        chatStorage
-          .saveChatAndSync(updatedChat)
-          .then((savedChat) => {
-            // Only update if the ID actually changed
-            if (savedChat.id !== updatedChat.id) {
-              currentChatIdRef.current = savedChat.id
-              setCurrentChat(savedChat)
-              setChats((prevChats) =>
-                prevChats.map((c) => (c.id === updatedChat.id ? savedChat : c)),
-              )
+      // For new chats, get server ID first before proceeding
+      if (storeHistory && currentChat.hasTemporaryId) {
+        try {
+          // Get server ID synchronously before proceeding
+          const result = await r2Storage.generateConversationId()
+          if (result) {
+            // Update the chat with the server ID
+            const chatWithServerId = {
+              ...updatedChat,
+              id: result.conversationId,
+              hasTemporaryId: false,
             }
+
+            // Update refs and state with new ID
+            currentChatIdRef.current = result.conversationId
+            setCurrentChat(chatWithServerId)
+            setChats((prevChats) =>
+              prevChats.map((c) =>
+                c.id === currentChat.id ? chatWithServerId : c,
+              ),
+            )
+
+            // Save the chat with server ID
+            await chatStorage.saveChatAndSync(chatWithServerId)
+
+            // Update the currentChat reference for the rest of the function
+            currentChat = chatWithServerId
+            updatedChat = chatWithServerId
+          }
+        } catch (error) {
+          logError('Failed to get server ID for new chat', error, {
+            component: 'useChatMessaging',
+            action: 'handleQuery',
           })
-          .catch((error) => {
-            logError('Failed to save chat', error, {
-              component: 'useChatMessaging',
-            })
+          // Continue with temporary ID if server ID fetch fails
+        }
+      } else if (storeHistory) {
+        // For existing chats, just save normally
+        chatStorage.saveChatAndSync(updatedChat).catch((error) => {
+          logError('Failed to save chat', error, {
+            component: 'useChatMessaging',
           })
+        })
       }
 
       setInput('')
@@ -438,15 +476,16 @@ export function useChatMessaging({
                 isThinking: false,
               }
               if (currentChatIdRef.current === currentChat.id) {
+                const chatId = currentChatIdRef.current
                 const newMessages = [...updatedMessages, assistantMessage]
                 // Save to localStorage and update display
                 updateChatWithHistoryCheck(
                   setChats,
                   currentChat,
                   setCurrentChat,
-                  currentChat.id,
+                  chatId,
                   newMessages,
-                  false,
+                  true, // immediate = true for final save
                   false,
                 )
               }
@@ -528,12 +567,13 @@ export function useChatMessaging({
                 }
 
                 if (currentChatIdRef.current === currentChat.id) {
+                  const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
                   updateChatWithHistoryCheck(
                     setChats,
                     currentChat,
                     setCurrentChat,
-                    currentChat.id,
+                    chatId,
                     newMessages,
                     false,
                     false,
@@ -551,13 +591,14 @@ export function useChatMessaging({
                   isThinking: true,
                 }
                 if (currentChatIdRef.current === currentChat.id) {
+                  const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
 
                   updateChatWithHistoryCheck(
                     setChats,
                     currentChat,
                     setCurrentChat,
-                    currentChat.id,
+                    chatId,
                     newMessages,
                     false,
                     true,
@@ -572,13 +613,14 @@ export function useChatMessaging({
                   isThinking: false,
                 }
                 if (currentChatIdRef.current === currentChat.id) {
+                  const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
 
                   updateChatWithHistoryCheck(
                     setChats,
                     currentChat,
                     setCurrentChat,
-                    currentChat.id,
+                    chatId,
                     newMessages,
                     false,
                     false,
@@ -617,7 +659,7 @@ export function useChatMessaging({
             setCurrentChat,
             currentChat.id,
             [...updatedMessages, errorMessage],
-            false,
+            true, // immediate = true to ensure error is saved
             false,
           )
         }
@@ -656,7 +698,7 @@ export function useChatMessaging({
 
   // Update currentChatIdRef when currentChat changes
   useEffect(() => {
-    currentChatIdRef.current = currentChat.id
+    currentChatIdRef.current = currentChat?.id || ''
   }, [currentChat])
 
   // Use the abstracted API key hook

@@ -28,14 +28,14 @@ async function getServerChatId(): Promise<string | null> {
   return null
 }
 
-// Create a new chat object with temporary ID (instant response)
+// Create a new chat object with placeholder ID (will be replaced when first message is sent)
 function createNewChatObjectSync(): Chat {
   return {
-    id: generateTemporaryChatId(),
+    id: 'new-chat-' + Date.now(), // Temporary placeholder ID
     title: 'New Chat',
     messages: [],
     createdAt: new Date(),
-    hasTemporaryId: true,
+    hasTemporaryId: true, // Flag to indicate this needs a server ID
     isBlankChat: true,
   }
 }
@@ -150,6 +150,28 @@ export function useChatStorage({
 
         return finalChats
       })
+
+      // Update current chat if it was modified remotely
+      const currentChatId = currentChatRef.current?.id
+      if (currentChatId) {
+        const updatedChat = savedChats.find((chat) => chat.id === currentChatId)
+        if (updatedChat) {
+          setCurrentChat((prevChat) => {
+            // Only update if the chat has actually changed
+            if (
+              prevChat.id === updatedChat.id &&
+              (prevChat.messages.length !== updatedChat.messages.length ||
+                prevChat.syncedAt !== updatedChat.syncedAt)
+            ) {
+              return {
+                ...updatedChat,
+                createdAt: new Date(updatedChat.createdAt),
+              }
+            }
+            return prevChat
+          })
+        }
+      }
     } catch (error) {
       logError('Failed to reload chats from storage', error, {
         component: 'useChatStorage',
