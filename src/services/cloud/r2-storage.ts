@@ -1,6 +1,6 @@
 import { logError } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
-import type { StoredChat } from '../storage/indexed-db'
+import { DB_VERSION, type StoredChat } from '../storage/indexed-db'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -104,7 +104,7 @@ export class R2StorageService {
 
     // Metadata for the chat
     const metadata = {
-      title: chat.title || 'Untitled Chat',
+      'db-version': String(DB_VERSION),
       'message-count': String(chat.messages?.length || 0),
     }
 

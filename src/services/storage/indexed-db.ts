@@ -18,7 +18,7 @@ export interface StoredChat extends Chat {
 }
 
 const DB_NAME = 'tinfoil-chat'
-const DB_VERSION = 1
+export const DB_VERSION = 1
 const CHATS_STORE = 'chats'
 
 export class IndexedDBStorage {
