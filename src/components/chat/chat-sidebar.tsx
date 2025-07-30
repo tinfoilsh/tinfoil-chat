@@ -429,71 +429,86 @@ export function ChatSidebar({
           <div className="flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
               {isClient &&
-                chats.map((chat) => (
-                  <div key={chat.id} className="relative">
-                    <div
-                      onClick={() => {
-                        // Don't allow selecting encrypted chats
-                        if (chat.decryptionFailed) {
-                          return
-                        }
-                        handleChatSelect(chat.id)
-                        // Only close sidebar on mobile
-                        if (windowWidth < MOBILE_BREAKPOINT) {
-                          setIsOpen(false)
-                        }
-                      }}
-                      onTouchEnd={(e) => {
-                        // Prevent the click event from firing after touch
-                        e.preventDefault()
-                        // Don't allow selecting encrypted chats
-                        if (chat.decryptionFailed) {
-                          return
-                        }
-                        handleChatSelect(chat.id)
-                        // Only close sidebar on mobile
-                        if (windowWidth < MOBILE_BREAKPOINT) {
-                          setIsOpen(false)
-                        }
-                      }}
-                      className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
-                        chat.decryptionFailed
-                          ? isDarkMode
-                            ? 'cursor-not-allowed border-gray-700 text-gray-500'
-                            : 'cursor-not-allowed border-gray-300 text-gray-400'
-                          : currentChat?.id === chat.id
+                // Sort chats to ensure empty chats appear at the top
+                [...chats]
+                  .sort((a, b) => {
+                    // Empty chats should always be at the top
+                    const aIsEmpty = !a.messages || a.messages.length === 0
+                    const bIsEmpty = !b.messages || b.messages.length === 0
+
+                    if (aIsEmpty && !bIsEmpty) return -1
+                    if (!aIsEmpty && bIsEmpty) return 1
+
+                    // For non-empty chats, sort by createdAt (newest first)
+                    const timeA = new Date(a.createdAt).getTime()
+                    const timeB = new Date(b.createdAt).getTime()
+                    return timeB - timeA
+                  })
+                  .map((chat) => (
+                    <div key={chat.id} className="relative">
+                      <div
+                        onClick={() => {
+                          // Don't allow selecting encrypted chats
+                          if (chat.decryptionFailed) {
+                            return
+                          }
+                          handleChatSelect(chat.id)
+                          // Only close sidebar on mobile
+                          if (windowWidth < MOBILE_BREAKPOINT) {
+                            setIsOpen(false)
+                          }
+                        }}
+                        onTouchEnd={(e) => {
+                          // Prevent the click event from firing after touch
+                          e.preventDefault()
+                          // Don't allow selecting encrypted chats
+                          if (chat.decryptionFailed) {
+                            return
+                          }
+                          handleChatSelect(chat.id)
+                          // Only close sidebar on mobile
+                          if (windowWidth < MOBILE_BREAKPOINT) {
+                            setIsOpen(false)
+                          }
+                        }}
+                        className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
+                          chat.decryptionFailed
                             ? isDarkMode
-                              ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
-                              : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
-                            : isDarkMode
-                              ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                              : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-                      }`}
-                    >
-                      {/* Chat item content */}
-                      <ChatListItem
-                        chat={chat}
-                        isEditing={editingChatId === chat.id}
-                        editingTitle={editingTitle}
-                        setEditingTitle={setEditingTitle}
-                        updateChatTitle={updateChatTitle}
-                        setEditingChatId={setEditingChatId}
-                        setDeletingChatId={setDeletingChatId}
-                        isPremium={isPremium}
-                        isDarkMode={isDarkMode}
-                      />
+                              ? 'cursor-not-allowed border-gray-700 text-gray-500'
+                              : 'cursor-not-allowed border-gray-300 text-gray-400'
+                            : currentChat?.id === chat.id
+                              ? isDarkMode
+                                ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
+                                : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
+                              : isDarkMode
+                                ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                                : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                        }`}
+                      >
+                        {/* Chat item content */}
+                        <ChatListItem
+                          chat={chat}
+                          isEditing={editingChatId === chat.id}
+                          editingTitle={editingTitle}
+                          setEditingTitle={setEditingTitle}
+                          updateChatTitle={updateChatTitle}
+                          setEditingChatId={setEditingChatId}
+                          setDeletingChatId={setDeletingChatId}
+                          isPremium={isPremium}
+                          isDarkMode={isDarkMode}
+                        />
+                      </div>
+                      {/* Delete confirmation */}
+                      {deletingChatId === chat.id && isPremium && (
+                        <DeleteConfirmation
+                          chatId={chat.id}
+                          onDelete={deleteChat}
+                          onCancel={() => setDeletingChatId(null)}
+                          isDarkMode={isDarkMode}
+                        />
+                      )}
                     </div>
-                    {/* Delete confirmation */}
-                    {deletingChatId === chat.id && isPremium && (
-                      <DeleteConfirmation
-                        chatId={chat.id}
-                        onDelete={deleteChat}
-                        onCancel={() => setDeletingChatId(null)}
-                        isDarkMode={isDarkMode}
-                      />
-                    )}
-                  </div>
-                ))}
+                  ))}
             </div>
           </div>
 

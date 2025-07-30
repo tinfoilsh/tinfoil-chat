@@ -187,12 +187,19 @@ export class CloudSyncService {
           try {
             const downloadedChat = await r2Storage.downloadChat(remoteChat.id)
             if (downloadedChat) {
-              await indexedDBStorage.saveChat(downloadedChat)
-              await indexedDBStorage.markAsSynced(
-                downloadedChat.id,
-                downloadedChat.syncVersion || 0,
-              )
-              result.downloaded++
+              // Don't save empty chats to IndexedDB during sync
+              // Empty chats should only exist in memory until they have messages
+              if (
+                downloadedChat.messages &&
+                downloadedChat.messages.length > 0
+              ) {
+                await indexedDBStorage.saveChat(downloadedChat)
+                await indexedDBStorage.markAsSynced(
+                  downloadedChat.id,
+                  downloadedChat.syncVersion || 0,
+                )
+                result.downloaded++
+              }
             }
           } catch (error) {
             result.errors.push(

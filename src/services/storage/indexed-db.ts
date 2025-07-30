@@ -98,16 +98,14 @@ export class IndexedDBStorage {
   async saveChat(chat: Chat): Promise<void> {
     const db = await this.ensureDB()
 
-    // Get existing chat to preserve sync metadata
-    let existingChat: StoredChat | null = null
-    try {
-      existingChat = await this.getChatInternal(chat.id)
-    } catch (error) {
-      // Log database errors but continue with save operation
-      logError('Database error while retrieving existing chat', error, {
+    // Don't save empty chats to IndexedDB
+    // Empty chats should only exist in memory until they have messages
+    if (!chat.messages || chat.messages.length === 0) {
+      logWarning('Attempted to save empty chat to IndexedDB, skipping', {
         component: 'IndexedDBStorage',
+        metadata: { chatId: chat.id },
       })
-      // existingChat remains null, so sync metadata won't be preserved
+      return
     }
 
     return new Promise((resolve, reject) => {
