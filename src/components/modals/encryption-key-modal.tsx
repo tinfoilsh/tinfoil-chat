@@ -3,6 +3,7 @@
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, Transition } from '@headlessui/react'
 import {
+  CheckIcon,
   ClipboardDocumentIcon,
   KeyIcon,
   XMarkIcon,
@@ -26,6 +27,7 @@ export function EncryptionKeyModal({
 }: EncryptionKeyModalProps) {
   const [inputKey, setInputKey] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
   const { toast } = useToast()
 
   const handleCopyKey = async () => {
@@ -33,10 +35,8 @@ export function EncryptionKeyModal({
 
     try {
       await navigator.clipboard.writeText(encryptionKey)
-      toast({
-        title: 'Encryption key copied',
-        description: 'The key has been copied to your clipboard',
-      })
+      setIsCopied(true)
+      setTimeout(() => setIsCopied(false), 2000)
     } catch (error) {
       toast({
         title: 'Failed to copy',
@@ -61,7 +61,7 @@ export function EncryptionKeyModal({
       await onKeyChange(inputKey)
       toast({
         title: 'Key updated',
-        description: 'Decrypting chats with the new key...',
+        description: 'Your encryption key has been updated successfully',
       })
       setInputKey('')
       onClose()
@@ -155,14 +155,20 @@ export function EncryptionKeyModal({
                           </code>
                           <button
                             onClick={handleCopyKey}
-                            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                              isDarkMode
-                                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-all ${
+                              isCopied
+                                ? 'bg-emerald-500 text-white'
+                                : isDarkMode
+                                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                             }`}
                           >
-                            <ClipboardDocumentIcon className="h-4 w-4" />
-                            Copy
+                            {isCopied ? (
+                              <CheckIcon className="h-4 w-4" />
+                            ) : (
+                              <ClipboardDocumentIcon className="h-4 w-4" />
+                            )}
+                            {isCopied ? 'Copied!' : 'Copy'}
                           </button>
                         </div>
                       ) : (
