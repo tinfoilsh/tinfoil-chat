@@ -8,7 +8,7 @@ import {
   KeyIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { Fragment, useState, useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 
 interface EncryptionKeyModalProps {
   isOpen: boolean
@@ -31,18 +31,27 @@ export function EncryptionKeyModal({
   const { toast } = useToast()
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const handleCopyKey = async () => {
     if (!encryptionKey) return
 
     try {
       await navigator.clipboard.writeText(encryptionKey)
       setIsCopied(true)
-      
+
       // Clear any existing timeout
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current)
       }
-      
+
       // Set new timeout
       copyTimeoutRef.current = setTimeout(() => {
         setIsCopied(false)
