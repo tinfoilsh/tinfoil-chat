@@ -12,6 +12,11 @@ import JSZip from 'jszip'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
 
+import { r2Storage } from '@/services/cloud/r2-storage'
+import {
+  indexedDBStorage,
+  type StoredChat,
+} from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
@@ -80,6 +85,7 @@ type ChatSidebarProps = {
   isPremium?: boolean
   onVerificationComplete: (success: boolean) => void
   onEncryptionKeyClick?: () => void
+  onChatsUpdated?: () => void
 }
 
 // Add this constant at the top of the file
@@ -196,17 +202,25 @@ export function ChatSidebar({
   selectedModel,
   isPremium = true,
   onEncryptionKeyClick,
+  onChatsUpdated,
 }: ChatSidebarProps) {
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
-  const [displayedChatsCount, setDisplayedChatsCount] = useState(CHATS_PER_PAGE)
+  // Show all local chats - pagination is only for remote
+  const [displayedChatsCount, setDisplayedChatsCount] = useState(999999)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [nextToken, setNextToken] = useState<string | undefined>(undefined)
+  const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, getToken } = useAuth()
+
+  // Token getter should be set by parent component that has access to getApiKey
+  // The parent (ChatInterface) already sets this up through useCloudSync
 
   // Apply zoom prevention for mobile
   usePreventZoom()
@@ -237,6 +251,114 @@ export function ChatSidebar({
   useEffect(() => {
     setDisplayedChatsCount(CHATS_PER_PAGE)
   }, [chats.length])
+
+  // Initialize r2Storage with token getter when component mounts
+  useEffect(() => {
+    if (isSignedIn && getToken) {
+      // Set up token getter for r2Storage using Clerk token
+      r2Storage.setTokenGetter(async () => {
+        const token = await getToken()
+        return token
+      })
+    }
+  }, [isSignedIn, getToken])
+
+  // Clean up paginated chats on page refresh and initialize pagination
+  useEffect(() => {
+    const cleanupAndInitialize = async () => {
+      if (!isSignedIn || !getToken) return
+
+      try {
+        // First, delete all paginated chats from IndexedDB
+        const allChats = await indexedDBStorage.getAllChats()
+        for (const chat of allChats) {
+          if ((chat as any).isPaginated) {
+            await indexedDBStorage.deleteChat(chat.id)
+          }
+        }
+
+        // Then get the first page to obtain the continuation token
+        const result = await r2Storage.listChats({ limit: CHATS_PER_PAGE })
+
+        if (result.nextContinuationToken) {
+          // Set the token to start from page 2
+          setNextToken(result.nextContinuationToken)
+          setHasMoreRemote(true)
+        } else {
+          // No more pages available
+          setHasMoreRemote(false)
+        }
+
+        // Trigger reload to update the UI after cleanup
+        if (onChatsUpdated) {
+          onChatsUpdated()
+        }
+      } catch (error) {
+        console.error('Failed to cleanup and initialize pagination:', error)
+      }
+    }
+
+    cleanupAndInitialize()
+  }, [isSignedIn, getToken, onChatsUpdated])
+
+  // Load more chats from backend
+  const loadMoreChats = async () => {
+    if (isLoadingMore || !isSignedIn || !hasMoreRemote) return
+
+    setIsLoadingMore(true)
+    try {
+      const result = await r2Storage.listChats({
+        limit: CHATS_PER_PAGE,
+        continuationToken: nextToken,
+      })
+
+      if (result.conversations && result.conversations.length > 0) {
+        // Download and save full chat data to IndexedDB
+        for (const conv of result.conversations) {
+          try {
+            const fullChat = await r2Storage.downloadChat(conv.id)
+            if (fullChat) {
+              // Mark as paginated to prevent deletion during sync
+              const paginatedChat: StoredChat = {
+                ...fullChat,
+                isPaginated: true,
+              }
+              // Save to IndexedDB - this will trigger a reload of chats
+              await indexedDBStorage.saveChat(paginatedChat)
+              // Mark as synced since we just downloaded from cloud
+              await indexedDBStorage.markAsSynced(
+                fullChat.id,
+                fullChat.syncVersion || 0,
+              )
+            }
+          } catch (error) {
+            logError(`Failed to download chat ${conv.id}`, error, {
+              component: 'ChatSidebar',
+              action: 'loadMoreChats',
+              metadata: { chatId: conv.id },
+            })
+          }
+        }
+
+        // Trigger parent component to reload chats from IndexedDB
+        if (onChatsUpdated) {
+          onChatsUpdated()
+        }
+
+        setNextToken(result.nextContinuationToken)
+        setHasMoreRemote(!!result.nextContinuationToken)
+      } else {
+        setHasMoreRemote(false)
+      }
+    } catch (error) {
+      logError('Failed to load more chats', error, {
+        component: 'ChatSidebar',
+        action: 'loadMoreChats',
+      })
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
@@ -437,8 +559,7 @@ export function ChatSidebar({
           <div className="flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
               {isClient &&
-                // Sort chats to ensure empty chats appear at the top
-                [...chats]
+                chats
                   .sort((a, b) => {
                     // Blank chats should always be at the top
                     const aIsBlank = a.isBlankChat === true
@@ -452,16 +573,17 @@ export function ChatSidebar({
                     const timeB = new Date(b.createdAt).getTime()
                     return timeB - timeA
                   })
-                  .slice(0, displayedChatsCount)
                   .map((chat) => (
                     <div key={chat.id} className="relative">
                       <div
-                        onClick={() => {
+                        onClick={async () => {
                           // Don't allow selecting encrypted chats
                           if (chat.decryptionFailed) {
                             return
                           }
+
                           handleChatSelect(chat.id)
+
                           // Only close sidebar on mobile
                           if (windowWidth < MOBILE_BREAKPOINT) {
                             setIsOpen(false)
@@ -519,21 +641,18 @@ export function ChatSidebar({
                     </div>
                   ))}
 
-              {/* Load More button - prepared for future server-side pagination */}
-              {chats.length > displayedChatsCount && (
+              {/* Load More button - only for remote chats */}
+              {isSignedIn && hasMoreRemote && (
                 <button
-                  onClick={() => {
-                    // For now, just show more local chats
-                    // TODO: In the future, this will trigger server-side pagination
-                    setDisplayedChatsCount((prev) => prev + CHATS_PER_PAGE)
-                  }}
+                  onClick={loadMoreChats}
+                  disabled={isLoadingMore}
                   className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
                     isDarkMode
-                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:bg-gray-900 disabled:text-gray-600'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400'
                   }`}
                 >
-                  Load More ({chats.length - displayedChatsCount} remaining)
+                  {isLoadingMore ? 'Loading...' : 'Load More'}
                 </button>
               )}
             </div>

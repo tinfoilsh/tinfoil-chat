@@ -690,6 +690,7 @@ export function ChatInterface({
         onEncryptionKeyClick={
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
         }
+        onChatsUpdated={reloadChats}
       />
 
       {/* Right Verifier Sidebar */}

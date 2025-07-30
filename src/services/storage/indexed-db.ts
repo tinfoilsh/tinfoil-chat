@@ -15,6 +15,7 @@ export interface StoredChat extends Chat {
   decryptionFailed?: boolean
   encryptedData?: string
   version?: number // Storage format version
+  isPaginated?: boolean // Chat loaded through pagination, not initial sync
 }
 
 const DB_NAME = 'tinfoil-chat'
