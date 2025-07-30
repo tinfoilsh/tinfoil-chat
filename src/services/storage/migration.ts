@@ -1,5 +1,5 @@
 import { logInfo } from '@/utils/error-handling'
-import { indexedDBStorage, type Chat, type StoredChat } from './indexed-db'
+import { indexedDBStorage, type StoredChat } from './indexed-db'
 
 const CHATS_STORAGE_KEY = 'chats' // The key currently used by the app
 
@@ -95,7 +95,7 @@ export class StorageMigration {
         }
 
         try {
-          const chat: Chat = {
+          const chat: StoredChat = {
             id: convertToNewIdFormat(legacyChat.id),
             title: legacyChat.title || 'Untitled Chat',
             messages: legacyChat.messages
@@ -123,26 +123,15 @@ export class StorageMigration {
                 ? legacyChat.createdAt
                 : legacyChat.createdAt.toISOString(),
             updatedAt: new Date().toISOString(),
+            // Include sync metadata directly to avoid double write
+            locallyModified: true,
+            syncVersion: 0,
+            lastAccessedAt: Date.now(),
+            // Don't set syncedAt - this indicates it needs to be synced
           }
 
-          // Save the chat with proper sync metadata
-          // We need to save it through indexedDBStorage which will add lastAccessedAt
-          // But we also need to ensure sync metadata is initialized
+          // Save the chat with sync metadata in a single operation
           await indexedDBStorage.saveChat(chat)
-
-          // Now update the chat with sync metadata
-          // Mark as locally modified since it hasn't been synced yet
-          const storedChat = await indexedDBStorage.getChat(chat.id)
-          if (storedChat) {
-            const chatWithSyncMetadata: StoredChat = {
-              ...storedChat,
-              locallyModified: true,
-              syncVersion: 0,
-              // Don't set syncedAt - this indicates it needs to be synced
-            }
-            // Save again with sync metadata
-            await indexedDBStorage.saveChat(chatWithSyncMetadata)
-          }
 
           result.migratedCount++
         } catch (error) {

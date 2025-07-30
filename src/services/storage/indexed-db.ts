@@ -60,8 +60,6 @@ export class IndexedDBStorage {
               unique: false,
             })
             store.createIndex('createdAt', 'createdAt', { unique: false })
-            // Add index on id for sorting by reverse timestamp
-            store.createIndex('id', 'id', { unique: true })
             // Add sync-related indexes
             store.createIndex('syncedAt', 'syncedAt', { unique: false })
             store.createIndex('locallyModified', 'locallyModified', {
@@ -209,9 +207,8 @@ export class IndexedDBStorage {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readonly')
       const store = transaction.objectStore(CHATS_STORE)
-      // Sort by ID which contains reverse timestamp
-      const index = store.index('id')
-      const request = index.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
+      // Sort by ID (primary key) which contains reverse timestamp
+      const request = store.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
 
       const chats: StoredChat[] = []
 
