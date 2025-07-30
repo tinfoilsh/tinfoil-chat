@@ -83,7 +83,7 @@ export function useCloudSync() {
   // Sync chats
   const syncChats = useCallback(async () => {
     if (syncingRef.current) {
-      return
+      return false
     }
 
     syncingRef.current = true
@@ -127,14 +127,17 @@ export function useCloudSync() {
         await encryptionService.setKey(key)
         setState((prev) => ({ ...prev, encryptionKey: key }))
 
-        // If the key changed, retry decryption and sync
-        if (oldKey && oldKey !== key) {
+        // If the key changed OR this is the first time setting a key, retry decryption and sync
+        if (!oldKey || oldKey !== key) {
           // First retry decryption for chats that failed with the old key
           const decryptedCount = await retryDecryptionWithNewKey()
 
           // Then trigger a full sync to ensure everything is up to date
-          return syncChats()
+          await syncChats()
+          return true // Always return true to trigger reload
         }
+
+        return false // Key didn't change
       } catch (error) {
         logError('Failed to set encryption key', error, {
           component: 'useCloudSync',

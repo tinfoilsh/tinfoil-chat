@@ -1,5 +1,4 @@
 import { logError, logInfo } from '@/utils/error-handling'
-import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
 
@@ -254,42 +253,34 @@ export class CloudSyncService {
   // Retry decryption for chats that failed to decrypt
   async retryDecryptionWithNewKey(): Promise<number> {
     let decryptedCount = 0
+    let chatsWithEncryptedData: any[] = []
 
     try {
       // Get all chats that have encrypted data
-      const chatsWithEncryptedData =
+      chatsWithEncryptedData =
         await indexedDBStorage.getChatsWithEncryptedData()
 
       for (const chat of chatsWithEncryptedData) {
-        if (chat.encryptedData) {
-          try {
-            const encrypted = JSON.parse(chat.encryptedData)
+        // Simply update the flags - the chat already has decrypted data
+        const updatedChat = {
+          ...chat,
+          decryptionFailed: false,
+          encryptedData: undefined,
+        }
 
-            // Try to decrypt with the current key (already set by setKey)
-            const decrypted = await encryptionService.decrypt(encrypted)
-
-            // Successfully decrypted - update the chat
-            // Need to preserve the ID and sync metadata
-            const updatedChat = {
-              ...decrypted,
-              id: chat.id, // Preserve the original ID
-              decryptionFailed: false,
-              encryptedData: undefined,
-              syncedAt: chat.syncedAt,
-              locallyModified: false,
-              syncVersion: chat.syncVersion,
-            }
-
-            await indexedDBStorage.saveChat(updatedChat)
-            decryptedCount++
-          } catch (error) {
-            // Silent fail - keep the encrypted placeholder
-            logError(`Failed to retry decryption for chat ${chat.id}`, error, {
+        try {
+          await indexedDBStorage.saveChat(updatedChat)
+          decryptedCount++
+        } catch (error) {
+          logError(
+            `Failed to update decryption status for chat ${chat.id}`,
+            error,
+            {
               component: 'CloudSync',
               action: 'retryDecryptionWithNewKey',
               metadata: { chatId: chat.id },
-            })
-          }
+            },
+          )
         }
       }
     } catch (error) {

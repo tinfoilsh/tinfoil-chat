@@ -140,11 +140,8 @@ export class IndexedDBStorage {
             (chat as StoredChat).locallyModified,
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
-          decryptionFailed:
-            existingChat?.decryptionFailed ??
-            (chat as StoredChat).decryptionFailed,
-          encryptedData:
-            existingChat?.encryptedData ?? (chat as StoredChat).encryptedData,
+          decryptionFailed: (chat as StoredChat).decryptionFailed,
+          encryptedData: (chat as StoredChat).encryptedData,
           version: 1, // Current storage format version
         }
 
