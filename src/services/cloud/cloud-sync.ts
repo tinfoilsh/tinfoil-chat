@@ -1,5 +1,6 @@
 import { logError, logInfo } from '@/utils/error-handling'
-import { indexedDBStorage } from '../storage/indexed-db'
+import { encryptionService } from '../encryption/encryption-service'
+import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
 
 export interface SyncResult {

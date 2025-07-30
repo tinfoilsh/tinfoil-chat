@@ -60,8 +60,8 @@ export function CloudSyncIntroModal({
               isDarkMode ? 'text-gray-300' : 'text-gray-700'
             }`}
           >
-            We've migrated your existing chats to our secure cloud storage.
-            Here's what this means for you:
+            We&apos;ve migrated your existing chats to our secure cloud storage.
+            Here&apos;s what this means for you:
           </p>
 
           <div className="space-y-3">

@@ -633,7 +633,6 @@ export function useChatMessaging({
       loadingState,
       currentChat,
       storeHistory,
-      chats,
       setChats,
       setCurrentChat,
       models,
@@ -643,7 +642,6 @@ export function useChatMessaging({
       messagesEndRef,
       updateChatWithHistoryCheck,
       maxMessages,
-      reloadChatsFromStorage,
     ],
   )
 
