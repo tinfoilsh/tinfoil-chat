@@ -8,7 +8,7 @@ import {
   KeyIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useEffect, useRef } from 'react'
 
 interface EncryptionKeyModalProps {
   isOpen: boolean
@@ -29,6 +29,7 @@ export function EncryptionKeyModal({
   const [isUpdating, setIsUpdating] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const { toast } = useToast()
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const handleCopyKey = async () => {
     if (!encryptionKey) return
@@ -36,7 +37,17 @@ export function EncryptionKeyModal({
     try {
       await navigator.clipboard.writeText(encryptionKey)
       setIsCopied(true)
-      setTimeout(() => setIsCopied(false), 2000)
+      
+      // Clear any existing timeout
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+      
+      // Set new timeout
+      copyTimeoutRef.current = setTimeout(() => {
+        setIsCopied(false)
+        copyTimeoutRef.current = null
+      }, 2000)
     } catch (error) {
       toast({
         title: 'Failed to copy',

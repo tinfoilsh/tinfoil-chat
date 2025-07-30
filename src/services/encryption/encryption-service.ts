@@ -1,5 +1,4 @@
 // Encryption service for end-to-end encryption of chat data
-import { logWarning } from '@/utils/error-handling'
 
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
 
@@ -12,6 +11,7 @@ export class EncryptionService {
   private encryptionKey: CryptoKey | null = null
 
   // Helper to convert bytes to alphanumeric string (a-z, 0-9)
+  // Always produces even-length strings (2 characters per byte)
   private bytesToAlphanumeric(bytes: Uint8Array): string {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
     let result = ''
@@ -28,6 +28,11 @@ export class EncryptionService {
 
   // Helper to convert alphanumeric string back to bytes
   private alphanumericToBytes(str: string): Uint8Array {
+    // Validate input length is even (required for proper decoding)
+    if (str.length % 2 !== 0) {
+      throw new Error('Key length must be even')
+    }
+
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
     const bytes = new Uint8Array(str.length / 2)
 
@@ -69,42 +74,8 @@ export class EncryptionService {
     const storedKey = localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
 
     if (storedKey) {
-      // Check if it's an old base64 key and convert it
-      if (
-        storedKey.includes('+') ||
-        storedKey.includes('/') ||
-        storedKey.includes('=')
-      ) {
-        try {
-          // Convert old base64 key to new format
-          const keyData = Uint8Array.from(atob(storedKey), (c) =>
-            c.charCodeAt(0),
-          )
-          const newKey = 'key_' + this.bytesToAlphanumeric(keyData)
-          localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
-          await this.setKey(newKey)
-          return newKey
-        } catch (error) {
-          // If conversion fails, generate a new key
-          logWarning('Failed to convert old key format, generating new key', {
-            component: 'EncryptionService',
-            action: 'initialize',
-          })
-          const newKey = await this.generateKey()
-          localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
-          await this.setKey(newKey)
-          return newKey
-        }
-      } else if (!storedKey.startsWith('key_')) {
-        // Old alphanumeric key without prefix - add prefix
-        const newKey = 'key_' + storedKey
-        localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
-        await this.setKey(newKey)
-        return newKey
-      } else {
-        await this.setKey(storedKey)
-        return storedKey
-      }
+      await this.setKey(storedKey)
+      return storedKey
     } else {
       // Generate new key
       const newKey = await this.generateKey()
