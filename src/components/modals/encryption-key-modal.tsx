@@ -105,17 +105,17 @@ export function EncryptionKeyModal({
               <Dialog.Panel
                 className={`w-full max-w-md transform overflow-hidden rounded-2xl ${
                   isDarkMode ? 'bg-gray-800' : 'bg-white'
-                } p-6 text-left align-middle shadow-xl transition-all`}
+                } p-4 text-left align-middle shadow-xl transition-all sm:p-6`}
               >
                 <Dialog.Title
                   as="h3"
-                  className={`flex items-center justify-between text-lg font-medium leading-6 ${
+                  className={`flex items-center justify-between text-base font-medium leading-6 sm:text-lg ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <KeyIcon className="h-5 w-5" />
-                    Encryption Key Management
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <KeyIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span className="text-sm sm:text-base">Encryption Key</span>
                   </div>
                   <button
                     onClick={onClose}
@@ -123,26 +123,26 @@ export function EncryptionKeyModal({
                       isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
                     }`}
                   >
-                    <XMarkIcon className="h-5 w-5" />
+                    <XMarkIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 </Dialog.Title>
 
-                <div className="mt-4">
+                <div className="mt-3 sm:mt-4">
                   {/* Current Key Section */}
-                  <div className="mb-6">
+                  <div className="mb-4 sm:mb-6">
                     <h4
-                      className={`mb-2 text-sm font-medium ${
+                      className={`mb-1.5 text-xs font-medium sm:mb-2 sm:text-sm ${
                         isDarkMode ? 'text-gray-300' : 'text-gray-700'
                       }`}
                     >
-                      Your Current Encryption Key
+                      Your Current Key
                     </h4>
                     <div
                       className={`rounded-lg border ${
                         isDarkMode
                           ? 'border-gray-700 bg-gray-900'
                           : 'border-gray-200 bg-gray-50'
-                      } p-3`}
+                      } p-2 sm:p-3`}
                     >
                       {encryptionKey ? (
                         <div className="flex items-center justify-between">
@@ -155,7 +155,7 @@ export function EncryptionKeyModal({
                           </code>
                           <button
                             onClick={handleCopyKey}
-                            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition-all ${
+                            className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-all sm:px-3 sm:py-1.5 sm:text-sm ${
                               isCopied
                                 ? 'bg-emerald-500 text-white'
                                 : isDarkMode
@@ -164,11 +164,14 @@ export function EncryptionKeyModal({
                             }`}
                           >
                             {isCopied ? (
-                              <CheckIcon className="h-4 w-4" />
+                              <CheckIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                             ) : (
-                              <ClipboardDocumentIcon className="h-4 w-4" />
+                              <ClipboardDocumentIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                             )}
-                            {isCopied ? 'Copied!' : 'Copy'}
+                            <span className="hidden sm:inline">
+                              {isCopied ? 'Copied!' : 'Copy'}
+                            </span>
+                            <span className="sm:hidden">Copy</span>
                           </button>
                         </div>
                       ) : (
@@ -182,7 +185,7 @@ export function EncryptionKeyModal({
                       )}
                     </div>
                     <p
-                      className={`mt-2 text-xs ${
+                      className={`mt-1.5 hidden text-xs sm:mt-2 sm:block ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
                     >
@@ -195,27 +198,27 @@ export function EncryptionKeyModal({
                   {/* Update Key Section */}
                   <div>
                     <h4
-                      className={`mb-2 text-sm font-medium ${
+                      className={`mb-1.5 text-xs font-medium sm:mb-2 sm:text-sm ${
                         isDarkMode ? 'text-gray-300' : 'text-gray-700'
                       }`}
                     >
                       Sync With Another Device
                     </h4>
                     <p
-                      className={`mb-3 text-xs ${
+                      className={`mb-2 text-xs sm:mb-3 ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
                     >
                       Enter the encryption key from your other device to sync
                       chats.
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="password"
                         value={inputKey}
                         onChange={(e) => setInputKey(e.target.value)}
                         placeholder="Enter encryption key (e.g., key_abc123...)"
-                        className={`flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 sm:flex-1 sm:px-3 sm:py-2 sm:text-sm ${
                           isDarkMode
                             ? 'border-gray-700 bg-gray-900 text-white placeholder-gray-500'
                             : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
@@ -229,7 +232,7 @@ export function EncryptionKeyModal({
                       <button
                         onClick={handleUpdateKey}
                         disabled={isUpdating || !inputKey.trim()}
-                        className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        className={`w-full rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:px-4 sm:py-2 sm:text-sm ${
                           isUpdating || !inputKey.trim()
                             ? isDarkMode
                               ? 'cursor-not-allowed bg-gray-700 text-gray-500'

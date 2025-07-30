@@ -40,23 +40,23 @@ export function CloudSyncIntroModal({
 
       {/* Modal */}
       <div
-        className={`relative z-10 w-full max-w-md transform rounded-lg p-6 shadow-xl transition-all duration-300 ${
+        className={`relative z-10 w-full max-w-md transform rounded-lg shadow-xl transition-all duration-300 ${
           isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-        } ${isOpen ? 'scale-100' : 'scale-95'}`}
+        } ${isOpen ? 'scale-100' : 'scale-95'} p-4 sm:p-6`}
       >
-        <div className="mb-4 flex items-center justify-center">
-          <div className="rounded-full bg-blue-100 p-3 dark:bg-blue-900">
-            <CloudArrowUpIcon className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+        <div className="mb-3 flex items-center justify-center sm:mb-4">
+          <div className="rounded-full bg-blue-100 p-2 dark:bg-blue-900 sm:p-3">
+            <CloudArrowUpIcon className="h-6 w-6 text-blue-600 dark:text-blue-400 sm:h-8 sm:w-8" />
           </div>
         </div>
 
-        <h2 className="mb-4 text-center text-2xl font-bold">
+        <h2 className="mb-3 text-center text-lg font-bold sm:mb-4 sm:text-2xl">
           Your Chats are Now Privately Synced in the Cloud
         </h2>
 
-        <div className="mb-6 space-y-4">
+        <div className="mb-4 space-y-3 sm:mb-6 sm:space-y-4">
           <p
-            className={`text-center text-sm ${
+            className={`text-center text-xs sm:text-sm ${
               isDarkMode ? 'text-gray-300' : 'text-gray-700'
             }`}
           >
@@ -64,19 +64,19 @@ export function CloudSyncIntroModal({
             Here&apos;s what this means for you:
           </p>
 
-          <div className="space-y-3">
-            <div className="flex items-start space-x-3">
-              <ShieldCheckIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
+          <div className="space-y-2 sm:space-y-3">
+            <div className="flex items-start space-x-2 sm:space-x-3">
+              <ShieldCheckIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500 sm:h-5 sm:w-5" />
               <div>
                 <p
-                  className={`font-medium ${
+                  className={`text-sm font-medium sm:text-base ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
                   End-to-End Encrypted
                 </p>
                 <p
-                  className={`text-sm ${
+                  className={`text-xs sm:text-sm ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}
                 >
@@ -85,18 +85,18 @@ export function CloudSyncIntroModal({
               </div>
             </div>
 
-            <div className="flex items-start space-x-3">
-              <FaKey className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-500" />
+            <div className="flex items-start space-x-2 sm:space-x-3">
+              <FaKey className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-500 sm:h-5 sm:w-5" />
               <div>
                 <p
-                  className={`font-medium ${
+                  className={`text-sm font-medium sm:text-base ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
                   Your Encryption Key
                 </p>
                 <p
-                  className={`text-sm ${
+                  className={`text-xs sm:text-sm ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}
                 >
@@ -104,18 +104,18 @@ export function CloudSyncIntroModal({
                 </p>
               </div>
             </div>
-            <div className="flex items-start space-x-3">
-              <CloudArrowUpIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
+            <div className="flex items-start space-x-2 sm:space-x-3">
+              <CloudArrowUpIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-500 sm:h-5 sm:w-5" />
               <div>
                 <p
-                  className={`font-medium ${
+                  className={`text-sm font-medium sm:text-base ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
                   Automatic Syncing
                 </p>
                 <p
-                  className={`text-sm ${
+                  className={`text-xs sm:text-sm ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}
                 >
@@ -128,7 +128,7 @@ export function CloudSyncIntroModal({
           </div>
 
           <div
-            className={`rounded-lg p-3 text-sm ${
+            className={`hidden rounded-lg p-3 text-sm sm:block ${
               isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
             }`}
           >
@@ -154,7 +154,7 @@ export function CloudSyncIntroModal({
 
         <button
           onClick={onClose}
-          className={`w-full rounded-lg px-4 py-2 font-medium transition-colors ${
+          className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:text-base ${
             isDarkMode
               ? 'bg-blue-600 text-white hover:bg-blue-700'
               : 'bg-blue-600 text-white hover:bg-blue-700'
