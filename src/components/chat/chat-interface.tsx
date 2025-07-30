@@ -281,7 +281,7 @@ export function ChatInterface({
         })
       })
 
-    // Sync every 30 seconds
+    // Sync every 5 seconds
     const interval = setInterval(() => {
       syncChats()
         .then(() => {
@@ -294,7 +294,7 @@ export function ChatInterface({
             action: 'periodicSync',
           })
         })
-    }, 30 * 1000)
+    }, 5 * 1000)
 
     return () => clearInterval(interval)
   }, [isSignedIn, syncChats, reloadChats])
