@@ -714,6 +714,9 @@ export function ChatInterface({
         toggleTheme={toggleTheme}
         isClient={isClient}
         defaultSystemPrompt={systemPrompt}
+        onEncryptionKeyClick={
+          isSignedIn ? handleOpenEncryptionKeyModal : undefined
+        }
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
