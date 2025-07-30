@@ -230,6 +230,27 @@ export class CloudSyncService {
     return this.isSyncing
   }
 
+  // Delete a chat from cloud storage
+  async deleteFromCloud(chatId: string): Promise<void> {
+    // Don't attempt deletion if not authenticated
+    if (!(await r2Storage.isAuthenticated())) {
+      return
+    }
+
+    try {
+      await r2Storage.deleteChat(chatId)
+    } catch (error) {
+      // Silently fail if no auth token set
+      if (
+        error instanceof Error &&
+        error.message.includes('Authentication token not set')
+      ) {
+        return
+      }
+      throw error
+    }
+  }
+
   // Retry decryption for chats that failed to decrypt
   async retryDecryptionWithNewKey(): Promise<number> {
     let decryptedCount = 0

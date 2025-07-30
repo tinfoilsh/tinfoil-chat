@@ -211,7 +211,7 @@ export class R2StorageService {
 
   async deleteChat(chatId: string): Promise<void> {
     const response = await fetch(
-      `${API_BASE_URL}/api/storage/chats/${chatId}`,
+      `${API_BASE_URL}/api/storage/conversation/${chatId}`,
       {
         method: 'DELETE',
         headers: await this.getHeaders(),

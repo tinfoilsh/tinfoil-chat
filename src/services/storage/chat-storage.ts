@@ -160,6 +160,15 @@ export class ChatStorageService {
   async deleteChat(id: string): Promise<void> {
     await this.initialize()
     await indexedDBStorage.deleteChat(id)
+
+    // Also delete from cloud storage (non-blocking)
+    cloudSync.deleteFromCloud(id).catch((error: unknown) => {
+      logError('Failed to delete chat from cloud', error, {
+        component: 'ChatStorageService',
+        action: 'deleteChat',
+        metadata: { chatId: id },
+      })
+    })
   }
 
   async getAllChats(): Promise<Chat[]> {
