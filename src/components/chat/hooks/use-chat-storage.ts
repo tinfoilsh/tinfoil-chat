@@ -129,9 +129,12 @@ export function useChatStorage({
           const combinedChats = [...unsavedEmptyChats, ...parsedChats]
 
           // Sort by ID to maintain consistent order (newer first)
-          const finalChats = combinedChats.sort((a, b) =>
-            a.id.localeCompare(b.id),
-          )
+          // Since IDs can have different formats, let's sort by createdAt instead
+          const finalChats = combinedChats.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime()
+            const timeB = new Date(b.createdAt).getTime()
+            return timeB - timeA // Descending order (newest first)
+          })
 
           // Determine which chat should be current
           const currentChatStillExists = finalChats.some(
