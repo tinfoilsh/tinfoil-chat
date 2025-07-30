@@ -1,3 +1,4 @@
+import { logInfo } from '@/utils/error-handling'
 import { indexedDBStorage, type Chat, type StoredChat } from './indexed-db'
 
 const CHATS_STORAGE_KEY = 'chats' // The key currently used by the app
@@ -83,6 +84,16 @@ export class StorageMigration {
 
       // Migrate each chat
       for (const legacyChat of chats) {
+        // Skip empty chats (no messages)
+        if (!legacyChat.messages || legacyChat.messages.length === 0) {
+          logInfo('Skipping empty chat during migration', {
+            component: 'StorageMigration',
+            action: 'migrateLocalStorage',
+            metadata: { chatId: legacyChat.id, title: legacyChat.title },
+          })
+          continue
+        }
+
         try {
           const chat: Chat = {
             id: convertToNewIdFormat(legacyChat.id),
