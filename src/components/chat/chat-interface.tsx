@@ -20,6 +20,7 @@ import {
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
@@ -121,6 +122,10 @@ export function ChatInterface({
   const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
     useState(false)
 
+  // State for cloud sync intro modal
+  const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
+    useState(false)
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -134,6 +139,20 @@ export function ChatInterface({
 
   // Use custom system prompt hook
   const { effectiveSystemPrompt } = useCustomSystemPrompt(systemPrompt)
+
+  // Check for migration and show intro modal
+  useEffect(() => {
+    if (isSignedIn && typeof window !== 'undefined') {
+      // Check if migration happened and user hasn't seen the intro yet
+      const hasMigrated = sessionStorage.getItem('pendingMigrationSync')
+      const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
+
+      if (hasMigrated === 'true' && !hasSeenIntro) {
+        setIsCloudSyncIntroModalOpen(true)
+        localStorage.setItem('hasSeenCloudSyncIntro', 'true')
+      }
+    }
+  }, [isSignedIn])
 
   // Load models and system prompt
   useEffect(() => {
@@ -842,6 +861,13 @@ export function ChatInterface({
             await reloadChats()
           }
         }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Cloud Sync Intro Modal */}
+      <CloudSyncIntroModal
+        isOpen={isCloudSyncIntroModalOpen}
+        onClose={() => setIsCloudSyncIntroModalOpen(false)}
         isDarkMode={isDarkMode}
       />
     </div>
