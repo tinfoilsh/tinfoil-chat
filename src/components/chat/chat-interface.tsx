@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline'
 
 import { useCloudSync } from '@/hooks/use-cloud-sync'
+import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
@@ -142,16 +143,31 @@ export function ChatInterface({
 
   // Check for migration and show intro modal
   useEffect(() => {
-    if (isSignedIn && typeof window !== 'undefined') {
-      // Check if migration happened and user hasn't seen the intro yet
-      const hasMigrated = sessionStorage.getItem('pendingMigrationSync')
-      const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
+    if (!isSignedIn || typeof window === 'undefined') return
 
-      if (hasMigrated === 'true' && !hasSeenIntro) {
+    // Check if user has already seen the intro
+    const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
+    if (hasSeenIntro) return
+
+    // Check if migration already happened (page refresh case)
+    const hasMigrated = sessionStorage.getItem('pendingMigrationSync')
+    if (hasMigrated === 'true') {
+      setIsCloudSyncIntroModalOpen(true)
+      localStorage.setItem('hasSeenCloudSyncIntro', 'true')
+      return
+    }
+
+    // Listen for migration event
+    const unsubscribe = migrationEvents.on('migration-completed', (event) => {
+      // Only show modal if user hasn't seen it yet
+      const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
+      if (!hasSeenIntro && event.migratedCount > 0) {
         setIsCloudSyncIntroModalOpen(true)
         localStorage.setItem('hasSeenCloudSyncIntro', 'true')
       }
-    }
+    })
+
+    return unsubscribe
   }, [isSignedIn])
 
   // Load models and system prompt

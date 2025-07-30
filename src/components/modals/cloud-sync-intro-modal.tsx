@@ -1,5 +1,6 @@
 import { CloudArrowUpIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
+import { FaKey, FaLock } from 'react-icons/fa'
 
 interface CloudSyncIntroModalProps {
   isOpen: boolean
@@ -50,11 +51,15 @@ export function CloudSyncIntroModal({
         </div>
 
         <h2 className="mb-4 text-center text-2xl font-bold">
-          Your Chats are Now Synced to the Cloud! 🎉
+          Your Chats are Now Synced to the Cloud
         </h2>
 
         <div className="mb-6 space-y-4">
-          <p className="text-center text-sm">
+          <p
+            className={`text-center text-sm ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-700'
+            }`}
+          >
             We've migrated your existing chats to our secure cloud storage.
             Here's what this means for you:
           </p>
@@ -63,9 +68,20 @@ export function CloudSyncIntroModal({
             <div className="flex items-start space-x-3">
               <CloudArrowUpIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
               <div>
-                <p className="font-medium">Automatic Syncing</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Your chats are automatically backed up every 30 seconds
+                <p
+                  className={`font-medium ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}
+                >
+                  Automatic Syncing
+                </p>
+                <p
+                  className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}
+                >
+                  Your chats are automatically backed up and synced across your
+                  devices.
                 </p>
               </div>
             </div>
@@ -73,22 +89,39 @@ export function CloudSyncIntroModal({
             <div className="flex items-start space-x-3">
               <ShieldCheckIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
               <div>
-                <p className="font-medium">End-to-End Encrypted</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  All chats are encrypted before leaving your device
+                <p
+                  className={`font-medium ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}
+                >
+                  End-to-End Encrypted
+                </p>
+                <p
+                  className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}
+                >
+                  All chats are encrypted before leaving your device.
                 </p>
               </div>
             </div>
 
             <div className="flex items-start space-x-3">
-              <div className="mt-0.5 h-5 w-5 flex-shrink-0 text-center text-purple-500">
-                <span className="text-lg">🔑</span>
-              </div>
+              <FaKey className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-500" />
               <div>
-                <p className="font-medium">Your Encryption Key</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Access your key in Settings → Encryption Key to sync across
-                  devices
+                <p
+                  className={`font-medium ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}
+                >
+                  Your Encryption Key
+                </p>
+                <p
+                  className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}
+                >
+                  You can manage your encryption key in the settings.
                 </p>
               </div>
             </div>
@@ -99,8 +132,21 @@ export function CloudSyncIntroModal({
               isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
             }`}
           >
-            <p className="font-medium">🔒 Privacy First</p>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+            <div className="flex items-center space-x-2">
+              <FaLock className="h-4 w-4 text-gray-500" />
+              <p
+                className={`font-medium ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                }`}
+              >
+                Privacy First
+              </p>
+            </div>
+            <p
+              className={`mt-1 text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}
+            >
               We cannot read your chats. Only you have the encryption key.
             </p>
           </div>
@@ -114,7 +160,7 @@ export function CloudSyncIntroModal({
               : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}
         >
-          Got it, thanks!
+          Got it!
         </button>
       </div>
     </div>

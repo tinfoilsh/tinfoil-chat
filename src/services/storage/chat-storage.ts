@@ -4,6 +4,7 @@ import { cloudSync } from '../cloud/cloud-sync'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
+import { migrationEvents } from './migration-events'
 
 export class ChatStorageService {
   private initialized = false
@@ -50,6 +51,12 @@ export class ChatStorageService {
             )
             // Store a flag to indicate migration just completed
             sessionStorage.setItem('pendingMigrationSync', 'true')
+
+            // Emit migration event
+            migrationEvents.emit({
+              type: 'migration-completed',
+              migratedCount: result.migratedCount,
+            })
           }
         } else {
           logError('Migration failed', new Error(result.errors.join(', ')), {
