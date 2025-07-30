@@ -82,8 +82,9 @@ export class StorageMigration {
       // Initialize IndexedDB
       await indexedDBStorage.initialize()
 
-      // Migrate each chat
-      for (const legacyChat of chats) {
+      // Migrate each chat in reverse order (oldest first) to maintain proper timestamp-based IDs
+      // This ensures older chats get smaller reverse timestamps in their IDs
+      for (const legacyChat of chats.slice().reverse()) {
         // Skip empty chats (no messages)
         if (!legacyChat.messages || legacyChat.messages.length === 0) {
           logInfo('Skipping empty chat during migration', {
