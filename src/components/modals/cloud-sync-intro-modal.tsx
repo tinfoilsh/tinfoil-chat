@@ -51,7 +51,7 @@ export function CloudSyncIntroModal({
         </div>
 
         <h2 className="mb-4 text-center text-2xl font-bold">
-          Your Chats are Now Synced to the Cloud
+          Your Chats are Now Privately Synced in the Cloud
         </h2>
 
         <div className="mb-6 space-y-4">
@@ -65,27 +65,6 @@ export function CloudSyncIntroModal({
           </p>
 
           <div className="space-y-3">
-            <div className="flex items-start space-x-3">
-              <CloudArrowUpIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
-              <div>
-                <p
-                  className={`font-medium ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
-                >
-                  Automatic Syncing
-                </p>
-                <p
-                  className={`text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}
-                >
-                  Your chats are automatically backed up and synced across your
-                  devices.
-                </p>
-              </div>
-            </div>
-
             <div className="flex items-start space-x-3">
               <ShieldCheckIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500" />
               <div>
@@ -122,6 +101,27 @@ export function CloudSyncIntroModal({
                   }`}
                 >
                   You can manage your encryption key in the settings.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <CloudArrowUpIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
+              <div>
+                <p
+                  className={`font-medium ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}
+                >
+                  Automatic Syncing
+                </p>
+                <p
+                  className={`text-sm ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}
+                >
+                  Your chats are automatically backed up and synced across your
+                  devices (just make sure to copy over your encryption key in
+                  the settings).
                 </p>
               </div>
             </div>
