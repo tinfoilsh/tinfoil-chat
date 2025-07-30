@@ -179,8 +179,20 @@ export class R2StorageService {
     }
   }
 
-  async listChats(): Promise<ChatListResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/chats/list`, {
+  async listChats(options?: {
+    limit?: number
+    continuationToken?: string
+  }): Promise<ChatListResponse> {
+    const params = new URLSearchParams()
+    if (options?.limit) {
+      params.append('limit', options.limit.toString())
+    }
+    if (options?.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
+    }
+
+    const url = `${API_BASE_URL}/api/chats/list${params.toString() ? `?${params.toString()}` : ''}`
+    const response = await fetch(url, {
       headers: await this.getHeaders(),
     })
 

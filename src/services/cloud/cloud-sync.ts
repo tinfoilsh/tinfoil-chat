@@ -9,6 +9,12 @@ export interface SyncResult {
   errors: string[]
 }
 
+export interface PaginatedChatsResult {
+  chats: StoredChat[]
+  hasMore: boolean
+  nextToken?: string
+}
+
 export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
@@ -258,6 +264,96 @@ export class CloudSyncService {
       ) {
         return
       }
+      throw error
+    }
+  }
+
+  // Load chats with pagination - combines local and remote chats
+  async loadChatsWithPagination(options: {
+    limit: number
+    continuationToken?: string
+    loadLocal?: boolean
+  }): Promise<PaginatedChatsResult> {
+    const { limit, continuationToken, loadLocal = true } = options
+
+    // If no authentication, just return local chats
+    if (!(await r2Storage.isAuthenticated())) {
+      if (loadLocal) {
+        const localChats = await indexedDBStorage.getAllChats()
+        const sortedChats = localChats.sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime()
+          const timeB = new Date(b.createdAt).getTime()
+          return timeB - timeA
+        })
+
+        const start = continuationToken ? parseInt(continuationToken, 10) : 0
+        const paginatedChats = sortedChats.slice(start, start + limit)
+
+        return {
+          chats: paginatedChats,
+          hasMore: start + limit < sortedChats.length,
+          nextToken:
+            start + limit < sortedChats.length
+              ? (start + limit).toString()
+              : undefined,
+        }
+      }
+      return { chats: [], hasMore: false }
+    }
+
+    try {
+      // For authenticated users, load from R2
+      const remoteList = await r2Storage.listChats({ limit, continuationToken })
+
+      // Download the actual chat data for each remote chat
+      const downloadedChats: StoredChat[] = []
+      for (const remoteChat of remoteList.conversations || []) {
+        try {
+          const chat = await r2Storage.downloadChat(remoteChat.id)
+          if (chat) {
+            downloadedChats.push(chat)
+          }
+        } catch (error) {
+          logError(`Failed to download chat ${remoteChat.id}`, error, {
+            component: 'CloudSync',
+            action: 'loadChatsWithPagination',
+          })
+        }
+      }
+
+      return {
+        chats: downloadedChats,
+        hasMore: !!remoteList.nextContinuationToken,
+        nextToken: remoteList.nextContinuationToken,
+      }
+    } catch (error) {
+      logError('Failed to load remote chats with pagination', error, {
+        component: 'CloudSync',
+        action: 'loadChatsWithPagination',
+      })
+
+      // Fall back to local chats if remote loading fails
+      if (loadLocal) {
+        const localChats = await indexedDBStorage.getAllChats()
+        const sortedChats = localChats.sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime()
+          const timeB = new Date(b.createdAt).getTime()
+          return timeB - timeA
+        })
+
+        const start = continuationToken ? parseInt(continuationToken, 10) : 0
+        const paginatedChats = sortedChats.slice(start, start + limit)
+
+        return {
+          chats: paginatedChats,
+          hasMore: start + limit < sortedChats.length,
+          nextToken:
+            start + limit < sortedChats.length
+              ? (start + limit).toString()
+              : undefined,
+        }
+      }
+
       throw error
     }
   }

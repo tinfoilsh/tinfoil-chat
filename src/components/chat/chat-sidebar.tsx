@@ -177,6 +177,8 @@ function usePreventZoom() {
   }, [])
 }
 
+const CHATS_PER_PAGE = 10
+
 export function ChatSidebar({
   isOpen,
   setIsOpen,
@@ -198,6 +200,7 @@ export function ChatSidebar({
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
+  const [displayedChatsCount, setDisplayedChatsCount] = useState(CHATS_PER_PAGE)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
@@ -229,6 +232,11 @@ export function ChatSidebar({
   useEffect(() => {
     setIsInitialLoad(false)
   }, [])
+
+  // Reset pagination when chats change (e.g., new chat created, user switched)
+  useEffect(() => {
+    setDisplayedChatsCount(CHATS_PER_PAGE)
+  }, [chats.length])
 
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
@@ -444,6 +452,7 @@ export function ChatSidebar({
                     const timeB = new Date(b.createdAt).getTime()
                     return timeB - timeA
                   })
+                  .slice(0, displayedChatsCount)
                   .map((chat) => (
                     <div key={chat.id} className="relative">
                       <div
@@ -509,6 +518,24 @@ export function ChatSidebar({
                       )}
                     </div>
                   ))}
+
+              {/* Load More button - prepared for future server-side pagination */}
+              {chats.length > displayedChatsCount && (
+                <button
+                  onClick={() => {
+                    // For now, just show more local chats
+                    // TODO: In the future, this will trigger server-side pagination
+                    setDisplayedChatsCount((prev) => prev + CHATS_PER_PAGE)
+                  }}
+                  className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
+                    isDarkMode
+                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Load More ({chats.length - displayedChatsCount} remaining)
+                </button>
+              )}
             </div>
           </div>
 
