@@ -19,6 +19,8 @@ export type Chat = {
   syncedAt?: number
   locallyModified?: boolean
   decryptionFailed?: boolean
+  // Temporary ID flag - true if chat has a temporary UUID awaiting server ID
+  hasTemporaryId?: boolean
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming'

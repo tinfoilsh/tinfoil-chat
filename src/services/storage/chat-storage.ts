@@ -1,6 +1,7 @@
 import type { Chat } from '@/components/chat/types'
-import { logError, logInfo } from '@/utils/error-handling'
+import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
+import { r2Storage } from '../cloud/r2-storage'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
@@ -84,7 +85,68 @@ export class ChatStorageService {
   async saveChat(chat: Chat): Promise<void> {
     await this.initialize()
 
-    // Convert Chat type to storage format
+    // Only try to get server ID if chat still has temporary ID
+    // (initial attempt in createNewChat may have failed)
+    if (chat.hasTemporaryId) {
+      try {
+        const serverId = await r2Storage.generateConversationId()
+        if (serverId) {
+          // Delete any existing chat with temporary ID
+          try {
+            await indexedDBStorage.deleteChat(chat.id)
+          } catch (error) {
+            // Ignore - chat might not exist yet
+          }
+
+          // Save with server ID
+          const chatWithServerId = {
+            ...chat,
+            id: serverId.conversationId,
+            hasTemporaryId: false,
+          }
+
+          const storageChat: StorageChat = {
+            ...chatWithServerId,
+            createdAt:
+              chatWithServerId.createdAt instanceof Date
+                ? chatWithServerId.createdAt.toISOString()
+                : chatWithServerId.createdAt,
+            updatedAt: new Date().toISOString(),
+          }
+          await indexedDBStorage.saveChat(storageChat)
+
+          // Backup to cloud
+          cloudSync.backupChat(chatWithServerId.id).catch((error) => {
+            logError('Failed to backup chat to cloud', error, {
+              component: 'ChatStorageService',
+              action: 'saveChat',
+              metadata: { chatId: chatWithServerId.id },
+            })
+          })
+
+          logInfo('Saved chat with server ID', {
+            component: 'ChatStorageService',
+            action: 'saveChat',
+            metadata: {
+              oldId: chat.id,
+              newId: serverId.conversationId,
+            },
+          })
+          return
+        }
+      } catch (error) {
+        logWarning(
+          'Failed to get server ID during save, keeping temporary ID',
+          {
+            component: 'ChatStorageService',
+            action: 'saveChat',
+            metadata: { error, chatId: chat.id },
+          },
+        )
+      }
+    }
+
+    // Normal save (either has server ID or keeping temporary ID)
     const storageChat: StorageChat = {
       ...chat,
       createdAt:
@@ -95,41 +157,21 @@ export class ChatStorageService {
     }
     await indexedDBStorage.saveChat(storageChat)
 
-    // Auto-backup to cloud (non-blocking)
-    cloudSync.backupChat(chat.id).catch((error) => {
-      logError('Failed to backup chat to cloud', error, {
-        component: 'ChatStorageService',
-        action: 'saveChat',
-        metadata: { chatId: chat.id },
+    // Auto-backup to cloud (non-blocking) - only if not temporary
+    if (!chat.hasTemporaryId) {
+      cloudSync.backupChat(chat.id).catch((error) => {
+        logError('Failed to backup chat to cloud', error, {
+          component: 'ChatStorageService',
+          action: 'saveChat',
+          metadata: { chatId: chat.id },
+        })
       })
-    })
+    }
   }
 
   async saveChatAndSync(chat: Chat): Promise<void> {
-    await this.initialize()
-
-    // Convert Chat type to storage format
-    const storageChat: StorageChat = {
-      ...chat,
-      createdAt:
-        chat.createdAt instanceof Date
-          ? chat.createdAt.toISOString()
-          : chat.createdAt,
-      updatedAt: new Date().toISOString(),
-    }
-    await indexedDBStorage.saveChat(storageChat)
-
-    // Wait for cloud backup to complete
-    try {
-      await cloudSync.backupChat(chat.id)
-    } catch (error) {
-      logError('Failed to backup chat to cloud', error, {
-        component: 'ChatStorageService',
-        action: 'saveChatAndSync',
-        metadata: { chatId: chat.id },
-      })
-      // Don't throw - local save succeeded even if cloud sync failed
-    }
+    // Just use the regular saveChat method
+    await this.saveChat(chat)
   }
 
   async getChat(id: string): Promise<Chat | null> {

@@ -66,6 +66,16 @@ export class CloudSyncService {
         return
       }
 
+      // Don't sync chats with temporary IDs
+      if ((chat as any).hasTemporaryId) {
+        logInfo('Skipping sync for chat with temporary ID', {
+          component: 'CloudSync',
+          action: 'backupChat',
+          metadata: { chatId },
+        })
+        return
+      }
+
       await r2Storage.uploadChat(chat)
 
       // Mark as synced with incremented version
@@ -100,9 +110,12 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Filter out empty chats - they shouldn't be synced
+      // Filter out empty chats and chats with temporary IDs - they shouldn't be synced
       const chatsToSync = unsyncedChats.filter(
-        (chat) => chat.messages && chat.messages.length > 0,
+        (chat) =>
+          chat.messages &&
+          chat.messages.length > 0 &&
+          !(chat as any).hasTemporaryId,
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {

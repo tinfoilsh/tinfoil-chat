@@ -6,54 +6,36 @@ import { v4 as uuidv4 } from 'uuid'
 import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 
-// Generate a chat ID with proper format for cloud storage (synchronous fallback)
-function generateChatIdSync(): string {
-  const timestamp = Date.now()
-  const reverseTimestamp = 9999999999999 - timestamp
-  return `${reverseTimestamp}_${uuidv4()}`
+// Generate a temporary chat ID that will be replaced with server ID
+function generateTemporaryChatId(): string {
+  return `temp_${uuidv4()}`
 }
 
-// Generate a chat ID with proper format for cloud storage (async with backend)
-async function generateChatId(): Promise<string> {
+// Get a server-assigned chat ID from the backend
+async function getServerChatId(): Promise<string | null> {
   try {
-    // Try to get a properly formatted ID from the backend
     if (await r2Storage.isAuthenticated()) {
       const result = await r2Storage.generateConversationId()
       return result.conversationId
     }
   } catch (error) {
-    // Fallback to client-side generation if offline or not authenticated
-    logWarning(
-      'Failed to generate ID from backend, using client-side generation',
-      {
-        component: 'useChatStorage',
-        action: 'generateChatId',
-        metadata: { error },
-      },
-    )
+    logWarning('Failed to generate ID from backend', {
+      component: 'useChatStorage',
+      action: 'getServerChatId',
+      metadata: { error },
+    })
   }
-
-  return generateChatIdSync()
+  return null
 }
 
-// Helper to create a new chat object with generated ID
-async function createNewChatObject(): Promise<Chat> {
-  const id = await generateChatId()
-  return {
-    id,
-    title: 'New Chat',
-    messages: [],
-    createdAt: new Date(),
-  }
-}
-
-// Synchronous version for initial state (before auth is ready)
+// Create a new chat object with temporary ID (instant response)
 function createNewChatObjectSync(): Chat {
   return {
-    id: generateChatIdSync(),
+    id: generateTemporaryChatId(),
     title: 'New Chat',
     messages: [],
     createdAt: new Date(),
+    hasTemporaryId: true,
   }
 }
 
@@ -259,29 +241,47 @@ export function useChatStorage({
       return // Current chat is already empty, no need to create a new one
     }
 
-    // Create new chat asynchronously to use backend ID generation
-    createNewChatObject()
-      .then((newChat) => {
-        setCurrentChat(newChat)
+    // Create new chat instantly with temporary ID
+    const tempChat = createNewChatObjectSync()
+    const tempId = tempChat.id
 
-        // Update chats array by adding the new chat at the beginning
-        setChats((prev) => {
-          const updatedChats = [newChat, ...prev]
-          // Don't save empty chats - they'll be saved when the first message is added
-          return updatedChats
-        })
-      })
-      .catch((error) => {
-        logError('Failed to create new chat', error, {
-          component: 'useChatStorage',
-          action: 'createNewChat',
+    setCurrentChat(tempChat)
+    setChats((prev) => [tempChat, ...prev])
+
+    // Immediately try to get server ID in the background
+    getServerChatId().then((serverId) => {
+      if (serverId) {
+        // Update both chats array and currentChat if this chat still exists
+        setChats((prevChats) => {
+          const chatStillExists = prevChats.some((chat) => chat.id === tempId)
+          if (!chatStillExists) return prevChats
+
+          return prevChats.map((chat) => {
+            if (chat.id === tempId) {
+              return { ...chat, id: serverId, hasTemporaryId: false }
+            }
+            return chat
+          })
         })
 
-        // Fallback to sync generation if async fails
-        const newChat = createNewChatObjectSync()
-        setCurrentChat(newChat)
-        setChats((prev) => [newChat, ...prev])
-      })
+        // Update current chat if it's still the active one
+        setCurrentChat((prev) => {
+          if (prev.id === tempId) {
+            return { ...prev, id: serverId, hasTemporaryId: false }
+          }
+          return prev
+        })
+
+        // Update the ref as well
+        if (currentChatRef.current?.id === tempId) {
+          currentChatRef.current = {
+            ...currentChatRef.current,
+            id: serverId,
+            hasTemporaryId: false,
+          }
+        }
+      }
+    })
   }, [storeHistory, currentChat?.messages?.length])
 
   // Delete a chat
