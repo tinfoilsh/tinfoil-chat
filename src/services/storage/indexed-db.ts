@@ -132,9 +132,17 @@ export class IndexedDBStorage {
           lastAccessedAt: Date.now(),
           // Preserve sync metadata if it exists
           syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
+          // Mark as locally modified if:
+          // 1. It's explicitly set in the incoming chat
+          // 2. OR it was already locally modified and not being updated from sync
+          // 3. OR the content has changed (different message count or updated timestamp)
           locallyModified:
-            existingChat?.locallyModified ??
-            (chat as StoredChat).locallyModified,
+            (chat as StoredChat).locallyModified !== undefined
+              ? (chat as StoredChat).locallyModified
+              : existingChat
+                ? existingChat.messages.length !== messagesForStorage.length ||
+                  existingChat.updatedAt !== chat.updatedAt
+                : true,
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
