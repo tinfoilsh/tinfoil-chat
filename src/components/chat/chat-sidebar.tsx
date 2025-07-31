@@ -278,7 +278,7 @@ export function ChatSidebar({
           }
         }
 
-        // Then get the first page to obtain the continuation token
+        // Get the continuation token for page 2 (since page 1 is loaded during initial sync)
         const result = await r2Storage.listChats({ limit: CHATS_PER_PAGE })
 
         if (result.nextContinuationToken) {
@@ -295,7 +295,10 @@ export function ChatSidebar({
           onChatsUpdated()
         }
       } catch (error) {
-        console.error('Failed to cleanup and initialize pagination:', error)
+        logError('Failed to cleanup and initialize pagination', error, {
+          component: 'ChatSidebar',
+          action: 'cleanupAndInitialize',
+        })
       }
     }
 

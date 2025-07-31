@@ -156,7 +156,11 @@ export class CloudSyncService {
       // Then, get list of remote chats with content
       let remoteList
       try {
-        remoteList = await r2Storage.listChats({ includeContent: true })
+        // Only fetch first 10 chats during initial sync to match pagination
+        remoteList = await r2Storage.listChats({
+          includeContent: true,
+          limit: 10,
+        })
       } catch (error) {
         // Log the error but continue with sync
         logError('Failed to list remote chats', error, {
