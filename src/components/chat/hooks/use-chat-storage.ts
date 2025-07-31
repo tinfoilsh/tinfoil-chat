@@ -105,9 +105,10 @@ export function useChatStorage({
           })
         })
 
-        // Then add blank chats that aren't saved yet
+        // Then add blank chats and recently created chats that aren't saved yet
         prevChats.forEach((chat) => {
-          if (chat.isBlankChat && !chatMap.has(chat.id)) {
+          // Preserve blank chats OR chats that don't have syncedAt (not yet synced)
+          if ((chat.isBlankChat || !chat.syncedAt) && !chatMap.has(chat.id)) {
             chatMap.set(chat.id, chat)
           }
         })
