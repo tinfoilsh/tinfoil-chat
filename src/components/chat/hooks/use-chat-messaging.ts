@@ -128,8 +128,11 @@ export function useChatMessaging({
 
       // Save to storage if enabled (skip during thinking state unless immediate)
       if (storeHistory && (!isThinking || immediate)) {
+        // Skip cloud sync during streaming (unless immediate flag is set for final save)
+        const skipCloudSync = isStreamingRef.current && !immediate
+
         chatStorage
-          .saveChatAndSync(updatedChat)
+          .saveChat(updatedChat, skipCloudSync)
           .then((savedChat) => {
             // Only update if the ID actually changed
             if (savedChat.id !== updatedChat.id) {
@@ -636,6 +639,20 @@ export function useChatMessaging({
               continue
             }
           }
+        }
+
+        // Final save after stream completes successfully
+        if (assistantMessage.content || assistantMessage.thoughts) {
+          const finalMessages = [...updatedMessages, assistantMessage]
+          updateChatWithHistoryCheck(
+            setChats,
+            currentChat,
+            setCurrentChat,
+            currentChat.id,
+            finalMessages,
+            true, // immediate = true for final save
+            false,
+          )
         }
       } catch (error) {
         setIsWaitingForResponse(false) // Make sure to clear waiting state on error

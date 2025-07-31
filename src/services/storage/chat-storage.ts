@@ -83,7 +83,7 @@ export class ChatStorageService {
     }
   }
 
-  async saveChat(chat: Chat): Promise<Chat> {
+  async saveChat(chat: Chat, skipCloudSync = false): Promise<Chat> {
     await this.initialize()
 
     let chatToSave = chat
@@ -152,8 +152,8 @@ export class ChatStorageService {
     }
     await indexedDBStorage.saveChat(storageChat)
 
-    // Auto-backup to cloud (non-blocking) - only if not temporary
-    if (!chatToSave.hasTemporaryId) {
+    // Auto-backup to cloud (non-blocking) - only if not temporary and not skipped
+    if (!chatToSave.hasTemporaryId && !skipCloudSync) {
       cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
           component: 'ChatStorageService',
@@ -174,8 +174,8 @@ export class ChatStorageService {
   }
 
   async saveChatAndSync(chat: Chat): Promise<Chat> {
-    // Just use the regular saveChat method
-    return await this.saveChat(chat)
+    // Just use the regular saveChat method with sync enabled
+    return await this.saveChat(chat, false)
   }
 
   async getChat(id: string): Promise<Chat | null> {
