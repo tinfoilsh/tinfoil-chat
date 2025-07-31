@@ -19,11 +19,14 @@ export function useCloudSync() {
     encryptionKey: null,
   })
   const syncingRef = useRef(false)
+  const initializingRef = useRef(false)
 
   // Initialize cloud sync when user is signed in
   useEffect(() => {
     const initializeSync = async () => {
-      if (!isSignedIn) return
+      if (!isSignedIn || initializingRef.current) return
+
+      initializingRef.current = true
 
       try {
         // Set token getter for cloud sync and r2 storage
@@ -51,22 +54,54 @@ export function useCloudSync() {
           )
           sessionStorage.removeItem('pendingMigrationSync')
 
-          // Trigger sync for migrated chats
-          try {
-            const result = await cloudSync.syncAllChats()
-            logInfo(
-              `Migration sync complete: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
-              {
-                component: 'useCloudSync',
-                action: 'migration-sync',
-                metadata: { result },
-              },
-            )
-          } catch (error) {
-            logError('Failed to sync migrated chats', error, {
-              component: 'useCloudSync',
-              action: 'migration-sync',
-            })
+          // Wait a bit to ensure cloudSync is fully initialized
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          // Use the syncChats function instead of calling syncAllChats directly
+          // This will properly manage the syncing state
+          if (!syncingRef.current) {
+            syncingRef.current = true
+            setState((prev) => ({ ...prev, syncing: true }))
+
+            try {
+              const result = await cloudSync.syncAllChats()
+
+              setState((prev) => ({
+                ...prev,
+                syncing: false,
+                lastSyncTime: Date.now(),
+              }))
+
+              logInfo(
+                `Migration sync complete: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
+                {
+                  component: 'useCloudSync',
+                  action: 'migration-sync',
+                  metadata: { result },
+                },
+              )
+            } catch (error) {
+              setState((prev) => ({ ...prev, syncing: false }))
+              if (
+                error instanceof Error &&
+                error.message.includes('Sync already in progress')
+              ) {
+                logInfo(
+                  'Migration sync skipped - another sync is already in progress',
+                  {
+                    component: 'useCloudSync',
+                    action: 'migration-sync',
+                  },
+                )
+              } else {
+                logError('Failed to sync migrated chats', error, {
+                  component: 'useCloudSync',
+                  action: 'migration-sync',
+                })
+              }
+            } finally {
+              syncingRef.current = false
+            }
           }
         }
       } catch (error) {
@@ -74,6 +109,8 @@ export function useCloudSync() {
           component: 'useCloudSync',
           action: 'initializeSync',
         })
+      } finally {
+        initializingRef.current = false
       }
     }
 
