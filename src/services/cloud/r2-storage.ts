@@ -5,11 +5,6 @@ import { DB_VERSION, type StoredChat } from '../storage/indexed-db'
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
 
-export interface PresignedUrlResponse {
-  url: string
-  key: string
-}
-
 export interface ChatListResponse {
   conversations: Array<{
     id: string
@@ -19,6 +14,7 @@ export interface ChatListResponse {
     title: string
     messageCount: number
     size: number
+    content?: string
   }>
   nextContinuationToken?: string
   hasMore: boolean
@@ -73,30 +69,6 @@ export class R2StorageService {
     return token !== null && token !== ''
   }
 
-  async getPresignedUrl(
-    operation: 'get' | 'put',
-    chatId: string,
-    metadata?: Record<string, string>,
-  ): Promise<PresignedUrlResponse> {
-    const requestBody = {
-      operation,
-      conversationId: chatId,
-      metadata,
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/storage/presign`, {
-      method: 'POST',
-      headers: await this.getHeaders(),
-      body: JSON.stringify(requestBody),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to get presigned URL: ${response.statusText}`)
-    }
-
-    return response.json()
-  }
-
   async uploadChat(chat: StoredChat): Promise<void> {
     // Encrypt the chat data first
     await encryptionService.initialize()
@@ -106,6 +78,8 @@ export class R2StorageService {
     const metadata = {
       'db-version': String(DB_VERSION),
       'message-count': String(chat.messages?.length || 0),
+      'chat-created-at': chat.createdAt,
+      'chat-updated-at': chat.updatedAt,
     }
 
     // Upload through backend proxy to avoid CORS issues
@@ -126,11 +100,13 @@ export class R2StorageService {
 
   async downloadChat(chatId: string): Promise<StoredChat | null> {
     try {
-      // Get presigned URL for download
-      const { url } = await this.getPresignedUrl('get', chatId)
-
-      // Download encrypted data
-      const response = await fetch(url)
+      // Download encrypted data directly from backend
+      const response = await fetch(
+        `${API_BASE_URL}/api/storage/conversation/${chatId}`,
+        {
+          headers: await this.getHeaders(),
+        },
+      )
 
       if (response.status === 404) {
         return null
@@ -182,6 +158,7 @@ export class R2StorageService {
   async listChats(options?: {
     limit?: number
     continuationToken?: string
+    includeContent?: boolean
   }): Promise<ChatListResponse> {
     const params = new URLSearchParams()
     if (options?.limit) {
@@ -189,6 +166,9 @@ export class R2StorageService {
     }
     if (options?.continuationToken) {
       params.append('continuationToken', options.continuationToken)
+    }
+    if (options?.includeContent) {
+      params.append('includeContent', 'true')
     }
 
     const url = `${API_BASE_URL}/api/chats/list${params.toString() ? `?${params.toString()}` : ''}`

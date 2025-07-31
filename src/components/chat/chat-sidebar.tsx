@@ -13,6 +13,7 @@ import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
 
 import { r2Storage } from '@/services/cloud/r2-storage'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import {
   indexedDBStorage,
   type StoredChat,
@@ -310,13 +311,40 @@ export function ChatSidebar({
       const result = await r2Storage.listChats({
         limit: CHATS_PER_PAGE,
         continuationToken: nextToken,
+        includeContent: true,
       })
 
       if (result.conversations && result.conversations.length > 0) {
-        // Download and save full chat data to IndexedDB
+        // Process and save chat data to IndexedDB
         for (const conv of result.conversations) {
+          if (!conv.content) continue
+
           try {
-            const fullChat = await r2Storage.downloadChat(conv.id)
+            const encrypted = JSON.parse(conv.content)
+
+            // Try to decrypt the chat data
+            let fullChat: StoredChat | null = null
+            try {
+              await encryptionService.initialize()
+              const decrypted = await encryptionService.decrypt(encrypted)
+              fullChat = decrypted
+            } catch (decryptError) {
+              // If decryption fails, store the encrypted data for later retry
+              fullChat = {
+                id: conv.id,
+                title: 'Encrypted',
+                messages: [],
+                createdAt: conv.createdAt,
+                updatedAt: conv.updatedAt,
+                lastAccessedAt: Date.now(),
+                decryptionFailed: true,
+                encryptedData: conv.content,
+                syncedAt: Date.now(),
+                locallyModified: false,
+                syncVersion: 1,
+              } as StoredChat
+            }
+
             if (fullChat) {
               // Mark as paginated to prevent deletion during sync
               const paginatedChat: StoredChat = {
@@ -327,12 +355,12 @@ export function ChatSidebar({
               await indexedDBStorage.saveChat(paginatedChat)
               // Mark as synced since we just downloaded from cloud
               await indexedDBStorage.markAsSynced(
-                fullChat.id,
-                fullChat.syncVersion || 0,
+                paginatedChat.id,
+                paginatedChat.syncVersion || 0,
               )
             }
           } catch (error) {
-            logError(`Failed to download chat ${conv.id}`, error, {
+            logError(`Failed to process chat ${conv.id}`, error, {
               component: 'ChatSidebar',
               action: 'loadMoreChats',
               metadata: { chatId: conv.id },

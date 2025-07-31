@@ -18,8 +18,6 @@ export interface PaginatedChatsResult {
 export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
-  private lastUploadTime = 0
-  private readonly MIN_UPLOAD_INTERVAL = 1000 // 1 second between uploads
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
@@ -53,16 +51,6 @@ export class CloudSyncService {
 
   private async doBackupChat(chatId: string): Promise<void> {
     try {
-      // Rate limiting: ensure minimum interval between uploads
-      const now = Date.now()
-      const timeSinceLastUpload = now - this.lastUploadTime
-      if (timeSinceLastUpload < this.MIN_UPLOAD_INTERVAL) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.MIN_UPLOAD_INTERVAL - timeSinceLastUpload),
-        )
-      }
-      this.lastUploadTime = Date.now()
-
       const chat = await indexedDBStorage.getChat(chatId)
       if (!chat) {
         return // Chat might have been deleted
@@ -126,7 +114,8 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      for (const chat of chatsToSync) {
+      // Upload all chats in parallel for better performance
+      const uploadPromises = chatsToSync.map(async (chat) => {
         try {
           await r2Storage.uploadChat(chat)
           const newVersion = (chat.syncVersion || 0) + 1
@@ -135,7 +124,9 @@ export class CloudSyncService {
         } catch (error) {
           result.errors.push(`Failed to backup chat ${chat.id}: ${error}`)
         }
-      }
+      })
+
+      await Promise.all(uploadPromises)
     } catch (error) {
       result.errors.push(`Failed to get unsynced chats: ${error}`)
     }
@@ -162,10 +153,10 @@ export class CloudSyncService {
       result.uploaded = backupResult.uploaded
       result.errors.push(...backupResult.errors)
 
-      // Then, get list of remote chats
+      // Then, get list of remote chats with content
       let remoteList
       try {
-        remoteList = await r2Storage.listChats()
+        remoteList = await r2Storage.listChats({ includeContent: true })
       } catch (error) {
         // Log the error but continue with sync
         logError('Failed to list remote chats', error, {
@@ -184,24 +175,48 @@ export class CloudSyncService {
       const remoteConversations = remoteList.conversations || []
       const remoteChatMap = new Map(remoteConversations.map((c) => [c.id, c]))
 
-      // Download new or updated chats from remote
+      // Process remote chats
       for (const remoteChat of remoteConversations) {
         const localChat = localChatMap.get(remoteChat.id)
 
-        // Download if:
+        // Process if:
         // 1. Chat doesn't exist locally
         // 2. Remote is newer (based on updatedAt)
         // 3. Chat failed decryption (to retry with new key)
         const remoteTimestamp = Date.parse(remoteChat.updatedAt)
-        const shouldDownload =
+        const shouldProcess =
           !localChat ||
           (!isNaN(remoteTimestamp) &&
             remoteTimestamp > (localChat.syncedAt || 0)) ||
           (localChat as any).decryptionFailed === true
 
-        if (shouldDownload) {
+        if (shouldProcess && remoteChat.content) {
           try {
-            const downloadedChat = await r2Storage.downloadChat(remoteChat.id)
+            const encrypted = JSON.parse(remoteChat.content)
+
+            // Try to decrypt the chat data
+            let downloadedChat: StoredChat | null = null
+            try {
+              await encryptionService.initialize()
+              const decrypted = await encryptionService.decrypt(encrypted)
+              downloadedChat = decrypted
+            } catch (decryptError) {
+              // If decryption fails, store the encrypted data for later retry
+              downloadedChat = {
+                id: remoteChat.id,
+                title: 'Encrypted',
+                messages: [],
+                createdAt: remoteChat.createdAt,
+                updatedAt: remoteChat.updatedAt,
+                lastAccessedAt: Date.now(),
+                decryptionFailed: true,
+                encryptedData: remoteChat.content,
+                syncedAt: Date.now(),
+                locallyModified: false,
+                syncVersion: 1,
+              } as StoredChat
+            }
+
             if (downloadedChat) {
               // Save all downloaded chats (including encrypted ones)
               // The isBlankChat check in IndexedDB will prevent blank chats from being saved
@@ -214,7 +229,7 @@ export class CloudSyncService {
             }
           } catch (error) {
             result.errors.push(
-              `Failed to download chat ${remoteChat.id}: ${error}`,
+              `Failed to process chat ${remoteChat.id}: ${error}`,
             )
           }
         }
@@ -307,19 +322,49 @@ export class CloudSyncService {
     }
 
     try {
-      // For authenticated users, load from R2
-      const remoteList = await r2Storage.listChats({ limit, continuationToken })
+      // For authenticated users, load from R2 with content
+      const remoteList = await r2Storage.listChats({
+        limit,
+        continuationToken,
+        includeContent: true,
+      })
 
-      // Download the actual chat data for each remote chat
+      // Process the chat data from each remote chat
       const downloadedChats: StoredChat[] = []
       for (const remoteChat of remoteList.conversations || []) {
+        if (!remoteChat.content) continue
+
         try {
-          const chat = await r2Storage.downloadChat(remoteChat.id)
+          const encrypted = JSON.parse(remoteChat.content)
+
+          // Try to decrypt the chat data
+          let chat: StoredChat | null = null
+          try {
+            await encryptionService.initialize()
+            const decrypted = await encryptionService.decrypt(encrypted)
+            chat = decrypted
+          } catch (decryptError) {
+            // If decryption fails, store the encrypted data for later retry
+            chat = {
+              id: remoteChat.id,
+              title: 'Encrypted',
+              messages: [],
+              createdAt: remoteChat.createdAt,
+              updatedAt: remoteChat.updatedAt,
+              lastAccessedAt: Date.now(),
+              decryptionFailed: true,
+              encryptedData: remoteChat.content,
+              syncedAt: Date.now(),
+              locallyModified: false,
+              syncVersion: 1,
+            } as StoredChat
+          }
+
           if (chat) {
             downloadedChats.push(chat)
           }
         } catch (error) {
-          logError(`Failed to download chat ${remoteChat.id}`, error, {
+          logError(`Failed to process chat ${remoteChat.id}`, error, {
             component: 'CloudSync',
             action: 'loadChatsWithPagination',
           })
