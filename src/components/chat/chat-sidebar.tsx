@@ -234,10 +234,9 @@ export function ChatSidebar({
   ).length
   const shouldShowLoadMore =
     isSignedIn &&
+    nextToken && // Only show if we have a token to load more
     (hasMoreRemote ||
-      (syncedChatsCount > 0 &&
-        syncedChatsCount % CHATS_PER_PAGE === 0 &&
-        !nextToken))
+      (syncedChatsCount > 0 && syncedChatsCount % CHATS_PER_PAGE === 0))
 
   // Add window resize listener and iOS detection
   useEffect(() => {
@@ -716,15 +715,18 @@ export function ChatSidebar({
               )}
 
               {/* Show "No more chats" message when we've loaded everything */}
-              {isSignedIn && !shouldShowLoadMore && syncedChatsCount > 0 && (
-                <div
-                  className={`w-full rounded-lg p-3 text-center text-sm ${
-                    isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                  }`}
-                >
-                  No more chats
-                </div>
-              )}
+              {isSignedIn &&
+                !hasMoreRemote &&
+                syncedChatsCount > 0 &&
+                !nextToken && (
+                  <div
+                    className={`w-full rounded-lg p-3 text-center text-sm ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                    }`}
+                  >
+                    No more chats
+                  </div>
+                )}
             </div>
           </div>
 
