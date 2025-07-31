@@ -216,15 +216,28 @@ export function ChatSidebar({
   )
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [nextToken, setNextToken] = useState<string | undefined>(undefined)
-  const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
   const { isSignedIn, getToken } = useAuth()
+  // Start optimistically assuming there might be more chats
+  const [hasMoreRemote, setHasMoreRemote] = useState(false)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
 
   // Apply zoom prevention for mobile
   usePreventZoom()
+
+  // Calculate if we should show the Load More button optimistically
+  // Show if: we have synced chats AND (we have a continuation token OR we have exactly CHATS_PER_PAGE synced chats)
+  const syncedChatsCount = chats.filter(
+    (chat) => chat.syncedAt && !(chat as any).isPaginated,
+  ).length
+  const shouldShowLoadMore =
+    isSignedIn &&
+    (hasMoreRemote ||
+      (syncedChatsCount > 0 &&
+        syncedChatsCount % CHATS_PER_PAGE === 0 &&
+        !nextToken))
 
   // Add window resize listener and iOS detection
   useEffect(() => {
@@ -270,11 +283,25 @@ export function ChatSidebar({
       if (!isSignedIn || !getToken) return
 
       try {
-        // First, delete all paginated chats from IndexedDB
-        const allChats = await indexedDBStorage.getAllChats()
-        for (const chat of allChats) {
-          if ((chat as any).isPaginated) {
-            await indexedDBStorage.deleteChat(chat.id)
+        // Check if we should preserve paginated chats (within same session)
+        const sessionKey = 'tinfoil_pagination_session'
+        const currentSession = sessionStorage.getItem(sessionKey)
+        const isNewSession = !currentSession
+
+        if (isNewSession) {
+          // New session - clean up old paginated chats
+          sessionStorage.setItem(sessionKey, 'active')
+
+          const allChats = await indexedDBStorage.getAllChats()
+          for (const chat of allChats) {
+            if ((chat as any).isPaginated) {
+              await indexedDBStorage.deleteChat(chat.id)
+            }
+          }
+
+          // Trigger reload to update the UI after cleanup
+          if (onChatsUpdated) {
+            onChatsUpdated()
           }
         }
 
@@ -289,11 +316,6 @@ export function ChatSidebar({
           // No more pages available
           setHasMoreRemote(false)
         }
-
-        // Trigger reload to update the UI after cleanup
-        if (onChatsUpdated) {
-          onChatsUpdated()
-        }
       } catch (error) {
         logError('Failed to cleanup and initialize pagination', error, {
           component: 'ChatSidebar',
@@ -303,11 +325,17 @@ export function ChatSidebar({
     }
 
     cleanupAndInitialize()
-  }, [isSignedIn, getToken, onChatsUpdated])
+  }, [isSignedIn, getToken]) // Remove onChatsUpdated from dependencies to prevent re-runs
 
   // Load more chats from backend
   const loadMoreChats = async () => {
-    if (isLoadingMore || !isSignedIn || !hasMoreRemote) return
+    if (isLoadingMore || !isSignedIn) return
+
+    // If we don't have a token yet but the button is shown optimistically,
+    // we need to wait for the initialization to complete
+    if (!nextToken && !hasMoreRemote) {
+      return
+    }
 
     setIsLoadingMore(true)
     try {
@@ -673,10 +701,10 @@ export function ChatSidebar({
                   ))}
 
               {/* Load More button - only for remote chats */}
-              {isSignedIn && hasMoreRemote && (
+              {shouldShowLoadMore && (
                 <button
                   onClick={loadMoreChats}
-                  disabled={isLoadingMore}
+                  disabled={isLoadingMore || !nextToken}
                   className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
                     isDarkMode
                       ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:bg-gray-900 disabled:text-gray-600'
@@ -685,6 +713,17 @@ export function ChatSidebar({
                 >
                   {isLoadingMore ? 'Loading...' : 'Load More'}
                 </button>
+              )}
+
+              {/* Show "No more chats" message when we've loaded everything */}
+              {isSignedIn && !shouldShowLoadMore && syncedChatsCount > 0 && (
+                <div
+                  className={`w-full rounded-lg p-3 text-center text-sm ${
+                    isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`}
+                >
+                  No more chats
+                </div>
               )}
             </div>
           </div>
