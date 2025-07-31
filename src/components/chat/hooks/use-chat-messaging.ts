@@ -1,8 +1,9 @@
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
+import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { chatStorage } from '@/services/storage/chat-storage'
-import { logError } from '@/utils/error-handling'
+import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { scrollToBottom } from '../chat-messages'
@@ -346,10 +347,12 @@ export function useChatMessaging({
       // Initial scroll after user message is added
       setTimeout(() => scrollToBottom(messagesEndRef, 'auto'), 0)
 
+      let assistantMessage: Message | null = null
+
       try {
         isStreamingRef.current = true
 
-        let assistantMessage: Message = {
+        assistantMessage = {
           role: 'assistant',
           content: '',
           timestamp: new Date(),
@@ -643,16 +646,37 @@ export function useChatMessaging({
 
         // Final save after stream completes successfully
         if (assistantMessage.content || assistantMessage.thoughts) {
-          const finalMessages = [...updatedMessages, assistantMessage]
-          updateChatWithHistoryCheck(
-            setChats,
-            currentChat,
-            setCurrentChat,
-            currentChat.id,
-            finalMessages,
-            true, // immediate = true for final save
-            false,
-          )
+          // Use currentChatIdRef to get the most recent chat ID
+          const chatId = currentChatIdRef.current
+          if (chatId === currentChat.id) {
+            const finalMessages = [...updatedMessages, assistantMessage]
+            updateChatWithHistoryCheck(
+              setChats,
+              currentChat,
+              setCurrentChat,
+              chatId,
+              finalMessages,
+              true, // immediate = true for final save
+              false,
+            )
+          } else {
+            logWarning(
+              'Chat ID changed during streaming, skipping final save',
+              {
+                component: 'useChatMessaging',
+                action: 'handleQuery',
+                metadata: {
+                  originalChatId: currentChat.id,
+                  currentChatId: chatId,
+                },
+              },
+            )
+          }
+        } else {
+          logWarning('No assistant content to save after streaming', {
+            component: 'useChatMessaging',
+            action: 'handleQuery',
+          })
         }
       } catch (error) {
         setIsWaitingForResponse(false) // Make sure to clear waiting state on error
@@ -686,6 +710,24 @@ export function useChatMessaging({
         isStreamingRef.current = false
         setIsThinking(false)
         setIsWaitingForResponse(false) // Always ensure loading state is cleared
+
+        // Ensure we trigger a final sync if we have content
+        // This handles edge cases where the normal final save might not execute
+        if (
+          storeHistory &&
+          assistantMessage &&
+          (assistantMessage.content || assistantMessage.thoughts) &&
+          currentChatIdRef.current === currentChat.id
+        ) {
+          // Just trigger a sync without saving again to avoid duplicates
+          // The latest content should already be in IndexedDB from streaming saves
+          cloudSync.backupChat(currentChatIdRef.current).catch((error) => {
+            logError('Failed to sync chat after streaming', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery.finally',
+            })
+          })
+        }
       }
     },
     [
