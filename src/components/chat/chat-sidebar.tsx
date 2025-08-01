@@ -220,6 +220,7 @@ export function ChatSidebar({
   const { isSignedIn, getToken } = useAuth()
   // Start optimistically assuming there might be more chats
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
+  const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -232,11 +233,14 @@ export function ChatSidebar({
   const syncedChatsCount = chats.filter(
     (chat) => chat.syncedAt && !(chat as any).isPaginated,
   ).length
+  // Simplified logic: Show load more if:
+  // 1. User is signed in
+  // 2. We haven't determined there are no more chats OR we haven't attempted to load yet
+  // 3. We have enough chats to suggest pagination OR we have a continuation token
   const shouldShowLoadMore =
     isSignedIn &&
-    nextToken && // Only show if we have a token to load more
-    (hasMoreRemote ||
-      (syncedChatsCount > 0 && syncedChatsCount % CHATS_PER_PAGE === 0))
+    (hasMoreRemote || !hasAttemptedLoadMore) &&
+    (nextToken || chats.length >= CHATS_PER_PAGE)
 
   // Add window resize listener and iOS detection
   useEffect(() => {
@@ -331,12 +335,29 @@ export function ChatSidebar({
     if (isLoadingMore || !isSignedIn) return
 
     // If we don't have a token yet but the button is shown optimistically,
-    // we need to wait for the initialization to complete
-    if (!nextToken && !hasMoreRemote) {
+    // we need to initialize the pagination first
+    if (!nextToken && chats.length >= CHATS_PER_PAGE) {
+      // Initialize pagination by getting the first page info
+      try {
+        const result = await r2Storage.listChats({ limit: CHATS_PER_PAGE })
+        if (result.nextContinuationToken) {
+          setNextToken(result.nextContinuationToken)
+          setHasMoreRemote(true)
+          // Now proceed with loading the next page
+          await loadMoreChats()
+          return
+        }
+      } catch (error) {
+        logError('Failed to initialize pagination', error, {
+          component: 'ChatSidebar',
+          action: 'loadMoreChats',
+        })
+      }
       return
     }
 
     setIsLoadingMore(true)
+    setHasAttemptedLoadMore(true)
     try {
       const result = await r2Storage.listChats({
         limit: CHATS_PER_PAGE,
@@ -405,8 +426,15 @@ export function ChatSidebar({
 
         setNextToken(result.nextContinuationToken)
         setHasMoreRemote(!!result.nextContinuationToken)
+
+        // If there's no next token, we've reached the end
+        if (!result.nextContinuationToken) {
+          setHasAttemptedLoadMore(true)
+        }
       } else {
+        // No conversations returned - we've reached the end
         setHasMoreRemote(false)
+        setHasAttemptedLoadMore(true)
       }
     } catch (error) {
       logError('Failed to load more chats', error, {
@@ -703,7 +731,7 @@ export function ChatSidebar({
               {shouldShowLoadMore && (
                 <button
                   onClick={loadMoreChats}
-                  disabled={isLoadingMore || !nextToken}
+                  disabled={isLoadingMore}
                   className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
                     isDarkMode
                       ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:bg-gray-900 disabled:text-gray-600'
@@ -716,9 +744,9 @@ export function ChatSidebar({
 
               {/* Show "No more chats" message when we've loaded everything */}
               {isSignedIn &&
+                !shouldShowLoadMore &&
                 !hasMoreRemote &&
-                syncedChatsCount > 0 &&
-                !nextToken && (
+                hasAttemptedLoadMore && (
                   <div
                     className={`w-full rounded-lg p-3 text-center text-sm ${
                       isDarkMode ? 'text-gray-500' : 'text-gray-400'
