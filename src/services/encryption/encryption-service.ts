@@ -1,5 +1,7 @@
 // Encryption service for end-to-end encryption of chat data
 
+import { compressionService } from '../compression/compression-service'
+
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
 
 export interface EncryptedData {
@@ -140,10 +142,15 @@ export class EncryptionService {
       throw new Error('Encryption key not initialized')
     }
 
-    // Convert data to string then to bytes
+    // Convert data to string
     const dataString = JSON.stringify(data)
+
+    // Compress the data first
+    const compressed = await compressionService.compress(dataString)
+
+    // Encrypt the compressed data
     const encoder = new TextEncoder()
-    const dataBytes = encoder.encode(dataString)
+    const dataBytes = encoder.encode(compressed.compressed)
 
     // Generate random IV
     const iv = crypto.getRandomValues(new Uint8Array(12))
@@ -191,10 +198,16 @@ export class EncryptionService {
         data,
       )
 
-      // Convert back to string then parse JSON
+      // Convert decrypted data to string (this is the compressed data)
       const decoder = new TextDecoder()
-      const jsonString = decoder.decode(decryptedData)
-      return JSON.parse(jsonString)
+      const compressedString = decoder.decode(decryptedData)
+
+      // Decompress
+      const decompressedString =
+        await compressionService.decompress(compressedString)
+
+      // Parse JSON
+      return JSON.parse(decompressedString)
     } catch (error) {
       throw new Error(`Decryption failed: ${error}`)
     }
