@@ -25,10 +25,11 @@ function convertStoredChatToChat(storedChat: StoredChat): Chat {
     title: storedChat.title,
     messages: storedChat.messages,
     createdAt: new Date(storedChat.createdAt),
-    model: storedChat.model,
     syncedAt: storedChat.syncedAt,
     locallyModified: storedChat.locallyModified,
     decryptionFailed: storedChat.decryptionFailed,
+    hasTemporaryId: storedChat.hasTemporaryId,
+    isBlankChat: storedChat.isBlankChat,
   }
 }
 

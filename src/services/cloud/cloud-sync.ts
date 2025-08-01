@@ -291,9 +291,23 @@ export class CloudSyncService {
       }
 
       // Delete local chats that were deleted remotely
-      for (const localChat of localChats) {
-        if (!remoteChatMap.has(localChat.id) && localChat.syncedAt) {
-          // This chat was previously synced but now deleted from R2
+      // First, sort all synced local chats by createdAt to determine their position
+      const sortedSyncedLocalChats = localChats
+        .filter(
+          (chat) => chat.syncedAt && !chat.isBlankChat && !chat.hasTemporaryId,
+        )
+        .sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime()
+          const timeB = new Date(b.createdAt).getTime()
+          return timeB - timeA // Descending (newest first)
+        })
+
+      // Only consider chats in the first 10 positions for deletion check
+      const localChatsInFirstPage = sortedSyncedLocalChats.slice(0, 10)
+
+      for (const localChat of localChatsInFirstPage) {
+        if (!remoteChatMap.has(localChat.id)) {
+          // This chat should be in the first page but isn't in remote - it was deleted
           try {
             await indexedDBStorage.deleteChat(localChat.id)
           } catch (error) {

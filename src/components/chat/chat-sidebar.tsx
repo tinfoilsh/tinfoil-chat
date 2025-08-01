@@ -20,7 +20,7 @@ import {
 } from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -221,6 +221,8 @@ export function ChatSidebar({
   // Start optimistically assuming there might be more chats
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
+  const prevChatsLengthRef = useRef(0)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -278,39 +280,77 @@ export function ChatSidebar({
     }
   }, [isSignedIn, getToken])
 
-  // Clean up extra chats on page refresh to keep only first page
+  // Reset pagination when new chats are added (not paginated ones)
+  useEffect(() => {
+    // Count only synced chats
+    const currentNonPaginatedCount = chats.filter(
+      (chat) => chat.syncedAt,
+    ).length
+    const prevCount = prevChatsLengthRef.current
+
+    // If non-paginated chats increased, reset pagination to ensure correct ordering
+    if (currentNonPaginatedCount > prevCount && nextToken) {
+      setNextToken(undefined)
+      setHasAttemptedLoadMore(false)
+      // Re-fetch the continuation token
+      if (isSignedIn) {
+        r2Storage
+          .listChats({ limit: CHATS_PER_PAGE })
+          .then((result) => {
+            if (result.nextContinuationToken) {
+              setNextToken(result.nextContinuationToken)
+              setHasMoreRemote(true)
+            }
+          })
+          .catch((error) => {
+            logError('Failed to reset pagination token', error, {
+              component: 'ChatSidebar',
+              action: 'resetPagination',
+            })
+          })
+      }
+    }
+
+    prevChatsLengthRef.current = currentNonPaginatedCount
+  }, [chats, isSignedIn, getToken, nextToken])
+
+  // Clean up paginated chats on page refresh
   useEffect(() => {
     const cleanupAndInitialize = async () => {
-      if (!isSignedIn || !getToken) return
+      if (!isSignedIn) return
 
       try {
-        // Always clean up on page refresh to keep only first page
+        // On page load, clean up chats loaded via pagination
         const allChats = await indexedDBStorage.getAllChats()
 
-        // Sort chats by createdAt to match display order
-        const sortedChats = allChats.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime()
-          const timeB = new Date(b.createdAt).getTime()
-          return timeB - timeA
-        })
+        // Sort by createdAt to determine which are beyond first page
+        const sortedSyncedChats = allChats
+          .filter(
+            (chat) =>
+              chat.syncedAt &&
+              !(chat as any).isBlankChat &&
+              !(chat as any).hasTemporaryId,
+          )
+          .sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime()
+            const timeB = new Date(b.createdAt).getTime()
+            return timeB - timeA
+          })
 
-        // Keep only synced chats (exclude blank/temporary chats from count)
-        const syncedChats = sortedChats.filter(
-          (chat) =>
-            chat.syncedAt &&
-            !(chat as any).isBlankChat &&
-            !(chat as any).hasTemporaryId,
-        )
+        // On page refresh, we want to keep only the first page of chats
+        // to ensure a clean state that matches what cloud sync expects
+        if (sortedSyncedChats.length > CHATS_PER_PAGE) {
+          let deletedAny = false
+          const chatsToDelete = sortedSyncedChats.slice(CHATS_PER_PAGE)
 
-        // Delete all synced chats beyond the first page
-        if (syncedChats.length > CHATS_PER_PAGE) {
-          const chatsToDelete = syncedChats.slice(CHATS_PER_PAGE)
           for (const chat of chatsToDelete) {
+            // Delete all chats beyond the first page on refresh
+            // They will be re-fetched via pagination if needed
             await indexedDBStorage.deleteChat(chat.id)
+            deletedAny = true
           }
 
-          // Trigger reload to update the UI after cleanup
-          if (onChatsUpdated) {
+          if (deletedAny && onChatsUpdated) {
             onChatsUpdated()
           }
         }
@@ -326,45 +366,37 @@ export function ChatSidebar({
           // No more pages available
           setHasMoreRemote(false)
         }
+        setIsInitialized(true)
       } catch (error) {
         logError('Failed to cleanup and initialize pagination', error, {
           component: 'ChatSidebar',
           action: 'cleanupAndInitialize',
         })
+        setIsInitialized(true) // Set initialized even on error to prevent blocking
       }
     }
 
     cleanupAndInitialize()
-  }, [isSignedIn, getToken]) // Remove onChatsUpdated from dependencies to prevent re-runs
+  }, [isSignedIn, onChatsUpdated])
 
   // Load more chats from backend
   const loadMoreChats = async () => {
     if (isLoadingMore || !isSignedIn) return
 
-    // If we don't have a token yet but the button is shown optimistically,
-    // we need to initialize the pagination first
-    if (!nextToken && chats.length >= CHATS_PER_PAGE) {
-      // Initialize pagination by getting the first page info
-      try {
-        const result = await r2Storage.listChats({ limit: CHATS_PER_PAGE })
-        if (result.nextContinuationToken) {
-          setNextToken(result.nextContinuationToken)
-          setHasMoreRemote(true)
-          // Now proceed with loading the next page
-          await loadMoreChats()
-          return
-        }
-      } catch (error) {
-        logError('Failed to initialize pagination', error, {
-          component: 'ChatSidebar',
-          action: 'loadMoreChats',
-        })
-      }
+    // If not initialized yet, wait for initialization
+    if (!isInitialized) {
+      return
+    }
+
+    // If we don't have a token after initialization, there are no more pages
+    if (!nextToken) {
+      setHasMoreRemote(false)
       return
     }
 
     setIsLoadingMore(true)
     setHasAttemptedLoadMore(true)
+
     try {
       const result = await r2Storage.listChats({
         limit: CHATS_PER_PAGE,
@@ -732,7 +764,7 @@ export function ChatSidebar({
               {/* Load More button - only for remote chats */}
               {shouldShowLoadMore && (
                 <button
-                  onClick={loadMoreChats}
+                  onClick={() => loadMoreChats()}
                   disabled={isLoadingMore}
                   className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
                     isDarkMode

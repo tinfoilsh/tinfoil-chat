@@ -104,7 +104,7 @@ export function useChatMessaging({
         action: 'reloadChatsFromStorage',
       })
     }
-  }, [currentChat?.id, storeHistory, setCurrentChat, setChats])
+  }, [currentChat, storeHistory, setCurrentChat, setChats])
 
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = useCallback(
@@ -318,8 +318,7 @@ export function useChatMessaging({
             // Save the chat with server ID
             await chatStorage.saveChatAndSync(chatWithServerId)
 
-            // Update the currentChat reference for the rest of the function
-            currentChat = chatWithServerId
+            // Use the updated chat for the rest of the function
             updatedChat = chatWithServerId
           }
         } catch (error) {
@@ -354,8 +353,8 @@ export function useChatMessaging({
         isStreamingRef.current = true
 
         // Track streaming start for the current chat
-        if (currentChat?.id) {
-          streamingTracker.startStreaming(currentChat.id)
+        if (updatedChat?.id) {
+          streamingTracker.startStreaming(updatedChat.id)
         }
 
         assistantMessage = {
@@ -453,7 +452,7 @@ export function useChatMessaging({
 
         while (true) {
           const { done, value } = await reader!.read()
-          if (done || currentChatIdRef.current !== currentChat.id) {
+          if (done || currentChatIdRef.current !== updatedChat.id) {
             // Handle any remaining buffered content when stream ends
             if (isFirstChunk && initialContentBuffer.trim()) {
               // Process the buffered content even if it's less than 20 characters
@@ -463,13 +462,13 @@ export function useChatMessaging({
                 timestamp: new Date(),
                 isThinking: false,
               }
-              if (currentChatIdRef.current === currentChat.id) {
+              if (currentChatIdRef.current === updatedChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
                 updateChatWithHistoryCheck(
                   setChats,
-                  currentChat,
+                  updatedChat,
                   setCurrentChat,
-                  currentChat.id,
+                  updatedChat.id,
                   newMessages,
                   false,
                   false,
@@ -487,13 +486,13 @@ export function useChatMessaging({
                 timestamp: new Date(),
                 isThinking: false,
               }
-              if (currentChatIdRef.current === currentChat.id) {
+              if (currentChatIdRef.current === updatedChat.id) {
                 const chatId = currentChatIdRef.current
                 const newMessages = [...updatedMessages, assistantMessage]
                 // Save to localStorage and update display
                 updateChatWithHistoryCheck(
                   setChats,
-                  currentChat,
+                  updatedChat,
                   setCurrentChat,
                   chatId,
                   newMessages,
@@ -578,12 +577,12 @@ export function useChatMessaging({
                     (assistantMessage.content || '') + remainingContent
                 }
 
-                if (currentChatIdRef.current === currentChat.id) {
+                if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChat,
+                    updatedChat,
                     setCurrentChat,
                     chatId,
                     newMessages,
@@ -602,13 +601,13 @@ export function useChatMessaging({
                   thoughts: thoughtsBuffer,
                   isThinking: true,
                 }
-                if (currentChatIdRef.current === currentChat.id) {
+                if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
 
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChat,
+                    updatedChat,
                     setCurrentChat,
                     chatId,
                     newMessages,
@@ -624,13 +623,13 @@ export function useChatMessaging({
                   content: (assistantMessage.content || '') + content,
                   isThinking: false,
                 }
-                if (currentChatIdRef.current === currentChat.id) {
+                if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
 
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChat,
+                    updatedChat,
                     setCurrentChat,
                     chatId,
                     newMessages,
@@ -654,11 +653,11 @@ export function useChatMessaging({
         if (assistantMessage.content || assistantMessage.thoughts) {
           // Use currentChatIdRef to get the most recent chat ID
           const chatId = currentChatIdRef.current
-          if (chatId === currentChat.id) {
+          if (chatId === updatedChat.id) {
             const finalMessages = [...updatedMessages, assistantMessage]
             updateChatWithHistoryCheck(
               setChats,
-              currentChat,
+              updatedChat,
               setCurrentChat,
               chatId,
               finalMessages,
@@ -672,7 +671,7 @@ export function useChatMessaging({
                 component: 'useChatMessaging',
                 action: 'handleQuery',
                 metadata: {
-                  originalChatId: currentChat.id,
+                  originalChatId: updatedChat.id,
                   currentChatId: chatId,
                 },
               },
@@ -702,9 +701,9 @@ export function useChatMessaging({
 
           updateChatWithHistoryCheck(
             setChats,
-            currentChat,
+            updatedChat,
             setCurrentChat,
-            currentChat.id,
+            updatedChat.id,
             [...updatedMessages, errorMessage],
             true, // immediate = true to ensure error is saved
             false,
@@ -716,8 +715,8 @@ export function useChatMessaging({
         isStreamingRef.current = false
 
         // Track streaming end for the current chat
-        if (currentChat?.id) {
-          streamingTracker.endStreaming(currentChat.id)
+        if (updatedChat?.id) {
+          streamingTracker.endStreaming(updatedChat.id)
         }
 
         setIsThinking(false)
@@ -729,7 +728,7 @@ export function useChatMessaging({
           storeHistory &&
           assistantMessage &&
           (assistantMessage.content || assistantMessage.thoughts) &&
-          currentChatIdRef.current === currentChat.id
+          currentChatIdRef.current === updatedChat.id
         ) {
           // Just trigger a sync without saving again to avoid duplicates
           // The latest content should already be in IndexedDB from streaming saves
