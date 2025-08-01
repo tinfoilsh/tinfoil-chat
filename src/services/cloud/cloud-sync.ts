@@ -293,11 +293,6 @@ export class CloudSyncService {
       // Delete local chats that were deleted remotely
       for (const localChat of localChats) {
         if (!remoteChatMap.has(localChat.id) && localChat.syncedAt) {
-          // Skip deletion of paginated chats - they won't be in the initial sync list
-          if ((localChat as any).isPaginated) {
-            continue
-          }
-
           // This chat was previously synced but now deleted from R2
           try {
             await indexedDBStorage.deleteChat(localChat.id)

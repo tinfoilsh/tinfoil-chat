@@ -230,9 +230,7 @@ export function ChatSidebar({
 
   // Calculate if we should show the Load More button optimistically
   // Show if: we have synced chats AND (we have a continuation token OR we have exactly CHATS_PER_PAGE synced chats)
-  const syncedChatsCount = chats.filter(
-    (chat) => chat.syncedAt && !(chat as any).isPaginated,
-  ).length
+  const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
   // Simplified logic: Show load more if:
   // 1. User is signed in
   // 2. We haven't determined there are no more chats OR we haven't attempted to load yet
@@ -280,26 +278,35 @@ export function ChatSidebar({
     }
   }, [isSignedIn, getToken])
 
-  // Clean up paginated chats on page refresh and initialize pagination
+  // Clean up extra chats on page refresh to keep only first page
   useEffect(() => {
     const cleanupAndInitialize = async () => {
       if (!isSignedIn || !getToken) return
 
       try {
-        // Check if we should preserve paginated chats (within same session)
-        const sessionKey = 'tinfoil_pagination_session'
-        const currentSession = sessionStorage.getItem(sessionKey)
-        const isNewSession = !currentSession
+        // Always clean up on page refresh to keep only first page
+        const allChats = await indexedDBStorage.getAllChats()
 
-        if (isNewSession) {
-          // New session - clean up old paginated chats
-          sessionStorage.setItem(sessionKey, 'active')
+        // Sort chats by createdAt to match display order
+        const sortedChats = allChats.sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime()
+          const timeB = new Date(b.createdAt).getTime()
+          return timeB - timeA
+        })
 
-          const allChats = await indexedDBStorage.getAllChats()
-          for (const chat of allChats) {
-            if ((chat as any).isPaginated) {
-              await indexedDBStorage.deleteChat(chat.id)
-            }
+        // Keep only synced chats (exclude blank/temporary chats from count)
+        const syncedChats = sortedChats.filter(
+          (chat) =>
+            chat.syncedAt &&
+            !(chat as any).isBlankChat &&
+            !(chat as any).hasTemporaryId,
+        )
+
+        // Delete all synced chats beyond the first page
+        if (syncedChats.length > CHATS_PER_PAGE) {
+          const chatsToDelete = syncedChats.slice(CHATS_PER_PAGE)
+          for (const chat of chatsToDelete) {
+            await indexedDBStorage.deleteChat(chat.id)
           }
 
           // Trigger reload to update the UI after cleanup
@@ -397,17 +404,12 @@ export function ChatSidebar({
             }
 
             if (fullChat) {
-              // Mark as paginated to prevent deletion during sync
-              const paginatedChat: StoredChat = {
-                ...fullChat,
-                isPaginated: true,
-              }
               // Save to IndexedDB - this will trigger a reload of chats
-              await indexedDBStorage.saveChat(paginatedChat)
+              await indexedDBStorage.saveChat(fullChat)
               // Mark as synced since we just downloaded from cloud
               await indexedDBStorage.markAsSynced(
-                paginatedChat.id,
-                paginatedChat.syncVersion || 0,
+                fullChat.id,
+                fullChat.syncVersion || 0,
               )
             }
           } catch (error) {
