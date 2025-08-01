@@ -2,6 +2,7 @@ import type { Chat } from '@/components/chat/types'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
 import { r2Storage } from '../cloud/r2-storage'
+import { streamingTracker } from '../cloud/streaming-tracker'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
@@ -152,14 +153,24 @@ export class ChatStorageService {
     }
     await indexedDBStorage.saveChat(storageChat)
 
-    // Auto-backup to cloud (non-blocking) - only if not temporary and not skipped
-    if (!chatToSave.hasTemporaryId && !skipCloudSync) {
+    // Auto-backup to cloud (non-blocking) - only if not temporary, not skipped, and not streaming
+    if (
+      !chatToSave.hasTemporaryId &&
+      !skipCloudSync &&
+      !streamingTracker.isStreaming(chatToSave.id)
+    ) {
       cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
           component: 'ChatStorageService',
           action: 'saveChat',
           metadata: { chatId: chatToSave.id },
         })
+      })
+    } else if (streamingTracker.isStreaming(chatToSave.id)) {
+      logInfo('Skipping cloud sync for streaming chat', {
+        component: 'ChatStorageService',
+        action: 'saveChat',
+        metadata: { chatId: chatToSave.id },
       })
     }
 

@@ -2,6 +2,7 @@ import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
+import { streamingTracker } from './streaming-tracker'
 
 export interface SyncResult {
   uploaded: number
@@ -51,6 +52,34 @@ export class CloudSyncService {
 
   private async doBackupChat(chatId: string): Promise<void> {
     try {
+      // Check if chat is currently streaming
+      if (streamingTracker.isStreaming(chatId)) {
+        logInfo('Chat is streaming, registering for sync after stream ends', {
+          component: 'CloudSync',
+          action: 'backupChat',
+          metadata: { chatId },
+        })
+
+        // Register to sync once streaming ends
+        streamingTracker.onStreamEnd(chatId, () => {
+          logInfo('Streaming ended, triggering delayed sync', {
+            component: 'CloudSync',
+            action: 'backupChat',
+            metadata: { chatId },
+          })
+          // Re-trigger the backup after streaming ends
+          this.backupChat(chatId).catch((error) => {
+            logError('Failed to backup chat after streaming', error, {
+              component: 'CloudSync',
+              action: 'backupChat',
+              metadata: { chatId },
+            })
+          })
+        })
+
+        return
+      }
+
       const chat = await indexedDBStorage.getChat(chatId)
       if (!chat) {
         return // Chat might have been deleted
@@ -66,6 +95,16 @@ export class CloudSyncService {
             isBlankChat: (chat as any).isBlankChat,
             hasTemporaryId: (chat as any).hasTemporaryId,
           },
+        })
+        return
+      }
+
+      // Double-check streaming status right before upload
+      if (streamingTracker.isStreaming(chatId)) {
+        logInfo('Chat started streaming during backup process, aborting sync', {
+          component: 'CloudSync',
+          action: 'backupChat',
+          metadata: { chatId },
         })
         return
       }
@@ -104,9 +143,12 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Filter out blank chats and chats with temporary IDs - they shouldn't be synced
+      // Filter out blank chats, chats with temporary IDs, and streaming chats
       const chatsToSync = unsyncedChats.filter(
-        (chat) => !(chat as any).isBlankChat && !(chat as any).hasTemporaryId,
+        (chat) =>
+          !(chat as any).isBlankChat &&
+          !(chat as any).hasTemporaryId &&
+          !streamingTracker.isStreaming(chat.id),
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
@@ -117,6 +159,15 @@ export class CloudSyncService {
       // Upload all chats in parallel for better performance
       const uploadPromises = chatsToSync.map(async (chat) => {
         try {
+          // Skip if chat started streaming while in queue
+          if (streamingTracker.isStreaming(chat.id)) {
+            logInfo(`Skipping sync for chat ${chat.id} - started streaming`, {
+              component: 'CloudSync',
+              action: 'backupUnsyncedChats',
+            })
+            return
+          }
+
           await r2Storage.uploadChat(chat)
           const newVersion = (chat.syncVersion || 0) + 1
           await indexedDBStorage.markAsSynced(chat.id, newVersion)

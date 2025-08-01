@@ -2,6 +2,7 @@ import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
+import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -351,6 +352,11 @@ export function useChatMessaging({
 
       try {
         isStreamingRef.current = true
+
+        // Track streaming start for the current chat
+        if (currentChat?.id) {
+          streamingTracker.startStreaming(currentChat.id)
+        }
 
         assistantMessage = {
           role: 'assistant',
@@ -708,6 +714,12 @@ export function useChatMessaging({
         setLoadingState('idle')
         setAbortController(null)
         isStreamingRef.current = false
+
+        // Track streaming end for the current chat
+        if (currentChat?.id) {
+          streamingTracker.endStreaming(currentChat.id)
+        }
+
         setIsThinking(false)
         setIsWaitingForResponse(false) // Always ensure loading state is cleared
 
