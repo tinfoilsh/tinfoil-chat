@@ -127,8 +127,9 @@ export class R2StorageService {
         // If decryption fails, store the encrypted data for later retry
         // Extract timestamp from the chat ID to use as createdAt
         const timestamp = chatId.split('_')[0]
-        const createdAtMs = timestamp
-          ? 9999999999999 - parseInt(timestamp, 10)
+        const parsedTimestamp = parseInt(timestamp, 10)
+        const createdAtMs = !isNaN(parsedTimestamp)
+          ? 9999999999999 - parsedTimestamp
           : Date.now()
 
         return {
