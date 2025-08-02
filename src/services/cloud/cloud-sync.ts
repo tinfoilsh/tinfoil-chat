@@ -19,6 +19,7 @@ export interface PaginatedChatsResult {
 export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
+  private streamingCallbacks: Set<string> = new Set()
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
@@ -54,14 +55,30 @@ export class CloudSyncService {
     try {
       // Check if chat is currently streaming
       if (streamingTracker.isStreaming(chatId)) {
+        // Check if we already have a callback registered for this chat
+        if (this.streamingCallbacks.has(chatId)) {
+          logInfo('Streaming callback already registered for chat', {
+            component: 'CloudSync',
+            action: 'backupChat',
+            metadata: { chatId },
+          })
+          return
+        }
+
         logInfo('Chat is streaming, registering for sync after stream ends', {
           component: 'CloudSync',
           action: 'backupChat',
           metadata: { chatId },
         })
 
+        // Mark that we have a callback registered
+        this.streamingCallbacks.add(chatId)
+
         // Register to sync once streaming ends
         streamingTracker.onStreamEnd(chatId, () => {
+          // Remove from tracking set
+          this.streamingCallbacks.delete(chatId)
+
           logInfo('Streaming ended, triggering delayed sync', {
             component: 'CloudSync',
             action: 'backupChat',
