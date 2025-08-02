@@ -411,6 +411,9 @@ export class CloudSyncService {
     }
 
     try {
+      // Initialize encryption service once before processing
+      await encryptionService.initialize()
+
       // For authenticated users, load from R2 with content
       const remoteList = await r2Storage.listChats({
         limit,
@@ -429,7 +432,6 @@ export class CloudSyncService {
           // Try to decrypt the chat data
           let chat: StoredChat | null = null
           try {
-            await encryptionService.initialize()
             const decrypted = await encryptionService.decrypt(encrypted)
             chat = decrypted
           } catch (decryptError) {
