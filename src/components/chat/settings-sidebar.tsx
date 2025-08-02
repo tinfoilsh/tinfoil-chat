@@ -1,5 +1,10 @@
 /* eslint-disable react/no-unescaped-entities */
-import { MoonIcon, SunIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import {
+  KeyIcon,
+  MoonIcon,
+  SunIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { CONSTANTS } from './constants'
@@ -11,6 +16,7 @@ type SettingsSidebarProps = {
   toggleTheme: () => void
   isClient: boolean
   defaultSystemPrompt?: string
+  onEncryptionKeyClick?: () => void
 }
 
 export function SettingsSidebar({
@@ -20,6 +26,7 @@ export function SettingsSidebar({
   toggleTheme,
   isClient,
   defaultSystemPrompt = '',
+  onEncryptionKeyClick,
 }: SettingsSidebarProps) {
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
@@ -659,6 +666,61 @@ export function SettingsSidebar({
                 </div>
               </div>
             </div>
+
+            {/* Security section */}
+            {onEncryptionKeyClick && (
+              <div>
+                <h3
+                  className={`mb-3 text-sm font-medium ${
+                    isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                  }`}
+                >
+                  Security
+                </h3>
+                <div className="space-y-2">
+                  <button
+                    onClick={onEncryptionKeyClick}
+                    className={`flex w-full items-center justify-between rounded-lg p-3 transition-colors ${
+                      isDarkMode
+                        ? 'bg-gray-800 hover:bg-gray-700'
+                        : 'bg-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <KeyIcon
+                        className={`h-5 w-5 ${
+                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                        }`}
+                      />
+                      <div className="text-left">
+                        <div
+                          className={`text-sm font-medium ${
+                            isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                          }`}
+                        >
+                          Chat Encryption Key
+                        </div>
+                        <div
+                          className={`text-xs ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}
+                        >
+                          Manage your chat backup and synchronization encryption
+                          key.
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className={`text-xs ${
+                        isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                      }`}
+                    >
+                      →
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
