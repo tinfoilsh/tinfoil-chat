@@ -1,3 +1,5 @@
+import { logError } from '@/utils/error-handling'
+
 class StreamingTracker {
   private streamingChats = new Set<string>()
   private streamEndCallbacks = new Map<string, (() => void)[]>()
@@ -12,7 +14,19 @@ class StreamingTracker {
     // Execute any callbacks waiting for this chat to finish streaming
     const callbacks = this.streamEndCallbacks.get(chatId)
     if (callbacks) {
-      callbacks.forEach((callback) => callback())
+      // Execute each callback with error handling to prevent one failure from affecting others
+      callbacks.forEach((callback) => {
+        try {
+          callback()
+        } catch (error) {
+          logError('Error executing stream end callback', error, {
+            component: 'StreamingTracker',
+            action: 'endStreaming',
+            metadata: { chatId },
+          })
+        }
+      })
+      // Always clean up callbacks, even if some failed
       this.streamEndCallbacks.delete(chatId)
     }
   }
