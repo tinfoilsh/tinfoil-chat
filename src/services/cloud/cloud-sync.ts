@@ -173,13 +173,17 @@ export class CloudSyncService {
           await indexedDBStorage.markAsSynced(chat.id, newVersion)
           result.uploaded++
         } catch (error) {
-          result.errors.push(`Failed to backup chat ${chat.id}: ${error}`)
+          result.errors.push(
+            `Failed to backup chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
+          )
         }
       })
 
       await Promise.all(uploadPromises)
     } catch (error) {
-      result.errors.push(`Failed to get unsynced chats: ${error}`)
+      result.errors.push(
+        `Failed to get unsynced chats: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
 
     return result
@@ -284,7 +288,7 @@ export class CloudSyncService {
             }
           } catch (error) {
             result.errors.push(
-              `Failed to process chat ${remoteChat.id}: ${error}`,
+              `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
             )
           }
         }
@@ -312,13 +316,15 @@ export class CloudSyncService {
             await indexedDBStorage.deleteChat(localChat.id)
           } catch (error) {
             result.errors.push(
-              `Failed to delete local chat ${localChat.id}: ${error}`,
+              `Failed to delete local chat ${localChat.id}: ${error instanceof Error ? error.message : String(error)}`,
             )
           }
         }
       }
     } catch (error) {
-      result.errors.push(`Sync failed: ${error}`)
+      result.errors.push(
+        `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
     } finally {
       this.isSyncing = false
     }
