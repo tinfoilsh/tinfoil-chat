@@ -24,6 +24,7 @@ export interface MigrationResult {
   success: boolean
   migratedCount: number
   totalCount: number
+  skippedCount: number
   errors: string[]
 }
 
@@ -55,6 +56,7 @@ export class StorageMigration {
       success: false,
       migratedCount: 0,
       totalCount: 0,
+      skippedCount: 0,
       errors: [],
     }
 
@@ -95,6 +97,7 @@ export class StorageMigration {
             action: 'migrateLocalStorage',
             metadata: { chatId: legacyChat.id, title: legacyChat.title },
           })
+          result.skippedCount++
           continue
         }
 
@@ -145,8 +148,8 @@ export class StorageMigration {
         }
       }
 
-      // Mark migration as successful if all chats were migrated
-      if (result.migratedCount === result.totalCount) {
+      // Mark migration as successful if all non-empty chats were migrated
+      if (result.migratedCount + result.skippedCount === result.totalCount) {
         result.success = true
       }
 
