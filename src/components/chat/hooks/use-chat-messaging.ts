@@ -348,13 +348,15 @@ export function useChatMessaging({
       setTimeout(() => scrollToBottom(messagesEndRef, 'auto'), 0)
 
       let assistantMessage: Message | null = null
+      // Track the initial chat ID for streaming tracker
+      const streamingChatId = updatedChat.id
 
       try {
         isStreamingRef.current = true
 
         // Track streaming start for the current chat
-        if (updatedChat?.id) {
-          streamingTracker.startStreaming(updatedChat.id)
+        if (streamingChatId) {
+          streamingTracker.startStreaming(streamingChatId)
         }
 
         assistantMessage = {
@@ -714,9 +716,9 @@ export function useChatMessaging({
         setAbortController(null)
         isStreamingRef.current = false
 
-        // Track streaming end for the current chat
-        if (updatedChat?.id) {
-          streamingTracker.endStreaming(updatedChat.id)
+        // Track streaming end using the initial chat ID
+        if (streamingChatId) {
+          streamingTracker.endStreaming(streamingChatId)
         }
 
         setIsThinking(false)
