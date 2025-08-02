@@ -238,6 +238,7 @@ export function EncryptionKeyModal({
                         value={inputKey}
                         onChange={(e) => setInputKey(e.target.value)}
                         placeholder="Enter encryption key (e.g., key_abc123...)"
+                        autoComplete="off"
                         className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 sm:flex-1 sm:px-3 sm:py-2 sm:text-sm ${
                           isDarkMode
                             ? 'border-gray-700 bg-gray-900 text-white placeholder-gray-500'
