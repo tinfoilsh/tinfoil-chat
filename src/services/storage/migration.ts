@@ -28,14 +28,17 @@ export interface MigrationResult {
 }
 
 // Helper function to convert legacy ID to new format
-function convertToNewIdFormat(legacyId: string): string {
+function convertToNewIdFormat(
+  legacyId: string,
+  createdAt: string | Date,
+): string {
   // If ID already has the new format, return as is
   if (legacyId.includes('_') && /^\d+_/.test(legacyId)) {
     return legacyId
   }
 
-  // Convert legacy ID to new format using current timestamp
-  const timestamp = Date.now()
+  // Convert legacy ID to new format using the chat's original creation time
+  const timestamp = new Date(createdAt).getTime()
   const reverseTimestamp = 9999999999999 - timestamp
   return `${reverseTimestamp}_${legacyId}`
 }
@@ -97,7 +100,7 @@ export class StorageMigration {
 
         try {
           const chat: StoredChat = {
-            id: convertToNewIdFormat(legacyChat.id),
+            id: convertToNewIdFormat(legacyChat.id, legacyChat.createdAt),
             title: legacyChat.title || 'Untitled Chat',
             messages: legacyChat.messages
               .filter((msg) => msg.content?.trim() || msg.thoughts?.trim())
