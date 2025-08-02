@@ -228,6 +228,9 @@ export class CloudSyncService {
 
       const localChats = await indexedDBStorage.getAllChats()
 
+      // Initialize encryption service once before processing
+      await encryptionService.initialize()
+
       // Create maps for easy lookup
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
       // Handle null conversations array
@@ -256,7 +259,6 @@ export class CloudSyncService {
             // Try to decrypt the chat data
             let downloadedChat: StoredChat | null = null
             try {
-              await encryptionService.initialize()
               const decrypted = await encryptionService.decrypt(encrypted)
               downloadedChat = decrypted
             } catch (decryptError) {
