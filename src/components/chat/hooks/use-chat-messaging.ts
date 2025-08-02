@@ -81,31 +81,6 @@ export function useChatMessaging({
     ? CONSTANTS.DEFAULT_FREE_MODEL
     : selectedModel
 
-  // Add reload function to refresh chats from storage
-  const reloadChatsFromStorage = useCallback(async () => {
-    if (!storeHistory || !currentChat) return
-
-    try {
-      const updatedChat = await chatStorage.getChat(currentChat.id)
-      if (updatedChat) {
-        // Update the current chat with the latest sync metadata
-        setCurrentChat(updatedChat)
-
-        // Update the chats array
-        setChats((prevChats) =>
-          prevChats.map((chat) =>
-            chat.id === updatedChat.id ? updatedChat : chat,
-          ),
-        )
-      }
-    } catch (error) {
-      logError('Failed to reload chat after sync', error, {
-        component: 'useChatMessaging',
-        action: 'reloadChatsFromStorage',
-      })
-    }
-  }, [currentChat, storeHistory, setCurrentChat, setChats])
-
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = useCallback(
     (
