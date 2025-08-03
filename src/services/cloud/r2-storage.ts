@@ -47,7 +47,7 @@ export class R2StorageService {
     return response.json()
   }
 
-  private async getHeaders(): Promise<HeadersInit> {
+  private async getHeaders(includeContentType = true): Promise<HeadersInit> {
     if (!this.getToken) {
       throw new Error('Token getter not set')
     }
@@ -57,10 +57,15 @@ export class R2StorageService {
       throw new Error('Failed to get authentication token')
     }
 
-    return {
+    const headers: HeadersInit = {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
     }
+
+    if (includeContentType) {
+      headers['Content-Type'] = 'application/json'
+    }
+
+    return headers
   }
 
   async isAuthenticated(): Promise<boolean> {
@@ -104,7 +109,7 @@ export class R2StorageService {
       const response = await fetch(
         `${API_BASE_URL}/api/storage/conversation/${chatId}`,
         {
-          headers: await this.getHeaders(),
+          headers: await this.getHeaders(false),
         },
       )
 
@@ -174,7 +179,7 @@ export class R2StorageService {
 
     const url = `${API_BASE_URL}/api/chats/list${params.toString() ? `?${params.toString()}` : ''}`
     const response = await fetch(url, {
-      headers: await this.getHeaders(),
+      headers: await this.getHeaders(false),
     })
 
     if (!response.ok) {
