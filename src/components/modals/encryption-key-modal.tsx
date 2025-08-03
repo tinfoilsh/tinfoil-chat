@@ -139,6 +139,7 @@ export function EncryptionKeyModal({
                   </div>
                   <button
                     onClick={onClose}
+                    aria-label="Close dialog"
                     className={`rounded-lg p-1 transition-colors ${
                       isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
                     }`}
