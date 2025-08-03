@@ -20,7 +20,7 @@ import {
 } from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -222,7 +222,6 @@ export function ChatSidebar({
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
-  const prevChatsLengthRef = useRef(0)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -279,40 +278,6 @@ export function ChatSidebar({
       })
     }
   }, [isSignedIn, getToken])
-
-  // Reset pagination when new chats are added (not paginated ones)
-  useEffect(() => {
-    // Count only synced chats
-    const currentNonPaginatedCount = chats.filter(
-      (chat) => chat.syncedAt,
-    ).length
-    const prevCount = prevChatsLengthRef.current
-
-    // If non-paginated chats increased, reset pagination to ensure correct ordering
-    if (currentNonPaginatedCount > prevCount && nextToken) {
-      setNextToken(undefined)
-      setHasAttemptedLoadMore(false)
-      // Re-fetch the continuation token
-      if (isSignedIn) {
-        r2Storage
-          .listChats({ limit: CHATS_PER_PAGE })
-          .then((result) => {
-            if (result.nextContinuationToken) {
-              setNextToken(result.nextContinuationToken)
-              setHasMoreRemote(true)
-            }
-          })
-          .catch((error) => {
-            logError('Failed to reset pagination token', error, {
-              component: 'ChatSidebar',
-              action: 'resetPagination',
-            })
-          })
-      }
-    }
-
-    prevChatsLengthRef.current = currentNonPaginatedCount
-  }, [chats, isSignedIn, getToken, nextToken])
 
   // Clean up paginated chats on page refresh
   useEffect(() => {
