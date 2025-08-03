@@ -46,9 +46,8 @@ function convertToNewIdFormat(
 
 export class StorageMigration {
   async needsMigration(): Promise<boolean> {
-    // Simply check if chats exist in localStorage
-    const chatsData = localStorage.getItem(CHATS_STORAGE_KEY)
-    return !!chatsData
+    // Use the same validation logic as hasLegacyData
+    return this.hasLegacyData()
   }
 
   async migrate(): Promise<MigrationResult> {
