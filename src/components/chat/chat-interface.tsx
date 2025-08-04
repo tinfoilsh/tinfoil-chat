@@ -17,8 +17,12 @@ import {
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 
+import { useCloudSync } from '@/hooks/use-cloud-sync'
+import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
+import { EncryptionKeyModal } from '../modals/encryption-key-modal'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -83,6 +87,15 @@ export function ChatInterface({
     isLoading: subscriptionLoading,
   } = useSubscriptionStatus()
 
+  // Initialize cloud sync
+  const {
+    syncing,
+    syncChats,
+    encryptionKey,
+    setEncryptionKey,
+    retryDecryptionWithNewKey,
+  } = useCloudSync()
+
   // State for API data
   const [models, setModels] = useState<BaseModel[]>([])
   const [systemPrompt, setSystemPrompt] = useState<string>('')
@@ -106,6 +119,14 @@ export function ChatInterface({
   // State for settings sidebar
   const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
 
+  // State for encryption key modal
+  const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
+    useState(false)
+
+  // State for cloud sync intro modal
+  const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
+    useState(false)
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -119,6 +140,35 @@ export function ChatInterface({
 
   // Use custom system prompt hook
   const { effectiveSystemPrompt } = useCustomSystemPrompt(systemPrompt)
+
+  // Check for migration and show intro modal
+  useEffect(() => {
+    if (!isSignedIn || typeof window === 'undefined') return
+
+    // Check if user has already seen the intro
+    const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
+    if (hasSeenIntro) return
+
+    // Check if migration already happened (page refresh case)
+    const hasMigrated = sessionStorage.getItem('pendingMigrationSync')
+    if (hasMigrated === 'true') {
+      setIsCloudSyncIntroModalOpen(true)
+      localStorage.setItem('hasSeenCloudSyncIntro', 'true')
+      return
+    }
+
+    // Listen for migration event
+    const unsubscribe = migrationEvents.on('migration-completed', (event) => {
+      // Only show modal if user hasn't seen it yet
+      const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
+      if (!hasSeenIntro && event.migratedCount > 0) {
+        setIsCloudSyncIntroModalOpen(true)
+        localStorage.setItem('hasSeenCloudSyncIntro', 'true')
+      }
+    })
+
+    return unsubscribe
+  }, [isSignedIn])
 
   // Load models and system prompt
   useEffect(() => {
@@ -194,6 +244,7 @@ export function ChatInterface({
     cancelGeneration,
     updateChatTitle,
     getApiKey,
+    reloadChats,
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
     storeHistory: isPremium,
@@ -212,6 +263,41 @@ export function ChatInterface({
     isPremium,
     selectedModelDetails,
   )
+
+  // Sync chats when user signs in and periodically
+  useEffect(() => {
+    if (!isSignedIn) return
+
+    // Initial sync on page load/refresh
+    syncChats()
+      .then(() => {
+        // Reload chats from IndexedDB after sync completes
+        return reloadChats()
+      })
+      .catch((error) => {
+        logError('Failed to sync chats', error, {
+          component: 'ChatInterface',
+          action: 'syncChats',
+        })
+      })
+
+    // Sync every 5 seconds
+    const interval = setInterval(() => {
+      syncChats()
+        .then(() => {
+          // Reload chats from IndexedDB after sync completes
+          return reloadChats()
+        })
+        .catch((error) => {
+          logError('Failed to sync chats (periodic)', error, {
+            component: 'ChatInterface',
+            action: 'periodicSync',
+          })
+        })
+    }, 5 * 1000)
+
+    return () => clearInterval(interval)
+  }, [isSignedIn, syncChats, reloadChats])
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
@@ -240,6 +326,11 @@ export function ChatInterface({
     if (newSettingsState) {
       setIsVerifierSidebarOpen(false)
     }
+  }
+
+  // Handler for encryption key button
+  const handleOpenEncryptionKeyModal = () => {
+    setIsEncryptionKeyModalOpen(true)
   }
 
   // Don't automatically create new chats - let the chat state handle initialization
@@ -596,6 +687,10 @@ export function ChatInterface({
         }}
         selectedModel={selectedModel}
         isPremium={isPremium}
+        onEncryptionKeyClick={
+          isSignedIn ? handleOpenEncryptionKeyModal : undefined
+        }
+        onChatsUpdated={reloadChats}
       />
 
       {/* Right Verifier Sidebar */}
@@ -620,6 +715,9 @@ export function ChatInterface({
         toggleTheme={toggleTheme}
         isClient={isClient}
         defaultSystemPrompt={systemPrompt}
+        onEncryptionKeyClick={
+          isSignedIn ? handleOpenEncryptionKeyModal : undefined
+        }
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
@@ -770,6 +868,28 @@ export function ChatInterface({
           )}
         </div>
       </div>
+
+      {/* Encryption Key Modal */}
+      <EncryptionKeyModal
+        isOpen={isEncryptionKeyModalOpen}
+        onClose={() => setIsEncryptionKeyModalOpen(false)}
+        encryptionKey={encryptionKey}
+        onKeyChange={async (key: string) => {
+          const syncResult = await setEncryptionKey(key)
+          // If sync happened (key changed), reload chats
+          if (syncResult) {
+            await reloadChats()
+          }
+        }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Cloud Sync Intro Modal */}
+      <CloudSyncIntroModal
+        isOpen={isCloudSyncIntroModalOpen}
+        onClose={() => setIsCloudSyncIntroModalOpen(false)}
+        isDarkMode={isDarkMode}
+      />
     </div>
   )
 }

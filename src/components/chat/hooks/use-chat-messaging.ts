@@ -1,6 +1,10 @@
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
-import { logError } from '@/utils/error-handling'
+import { cloudSync } from '@/services/cloud/cloud-sync'
+import { r2Storage } from '@/services/cloud/r2-storage'
+import { streamingTracker } from '@/services/cloud/streaming-tracker'
+import { chatStorage } from '@/services/storage/chat-storage'
+import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { scrollToBottom } from '../chat-messages'
@@ -8,18 +12,6 @@ import { ChatError, generateTitle } from '../chat-utils'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import { useMaxMessages } from './use-max-messages'
-
-// Utility function to remove imageData from messages before localStorage storage
-// This prevents hitting browser storage quotas since base64 images can be very large
-const stripImageDataForStorage = (chats: Chat[]): Chat[] => {
-  return chats.map((chat) => ({
-    ...chat,
-    messages: chat.messages.map((msg) => {
-      const { imageData, ...msgWithoutImageData } = msg
-      return msgWithoutImageData
-    }),
-  }))
-}
 
 interface UseChatMessagingProps {
   systemPrompt: string
@@ -68,6 +60,11 @@ export function useChatMessaging({
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const maxMessages = useMaxMessages()
 
+  // Initialize r2Storage with token getter
+  useEffect(() => {
+    r2Storage.setTokenGetter(getToken)
+  }, [getToken])
+
   const [input, setInput] = useState('')
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
   const [abortController, setAbortController] =
@@ -76,7 +73,7 @@ export function useChatMessaging({
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const currentChatIdRef = useRef<string>(currentChat.id)
+  const currentChatIdRef = useRef<string>(currentChat?.id || '')
   const isStreamingRef = useRef(false)
 
   // Override model selection for free users
@@ -95,34 +92,40 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
-      setChats((prevChats) => {
-        // Find the latest version of this chat (to preserve any recent title changes)
-        const existingChat =
-          prevChats.find((c) => c.id === chatId) || currentChat
+      const updatedChat = {
+        ...currentChat,
+        messages: newMessages,
+      }
 
-        const updatedChat: Chat = {
-          ...existingChat,
-          messages: newMessages,
-        }
+      // Update state immediately
+      setCurrentChat(updatedChat)
+      setChats((prevChats) =>
+        prevChats.map((c) => (c.id === chatId ? updatedChat : c)),
+      )
 
-        // Build new array
-        const newChats = prevChats.map((c) =>
-          c.id === chatId ? updatedChat : c,
-        )
+      // Save to storage if enabled (skip during thinking state unless immediate)
+      if (storeHistory && (!isThinking || immediate)) {
+        // Skip cloud sync during streaming (unless immediate flag is set for final save)
+        const skipCloudSync = isStreamingRef.current && !immediate
 
-        // Persist if needed (strip imageData to prevent quota issues)
-        if (storeHistory && (!isThinking || immediate)) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(newChats)),
-          )
-        }
-
-        // Also replace currentChat state
-        setCurrentChat(updatedChat)
-
-        return newChats
-      })
+        chatStorage
+          .saveChat(updatedChat, skipCloudSync)
+          .then((savedChat) => {
+            // Only update if the ID actually changed
+            if (savedChat.id !== updatedChat.id) {
+              currentChatIdRef.current = savedChat.id
+              setCurrentChat(savedChat)
+              setChats((prevChats) =>
+                prevChats.map((c) => (c.id === updatedChat.id ? savedChat : c)),
+              )
+            }
+          })
+          .catch((error) => {
+            logError('Failed to save chat during update', error, {
+              component: 'useChatMessaging',
+            })
+          })
+      }
     },
     [storeHistory],
   )
@@ -151,10 +154,31 @@ export function useChatMessaging({
           return chat
         })
         if (storeHistory) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(newChats)),
+          // Find and save the updated chat
+          const updatedChat = newChats.find(
+            (c) => c.id === currentChatIdRef.current,
           )
+          if (updatedChat) {
+            chatStorage
+              .saveChatAndSync(updatedChat)
+              .then((savedChat) => {
+                // Only update if the ID actually changed
+                if (savedChat.id !== updatedChat.id) {
+                  currentChatIdRef.current = savedChat.id
+                  setCurrentChat(savedChat)
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === updatedChat.id ? savedChat : c,
+                    ),
+                  )
+                }
+              })
+              .catch((error) => {
+                logError('Failed to save chat after cancellation', error, {
+                  component: 'useChatMessaging',
+                })
+              })
+          }
         }
         return newChats
       })
@@ -184,6 +208,15 @@ export function useChatMessaging({
     ) => {
       if (!query.trim() || loadingState !== 'idle') return
 
+      // Safety check - ensure we have a current chat
+      if (!currentChat) {
+        logError('No current chat available', undefined, {
+          component: 'useChatMessaging',
+          action: 'handleQuery',
+        })
+        return
+      }
+
       const controller = new AbortController()
       setAbortController(controller)
       setLoadingState('loading')
@@ -200,52 +233,84 @@ export function useChatMessaging({
 
       // Generate title immediately if this is the first message
       let updatedChat = { ...currentChat }
+      const isFirstMessage = currentChat.messages.length === 0
 
-      if (currentChat.messages.length === 0 && storeHistory) {
+      if (isFirstMessage && storeHistory) {
         const title = generateTitle(query)
         // Make sure title is not empty
         const safeTitle =
           title.trim() || 'Chat about ' + query.slice(0, 20) + '...'
 
-        // Update the current chat with the new title
-        updatedChat = { ...currentChat, title: safeTitle }
-        setCurrentChat(updatedChat)
-
-        // Update all chats in state and localStorage
-        const updatedChatsWithTitle = chats.map((chat) =>
-          chat.id === currentChat.id ? { ...chat, title: safeTitle } : chat,
-        )
-
-        setChats(updatedChatsWithTitle)
-        if (storeHistory) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(updatedChatsWithTitle)),
-          )
+        // Update the current chat with:
+        // - New title
+        // - Clear blank flag
+        // - Update createdAt to now (when first message is sent)
+        updatedChat = {
+          ...currentChat,
+          title: safeTitle,
+          isBlankChat: false,
+          createdAt: new Date(), // Set creation time to when first message is sent
         }
       }
 
       const updatedMessages = [...currentChat.messages, userMessage]
-      updatedChat = { ...updatedChat, messages: updatedMessages }
+      updatedChat = {
+        ...updatedChat,
+        messages: updatedMessages,
+        isBlankChat: false, // Clear blank chat flag when first message is sent
+      }
 
-      // Update the current chat with the new messages
+      // Update the current chat and chats array immediately
       setCurrentChat(updatedChat)
-
-      // Update chats array with both title and messages
-      setChats((prevChats) => {
-        const newChats = prevChats.map((chat) =>
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
           chat.id === currentChat.id ? updatedChat : chat,
-        )
+        ),
+      )
 
-        if (storeHistory) {
-          localStorage.setItem(
-            'chats',
-            JSON.stringify(stripImageDataForStorage(newChats)),
-          )
+      // For new chats, get server ID first before proceeding
+      if (storeHistory && currentChat.hasTemporaryId) {
+        try {
+          // Get server ID synchronously before proceeding
+          const result = await r2Storage.generateConversationId()
+          if (result) {
+            // Update the chat with the server ID
+            const chatWithServerId = {
+              ...updatedChat,
+              id: result.conversationId,
+              hasTemporaryId: false,
+            }
+
+            // Update refs and state with new ID
+            currentChatIdRef.current = result.conversationId
+            setCurrentChat(chatWithServerId)
+            setChats((prevChats) =>
+              prevChats.map((c) =>
+                c.id === currentChat.id ? chatWithServerId : c,
+              ),
+            )
+
+            // Save the chat with server ID
+            await chatStorage.saveChatAndSync(chatWithServerId)
+
+            // Use the updated chat for the rest of the function
+            updatedChat = chatWithServerId
+          }
+        } catch (error) {
+          logError('Failed to get server ID for new chat', error, {
+            component: 'useChatMessaging',
+            action: 'handleQuery',
+          })
+          // Continue with temporary ID if server ID fetch fails
         }
-
-        return newChats
-      })
+      } else if (storeHistory) {
+        // For existing chats, just save normally
+        chatStorage.saveChatAndSync(updatedChat).catch((error) => {
+          logError('Failed to save chat', error, {
+            component: 'useChatMessaging',
+          })
+        })
+      }
 
       setInput('')
 
@@ -257,10 +322,19 @@ export function useChatMessaging({
       // Initial scroll after user message is added
       setTimeout(() => scrollToBottom(messagesEndRef, 'auto'), 0)
 
+      let assistantMessage: Message | null = null
+      // Track the initial chat ID for streaming tracker
+      const streamingChatId = updatedChat.id
+
       try {
         isStreamingRef.current = true
 
-        let assistantMessage: Message = {
+        // Track streaming start for the current chat
+        if (streamingChatId) {
+          streamingTracker.startStreaming(streamingChatId)
+        }
+
+        assistantMessage = {
           role: 'assistant',
           content: '',
           timestamp: new Date(),
@@ -355,7 +429,7 @@ export function useChatMessaging({
 
         while (true) {
           const { done, value } = await reader!.read()
-          if (done || currentChatIdRef.current !== currentChat.id) {
+          if (done || currentChatIdRef.current !== updatedChat.id) {
             // Handle any remaining buffered content when stream ends
             if (isFirstChunk && initialContentBuffer.trim()) {
               // Process the buffered content even if it's less than 20 characters
@@ -365,13 +439,13 @@ export function useChatMessaging({
                 timestamp: new Date(),
                 isThinking: false,
               }
-              if (currentChatIdRef.current === currentChat.id) {
+              if (currentChatIdRef.current === updatedChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
                 updateChatWithHistoryCheck(
                   setChats,
-                  currentChat,
+                  updatedChat,
                   setCurrentChat,
-                  currentChat.id,
+                  updatedChat.id,
                   newMessages,
                   false,
                   false,
@@ -389,16 +463,17 @@ export function useChatMessaging({
                 timestamp: new Date(),
                 isThinking: false,
               }
-              if (currentChatIdRef.current === currentChat.id) {
+              if (currentChatIdRef.current === updatedChat.id) {
+                const chatId = currentChatIdRef.current
                 const newMessages = [...updatedMessages, assistantMessage]
                 // Save to localStorage and update display
                 updateChatWithHistoryCheck(
                   setChats,
-                  currentChat,
+                  updatedChat,
                   setCurrentChat,
-                  currentChat.id,
+                  chatId,
                   newMessages,
-                  false,
+                  true, // immediate = true for final save
                   false,
                 )
               }
@@ -479,13 +554,14 @@ export function useChatMessaging({
                     (assistantMessage.content || '') + remainingContent
                 }
 
-                if (currentChatIdRef.current === currentChat.id) {
+                if (currentChatIdRef.current === updatedChat.id) {
+                  const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChat,
+                    updatedChat,
                     setCurrentChat,
-                    currentChat.id,
+                    chatId,
                     newMessages,
                     false,
                     false,
@@ -502,18 +578,15 @@ export function useChatMessaging({
                   thoughts: thoughtsBuffer,
                   isThinking: true,
                 }
-                if (currentChatIdRef.current === currentChat.id) {
+                if (currentChatIdRef.current === updatedChat.id) {
+                  const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
-
-                  // Get the current chat with its potentially updated title
-                  const currentChatWithTitle =
-                    chats.find((c) => c.id === currentChat.id) || currentChat
 
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChatWithTitle,
+                    updatedChat,
                     setCurrentChat,
-                    currentChat.id,
+                    chatId,
                     newMessages,
                     false,
                     true,
@@ -527,18 +600,15 @@ export function useChatMessaging({
                   content: (assistantMessage.content || '') + content,
                   isThinking: false,
                 }
-                if (currentChatIdRef.current === currentChat.id) {
+                if (currentChatIdRef.current === updatedChat.id) {
+                  const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
-
-                  // Get the current chat with its potentially updated title
-                  const currentChatWithTitle =
-                    chats.find((c) => c.id === currentChat.id) || currentChat
 
                   updateChatWithHistoryCheck(
                     setChats,
-                    currentChatWithTitle,
+                    updatedChat,
                     setCurrentChat,
-                    currentChat.id,
+                    chatId,
                     newMessages,
                     false,
                     false,
@@ -554,6 +624,41 @@ export function useChatMessaging({
               continue
             }
           }
+        }
+
+        // Final save after stream completes successfully
+        if (assistantMessage.content || assistantMessage.thoughts) {
+          // Use currentChatIdRef to get the most recent chat ID
+          const chatId = currentChatIdRef.current
+          if (chatId === updatedChat.id) {
+            const finalMessages = [...updatedMessages, assistantMessage]
+            updateChatWithHistoryCheck(
+              setChats,
+              updatedChat,
+              setCurrentChat,
+              chatId,
+              finalMessages,
+              true, // immediate = true for final save
+              false,
+            )
+          } else {
+            logWarning(
+              'Chat ID changed during streaming, skipping final save',
+              {
+                component: 'useChatMessaging',
+                action: 'handleQuery',
+                metadata: {
+                  originalChatId: updatedChat.id,
+                  currentChatId: chatId,
+                },
+              },
+            )
+          }
+        } else {
+          logWarning('No assistant content to save after streaming', {
+            component: 'useChatMessaging',
+            action: 'handleQuery',
+          })
         }
       } catch (error) {
         setIsWaitingForResponse(false) // Make sure to clear waiting state on error
@@ -571,17 +676,13 @@ export function useChatMessaging({
             isError: true,
           }
 
-          // Get the current chat with its potentially updated title
-          const currentChatWithTitle =
-            chats.find((c) => c.id === currentChat.id) || currentChat
-
           updateChatWithHistoryCheck(
             setChats,
-            currentChatWithTitle,
+            updatedChat,
             setCurrentChat,
-            currentChat.id,
+            updatedChat.id,
             [...updatedMessages, errorMessage],
-            false,
+            true, // immediate = true to ensure error is saved
             false,
           )
         }
@@ -589,15 +690,38 @@ export function useChatMessaging({
         setLoadingState('idle')
         setAbortController(null)
         isStreamingRef.current = false
+
+        // Track streaming end using the initial chat ID
+        if (streamingChatId) {
+          streamingTracker.endStreaming(streamingChatId)
+        }
+
         setIsThinking(false)
         setIsWaitingForResponse(false) // Always ensure loading state is cleared
+
+        // Ensure we trigger a final sync if we have content
+        // This handles edge cases where the normal final save might not execute
+        if (
+          storeHistory &&
+          assistantMessage &&
+          (assistantMessage.content || assistantMessage.thoughts) &&
+          currentChatIdRef.current === updatedChat.id
+        ) {
+          // Just trigger a sync without saving again to avoid duplicates
+          // The latest content should already be in IndexedDB from streaming saves
+          cloudSync.backupChat(currentChatIdRef.current).catch((error) => {
+            logError('Failed to sync chat after streaming', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery.finally',
+            })
+          })
+        }
       }
     },
     [
       loadingState,
       currentChat,
       storeHistory,
-      chats,
       setChats,
       setCurrentChat,
       models,
@@ -621,7 +745,7 @@ export function useChatMessaging({
 
   // Update currentChatIdRef when currentChat changes
   useEffect(() => {
-    currentChatIdRef.current = currentChat.id
+    currentChatIdRef.current = currentChat?.id || ''
   }, [currentChat])
 
   // Use the abstracted API key hook

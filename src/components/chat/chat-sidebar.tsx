@@ -1,3 +1,4 @@
+import { PAGINATION } from '@/config'
 import { SignInButton, useAuth } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -9,11 +10,21 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import JSZip from 'jszip'
+import { AiOutlineCloudSync } from 'react-icons/ai'
+import { FaLock } from 'react-icons/fa'
 
+import { r2Storage } from '@/services/cloud/r2-storage'
+import { encryptionService } from '@/services/encryption/encryption-service'
+import {
+  indexedDBStorage,
+  type StoredChat,
+} from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
+import { KeyIcon } from '@heroicons/react/24/outline'
 import { useEffect, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
+import type { Chat } from './types'
 
 // Utility function to detect iOS devices
 function isIOSDevice() {
@@ -59,19 +70,6 @@ function formatRelativeTime(date: Date): string {
   return `${years}y ago`
 }
 
-type Message = {
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-}
-
-type Chat = {
-  id: string
-  title: string
-  messages: Message[]
-  createdAt: Date
-}
-
 type ChatSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
@@ -88,6 +86,8 @@ type ChatSidebarProps = {
   selectedModel: string
   isPremium?: boolean
   onVerificationComplete: (success: boolean) => void
+  onEncryptionKeyClick?: () => void
+  onChatsUpdated?: () => void
 }
 
 // Add this constant at the top of the file
@@ -201,19 +201,44 @@ export function ChatSidebar({
   onVerificationComplete,
   selectedModel,
   isPremium = true,
+  onEncryptionKeyClick,
+  onChatsUpdated,
 }: ChatSidebarProps) {
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
+  // Show all local chats - pagination is only for remote
+  const [displayedChatsCount, setDisplayedChatsCount] = useState(999999)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [nextToken, setNextToken] = useState<string | undefined>(undefined)
   const [isIOS, setIsIOS] = useState(false)
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, getToken } = useAuth()
+  // Start optimistically assuming there might be more chats
+  const [hasMoreRemote, setHasMoreRemote] = useState(false)
+  const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Token getter should be set by parent component that has access to getApiKey
+  // The parent (ChatInterface) already sets this up through useCloudSync
 
   // Apply zoom prevention for mobile
   usePreventZoom()
+
+  // Calculate if we should show the Load More button optimistically
+  // Show if: we have synced chats AND (we have a continuation token OR we have exactly PAGINATION.CHATS_PER_PAGE synced chats)
+  const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
+  // Simplified logic: Show load more if:
+  // 1. User is signed in
+  // 2. We haven't determined there are no more chats OR we haven't attempted to load yet
+  // 3. We have enough chats to suggest pagination OR we have a continuation token
+  const shouldShowLoadMore =
+    isSignedIn &&
+    (hasMoreRemote || !hasAttemptedLoadMore) &&
+    (nextToken || chats.length >= PAGINATION.CHATS_PER_PAGE)
 
   // Add window resize listener and iOS detection
   useEffect(() => {
@@ -236,6 +261,192 @@ export function ChatSidebar({
   useEffect(() => {
     setIsInitialLoad(false)
   }, [])
+
+  // Reset pagination when chats change (e.g., new chat created, user switched)
+  useEffect(() => {
+    setDisplayedChatsCount(PAGINATION.CHATS_PER_PAGE)
+  }, [chats.length])
+
+  // Initialize r2Storage with token getter when component mounts
+  useEffect(() => {
+    if (isSignedIn && getToken) {
+      // Set up token getter for r2Storage using Clerk token
+      r2Storage.setTokenGetter(async () => {
+        const token = await getToken()
+        return token
+      })
+    }
+  }, [isSignedIn, getToken])
+
+  // Clean up paginated chats on page refresh
+  useEffect(() => {
+    const cleanupAndInitialize = async () => {
+      if (!isSignedIn) return
+
+      try {
+        // On page load, clean up chats loaded via pagination
+        const allChats = await indexedDBStorage.getAllChats()
+
+        // Sort by createdAt to determine which are beyond first page
+        const sortedSyncedChats = allChats
+          .filter(
+            (chat) =>
+              chat.syncedAt &&
+              !(chat as any).isBlankChat &&
+              !(chat as any).hasTemporaryId,
+          )
+          .sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime()
+            const timeB = new Date(b.createdAt).getTime()
+            return timeB - timeA
+          })
+
+        // On page refresh, we want to keep only the first page of chats
+        // to ensure a clean state that matches what cloud sync expects
+        if (sortedSyncedChats.length > PAGINATION.CHATS_PER_PAGE) {
+          let deletedAny = false
+          const chatsToDelete = sortedSyncedChats.slice(
+            PAGINATION.CHATS_PER_PAGE,
+          )
+
+          for (const chat of chatsToDelete) {
+            // Delete all chats beyond the first page on refresh
+            // They will be re-fetched via pagination if needed
+            await indexedDBStorage.deleteChat(chat.id)
+            deletedAny = true
+          }
+
+          if (deletedAny && onChatsUpdated) {
+            onChatsUpdated()
+          }
+        }
+
+        // Get the continuation token for page 2 (since page 1 is loaded during initial sync)
+        const result = await r2Storage.listChats({
+          limit: PAGINATION.CHATS_PER_PAGE,
+        })
+
+        if (result.nextContinuationToken) {
+          // Set the token to start from page 2
+          setNextToken(result.nextContinuationToken)
+          setHasMoreRemote(true)
+        } else {
+          // No more pages available
+          setHasMoreRemote(false)
+        }
+        setIsInitialized(true)
+      } catch (error) {
+        logError('Failed to cleanup and initialize pagination', error, {
+          component: 'ChatSidebar',
+          action: 'cleanupAndInitialize',
+        })
+        setIsInitialized(true) // Set initialized even on error to prevent blocking
+      }
+    }
+
+    cleanupAndInitialize()
+  }, [isSignedIn, onChatsUpdated])
+
+  // Load more chats from backend
+  const loadMoreChats = async () => {
+    if (isLoadingMore || !isSignedIn) return
+
+    // If not initialized yet, wait for initialization
+    if (!isInitialized) {
+      return
+    }
+
+    // If we don't have a token after initialization, there are no more pages
+    if (!nextToken) {
+      setHasMoreRemote(false)
+      return
+    }
+
+    setIsLoadingMore(true)
+    setHasAttemptedLoadMore(true)
+
+    try {
+      const result = await r2Storage.listChats({
+        limit: PAGINATION.CHATS_PER_PAGE,
+        continuationToken: nextToken,
+        includeContent: true,
+      })
+
+      if (result.conversations && result.conversations.length > 0) {
+        // Process and save chat data to IndexedDB
+        for (const conv of result.conversations) {
+          if (!conv.content) continue
+
+          try {
+            const encrypted = JSON.parse(conv.content)
+
+            // Try to decrypt the chat data
+            let fullChat: StoredChat | null = null
+            try {
+              await encryptionService.initialize()
+              const decrypted = await encryptionService.decrypt(encrypted)
+              fullChat = decrypted
+            } catch (decryptError) {
+              // If decryption fails, store the encrypted data for later retry
+              fullChat = {
+                id: conv.id,
+                title: 'Encrypted',
+                messages: [],
+                createdAt: conv.createdAt,
+                updatedAt: conv.updatedAt,
+                lastAccessedAt: Date.now(),
+                decryptionFailed: true,
+                encryptedData: conv.content,
+                syncedAt: Date.now(),
+                locallyModified: false,
+                syncVersion: 1,
+              } as StoredChat
+            }
+
+            if (fullChat) {
+              // Save to IndexedDB - this will trigger a reload of chats
+              await indexedDBStorage.saveChat(fullChat)
+              // Mark as synced since we just downloaded from cloud
+              await indexedDBStorage.markAsSynced(
+                fullChat.id,
+                fullChat.syncVersion || 0,
+              )
+            }
+          } catch (error) {
+            logError(`Failed to process chat ${conv.id}`, error, {
+              component: 'ChatSidebar',
+              action: 'loadMoreChats',
+              metadata: { chatId: conv.id },
+            })
+          }
+        }
+
+        // Trigger parent component to reload chats from IndexedDB
+        if (onChatsUpdated) {
+          onChatsUpdated()
+        }
+
+        setNextToken(result.nextContinuationToken)
+        setHasMoreRemote(!!result.nextContinuationToken)
+
+        // If there's no next token, we've reached the end
+        if (!result.nextContinuationToken) {
+          setHasAttemptedLoadMore(true)
+        }
+      } else {
+        // No conversations returned - we've reached the end
+        setHasMoreRemote(false)
+        setHasAttemptedLoadMore(true)
+      }
+    } catch (error) {
+      logError('Failed to load more chats', error, {
+        component: 'ChatSidebar',
+        action: 'loadMoreChats',
+      })
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
@@ -390,26 +601,43 @@ export function ChatSidebar({
                   >
                     Chat History
                   </h3>
-                  {chats.length > 0 && (
-                    <button
-                      onClick={() => downloadChats(chats)}
-                      className={`rounded-lg p-1.5 transition-all duration-200 ${
-                        isDarkMode
-                          ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                      }`}
-                      title="Download all chats as ZIP"
-                    >
-                      <ArrowDownTrayIcon className="h-4 w-4" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {onEncryptionKeyClick && (
+                      <button
+                        onClick={onEncryptionKeyClick}
+                        className={`rounded-lg p-1.5 transition-all duration-200 ${
+                          isDarkMode
+                            ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        }`}
+                        title="Manage encryption key"
+                      >
+                        <KeyIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                    {chats.length > 0 && (
+                      <button
+                        onClick={() => downloadChats(chats)}
+                        className={`rounded-lg p-1.5 transition-all duration-200 ${
+                          isDarkMode
+                            ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        }`}
+                        title="Download all chats as ZIP"
+                      >
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div
-                  className={`mt-1 truncate text-xs ${
+                  className={`mt-1 text-xs ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
                   }`}
                 >
-                  Your chat history is stored locally in your browser.
+                  Your chats are encrypted and synced to the cloud.
+                  <br />
+                  The encryption key is only stored in your browser.
                 </div>
               </>
             )}
@@ -419,59 +647,116 @@ export function ChatSidebar({
           <div className="flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
               {isClient &&
-                chats.map((chat) => (
-                  <div key={chat.id} className="relative">
-                    <div
-                      onClick={() => {
-                        handleChatSelect(chat.id)
-                        // Only close sidebar on mobile
-                        if (windowWidth < MOBILE_BREAKPOINT) {
-                          setIsOpen(false)
-                        }
-                      }}
-                      onTouchEnd={(e) => {
-                        // Prevent the click event from firing after touch
-                        e.preventDefault()
-                        handleChatSelect(chat.id)
-                        // Only close sidebar on mobile
-                        if (windowWidth < MOBILE_BREAKPOINT) {
-                          setIsOpen(false)
-                        }
-                      }}
-                      className={`group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
-                        currentChat?.id === chat.id
-                          ? isDarkMode
-                            ? 'border-gray-700 bg-gray-800 text-white'
-                            : 'border-gray-300 bg-gray-100 text-gray-900'
-                          : isDarkMode
-                            ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                            : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-                      }`}
-                    >
-                      {/* Chat item content */}
-                      <ChatListItem
-                        chat={chat}
-                        isEditing={editingChatId === chat.id}
-                        editingTitle={editingTitle}
-                        setEditingTitle={setEditingTitle}
-                        updateChatTitle={updateChatTitle}
-                        setEditingChatId={setEditingChatId}
-                        setDeletingChatId={setDeletingChatId}
-                        isPremium={isPremium}
-                        isDarkMode={isDarkMode}
-                      />
+                chats
+                  .sort((a, b) => {
+                    // Blank chats should always be at the top
+                    const aIsBlank = a.isBlankChat === true
+                    const bIsBlank = b.isBlankChat === true
+
+                    if (aIsBlank && !bIsBlank) return -1
+                    if (!aIsBlank && bIsBlank) return 1
+
+                    // For non-empty chats, sort by createdAt (newest first)
+                    const timeA = new Date(a.createdAt).getTime()
+                    const timeB = new Date(b.createdAt).getTime()
+                    return timeB - timeA
+                  })
+                  .map((chat) => (
+                    <div key={chat.id} className="relative">
+                      <div
+                        onClick={async () => {
+                          // Don't allow selecting encrypted chats
+                          if (chat.decryptionFailed) {
+                            return
+                          }
+
+                          handleChatSelect(chat.id)
+
+                          // Only close sidebar on mobile
+                          if (windowWidth < MOBILE_BREAKPOINT) {
+                            setIsOpen(false)
+                          }
+                        }}
+                        onTouchEnd={(e) => {
+                          // Prevent the click event from firing after touch
+                          e.preventDefault()
+                          // Don't allow selecting encrypted chats
+                          if (chat.decryptionFailed) {
+                            return
+                          }
+                          handleChatSelect(chat.id)
+                          // Only close sidebar on mobile
+                          if (windowWidth < MOBILE_BREAKPOINT) {
+                            setIsOpen(false)
+                          }
+                        }}
+                        className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
+                          chat.decryptionFailed
+                            ? isDarkMode
+                              ? 'cursor-not-allowed border-gray-700 text-gray-500'
+                              : 'cursor-not-allowed border-gray-300 text-gray-400'
+                            : currentChat?.id === chat.id
+                              ? isDarkMode
+                                ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
+                                : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
+                              : isDarkMode
+                                ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                                : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                        }`}
+                      >
+                        {/* Chat item content */}
+                        <ChatListItem
+                          chat={chat}
+                          isEditing={editingChatId === chat.id}
+                          editingTitle={editingTitle}
+                          setEditingTitle={setEditingTitle}
+                          updateChatTitle={updateChatTitle}
+                          setEditingChatId={setEditingChatId}
+                          setDeletingChatId={setDeletingChatId}
+                          isPremium={isPremium}
+                          isDarkMode={isDarkMode}
+                        />
+                      </div>
+                      {/* Delete confirmation */}
+                      {deletingChatId === chat.id && isPremium && (
+                        <DeleteConfirmation
+                          chatId={chat.id}
+                          onDelete={deleteChat}
+                          onCancel={() => setDeletingChatId(null)}
+                          isDarkMode={isDarkMode}
+                        />
+                      )}
                     </div>
-                    {/* Delete confirmation */}
-                    {deletingChatId === chat.id && isPremium && (
-                      <DeleteConfirmation
-                        chatId={chat.id}
-                        onDelete={deleteChat}
-                        onCancel={() => setDeletingChatId(null)}
-                        isDarkMode={isDarkMode}
-                      />
-                    )}
+                  ))}
+
+              {/* Load More button - only for remote chats */}
+              {shouldShowLoadMore && (
+                <button
+                  onClick={() => loadMoreChats()}
+                  disabled={isLoadingMore}
+                  className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
+                    isDarkMode
+                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:bg-gray-900 disabled:text-gray-600'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400'
+                  }`}
+                >
+                  {isLoadingMore ? 'Loading...' : 'Load More'}
+                </button>
+              )}
+
+              {/* Show "No more chats" message when we've loaded everything */}
+              {isSignedIn &&
+                !shouldShowLoadMore &&
+                !hasMoreRemote &&
+                hasAttemptedLoadMore && (
+                  <div
+                    className={`w-full rounded-lg p-3 text-center text-sm ${
+                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                    }`}
+                  >
+                    No more chats
                   </div>
-                ))}
+                )}
             </div>
           </div>
 
@@ -625,19 +910,57 @@ function ChatListItem({
             </form>
           ) : (
             <>
-              <div
-                className={`truncate text-sm font-medium ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}
-              >
-                {chat.title}
+              <div className="flex items-center gap-1">
+                <div
+                  className={`truncate text-sm font-medium ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                  }`}
+                >
+                  {chat.decryptionFailed ? 'Encrypted' : chat.title}
+                </div>
+                {/* Lock icon for encrypted chats */}
+                {chat.decryptionFailed && (
+                  <FaLock
+                    className={`h-3 w-3 ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}
+                    title="Encrypted chat"
+                  />
+                )}
+                {/* New chat indicator */}
+                {chat.messages.length === 0 && !chat.decryptionFailed && (
+                  <div
+                    className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                    title="New chat"
+                  />
+                )}
               </div>
-              <div
-                className={`text-xs ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}
-              >
-                {formatRelativeTime(chat.createdAt)}
+              {/* Show timestamp with sync indicator or decryption error */}
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`text-xs ${
+                    chat.decryptionFailed
+                      ? 'text-red-500'
+                      : isDarkMode
+                        ? 'text-gray-400'
+                        : 'text-gray-500'
+                  }`}
+                >
+                  {chat.decryptionFailed
+                    ? 'Failed to decrypt: wrong key'
+                    : chat.messages.length === 0
+                      ? '\u00A0' // Non-breaking space for consistent height
+                      : formatRelativeTime(chat.createdAt)}
+                </div>
+                {/* Cloud sync indicator - show when chat has messages but not synced */}
+                {chat.messages.length > 0 && !chat.syncedAt && (
+                  <AiOutlineCloudSync
+                    className={`h-3 w-3 ${
+                      isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                    }`}
+                    title="Not synced to cloud"
+                  />
+                )}
               </div>
             </>
           )}
@@ -645,17 +968,19 @@ function ChatListItem({
 
         {!isEditing && isPremium && (
           <div className="ml-2 flex opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              className={`mr-1 rounded p-1 transition-colors ${
-                isDarkMode
-                  ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
-              }`}
-              onClick={startEditing}
-              title="Rename"
-            >
-              <PencilSquareIcon className="h-4 w-4" />
-            </button>
+            {!chat.decryptionFailed && (
+              <button
+                className={`mr-1 rounded p-1 transition-colors ${
+                  isDarkMode
+                    ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                    : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                }`}
+                onClick={startEditing}
+                title="Rename"
+              >
+                <PencilSquareIcon className="h-4 w-4" />
+              </button>
+            )}
             <button
               className={`rounded p-1 transition-colors ${
                 isDarkMode

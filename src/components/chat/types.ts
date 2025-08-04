@@ -15,6 +15,14 @@ export type Chat = {
   title: string
   messages: Message[]
   createdAt: Date
+  // Sync metadata - optional for backward compatibility
+  syncedAt?: number
+  locallyModified?: boolean
+  decryptionFailed?: boolean
+  // Temporary ID flag - true if chat has a temporary UUID awaiting server ID
+  hasTemporaryId?: boolean
+  // Blank chat flag - true for new chats that haven't been used yet
+  isBlankChat?: boolean
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming'

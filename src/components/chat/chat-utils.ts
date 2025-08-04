@@ -214,8 +214,8 @@ export function updateChatTitle(
   chatId: string,
   newTitle: string,
 ) {
-  setChats((prevChats: Chat[]) => {
-    const updatedChats = prevChats.map((chat: Chat) =>
+  setChats((prevChats) => {
+    const updatedChats = prevChats.map((chat) =>
       chat.id === chatId ? { ...chat, title: newTitle } : chat,
     )
 
