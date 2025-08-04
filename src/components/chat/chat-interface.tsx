@@ -584,7 +584,8 @@ export function ChatInterface({
       {/* Sidebar toggle button - visible when left sidebar is closed, hidden when open */}
       {!isSidebarOpen &&
         !(
-          windowWidth < CONSTANTS.MOBILE_BREAKPOINT && isVerifierSidebarOpen
+          windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
+          (isVerifierSidebarOpen || isSettingsSidebarOpen)
         ) && (
           <button
             className={`fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
@@ -599,11 +600,16 @@ export function ChatInterface({
         )}
 
       {/* Right side toggle buttons */}
-      {!(windowWidth < CONSTANTS.MOBILE_BREAKPOINT && isSidebarOpen) && (
+      {!(
+        windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
+        (isVerifierSidebarOpen || isSettingsSidebarOpen)
+      ) && (
         <div
           className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
             isVerifierSidebarOpen || isSettingsSidebarOpen
-              ? 'right-[324px]'
+              ? windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+                ? 'right-[324px]'
+                : 'right-4'
               : 'right-4'
           }`}
         >
