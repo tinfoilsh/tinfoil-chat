@@ -651,7 +651,7 @@ export function ChatInterface({
       <ChatSidebar
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
-        chats={isSignedIn ? chats : [currentChat]}
+        chats={chats}
         currentChat={currentChat}
         isDarkMode={isDarkMode}
         createNewChat={createNewChat}

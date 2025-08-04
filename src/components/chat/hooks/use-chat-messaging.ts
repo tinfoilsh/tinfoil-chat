@@ -114,34 +114,45 @@ export function useChatMessaging({
         ),
       )
 
-      // Save to storage if enabled (skip during thinking state unless immediate)
-      if (storeHistory && (!isThinking || immediate)) {
-        // Skip cloud sync during streaming (unless immediate flag is set for final save)
-        const skipCloudSync = isStreamingRef.current && !immediate
+      // Save to storage (skip during thinking state unless immediate)
+      if (!isThinking || immediate) {
+        if (storeHistory) {
+          // Skip cloud sync during streaming (unless immediate flag is set for final save)
+          const skipCloudSync = isStreamingRef.current && !immediate
 
-        // Create the updated chat object for storage
-        const updatedChat = {
-          ...currentChat,
-          messages: newMessages,
-        }
+          // Create the updated chat object for storage
+          const updatedChat = {
+            ...currentChat,
+            messages: newMessages,
+          }
 
-        chatStorage
-          .saveChat(updatedChat, skipCloudSync)
-          .then((savedChat) => {
-            // Only update if the ID actually changed
-            if (savedChat.id !== updatedChat.id) {
-              currentChatIdRef.current = savedChat.id
-              setCurrentChat(savedChat)
-              setChats((prevChats) =>
-                prevChats.map((c) => (c.id === updatedChat.id ? savedChat : c)),
-              )
-            }
-          })
-          .catch((error) => {
-            logError('Failed to save chat during update', error, {
-              component: 'useChatMessaging',
+          chatStorage
+            .saveChat(updatedChat, skipCloudSync)
+            .then((savedChat) => {
+              // Only update if the ID actually changed
+              if (savedChat.id !== updatedChat.id) {
+                currentChatIdRef.current = savedChat.id
+                setCurrentChat(savedChat)
+                setChats((prevChats) =>
+                  prevChats.map((c) =>
+                    c.id === updatedChat.id ? savedChat : c,
+                  ),
+                )
+              }
             })
-          })
+            .catch((error) => {
+              logError('Failed to save chat during update', error, {
+                component: 'useChatMessaging',
+              })
+            })
+        } else {
+          // Save to session storage for non-signed-in users
+          const updatedChat = {
+            ...currentChat,
+            messages: newMessages,
+          }
+          sessionChatStorage.saveChat(updatedChat)
+        }
       }
     },
     [storeHistory, chatStorage],
@@ -170,12 +181,12 @@ export function useChatMessaging({
           }
           return chat
         })
-        if (storeHistory) {
-          // Find and save the updated chat
-          const updatedChat = newChats.find(
-            (c) => c.id === currentChatIdRef.current,
-          )
-          if (updatedChat) {
+        // Find and save the updated chat
+        const updatedChat = newChats.find(
+          (c) => c.id === currentChatIdRef.current,
+        )
+        if (updatedChat) {
+          if (storeHistory) {
             chatStorage
               .saveChatAndSync(updatedChat)
               .then((savedChat) => {
@@ -195,6 +206,9 @@ export function useChatMessaging({
                   component: 'useChatMessaging',
                 })
               })
+          } else {
+            // Save to session storage for non-signed-in users
+            sessionChatStorage.saveChat(updatedChat)
           }
         }
         return newChats
@@ -252,7 +266,7 @@ export function useChatMessaging({
       let updatedChat = { ...currentChat }
       const isFirstMessage = currentChat.messages.length === 0
 
-      if (isFirstMessage && storeHistory) {
+      if (isFirstMessage) {
         const title = generateTitle(query)
         // Make sure title is not empty
         const safeTitle =
@@ -285,57 +299,54 @@ export function useChatMessaging({
         ),
       )
 
-      // For new chats, get server ID first before proceeding
-      if (storeHistory && currentChat.hasTemporaryId) {
-        try {
-          // Get server ID synchronously before proceeding
-          const result = await r2Storage.generateConversationId()
-          if (result) {
-            // Update the chat with the server ID
-            const chatWithServerId = {
-              ...updatedChat,
-              id: result.conversationId,
-              hasTemporaryId: false,
-            }
+      // Handle chat saving based on user status
+      if (storeHistory) {
+        // For signed-in users
+        if (currentChat.hasTemporaryId) {
+          try {
+            // Get server ID synchronously before proceeding
+            const result = await r2Storage.generateConversationId()
+            if (result) {
+              // Update the chat with the server ID
+              const chatWithServerId = {
+                ...updatedChat,
+                id: result.conversationId,
+                hasTemporaryId: false,
+              }
 
-            // Update refs and state with new ID
-            currentChatIdRef.current = result.conversationId
-            setCurrentChat(chatWithServerId)
-            setChats((prevChats) =>
-              prevChats.map((c) =>
-                c.id === currentChat.id ? chatWithServerId : c,
-              ),
-            )
+              // Update refs and state with new ID
+              currentChatIdRef.current = result.conversationId
+              setCurrentChat(chatWithServerId)
+              setChats((prevChats) =>
+                prevChats.map((c) =>
+                  c.id === currentChat.id ? chatWithServerId : c,
+                ),
+              )
 
-            // Save the chat with server ID
-            if (isSignedIn) {
+              // Save the chat with server ID
               await chatStorage.saveChatAndSync(chatWithServerId)
-            } else {
-              sessionChatStorage.saveChat(chatWithServerId)
-            }
 
-            // Use the updated chat for the rest of the function
-            updatedChat = chatWithServerId
+              // Use the updated chat for the rest of the function
+              updatedChat = chatWithServerId
+            }
+          } catch (error) {
+            logError('Failed to get server ID for new chat', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery',
+            })
+            // Continue with temporary ID if server ID fetch fails
           }
-        } catch (error) {
-          logError('Failed to get server ID for new chat', error, {
-            component: 'useChatMessaging',
-            action: 'handleQuery',
-          })
-          // Continue with temporary ID if server ID fetch fails
-        }
-      } else if (storeHistory) {
-        // For existing chats, just save normally
-        if (isSignedIn) {
+        } else {
+          // For existing chats, just save normally
           chatStorage.saveChatAndSync(updatedChat).catch((error) => {
             logError('Failed to save chat', error, {
               component: 'useChatMessaging',
             })
           })
-        } else {
-          // For non-signed-in users, save to sessionStorage
-          sessionChatStorage.saveChat(updatedChat)
         }
+      } else {
+        // For non-signed-in users, always save to sessionStorage
+        sessionChatStorage.saveChat(updatedChat)
       }
 
       setInput('')

@@ -1,34 +1,10 @@
-import { r2Storage } from '@/services/cloud/r2-storage'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
-import { logError, logWarning } from '@/utils/error-handling'
+import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { v4 as uuidv4 } from 'uuid'
 import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
-
-// Generate a temporary chat ID that will be replaced with server ID
-function generateTemporaryChatId(): string {
-  return `temp_${uuidv4()}`
-}
-
-// Get a server-assigned chat ID from the backend
-async function getServerChatId(): Promise<string | null> {
-  try {
-    if (await r2Storage.isAuthenticated()) {
-      const result = await r2Storage.generateConversationId()
-      return result.conversationId
-    }
-  } catch (error) {
-    logWarning('Failed to generate ID from backend', {
-      component: 'useChatStorage',
-      action: 'getServerChatId',
-      metadata: { error },
-    })
-  }
-  return null
-}
 
 // Create a new chat object with placeholder ID (will be replaced when first message is sent)
 function createNewChatObjectSync(): Chat {
@@ -90,11 +66,11 @@ export function useChatStorage({
 
   // Reload chats from storage
   const reloadChats = useCallback(async () => {
-    if (!storeHistory || typeof window === 'undefined') return
+    if (typeof window === 'undefined') return
 
     try {
       // Use sessionStorage for non-signed-in users, IndexedDB for signed-in
-      const savedChats = isSignedIn
+      const savedChats = storeHistory
         ? await chatStorage.getAllChatsWithSyncStatus()
         : sessionChatStorage.getAllChats()
 
@@ -190,10 +166,12 @@ export function useChatStorage({
   useEffect(() => {
     let isMounted = true
 
-    if (storeHistory && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       const loadChats = async () => {
         try {
-          const savedChats = await chatStorage.getAllChatsWithSyncStatus()
+          const savedChats = storeHistory
+            ? await chatStorage.getAllChatsWithSyncStatus()
+            : sessionChatStorage.getAllChats()
 
           // Check if component is still mounted before updating state
           if (!isMounted) return
@@ -252,8 +230,10 @@ export function useChatStorage({
       }
 
       loadChats()
-    } else {
-      // If not storing history, clear initial load immediately
+    }
+
+    // Clear initial load if we're not storing or on server
+    if (!storeHistory || typeof window === 'undefined') {
       setIsInitialLoad(false)
     }
 
@@ -265,8 +245,6 @@ export function useChatStorage({
 
   // Create a new chat
   const createNewChat = useCallback(() => {
-    if (!storeHistory) return // Prevent creating new chats for basic users
-
     // Check if any chat in the list is blank (not just current chat)
     const hasBlankChat = chats.some((chat) => chat.isBlankChat === true)
 
@@ -287,13 +265,11 @@ export function useChatStorage({
 
     // Don't request server ID here - wait until first message is sent
     // This ensures createdAt reflects when the chat actually has content
-  }, [storeHistory, chats])
+  }, [chats])
 
   // Delete a chat
   const deleteChat = useCallback(
     (chatId: string) => {
-      if (!storeHistory) return // Prevent deleting chats for basic users
-
       setChats((prevChats) => {
         const newChats = prevChats.filter((chat) => chat.id !== chatId)
 
@@ -331,8 +307,6 @@ export function useChatStorage({
   // Switch to a different chat
   const switchChat = useCallback(
     async (chat: Chat) => {
-      if (!storeHistory) return // Prevent switching chats for basic users
-
       setCurrentChat(chat)
       setIsInitialLoad(true)
 
@@ -347,8 +321,6 @@ export function useChatStorage({
   // Handle chat selection
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      if (!storeHistory) return // Prevent chat selection for basic users
-
       const selectedChat = chats.find((chat) => chat.id === chatId) || chats[0]
       switchChat(selectedChat)
     },
@@ -358,8 +330,6 @@ export function useChatStorage({
   // Update chat title
   const updateChatTitle = useCallback(
     (chatId: string, newTitle: string) => {
-      if (!storeHistory) return // Prevent updating titles for basic users
-
       setChats((prevChats) => {
         const updatedChats = prevChats.map((chat) =>
           chat.id === chatId ? { ...chat, title: newTitle } : chat,
@@ -368,17 +338,22 @@ export function useChatStorage({
         // Update in storage
         const chatToUpdate = updatedChats.find((c) => c.id === chatId)
         if (chatToUpdate) {
-          chatStorage
-            .saveChatAndSync(chatToUpdate)
-            .then(() => {
-              // Reload after sync to update syncedAt
-              reloadChats()
-            })
-            .catch((error) => {
-              logError('Failed to update chat title in storage', error, {
-                component: 'useChatStorage',
+          if (storeHistory) {
+            chatStorage
+              .saveChatAndSync(chatToUpdate)
+              .then(() => {
+                // Reload after sync to update syncedAt
+                reloadChats()
               })
-            })
+              .catch((error) => {
+                logError('Failed to update chat title in storage', error, {
+                  component: 'useChatStorage',
+                })
+              })
+          } else {
+            // Save to session storage for non-signed-in users
+            sessionChatStorage.saveChat(chatToUpdate)
+          }
         }
 
         return updatedChats
