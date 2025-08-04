@@ -303,13 +303,11 @@ export function ChatInterface({
   const handleOpenVerifierSidebar = () => {
     if (isVerifierSidebarOpen) {
       // If already open, close it
-      setIsVerifierSidebarOpen(false)
+      handleSetVerifierSidebarOpen(false)
     } else {
       // Open verifier and close settings if open
-      setIsVerifierSidebarOpen(true)
+      handleSetVerifierSidebarOpen(true)
       setIsSettingsSidebarOpen(false)
-      // Clear the saved preference when user opens it
-      localStorage.removeItem('verifierSidebarClosed')
     }
   }
 
@@ -333,7 +331,7 @@ export function ChatInterface({
     } else {
       // Open settings and close verifier if open
       setIsSettingsSidebarOpen(true)
-      setIsVerifierSidebarOpen(false)
+      handleSetVerifierSidebarOpen(false)
     }
   }
 

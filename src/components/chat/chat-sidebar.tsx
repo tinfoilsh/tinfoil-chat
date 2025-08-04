@@ -587,16 +587,32 @@ export function ChatSidebar({
                   : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`rounded-full p-2 ${
-                    isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-100'
+              <div className="flex-1">
+                <h4
+                  className={`mb-1 text-sm font-semibold ${
+                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
+                  Unlock Premium Features
+                </h4>
+                <p
+                  className={`mb-3 text-sm ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}
+                >
+                  Get access to advanced AI models, voice input, and more.
+                </p>
+                <Link
+                  href="https://tinfoil.sh/pricing"
+                  className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
+                    isDarkMode
+                      ? 'text-emerald-400 hover:text-emerald-300'
+                      : 'text-emerald-600 hover:text-emerald-500'
+                  }`}
+                >
+                  Get Pro
                   <svg
-                    className={`h-5 w-5 ${
-                      isDarkMode ? 'text-emerald-400' : 'text-emerald-600'
-                    }`}
+                    className="ml-0.5 h-3 w-3"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -605,49 +621,10 @@ export function ChatSidebar({
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                      d="M9 5l7 7-7 7"
                     />
                   </svg>
-                </div>
-                <div className="flex-1">
-                  <h4
-                    className={`mb-1 text-sm font-semibold ${
-                      isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                    }`}
-                  >
-                    Unlock Premium Features
-                  </h4>
-                  <p
-                    className={`mb-3 text-sm ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}
-                  >
-                    Get access to advanced AI models, voice input, and more.
-                  </p>
-                  <Link
-                    href="https://tinfoil.sh/pricing"
-                    className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
-                      isDarkMode
-                        ? 'text-emerald-400 hover:text-emerald-300'
-                        : 'text-emerald-600 hover:text-emerald-500'
-                    }`}
-                  >
-                    Get Pro
-                    <svg
-                      className="h-3 w-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </Link>
-                </div>
+                </Link>
               </div>
             </div>
           )}
