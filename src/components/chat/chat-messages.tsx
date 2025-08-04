@@ -20,6 +20,7 @@ import {
 } from 'react-icons/fa'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
@@ -203,6 +204,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
 
   return (
     <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
       components={{
         code({
           node,
@@ -231,6 +233,54 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             <code className={className} {...props}>
               {children}
             </code>
+          )
+        },
+        table({ children }) {
+          return (
+            <div className="my-4 overflow-x-auto">
+              <table
+                className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+              >
+                {children}
+              </table>
+            </div>
+          )
+        },
+        thead({ children }) {
+          return (
+            <thead className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}>
+              {children}
+            </thead>
+          )
+        },
+        tbody({ children }) {
+          return (
+            <tbody
+              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-white'}`}
+            >
+              {children}
+            </tbody>
+          )
+        },
+        tr({ children }) {
+          return <tr>{children}</tr>
+        },
+        th({ children }) {
+          return (
+            <th
+              className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
+            >
+              {children}
+            </th>
+          )
+        },
+        td({ children }) {
+          return (
+            <td
+              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-normal break-words`}
+            >
+              {children}
+            </td>
           )
         },
       }}
