@@ -65,22 +65,14 @@ export function useModelManagement({
     ) {
       setHasValidated(true)
 
-      // Check if current selected model exists in the available models list
-      const modelExists = models.find((m) => m.modelName === selectedModel)
-
-      // For premium users, also check if the selected model is a premium model
-      const needsFallback =
-        !modelExists || (isPremium && modelExists && modelExists.paid !== true)
-
-      if (needsFallback) {
-        // Find appropriate fallback model
+      // Check if the selected model is available for the user
+      if (!isModelNameAvailable(selectedModel, models, isPremium)) {
+        // Find first available chat model as fallback
         const availableChatModels = models.filter(
           (model) =>
             model.type === 'chat' &&
             model.chat === true &&
-            // For premium users, only consider premium models
-            ((isPremium && model.paid === true) ||
-              (!isPremium && model.paid !== true)),
+            isModelNameAvailable(model.modelName as AIModel, models, isPremium),
         )
 
         if (availableChatModels.length > 0) {
@@ -89,16 +81,13 @@ export function useModelManagement({
           localStorage.setItem('selectedModel', fallbackModel)
 
           logWarning(
-            `Model ${selectedModel} is not appropriate for subscription level, switching to ${fallbackModel}`,
+            `Model ${selectedModel} is not available for subscription level, switching to ${fallbackModel}`,
             {
               component: 'useModelManagement',
               action: 'validateModel',
               metadata: {
                 previousModel: selectedModel,
                 isPremium,
-                reason: !modelExists
-                  ? 'not_found'
-                  : 'free_model_for_premium_user',
               },
             },
           )

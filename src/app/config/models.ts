@@ -44,9 +44,8 @@ export const getAvailableChatModels = (
       // Must be a chat model
       model.type === 'chat' &&
       model.chat === true &&
-      // For premium users, only show premium models
-      // For free users, show all available models
-      (isPremium ? model.paid === true : isModelAvailable(model, isPremium)),
+      // Show models that are available for the user's subscription level
+      isModelAvailable(model, isPremium),
   )
 }
 
@@ -64,9 +63,8 @@ export const isModelNameAvailable = (
   return (
     model.type === 'chat' &&
     model.chat === true &&
-    // For premium users, only allow premium models
-    // For free users, use the standard availability check
-    (isPremium ? model.paid === true : isModelAvailable(model, isPremium))
+    // Use the standard availability check
+    isModelAvailable(model, isPremium)
   )
 }
 
