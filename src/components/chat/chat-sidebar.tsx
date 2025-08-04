@@ -781,7 +781,7 @@ export function ChatSidebar({
                           setDeletingChatId={setDeletingChatId}
                           isPremium={isPremium}
                           isDarkMode={isDarkMode}
-                          isSignedIn={isSignedIn}
+                          isSignedIn={isSignedIn ?? false}
                         />
                       </div>
                       {/* Delete confirmation */}
