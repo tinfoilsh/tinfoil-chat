@@ -11,7 +11,17 @@ export const sessionChatStorage = {
       if (!chatsJson) return []
 
       const chats = JSON.parse(chatsJson)
-      return Array.isArray(chats) ? chats : []
+      if (!Array.isArray(chats)) return []
+
+      // Convert date strings back to Date objects
+      return chats.map((chat) => ({
+        ...chat,
+        createdAt: new Date(chat.createdAt),
+        messages: chat.messages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        })),
+      }))
     } catch (error) {
       logError('Failed to get chats from session storage', error, {
         component: 'sessionChatStorage',
