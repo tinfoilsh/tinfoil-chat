@@ -593,8 +593,8 @@ const WelcomeScreen = memo(function WelcomeScreen({
         not even Tinfoil.
       </motion.p>
 
-      {/* Premium upgrade section for non-premium users */}
-      {!isPremium && (
+      {/* Premium upgrade section for non-premium users - only show after subscription status is loaded */}
+      {!subscriptionLoading && !isPremium && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
