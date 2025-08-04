@@ -4,6 +4,7 @@ import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -56,7 +57,7 @@ export function useChatMessaging({
   setCurrentChat,
   messagesEndRef,
 }: UseChatMessagingProps): UseChatMessagingReturn {
-  const { getToken } = useAuth()
+  const { getToken, isSignedIn } = useAuth()
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const maxMessages = useMaxMessages()
 
@@ -291,7 +292,11 @@ export function useChatMessaging({
             )
 
             // Save the chat with server ID
-            await chatStorage.saveChatAndSync(chatWithServerId)
+            if (isSignedIn) {
+              await chatStorage.saveChatAndSync(chatWithServerId)
+            } else {
+              sessionChatStorage.saveChat(chatWithServerId)
+            }
 
             // Use the updated chat for the rest of the function
             updatedChat = chatWithServerId
@@ -305,11 +310,16 @@ export function useChatMessaging({
         }
       } else if (storeHistory) {
         // For existing chats, just save normally
-        chatStorage.saveChatAndSync(updatedChat).catch((error) => {
-          logError('Failed to save chat', error, {
-            component: 'useChatMessaging',
+        if (isSignedIn) {
+          chatStorage.saveChatAndSync(updatedChat).catch((error) => {
+            logError('Failed to save chat', error, {
+              component: 'useChatMessaging',
+            })
           })
-        })
+        } else {
+          // For non-signed-in users, save to sessionStorage
+          sessionChatStorage.saveChat(updatedChat)
+        }
       }
 
       setInput('')

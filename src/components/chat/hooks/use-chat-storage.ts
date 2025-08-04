@@ -1,6 +1,8 @@
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError, logWarning } from '@/utils/error-handling'
+import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { CONSTANTS } from '../constants'
@@ -62,6 +64,7 @@ interface UseChatStorageReturn {
 export function useChatStorage({
   storeHistory,
 }: UseChatStorageProps): UseChatStorageReturn {
+  const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
 
   const [chats, setChats] = useState<Chat[]>(() => {
@@ -90,7 +93,10 @@ export function useChatStorage({
     if (!storeHistory || typeof window === 'undefined') return
 
     try {
-      const savedChats = await chatStorage.getAllChatsWithSyncStatus()
+      // Use sessionStorage for non-signed-in users, IndexedDB for signed-in
+      const savedChats = isSignedIn
+        ? await chatStorage.getAllChatsWithSyncStatus()
+        : sessionChatStorage.getAllChats()
 
       // Get current chats state to preserve blank chats
       setChats((prevChats) => {
@@ -178,7 +184,7 @@ export function useChatStorage({
         component: 'useChatStorage',
       })
     }
-  }, [storeHistory]) // Don't depend on currentChat.id to prevent recreating on every render
+  }, [storeHistory, isSignedIn]) // Don't depend on currentChat.id to prevent recreating on every render
 
   // Load chats from storage asynchronously
   useEffect(() => {
@@ -305,15 +311,21 @@ export function useChatStorage({
         }
 
         // Delete from storage
-        chatStorage.deleteChat(chatId).catch((error) => {
-          logError('Failed to delete chat from storage', error, {
-            component: 'useChatStorage',
+        if (isSignedIn) {
+          chatStorage.deleteChat(chatId).catch((error) => {
+            logError('Failed to delete chat from storage', error, {
+              component: 'useChatStorage',
+              action: 'deleteChat',
+              metadata: { chatId },
+            })
           })
-        })
+        } else {
+          sessionChatStorage.deleteChat(chatId)
+        }
         return newChats
       })
     },
-    [currentChat?.id, storeHistory],
+    [currentChat?.id, storeHistory, isSignedIn],
   )
 
   // Switch to a different chat
