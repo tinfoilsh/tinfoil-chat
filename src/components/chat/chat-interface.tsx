@@ -331,7 +331,7 @@ export function ChatInterface({
     } else {
       // Open settings and close verifier if open
       setIsSettingsSidebarOpen(true)
-      setIsVerifierSidebarOpen(false)
+      handleSetVerifierSidebarOpen(false)
     }
   }
 
