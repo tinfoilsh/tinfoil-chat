@@ -27,14 +27,9 @@ export function ModelSelector({
     setFailedImages((prev) => ({ ...prev, [modelName]: true }))
   }
 
-  // Get chat models filtered by user's subscription status
+  // Get chat models - show all chat models regardless of subscription
   const allChatModels = models.filter(
-    (model) =>
-      model.type === 'chat' &&
-      model.chat === true &&
-      // For premium users, only show premium models
-      // For free users, show all models
-      (!isPremium || model.paid === true),
+    (model) => model.type === 'chat' && model.chat === true,
   )
 
   return (
