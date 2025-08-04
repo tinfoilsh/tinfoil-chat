@@ -18,4 +18,19 @@ function validateConfig() {
   }
 }
 
+// Pagination settings
+export const PAGINATION = {
+  CHATS_PER_PAGE: 10,
+} as const
+
+// Cloud sync settings
+export const CLOUD_SYNC = {
+  RETRY_DELAY: 100, // milliseconds
+} as const
+
+// UI settings
+export const UI = {
+  TOAST_DURATION: 2000, // milliseconds
+} as const
+
 export { API_BASE_URL, CLERK_PUBLISHABLE_KEY, validateConfig }

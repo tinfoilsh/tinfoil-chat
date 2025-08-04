@@ -1,3 +1,4 @@
+import { PAGINATION } from '@/config'
 import { SignInButton, useAuth } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -184,8 +185,6 @@ function usePreventZoom() {
   }, [])
 }
 
-const CHATS_PER_PAGE = 10
-
 export function ChatSidebar({
   isOpen,
   setIsOpen,
@@ -230,7 +229,7 @@ export function ChatSidebar({
   usePreventZoom()
 
   // Calculate if we should show the Load More button optimistically
-  // Show if: we have synced chats AND (we have a continuation token OR we have exactly CHATS_PER_PAGE synced chats)
+  // Show if: we have synced chats AND (we have a continuation token OR we have exactly PAGINATION.CHATS_PER_PAGE synced chats)
   const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
   // Simplified logic: Show load more if:
   // 1. User is signed in
@@ -239,7 +238,7 @@ export function ChatSidebar({
   const shouldShowLoadMore =
     isSignedIn &&
     (hasMoreRemote || !hasAttemptedLoadMore) &&
-    (nextToken || chats.length >= CHATS_PER_PAGE)
+    (nextToken || chats.length >= PAGINATION.CHATS_PER_PAGE)
 
   // Add window resize listener and iOS detection
   useEffect(() => {
@@ -265,7 +264,7 @@ export function ChatSidebar({
 
   // Reset pagination when chats change (e.g., new chat created, user switched)
   useEffect(() => {
-    setDisplayedChatsCount(CHATS_PER_PAGE)
+    setDisplayedChatsCount(PAGINATION.CHATS_PER_PAGE)
   }, [chats.length])
 
   // Initialize r2Storage with token getter when component mounts
@@ -304,9 +303,11 @@ export function ChatSidebar({
 
         // On page refresh, we want to keep only the first page of chats
         // to ensure a clean state that matches what cloud sync expects
-        if (sortedSyncedChats.length > CHATS_PER_PAGE) {
+        if (sortedSyncedChats.length > PAGINATION.CHATS_PER_PAGE) {
           let deletedAny = false
-          const chatsToDelete = sortedSyncedChats.slice(CHATS_PER_PAGE)
+          const chatsToDelete = sortedSyncedChats.slice(
+            PAGINATION.CHATS_PER_PAGE,
+          )
 
           for (const chat of chatsToDelete) {
             // Delete all chats beyond the first page on refresh
@@ -321,7 +322,9 @@ export function ChatSidebar({
         }
 
         // Get the continuation token for page 2 (since page 1 is loaded during initial sync)
-        const result = await r2Storage.listChats({ limit: CHATS_PER_PAGE })
+        const result = await r2Storage.listChats({
+          limit: PAGINATION.CHATS_PER_PAGE,
+        })
 
         if (result.nextContinuationToken) {
           // Set the token to start from page 2
@@ -364,7 +367,7 @@ export function ChatSidebar({
 
     try {
       const result = await r2Storage.listChats({
-        limit: CHATS_PER_PAGE,
+        limit: PAGINATION.CHATS_PER_PAGE,
         continuationToken: nextToken,
         includeContent: true,
       })

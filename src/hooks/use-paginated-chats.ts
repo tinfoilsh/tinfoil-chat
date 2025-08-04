@@ -1,4 +1,5 @@
 import type { Chat } from '@/components/chat/types'
+import { PAGINATION } from '@/config'
 import {
   cloudSync,
   type PaginatedChatsResult,
@@ -15,8 +16,6 @@ interface UsePaginatedChatsReturn {
   reset: () => void
   error: string | null
 }
-
-const CHATS_PER_PAGE = 10
 
 // Convert StoredChat to Chat
 function convertStoredChatToChat(storedChat: StoredChat): Chat {
@@ -49,7 +48,7 @@ export function usePaginatedChats(): UsePaginatedChatsReturn {
     try {
       const result: PaginatedChatsResult =
         await cloudSync.loadChatsWithPagination({
-          limit: CHATS_PER_PAGE,
+          limit: PAGINATION.CHATS_PER_PAGE,
           continuationToken: nextToken,
           loadLocal: true, // Fall back to local if not authenticated
         })

@@ -1,3 +1,4 @@
+import { PAGINATION } from '@/config'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
@@ -228,10 +229,10 @@ export class CloudSyncService {
       // Then, get list of remote chats with content
       let remoteList
       try {
-        // Only fetch first 10 chats during initial sync to match pagination
+        // Only fetch first page of chats during initial sync to match pagination
         remoteList = await r2Storage.listChats({
           includeContent: true,
-          limit: 10,
+          limit: PAGINATION.CHATS_PER_PAGE,
         })
       } catch (error) {
         // Log the error but continue with sync
@@ -325,8 +326,11 @@ export class CloudSyncService {
           return timeB - timeA // Descending (newest first)
         })
 
-      // Only consider chats in the first 10 positions for deletion check
-      const localChatsInFirstPage = sortedSyncedLocalChats.slice(0, 10)
+      // Only consider chats in the first page for deletion check
+      const localChatsInFirstPage = sortedSyncedLocalChats.slice(
+        0,
+        PAGINATION.CHATS_PER_PAGE,
+      )
 
       for (const localChat of localChatsInFirstPage) {
         if (!remoteChatMap.has(localChat.id)) {
