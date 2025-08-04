@@ -528,28 +528,26 @@ export function ChatSidebar({
 
         {/* Main sidebar content */}
         <div className="flex h-full flex-col overflow-hidden">
-          {/* New Chat button - shown for all signed-in users */}
-          {isSignedIn && (
-            <div className="flex-none">
-              <button
-                onClick={() => {
-                  createNewChat()
-                  // Only close sidebar on mobile
-                  if (windowWidth < MOBILE_BREAKPOINT) {
-                    setIsOpen(false)
-                  }
-                }}
-                className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
-                  isDarkMode
-                    ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                    : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-                }`}
-              >
-                <PlusIcon className="h-5 w-5" />
-                New chat
-              </button>
-            </div>
-          )}
+          {/* New Chat button */}
+          <div className="flex-none">
+            <button
+              onClick={() => {
+                createNewChat()
+                // Only close sidebar on mobile
+                if (windowWidth < MOBILE_BREAKPOINT) {
+                  setIsOpen(false)
+                }
+              }}
+              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
+                isDarkMode
+                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+              }`}
+            >
+              <PlusIcon className="h-5 w-5" />
+              New chat
+            </button>
+          </div>
 
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
@@ -598,60 +596,64 @@ export function ChatSidebar({
 
           {/* Chat History Header */}
           <div
-            className={`flex-none ${isSignedIn ? `border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}` : ''} ${
-              isDarkMode ? 'bg-gray-900' : 'bg-white'
+            className={`flex-none border-b ${
+              isDarkMode
+                ? 'border-gray-800 bg-gray-900'
+                : 'border-gray-200 bg-white'
             } px-3 py-2 sm:px-4 sm:py-3`}
           >
-            {isSignedIn && (
-              <>
-                <div className="flex items-center justify-between">
-                  <h3
-                    className={`truncate text-sm font-medium ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-800'
+            <div className="flex items-center justify-between">
+              <h3
+                className={`truncate text-sm font-medium ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                }`}
+              >
+                Chat History
+              </h3>
+              <div className="flex items-center gap-1">
+                {onEncryptionKeyClick && isSignedIn && (
+                  <button
+                    onClick={onEncryptionKeyClick}
+                    className={`rounded-lg p-1.5 transition-all duration-200 ${
+                      isDarkMode
+                        ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
                     }`}
+                    title="Manage encryption key"
                   >
-                    Chat History
-                  </h3>
-                  <div className="flex items-center gap-1">
-                    {onEncryptionKeyClick && (
-                      <button
-                        onClick={onEncryptionKeyClick}
-                        className={`rounded-lg p-1.5 transition-all duration-200 ${
-                          isDarkMode
-                            ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                        }`}
-                        title="Manage encryption key"
-                      >
-                        <KeyIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                    {chats.length > 0 && (
-                      <button
-                        onClick={() => downloadChats(chats)}
-                        className={`rounded-lg p-1.5 transition-all duration-200 ${
-                          isDarkMode
-                            ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                        }`}
-                        title="Download all chats as ZIP"
-                      >
-                        <ArrowDownTrayIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div
-                  className={`mt-1 text-xs ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}
-                >
+                    <KeyIcon className="h-4 w-4" />
+                  </button>
+                )}
+                {chats.length > 0 && (
+                  <button
+                    onClick={() => downloadChats(chats)}
+                    className={`rounded-lg p-1.5 transition-all duration-200 ${
+                      isDarkMode
+                        ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                    }`}
+                    title="Download all chats as ZIP"
+                  >
+                    <ArrowDownTrayIcon className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div
+              className={`mt-1 text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}
+            >
+              {isSignedIn ? (
+                <>
                   Your chats are encrypted and synced to the cloud.
                   <br />
                   The encryption key is only stored in your browser.
-                </div>
-              </>
-            )}
+                </>
+              ) : (
+                'Your chats are stored temporarily in this browser tab.'
+              )}
+            </div>
           </div>
 
           {/* Scrollable Chat List */}

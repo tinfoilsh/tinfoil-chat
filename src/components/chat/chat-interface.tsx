@@ -247,7 +247,7 @@ export function ChatInterface({
     reloadChats,
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
-    storeHistory: isPremium,
+    storeHistory: isSignedIn, // Enable storage for all signed-in users
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
@@ -671,7 +671,7 @@ export function ChatInterface({
       <ChatSidebar
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
-        chats={isPremium ? chats : [currentChat]}
+        chats={isSignedIn ? chats : [currentChat]}
         currentChat={currentChat}
         isDarkMode={isDarkMode}
         createNewChat={createNewChat}

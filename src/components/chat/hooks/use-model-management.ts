@@ -79,7 +79,8 @@ export function useModelManagement({
             model.type === 'chat' &&
             model.chat === true &&
             // For premium users, only consider premium models
-            ((isPremium && model.paid === true) || (!isPremium && model.paid !== true)),
+            ((isPremium && model.paid === true) ||
+              (!isPremium && model.paid !== true)),
         )
 
         if (availableChatModels.length > 0) {
