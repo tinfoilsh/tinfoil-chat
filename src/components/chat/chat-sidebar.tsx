@@ -12,6 +12,7 @@ import { motion } from 'framer-motion'
 import JSZip from 'jszip'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
+import { MdOutlineCloudOff } from 'react-icons/md'
 import { UserButtonWithCleanup } from '../user-button-with-cleanup'
 
 import { r2Storage } from '@/services/cloud/r2-storage'
@@ -780,10 +781,11 @@ export function ChatSidebar({
                           setDeletingChatId={setDeletingChatId}
                           isPremium={isPremium}
                           isDarkMode={isDarkMode}
+                          isSignedIn={isSignedIn}
                         />
                       </div>
                       {/* Delete confirmation */}
-                      {deletingChatId === chat.id && isPremium && (
+                      {deletingChatId === chat.id && (
                         <DeleteConfirmation
                           chatId={chat.id}
                           onDelete={deleteChat}
@@ -912,6 +914,7 @@ function ChatListItem({
   setDeletingChatId,
   isPremium = true,
   isDarkMode,
+  isSignedIn,
 }: {
   chat: Chat
   isEditing: boolean
@@ -922,6 +925,7 @@ function ChatListItem({
   setDeletingChatId: (id: string | null) => void
   isPremium?: boolean
   isDarkMode: boolean
+  isSignedIn: boolean
 }) {
   // Handle edit form submission
   const handleSubmit = (e: React.FormEvent) => {
@@ -1017,23 +1021,32 @@ function ChatListItem({
                       ? '\u00A0' // Non-breaking space for consistent height
                       : formatRelativeTime(chat.createdAt)}
                 </div>
-                {/* Cloud sync indicator - show when chat has messages but not synced */}
-                {chat.messages.length > 0 && !chat.syncedAt && (
-                  <AiOutlineCloudSync
-                    className={`h-3 w-3 ${
-                      isDarkMode ? 'text-gray-600' : 'text-gray-400'
-                    }`}
-                    title="Not synced to cloud"
-                  />
-                )}
+                {/* Cloud sync indicator */}
+                {chat.messages.length > 0 &&
+                  !chat.syncedAt &&
+                  (isSignedIn ? (
+                    <AiOutlineCloudSync
+                      className={`h-3 w-3 ${
+                        isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                      }`}
+                      title="Not synced to cloud"
+                    />
+                  ) : (
+                    <MdOutlineCloudOff
+                      className={`h-3 w-3 ${
+                        isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                      }`}
+                      title="Local only - not saved to cloud"
+                    />
+                  ))}
               </div>
             </>
           )}
         </div>
 
-        {!isEditing && isPremium && (
+        {!isEditing && (
           <div className="ml-2 flex opacity-0 transition-opacity group-hover:opacity-100">
-            {!chat.decryptionFailed && (
+            {!chat.decryptionFailed && isPremium && (
               <button
                 className={`mr-1 rounded p-1 transition-colors ${
                   isDarkMode
