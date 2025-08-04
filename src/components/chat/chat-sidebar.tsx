@@ -1,5 +1,5 @@
 import { PAGINATION } from '@/config'
-import { SignInButton, useAuth, UserButton } from '@clerk/nextjs'
+import { SignInButton, useAuth } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
@@ -12,6 +12,7 @@ import { motion } from 'framer-motion'
 import JSZip from 'jszip'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
+import { UserButtonWithCleanup } from '../user-button-with-cleanup'
 
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -490,7 +491,7 @@ export function ChatSidebar({
           <div className="flex items-center gap-3">
             {/* User button for signed-in users */}
             {isSignedIn && (
-              <UserButton
+              <UserButtonWithCleanup
                 appearance={{
                   elements: {
                     avatarBox: 'w-8 h-8',
