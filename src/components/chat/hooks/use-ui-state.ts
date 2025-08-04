@@ -116,11 +116,11 @@ export function useUIState(): UseUIStateReturn {
 
   // Handle input focus
   const handleInputFocus = useCallback(() => {
-    // Close sidebar on all devices when input is focused
-    if (isSidebarOpen) {
+    // Only close sidebar on narrow screens (mobile devices)
+    if (isSidebarOpen && windowWidth < 768) {
       setIsSidebarOpen(false)
     }
-  }, [isSidebarOpen])
+  }, [isSidebarOpen, windowWidth])
 
   return {
     isClient,
