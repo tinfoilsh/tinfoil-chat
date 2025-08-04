@@ -741,6 +741,7 @@ export function useChatMessaging({
       messagesEndRef,
       updateChatWithHistoryCheck,
       maxMessages,
+      isSignedIn,
     ],
   )
 
