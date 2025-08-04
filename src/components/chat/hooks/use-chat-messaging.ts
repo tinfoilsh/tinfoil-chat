@@ -77,9 +77,18 @@ export function useChatMessaging({
   const currentChatIdRef = useRef<string>(currentChat?.id || '')
   const isStreamingRef = useRef(false)
 
-  // Override model selection for free users
+  // Override model selection for free users - use first available free model
   const effectiveModel = !storeHistory
-    ? CONSTANTS.DEFAULT_FREE_MODEL
+    ? (() => {
+        // Find the first free chat model
+        const firstFreeModel = models.find(
+          (model) =>
+            model.type === 'chat' &&
+            model.chat === true &&
+            (model.paid === undefined || model.paid === false),
+        )
+        return firstFreeModel?.modelName || selectedModel
+      })()
     : selectedModel
 
   // A modified version of updateChat that respects the storeHistory flag
