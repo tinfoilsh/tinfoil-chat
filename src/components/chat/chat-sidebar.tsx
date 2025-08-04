@@ -1,5 +1,5 @@
 import { PAGINATION } from '@/config'
-import { SignInButton, useAuth } from '@clerk/nextjs'
+import { SignInButton, useAuth, UserButton } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
@@ -488,6 +488,16 @@ export function ChatSidebar({
             <Logo className="mt-1 h-8 w-auto" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
+            {/* User button for signed-in users */}
+            {isSignedIn && (
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8',
+                  },
+                }}
+              />
+            )}
             <button
               className={`hidden rounded-lg p-2 transition-all duration-200 md:block ${
                 isDarkMode
@@ -517,8 +527,8 @@ export function ChatSidebar({
 
         {/* Main sidebar content */}
         <div className="flex h-full flex-col overflow-hidden">
-          {/* New Chat button - only shown for premium users */}
-          {isPremium && (
+          {/* New Chat button - shown for all signed-in users */}
+          {isSignedIn && (
             <div className="flex-none">
               <button
                 onClick={() => {
@@ -541,7 +551,7 @@ export function ChatSidebar({
           )}
 
           {/* Message for non-signed-in users */}
-          {!isPremium && !isSignedIn && (
+          {!isSignedIn && (
             <div
               className={`m-2 flex-none rounded-md p-3 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
@@ -563,7 +573,7 @@ export function ChatSidebar({
           )}
 
           {/* Message for signed-in non-premium users */}
-          {!isPremium && isSignedIn && (
+          {isSignedIn && !isPremium && (
             <div
               className={`m-2 flex-none rounded-md p-3 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
@@ -587,11 +597,11 @@ export function ChatSidebar({
 
           {/* Chat History Header */}
           <div
-            className={`flex-none ${isPremium ? `border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}` : ''} ${
+            className={`flex-none ${isSignedIn ? `border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'}` : ''} ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             } px-3 py-2 sm:px-4 sm:py-3`}
           >
-            {isPremium && (
+            {isSignedIn && (
               <>
                 <div className="flex items-center justify-between">
                   <h3
