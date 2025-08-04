@@ -640,7 +640,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                   />
                 </svg>
                 <span>Premium AI models</span>
@@ -651,12 +651,33 @@ const WelcomeScreen = memo(function WelcomeScreen({
                         key={model.modelName}
                         src={model.image}
                         alt={model.name}
-                        className="h-4 w-4 opacity-50"
+                        className="h-4 w-4 opacity-75"
                         title={model.name}
                       />
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div
+                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
+              >
+                <svg
+                  className={`h-4 w-4 flex-shrink-0 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                <span>Faster response times</span>
               </div>
             </div>
             <div className="mt-6">
