@@ -164,6 +164,8 @@ export function EncryptionKeyModal({
                           ? 'border-gray-700 bg-gray-900'
                           : 'border-gray-200 bg-gray-50'
                       } p-2 sm:p-3`}
+                      role="region"
+                      aria-label="Current encryption key"
                     >
                       {encryptionKey ? (
                         <div className="flex items-center justify-between">
@@ -176,6 +178,11 @@ export function EncryptionKeyModal({
                           </code>
                           <button
                             onClick={handleCopyKey}
+                            aria-label={
+                              isCopied
+                                ? 'Key copied to clipboard'
+                                : 'Copy encryption key to clipboard'
+                            }
                             className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-all sm:px-3 sm:py-1.5 sm:text-sm ${
                               isCopied
                                 ? 'bg-emerald-500 text-white'
@@ -206,6 +213,7 @@ export function EncryptionKeyModal({
                       )}
                     </div>
                     <p
+                      id="current-key-description"
                       className={`mt-1.5 hidden text-xs sm:mt-2 sm:block ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
@@ -226,6 +234,7 @@ export function EncryptionKeyModal({
                       Sync With Another Device
                     </h4>
                     <p
+                      id="sync-key-description"
                       className={`mb-2 text-xs sm:mb-3 ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
@@ -240,6 +249,9 @@ export function EncryptionKeyModal({
                         onChange={(e) => setInputKey(e.target.value)}
                         placeholder="Enter encryption key (e.g., key_abc123...)"
                         autoComplete="off"
+                        aria-label="Encryption key input"
+                        aria-describedby="sync-key-description"
+                        aria-invalid={isUpdating ? 'false' : undefined}
                         className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 sm:flex-1 sm:px-3 sm:py-2 sm:text-sm ${
                           isDarkMode
                             ? 'border-gray-700 bg-gray-900 text-white placeholder-gray-500'
@@ -254,6 +266,8 @@ export function EncryptionKeyModal({
                       <button
                         onClick={handleUpdateKey}
                         disabled={isUpdating || !inputKey.trim()}
+                        aria-label="Update encryption key"
+                        aria-busy={isUpdating}
                         className={`w-full rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:px-4 sm:py-2 sm:text-sm ${
                           isUpdating || !inputKey.trim()
                             ? isDarkMode

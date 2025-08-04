@@ -215,16 +215,16 @@ export class EncryptionService {
 
   // Helper method to convert Uint8Array to base64 safely for large data
   private uint8ArrayToBase64(bytes: Uint8Array): string {
-    // Process in chunks to avoid call stack size exceeded error
+    // Use a more efficient approach with array join instead of string concatenation
     const CHUNK_SIZE = 0x8000 // 32KB chunks
-    let result = ''
+    const chunks: string[] = []
 
     for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
       const chunk = bytes.subarray(i, i + CHUNK_SIZE)
-      result += String.fromCharCode.apply(null, Array.from(chunk))
+      chunks.push(String.fromCharCode.apply(null, Array.from(chunk)))
     }
 
-    return btoa(result)
+    return btoa(chunks.join(''))
   }
 }
 
