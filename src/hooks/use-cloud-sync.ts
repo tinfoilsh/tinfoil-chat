@@ -1,3 +1,4 @@
+import { CLOUD_SYNC } from '@/config'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -55,7 +56,9 @@ export function useCloudSync() {
           sessionStorage.removeItem('pendingMigrationSync')
 
           // Wait a bit to ensure cloudSync is fully initialized
-          await new Promise((resolve) => setTimeout(resolve, 100))
+          await new Promise((resolve) =>
+            setTimeout(resolve, CLOUD_SYNC.RETRY_DELAY),
+          )
 
           // Use the syncChats function instead of calling syncAllChats directly
           // This will properly manage the syncing state
