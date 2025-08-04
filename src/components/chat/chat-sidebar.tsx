@@ -528,48 +528,35 @@ export function ChatSidebar({
 
         {/* Main sidebar content */}
         <div className="flex h-full flex-col overflow-hidden">
-          {/* New Chat button */}
-          <div className="flex-none">
-            <button
-              onClick={() => {
-                createNewChat()
-                // Only close sidebar on mobile
-                if (windowWidth < MOBILE_BREAKPOINT) {
-                  setIsOpen(false)
-                }
-              }}
-              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
-                isDarkMode
-                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-              }`}
-            >
-              <PlusIcon className="h-5 w-5" />
-              New chat
-            </button>
-          </div>
-
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
-              className={`m-2 flex-none rounded-md p-4 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+              className={`m-2 flex-none rounded-lg border p-4 ${
+                isDarkMode
+                  ? 'border-emerald-500/30 bg-emerald-950/20'
+                  : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
             >
-              <p
-                className={`mb-3 text-sm ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              <h4
+                className={`mb-1 text-sm font-semibold ${
+                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
                 }`}
               >
-                Sign in or create an account to access chat history and sync
-                across devices.
+                Sign in to unlock full features
+              </h4>
+              <p
+                className={`mb-3 text-sm ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}
+              >
+                Access chat history and sync across devices.
               </p>
               <SignInButton mode="modal">
                 <button
-                  className={`w-full rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                  className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-all ${
                     isDarkMode
-                      ? 'border border-gray-600 bg-gray-700 text-white hover:bg-gray-600'
-                      : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
                   }`}
                 >
                   Sign in
@@ -628,6 +615,36 @@ export function ChatSidebar({
               </div>
             </div>
           )}
+
+          {/* Divider after boxes */}
+          {(!isSignedIn || (isSignedIn && !isPremium)) && (
+            <div
+              className={`border-b ${
+                isDarkMode ? 'border-gray-800' : 'border-gray-200'
+              }`}
+            />
+          )}
+
+          {/* New Chat button */}
+          <div className="flex-none">
+            <button
+              onClick={() => {
+                createNewChat()
+                // Only close sidebar on mobile
+                if (windowWidth < MOBILE_BREAKPOINT) {
+                  setIsOpen(false)
+                }
+              }}
+              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
+                isDarkMode
+                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+              }`}
+            >
+              <PlusIcon className="h-5 w-5" />
+              New chat
+            </button>
+          </div>
 
           {/* Chat History Header */}
           <div
