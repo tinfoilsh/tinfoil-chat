@@ -301,9 +301,16 @@ export function ChatInterface({
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
-    setIsVerifierSidebarOpen(true)
-    // Clear the saved preference when user opens it
-    localStorage.removeItem('verifierSidebarClosed')
+    if (isVerifierSidebarOpen) {
+      // If already open, close it
+      setIsVerifierSidebarOpen(false)
+    } else {
+      // Open verifier and close settings if open
+      setIsVerifierSidebarOpen(true)
+      setIsSettingsSidebarOpen(false)
+      // Clear the saved preference when user opens it
+      localStorage.removeItem('verifierSidebarClosed')
+    }
   }
 
   // Handler for setting verifier sidebar state with preference management
@@ -320,10 +327,12 @@ export function ChatInterface({
 
   // Handler for settings sidebar
   const handleOpenSettingsSidebar = () => {
-    const newSettingsState = !isSettingsSidebarOpen
-    setIsSettingsSidebarOpen(newSettingsState)
-    // Close verifier sidebar when opening settings
-    if (newSettingsState) {
+    if (isSettingsSidebarOpen) {
+      // If already open, close it
+      setIsSettingsSidebarOpen(false)
+    } else {
+      // Open settings and close verifier if open
+      setIsSettingsSidebarOpen(true)
       setIsVerifierSidebarOpen(false)
     }
   }
@@ -636,34 +645,44 @@ export function ChatInterface({
 
       {/* Right side toggle buttons */}
       {!(windowWidth < CONSTANTS.MOBILE_BREAKPOINT && isSidebarOpen) && (
-        <div className="fixed right-4 top-4 z-50 flex gap-2">
-          {/* Verifier toggle button - visible when verifier sidebar is closed */}
-          {!isVerifierSidebarOpen && (
-            <button
-              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-                isDarkMode
+        <div
+          className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
+            isVerifierSidebarOpen || isSettingsSidebarOpen
+              ? 'right-[324px]'
+              : 'right-4'
+          }`}
+        >
+          {/* Verifier toggle button */}
+          <button
+            className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+              isVerifierSidebarOpen
+                ? isDarkMode
+                  ? 'cursor-default bg-gray-700 text-gray-400'
+                  : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
+                : isDarkMode
                   ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
                   : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-              onClick={handleOpenVerifierSidebar}
-            >
-              <ShieldCheckIcon className="h-5 w-5" />
-            </button>
-          )}
+            }`}
+            onClick={handleOpenVerifierSidebar}
+          >
+            <ShieldCheckIcon className="h-5 w-5" />
+          </button>
 
-          {/* Settings toggle button - visible when settings sidebar is closed AND verifier sidebar is closed */}
-          {!isSettingsSidebarOpen && !isVerifierSidebarOpen && (
-            <button
-              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-                isDarkMode
+          {/* Settings toggle button */}
+          <button
+            className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+              isSettingsSidebarOpen
+                ? isDarkMode
+                  ? 'cursor-default bg-gray-700 text-gray-400'
+                  : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
+                : isDarkMode
                   ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
                   : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-              onClick={handleOpenSettingsSidebar}
-            >
-              <Cog6ToothIcon className="h-5 w-5" />
-            </button>
-          )}
+            }`}
+            onClick={handleOpenSettingsSidebar}
+          >
+            <Cog6ToothIcon className="h-5 w-5" />
+          </button>
         </div>
       )}
 
