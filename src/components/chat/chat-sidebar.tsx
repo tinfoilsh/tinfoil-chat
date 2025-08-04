@@ -554,22 +554,29 @@ export function ChatSidebar({
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
-              className={`m-2 flex-none rounded-md p-3 ${
+              className={`m-2 flex-none rounded-md p-4 ${
                 isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
               }`}
             >
-              <p className="text-sm">
-                <span
-                  className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}
-                >
-                  Sign in to access chat history and create new chats.
-                </span>{' '}
-                <SignInButton mode="modal">
-                  <button className="font-semibold text-emerald-500 transition-colors hover:text-emerald-600">
-                    Sign in
-                  </button>
-                </SignInButton>
+              <p
+                className={`mb-3 text-sm ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                }`}
+              >
+                Sign in or create an account to access chat history and sync
+                across devices.
               </p>
+              <SignInButton mode="modal">
+                <button
+                  className={`w-full rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                    isDarkMode
+                      ? 'border border-gray-600 bg-gray-700 text-white hover:bg-gray-600'
+                      : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Sign in
+                </button>
+              </SignInButton>
             </div>
           )}
 
