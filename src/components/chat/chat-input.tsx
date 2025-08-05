@@ -612,10 +612,15 @@ export function ChatInput({
               </button>
             )}
             <button
-              type="submit"
-              onClick={
-                loadingState === 'loading' ? cancelGeneration : handleSubmit
-              }
+              type="button"
+              onClick={(e) => {
+                if (loadingState === 'loading') {
+                  e.preventDefault()
+                  cancelGeneration()
+                } else {
+                  handleSubmit(e)
+                }
+              }}
               className={`rounded-lg p-1.5 ${
                 isDarkMode
                   ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
