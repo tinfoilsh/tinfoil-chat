@@ -27,6 +27,9 @@ import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import type { Message } from './types'
 
+// Static array to prevent recreation on every render
+const remarkPlugins = [remarkGfm]
+
 // Add new types
 type MessageWithThoughts = Message & {
   thoughts?: string
@@ -199,7 +202,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
 
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={remarkPlugins}
       components={{
         code({
           node,
