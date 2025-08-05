@@ -87,7 +87,8 @@ export function useChatMessaging({
             model.chat === true &&
             (model.paid === undefined || model.paid === false),
         )
-        return firstFreeModel?.modelName || selectedModel
+        // Always use a free model for free users - guaranteed to exist
+        return firstFreeModel!.modelName
       })()
     : selectedModel
 
