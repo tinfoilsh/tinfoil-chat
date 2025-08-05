@@ -233,7 +233,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </code>
           )
         },
-        table({ children, ...props }) {
+        table({ children, node, ...props }) {
           return (
             <div className="my-4 overflow-x-auto">
               <table
@@ -245,7 +245,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </div>
           )
         },
-        thead({ children, ...props }) {
+        thead({ children, node, ...props }) {
           return (
             <thead
               {...props}
@@ -255,7 +255,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </thead>
           )
         },
-        tbody({ children, ...props }) {
+        tbody({ children, node, ...props }) {
           return (
             <tbody
               {...props}
@@ -265,10 +265,10 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </tbody>
           )
         },
-        tr({ children, ...props }) {
+        tr({ children, node, ...props }) {
           return <tr {...props}>{children}</tr>
         },
-        th({ children, ...props }) {
+        th({ children, node, ...props }) {
           return (
             <th
               {...props}
@@ -278,7 +278,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </th>
           )
         },
-        td({ children, ...props }) {
+        td({ children, node, ...props }) {
           return (
             <td
               {...props}
