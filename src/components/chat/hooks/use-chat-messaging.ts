@@ -93,21 +93,28 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
-      const updatedChat = {
-        ...currentChat,
+      // Update state using functional updates to avoid stale closures
+      setCurrentChat((prevChat) => ({
+        ...prevChat,
         messages: newMessages,
-      }
+      }))
 
-      // Update state immediately
-      setCurrentChat(updatedChat)
       setChats((prevChats) =>
-        prevChats.map((c) => (c.id === chatId ? updatedChat : c)),
+        prevChats.map((c) =>
+          c.id === chatId ? { ...c, messages: newMessages } : c,
+        ),
       )
 
       // Save to storage if enabled (skip during thinking state unless immediate)
       if (storeHistory && (!isThinking || immediate)) {
         // Skip cloud sync during streaming (unless immediate flag is set for final save)
         const skipCloudSync = isStreamingRef.current && !immediate
+
+        // Create the updated chat object for storage
+        const updatedChat = {
+          ...currentChat,
+          messages: newMessages,
+        }
 
         chatStorage
           .saveChat(updatedChat, skipCloudSync)
@@ -128,7 +135,7 @@ export function useChatMessaging({
           })
       }
     },
-    [storeHistory],
+    [storeHistory, chatStorage],
   )
 
   // Cancel generation function

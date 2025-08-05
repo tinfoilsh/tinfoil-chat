@@ -4,7 +4,7 @@ import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
   FaFileAlt,
@@ -34,13 +34,10 @@ type MessageWithThoughts = Message & {
 
 type ChatMessagesProps = {
   messages: Message[]
-  isThinking: boolean
   isDarkMode: boolean
   chatId: string
   messagesEndRef: React.RefObject<HTMLDivElement>
   openAndExpandVerifier: () => void
-  isInitialLoad: boolean
-  setIsInitialLoad: (value: boolean) => void
   isWaitingForResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
@@ -718,22 +715,16 @@ const MessagesSeparator = memo(function MessagesSeparator({
 
 export function ChatMessages({
   messages,
-  isThinking,
   isDarkMode,
   chatId,
   messagesEndRef,
   openAndExpandVerifier,
-  isInitialLoad,
-  setIsInitialLoad,
   isWaitingForResponse = false,
   isPremium,
   models,
   subscriptionLoading,
 }: ChatMessagesProps) {
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [mounted, setMounted] = useState(false)
-  const lastMessageCountRef = useRef(messages.length)
-  const userScrollingRef = useRef(false)
   const maxMessages = useMaxMessages()
 
   // Check if there's already a thinking message in the chat
@@ -753,160 +744,6 @@ export function ChatMessages({
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  // Set up scroll detection on parent scroll container
-  useEffect(() => {
-    // Find the parent scroll container
-    const findScrollParent = (
-      element: HTMLElement | null,
-    ): HTMLElement | null => {
-      if (!element) return null
-      const parent = element.parentElement
-      if (!parent) return null
-
-      const overflow = window.getComputedStyle(parent).overflowY
-      if (overflow === 'auto' || overflow === 'scroll') {
-        return parent
-      }
-      return findScrollParent(parent)
-    }
-
-    const messageContainer = messagesEndRef.current?.parentElement
-    const scrollContainer = findScrollParent(messageContainer ?? null)
-
-    if (!scrollContainer) return
-
-    let scrollTimeout: NodeJS.Timeout
-    let lastScrollTop = scrollContainer.scrollTop
-    let isScrolling = false
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
-      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
-
-      // Detect if user is scrolling up
-      if (scrollTop < lastScrollTop && distanceFromBottom > 10) {
-        userScrollingRef.current = true
-        setShouldAutoScroll(false)
-      }
-
-      lastScrollTop = scrollTop
-
-      // Clear existing timeout
-      clearTimeout(scrollTimeout)
-      isScrolling = true
-
-      // Set a new timeout to detect when scrolling stops
-      scrollTimeout = setTimeout(() => {
-        isScrolling = false
-        userScrollingRef.current = false
-
-        // Only re-enable auto-scroll if we're at the very bottom AND stable
-        const checkStablePosition = () => {
-          const {
-            scrollTop: currentTop,
-            scrollHeight: currentHeight,
-            clientHeight: currentClient,
-          } = scrollContainer
-          const currentDistance = currentHeight - (currentTop + currentClient)
-
-          // Wait a bit more to ensure position is stable (no overscroll bounce)
-          setTimeout(() => {
-            const {
-              scrollTop: newTop,
-              scrollHeight: newHeight,
-              clientHeight: newClient,
-            } = scrollContainer
-            const newDistance = newHeight - (newTop + newClient)
-
-            // Only enable if position hasn't changed (stable) and we're at bottom
-            if (
-              Math.abs(newDistance - currentDistance) < 2 &&
-              newDistance < 10
-            ) {
-              setShouldAutoScroll(true)
-            }
-          }, 100)
-        }
-
-        checkStablePosition()
-      }, 250) // Increased to 250ms to allow overscroll to settle
-    }
-
-    const handleUserInteraction = () => {
-      // Mark user interaction
-      userScrollingRef.current = true
-      setShouldAutoScroll(false)
-    }
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-    scrollContainer.addEventListener('wheel', handleUserInteraction, {
-      passive: true,
-    })
-    scrollContainer.addEventListener('touchmove', handleUserInteraction, {
-      passive: true,
-    })
-
-    // Initial check
-    handleScroll()
-
-    return () => {
-      clearTimeout(scrollTimeout)
-      scrollContainer.removeEventListener('scroll', handleScroll)
-      scrollContainer.removeEventListener('wheel', handleUserInteraction)
-      scrollContainer.removeEventListener('touchmove', handleUserInteraction)
-    }
-  }, [messagesEndRef])
-
-  // Auto-scroll when new messages arrive or content changes
-  useEffect(() => {
-    if (!shouldAutoScroll || userScrollingRef.current) return
-
-    // Detect if this is a new message or just an update
-    const isNewMessage = messages.length > lastMessageCountRef.current
-    lastMessageCountRef.current = messages.length
-
-    const scrollToBottom = () => {
-      if (!userScrollingRef.current) {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: 'auto',
-          block: 'end',
-        })
-      }
-      if (isInitialLoad) {
-        setIsInitialLoad(false)
-      }
-    }
-
-    // Use a small delay to ensure DOM is updated
-    const timeoutId = setTimeout(scrollToBottom, 10)
-
-    return () => clearTimeout(timeoutId)
-  }, [
-    messages,
-    shouldAutoScroll,
-    isInitialLoad,
-    setIsInitialLoad,
-    messagesEndRef,
-  ])
-
-  // Continuous scrolling during streaming
-  useEffect(() => {
-    if (!shouldAutoScroll || userScrollingRef.current) return
-
-    if (isThinking || isWaitingForResponse) {
-      const scrollInterval = setInterval(() => {
-        if (shouldAutoScroll && !userScrollingRef.current) {
-          messagesEndRef.current?.scrollIntoView({
-            behavior: 'auto',
-            block: 'end',
-          })
-        }
-      }, 300) // Scroll every 300ms during streaming
-
-      return () => clearInterval(scrollInterval)
-    }
-  }, [isThinking, isWaitingForResponse, shouldAutoScroll, messagesEndRef])
 
   if (!mounted) {
     return (
@@ -940,49 +777,41 @@ export function ChatMessages({
   }
 
   return (
-    <div
-      className="h-full"
-      style={{
-        height: '100%',
-        position: 'relative',
-      }}
-    >
-      <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
-        {/* Archived Messages - only shown if there are more than the max prompt messages */}
-        {archivedMessages.length > 0 && (
-          <>
-            <div className={`opacity-70`}>
-              {archivedMessages.map((message, i) => (
-                <ChatMessage
-                  key={`archived-${i}`}
-                  message={message as MessageWithThoughts}
-                  isDarkMode={isDarkMode}
-                  shouldDiscardThoughts={false}
-                  isLastMessage={false}
-                  isWaitingForResponse={false}
-                />
-              ))}
-            </div>
+    <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
+      {/* Archived Messages - only shown if there are more than the max prompt messages */}
+      {archivedMessages.length > 0 && (
+        <>
+          <div className={`opacity-70`}>
+            {archivedMessages.map((message, i) => (
+              <ChatMessage
+                key={`archived-${i}`}
+                message={message as MessageWithThoughts}
+                isDarkMode={isDarkMode}
+                shouldDiscardThoughts={false}
+                isLastMessage={false}
+                isWaitingForResponse={false}
+              />
+            ))}
+          </div>
 
-            {/* Separator */}
-            <MessagesSeparator isDarkMode={isDarkMode} />
-          </>
-        )}
+          {/* Separator */}
+          <MessagesSeparator isDarkMode={isDarkMode} />
+        </>
+      )}
 
-        {/* Live Messages - the last messages up to max prompt limit */}
-        {liveMessages.map((message, i) => (
-          <ChatMessage
-            key={`${chatId}-${i}`}
-            message={message as MessageWithThoughts}
-            isDarkMode={isDarkMode}
-            shouldDiscardThoughts={false}
-            isLastMessage={i === liveMessages.length - 1}
-            isWaitingForResponse={false}
-          />
-        ))}
-        {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
-        <div ref={messagesEndRef} />
-      </div>
+      {/* Live Messages - the last messages up to max prompt limit */}
+      {liveMessages.map((message, i) => (
+        <ChatMessage
+          key={`${chatId}-${i}`}
+          message={message as MessageWithThoughts}
+          isDarkMode={isDarkMode}
+          shouldDiscardThoughts={false}
+          isLastMessage={i === liveMessages.length - 1}
+          isWaitingForResponse={false}
+        />
+      ))}
+      {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
+      <div ref={messagesEndRef} />
     </div>
   )
 }

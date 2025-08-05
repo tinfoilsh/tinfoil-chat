@@ -21,6 +21,7 @@ import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import ScrollableFeed from 'react-scrollable-feed'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
@@ -498,56 +499,12 @@ export function ChatInterface({
 
   // State for scroll button
   const [showScrollButton, setShowScrollButton] = useState(false)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-
-  // Set up scroll detection
-  useEffect(() => {
-    // Small delay to ensure ref is attached
-    const setupScrollListener = () => {
-      const scrollContainer = scrollContainerRef.current
-      if (!scrollContainer) {
-        // Retry if container not ready
-        setTimeout(setupScrollListener, 100)
-        return
-      }
-
-      const handleScroll = () => {
-        const { scrollTop, scrollHeight, clientHeight } = scrollContainer
-        const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
-
-        // Show button when scrolled up more than 200px from bottom
-        const shouldShow = distanceFromBottom > 200
-        setShowScrollButton(shouldShow)
-      }
-
-      scrollContainer.addEventListener('scroll', handleScroll, {
-        passive: true,
-      })
-
-      // Initial check
-      handleScroll()
-
-      // Store cleanup function
-      return () => {
-        scrollContainer.removeEventListener('scroll', handleScroll)
-      }
-    }
-
-    const cleanup = setupScrollListener()
-
-    return () => {
-      if (cleanup) cleanup()
-    }
-  }, [currentChat?.id]) // Re-run when chat changes
+  const scrollableFeedRef = useRef<any>(null)
 
   // Function to scroll to bottom
   const handleScrollToBottom = () => {
-    const scrollContainer = scrollContainerRef.current
-    if (scrollContainer) {
-      scrollContainer.scrollTo({
-        top: scrollContainer.scrollHeight,
-        behavior: 'smooth',
-      })
+    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
+      scrollableFeedRef.current.scrollToBottom()
     }
   }
 
@@ -758,31 +715,27 @@ export function ChatInterface({
           className={`relative flex h-full flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
         >
           {/* Messages Area */}
-          <div
-            ref={scrollContainerRef}
-            className={`relative flex-1 overflow-y-auto ${
+          <ScrollableFeed
+            ref={scrollableFeedRef}
+            className={`relative flex-1 ${
               isDarkMode ? 'bg-gray-800' : 'bg-white'
             }`}
-            style={{
-              overscrollBehavior: 'contain',
-              WebkitOverflowScrolling: 'touch',
+            onScroll={(isAtBottom: boolean) => {
+              setShowScrollButton(!isAtBottom)
             }}
           >
             <ChatMessages
               messages={currentChat?.messages || []}
-              isThinking={isThinking}
               isDarkMode={isDarkMode}
               chatId={currentChat.id}
               messagesEndRef={messagesEndRef}
               openAndExpandVerifier={modifiedOpenAndExpandVerifier}
-              isInitialLoad={isInitialLoad}
-              setIsInitialLoad={setIsInitialLoad}
               isWaitingForResponse={isWaitingForResponse}
               isPremium={isPremium}
               models={models}
               subscriptionLoading={subscriptionLoading}
             />
-          </div>
+          </ScrollableFeed>
 
           {/* Input Form */}
           {isClient && (
