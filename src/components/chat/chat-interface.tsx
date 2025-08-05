@@ -615,49 +615,92 @@ export function ChatInterface({
           }`}
         >
           {/* New chat button */}
-          <button
-            className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-              isDarkMode
-                ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-            onClick={createNewChat}
-            title="New chat"
-          >
-            <PlusIcon className="h-5 w-5" />
-          </button>
+          <div className="group relative">
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+                isDarkMode
+                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+              onClick={createNewChat}
+              aria-label="Create new chat"
+            >
+              <PlusIcon className="h-5 w-5" />
+            </button>
+            <span
+              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                isDarkMode
+                  ? 'bg-gray-700 text-gray-200'
+                  : 'bg-gray-800 text-white'
+              }`}
+            >
+              New chat
+            </span>
+          </div>
 
           {/* Verifier toggle button */}
-          <button
-            className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-              isVerifierSidebarOpen
-                ? isDarkMode
-                  ? 'cursor-default bg-gray-700 text-gray-400'
-                  : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
-                : isDarkMode
-                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-            onClick={handleOpenVerifierSidebar}
-          >
-            <ShieldCheckIcon className="h-5 w-5" />
-          </button>
+          <div className="group relative">
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+                isVerifierSidebarOpen
+                  ? isDarkMode
+                    ? 'cursor-default bg-gray-700 text-gray-400'
+                    : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
+                  : isDarkMode
+                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+              onClick={handleOpenVerifierSidebar}
+              aria-label={
+                isVerifierSidebarOpen
+                  ? 'Close verification panel'
+                  : 'Open verification panel'
+              }
+              aria-pressed={isVerifierSidebarOpen}
+            >
+              <ShieldCheckIcon className="h-5 w-5" />
+            </button>
+            <span
+              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                isDarkMode
+                  ? 'bg-gray-700 text-gray-200'
+                  : 'bg-gray-800 text-white'
+              }`}
+            >
+              {isVerifierSidebarOpen ? 'Close verification' : 'Verification'}
+            </span>
+          </div>
 
           {/* Settings toggle button */}
-          <button
-            className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-              isSettingsSidebarOpen
-                ? isDarkMode
-                  ? 'cursor-default bg-gray-700 text-gray-400'
-                  : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
-                : isDarkMode
-                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-            onClick={handleOpenSettingsSidebar}
-          >
-            <Cog6ToothIcon className="h-5 w-5" />
-          </button>
+          <div className="group relative">
+            <button
+              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+                isSettingsSidebarOpen
+                  ? isDarkMode
+                    ? 'cursor-default bg-gray-700 text-gray-400'
+                    : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
+                  : isDarkMode
+                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+              onClick={handleOpenSettingsSidebar}
+              aria-label={
+                isSettingsSidebarOpen ? 'Close settings' : 'Open settings'
+              }
+              aria-pressed={isSettingsSidebarOpen}
+            >
+              <Cog6ToothIcon className="h-5 w-5" />
+            </button>
+            <span
+              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                isDarkMode
+                  ? 'bg-gray-700 text-gray-200'
+                  : 'bg-gray-800 text-white'
+              }`}
+            >
+              {isSettingsSidebarOpen ? 'Close settings' : 'Settings'}
+            </span>
+          </div>
         </div>
       )}
 
