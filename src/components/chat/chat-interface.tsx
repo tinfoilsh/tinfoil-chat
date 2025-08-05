@@ -603,7 +603,7 @@ export function ChatInterface({
       {/* Right side toggle buttons */}
       {!(
         windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
-        (isVerifierSidebarOpen || isSettingsSidebarOpen)
+        (isSidebarOpen || isVerifierSidebarOpen || isSettingsSidebarOpen)
       ) && (
         <div
           className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
