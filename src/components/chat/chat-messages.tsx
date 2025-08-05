@@ -59,13 +59,8 @@ const ThoughtProcess = memo(function ThoughtProcess({
   shouldDiscard?: boolean
   isCompleted?: boolean
 }) {
-  // Start expanded if thinking or if thoughts are completed
-  const [isExpanded, setIsExpanded] = useState(isThinking || isCompleted)
-
-  // Update isExpanded when isThinking changes
-  useEffect(() => {
-    setIsExpanded(isThinking || isCompleted)
-  }, [isThinking, isCompleted])
+  // Always start collapsed - user must click to expand
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // Process the markdown to extract all paragraphs - moved before any conditional returns
   const paragraphs = useMemo(
