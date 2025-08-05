@@ -14,6 +14,7 @@ import {
   ArrowDownIcon,
   Bars3Icon,
   Cog6ToothIcon,
+  PlusIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 
@@ -613,6 +614,19 @@ export function ChatInterface({
               : 'right-4'
           }`}
         >
+          {/* New chat button */}
+          <button
+            className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+              isDarkMode
+                ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+            }`}
+            onClick={createNewChat}
+            title="New chat"
+          >
+            <PlusIcon className="h-5 w-5" />
+          </button>
+
           {/* Verifier toggle button */}
           <button
             className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
