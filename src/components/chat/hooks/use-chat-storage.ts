@@ -70,9 +70,10 @@ export function useChatStorage({
 
     try {
       // Use sessionStorage for non-signed-in users, IndexedDB for signed-in
-      const savedChats = storeHistory
-        ? await chatStorage.getAllChatsWithSyncStatus()
-        : sessionChatStorage.getAllChats()
+      const savedChats =
+        storeHistory && isSignedIn
+          ? await chatStorage.getAllChatsWithSyncStatus()
+          : sessionChatStorage.getAllChats()
 
       // Get current chats state to preserve blank chats
       setChats((prevChats) => {
@@ -169,9 +170,10 @@ export function useChatStorage({
     if (typeof window !== 'undefined') {
       const loadChats = async () => {
         try {
-          const savedChats = storeHistory
-            ? await chatStorage.getAllChatsWithSyncStatus()
-            : sessionChatStorage.getAllChats()
+          const savedChats =
+            storeHistory && isSignedIn
+              ? await chatStorage.getAllChatsWithSyncStatus()
+              : sessionChatStorage.getAllChats()
 
           // Check if component is still mounted before updating state
           if (!isMounted) return
@@ -241,7 +243,7 @@ export function useChatStorage({
     return () => {
       isMounted = false
     }
-  }, [storeHistory])
+  }, [storeHistory, isSignedIn])
 
   // Create a new chat
   const createNewChat = useCallback(() => {
@@ -338,7 +340,7 @@ export function useChatStorage({
         // Update in storage
         const chatToUpdate = updatedChats.find((c) => c.id === chatId)
         if (chatToUpdate) {
-          if (storeHistory) {
+          if (storeHistory && isSignedIn) {
             chatStorage
               .saveChatAndSync(chatToUpdate)
               .then(() => {
@@ -364,7 +366,7 @@ export function useChatStorage({
         setCurrentChat((prev) => ({ ...prev, title: newTitle }))
       }
     },
-    [storeHistory, currentChat?.id, reloadChats],
+    [storeHistory, isSignedIn, currentChat?.id, reloadChats],
   )
 
   return {
