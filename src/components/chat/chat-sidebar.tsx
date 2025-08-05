@@ -12,6 +12,7 @@ import { motion } from 'framer-motion'
 import JSZip from 'jszip'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
+import { MdOutlineCloudOff } from 'react-icons/md'
 import { UserButtonWithCleanup } from '../user-button-with-cleanup'
 
 import { r2Storage } from '@/services/cloud/r2-storage'
@@ -528,48 +529,35 @@ export function ChatSidebar({
 
         {/* Main sidebar content */}
         <div className="flex h-full flex-col overflow-hidden">
-          {/* New Chat button */}
-          <div className="flex-none">
-            <button
-              onClick={() => {
-                createNewChat()
-                // Only close sidebar on mobile
-                if (windowWidth < MOBILE_BREAKPOINT) {
-                  setIsOpen(false)
-                }
-              }}
-              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
-                isDarkMode
-                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-              }`}
-            >
-              <PlusIcon className="h-5 w-5" />
-              New chat
-            </button>
-          </div>
-
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
-              className={`m-2 flex-none rounded-md p-4 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+              className={`m-2 flex-none rounded-lg border p-4 ${
+                isDarkMode
+                  ? 'border-emerald-500/30 bg-emerald-950/20'
+                  : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
             >
-              <p
-                className={`mb-3 text-sm ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              <h4
+                className={`mb-1 text-sm font-semibold ${
+                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
                 }`}
               >
-                Sign in or create an account to access chat history and sync
-                across devices.
+                Sign in to unlock full features
+              </h4>
+              <p
+                className={`mb-3 text-sm ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}
+              >
+                Access chat history and sync across devices.
               </p>
               <SignInButton mode="modal">
                 <button
-                  className={`w-full rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                  className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-all ${
                     isDarkMode
-                      ? 'border border-gray-600 bg-gray-700 text-white hover:bg-gray-600'
-                      : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
                   }`}
                 >
                   Sign in
@@ -628,6 +616,36 @@ export function ChatSidebar({
               </div>
             </div>
           )}
+
+          {/* Divider after boxes */}
+          {(!isSignedIn || (isSignedIn && !isPremium)) && (
+            <div
+              className={`border-b ${
+                isDarkMode ? 'border-gray-800' : 'border-gray-200'
+              }`}
+            />
+          )}
+
+          {/* New Chat button */}
+          <div className="flex-none">
+            <button
+              onClick={() => {
+                createNewChat()
+                // Only close sidebar on mobile
+                if (windowWidth < MOBILE_BREAKPOINT) {
+                  setIsOpen(false)
+                }
+              }}
+              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
+                isDarkMode
+                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+              }`}
+            >
+              <PlusIcon className="h-5 w-5" />
+              New chat
+            </button>
+          </div>
 
           {/* Chat History Header */}
           <div
@@ -763,10 +781,11 @@ export function ChatSidebar({
                           setDeletingChatId={setDeletingChatId}
                           isPremium={isPremium}
                           isDarkMode={isDarkMode}
+                          isSignedIn={isSignedIn ?? false}
                         />
                       </div>
                       {/* Delete confirmation */}
-                      {deletingChatId === chat.id && isPremium && (
+                      {deletingChatId === chat.id && (
                         <DeleteConfirmation
                           chatId={chat.id}
                           onDelete={deleteChat}
@@ -895,6 +914,7 @@ function ChatListItem({
   setDeletingChatId,
   isPremium = true,
   isDarkMode,
+  isSignedIn,
 }: {
   chat: Chat
   isEditing: boolean
@@ -905,6 +925,7 @@ function ChatListItem({
   setDeletingChatId: (id: string | null) => void
   isPremium?: boolean
   isDarkMode: boolean
+  isSignedIn: boolean
 }) {
   // Handle edit form submission
   const handleSubmit = (e: React.FormEvent) => {
@@ -1000,23 +1021,32 @@ function ChatListItem({
                       ? '\u00A0' // Non-breaking space for consistent height
                       : formatRelativeTime(chat.createdAt)}
                 </div>
-                {/* Cloud sync indicator - show when chat has messages but not synced */}
-                {chat.messages.length > 0 && !chat.syncedAt && (
-                  <AiOutlineCloudSync
-                    className={`h-3 w-3 ${
-                      isDarkMode ? 'text-gray-600' : 'text-gray-400'
-                    }`}
-                    title="Not synced to cloud"
-                  />
-                )}
+                {/* Cloud sync indicator */}
+                {chat.messages.length > 0 &&
+                  !chat.syncedAt &&
+                  (isSignedIn ? (
+                    <AiOutlineCloudSync
+                      className={`h-3 w-3 ${
+                        isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                      }`}
+                      title="Not synced to cloud"
+                    />
+                  ) : (
+                    <MdOutlineCloudOff
+                      className={`h-3 w-3 ${
+                        isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                      }`}
+                      title="Local only - not saved to cloud"
+                    />
+                  ))}
               </div>
             </>
           )}
         </div>
 
-        {!isEditing && isPremium && (
+        {!isEditing && (
           <div className="ml-2 flex opacity-0 transition-opacity group-hover:opacity-100">
-            {!chat.decryptionFailed && (
+            {!chat.decryptionFailed && isPremium && (
               <button
                 className={`mr-1 rounded p-1 transition-colors ${
                   isDarkMode

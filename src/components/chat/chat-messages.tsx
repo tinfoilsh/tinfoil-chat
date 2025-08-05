@@ -20,11 +20,15 @@ import {
 } from 'react-icons/fa'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import type { Message } from './types'
+
+// Static array to prevent recreation on every render
+const remarkPlugins = [remarkGfm]
 
 // Add new types
 type MessageWithThoughts = Message & {
@@ -58,13 +62,8 @@ const ThoughtProcess = memo(function ThoughtProcess({
   shouldDiscard?: boolean
   isCompleted?: boolean
 }) {
-  // Start expanded if thinking or if thoughts are completed
-  const [isExpanded, setIsExpanded] = useState(isThinking || isCompleted)
-
-  // Update isExpanded when isThinking changes
-  useEffect(() => {
-    setIsExpanded(isThinking || isCompleted)
-  }, [isThinking, isCompleted])
+  // Always start collapsed - user must click to expand
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // Process the markdown to extract all paragraphs - moved before any conditional returns
   const paragraphs = useMemo(
@@ -203,6 +202,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
 
   return (
     <ReactMarkdown
+      remarkPlugins={remarkPlugins}
       components={{
         code({
           node,
@@ -228,9 +228,64 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             )
           }
           return (
-            <code className={className} {...props}>
+            <code className={`${className || ''} break-words`} {...props}>
               {children}
             </code>
+          )
+        },
+        table({ children, node, ...props }) {
+          return (
+            <div className="my-4 overflow-x-auto">
+              <table
+                {...props}
+                className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+              >
+                {children}
+              </table>
+            </div>
+          )
+        },
+        thead({ children, node, ...props }) {
+          return (
+            <thead
+              {...props}
+              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}
+            >
+              {children}
+            </thead>
+          )
+        },
+        tbody({ children, node, ...props }) {
+          return (
+            <tbody
+              {...props}
+              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-white'}`}
+            >
+              {children}
+            </tbody>
+          )
+        },
+        tr({ children, node, ...props }) {
+          return <tr {...props}>{children}</tr>
+        },
+        th({ children, node, ...props }) {
+          return (
+            <th
+              {...props}
+              className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
+            >
+              {children}
+            </th>
+          )
+        },
+        td({ children, node, ...props }) {
+          return (
+            <td
+              {...props}
+              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-normal break-words`}
+            >
+              {children}
+            </td>
           )
         },
       }}
@@ -375,11 +430,11 @@ const ChatMessage = memo(function ChatMessage({
               isUser
                 ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-500'} rounded-2xl rounded-tr-sm px-4 py-2`
                 : ''
-            }`}
+            } overflow-hidden`}
           >
             <div className="flex items-center gap-2">
               <div
-                className={`prose w-full max-w-none text-sm ${
+                className={`prose w-full max-w-none break-words text-sm ${
                   isDarkMode
                     ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
@@ -640,7 +695,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                   />
                 </svg>
                 <span>Premium AI models</span>
@@ -651,12 +706,33 @@ const WelcomeScreen = memo(function WelcomeScreen({
                         key={model.modelName}
                         src={model.image}
                         alt={model.name}
-                        className="h-4 w-4 opacity-50"
+                        className="h-4 w-4 opacity-75"
                         title={model.name}
                       />
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div
+                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
+              >
+                <svg
+                  className={`h-4 w-4 flex-shrink-0 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                <span>Faster response times</span>
               </div>
             </div>
             <div className="mt-6">

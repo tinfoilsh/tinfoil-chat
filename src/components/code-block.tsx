@@ -58,7 +58,7 @@ export function CodeBlock({
   }
 
   return (
-    <div className="group relative">
+    <div className="group relative overflow-x-auto">
       <button
         onClick={copyToClipboard}
         className={`absolute right-2 top-2 rounded-lg p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${
@@ -108,6 +108,7 @@ export function CodeBlock({
           border: isDarkMode
             ? '1px solid rgb(31 41 55)'
             : '1px solid rgb(229 231 235)',
+          overflowX: 'auto',
         }}
         wrapLongLines={false}
       >
