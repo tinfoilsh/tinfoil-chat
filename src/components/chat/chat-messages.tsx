@@ -235,10 +235,11 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </code>
           )
         },
-        table({ children }) {
+        table({ children, ...props }) {
           return (
             <div className="my-4 overflow-x-auto">
               <table
+                {...props}
                 className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
               >
                 {children}
@@ -246,37 +247,43 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </div>
           )
         },
-        thead({ children }) {
+        thead({ children, ...props }) {
           return (
-            <thead className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}>
+            <thead
+              {...props}
+              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}
+            >
               {children}
             </thead>
           )
         },
-        tbody({ children }) {
+        tbody({ children, ...props }) {
           return (
             <tbody
+              {...props}
               className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-white'}`}
             >
               {children}
             </tbody>
           )
         },
-        tr({ children }) {
-          return <tr>{children}</tr>
+        tr({ children, ...props }) {
+          return <tr {...props}>{children}</tr>
         },
-        th({ children }) {
+        th({ children, ...props }) {
           return (
             <th
+              {...props}
               className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
             >
               {children}
             </th>
           )
         },
-        td({ children }) {
+        td({ children, ...props }) {
           return (
             <td
+              {...props}
               className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-normal break-words`}
             >
               {children}
