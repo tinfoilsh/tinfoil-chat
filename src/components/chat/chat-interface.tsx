@@ -548,6 +548,8 @@ export function ChatInterface({
         top: scrollContainer.scrollHeight,
         behavior: 'smooth',
       })
+      // Ensure the scroll button disappears immediately
+      setShowScrollButton(false)
     }
   }
 
