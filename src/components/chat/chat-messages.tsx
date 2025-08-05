@@ -4,7 +4,7 @@ import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
   FaFileAlt,
@@ -23,7 +23,6 @@ import ReactMarkdown from 'react-markdown'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
-import { useAutoScroll } from './hooks/use-auto-scroll'
 import { useMaxMessages } from './hooks/use-max-messages'
 import type { Message } from './types'
 
@@ -35,13 +34,10 @@ type MessageWithThoughts = Message & {
 
 type ChatMessagesProps = {
   messages: Message[]
-  isThinking: boolean
   isDarkMode: boolean
   chatId: string
   messagesEndRef: React.RefObject<HTMLDivElement>
   openAndExpandVerifier: () => void
-  isInitialLoad: boolean
-  setIsInitialLoad: (value: boolean) => void
   isWaitingForResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
@@ -719,24 +715,17 @@ const MessagesSeparator = memo(function MessagesSeparator({
 
 export function ChatMessages({
   messages,
-  isThinking,
   isDarkMode,
   chatId,
   messagesEndRef,
   openAndExpandVerifier,
-  isInitialLoad,
-  setIsInitialLoad,
   isWaitingForResponse = false,
   isPremium,
   models,
   subscriptionLoading,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
-  const lastMessageCountRef = useRef(messages.length)
   const maxMessages = useMaxMessages()
-
-  // Use our custom auto-scroll hook
-  const { shouldAutoScroll, userScrollingRef } = useAutoScroll(messagesEndRef)
 
   // Check if there's already a thinking message in the chat
   const hasThinkingMessage = messages.some(
@@ -755,69 +744,6 @@ export function ChatMessages({
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  // Auto-scroll when new messages arrive or content changes
-  useEffect(() => {
-    // Detect if this is a new message or just an update
-    const isNewMessage = messages.length > lastMessageCountRef.current
-    lastMessageCountRef.current = messages.length
-
-    // For new messages, always scroll unless user is actively scrolling
-    if (isNewMessage && !userScrollingRef.current) {
-      const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: 'auto',
-          block: 'end',
-        })
-      }
-
-      // Small delay to ensure DOM is updated
-      const timeoutId = setTimeout(scrollToBottom, 10)
-
-      if (isInitialLoad) {
-        setIsInitialLoad(false)
-      }
-
-      return () => clearTimeout(timeoutId)
-    }
-
-    // For content updates (not new messages), only scroll if autoscroll is enabled
-    if (!isNewMessage && shouldAutoScroll && !userScrollingRef.current) {
-      const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: 'auto',
-          block: 'end',
-        })
-      }
-
-      const timeoutId = setTimeout(scrollToBottom, 10)
-      return () => clearTimeout(timeoutId)
-    }
-  }, [
-    messages,
-    shouldAutoScroll,
-    isInitialLoad,
-    setIsInitialLoad,
-    messagesEndRef,
-  ])
-
-  // Continuous scrolling during streaming
-  useEffect(() => {
-    if (!shouldAutoScroll || userScrollingRef.current) return
-
-    if (isThinking || isWaitingForResponse) {
-      const scrollInterval = setInterval(() => {
-        if (shouldAutoScroll && !userScrollingRef.current) {
-          messagesEndRef.current?.scrollIntoView({
-            behavior: 'auto',
-            block: 'end',
-          })
-        }
-      }, 300) // Scroll every 300ms during streaming
-
-      return () => clearInterval(scrollInterval)
-    }
-  }, [isThinking, isWaitingForResponse, shouldAutoScroll, messagesEndRef])
 
   if (!mounted) {
     return (
@@ -851,49 +777,41 @@ export function ChatMessages({
   }
 
   return (
-    <div
-      className="h-full"
-      style={{
-        height: '100%',
-        position: 'relative',
-      }}
-    >
-      <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
-        {/* Archived Messages - only shown if there are more than the max prompt messages */}
-        {archivedMessages.length > 0 && (
-          <>
-            <div className={`opacity-70`}>
-              {archivedMessages.map((message, i) => (
-                <ChatMessage
-                  key={`archived-${i}`}
-                  message={message as MessageWithThoughts}
-                  isDarkMode={isDarkMode}
-                  shouldDiscardThoughts={false}
-                  isLastMessage={false}
-                  isWaitingForResponse={false}
-                />
-              ))}
-            </div>
+    <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
+      {/* Archived Messages - only shown if there are more than the max prompt messages */}
+      {archivedMessages.length > 0 && (
+        <>
+          <div className={`opacity-70`}>
+            {archivedMessages.map((message, i) => (
+              <ChatMessage
+                key={`archived-${i}`}
+                message={message as MessageWithThoughts}
+                isDarkMode={isDarkMode}
+                shouldDiscardThoughts={false}
+                isLastMessage={false}
+                isWaitingForResponse={false}
+              />
+            ))}
+          </div>
 
-            {/* Separator */}
-            <MessagesSeparator isDarkMode={isDarkMode} />
-          </>
-        )}
+          {/* Separator */}
+          <MessagesSeparator isDarkMode={isDarkMode} />
+        </>
+      )}
 
-        {/* Live Messages - the last messages up to max prompt limit */}
-        {liveMessages.map((message, i) => (
-          <ChatMessage
-            key={`${chatId}-${i}`}
-            message={message as MessageWithThoughts}
-            isDarkMode={isDarkMode}
-            shouldDiscardThoughts={false}
-            isLastMessage={i === liveMessages.length - 1}
-            isWaitingForResponse={false}
-          />
-        ))}
-        {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
-        <div ref={messagesEndRef} />
-      </div>
+      {/* Live Messages - the last messages up to max prompt limit */}
+      {liveMessages.map((message, i) => (
+        <ChatMessage
+          key={`${chatId}-${i}`}
+          message={message as MessageWithThoughts}
+          isDarkMode={isDarkMode}
+          shouldDiscardThoughts={false}
+          isLastMessage={i === liveMessages.length - 1}
+          isWaitingForResponse={false}
+        />
+      ))}
+      {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
+      <div ref={messagesEndRef} />
     </div>
   )
 }
