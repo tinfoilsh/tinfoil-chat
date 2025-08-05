@@ -5,7 +5,7 @@ const VERIFIER_VERSION = 'v0.0.9'
 export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
   MOBILE_BREAKPOINT: 768,
-  DEFAULT_MODEL: 'llama3-3-70b' as AIModel,
+  DEFAULT_MODEL: 'llama3-3-70b-free' as AIModel,
   VERIFIER_VERSION,
   VERIFIER_WASM_URL: `https://tinfoilsh.github.io/verifier-js/tinfoil-verifier-${VERIFIER_VERSION}.wasm`,
   // Inference proxy URL for all model requests
