@@ -465,6 +465,7 @@ export function useChatMessaging({
         let isFirstChunk = true
         let initialContentBuffer = '' // Buffer for detecting <think> tag across chunks
         let sseBuffer = '' // Buffer for potentially incomplete SSE messages
+        let isUsingReasoningFormat = false // Track if we're using reasoning_content format
 
         while (true) {
           const { done, value } = await reader!.read()
@@ -492,15 +493,28 @@ export function useChatMessaging({
               }
             }
             // If we're still in thinking mode when the stream ends,
-            // convert thoughts into regular message content
+            // handle based on format
             else if (isInThinkingMode && thoughtsBuffer.trim()) {
               isInThinkingMode = false
               setIsThinking(false)
-              assistantMessage = {
-                role: 'assistant',
-                content: thoughtsBuffer.trim(), // Convert thoughts to content
-                timestamp: new Date(),
-                isThinking: false,
+
+              if (isUsingReasoningFormat) {
+                // For reasoning_content format, keep thoughts as thoughts
+                assistantMessage = {
+                  role: 'assistant',
+                  content: '', // No regular content was received
+                  thoughts: thoughtsBuffer.trim(),
+                  timestamp: new Date(),
+                  isThinking: false,
+                }
+              } else {
+                // For <think> format, convert thoughts to content
+                assistantMessage = {
+                  role: 'assistant',
+                  content: thoughtsBuffer.trim(), // Convert thoughts to content
+                  timestamp: new Date(),
+                  isThinking: false,
+                }
               }
               if (currentChatIdRef.current === updatedChat.id) {
                 const chatId = currentChatIdRef.current
@@ -539,38 +553,174 @@ export function useChatMessaging({
               const jsonData = line.replace(/^data: /, '')
               const json = JSON.parse(jsonData)
 
+              // Check for reasoning_content format (alternative to <think> tags)
+              // reasoning_content field exists when the key is present, even if empty string
+              const hasReasoningContent =
+                'reasoning_content' in (json.choices?.[0]?.delta || {}) ||
+                'reasoning_content' in (json.choices?.[0]?.message || {})
+              const reasoningContent =
+                json.choices?.[0]?.message?.reasoning_content ||
+                json.choices?.[0]?.delta?.reasoning_content ||
+                ''
+
               // Extract content from the delta structure in OpenAI format
               let content = json.choices?.[0]?.delta?.content || ''
 
-              // If we're still in the initial phase, buffer the content
-              if (isFirstChunk) {
-                initialContentBuffer += content
+              // Detect start of reasoning_content format (when field appears for first time)
+              if (
+                hasReasoningContent &&
+                !isUsingReasoningFormat &&
+                !isInThinkingMode
+              ) {
+                // Start thinking mode for reasoning_content format
+                isUsingReasoningFormat = true
+                isInThinkingMode = true
+                setIsThinking(true)
+                setIsWaitingForResponse(false)
+                isFirstChunk = false // No need to buffer for reasoning_content
 
-                // Check if we have enough content to determine if it starts with <think>
-                if (
-                  initialContentBuffer.includes('<think>') ||
-                  initialContentBuffer.length > 5 // Reduced from 20 to 5 for better responsiveness
-                ) {
-                  isFirstChunk = false
-                  content = initialContentBuffer
-                  initialContentBuffer = ''
-
-                  // Check for think tag in the complete buffer
-                  if (content.includes('<think>')) {
-                    isInThinkingMode = true
-                    setIsThinking(true)
-                    content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
+                // Only add non-empty reasoning content
+                if (reasoningContent) {
+                  thoughtsBuffer = reasoningContent
+                  assistantMessage = {
+                    ...assistantMessage,
+                    thoughts: thoughtsBuffer,
+                    isThinking: true,
                   }
+                  if (currentChatIdRef.current === updatedChat.id) {
+                    const chatId = currentChatIdRef.current
+                    const newMessages = [...updatedMessages, assistantMessage]
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      true,
+                    )
+                  }
+                }
+                continue
+              } else if (isUsingReasoningFormat && hasReasoningContent) {
+                // Continue with reasoning format (even if reasoning_content is empty)
+                if (reasoningContent) {
+                  // Only accumulate non-empty reasoning content
+                  thoughtsBuffer += reasoningContent
+                }
 
-                  // Remove loading dots only after processing the first chunk
-                  setIsWaitingForResponse(false)
-                } else {
-                  continue // Keep buffering
+                // Check if regular content has appeared - this signals end of thinking
+                if (content && isInThinkingMode) {
+                  isInThinkingMode = false
+                  setIsThinking(false)
+
+                  // Finalize the thoughts and start regular content
+                  assistantMessage = {
+                    ...assistantMessage,
+                    thoughts: thoughtsBuffer.trim() || undefined,
+                    content: content,
+                    isThinking: false,
+                  }
+                } else if (reasoningContent) {
+                  // Still in thinking mode with new reasoning content
+                  assistantMessage = {
+                    ...assistantMessage,
+                    thoughts: thoughtsBuffer,
+                    isThinking: isInThinkingMode,
+                  }
+                }
+
+                // Update UI if we have changes
+                if (
+                  (reasoningContent || content) &&
+                  currentChatIdRef.current === updatedChat.id
+                ) {
+                  const chatId = currentChatIdRef.current
+                  const newMessages = [...updatedMessages, assistantMessage]
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    isInThinkingMode,
+                  )
+                }
+
+                // Continue processing if we have content to handle below
+                if (!content) {
+                  continue
                 }
               }
 
-              // Check for </think> tag anywhere in the content
-              if (content.includes('</think>') && isInThinkingMode) {
+              // For reasoning_content format with content appearing
+              if (isUsingReasoningFormat && content) {
+                // Stop thinking if not already stopped
+                if (isInThinkingMode) {
+                  isInThinkingMode = false
+                  setIsThinking(false)
+                }
+
+                // Update with content (thoughts already set above)
+                assistantMessage = {
+                  ...assistantMessage,
+                  content: (assistantMessage.content || '') + content,
+                  isThinking: false,
+                }
+
+                if (currentChatIdRef.current === updatedChat.id) {
+                  const chatId = currentChatIdRef.current
+                  const newMessages = [...updatedMessages, assistantMessage]
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    false,
+                  )
+                }
+                continue
+              }
+
+              // Skip initial buffering if we're using reasoning_content format
+              if (!isUsingReasoningFormat) {
+                // If we're still in the initial phase, buffer the content
+                if (isFirstChunk) {
+                  initialContentBuffer += content
+
+                  // Check if we have enough content to determine if it starts with <think>
+                  if (
+                    initialContentBuffer.includes('<think>') ||
+                    initialContentBuffer.length > 5 // Reduced from 20 to 5 for better responsiveness
+                  ) {
+                    isFirstChunk = false
+                    content = initialContentBuffer
+                    initialContentBuffer = ''
+
+                    // Check for think tag in the complete buffer
+                    if (content.includes('<think>')) {
+                      isInThinkingMode = true
+                      setIsThinking(true)
+                      content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
+                    }
+
+                    // Remove loading dots only after processing the first chunk
+                    setIsWaitingForResponse(false)
+                  } else {
+                    continue // Keep buffering
+                  }
+                }
+              }
+
+              // Check for </think> tag anywhere in the content (only for <think> format, not reasoning_content)
+              if (
+                content.includes('</think>') &&
+                isInThinkingMode &&
+                !isUsingReasoningFormat
+              ) {
                 isInThinkingMode = false
                 setIsThinking(false)
 
@@ -609,8 +759,8 @@ export function useChatMessaging({
                 continue
               }
 
-              // If still in thinking mode
-              if (isInThinkingMode) {
+              // If still in thinking mode (for <think> format only, reasoning_content is handled above)
+              if (isInThinkingMode && !isUsingReasoningFormat) {
                 thoughtsBuffer += content
                 assistantMessage = {
                   ...assistantMessage,
@@ -631,27 +781,34 @@ export function useChatMessaging({
                     true,
                   )
                 }
-              } else {
+              } else if (!isInThinkingMode) {
                 // Not in thinking mode, append to regular content
-                content = content.replace(/<think>|<\/think>/g, '') // Remove any think tags
-                assistantMessage = {
-                  ...assistantMessage,
-                  content: (assistantMessage.content || '') + content,
-                  isThinking: false,
+                // For reasoning_content format, we've already transitioned out of thinking
+                // For <think> format, we remove any think tags
+                if (!isUsingReasoningFormat) {
+                  content = content.replace(/<think>|<\/think>/g, '') // Remove any think tags
                 }
-                if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
 
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                if (content) {
+                  assistantMessage = {
+                    ...assistantMessage,
+                    content: (assistantMessage.content || '') + content,
+                    isThinking: false,
+                  }
+                  if (currentChatIdRef.current === updatedChat.id) {
+                    const chatId = currentChatIdRef.current
+                    const newMessages = [...updatedMessages, assistantMessage]
+
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      false,
+                    )
+                  }
                 }
               }
             } catch (error) {
