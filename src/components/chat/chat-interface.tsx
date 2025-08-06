@@ -19,6 +19,7 @@ import {
 } from '@heroicons/react/24/outline'
 
 import { useCloudSync } from '@/hooks/use-cloud-sync'
+import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -97,6 +98,9 @@ export function ChatInterface({
     setEncryptionKey,
     retryDecryptionWithNewKey,
   } = useCloudSync()
+
+  // Initialize profile sync
+  const { retryDecryption: retryProfileDecryption } = useProfileSync()
 
   // State for API data
   const [models, setModels] = useState<BaseModel[]>([])
@@ -912,6 +916,8 @@ export function ChatInterface({
           // If sync happened (key changed), reload chats
           if (syncResult) {
             await reloadChats()
+            // Also retry profile decryption with the new key
+            await retryProfileDecryption()
           }
         }}
         isDarkMode={isDarkMode}
