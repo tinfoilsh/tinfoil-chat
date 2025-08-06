@@ -155,6 +155,76 @@ export function SettingsSidebar({
     }
   }, [isClient, defaultSystemPrompt])
 
+  // Listen for profile sync updates
+  useEffect(() => {
+    if (!isClient) return
+
+    const loadSettingsFromStorage = () => {
+      // Reload all settings from localStorage
+      const savedMaxMessages = localStorage.getItem('maxPromptMessages')
+      if (savedMaxMessages) {
+        const parsedValue = parseInt(savedMaxMessages, 10)
+        if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
+          setMaxMessages(parsedValue)
+        }
+      }
+
+      const savedNickname = localStorage.getItem('userNickname')
+      const savedProfession = localStorage.getItem('userProfession')
+      const savedTraits = localStorage.getItem('userTraits')
+      const savedContext = localStorage.getItem('userAdditionalContext')
+      const savedUsingPersonalization = localStorage.getItem(
+        'isUsingPersonalization',
+      )
+      const savedLanguage = localStorage.getItem('userLanguage')
+
+      if (savedNickname !== null) setNickname(savedNickname)
+      if (savedProfession !== null) setProfession(savedProfession)
+      if (savedTraits) {
+        try {
+          setSelectedTraits(JSON.parse(savedTraits))
+        } catch {
+          setSelectedTraits([])
+        }
+      }
+      if (savedContext !== null) setAdditionalContext(savedContext)
+      if (savedUsingPersonalization !== null) {
+        setIsUsingPersonalization(savedUsingPersonalization === 'true')
+      }
+      if (savedLanguage) {
+        setLanguage(savedLanguage)
+      }
+    }
+
+    // Listen for storage events (from other tabs or sync)
+    window.addEventListener('storage', loadSettingsFromStorage)
+
+    // Also listen for our custom events that fire after profile sync
+    const handleProfileSyncUpdate = () => {
+      loadSettingsFromStorage()
+    }
+
+    // These events are fired by the profile sync when it updates localStorage
+    window.addEventListener('themeChanged', handleProfileSyncUpdate)
+    window.addEventListener('maxPromptMessagesChanged', handleProfileSyncUpdate)
+    window.addEventListener('personalizationChanged', handleProfileSyncUpdate)
+    window.addEventListener('languageChanged', handleProfileSyncUpdate)
+
+    return () => {
+      window.removeEventListener('storage', loadSettingsFromStorage)
+      window.removeEventListener('themeChanged', handleProfileSyncUpdate)
+      window.removeEventListener(
+        'maxPromptMessagesChanged',
+        handleProfileSyncUpdate,
+      )
+      window.removeEventListener(
+        'personalizationChanged',
+        handleProfileSyncUpdate,
+      )
+      window.removeEventListener('languageChanged', handleProfileSyncUpdate)
+    }
+  }, [isClient])
+
   // Save max messages setting to localStorage
   const handleMaxMessagesChange = (value: number) => {
     if (value > 0 && value <= 50) {
