@@ -27,10 +27,20 @@ export function ModelSelector({
     setFailedImages((prev) => ({ ...prev, [modelName]: true }))
   }
 
-  // Get chat models - show all chat models regardless of subscription
-  const allChatModels = models.filter(
-    (model) => model.type === 'chat' && model.chat === true,
-  )
+  // Filter models based on subscription status
+  // Premium users: show only premium models
+  // Free users: show all models (free models enabled, premium models disabled)
+  const displayModels = models.filter((model) => {
+    if (model.type !== 'chat' || model.chat !== true) return false
+
+    // For premium users, only show premium models
+    if (isPremium && !model.paid) {
+      return false
+    }
+
+    // For free users, show all models
+    return true
+  })
 
   return (
     <div
@@ -39,7 +49,7 @@ export function ModelSelector({
         isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
       }`}
     >
-      {allChatModels.map((model) => {
+      {displayModels.map((model) => {
         const isAvailable = isModelAvailable(model, isPremium)
         const isSelected = model.modelName === selectedModel
         const isPremiumModel = model.paid === true
@@ -67,7 +77,7 @@ export function ModelSelector({
               <img
                 src={failedImages[model.modelName] ? '/icon.png' : model.image}
                 alt={model.name}
-                className={`h-5 w-5 ${!isAvailable ? 'opacity-40 grayscale' : ''}`}
+                className={`h-5 w-5 ${!isAvailable ? 'opacity-70 grayscale' : ''}`}
                 onError={() => handleImageError(model.modelName)}
               />
               {isPremiumModel && !isPremium && (
@@ -87,7 +97,7 @@ export function ModelSelector({
             <div className="flex flex-1 flex-col">
               <div className="flex items-center gap-2">
                 <span
-                  className={`font-medium ${!isAvailable ? 'opacity-40' : ''}`}
+                  className={`font-medium ${!isAvailable ? 'opacity-70' : ''}`}
                 >
                   {model.name}
                 </span>
@@ -107,7 +117,7 @@ export function ModelSelector({
               <span
                 className={`text-xs ${
                   isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                } ${!isAvailable ? 'opacity-40' : ''}`}
+                } ${!isAvailable ? 'opacity-70' : ''}`}
               >
                 {model.description}
               </span>
