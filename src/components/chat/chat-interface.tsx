@@ -531,7 +531,7 @@ export function ChatInterface({
     [handleFileUpload],
   )
 
-  // Show loading state while checking subscription or loading config
+  // Show loading state while critical data is loading
   if (subscriptionLoading || isLoadingConfig) {
     return (
       <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
