@@ -84,30 +84,57 @@ export function useModelManagement({
         return
       }
 
-      // Check if current model (from localStorage or default) is valid
-      if (isModelNameAvailable(selectedModel, models, isPremium)) {
-        // Model is valid, just ensure it's saved
-        localStorage.setItem('selectedModel', selectedModel)
-        return
+      // Determine the best model for this user
+      let targetModel: AIModel = selectedModel
+
+      // For premium users, always prefer premium models
+      if (isPremium) {
+        const currentModelData = models.find(
+          (m) => m.modelName === selectedModel,
+        )
+        const isCurrentModelFree = !currentModelData?.paid
+
+        // Upgrade to premium model if currently using a free model
+        if (
+          isCurrentModelFree ||
+          !isModelNameAvailable(selectedModel, models, isPremium)
+        ) {
+          const premiumModels = availableChatModels.filter(
+            (m) => m.paid === true,
+          )
+          if (premiumModels.length > 0) {
+            targetModel = premiumModels[0].modelName as AIModel
+          } else {
+            // Fallback to first available model if no premium models
+            targetModel = availableChatModels[0].modelName as AIModel
+          }
+        }
+      } else {
+        // For free users, validate current model or use first available
+        if (!isModelNameAvailable(selectedModel, models, isPremium)) {
+          targetModel = availableChatModels[0].modelName as AIModel
+        }
       }
 
-      // Otherwise, use the first available model from config
-      const firstAvailableModel = availableChatModels[0].modelName as AIModel
-      setSelectedModel(firstAvailableModel)
-      localStorage.setItem('selectedModel', firstAvailableModel)
-
-      logWarning(
-        `Model ${selectedModel} is not available, switching to ${firstAvailableModel}`,
-        {
-          component: 'useModelManagement',
-          action: 'validateModel',
-          metadata: {
-            previousModel: selectedModel,
-            isPremium,
-            availableModels: availableChatModels.map((m) => m.modelName),
+      // Update model if changed
+      if (targetModel !== selectedModel) {
+        setSelectedModel(targetModel)
+        logWarning(
+          `Model ${selectedModel} is not optimal, switching to ${targetModel}`,
+          {
+            component: 'useModelManagement',
+            action: 'validateModel',
+            metadata: {
+              previousModel: selectedModel,
+              isPremium,
+              availableModels: availableChatModels.map((m) => m.modelName),
+            },
           },
-        },
-      )
+        )
+      }
+
+      // Always save the validated model
+      localStorage.setItem('selectedModel', targetModel)
     }
   }, [
     models,
