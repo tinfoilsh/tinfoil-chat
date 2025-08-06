@@ -142,7 +142,13 @@ export function useProfileSync() {
               '',
             traits:
               settings.traits ||
-              JSON.parse(localStorage.getItem('userTraits') || '[]'),
+              (() => {
+                try {
+                  return JSON.parse(localStorage.getItem('userTraits') || '[]')
+                } catch {
+                  return []
+                }
+              })(),
             additionalContext:
               settings.additionalContext ||
               localStorage.getItem('userAdditionalContext') ||
