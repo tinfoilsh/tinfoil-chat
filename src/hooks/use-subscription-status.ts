@@ -1,17 +1,13 @@
 import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const SUBSCRIPTION_CACHE_KEY = 'cached_subscription_status'
-const SUBSCRIPTION_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 interface CachedSubscription {
-  data: {
-    is_subscribed: boolean
-    chat_subscription_active: boolean
-    api_subscription_active: boolean
-  }
-  timestamp: number
+  is_subscribed: boolean
+  chat_subscription_active: boolean
+  api_subscription_active: boolean
 }
 
 export function useSubscriptionStatus() {
@@ -23,11 +19,7 @@ export function useSubscriptionStatus() {
     try {
       const cached = localStorage.getItem(SUBSCRIPTION_CACHE_KEY)
       if (cached) {
-        const parsed: CachedSubscription = JSON.parse(cached)
-        // Check if cache is still valid
-        if (Date.now() - parsed.timestamp < SUBSCRIPTION_CACHE_TTL) {
-          return parsed.data
-        }
+        return JSON.parse(cached) as CachedSubscription
       }
     } catch {
       // Ignore cache errors
@@ -36,6 +28,9 @@ export function useSubscriptionStatus() {
   }
 
   const cachedStatus = getCachedStatus()
+
+  // Track if we initially had cached data
+  const hadCachedDataRef = useRef(!!cachedStatus)
 
   // Only show loading if we don't have cached data
   const [isLoading, setIsLoading] = useState(!cachedStatus)
@@ -66,7 +61,10 @@ export function useSubscriptionStatus() {
               // Ignore cache errors
             }
           }
-          setIsLoading(false)
+          // Only set loading to false if we didn't have cached data initially
+          if (!hadCachedDataRef.current) {
+            setIsLoading(false)
+          }
           return
         }
 
@@ -94,14 +92,7 @@ export function useSubscriptionStatus() {
         // Cache the subscription status
         if (typeof window !== 'undefined') {
           try {
-            const cacheData: CachedSubscription = {
-              data,
-              timestamp: Date.now(),
-            }
-            localStorage.setItem(
-              SUBSCRIPTION_CACHE_KEY,
-              JSON.stringify(cacheData),
-            )
+            localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify(data))
           } catch {
             // Ignore cache errors
           }
@@ -121,7 +112,11 @@ export function useSubscriptionStatus() {
           }
         }
       } finally {
-        setIsLoading(false)
+        // Only set loading to false if we didn't have cached data initially
+        // Otherwise, we're doing a background refresh and shouldn't show loading
+        if (!hadCachedDataRef.current) {
+          setIsLoading(false)
+        }
       }
     }
 
