@@ -15,7 +15,7 @@ export function useProfileSync() {
   }, [getToken])
 
   // Load settings from localStorage
-  const loadLocalSettings = (): ProfileData => {
+  const loadLocalSettings = useCallback((): ProfileData => {
     const settings: ProfileData = {}
 
     // Theme
@@ -62,10 +62,10 @@ export function useProfileSync() {
     }
 
     return settings
-  }
+  }, [])
 
   // Apply settings to localStorage
-  const applySettingsToLocal = (settings: ProfileData) => {
+  const applySettingsToLocal = useCallback((settings: ProfileData) => {
     // Theme
     if (settings.isDarkMode !== undefined) {
       localStorage.setItem('theme', settings.isDarkMode ? 'dark' : 'light')
@@ -164,7 +164,7 @@ export function useProfileSync() {
         }),
       )
     }
-  }
+  }, [])
 
   // Sync profile from cloud to local
   const syncFromCloud = useCallback(async () => {
@@ -189,7 +189,7 @@ export function useProfileSync() {
         action: 'syncFromCloud',
       })
     }
-  }, [isSignedIn])
+  }, [isSignedIn, applySettingsToLocal])
 
   // Sync profile from local to cloud (debounced)
   const syncToCloud = useCallback(async () => {
@@ -220,7 +220,7 @@ export function useProfileSync() {
         })
       }
     }, 2000) // 2 second debounce
-  }, [isSignedIn])
+  }, [isSignedIn, loadLocalSettings])
 
   // Initial sync when authenticated and periodic sync
   useEffect(() => {
@@ -290,7 +290,7 @@ export function useProfileSync() {
         action: 'retryDecryption',
       })
     }
-  }, [])
+  }, [applySettingsToLocal])
 
   return {
     syncFromCloud,
