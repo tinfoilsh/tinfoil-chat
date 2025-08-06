@@ -31,6 +31,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^11.2.10",
     "jszip": "^3.10.1",
+    "katex": "^0.16.22",
     "lucide-react": "^0.473.0",
     "next": "^15.3.3",
     "react": "^18",
@@ -39,8 +40,10 @@
     "react-markdown": "^9.0.3",
     "react-scrollable-feed": "^2.0.3",
     "react-syntax-highlighter": "^15.6.1",
+    "rehype-katex": "^7.0.1",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.0.3"

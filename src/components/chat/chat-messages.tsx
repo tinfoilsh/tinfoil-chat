@@ -4,6 +4,7 @@ import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import 'katex/dist/katex.min.css'
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
@@ -20,15 +21,18 @@ import {
 } from 'react-icons/fa'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import type { Message } from './types'
 
-// Static array to prevent recreation on every render
-const remarkPlugins = [remarkGfm]
+// Static arrays to prevent recreation on every render
+const remarkPlugins = [remarkGfm, remarkMath]
+const rehypePlugins = [rehypeKatex]
 
 // Add new types
 type MessageWithThoughts = Message & {
@@ -172,6 +176,8 @@ const ThoughtProcess = memo(function ThoughtProcess({
                   </div>
                   <div className="min-h-[24px] flex-1 pb-2">
                     <ReactMarkdown
+                      remarkPlugins={remarkPlugins}
+                      rehypePlugins={rehypePlugins}
                       components={{
                         p: ({ children }) => <>{children}</>,
                       }}
@@ -203,6 +209,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
   return (
     <ReactMarkdown
       remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
       components={{
         code({
           node,
