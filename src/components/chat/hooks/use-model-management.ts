@@ -34,7 +34,7 @@ export function useModelManagement({
   storeHistory,
   subscriptionLoading = false,
 }: UseModelManagementProps): UseModelManagementReturn {
-  // Model state - initialize with saved model if available
+  // Model state - initialize with saved model or temporary default
   const [selectedModel, setSelectedModel] = useState<AIModel>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('selectedModel')
@@ -42,6 +42,8 @@ export function useModelManagement({
         return saved as AIModel
       }
     }
+    // Use DEFAULT_MODEL only as a temporary placeholder
+    // It will be replaced with the first available model from config
     return CONSTANTS.DEFAULT_MODEL
   })
 
@@ -65,34 +67,47 @@ export function useModelManagement({
     ) {
       setHasValidated(true)
 
-      // Check if the selected model is available for the user
-      if (!isModelNameAvailable(selectedModel, models, isPremium)) {
-        // Find first available chat model as fallback
-        const availableChatModels = models.filter(
-          (model) =>
-            model.type === 'chat' &&
-            model.chat === true &&
-            isModelNameAvailable(model.modelName as AIModel, models, isPremium),
-        )
+      // Get all available chat models for this user
+      const availableChatModels = models.filter(
+        (model) =>
+          model.type === 'chat' &&
+          model.chat === true &&
+          isModelNameAvailable(model.modelName as AIModel, models, isPremium),
+      )
 
-        if (availableChatModels.length > 0) {
-          const fallbackModel = availableChatModels[0].modelName as AIModel
-          setSelectedModel(fallbackModel)
-          localStorage.setItem('selectedModel', fallbackModel)
-
-          logWarning(
-            `Model ${selectedModel} is not available for subscription level, switching to ${fallbackModel}`,
-            {
-              component: 'useModelManagement',
-              action: 'validateModel',
-              metadata: {
-                previousModel: selectedModel,
-                isPremium,
-              },
-            },
-          )
-        }
+      if (availableChatModels.length === 0) {
+        logWarning('No chat models available', {
+          component: 'useModelManagement',
+          action: 'validateModel',
+          metadata: { isPremium, modelCount: models.length },
+        })
+        return
       }
+
+      // Check if current model (from localStorage or default) is valid
+      if (isModelNameAvailable(selectedModel, models, isPremium)) {
+        // Model is valid, just ensure it's saved
+        localStorage.setItem('selectedModel', selectedModel)
+        return
+      }
+
+      // Otherwise, use the first available model from config
+      const firstAvailableModel = availableChatModels[0].modelName as AIModel
+      setSelectedModel(firstAvailableModel)
+      localStorage.setItem('selectedModel', firstAvailableModel)
+
+      logWarning(
+        `Model ${selectedModel} is not available, switching to ${firstAvailableModel}`,
+        {
+          component: 'useModelManagement',
+          action: 'validateModel',
+          metadata: {
+            previousModel: selectedModel,
+            isPremium,
+            availableModels: availableChatModels.map((m) => m.modelName),
+          },
+        },
+      )
     }
   }, [
     models,
