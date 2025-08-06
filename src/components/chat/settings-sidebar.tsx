@@ -205,14 +205,12 @@ export function SettingsSidebar({
     }
 
     // These events are fired by the profile sync when it updates localStorage
-    window.addEventListener('themeChanged', handleProfileSyncUpdate)
     window.addEventListener('maxPromptMessagesChanged', handleProfileSyncUpdate)
     window.addEventListener('personalizationChanged', handleProfileSyncUpdate)
     window.addEventListener('languageChanged', handleProfileSyncUpdate)
 
     return () => {
       window.removeEventListener('storage', loadSettingsFromStorage)
-      window.removeEventListener('themeChanged', handleProfileSyncUpdate)
       window.removeEventListener(
         'maxPromptMessagesChanged',
         handleProfileSyncUpdate,
