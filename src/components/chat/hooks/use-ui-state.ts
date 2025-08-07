@@ -98,6 +98,12 @@ export function useUIState(): UseUIStateReturn {
     setIsDarkMode((prev) => {
       const newTheme = !prev
       localStorage.setItem('theme', newTheme ? 'dark' : 'light')
+      // Trigger theme change event for profile sync
+      window.dispatchEvent(
+        new CustomEvent('themeChanged', {
+          detail: newTheme ? 'dark' : 'light',
+        }),
+      )
       return newTheme
     })
   }, [])

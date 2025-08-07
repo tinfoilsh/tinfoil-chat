@@ -26,6 +26,7 @@ export const PAGINATION = {
 // Cloud sync settings
 export const CLOUD_SYNC = {
   RETRY_DELAY: 100, // milliseconds
+  SYNC_INTERVAL: 5000, // 5 seconds - frequency for syncing chats and profile
 } as const
 
 // UI settings

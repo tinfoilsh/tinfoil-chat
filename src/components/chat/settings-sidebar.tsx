@@ -6,7 +6,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CONSTANTS } from './constants'
 
 type SettingsSidebarProps = {
@@ -105,44 +105,55 @@ export function SettingsSidebar({
     'Turkish',
   ]
 
-  // Load settings from localStorage
+  // Shared function to load settings from localStorage
+  const loadSettingsFromStorage = useCallback(() => {
+    // Load max messages setting
+    const savedMaxMessages = localStorage.getItem('maxPromptMessages')
+    if (savedMaxMessages) {
+      const parsedValue = parseInt(savedMaxMessages, 10)
+      if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
+        setMaxMessages(parsedValue)
+      }
+    }
+
+    // Load personalization settings
+    const savedNickname = localStorage.getItem('userNickname')
+    const savedProfession = localStorage.getItem('userProfession')
+    const savedTraits = localStorage.getItem('userTraits')
+    const savedContext = localStorage.getItem('userAdditionalContext')
+    const savedUsingPersonalization = localStorage.getItem(
+      'isUsingPersonalization',
+    )
+
+    if (savedNickname !== null) setNickname(savedNickname)
+    if (savedProfession !== null) setProfession(savedProfession)
+    if (savedTraits) {
+      try {
+        setSelectedTraits(JSON.parse(savedTraits))
+      } catch {
+        setSelectedTraits([])
+      }
+    }
+    if (savedContext !== null) setAdditionalContext(savedContext)
+    if (savedUsingPersonalization !== null) {
+      setIsUsingPersonalization(savedUsingPersonalization === 'true')
+    }
+
+    // Load language setting
+    const savedLanguage = localStorage.getItem('userLanguage')
+    if (savedLanguage) {
+      setLanguage(savedLanguage)
+    }
+  }, [])
+
+  // Initial load settings from localStorage
   useEffect(() => {
     if (isClient) {
-      // Load max messages setting
-      const savedMaxMessages = localStorage.getItem('maxPromptMessages')
-      if (savedMaxMessages) {
-        const parsedValue = parseInt(savedMaxMessages, 10)
-        if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
-          setMaxMessages(parsedValue)
-        }
-      }
+      loadSettingsFromStorage()
 
-      // Load personalization settings
-      const savedNickname = localStorage.getItem('userNickname')
-      const savedProfession = localStorage.getItem('userProfession')
-      const savedTraits = localStorage.getItem('userTraits')
-      const savedContext = localStorage.getItem('userAdditionalContext')
-      const savedUsingPersonalization = localStorage.getItem(
-        'isUsingPersonalization',
-      )
-
-      if (savedNickname) setNickname(savedNickname)
-      if (savedProfession) setProfession(savedProfession)
-      if (savedTraits) {
-        try {
-          setSelectedTraits(JSON.parse(savedTraits))
-        } catch {
-          setSelectedTraits([])
-        }
-      }
-      if (savedContext) setAdditionalContext(savedContext)
-      if (savedUsingPersonalization === 'true') setIsUsingPersonalization(true)
-
-      // Load language setting (separate from personalization)
+      // Set default language if not already set
       const savedLanguage = localStorage.getItem('userLanguage')
-      if (savedLanguage) {
-        setLanguage(savedLanguage)
-      } else {
+      if (!savedLanguage) {
         // Get user's locale and set as default
         const userLocale = navigator.language || 'en-US'
         const languageName =
@@ -153,7 +164,38 @@ export function SettingsSidebar({
         localStorage.setItem('userLanguage', languageName)
       }
     }
-  }, [isClient, defaultSystemPrompt])
+  }, [isClient, defaultSystemPrompt, loadSettingsFromStorage])
+
+  // Listen for profile sync updates
+  useEffect(() => {
+    if (!isClient) return
+
+    // Listen for storage events (from other tabs or sync)
+    window.addEventListener('storage', loadSettingsFromStorage)
+
+    // Also listen for our custom events that fire after profile sync
+    const handleProfileSyncUpdate = () => {
+      loadSettingsFromStorage()
+    }
+
+    // These events are fired by the profile sync when it updates localStorage
+    window.addEventListener('maxPromptMessagesChanged', handleProfileSyncUpdate)
+    window.addEventListener('personalizationChanged', handleProfileSyncUpdate)
+    window.addEventListener('languageChanged', handleProfileSyncUpdate)
+
+    return () => {
+      window.removeEventListener('storage', loadSettingsFromStorage)
+      window.removeEventListener(
+        'maxPromptMessagesChanged',
+        handleProfileSyncUpdate,
+      )
+      window.removeEventListener(
+        'personalizationChanged',
+        handleProfileSyncUpdate,
+      )
+      window.removeEventListener('languageChanged', handleProfileSyncUpdate)
+    }
+  }, [isClient, loadSettingsFromStorage])
 
   // Save max messages setting to localStorage
   const handleMaxMessagesChange = (value: number) => {
