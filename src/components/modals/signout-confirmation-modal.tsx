@@ -1,3 +1,4 @@
+import { logError } from '@/utils/error-handling'
 import { Dialog, Transition } from '@headlessui/react'
 import { ArrowDownTrayIcon, CheckIcon } from '@heroicons/react/24/outline'
 import { Fragment, useCallback, useState } from 'react'
@@ -19,6 +20,7 @@ export function SignoutConfirmationModal({
 }: SignoutConfirmationModalProps) {
   const [hasDownloadedKey, setHasDownloadedKey] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const downloadKeyAsPEM = useCallback(() => {
     if (!encryptionKey) return
@@ -44,8 +46,15 @@ ${encryptionKey.replace('key_', '')}
 
   const handleConfirm = useCallback(async () => {
     setIsConfirming(true)
+    setError(null)
     try {
       await onConfirm()
+    } catch (err) {
+      logError('Failed to delete data during signout', err, {
+        component: 'SignoutConfirmationModal',
+        action: 'handleConfirm',
+      })
+      setError('Failed to delete data. Please try again.')
     } finally {
       setIsConfirming(false)
     }
@@ -188,6 +197,17 @@ ${encryptionKey.replace('key_', '')}
                             Choose what to do with your local data
                           </p>
                         </div>
+                        {error && (
+                          <div
+                            className={`mb-3 rounded-lg p-3 text-sm ${
+                              isDarkMode
+                                ? 'border border-red-800 bg-red-900/20 text-red-400'
+                                : 'border border-red-200 bg-red-50 text-red-600'
+                            }`}
+                          >
+                            {error}
+                          </div>
+                        )}
                         <div className="flex flex-col gap-3 sm:flex-row">
                           <button
                             onClick={onClose}
