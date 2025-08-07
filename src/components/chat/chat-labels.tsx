@@ -85,7 +85,18 @@ export function ChatLabels({
               expandedLabel === 'model' ? 'bg-opacity-80' : ''
             } transition-colors hover:bg-opacity-80`}
           >
-            <img src={model.image} alt={model.name} className="h-5 w-5" />
+            <img
+              src={
+                model.modelName.toLowerCase().includes('openai') ||
+                model.modelName.toLowerCase().includes('gpt')
+                  ? isDarkMode
+                    ? '/model-icons/openai-dark.png'
+                    : '/model-icons/openai-light.png'
+                  : model.image
+              }
+              alt={model.name}
+              className="h-5 w-5"
+            />
             {!isCompactMode && (
               <span
                 className={`text-xs ${

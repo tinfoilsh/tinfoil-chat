@@ -75,7 +75,16 @@ export function ModelSelector({
           >
             <div className="relative">
               <img
-                src={failedImages[model.modelName] ? '/icon.png' : model.image}
+                src={
+                  failedImages[model.modelName]
+                    ? '/icon.png'
+                    : model.modelName.toLowerCase().includes('openai') ||
+                        model.modelName.toLowerCase().includes('gpt')
+                      ? isDarkMode
+                        ? '/model-icons/openai-dark.png'
+                        : '/model-icons/openai-light.png'
+                      : model.image
+                }
                 alt={model.name}
                 className={`h-5 w-5 ${!isAvailable ? 'opacity-70 grayscale' : ''}`}
                 onError={() => handleImageError(model.modelName)}
