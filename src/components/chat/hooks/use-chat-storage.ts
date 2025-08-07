@@ -303,22 +303,19 @@ export function useChatStorage({
         return newChats
       })
     },
-    [currentChat?.id, storeHistory, isSignedIn],
+    [currentChat?.id, isSignedIn],
   )
 
   // Switch to a different chat
-  const switchChat = useCallback(
-    async (chat: Chat) => {
-      setCurrentChat(chat)
-      setIsInitialLoad(true)
+  const switchChat = useCallback(async (chat: Chat) => {
+    setCurrentChat(chat)
+    setIsInitialLoad(true)
 
-      // Set isInitialLoad back to false after a brief delay to show the chat
-      setTimeout(() => {
-        setIsInitialLoad(false)
-      }, CONSTANTS.CHAT_INIT_DELAY_MS)
-    },
-    [storeHistory],
-  )
+    // Set isInitialLoad back to false after a brief delay to show the chat
+    setTimeout(() => {
+      setIsInitialLoad(false)
+    }, CONSTANTS.CHAT_INIT_DELAY_MS)
+  }, [])
 
   // Handle chat selection
   const handleChatSelect = useCallback(
@@ -326,7 +323,7 @@ export function useChatStorage({
       const selectedChat = chats.find((chat) => chat.id === chatId) || chats[0]
       switchChat(selectedChat)
     },
-    [chats, switchChat, storeHistory],
+    [chats, switchChat],
   )
 
   // Update chat title

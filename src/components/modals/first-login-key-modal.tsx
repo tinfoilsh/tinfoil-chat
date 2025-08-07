@@ -47,7 +47,7 @@ export function FirstLoginKeyModal({
     return null
   }
 
-  const handleFileImport = async (file: File) => {
+  const handleFileImport = useCallback(async (file: File) => {
     try {
       const content = await file.text()
       const extractedKey = extractKeyFromPEM(content)
@@ -61,7 +61,7 @@ export function FirstLoginKeyModal({
     } catch (error) {
       setError('Failed to read the PEM file')
     }
-  }
+  }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -73,19 +73,22 @@ export function FirstLoginKeyModal({
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
 
-    const files = Array.from(e.dataTransfer.files)
-    const pemFile = files.find((file) => file.name.endsWith('.pem'))
+      const files = Array.from(e.dataTransfer.files)
+      const pemFile = files.find((file) => file.name.endsWith('.pem'))
 
-    if (pemFile) {
-      await handleFileImport(pemFile)
-    } else {
-      setError('Please drop a .pem file')
-    }
-  }, [])
+      if (pemFile) {
+        await handleFileImport(pemFile)
+      } else {
+        setError('Please drop a .pem file')
+      }
+    },
+    [handleFileImport],
+  )
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

@@ -138,28 +138,31 @@ ${encryptionKey.replace('key_', '')}
     return null
   }
 
-  const handleFileImport = async (file: File) => {
-    try {
-      const content = await file.text()
-      const extractedKey = extractKeyFromPEM(content)
+  const handleFileImport = useCallback(
+    async (file: File) => {
+      try {
+        const content = await file.text()
+        const extractedKey = extractKeyFromPEM(content)
 
-      if (extractedKey) {
-        setInputKey(extractedKey)
-      } else {
+        if (extractedKey) {
+          setInputKey(extractedKey)
+        } else {
+          toast({
+            title: 'Invalid file',
+            description: 'Could not extract encryption key from the PEM file',
+            variant: 'destructive',
+          })
+        }
+      } catch (error) {
         toast({
-          title: 'Invalid file',
-          description: 'Could not extract encryption key from the PEM file',
+          title: 'Import failed',
+          description: 'Failed to read the PEM file',
           variant: 'destructive',
         })
       }
-    } catch (error) {
-      toast({
-        title: 'Import failed',
-        description: 'Failed to read the PEM file',
-        variant: 'destructive',
-      })
-    }
-  }
+    },
+    [toast],
+  )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -171,23 +174,26 @@ ${encryptionKey.replace('key_', '')}
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
 
-    const files = Array.from(e.dataTransfer.files)
-    const pemFile = files.find((file) => file.name.endsWith('.pem'))
+      const files = Array.from(e.dataTransfer.files)
+      const pemFile = files.find((file) => file.name.endsWith('.pem'))
 
-    if (pemFile) {
-      await handleFileImport(pemFile)
-    } else {
-      toast({
-        title: 'Invalid file',
-        description: 'Please drop a .pem file',
-        variant: 'destructive',
-      })
-    }
-  }, [])
+      if (pemFile) {
+        await handleFileImport(pemFile)
+      } else {
+        toast({
+          title: 'Invalid file',
+          description: 'Please drop a .pem file',
+          variant: 'destructive',
+        })
+      }
+    },
+    [handleFileImport, toast],
+  )
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
