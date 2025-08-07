@@ -117,8 +117,8 @@ ${encryptionKey.replace('key_', '')}
                         isDarkMode ? 'text-gray-300' : 'text-gray-600'
                       }`}
                     >
-                      You've been signed out. Your encryption key and local data
-                      are still on this device.
+                      You&apos;ve been signed out. Your encryption key and local
+                      data are still on this device.
                     </p>
                   </div>
 

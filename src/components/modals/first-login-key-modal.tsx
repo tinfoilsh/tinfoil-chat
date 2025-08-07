@@ -170,8 +170,8 @@ export function FirstLoginKeyModal({
                           isDarkMode ? 'text-gray-300' : 'text-gray-600'
                         }`}
                       >
-                        Your messages are end-to-end encrypted. Choose how you'd
-                        like to set up your encryption:
+                        Your messages are end-to-end encrypted. Choose how
+                        you&apos;d like to set up your encryption:
                       </p>
 
                       <div className="mt-6 space-y-3">
