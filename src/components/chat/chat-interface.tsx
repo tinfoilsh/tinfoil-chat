@@ -814,12 +814,12 @@ export function ChatInterface({
           right:
             (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? '345px'
+              ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px`
               : '0',
           bottom: 0,
           left:
             isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? '300px'
+              ? `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
               : '0',
           top: 0,
         }}

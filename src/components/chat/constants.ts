@@ -27,4 +27,8 @@ export const CONSTANTS = {
   CHAT_INIT_DELAY_MS: 300,
   // State update delay for async operations
   ASYNC_STATE_DELAY_MS: 50,
+  // Sidebar widths
+  CHAT_SIDEBAR_WIDTH_PX: 300,
+  SETTINGS_SIDEBAR_WIDTH_PX: 345,
+  VERIFIER_SIDEBAR_WIDTH_PX: 345,
 } as const
