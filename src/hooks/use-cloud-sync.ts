@@ -10,6 +10,7 @@ export interface CloudSyncState {
   syncing: boolean
   lastSyncTime: number | null
   encryptionKey: string | null
+  isFirstTimeUser: boolean
 }
 
 export function useCloudSync() {
@@ -18,6 +19,7 @@ export function useCloudSync() {
     syncing: false,
     lastSyncTime: null,
     encryptionKey: null,
+    isFirstTimeUser: false,
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
@@ -35,12 +37,17 @@ export function useCloudSync() {
         cloudSync.setTokenGetter(getToken)
         r2Storage.setTokenGetter(getToken)
 
+        // Check if user already has a key before initializing
+        const existingKey = localStorage.getItem('tinfoil-encryption-key')
+        const isFirstTime = !existingKey
+
         // Initialize encryption
         const key = await encryptionService.initialize()
 
         setState((prev) => ({
           ...prev,
           encryptionKey: key,
+          isFirstTimeUser: isFirstTime,
         }))
 
         // Check if there's a pending migration sync
@@ -203,11 +210,17 @@ export function useCloudSync() {
     [syncChats, retryDecryptionWithNewKey],
   )
 
+  // Clear first time user flag
+  const clearFirstTimeUser = useCallback(() => {
+    setState((prev) => ({ ...prev, isFirstTimeUser: false }))
+  }, [])
+
   return {
     ...state,
     syncChats,
     backupChat,
     setEncryptionKey,
     retryDecryptionWithNewKey,
+    clearFirstTimeUser,
   }
 }

@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ScrollableFeed from 'react-scrollable-feed'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
+import { FirstLoginKeyModal } from '../modals/first-login-key-modal'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -96,8 +97,10 @@ export function ChatInterface({
     syncing,
     syncChats,
     encryptionKey,
+    isFirstTimeUser,
     setEncryptionKey,
     retryDecryptionWithNewKey,
+    clearFirstTimeUser,
   } = useCloudSync()
 
   // Initialize profile sync
@@ -948,6 +951,28 @@ export function ChatInterface({
         onClose={() => setIsCloudSyncIntroModalOpen(false)}
         isDarkMode={isDarkMode}
       />
+
+      {/* First Login Key Modal */}
+      {isFirstTimeUser && isSignedIn && (
+        <FirstLoginKeyModal
+          isOpen={true}
+          onClose={() => clearFirstTimeUser()}
+          onNewKey={() => {
+            clearFirstTimeUser()
+            // Key is already generated, just close the modal
+          }}
+          onImportKey={async (key: string) => {
+            const syncResult = await setEncryptionKey(key)
+            // If sync happened (key changed), reload chats
+            if (syncResult) {
+              await retryProfileDecryption()
+              await reloadChats()
+            }
+            clearFirstTimeUser()
+          }}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   )
 }
