@@ -1,15 +1,11 @@
 import { Dialog, Transition } from '@headlessui/react'
-import {
-  ArrowDownTrayIcon,
-  ExclamationTriangleIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline'
-import { Fragment, useState } from 'react'
+import { ArrowDownTrayIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { Fragment, useCallback, useState } from 'react'
 
 interface SignoutConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   encryptionKey: string | null
   isDarkMode: boolean
 }
@@ -22,8 +18,9 @@ export function SignoutConfirmationModal({
   isDarkMode,
 }: SignoutConfirmationModalProps) {
   const [hasDownloadedKey, setHasDownloadedKey] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
 
-  const downloadKeyAsPEM = () => {
+  const downloadKeyAsPEM = useCallback(() => {
     if (!encryptionKey) return
 
     // Convert the key to PEM format
@@ -31,19 +28,28 @@ export function SignoutConfirmationModal({
 ${encryptionKey.replace('key_', '')}
 -----END TINFOIL CHAT ENCRYPTION KEY-----`
 
-    // Create a blob and download
+    // Create blob and trigger download
     const blob = new Blob([pemContent], { type: 'application/x-pem-file' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `tinfoil-chat-key-${new Date().toISOString().split('T')[0]}.pem`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `tinfoil-chat-key-${new Date().toISOString().split('T')[0]}.pem`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
     URL.revokeObjectURL(url)
 
     setHasDownloadedKey(true)
-  }
+  }, [encryptionKey])
+
+  const handleConfirm = useCallback(async () => {
+    setIsConfirming(true)
+    try {
+      await onConfirm()
+    } finally {
+      setIsConfirming(false)
+    }
+  }, [onConfirm])
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -78,104 +84,145 @@ ${encryptionKey.replace('key_', '')}
               >
                 <Dialog.Title
                   as="h3"
-                  className={`flex items-center justify-between text-lg font-medium leading-6 ${
+                  className={`text-lg font-medium leading-6 ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <ExclamationTriangleIcon className="h-6 w-6 text-amber-500" />
-                    <span>Important: Save Your Encryption Key</span>
-                  </div>
-                  <button
-                    onClick={onClose}
-                    aria-label="Close dialog"
-                    className={`rounded-lg p-1 transition-colors ${
-                      isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                    }`}
-                  >
-                    <XMarkIcon className="h-5 w-5" />
-                  </button>
+                  Complete Sign Out
                 </Dialog.Title>
 
-                <div className="mt-4">
+                <div className="mt-6 space-y-5">
+                  {/* Info Box */}
                   <div
-                    className={`rounded-lg border p-4 ${
-                      isDarkMode
-                        ? 'border-amber-900 bg-amber-950/30'
-                        : 'border-amber-200 bg-amber-50'
+                    className={`rounded-lg p-4 ${
+                      isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
                     }`}
                   >
                     <p
                       className={`text-sm ${
-                        isDarkMode ? 'text-amber-200' : 'text-amber-800'
+                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
                       }`}
                     >
-                      <strong>Warning:</strong> Signing out will clear your
-                      encryption key. Without this key, you won't be able to
-                      decrypt your cloud-synced messages after signing back in.
+                      You've been signed out. Your encryption key and local data
+                      are still on this device.
                     </p>
                   </div>
 
                   {encryptionKey && (
-                    <div className="mt-4">
-                      <p
-                        className={`mb-3 text-sm ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                        }`}
-                      >
-                        Please download your encryption key before signing out:
-                      </p>
+                    <>
+                      {/* Step 1: Backup Key */}
+                      <div>
+                        <div className="mb-3 flex items-start gap-3">
+                          <div
+                            className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+                              hasDownloadedKey
+                                ? 'bg-emerald-500'
+                                : isDarkMode
+                                  ? 'bg-gray-700'
+                                  : 'bg-gray-200'
+                            }`}
+                          >
+                            {hasDownloadedKey ? (
+                              <CheckIcon className="h-3.5 w-3.5 text-white" />
+                            ) : (
+                              <span
+                                className={`text-xs font-medium ${
+                                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                                }`}
+                              >
+                                1
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className={`text-sm ${
+                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                            }`}
+                          >
+                            Download your encryption key for future access
+                          </p>
+                        </div>
+                        <button
+                          onClick={downloadKeyAsPEM}
+                          disabled={hasDownloadedKey}
+                          className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
+                            hasDownloadedKey
+                              ? isDarkMode
+                                ? 'cursor-not-allowed bg-gray-700 text-gray-400'
+                                : 'cursor-not-allowed bg-gray-100 text-gray-400'
+                              : isDarkMode
+                                ? 'bg-white text-gray-900 hover:bg-gray-100'
+                                : 'bg-gray-900 text-white hover:bg-gray-800'
+                          }`}
+                        >
+                          {!hasDownloadedKey && (
+                            <ArrowDownTrayIcon className="hidden h-4 w-4 sm:block" />
+                          )}
+                          {hasDownloadedKey
+                            ? 'Key Downloaded Successfully'
+                            : 'Download Encryption Key'}
+                        </button>
+                      </div>
 
-                      <button
-                        onClick={downloadKeyAsPEM}
-                        className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                          hasDownloadedKey
-                            ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                            : 'bg-blue-500 text-white hover:bg-blue-600'
-                        }`}
-                      >
-                        <ArrowDownTrayIcon className="h-5 w-5" />
-                        {hasDownloadedKey
-                          ? 'Key Downloaded'
-                          : 'Download Encryption Key (.pem)'}
-                      </button>
-                    </div>
+                      {/* Step 2: Data Options */}
+                      <div>
+                        <div className="mb-3 flex items-start gap-3">
+                          <div
+                            className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+                              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+                            }`}
+                          >
+                            <span
+                              className={`text-xs font-medium ${
+                                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                              }`}
+                            >
+                              2
+                            </span>
+                          </div>
+                          <p
+                            className={`text-sm ${
+                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                            }`}
+                          >
+                            Choose what to do with your local data
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <button
+                            onClick={onClose}
+                            disabled={isConfirming}
+                            className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
+                              isDarkMode
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50'
+                                : 'bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50'
+                            }`}
+                          >
+                            Keep Local Data
+                          </button>
+                          <button
+                            onClick={handleConfirm}
+                            disabled={isConfirming}
+                            className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
+                              isDarkMode
+                                ? 'bg-red-600 text-white hover:bg-red-700 disabled:opacity-50'
+                                : 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-50'
+                            }`}
+                          >
+                            {isConfirming ? 'Deleting...' : 'Delete All Data'}
+                          </button>
+                        </div>
+                        <p
+                          className={`mt-3 text-center text-xs ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}
+                        >
+                          Keep data to continue where you left off, or delete to
+                          remove everything
+                        </p>
+                      </div>
+                    </>
                   )}
-
-                  <div className="mt-6 flex gap-3">
-                    <button
-                      onClick={onClose}
-                      className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        isDarkMode
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={onConfirm}
-                      disabled={encryptionKey && !hasDownloadedKey}
-                      className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        encryptionKey && !hasDownloadedKey
-                          ? isDarkMode
-                            ? 'cursor-not-allowed bg-gray-700 text-gray-500'
-                            : 'cursor-not-allowed bg-gray-200 text-gray-400'
-                          : 'bg-red-500 text-white hover:bg-red-600'
-                      }`}
-                    >
-                      Sign Out Anyway
-                    </button>
-                  </div>
-
-                  <p
-                    className={`mt-4 text-xs ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}
-                  >
-                    You can import your saved key later when signing back in to
-                    restore access to your encrypted messages.
-                  </p>
                 </div>
               </Dialog.Panel>
             </Transition.Child>
