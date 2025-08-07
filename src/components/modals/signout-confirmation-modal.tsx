@@ -1,7 +1,7 @@
 import { logError } from '@/utils/error-handling'
 import { Dialog, Transition } from '@headlessui/react'
 import { ArrowDownTrayIcon, CheckIcon } from '@heroicons/react/24/outline'
-import { Fragment, useCallback, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 
 interface SignoutConfirmationModalProps {
   isOpen: boolean
@@ -21,6 +21,11 @@ export function SignoutConfirmationModal({
   const [hasDownloadedKey, setHasDownloadedKey] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Reset download state when encryption key changes
+  useEffect(() => {
+    setHasDownloadedKey(false)
+  }, [encryptionKey])
 
   const downloadKeyAsPEM = useCallback(() => {
     if (!encryptionKey) return
