@@ -469,13 +469,14 @@ export function ChatSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed z-40 flex h-dvh w-[85vw] max-w-[${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px] flex-col border-r ${
+        } fixed z-40 flex h-dvh w-[85vw] flex-col border-r ${
           isDarkMode
             ? 'border-gray-800 bg-gray-900'
             : 'border-gray-200 bg-white'
-        } md:w-[${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px] ${
+        } ${
           isInitialLoad ? '' : 'transition-all duration-200 ease-in-out'
         } overflow-hidden`}
+        style={{ maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px` }}
       >
         {/* Header */}
         <div
