@@ -79,7 +79,9 @@ export function FirstLoginKeyModal({
       setIsDragging(false)
 
       const files = Array.from(e.dataTransfer.files)
-      const pemFile = files.find((file) => file.name.endsWith('.pem'))
+      const pemFile = files.find((file) =>
+        file.name.toLowerCase().endsWith('.pem'),
+      )
 
       if (pemFile) {
         await handleFileImport(pemFile)
