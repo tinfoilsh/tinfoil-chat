@@ -38,6 +38,7 @@ import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { SettingsSidebar } from './settings-sidebar'
+import { ShareModal } from './share-modal'
 import type { VerificationState } from './types'
 
 type ChatInterfaceProps = {
@@ -132,6 +133,9 @@ export function ChatInterface({
 
   // State for settings sidebar
   const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
+
+  // State for share modal
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
   // State for encryption key modal
   const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
@@ -381,6 +385,11 @@ export function ChatInterface({
         setIsSidebarOpen(false)
       }
     }
+  }
+
+  // Handler for opening share modal
+  const handleOpenShareModal = () => {
+    setIsShareModalOpen(true)
   }
 
   // Handler for encryption key button
@@ -797,6 +806,14 @@ export function ChatInterface({
         isClient={isClient}
       />
 
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        messages={currentChat?.messages || []}
+        isDarkMode={isDarkMode}
+      />
+
       {/* Settings Sidebar */}
       <SettingsSidebar
         isOpen={isSettingsSidebarOpen}
@@ -905,7 +922,10 @@ export function ChatInterface({
                   isDarkMode={isDarkMode}
                   isPremium={isPremium}
                   models={models}
-                  onSettingsClick={handleOpenSettingsSidebar}
+                  onShareClick={handleOpenShareModal}
+                  hasMessages={
+                    currentChat?.messages && currentChat.messages.length > 0
+                  }
                   isCompactMode={
                     windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
                     (isSidebarOpen &&
