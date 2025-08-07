@@ -876,6 +876,11 @@ export function ChatInterface({
                   isPremium={isPremium}
                   models={models}
                   onSettingsClick={handleOpenSettingsSidebar}
+                  isCompactMode={
+                    windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
+                    (isSidebarOpen &&
+                      (isVerifierSidebarOpen || isSettingsSidebarOpen))
+                  }
                 />
 
                 {/* Input */}
