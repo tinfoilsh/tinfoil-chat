@@ -18,6 +18,7 @@ import {
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 
+import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
@@ -100,7 +101,11 @@ export function ChatInterface({
   } = useCloudSync()
 
   // Initialize profile sync
-  const { retryDecryption: retryProfileDecryption } = useProfileSync()
+  const {
+    retryDecryption: retryProfileDecryption,
+    syncFromCloud: syncProfileFromCloud,
+    syncToCloud: syncProfileToCloud,
+  } = useProfileSync()
 
   // State for API data
   const [models, setModels] = useState<BaseModel[]>([])
@@ -270,40 +275,54 @@ export function ChatInterface({
     selectedModelDetails,
   )
 
-  // Sync chats when user signs in and periodically
+  // Sync chats and profile when user signs in and periodically
   useEffect(() => {
     if (!isSignedIn) return
 
-    // Initial sync on page load/refresh
-    syncChats()
-      .then(() => {
+    // Initial sync on page load/refresh - sync both chats and profile
+    Promise.all([
+      syncChats().then(() => {
         // Reload chats from IndexedDB after sync completes
         return reloadChats()
+      }),
+      syncProfileFromCloud().then(() => {
+        // After syncing from cloud, sync local changes back to cloud
+        return syncProfileToCloud()
+      }),
+    ]).catch((error) => {
+      logError('Failed to sync data on page load', error, {
+        component: 'ChatInterface',
+        action: 'initialSync',
       })
-      .catch((error) => {
-        logError('Failed to sync chats', error, {
-          component: 'ChatInterface',
-          action: 'syncChats',
-        })
-      })
+    })
 
-    // Sync every 5 seconds
+    // Sync at regular intervals
     const interval = setInterval(() => {
-      syncChats()
-        .then(() => {
+      Promise.all([
+        syncChats().then(() => {
           // Reload chats from IndexedDB after sync completes
           return reloadChats()
+        }),
+        syncProfileFromCloud().then(() => {
+          // After syncing from cloud, sync local changes back to cloud
+          return syncProfileToCloud()
+        }),
+      ]).catch((error) => {
+        logError('Failed to sync data (periodic)', error, {
+          component: 'ChatInterface',
+          action: 'periodicSync',
         })
-        .catch((error) => {
-          logError('Failed to sync chats (periodic)', error, {
-            component: 'ChatInterface',
-            action: 'periodicSync',
-          })
-        })
-    }, 5 * 1000)
+      })
+    }, CLOUD_SYNC.SYNC_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [isSignedIn, syncChats, reloadChats])
+  }, [
+    isSignedIn,
+    syncChats,
+    reloadChats,
+    syncProfileFromCloud,
+    syncProfileToCloud,
+  ])
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {

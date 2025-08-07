@@ -1,3 +1,4 @@
+import { CLOUD_SYNC } from '@/config'
 import { profileSync, type ProfileData } from '@/services/cloud/profile-sync'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -240,10 +241,10 @@ export function useProfileSync() {
       syncFromCloud()
     }
 
-    // Sync periodically (every 30 seconds)
+    // Sync at regular intervals (same as chat sync)
     const interval = setInterval(() => {
       syncFromCloud()
-    }, 30000)
+    }, CLOUD_SYNC.SYNC_INTERVAL)
 
     return () => clearInterval(interval)
   }, [isSignedIn, syncFromCloud])
