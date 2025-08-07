@@ -92,7 +92,7 @@ export function ChatLabels({
                   isDarkMode ? 'text-gray-200' : 'text-gray-600'
                 }`}
               >
-                Running {model.name}
+                {model.name}
               </span>
             )}
           </button>
