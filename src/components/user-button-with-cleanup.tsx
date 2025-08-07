@@ -1,7 +1,8 @@
 'use client'
 
+import { profileSync } from '@/services/cloud/profile-sync'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
-import { logInfo } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { useClerk, UserButton } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
 
@@ -43,17 +44,71 @@ export function UserButtonWithCleanup({
             action: 'handleSignOut',
           })
 
-          // Clear all localStorage
-          localStorage.clear()
+          // Clear profile sync cache
+          profileSync.clearCache()
+          logInfo('Cleared profile sync cache', {
+            component: 'UserButtonWithCleanup',
+            action: 'clearProfileCache',
+          })
+
+          // Clear all localStorage items
+          // We specifically list important items to ensure they're cleared
+          const itemsToClear = [
+            'theme',
+            'maxPromptMessages',
+            'userLanguage',
+            'userNickname',
+            'userProfession',
+            'userTraits',
+            'userAdditionalContext',
+            'isUsingPersonalization',
+            'encryptionKey',
+            'encryptionKeySet',
+            'hasUnlockedCloud',
+            'clerk-db-jwt',
+            '__clerk_db_jwt',
+          ]
+
+          itemsToClear.forEach((item) => {
+            try {
+              localStorage.removeItem(item)
+            } catch (e) {
+              logInfo(`Failed to remove localStorage item: ${item}`, {
+                component: 'UserButtonWithCleanup',
+                action: 'clearLocalStorage',
+              })
+            }
+          })
+
+          // Clear all remaining localStorage items
+          try {
+            localStorage.clear()
+          } catch (error) {
+            logInfo('Failed to clear all localStorage', {
+              component: 'UserButtonWithCleanup',
+              action: 'clearLocalStorage',
+            })
+          }
 
           // Clear sessionStorage
-          sessionStorage.clear()
+          try {
+            sessionStorage.clear()
+          } catch (error) {
+            logInfo('Failed to clear sessionStorage', {
+              component: 'UserButtonWithCleanup',
+              action: 'clearSessionStorage',
+            })
+          }
 
           // Clear IndexedDB - all chats and stored data
           try {
             await indexedDBStorage.clearAll()
+            logInfo('Cleared IndexedDB', {
+              component: 'UserButtonWithCleanup',
+              action: 'clearIndexedDB',
+            })
           } catch (error) {
-            logInfo('Failed to clear IndexedDB during signout', {
+            logError('Failed to clear IndexedDB during signout', error, {
               component: 'UserButtonWithCleanup',
               action: 'clearIndexedDB',
             })
@@ -66,6 +121,10 @@ export function UserButtonWithCleanup({
               await Promise.all(
                 cacheNames.map((cacheName) => caches.delete(cacheName)),
               )
+              logInfo('Cleared service worker caches', {
+                component: 'UserButtonWithCleanup',
+                action: 'clearCaches',
+              })
             } catch (error) {
               logInfo('Failed to clear caches during signout', {
                 component: 'UserButtonWithCleanup',
@@ -79,17 +138,27 @@ export function UserButtonWithCleanup({
             action: 'handleSignOut',
           })
 
-          // Sign out without redirect (we'll handle it manually)
-          await signOut()
-
-          // Redirect to the main site
-          window.location.href = 'https://chat.tinfoil.sh'
+          // Sign out and reload the page
+          try {
+            await signOut()
+            // Force reload from server (bypass cache)
+            window.location.reload()
+          } catch (signOutError) {
+            // If Clerk signOut fails, force reload anyway
+            logError('Clerk signOut failed, forcing reload', signOutError, {
+              component: 'UserButtonWithCleanup',
+              action: 'handleSignOut',
+            })
+            window.location.reload()
+          }
         } catch (error) {
-          logInfo('Error during signout', {
+          logError('Error during signout cleanup', error, {
             component: 'UserButtonWithCleanup',
             action: 'handleSignOut',
           })
           cleanupPerformed.current = false
+          // Force reload even if cleanup fails
+          window.location.reload()
         }
       }
     }
