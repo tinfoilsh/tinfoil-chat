@@ -34,11 +34,11 @@ export function VerifierSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : 'translate-x-full'
-        } fixed right-0 z-40 flex h-dvh w-[85vw] max-w-[300px] flex-col border-l ${
+        } fixed right-0 z-40 flex h-dvh w-[85vw] max-w-[345px] flex-col border-l ${
           isDarkMode
             ? 'border-gray-700 bg-gray-900'
             : 'border-gray-200 bg-white'
-        } overflow-hidden transition-all duration-200 ease-in-out md:w-[300px]`}
+        } overflow-hidden transition-all duration-200 ease-in-out md:w-[345px]`}
       >
         {/* Header with title and close button */}
         <div

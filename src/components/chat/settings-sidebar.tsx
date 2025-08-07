@@ -361,11 +361,11 @@ export function SettingsSidebar({
           damping: 30,
           stiffness: 300,
         }}
-        className={`fixed right-0 top-0 z-50 flex h-full w-[85vw] max-w-[300px] flex-col border-l ${
+        className={`fixed right-0 top-0 z-50 flex h-full w-[85vw] max-w-[345px] flex-col border-l ${
           isDarkMode
             ? 'border-gray-800 bg-gray-900'
             : 'border-gray-200 bg-white'
-        } overflow-hidden md:w-[300px]`}
+        } overflow-hidden md:w-[345px]`}
       >
         {/* Header */}
         <div

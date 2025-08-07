@@ -659,7 +659,7 @@ export function ChatInterface({
           className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
             isVerifierSidebarOpen || isSettingsSidebarOpen
               ? windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? 'right-[324px]'
+                ? 'right-[369px]'
                 : 'right-4'
               : 'right-4'
           }`}
@@ -814,7 +814,7 @@ export function ChatInterface({
           right:
             (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? '300px'
+              ? '345px'
               : '0',
           bottom: 0,
           left:
