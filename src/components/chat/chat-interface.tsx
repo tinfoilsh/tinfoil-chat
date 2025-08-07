@@ -264,6 +264,18 @@ export function ChatInterface({
     subscriptionLoading: subscriptionLoading,
   })
 
+  // Effect to handle window resize and enforce single sidebar rule
+  useEffect(() => {
+    // When window becomes narrow and both types of sidebars are open, close the right one
+    if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+      if (isSidebarOpen && (isVerifierSidebarOpen || isSettingsSidebarOpen)) {
+        // Close right sidebars to prioritize left sidebar
+        setIsVerifierSidebarOpen(false)
+        setIsSettingsSidebarOpen(false)
+      }
+    }
+  }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsSidebarOpen])
+
   // Get the selected model details
   const selectedModelDetails = models.find(
     (model) => model.modelName === selectedModel,
@@ -345,6 +357,10 @@ export function ChatInterface({
     } else {
       // Clear the saved preference when user opens it
       localStorage.removeItem('verifierSidebarClosed')
+      // If window is narrow, close left sidebar when opening right sidebar
+      if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+        setIsSidebarOpen(false)
+      }
     }
   }
 
@@ -357,6 +373,10 @@ export function ChatInterface({
       // Open settings and close verifier if open
       setIsSettingsSidebarOpen(true)
       handleSetVerifierSidebarOpen(false)
+      // If window is narrow, close left sidebar when opening settings
+      if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+        setIsSidebarOpen(false)
+      }
     }
   }
 
@@ -617,7 +637,14 @@ export function ChatInterface({
                 ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
                 : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
             }`}
-            onClick={() => setIsSidebarOpen(true)}
+            onClick={() => {
+              setIsSidebarOpen(true)
+              // If window is narrow, close right sidebars when opening left sidebar
+              if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+                setIsVerifierSidebarOpen(false)
+                setIsSettingsSidebarOpen(false)
+              }
+            }}
           >
             <Bars3Icon className="h-5 w-5" />
           </button>
@@ -632,7 +659,7 @@ export function ChatInterface({
           className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
             isVerifierSidebarOpen || isSettingsSidebarOpen
               ? windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? 'right-[324px]'
+                ? 'right-[369px]'
                 : 'right-4'
               : 'right-4'
           }`}
@@ -787,12 +814,12 @@ export function ChatInterface({
           right:
             (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? '300px'
+              ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px`
               : '0',
           bottom: 0,
           left:
             isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? '300px'
+              ? `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
               : '0',
           top: 0,
         }}
@@ -876,6 +903,11 @@ export function ChatInterface({
                   isPremium={isPremium}
                   models={models}
                   onSettingsClick={handleOpenSettingsSidebar}
+                  isCompactMode={
+                    windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
+                    (isSidebarOpen &&
+                      (isVerifierSidebarOpen || isSettingsSidebarOpen))
+                  }
                 />
 
                 {/* Input */}

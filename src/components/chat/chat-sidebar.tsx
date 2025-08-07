@@ -14,6 +14,7 @@ import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
 import { MdOutlineCloudOff } from 'react-icons/md'
 import { UserButtonWithCleanup } from '../user-button-with-cleanup'
+import { CONSTANTS } from './constants'
 
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -468,11 +469,11 @@ export function ChatSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed z-40 flex h-dvh w-[85vw] max-w-[300px] flex-col border-r ${
+        } fixed z-40 flex h-dvh w-[85vw] max-w-[${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px] flex-col border-r ${
           isDarkMode
             ? 'border-gray-800 bg-gray-900'
             : 'border-gray-200 bg-white'
-        } md:w-[300px] ${
+        } md:w-[${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px] ${
           isInitialLoad ? '' : 'transition-all duration-200 ease-in-out'
         } overflow-hidden`}
       >

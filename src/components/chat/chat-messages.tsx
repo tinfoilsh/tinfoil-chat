@@ -445,8 +445,8 @@ const ChatMessage = memo(function ChatMessage({
                   isDarkMode
                     ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
-                      ? 'text-white prose-headings:text-white prose-a:text-gray-200 hover:prose-a:text-gray-100 prose-strong:text-white prose-code:text-white prose-pre:bg-transparent prose-pre:p-0'
-                      : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-pre:bg-transparent prose-pre:p-0'
+                      ? 'text-white prose-headings:text-white prose-a:text-gray-200 hover:prose-a:text-gray-100 prose-strong:text-white prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                      : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
                 <MemoizedMarkdown

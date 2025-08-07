@@ -24,6 +24,7 @@ type ChatLabelsProps = {
   isPremium: boolean
   models: BaseModel[]
   onSettingsClick?: () => void
+  isCompactMode?: boolean
 }
 
 export function ChatLabels({
@@ -38,6 +39,7 @@ export function ChatLabels({
   isPremium,
   models,
   onSettingsClick,
+  isCompactMode = false,
 }: ChatLabelsProps) {
   // Model selection handler - enforces handleModelSelect is defined
   const onModelSelect = useCallback(
@@ -84,13 +86,15 @@ export function ChatLabels({
             } transition-colors hover:bg-opacity-80`}
           >
             <img src={model.image} alt={model.name} className="h-5 w-5" />
-            <span
-              className={`hidden text-xs md:inline ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-600'
-              }`}
-            >
-              Running {model.name}
-            </span>
+            {!isCompactMode && (
+              <span
+                className={`text-xs ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-600'
+                }`}
+              >
+                {model.name}
+              </span>
+            )}
           </button>
 
           {expandedLabel === 'model' && handleModelSelect && (
@@ -119,13 +123,15 @@ export function ChatLabels({
                 isDarkMode ? 'text-gray-200' : 'text-gray-600'
               }`}
             />
-            <span
-              className={`hidden text-xs md:inline ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-600'
-              }`}
-            >
-              Settings
-            </span>
+            {!isCompactMode && (
+              <span
+                className={`text-xs ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-600'
+                }`}
+              >
+                Settings
+              </span>
+            )}
           </button>
         )}
 
@@ -144,17 +150,19 @@ export function ChatLabels({
           ) : (
             <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
           )}
-          <span
-            className={`hidden text-xs md:inline ${
-              isDarkMode ? 'text-gray-200' : 'text-gray-600'
-            }`}
-          >
-            {!verificationComplete
-              ? 'Verifying...'
-              : verificationSuccess
-                ? 'Chat is private'
-                : 'Verification failed'}
-          </span>
+          {!isCompactMode && (
+            <span
+              className={`text-xs ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-600'
+              }`}
+            >
+              {!verificationComplete
+                ? 'Verifying...'
+                : verificationSuccess
+                  ? 'Chat is private'
+                  : 'Verification failed'}
+            </span>
+          )}
         </button>
       </div>
 

@@ -5,6 +5,7 @@ const VERIFIER_VERSION = 'v0.0.9'
 export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
   MOBILE_BREAKPOINT: 768,
+  SINGLE_SIDEBAR_BREAKPOINT: 1024, // Below this width, only one sidebar can be open at a time
   DEFAULT_MODEL: 'llama3-3-70b-free' as AIModel,
   VERIFIER_VERSION,
   VERIFIER_WASM_URL: `https://tinfoilsh.github.io/verifier-js/tinfoil-verifier-${VERIFIER_VERSION}.wasm`,
@@ -26,4 +27,8 @@ export const CONSTANTS = {
   CHAT_INIT_DELAY_MS: 300,
   // State update delay for async operations
   ASYNC_STATE_DELAY_MS: 50,
+  // Sidebar widths
+  CHAT_SIDEBAR_WIDTH_PX: 300,
+  SETTINGS_SIDEBAR_WIDTH_PX: 345,
+  VERIFIER_SIDEBAR_WIDTH_PX: 345,
 } as const
