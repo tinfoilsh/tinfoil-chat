@@ -199,6 +199,8 @@ ${encryptionKey.replace('key_', '')}
     const file = e.target.files?.[0]
     if (file) {
       await handleFileImport(file)
+      // Reset the input value to allow re-importing the same file
+      e.target.value = ''
     }
   }
 
