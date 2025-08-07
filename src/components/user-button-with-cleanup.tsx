@@ -1,9 +1,7 @@
 'use client'
 
-import { indexedDBStorage } from '@/services/storage/indexed-db'
-import { logInfo } from '@/utils/error-handling'
 import { useClerk, UserButton } from '@clerk/nextjs'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 
 interface UserButtonWithCleanupProps {
   appearance?: {
@@ -13,18 +11,18 @@ interface UserButtonWithCleanupProps {
   }
 }
 
+const SIGNOUT_REDIRECT_PATH = '/signout-complete'
+
 export function UserButtonWithCleanup({
   appearance,
 }: UserButtonWithCleanupProps) {
   const { signOut } = useClerk()
-  const cleanupPerformed = useRef(false)
 
-  // Intercept signout clicks
-  useEffect(() => {
-    const handleClick = async (e: MouseEvent) => {
-      const target = e.target as HTMLElement
+  const handleSignoutClick = useCallback(
+    async (event: MouseEvent) => {
+      const target = event.target as HTMLElement
 
-      // Check if the clicked element or its parent is the sign-out button
+      // Check if this is a sign out button click
       const isSignOutButton =
         target.closest('[aria-label="Sign out"]') ||
         target
@@ -32,75 +30,26 @@ export function UserButtonWithCleanup({
           ?.textContent?.toLowerCase()
           .includes('sign out')
 
-      if (isSignOutButton && !cleanupPerformed.current) {
-        e.preventDefault()
-        e.stopPropagation()
-        cleanupPerformed.current = true
+      if (isSignOutButton) {
+        // Prevent default behavior and handle signout ourselves
+        event.preventDefault()
+        event.stopPropagation()
 
-        try {
-          logInfo('Starting signout cleanup', {
-            component: 'UserButtonWithCleanup',
-            action: 'handleSignOut',
-          })
-
-          // Clear all localStorage
-          localStorage.clear()
-
-          // Clear sessionStorage
-          sessionStorage.clear()
-
-          // Clear IndexedDB - all chats and stored data
-          try {
-            await indexedDBStorage.clearAll()
-          } catch (error) {
-            logInfo('Failed to clear IndexedDB during signout', {
-              component: 'UserButtonWithCleanup',
-              action: 'clearIndexedDB',
-            })
-          }
-
-          // Clear any service worker caches
-          if ('caches' in window) {
-            try {
-              const cacheNames = await caches.keys()
-              await Promise.all(
-                cacheNames.map((cacheName) => caches.delete(cacheName)),
-              )
-            } catch (error) {
-              logInfo('Failed to clear caches during signout', {
-                component: 'UserButtonWithCleanup',
-                action: 'clearCaches',
-              })
-            }
-          }
-
-          logInfo('Signout cleanup completed, signing out', {
-            component: 'UserButtonWithCleanup',
-            action: 'handleSignOut',
-          })
-
-          // Sign out without redirect (we'll handle it manually)
-          await signOut()
-
-          // Redirect to the main site
-          window.location.href = 'https://chat.tinfoil.sh'
-        } catch (error) {
-          logInfo('Error during signout', {
-            component: 'UserButtonWithCleanup',
-            action: 'handleSignOut',
-          })
-          cleanupPerformed.current = false
-        }
+        // Sign out with redirect to our custom page
+        await signOut({ redirectUrl: SIGNOUT_REDIRECT_PATH })
       }
-    }
+    },
+    [signOut],
+  )
 
-    // Add listener to document to catch clicks on UserButton menu
-    document.addEventListener('click', handleClick, true)
+  useEffect(() => {
+    // Listen for signout clicks in capture phase to intercept them
+    document.addEventListener('click', handleSignoutClick, true)
 
     return () => {
-      document.removeEventListener('click', handleClick, true)
+      document.removeEventListener('click', handleSignoutClick, true)
     }
-  }, [signOut])
+  }, [handleSignoutClick])
 
   return <UserButton appearance={appearance} />
 }

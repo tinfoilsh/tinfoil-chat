@@ -3,12 +3,14 @@
 import { useToast } from '@/hooks/use-toast'
 import { Dialog, Transition } from '@headlessui/react'
 import {
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   CheckIcon,
   ClipboardDocumentIcon,
   KeyIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 
 interface EncryptionKeyModalProps {
   isOpen: boolean
@@ -28,8 +30,10 @@ export function EncryptionKeyModal({
   const [inputKey, setInputKey] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const { toast } = useToast()
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -93,6 +97,110 @@ export function EncryptionKeyModal({
       })
     } finally {
       setIsUpdating(false)
+    }
+  }
+
+  const downloadKeyAsPEM = () => {
+    if (!encryptionKey) return
+
+    // Convert the key to PEM format
+    const pemContent = `-----BEGIN TINFOIL CHAT ENCRYPTION KEY-----
+${encryptionKey.replace('key_', '')}
+-----END TINFOIL CHAT ENCRYPTION KEY-----`
+
+    // Create a blob and download
+    const blob = new Blob([pemContent], { type: 'application/x-pem-file' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tinfoil-chat-key-${new Date().toISOString().split('T')[0]}.pem`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const extractKeyFromPEM = (pemContent: string): string | null => {
+    const lines = pemContent.split('\n')
+    const startIndex = lines.findIndex((line) =>
+      line.includes('BEGIN TINFOIL CHAT ENCRYPTION KEY'),
+    )
+    const endIndex = lines.findIndex((line) =>
+      line.includes('END TINFOIL CHAT ENCRYPTION KEY'),
+    )
+
+    if (startIndex !== -1 && endIndex !== -1 && startIndex < endIndex) {
+      const keyLines = lines.slice(startIndex + 1, endIndex)
+      const keyContent = keyLines.join('').trim()
+      return keyContent ? `key_${keyContent}` : null
+    }
+
+    return null
+  }
+
+  const handleFileImport = useCallback(
+    async (file: File) => {
+      try {
+        const content = await file.text()
+        const extractedKey = extractKeyFromPEM(content)
+
+        if (extractedKey) {
+          setInputKey(extractedKey)
+        } else {
+          toast({
+            title: 'Invalid file',
+            description: 'Could not extract encryption key from the PEM file',
+            variant: 'destructive',
+          })
+        }
+      } catch (error) {
+        toast({
+          title: 'Import failed',
+          description: 'Failed to read the PEM file',
+          variant: 'destructive',
+        })
+      }
+    },
+    [toast],
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+
+      const files = Array.from(e.dataTransfer.files)
+      const pemFile = files.find((file) => file.name.endsWith('.pem'))
+
+      if (pemFile) {
+        await handleFileImport(pemFile)
+      } else {
+        toast({
+          title: 'Invalid file',
+          description: 'Please drop a .pem file',
+          variant: 'destructive',
+        })
+      }
+    },
+    [handleFileImport, toast],
+  )
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      await handleFileImport(file)
+      // Reset the input value to allow re-importing the same file
+      e.target.value = ''
     }
   }
 
@@ -168,39 +276,74 @@ export function EncryptionKeyModal({
                       aria-label="Current encryption key"
                     >
                       {encryptionKey ? (
-                        <div className="flex items-center justify-between">
-                          <code
-                            className={`text-xs ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}
-                          >
-                            {encryptionKey.substring(0, 20)}...
-                          </code>
-                          <button
-                            onClick={handleCopyKey}
-                            aria-label={
-                              isCopied
-                                ? 'Key copied to clipboard'
-                                : 'Copy encryption key to clipboard'
-                            }
-                            className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-all sm:px-3 sm:py-1.5 sm:text-sm ${
-                              isCopied
-                                ? 'bg-emerald-500 text-white'
-                                : isDarkMode
-                                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                          >
-                            {isCopied ? (
-                              <CheckIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                            ) : (
-                              <ClipboardDocumentIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                            )}
-                            <span className="hidden sm:inline">
-                              {isCopied ? 'Copied!' : 'Copy'}
-                            </span>
-                            <span className="sm:hidden">Copy</span>
-                          </button>
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <code
+                              className={`font-mono text-xs ${
+                                isDarkMode
+                                  ? 'text-emerald-400'
+                                  : 'text-emerald-600'
+                              }`}
+                            >
+                              {encryptionKey.substring(0, 20)}...
+                            </code>
+                            <div className="flex gap-2">
+                              <div className="group relative">
+                                <button
+                                  onClick={downloadKeyAsPEM}
+                                  aria-label="Download encryption key as PEM file"
+                                  className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all sm:text-sm ${
+                                    isDarkMode
+                                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  <ArrowDownTrayIcon className="h-4 w-4" />
+                                </button>
+                                <div
+                                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                                    isDarkMode
+                                      ? 'bg-gray-900 text-gray-100'
+                                      : 'bg-gray-800 text-white'
+                                  }`}
+                                >
+                                  Download
+                                </div>
+                              </div>
+                              <div className="group relative">
+                                <button
+                                  onClick={handleCopyKey}
+                                  aria-label={
+                                    isCopied
+                                      ? 'Key copied to clipboard'
+                                      : 'Copy encryption key to clipboard'
+                                  }
+                                  className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all sm:text-sm ${
+                                    isCopied
+                                      ? 'bg-emerald-500 text-white'
+                                      : isDarkMode
+                                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {isCopied ? (
+                                    <CheckIcon className="h-4 w-4" />
+                                  ) : (
+                                    <ClipboardDocumentIcon className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <div
+                                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                                    isDarkMode
+                                      ? 'bg-gray-900 text-gray-100'
+                                      : 'bg-gray-800 text-white'
+                                  }`}
+                                >
+                                  {isCopied ? 'Copied!' : 'Copy'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <p
@@ -219,8 +362,7 @@ export function EncryptionKeyModal({
                       }`}
                     >
                       Keep this key safe. You'll need it to decrypt your chats
-                      on other devices. Keys start with "key_" followed by
-                      lowercase letters and numbers.
+                      on other devices.
                     </p>
                   </div>
 
@@ -231,7 +373,7 @@ export function EncryptionKeyModal({
                         isDarkMode ? 'text-gray-300' : 'text-gray-700'
                       }`}
                     >
-                      Sync With Another Device
+                      Restore or Sync Encryption Key
                     </h4>
                     <p
                       id="sync-key-description"
@@ -239,9 +381,70 @@ export function EncryptionKeyModal({
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
                     >
-                      Enter the encryption key from your other device to sync
-                      chats.
+                      Restore your key from a backup or sync with another
+                      device.
                     </p>
+
+                    {/* Drag and Drop Zone */}
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`mb-3 rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
+                        isDragging
+                          ? isDarkMode
+                            ? 'border-blue-500 bg-blue-950/30'
+                            : 'border-blue-500 bg-blue-50'
+                          : isDarkMode
+                            ? 'border-gray-700 bg-gray-900/50'
+                            : 'border-gray-300 bg-gray-50'
+                      }`}
+                    >
+                      <ArrowUpTrayIcon
+                        className={`mx-auto h-8 w-8 ${
+                          isDragging
+                            ? 'text-blue-500'
+                            : isDarkMode
+                              ? 'text-gray-500'
+                              : 'text-gray-400'
+                        }`}
+                      />
+                      <p
+                        className={`mt-2 text-xs sm:text-sm ${
+                          isDragging
+                            ? 'text-blue-500'
+                            : isDarkMode
+                              ? 'text-gray-400'
+                              : 'text-gray-600'
+                        }`}
+                      >
+                        {isDragging
+                          ? 'Drop your PEM file here'
+                          : 'Drag and drop a PEM file here'}
+                      </p>
+                      {!isDragging && (
+                        <>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pem"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`mt-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
+                              isDarkMode
+                                ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            Choose File
+                          </button>
+                        </>
+                      )}
+                    </div>
+
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="password"

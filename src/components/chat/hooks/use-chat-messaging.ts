@@ -157,7 +157,7 @@ export function useChatMessaging({
         }
       }
     },
-    [storeHistory, chatStorage],
+    [storeHistory],
   )
 
   // Cancel generation function
@@ -927,7 +927,6 @@ export function useChatMessaging({
       messagesEndRef,
       updateChatWithHistoryCheck,
       maxMessages,
-      isSignedIn,
     ],
   )
 
