@@ -168,7 +168,7 @@ export function ProcessStep({
                 className={`flex items-start gap-2 rounded-lg ${isDarkMode ? 'bg-red-500/10' : 'bg-red-50'} p-3 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}
               >
                 <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0" />
-                <p className="break-normal text-sm">{error}</p>
+                <p className="overflow-hidden break-words text-sm">{error}</p>
               </div>
             )}
 
