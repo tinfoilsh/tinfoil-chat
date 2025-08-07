@@ -118,11 +118,6 @@ ${encryptionKey.replace('key_', '')}
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-
-    toast({
-      title: 'Key downloaded',
-      description: 'Your encryption key has been saved as a PEM file',
-    })
   }
 
   const extractKeyFromPEM = (pemContent: string): string | null => {
@@ -150,11 +145,6 @@ ${encryptionKey.replace('key_', '')}
 
       if (extractedKey) {
         setInputKey(extractedKey)
-        toast({
-          title: 'Key imported',
-          description:
-            'Encryption key extracted from PEM file. Click "Update" to apply it.',
-        })
       } else {
         toast({
           title: 'Invalid file',
@@ -281,52 +271,69 @@ ${encryptionKey.replace('key_', '')}
                         <div>
                           <div className="flex items-center justify-between">
                             <code
-                              className={`text-xs ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                              className={`font-mono text-xs ${
+                                isDarkMode
+                                  ? 'text-emerald-400'
+                                  : 'text-emerald-600'
                               }`}
                             >
                               {encryptionKey.substring(0, 20)}...
                             </code>
                             <div className="flex gap-2">
-                              <button
-                                onClick={downloadKeyAsPEM}
-                                aria-label="Download encryption key as PEM file"
-                                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-all sm:px-3 sm:py-1.5 sm:text-sm ${
-                                  isDarkMode
-                                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                }`}
-                              >
-                                <ArrowDownTrayIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                                <span className="hidden sm:inline">
-                                  Download
-                                </span>
-                              </button>
-                              <button
-                                onClick={handleCopyKey}
-                                aria-label={
-                                  isCopied
-                                    ? 'Key copied to clipboard'
-                                    : 'Copy encryption key to clipboard'
-                                }
-                                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-all sm:px-3 sm:py-1.5 sm:text-sm ${
-                                  isCopied
-                                    ? 'bg-emerald-500 text-white'
-                                    : isDarkMode
+                              <div className="group relative">
+                                <button
+                                  onClick={downloadKeyAsPEM}
+                                  aria-label="Download encryption key as PEM file"
+                                  className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all sm:text-sm ${
+                                    isDarkMode
                                       ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                }`}
-                              >
-                                {isCopied ? (
-                                  <CheckIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                                ) : (
-                                  <ClipboardDocumentIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                                )}
-                                <span className="hidden sm:inline">
+                                  }`}
+                                >
+                                  <ArrowDownTrayIcon className="h-4 w-4" />
+                                </button>
+                                <div
+                                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                                    isDarkMode
+                                      ? 'bg-gray-900 text-gray-100'
+                                      : 'bg-gray-800 text-white'
+                                  }`}
+                                >
+                                  Download
+                                </div>
+                              </div>
+                              <div className="group relative">
+                                <button
+                                  onClick={handleCopyKey}
+                                  aria-label={
+                                    isCopied
+                                      ? 'Key copied to clipboard'
+                                      : 'Copy encryption key to clipboard'
+                                  }
+                                  className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all sm:text-sm ${
+                                    isCopied
+                                      ? 'bg-emerald-500 text-white'
+                                      : isDarkMode
+                                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  {isCopied ? (
+                                    <CheckIcon className="h-4 w-4" />
+                                  ) : (
+                                    <ClipboardDocumentIcon className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <div
+                                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                                    isDarkMode
+                                      ? 'bg-gray-900 text-gray-100'
+                                      : 'bg-gray-800 text-white'
+                                  }`}
+                                >
                                   {isCopied ? 'Copied!' : 'Copy'}
-                                </span>
-                                <span className="sm:hidden">Copy</span>
-                              </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -347,8 +354,7 @@ ${encryptionKey.replace('key_', '')}
                       }`}
                     >
                       Keep this key safe. You'll need it to decrypt your chats
-                      on other devices. Keys start with "key_" followed by
-                      lowercase letters and numbers.
+                      on other devices.
                     </p>
                   </div>
 
@@ -359,7 +365,7 @@ ${encryptionKey.replace('key_', '')}
                         isDarkMode ? 'text-gray-300' : 'text-gray-700'
                       }`}
                     >
-                      Sync With Another Device
+                      Restore or Sync Encryption Key
                     </h4>
                     <p
                       id="sync-key-description"
@@ -367,8 +373,8 @@ ${encryptionKey.replace('key_', '')}
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
                     >
-                      Enter the encryption key from your other device or import
-                      a PEM file.
+                      Restore your key from a backup or sync with another
+                      device.
                     </p>
 
                     {/* Drag and Drop Zone */}
@@ -406,7 +412,7 @@ ${encryptionKey.replace('key_', '')}
                       >
                         {isDragging
                           ? 'Drop your PEM file here'
-                          : 'Drag and drop a PEM file here, or'}
+                          : 'Drag and drop a PEM file here'}
                       </p>
                       {!isDragging && (
                         <>
@@ -419,9 +425,13 @@ ${encryptionKey.replace('key_', '')}
                           />
                           <button
                             onClick={() => fileInputRef.current?.click()}
-                            className={`mt-2 text-xs font-medium text-blue-500 hover:text-blue-600 sm:text-sm`}
+                            className={`mt-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
+                              isDarkMode
+                                ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
                           >
-                            browse to upload
+                            Choose File
                           </button>
                         </>
                       )}
