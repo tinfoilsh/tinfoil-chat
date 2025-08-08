@@ -11,7 +11,14 @@ interface UserButtonWithCleanupProps {
   }
 }
 
-const SIGNOUT_REDIRECT_PATH = '/signout-complete'
+const getSignOutRedirectUrl = () => {
+  // In production, use absolute URL; in development, use relative path
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin
+    return `${origin}/signout-complete`
+  }
+  return '/signout-complete'
+}
 
 export function UserButtonWithCleanup({
   appearance,
@@ -35,8 +42,8 @@ export function UserButtonWithCleanup({
         event.preventDefault()
         event.stopPropagation()
 
-        // Sign out with redirect to our custom page
-        await signOut({ redirectUrl: SIGNOUT_REDIRECT_PATH })
+        // Sign out with redirect to our custom page using absolute URL
+        await signOut({ redirectUrl: getSignOutRedirectUrl() })
       }
     },
     [signOut],
