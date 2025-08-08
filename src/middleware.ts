@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 
 // Define which routes should be protected
 const isProtectedRoute = createRouteMatcher(['/api/billing(.*)'])
@@ -8,6 +9,9 @@ export default clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {
     await auth.protect()
   }
+
+  // Let all other requests through
+  return NextResponse.next()
 })
 
 export const config = {

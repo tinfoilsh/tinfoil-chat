@@ -83,8 +83,9 @@ export class CompressionService {
       // Create decompression stream
       const decompressionStream = new DecompressionStream('gzip')
       const writer = decompressionStream.writable.getWriter()
-      writer.write(compressedBytes)
-      writer.close()
+      // Create a new Uint8Array to ensure proper type
+      await writer.write(new Uint8Array(compressedBytes))
+      await writer.close()
 
       // Read decompressed data
       const decompressedChunks: Uint8Array[] = []
