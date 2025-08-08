@@ -1,3 +1,4 @@
+import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
@@ -89,6 +90,7 @@ export default function RootLayout({
       </head>
       <body className="bg-gray-900 text-gray-100 antialiased">
         <ClerkProvider telemetry={false}>
+          <AuthCleanupHandler />
           {children}
           <Toaster />
         </ClerkProvider>
