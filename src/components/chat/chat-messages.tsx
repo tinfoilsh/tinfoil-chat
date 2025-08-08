@@ -22,9 +22,7 @@ import {
 } from 'react-icons/fa'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
-import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
@@ -32,9 +30,35 @@ import { useMaxMessages } from './hooks/use-max-messages'
 import { PromptSelector } from './prompt-selector'
 import type { Message } from './types'
 
-// Static arrays to prevent recreation on every render
-const remarkPlugins = [remarkGfm, remarkMath]
-const rehypePlugins = [rehypeKatex]
+// We'll use a custom hook to load math plugins
+function useMathPlugins() {
+  const [plugins, setPlugins] = useState<{
+    remarkPlugins: any[]
+    rehypePlugins: any[]
+  }>({
+    remarkPlugins: [remarkGfm],
+    rehypePlugins: [],
+  })
+
+  useEffect(() => {
+    // Load math plugins only in browser
+    if (typeof window !== 'undefined') {
+      Promise.all([import('remark-math'), import('rehype-katex')])
+        .then(([remarkMathMod, rehypeKatexMod]) => {
+          setPlugins({
+            remarkPlugins: [remarkGfm, remarkMathMod.default] as any[],
+            rehypePlugins: [rehypeKatexMod.default] as any[],
+          })
+        })
+        .catch(() => {
+          // If loading fails, just use basic plugins
+          console.warn('Math rendering plugins failed to load')
+        })
+    }
+  }, [])
+
+  return plugins
+}
 
 // Add new types
 type MessageWithThoughts = Message & {
@@ -73,6 +97,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
 }) {
   // Always start collapsed - user must click to expand
   const [isExpanded, setIsExpanded] = useState(false)
+  const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
   // Process the markdown to extract all paragraphs - moved before any conditional returns
   const paragraphs = useMemo(
@@ -184,7 +209,9 @@ const ThoughtProcess = memo(function ThoughtProcess({
                       remarkPlugins={remarkPlugins}
                       rehypePlugins={rehypePlugins}
                       components={{
-                        p: ({ children }) => <>{children}</>,
+                        p: ({ children }: { children?: React.ReactNode }) => (
+                          <>{children}</>
+                        ),
                       }}
                     >
                       {paragraph}
@@ -210,6 +237,9 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
 }) {
   // Convert single newlines to markdown line breaks (two spaces + newline)
   const processedContent = content.replace(/\n/g, '  \n')
+
+  // Use the hook to get math plugins
+  const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
   return (
     <ReactMarkdown
@@ -245,7 +275,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </code>
           )
         },
-        table({ children, node, ...props }) {
+        table({ children, node, ...props }: any) {
           return (
             <div className="my-4 overflow-x-auto">
               <table
@@ -257,7 +287,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </div>
           )
         },
-        thead({ children, node, ...props }) {
+        thead({ children, node, ...props }: any) {
           return (
             <thead
               {...props}
@@ -267,7 +297,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </thead>
           )
         },
-        tbody({ children, node, ...props }) {
+        tbody({ children, node, ...props }: any) {
           return (
             <tbody
               {...props}
@@ -277,10 +307,10 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </tbody>
           )
         },
-        tr({ children, node, ...props }) {
+        tr({ children, node, ...props }: any) {
           return <tr {...props}>{children}</tr>
         },
-        th({ children, node, ...props }) {
+        th({ children, node, ...props }: any) {
           return (
             <th
               {...props}
@@ -290,7 +320,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
             </th>
           )
         },
-        td({ children, node, ...props }) {
+        td({ children, node, ...props }: any) {
           return (
             <td
               {...props}

@@ -1,10 +1,10 @@
 import { logError } from '@/utils/error-handling'
-import { auth, clerkClient } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'edge'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const { userId } = await auth()
 
@@ -12,8 +12,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const clerk = await clerkClient()
-    const user = await clerk.users.getUser(userId)
+    // Use currentUser() instead of clerkClient() for edge runtime compatibility
+    const user = await currentUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
     const publicMetadata = user.publicMetadata
 
     const response = {
