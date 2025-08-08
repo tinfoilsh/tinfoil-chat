@@ -16,7 +16,8 @@ export const LockAnimation = memo(function LockAnimation({
   const shouldReduceMotion = useReducedMotion()
 
   // Geometry
-  const fillColor = isDarkMode ? '#e5e7eb' : '#111827'
+  // High contrast lock: white in dark mode, near-black in light mode
+  const fillColor = isDarkMode ? '#ffffff' : '#111827'
   const OPEN_D = 'M18 48 V20 a14 14 0 0 1 28 0 V24'
   const CLOSED_D = 'M18 40 V16 a14 14 0 0 1 28 0 V40'
 
@@ -86,6 +87,10 @@ export const LockAnimation = memo(function LockAnimation({
             <clipPath id="body-clip">
               <rect x="0" y="24" width="64" height="40" />
             </clipPath>
+            <mask id="body-hole-mask" maskUnits="userSpaceOnUse">
+              <rect x="0" y="0" width="64" height="64" fill="white" />
+              <circle cx="32" cy="44" r="5.2" fill="black" />
+            </mask>
           </defs>
 
           {/* Shackle */}
@@ -105,10 +110,11 @@ export const LockAnimation = memo(function LockAnimation({
             />
           </motion.g>
 
-          {/* Body */}
+          {/* Body with transparent keyhole via mask */}
           <motion.path
             animate={bodyControls}
             clipPath="url(#body-clip)"
+            mask="url(#body-hole-mask)"
             fill={fillColor}
             d="M52,24h-4v-8c0-8.836-7.164-16-16-16S16,7.164,16,16v8h-4c-2.211,0-4,1.789-4,4v32c0,2.211,1.789,4,4,4h40 c2.211,0,4-1.789,4-4V28C56,25.789,54.211,24,52,24z M40,24 H24v-8c0-4.418,3.582-8,8-8s8,3.582,8,8V24z"
           />
