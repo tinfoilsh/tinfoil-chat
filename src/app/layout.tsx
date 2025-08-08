@@ -71,30 +71,30 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="overflow-x-hidden">
-      <head>
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
-        />
-        <meta name="theme-color" content="#111827" />
-        <link
-          rel="stylesheet"
-          href="https://api.fontshare.com/css?f%5B%5D=switzer@400,500,600,700&amp;display=swap"
-        />
-        <script
-          defer
-          data-domain="chat.tinfoil.sh"
-          src="https://plausible.io/js/script.js"
-        ></script>
-      </head>
-      <body className="bg-gray-900 text-gray-100 antialiased">
-        <ClerkProvider telemetry={false}>
+    <ClerkProvider telemetry={false} afterSignOutUrl="/">
+      <html lang="en" className="overflow-x-hidden">
+        <head>
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+          />
+          <meta name="theme-color" content="#111827" />
+          <link
+            rel="stylesheet"
+            href="https://api.fontshare.com/css?f%5B%5D=switzer@400,500,600,700&amp;display=swap"
+          />
+          <script
+            defer
+            data-domain="chat.tinfoil.sh"
+            src="https://plausible.io/js/script.js"
+          ></script>
+        </head>
+        <body className="bg-gray-900 text-gray-100 antialiased">
           <AuthCleanupHandler />
           {children}
           <Toaster />
-        </ClerkProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

@@ -109,10 +109,13 @@ export class EncryptionService {
       // Convert alphanumeric to bytes
       const keyData = this.alphanumericToBytes(processedKey)
 
-      // Import as CryptoKey
+      // Import as CryptoKey - ensure we have a proper ArrayBuffer
       this.encryptionKey = await crypto.subtle.importKey(
         'raw',
-        keyData,
+        keyData.buffer.slice(
+          keyData.byteOffset,
+          keyData.byteOffset + keyData.byteLength,
+        ) as ArrayBuffer,
         { name: 'AES-GCM' },
         false,
         ['encrypt', 'decrypt'],
@@ -162,7 +165,10 @@ export class EncryptionService {
         iv: iv,
       },
       this.encryptionKey,
-      dataBytes,
+      dataBytes.buffer.slice(
+        dataBytes.byteOffset,
+        dataBytes.byteOffset + dataBytes.byteLength,
+      ) as ArrayBuffer,
     )
 
     // Convert to base64 safely for large data
@@ -195,7 +201,10 @@ export class EncryptionService {
           iv: iv,
         },
         this.encryptionKey,
-        data,
+        data.buffer.slice(
+          data.byteOffset,
+          data.byteOffset + data.byteLength,
+        ) as ArrayBuffer,
       )
 
       // Convert decrypted data to string (this is the compressed data)

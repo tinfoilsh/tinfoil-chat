@@ -13,7 +13,6 @@ interface UserButtonWithCleanupProps {
 export function UserButtonWithCleanup({
   appearance,
 }: UserButtonWithCleanupProps) {
-  // Just render the standard UserButton
-  // The cleanup will be handled by checking auth state elsewhere
+  // Just render the standard UserButton exactly like landing-site
   return <UserButton appearance={appearance} />
 }
