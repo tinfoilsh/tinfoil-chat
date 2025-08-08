@@ -617,24 +617,22 @@ export class CloudSyncService {
             await indexedDBStorage.saveChat(chatToReencrypt)
 
             // Upload to cloud (will be encrypted with new key)
-            const uploaded = await r2Storage.uploadChat(chatToReencrypt)
-            if (uploaded) {
-              await indexedDBStorage.markAsSynced(
-                chatToReencrypt.id,
-                chatToReencrypt.syncVersion,
-              )
-              result.uploaded++
-              result.reencrypted++
+            await r2Storage.uploadChat(chatToReencrypt)
+            await indexedDBStorage.markAsSynced(
+              chatToReencrypt.id,
+              chatToReencrypt.syncVersion,
+            )
+            result.uploaded++
+            result.reencrypted++
 
-              logInfo('Chat re-encrypted and uploaded', {
-                component: 'CloudSync',
-                action: 'reencryptAndUploadChats',
-                metadata: {
-                  chatId: chat.id,
-                  syncVersion: chatToReencrypt.syncVersion,
-                },
-              })
-            }
+            logInfo('Chat re-encrypted and uploaded', {
+              component: 'CloudSync',
+              action: 'reencryptAndUploadChats',
+              metadata: {
+                chatId: chat.id,
+                syncVersion: chatToReencrypt.syncVersion,
+              },
+            })
           }
         } catch (error) {
           const errorMsg = `Failed to re-encrypt chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`
