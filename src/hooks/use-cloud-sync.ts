@@ -193,6 +193,20 @@ export function useCloudSync() {
           // First retry decryption for chats that failed with the old key
           const decryptedCount = await retryDecryptionWithNewKey()
 
+          // Then re-encrypt all local chats with the new key and upload them
+          const reencryptResult = await cloudSync.reencryptAndUploadChats()
+
+          logInfo('Re-encrypted chats after key change', {
+            component: 'useCloudSync',
+            action: 'setEncryptionKey',
+            metadata: {
+              decrypted: decryptedCount,
+              reencrypted: reencryptResult.reencrypted,
+              uploaded: reencryptResult.uploaded,
+              errors: reencryptResult.errors.length,
+            },
+          })
+
           // Then trigger a full sync to ensure everything is up to date
           await syncChats()
           return true // Always return true to trigger reload
