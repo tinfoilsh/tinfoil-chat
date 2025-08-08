@@ -1,6 +1,7 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
+import { LockAnimation } from '@/components/chat/lock-animation'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
@@ -52,6 +53,8 @@ type ChatMessagesProps = {
   subscriptionLoading?: boolean
   onSelectPrompt?: (prompt: string) => void
 }
+
+// Lock animation moved to `./lock-animation`
 
 // Add new component for thought process display
 const ThoughtProcess = memo(function ThoughtProcess({
@@ -619,41 +622,49 @@ const WelcomeScreen = memo(function WelcomeScreen({
         delay: 0.1,
       }}
     >
-      <motion.h1
-        className={`font-display text-3xl font-medium tracking-tight ${
-          isDarkMode ? 'text-gray-100' : 'text-gray-800'
-        } mb-6`}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{
-          duration: 0.5,
-          ease: 'easeOut',
-          delay: 0.2,
-        }}
-      >
-        {getGreeting()}
-      </motion.h1>
+      <div className="mb-6 flex w-full flex-col items-start gap-6 md:flex-row md:items-center">
+        <div className="flex-shrink-0 md:self-center">
+          <LockAnimation isDarkMode={isDarkMode} size={97} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <motion.h1
+            className={`font-display text-3xl font-medium tracking-tight ${
+              isDarkMode ? 'text-gray-100' : 'text-gray-800'
+            } mb-3`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.5,
+              ease: 'easeOut',
+              delay: 0.2,
+            }}
+          >
+            {getGreeting()}
+          </motion.h1>
 
-      <motion.p
-        className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-12 text-lg`}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{
-          duration: 0.5,
-          ease: 'easeOut',
-          delay: 0.3,
-        }}
-      >
-        This conversation is completely private, nobody can see your messages -
-        not even Tinfoil.
-      </motion.p>
-
-      {/* Prompt Selector */}
+          <motion.p
+            className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{
+              duration: 0.5,
+              ease: 'easeOut',
+              delay: 0.3,
+            }}
+          >
+            <b>This conversation is private:</b> nobody can see your messages,
+            not even Tinfoil.
+          </motion.p>
+        </div>
+      </div>
+      {/* Prompt Selector centered and independent of the lock/text row */}
       {onSelectPrompt && (
-        <PromptSelector
-          isDarkMode={isDarkMode}
-          onSelectPrompt={onSelectPrompt}
-        />
+        <div className="mt-8 flex w-full justify-center">
+          <PromptSelector
+            isDarkMode={isDarkMode}
+            onSelectPrompt={onSelectPrompt}
+          />
+        </div>
       )}
     </motion.div>
   )
