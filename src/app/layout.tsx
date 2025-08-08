@@ -71,7 +71,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <ClerkProvider telemetry={false} afterSignOutUrl="/">
+    <ClerkProvider telemetry={false}>
       <html lang="en" className="overflow-x-hidden">
         <head>
           <meta
