@@ -12,7 +12,7 @@ interface UserButtonWithCleanupProps {
 }
 
 const getSignOutRedirectUrl = () => {
-  // In production, use absolute URL; in development, use relative path
+  // Use an absolute URL when running in the browser; fall back to a relative path during SSR
   if (typeof window !== 'undefined') {
     const origin = window.location.origin
     return `${origin}/signout-complete`
