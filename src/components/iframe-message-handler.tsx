@@ -35,15 +35,17 @@ export function IframeMessageHandler() {
 
             logInfo('Text injected via iframe', {
               component: 'IframeMessageHandler',
-              key: storageKey,
-              origin: event.origin,
+              metadata: {
+                key: storageKey,
+                origin: event.origin,
+              },
             })
           }
         }
       } catch (error) {
         logError('Failed to handle iframe message', error, {
           component: 'IframeMessageHandler',
-          origin: event.origin,
+          metadata: { origin: event.origin },
         })
 
         // Send error response
