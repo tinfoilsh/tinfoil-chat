@@ -1,4 +1,5 @@
 import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
+import { IframeMessageHandler } from '@/components/iframe-message-handler'
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
@@ -91,6 +92,7 @@ export default function RootLayout({
         </head>
         <body className="bg-gray-900 text-gray-100 antialiased">
           <AuthCleanupHandler />
+          <IframeMessageHandler />
           {children}
           <Toaster />
         </body>
