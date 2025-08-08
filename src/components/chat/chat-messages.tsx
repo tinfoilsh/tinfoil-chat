@@ -1,6 +1,8 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
+import { LockAnimation } from '@/components/chat/lock-animation'
+import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
@@ -52,6 +54,8 @@ type ChatMessagesProps = {
   subscriptionLoading?: boolean
   onSelectPrompt?: (prompt: string) => void
 }
+
+// Lock animation moved to `./lock-animation`
 
 // Add new component for thought process display
 const ThoughtProcess = memo(function ThoughtProcess({
@@ -619,42 +623,92 @@ const WelcomeScreen = memo(function WelcomeScreen({
         delay: 0.1,
       }}
     >
-      <motion.h1
-        className={`font-display text-3xl font-medium tracking-tight ${
-          isDarkMode ? 'text-gray-100' : 'text-gray-800'
-        } mb-6`}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{
-          duration: 0.5,
-          ease: 'easeOut',
-          delay: 0.2,
-        }}
-      >
-        {getGreeting()}
-      </motion.h1>
+      <div className="mb-6 w-full">
+        <div className="-ml-8 grid grid-cols-[auto,1fr] items-start gap-x-3 md:gap-x-4">
+          <div className="mt-1">
+            <LockAnimation isDarkMode={isDarkMode} size={32} />
+          </div>
+          <motion.h1
+            className={`font-display col-start-2 text-3xl font-medium tracking-tight ${
+              isDarkMode ? 'text-gray-100' : 'text-gray-800'
+            }`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              duration: 0.5,
+              ease: 'easeOut',
+              delay: 0.2,
+            }}
+          >
+            {getGreeting()}
+          </motion.h1>
 
-      <motion.p
-        className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} mb-12 text-lg`}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{
-          duration: 0.5,
-          ease: 'easeOut',
-          delay: 0.3,
-        }}
-      >
-        This conversation is completely private, nobody can see your messages -
-        not even Tinfoil.
-      </motion.p>
-
-      {/* Prompt Selector */}
-      {onSelectPrompt && (
-        <PromptSelector
-          isDarkMode={isDarkMode}
-          onSelectPrompt={onSelectPrompt}
-        />
-      )}
+          <div className="col-start-2">
+            <motion.p
+              className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{
+                duration: 0.5,
+                ease: 'easeOut',
+                delay: 0.3,
+              }}
+            >
+              <b>This conversation is private:</b> nobody can see your messages,
+              not even Tinfoil.
+            </motion.p>
+            <motion.p
+              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-2 text-sm leading-6`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{
+                duration: 0.5,
+                ease: 'easeOut',
+                delay: 0.3,
+              }}
+            >
+              Each message is end‑to‑end encrypted and <em>only</em> processed
+              inside secure hardware enclaves.{' '}
+              <Link
+                href="https://docs.tinfoil.sh/resources/how-it-works"
+                className={`${
+                  isDarkMode
+                    ? 'text-gray-400 hover:text-gray-300'
+                    : 'text-gray-500 hover:text-gray-700'
+                } inline-flex items-center gap-1`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Learn more about how it works"
+              >
+                Learn more
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                  className="h-[0.95em] w-[0.95em]"
+                >
+                  <path
+                    d="M4 10h10m0 0-4-4m4 4-4 4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+            </motion.p>
+            {onSelectPrompt && (
+              <div className="col-start-2 mt-8">
+                <PromptSelector
+                  isDarkMode={isDarkMode}
+                  onSelectPrompt={onSelectPrompt}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </motion.div>
   )
 })

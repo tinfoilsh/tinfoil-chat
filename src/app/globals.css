@@ -45,3 +45,15 @@
 .h-screen {
   height: 100dvh; /* Dynamic viewport height - adjusts as the address bar appears/disappears */
 }
+
+@keyframes sheen {
+  0% {
+    background-position: -120% 0;
+  }
+  100% {
+    background-position: 220% 0;
+  }
+}
+
+/* Subtle one-shot sheen for text clipped backgrounds */
+/* Removed sheen styles */
