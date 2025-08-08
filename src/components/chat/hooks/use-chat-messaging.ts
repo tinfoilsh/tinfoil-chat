@@ -40,6 +40,8 @@ interface UseChatMessagingReturn {
     query: string,
     documentContent?: string,
     documents?: Array<{ name: string }>,
+    imageData?: Array<{ base64: string; mimeType: string }>,
+    systemPromptOverride?: string,
   ) => void
   cancelGeneration: () => Promise<void>
   getApiKey: () => Promise<string>
@@ -238,8 +240,11 @@ export function useChatMessaging({
       documentContent?: string,
       documents?: Array<{ name: string }>,
       imageData?: Array<{ base64: string; mimeType: string }>,
+      systemPromptOverride?: string,
     ) => {
-      if (!query.trim() || loadingState !== 'idle') return
+      // Allow empty query only if systemPromptOverride is provided
+      if ((!query.trim() && !systemPromptOverride) || loadingState !== 'idle')
+        return
 
       // Safety check - ensure we have a current chat
       if (!currentChat) {
@@ -255,24 +260,33 @@ export function useChatMessaging({
       setLoadingState('loading')
       setIsWaitingForResponse(true)
 
-      const userMessage: Message = {
-        role: 'user',
-        content: query,
-        documentContent: documentContent,
-        documents,
-        imageData,
-        timestamp: new Date(),
-      }
+      // Only create a user message if there's actual query content
+      // When using system prompt override with empty query, skip user message
+      const hasUserContent = query.trim() !== ''
+
+      const userMessage: Message | null = hasUserContent
+        ? {
+            role: 'user',
+            content: query,
+            documentContent: documentContent,
+            documents,
+            imageData,
+            timestamp: new Date(),
+          }
+        : null
 
       // Generate title immediately if this is the first message
       let updatedChat = { ...currentChat }
       const isFirstMessage = currentChat.messages.length === 0
 
       if (isFirstMessage) {
-        const title = generateTitle(query)
+        // Use query for title if available, otherwise extract from system prompt
+        const titleSource =
+          query.trim() || (systemPromptOverride ? 'Assistant Task' : 'New Chat')
+        const title = generateTitle(titleSource)
         // Make sure title is not empty
         const safeTitle =
-          title.trim() || 'Chat about ' + query.slice(0, 20) + '...'
+          title.trim() || 'Chat about ' + titleSource.slice(0, 20) + '...'
 
         // Update the current chat with:
         // - New title
@@ -286,7 +300,9 @@ export function useChatMessaging({
         }
       }
 
-      const updatedMessages = [...currentChat.messages, userMessage]
+      const updatedMessages = userMessage
+        ? [...currentChat.messages, userMessage]
+        : [...currentChat.messages]
       updatedChat = {
         ...updatedChat,
         messages: updatedMessages,
@@ -387,7 +403,8 @@ export function useChatMessaging({
         // Always use the proxy
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
-        const finalSystemPrompt = systemPrompt.replace(
+        const baseSystemPrompt = systemPromptOverride || systemPrompt
+        const finalSystemPrompt = baseSystemPrompt.replace(
           '{MODEL_NAME}',
           model.name,
         )

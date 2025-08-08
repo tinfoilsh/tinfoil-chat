@@ -42,6 +42,7 @@ interface UseChatStateReturn {
     documentContent?: string,
     documents?: Array<{ name: string }>,
     imageData?: Array<{ base64: string; mimeType: string }>,
+    systemPromptOverride?: string,
   ) => void
   createNewChat: () => void
   deleteChat: (chatId: string) => void

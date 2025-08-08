@@ -28,6 +28,7 @@ import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
+import { PromptSelector } from './prompt-selector'
 import type { Message } from './types'
 
 // Static arrays to prevent recreation on every render
@@ -50,6 +51,7 @@ type ChatMessagesProps = {
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
+  onSelectPrompt?: (prompt: string) => void
 }
 
 // Add new component for thought process display
@@ -491,12 +493,14 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium,
   models,
   subscriptionLoading,
+  onSelectPrompt,
 }: {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
+  onSelectPrompt?: (prompt: string) => void
 }) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
@@ -772,6 +776,14 @@ const WelcomeScreen = memo(function WelcomeScreen({
           </div>
         </motion.div>
       )}
+
+      {/* Prompt Selector */}
+      {onSelectPrompt && (
+        <PromptSelector
+          isDarkMode={isDarkMode}
+          onSelectPrompt={onSelectPrompt}
+        />
+      )}
     </motion.div>
   )
 })
@@ -806,6 +818,7 @@ export function ChatMessages({
   isPremium,
   models,
   subscriptionLoading,
+  onSelectPrompt,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const maxMessages = useMaxMessages()
@@ -852,6 +865,7 @@ export function ChatMessages({
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}
+            onSelectPrompt={onSelectPrompt}
           />
         </div>
         <div ref={messagesEndRef} className="hidden" />
