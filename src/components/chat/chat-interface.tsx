@@ -867,6 +867,18 @@ export function ChatInterface({
               isPremium={isPremium}
               models={models}
               subscriptionLoading={subscriptionLoading}
+              onSelectPrompt={(prompt) => {
+                // Append the selected prompt to the system prompt and send immediately
+                const enhancedSystemPrompt = `${effectiveSystemPrompt}\n\n${prompt}`
+                // Send with an empty user message (will be handled to show a default)
+                handleQuery(
+                  '',
+                  undefined,
+                  undefined,
+                  undefined,
+                  enhancedSystemPrompt,
+                )
+              }}
             />
           </ScrollableFeed>
 

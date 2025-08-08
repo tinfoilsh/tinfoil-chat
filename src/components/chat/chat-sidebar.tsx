@@ -579,42 +579,107 @@ export function ChatSidebar({
             >
               <div className="flex-1">
                 <h4
-                  className={`mb-1 text-sm font-semibold ${
+                  className={`mb-3 text-sm font-semibold ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
-                  Unlock Premium Features
+                  Get more out of Tinfoil Chat
                 </h4>
-                <p
-                  className={`mb-3 text-sm ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
-                >
-                  Get access to advanced AI models, voice input, and more.
-                </p>
-                <Link
-                  href="https://tinfoil.sh/pricing"
-                  className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
-                    isDarkMode
-                      ? 'text-emerald-400 hover:text-emerald-300'
-                      : 'text-emerald-600 hover:text-emerald-500'
-                  }`}
-                >
-                  Get Pro
-                  <svg
-                    className="ml-0.5 h-3 w-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className="space-y-2.5">
+                  <div
+                    className={`flex items-center gap-3 text-xs ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </Link>
+                    <svg
+                      className={`h-4 w-4 flex-shrink-0 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                      />
+                    </svg>
+                    <span>Speech-to-text voice input</span>
+                  </div>
+
+                  <div
+                    className={`flex items-center gap-3 text-xs ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}
+                  >
+                    <svg
+                      className={`h-4 w-4 flex-shrink-0 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                      />
+                    </svg>
+                    <span>Premium AI models</span>
+                  </div>
+
+                  <div
+                    className={`flex items-center gap-3 text-xs ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}
+                  >
+                    <svg
+                      className={`h-4 w-4 flex-shrink-0 ${
+                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
+                    </svg>
+                    <span>Faster response times</span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Link
+                    href="https://tinfoil.sh/pricing"
+                    className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
+                      isDarkMode
+                        ? 'text-emerald-400 hover:text-emerald-300'
+                        : 'text-emerald-600 hover:text-emerald-500'
+                    }`}
+                  >
+                    Upgrade to Pro
+                    <svg
+                      className="h-3 w-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </Link>
+                </div>
               </div>
             </div>
           )}

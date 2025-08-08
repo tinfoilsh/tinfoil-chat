@@ -2,7 +2,6 @@
 
 import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
-import { MicrophoneIcon } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
 import { memo, useEffect, useMemo, useState } from 'react'
@@ -28,6 +27,7 @@ import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
+import { PromptSelector } from './prompt-selector'
 import type { Message } from './types'
 
 // Static arrays to prevent recreation on every render
@@ -50,6 +50,7 @@ type ChatMessagesProps = {
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
+  onSelectPrompt?: (prompt: string) => void
 }
 
 // Add new component for thought process display
@@ -491,12 +492,14 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium,
   models,
   subscriptionLoading,
+  onSelectPrompt,
 }: {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
+  onSelectPrompt?: (prompt: string) => void
 }) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
@@ -538,13 +541,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
     }
     return 'Tinfoil Private Chat'
   }
-
-  // Get premium models for display - include both premium-only and conditional models
-  const premiumModels =
-    models?.filter(
-      (model) =>
-        model.type === 'chat' && model.chat === true && model.paid === true,
-    ) || []
 
   // Show loading state while subscription is loading
   if (subscriptionLoading) {
@@ -652,125 +648,12 @@ const WelcomeScreen = memo(function WelcomeScreen({
         not even Tinfoil.
       </motion.p>
 
-      {/* Premium upgrade section for non-premium users - only show after subscription status is loaded */}
-      {!subscriptionLoading && !isPremium && (
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.5,
-            ease: 'easeOut',
-            delay: 0.5,
-          }}
-        >
-          <div
-            className={`rounded-xl border ${
-              isDarkMode
-                ? 'border-emerald-500/30 bg-emerald-950/20'
-                : 'border-emerald-500/30 bg-emerald-50/50'
-            } p-6`}
-          >
-            <h3
-              className={`mb-4 text-base font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}
-            >
-              Get more out of Tinfoil Chat
-            </h3>
-            <div className="space-y-3">
-              <div
-                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-              >
-                <MicrophoneIcon
-                  className={`h-4 w-4 flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}
-                />
-                <span>Speech-to-text voice input</span>
-              </div>
-
-              <div
-                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-              >
-                <svg
-                  className={`h-4 w-4 flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                  />
-                </svg>
-                <span>Premium AI models</span>
-                {premiumModels.length > 0 && (
-                  <div className="ml-2 flex items-center gap-1.5">
-                    {premiumModels.map((model) => (
-                      <img
-                        key={model.modelName}
-                        src={model.image}
-                        alt={model.name}
-                        className="h-4 w-4 opacity-75"
-                        title={model.name}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`flex items-center gap-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-              >
-                <svg
-                  className={`h-4 w-4 flex-shrink-0 ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-                <span>Faster response times</span>
-              </div>
-            </div>
-            <div className="mt-6">
-              <a
-                href="https://tinfoil.sh/pricing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
-                  isDarkMode
-                    ? 'text-emerald-400 hover:text-emerald-300'
-                    : 'text-emerald-600 hover:text-emerald-500'
-                }`}
-              >
-                Upgrade to Pro
-                <svg
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </a>
-            </div>
-          </div>
-        </motion.div>
+      {/* Prompt Selector */}
+      {onSelectPrompt && (
+        <PromptSelector
+          isDarkMode={isDarkMode}
+          onSelectPrompt={onSelectPrompt}
+        />
       )}
     </motion.div>
   )
@@ -806,6 +689,7 @@ export function ChatMessages({
   isPremium,
   models,
   subscriptionLoading,
+  onSelectPrompt,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const maxMessages = useMaxMessages()
@@ -852,6 +736,7 @@ export function ChatMessages({
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}
+            onSelectPrompt={onSelectPrompt}
           />
         </div>
         <div ref={messagesEndRef} className="hidden" />
