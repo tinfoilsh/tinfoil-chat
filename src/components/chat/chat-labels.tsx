@@ -1,11 +1,11 @@
 import { type BaseModel } from '@/app/config/models'
 import {
-  Cog6ToothIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
   LockOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
+import { PiShareFat } from 'react-icons/pi'
 import { ModelSelector } from './model-selector'
 import type { AIModel } from './types'
 
@@ -23,7 +23,8 @@ type ChatLabelsProps = {
   isDarkMode: boolean
   isPremium: boolean
   models: BaseModel[]
-  onSettingsClick?: () => void
+  onShareClick?: () => void
+  hasMessages?: boolean
   isCompactMode?: boolean
 }
 
@@ -38,7 +39,8 @@ export function ChatLabels({
   isDarkMode,
   isPremium,
   models,
-  onSettingsClick,
+  onShareClick,
+  hasMessages = false,
   isCompactMode = false,
 }: ChatLabelsProps) {
   // Model selection handler - enforces handleModelSelect is defined
@@ -119,33 +121,6 @@ export function ChatLabels({
           )}
         </div>
 
-        {/* Settings button */}
-        {onSettingsClick && (
-          <button
-            type="button"
-            onClick={onSettingsClick}
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
-            } transition-colors hover:bg-opacity-80`}
-            title="Settings"
-          >
-            <Cog6ToothIcon
-              className={`h-5 w-5 ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-600'
-              }`}
-            />
-            {!isCompactMode && (
-              <span
-                className={`text-xs ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-600'
-                }`}
-              >
-                Settings
-              </span>
-            )}
-          </button>
-        )}
-
         {/* Verification label */}
         <button
           type="button"
@@ -175,6 +150,33 @@ export function ChatLabels({
             </span>
           )}
         </button>
+
+        {/* Share button - only show when there are messages */}
+        {onShareClick && hasMessages && (
+          <button
+            type="button"
+            onClick={onShareClick}
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
+              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+            } transition-colors hover:bg-opacity-80`}
+            title="Share"
+          >
+            <PiShareFat
+              className={`h-5 w-5 ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-600'
+              }`}
+            />
+            {!isCompactMode && (
+              <span
+                className={`text-xs ${
+                  isDarkMode ? 'text-gray-200' : 'text-gray-600'
+                }`}
+              >
+                Share
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       <style jsx>{`

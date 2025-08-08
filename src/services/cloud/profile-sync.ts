@@ -178,14 +178,16 @@ export class ProfileSyncService {
   }
 
   // Save profile to cloud
-  async saveProfile(profile: ProfileData): Promise<boolean> {
+  async saveProfile(
+    profile: ProfileData,
+  ): Promise<{ success: boolean; version?: number }> {
     try {
       if (!(await this.isAuthenticated())) {
         logInfo('Skipping profile save - not authenticated', {
           component: 'ProfileSync',
           action: 'saveProfile',
         })
-        return false
+        return { success: false }
       }
 
       logInfo('Saving profile to cloud', {
@@ -247,7 +249,7 @@ export class ProfileSyncService {
         },
       })
 
-      return true
+      return { success: true, version: profileWithMetadata.version }
     } catch (error) {
       // Silently fail if no auth token
       if (
@@ -258,7 +260,7 @@ export class ProfileSyncService {
           component: 'ProfileSync',
           action: 'saveProfile',
         })
-        return false
+        return { success: false }
       }
 
       logError('Failed to save profile', error, {
@@ -266,7 +268,7 @@ export class ProfileSyncService {
         action: 'saveProfile',
       })
 
-      return false
+      return { success: false }
     }
   }
 

@@ -561,6 +561,106 @@ export class CloudSyncService {
 
     return decryptedCount
   }
+
+  // Re-encrypt all local chats with new key and upload to cloud
+  async reencryptAndUploadChats(): Promise<{
+    reencrypted: number
+    uploaded: number
+    errors: string[]
+  }> {
+    const result = {
+      reencrypted: 0,
+      uploaded: 0,
+      errors: [] as string[],
+    }
+
+    try {
+      // Get all local chats
+      const allChats = await indexedDBStorage.getAllChats()
+
+      logInfo('Starting re-encryption of local chats', {
+        component: 'CloudSync',
+        action: 'reencryptAndUploadChats',
+        metadata: { totalChats: allChats.length },
+      })
+
+      // Initialize encryption with new key
+      await encryptionService.initialize()
+
+      for (const chat of allChats) {
+        try {
+          // Skip blank chats
+          if (chat.isBlankChat) continue
+
+          // For encrypted chats, they need to be decrypted first (will use old key from memory if available)
+          // For decrypted chats, we can directly work with them
+          let chatToReencrypt = chat
+
+          if (chat.encryptedData) {
+            // This chat is still encrypted with old key, skip it
+            // It will be handled by retryDecryptionWithNewKey
+            logInfo('Skipping encrypted chat - needs decryption first', {
+              component: 'CloudSync',
+              action: 'reencryptAndUploadChats',
+              metadata: { chatId: chat.id },
+            })
+            continue
+          }
+
+          // Re-encrypt the chat with the new key by forcing a sync
+          // The sync process will automatically encrypt with the current key
+          if (await r2Storage.isAuthenticated()) {
+            // Increment sync version to force upload
+            chatToReencrypt.syncVersion = (chatToReencrypt.syncVersion || 0) + 1
+
+            // Save locally with new sync version
+            await indexedDBStorage.saveChat(chatToReencrypt)
+
+            // Upload to cloud (will be encrypted with new key)
+            await r2Storage.uploadChat(chatToReencrypt)
+            await indexedDBStorage.markAsSynced(
+              chatToReencrypt.id,
+              chatToReencrypt.syncVersion,
+            )
+            result.uploaded++
+            result.reencrypted++
+
+            logInfo('Chat re-encrypted and uploaded', {
+              component: 'CloudSync',
+              action: 'reencryptAndUploadChats',
+              metadata: {
+                chatId: chat.id,
+                syncVersion: chatToReencrypt.syncVersion,
+              },
+            })
+          }
+        } catch (error) {
+          const errorMsg = `Failed to re-encrypt chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`
+          result.errors.push(errorMsg)
+          logError('Failed to re-encrypt chat', error, {
+            component: 'CloudSync',
+            action: 'reencryptAndUploadChats',
+            metadata: { chatId: chat.id },
+          })
+        }
+      }
+
+      logInfo('Completed re-encryption of local chats', {
+        component: 'CloudSync',
+        action: 'reencryptAndUploadChats',
+        metadata: result,
+      })
+    } catch (error) {
+      const errorMsg = `Re-encryption failed: ${error instanceof Error ? error.message : String(error)}`
+      result.errors.push(errorMsg)
+      logError('Failed to re-encrypt chats', error, {
+        component: 'CloudSync',
+        action: 'reencryptAndUploadChats',
+      })
+    }
+
+    return result
+  }
 }
 
 export const cloudSync = new CloudSyncService()
