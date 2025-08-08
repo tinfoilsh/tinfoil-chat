@@ -296,13 +296,16 @@ export function ChatInterface({
 
   // Check for injected text from iframe on mount
   useEffect(() => {
-    const injectedText = localStorage.getItem('injected_text')
-    if (injectedText) {
-      // Clear it immediately to prevent re-sending on refresh
-      localStorage.removeItem('injected_text')
+    // Only process if we're NOT in an iframe (i.e., we're the main page after redirect)
+    if (window.parent === window) {
+      const injectedText = localStorage.getItem('injected_text')
+      if (injectedText) {
+        // Clear it immediately to prevent re-sending on refresh
+        localStorage.removeItem('injected_text')
 
-      // Send as first user message
-      handleQuery(injectedText)
+        // Send as first user message
+        handleQuery(injectedText)
+      }
     }
   }, []) // Only run once on mount
 
