@@ -654,12 +654,12 @@ const WelcomeScreen = memo(function WelcomeScreen({
       }}
     >
       <div className="mb-6 w-full">
-        <div className="-ml-8 grid grid-cols-[auto,1fr] items-start gap-x-3 md:gap-x-4">
-          <div className="mt-1">
+        <div className="grid grid-cols-1 items-start">
+          <div className="mb-2">
             <LockAnimation isDarkMode={isDarkMode} size={32} />
           </div>
           <motion.h1
-            className={`font-display col-start-2 text-3xl font-medium tracking-tight ${
+            className={`font-display text-3xl font-medium tracking-tight ${
               isDarkMode ? 'text-gray-100' : 'text-gray-800'
             }`}
             initial={{ opacity: 0, y: 10 }}
@@ -673,7 +673,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
             {getGreeting()}
           </motion.h1>
 
-          <div className="col-start-2">
+          <div>
             <motion.p
               className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
               initial={{ opacity: 0 }}
@@ -729,7 +729,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               </Link>
             </motion.p>
             {onSelectPrompt && (
-              <div className="col-start-2 mt-8">
+              <div className="mt-8 hidden md:block">
                 <PromptSelector
                   isDarkMode={isDarkMode}
                   onSelectPrompt={onSelectPrompt}
@@ -807,13 +807,13 @@ export function ChatMessages({
   if (messages.length === 0) {
     return (
       <div
-        className="flex h-full items-center justify-center"
+        className="flex h-full justify-center pt-16 md:pt-24 lg:pt-28"
         style={{
           height: '100%',
           position: 'relative',
         }}
       >
-        <div className="w-full max-w-xl px-8">
+        <div className="mt-16 w-full max-w-xl px-8 md:mt-0">
           <WelcomeScreen
             isDarkMode={isDarkMode}
             openAndExpandVerifier={openAndExpandVerifier}
