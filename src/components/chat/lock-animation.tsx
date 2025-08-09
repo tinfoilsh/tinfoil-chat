@@ -23,13 +23,6 @@ export const LockAnimation = memo(function LockAnimation({
 
   useEffect(() => {
     const run = async () => {
-      await bodyControls.start({
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
-      })
-
       if (shouldReduceMotion) {
         await shackleControls.start({
           y: 0,
@@ -54,19 +47,20 @@ export const LockAnimation = memo(function LockAnimation({
           transition: { duration: 0.3, ease: 'easeOut' },
         })
 
-        lockControls.set({ rotate: 0, x: 0 })
         await lockControls.start({
-          rotate: [0, -1.2, 1.1, -0.8, 0.4, -0.2, 0],
-          x: [0, -0.7, 0.6, -0.4, 0.2, -0.1, 0],
-          transition: { duration: 0.5, ease: 'easeOut', delay: 0.02 },
+          rotate: [0, -1.8, 1.6, -1.2, 0.6, -0.3, 0],
+          x: [0, -1.0, 0.9, -0.6, 0.3, -0.15, 0],
+          transition: { duration: 0.6, ease: 'easeOut', delay: 0.02 },
         })
       }
     }
 
-    bodyControls.set({ opacity: 0, y: 8, scale: 0.995 })
+    // Immediately render the full lock in an open state so nothing "pops in" late
+    bodyControls.set({ opacity: 1, y: 0, scale: 1 })
     shackleControls.set({ y: -8, d: OPEN_D })
-    lockControls.set({ rotate: 0, x: 0 })
-    run()
+    lockControls.set({ rotate: 0, x: 0, opacity: 1 })
+    const timer = setTimeout(run, 1000)
+    return () => clearTimeout(timer)
   }, [bodyControls, shackleControls, lockControls, shouldReduceMotion])
 
   return (
