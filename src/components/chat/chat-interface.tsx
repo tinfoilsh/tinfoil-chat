@@ -28,6 +28,7 @@ import ScrollableFeed from 'react-scrollable-feed'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
 import { FirstLoginKeyModal } from '../modals/first-login-key-modal'
+import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -637,6 +638,14 @@ export function ChatInterface({
         overscrollBehavior: 'none',
       }}
     >
+      {/* URL Hash Message Handler */}
+      <UrlHashMessageHandler
+        isReady={!isLoadingConfig && isClient && !!currentChat}
+        onMessageReady={(message) => {
+          handleQuery(message)
+        }}
+      />
+
       {/* Sidebar toggle button - visible when left sidebar is closed, hidden when open */}
       {!isSidebarOpen &&
         !(
