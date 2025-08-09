@@ -294,18 +294,6 @@ export function ChatInterface({
     selectedModelDetails,
   )
 
-  // Check for injected text from iframe on mount
-  useEffect(() => {
-    const injectedText = localStorage.getItem('injected_text')
-    if (injectedText) {
-      // Clear it immediately to prevent re-sending on refresh
-      localStorage.removeItem('injected_text')
-
-      // Send as first user message
-      handleQuery(injectedText)
-    }
-  }, []) // Only run once on mount
-
   // Sync chats and profile when user signs in and periodically
   useEffect(() => {
     if (!isSignedIn) return
