@@ -295,16 +295,25 @@ export function ChatInterface({
   )
 
   // Check for injected text from iframe on mount
+  const hasProcessedInjectedText = useRef(false)
   useEffect(() => {
-    const injectedText = localStorage.getItem('injected_text')
-    if (injectedText) {
-      // Clear it immediately to prevent re-sending on refresh
-      localStorage.removeItem('injected_text')
+    // Only process if we're NOT in an iframe (i.e., we're the main page after redirect)
+    // and we haven't already processed an injected message
+    if (window.parent === window && !hasProcessedInjectedText.current) {
+      const injectedText = localStorage.getItem('injected_text')
+      if (injectedText && currentChat && !subscriptionLoading) {
+        hasProcessedInjectedText.current = true
 
-      // Send as first user message
-      handleQuery(injectedText)
+        // Clear it immediately to prevent re-sending on refresh
+        localStorage.removeItem('injected_text')
+
+        // Small delay to ensure everything is fully initialized
+        setTimeout(() => {
+          handleQuery(injectedText)
+        }, 100)
+      }
     }
-  }, []) // Only run once on mount
+  }, [currentChat, subscriptionLoading, handleQuery])
 
   // Sync chats and profile when user signs in and periodically
   useEffect(() => {
