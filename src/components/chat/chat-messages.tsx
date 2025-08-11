@@ -807,13 +807,13 @@ export function ChatMessages({
   if (messages.length === 0) {
     return (
       <div
-        className="flex h-full justify-center pt-16 md:pt-24 lg:pt-28"
+        className="flex h-full items-center justify-center"
         style={{
           height: '100%',
           position: 'relative',
         }}
       >
-        <div className="mt-16 w-full max-w-xl px-8 md:mt-0">
+        <div className="w-full max-w-xl px-8">
           <WelcomeScreen
             isDarkMode={isDarkMode}
             openAndExpandVerifier={openAndExpandVerifier}
