@@ -92,7 +92,10 @@ type ChatMessagesProps = {
   selectedModel?: string
   handleModelSelect?: (model: string) => void
   expandedLabel?: string | null
-  handleLabelClick?: (label: string, action: () => void) => void
+  handleLabelClick?: (
+    label: 'verify' | 'model' | 'info',
+    action: () => void,
+  ) => void
 }
 
 // Lock animation moved to `./lock-animation`
@@ -577,7 +580,10 @@ const WelcomeScreen = memo(function WelcomeScreen({
   selectedModel?: string
   handleModelSelect?: (model: string) => void
   expandedLabel?: string | null
-  handleLabelClick?: (label: string, action: () => void) => void
+  handleLabelClick?: (
+    label: 'verify' | 'model' | 'info',
+    action: () => void,
+  ) => void
 }) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
