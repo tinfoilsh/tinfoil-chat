@@ -29,12 +29,14 @@ export function AuthCleanupHandler() {
     ) {
       hasCheckedRef.current = true
 
-      // Check theme
+      // Check theme - follow browser preference if no saved theme
       const theme = localStorage.getItem('theme')
-      setIsDarkMode(
-        theme === 'dark' ||
-          (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches),
-      )
+      if (theme !== null) {
+        setIsDarkMode(theme === 'dark')
+      } else {
+        // Use browser's color scheme preference
+        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
+      }
 
       setShowModal(true)
     }

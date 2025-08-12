@@ -898,6 +898,10 @@ export function ChatInterface({
               handleDocumentUpload={handleFileUpload}
               processedDocuments={processedDocuments}
               removeDocument={removeDocument}
+              selectedModel={selectedModel}
+              handleModelSelect={handleModelSelect}
+              expandedLabel={expandedLabel}
+              handleLabelClick={handleLabelClick}
             />
           </ScrollableFeed>
 

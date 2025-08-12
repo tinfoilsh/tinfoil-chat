@@ -33,7 +33,7 @@ export function useUIState(): UseUIStateReturn {
       return
     }
 
-    // Fall back to system preference
+    // Use browser's color scheme preference
     const prefersDark = window.matchMedia(
       '(prefers-color-scheme: dark)',
     ).matches
@@ -42,7 +42,10 @@ export function useUIState(): UseUIStateReturn {
     // Listen for system theme changes if no saved preference
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = (e: MediaQueryListEvent) => {
-      setIsDarkMode(e.matches)
+      // Only update if there's no saved preference
+      if (localStorage.getItem('theme') === null) {
+        setIsDarkMode(e.matches)
+      }
     }
 
     mediaQuery.addEventListener('change', handleChange)
