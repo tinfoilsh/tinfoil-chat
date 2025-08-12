@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, useAnimationControls, useReducedMotion } from 'framer-motion'
-import { memo, useEffect, useId } from 'react'
+import { memo, useEffect } from 'react'
 
 export const LockAnimation = memo(function LockAnimation({
   isDarkMode,
@@ -14,17 +14,12 @@ export const LockAnimation = memo(function LockAnimation({
   const bodyControls = useAnimationControls()
   const lockControls = useAnimationControls()
   const shouldReduceMotion = useReducedMotion()
-  const uniqueId = useId()
 
   // Geometry
   // High contrast lock: white in dark mode, near-black in light mode
   const fillColor = isDarkMode ? '#ffffff' : '#111827'
   const OPEN_D = 'M18 48 V20 a14 14 0 0 1 28 0 V24'
   const CLOSED_D = 'M18 40 V16 a14 14 0 0 1 28 0 V40'
-
-  // Create unique IDs for SVG elements to prevent conflicts in production
-  const bodyClipId = `body-clip-${uniqueId}`
-  const bodyHoleMaskId = `body-hole-mask-${uniqueId}`
 
   useEffect(() => {
     const run = async () => {
@@ -70,28 +65,18 @@ export const LockAnimation = memo(function LockAnimation({
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
-      <motion.svg
+      <svg
         width={size}
         height={size}
         viewBox="0 0 64 64"
-        initial={false}
         aria-label="Locking animation"
         style={{ overflow: 'visible' }}
       >
         <motion.g
           animate={lockControls}
+          initial={false}
           style={{ originX: '32px', originY: '44px' }}
         >
-          <defs>
-            <clipPath id={bodyClipId}>
-              <rect x="0" y="24" width="64" height="40" />
-            </clipPath>
-            <mask id={bodyHoleMaskId} maskUnits="userSpaceOnUse">
-              <rect x="0" y="0" width="64" height="64" fill="white" />
-              <circle cx="32" cy="44" r="5.2" fill="black" />
-            </mask>
-          </defs>
-
           {/* Shackle */}
           <motion.g
             animate={shackleControls}
@@ -109,16 +94,20 @@ export const LockAnimation = memo(function LockAnimation({
             />
           </motion.g>
 
-          {/* Body with transparent keyhole via mask */}
-          <motion.path
+          {/* Lock body - simple solid rectangle */}
+          <motion.rect
             animate={bodyControls}
-            clipPath={`url(#${bodyClipId})`}
-            mask={`url(#${bodyHoleMaskId})`}
+            initial={false}
+            x="12"
+            y="24"
+            width="40"
+            height="36"
+            rx="4"
+            ry="4"
             fill={fillColor}
-            d="M52,24h-4v-8c0-8.836-7.164-16-16-16S16,7.164,16,16v8h-4c-2.211,0-4,1.789-4,4v32c0,2.211,1.789,4,4,4h40 c2.211,0,4-1.789,4-4V28C56,25.789,54.211,24,52,24z M40,24 H24v-8c0-4.418,3.582-8,8-8s8,3.582,8,8V24z"
           />
         </motion.g>
-      </motion.svg>
+      </svg>
     </div>
   )
 })
