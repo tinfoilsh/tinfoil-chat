@@ -686,11 +686,8 @@ const WelcomeScreen = memo(function WelcomeScreen({
     >
       <div className="mb-6 w-full">
         <div className="grid grid-cols-1 items-start">
-          <div className="mb-2">
-            <LockAnimation isDarkMode={isDarkMode} size={32} />
-          </div>
           <motion.h1
-            className={`font-display text-3xl font-medium tracking-tight ${
+            className={`font-display flex items-center gap-3 text-3xl font-medium tracking-tight ${
               isDarkMode ? 'text-gray-100' : 'text-gray-800'
             }`}
             initial={{ opacity: 0, y: 10 }}
@@ -701,6 +698,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               delay: 0.2,
             }}
           >
+            <LockAnimation isDarkMode={isDarkMode} size={36} />
             {getGreeting()}
           </motion.h1>
 
@@ -759,10 +757,10 @@ const WelcomeScreen = memo(function WelcomeScreen({
               </Link>
             </motion.p>
 
-            {/* Centered Chat Input */}
+            {/* Centered Chat Input - Desktop only */}
             {onSubmit && input !== undefined && setInput && (
               <motion.div
-                className="mb-6 mt-8"
+                className="mb-6 mt-8 hidden md:block"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{

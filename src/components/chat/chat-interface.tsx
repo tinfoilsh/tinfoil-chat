@@ -901,10 +901,10 @@ export function ChatInterface({
             />
           </ScrollableFeed>
 
-          {/* Input Form - Only show when there are messages */}
+          {/* Input Form - Show on mobile always, on desktop only when there are messages */}
           {isClient &&
-            currentChat?.messages &&
-            currentChat.messages.length > 0 && (
+            (windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
+              (currentChat?.messages && currentChat.messages.length > 0)) && (
               <div
                 className={`relative flex-shrink-0 ${
                   isDarkMode ? 'bg-gray-800' : 'bg-white'
