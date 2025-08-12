@@ -410,9 +410,12 @@ export function SettingsSidebar({
 
   const handleCustomPromptChange = (value: string) => {
     setCustomSystemPrompt(value)
+  }
+
+  const handleCustomPromptBlur = () => {
     if (isClient) {
       // Store with system tags
-      const promptWithTags = ensureSystemTags(value)
+      const promptWithTags = ensureSystemTags(customSystemPrompt)
       localStorage.setItem('customSystemPrompt', promptWithTags)
       // Only dispatch if currently enabled
       if (isUsingCustomPrompt) {
@@ -840,6 +843,7 @@ export function SettingsSidebar({
                           onChange={(e) =>
                             handleCustomPromptChange(e.target.value)
                           }
+                          onBlur={handleCustomPromptBlur}
                           placeholder="Enter your custom system prompt..."
                           rows={6}
                           className={`w-full resize-none rounded-md border px-3 py-2 font-mono text-sm ${
@@ -876,11 +880,12 @@ export function SettingsSidebar({
                         </div>
                         <div className="flex justify-center">
                           <button
-                            onClick={() =>
+                            onClick={() => {
                               handleCustomPromptChange(
                                 stripSystemTags(defaultSystemPrompt),
                               )
-                            }
+                              handleCustomPromptBlur()
+                            }}
                             className={`rounded-md px-3 py-1.5 text-xs transition-all ${
                               isDarkMode
                                 ? 'text-red-400 hover:text-red-300'
