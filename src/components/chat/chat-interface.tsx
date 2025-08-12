@@ -888,116 +888,128 @@ export function ChatInterface({
                   enhancedSystemPrompt,
                 )
               }}
+              onSubmit={wrappedHandleSubmit}
+              input={input}
+              setInput={setInput}
+              loadingState={loadingState}
+              cancelGeneration={cancelGeneration}
+              inputRef={inputRef}
+              handleInputFocus={handleInputFocus}
+              handleDocumentUpload={handleFileUpload}
+              processedDocuments={processedDocuments}
+              removeDocument={removeDocument}
             />
           </ScrollableFeed>
 
-          {/* Input Form */}
-          {isClient && (
-            <div
-              className={`relative flex-shrink-0 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-white'
-              } p-4`}
-              style={{
-                minHeight: '80px',
-                maxHeight: '50vh',
-                paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
-                transition: 'border 0.2s ease-in-out',
-                borderTop: isBottomDragActive
-                  ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
-                  : isDarkMode
-                    ? '1px solid rgb(55, 65, 81)' // gray-700
-                    : '1px solid rgb(229, 231, 235)', // gray-200
-                borderLeft: isBottomDragActive
-                  ? '2px solid rgba(52, 211, 153, 0.5)'
-                  : 'none',
-                borderRight: isBottomDragActive
-                  ? '2px solid rgba(52, 211, 153, 0.5)'
-                  : 'none',
-                borderBottom: isBottomDragActive
-                  ? '2px solid rgba(52, 211, 153, 0.5)'
-                  : 'none',
-              }}
-              onDragOver={handleBottomDragOver}
-              onDragLeave={handleBottomDragLeave}
-              onDrop={(e) => {
-                e.preventDefault()
-                setIsBottomDragActive(false)
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                  handleFileUpload(e.dataTransfer.files[0])
-                }
-              }}
-            >
-              <form
-                onSubmit={wrappedHandleSubmit}
-                className="mx-auto max-w-3xl px-3 md:px-8"
+          {/* Input Form - Only show when there are messages */}
+          {isClient &&
+            currentChat?.messages &&
+            currentChat.messages.length > 0 && (
+              <div
+                className={`relative flex-shrink-0 ${
+                  isDarkMode ? 'bg-gray-800' : 'bg-white'
+                } p-4`}
+                style={{
+                  minHeight: '80px',
+                  maxHeight: '50vh',
+                  paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
+                  transition: 'border 0.2s ease-in-out',
+                  borderTop: isBottomDragActive
+                    ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
+                    : isDarkMode
+                      ? '1px solid rgb(55, 65, 81)' // gray-700
+                      : '1px solid rgb(229, 231, 235)', // gray-200
+                  borderLeft: isBottomDragActive
+                    ? '2px solid rgba(52, 211, 153, 0.5)'
+                    : 'none',
+                  borderRight: isBottomDragActive
+                    ? '2px solid rgba(52, 211, 153, 0.5)'
+                    : 'none',
+                  borderBottom: isBottomDragActive
+                    ? '2px solid rgba(52, 211, 153, 0.5)'
+                    : 'none',
+                }}
+                onDragOver={handleBottomDragOver}
+                onDragLeave={handleBottomDragLeave}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setIsBottomDragActive(false)
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleFileUpload(e.dataTransfer.files[0])
+                  }
+                }}
               >
-                {/* Labels - Model selection only for premium users */}
-                <ChatLabels
-                  verificationComplete={verificationComplete}
-                  verificationSuccess={verificationSuccess}
-                  openAndExpandVerifier={modifiedOpenAndExpandVerifier}
-                  expandedLabel={expandedLabel}
-                  handleLabelClick={handleLabelClick}
-                  selectedModel={selectedModel}
-                  handleModelSelect={handleModelSelect}
-                  isDarkMode={isDarkMode}
-                  isPremium={isPremium}
-                  models={models}
-                  onShareClick={handleOpenShareModal}
-                  hasMessages={
-                    currentChat?.messages && currentChat.messages.length > 0
-                  }
-                  isCompactMode={
-                    windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
-                    (isSidebarOpen &&
-                      (isVerifierSidebarOpen || isSettingsSidebarOpen))
-                  }
-                />
+                <form
+                  onSubmit={wrappedHandleSubmit}
+                  className="mx-auto max-w-3xl px-3 md:px-8"
+                >
+                  {/* Labels - Model selection only for premium users */}
+                  <ChatLabels
+                    verificationComplete={verificationComplete}
+                    verificationSuccess={verificationSuccess}
+                    openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+                    expandedLabel={expandedLabel}
+                    handleLabelClick={handleLabelClick}
+                    selectedModel={selectedModel}
+                    handleModelSelect={handleModelSelect}
+                    isDarkMode={isDarkMode}
+                    isPremium={isPremium}
+                    models={models}
+                    onShareClick={handleOpenShareModal}
+                    hasMessages={
+                      currentChat?.messages && currentChat.messages.length > 0
+                    }
+                    isCompactMode={
+                      windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
+                      (isSidebarOpen &&
+                        (isVerifierSidebarOpen || isSettingsSidebarOpen))
+                    }
+                  />
 
-                {/* Input */}
-                <ChatInput
-                  input={input}
-                  setInput={setInput}
-                  handleSubmit={wrappedHandleSubmit}
-                  loadingState={loadingState}
-                  cancelGeneration={cancelGeneration}
-                  inputRef={inputRef}
-                  handleInputFocus={handleInputFocus}
-                  inputMinHeight={inputMinHeight}
-                  isDarkMode={isDarkMode}
-                  handleDocumentUpload={handleFileUpload}
-                  processedDocuments={processedDocuments}
-                  removeDocument={removeDocument}
-                  isPremium={isPremium}
-                  hasMessages={
-                    currentChat?.messages && currentChat.messages.length > 0
-                  }
-                />
-              </form>
+                  {/* Input */}
+                  <ChatInput
+                    input={input}
+                    setInput={setInput}
+                    handleSubmit={wrappedHandleSubmit}
+                    loadingState={loadingState}
+                    cancelGeneration={cancelGeneration}
+                    inputRef={inputRef}
+                    handleInputFocus={handleInputFocus}
+                    inputMinHeight={inputMinHeight}
+                    isDarkMode={isDarkMode}
+                    handleDocumentUpload={handleFileUpload}
+                    processedDocuments={processedDocuments}
+                    removeDocument={removeDocument}
+                    isPremium={isPremium}
+                    hasMessages={
+                      currentChat?.messages && currentChat.messages.length > 0
+                    }
+                  />
+                </form>
 
-              {/* Scroll to bottom button - absolutely positioned in parent */}
-              {showScrollButton && currentChat?.messages?.length > 0 && (
-                <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
-                  <button
-                    onClick={handleScrollToBottom}
-                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                      isDarkMode
-                        ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
-                        : 'border border-gray-200 bg-white/90 shadow-md hover:bg-gray-50'
-                    }`}
-                    aria-label="Scroll to bottom"
-                  >
-                    <ArrowDownIcon
-                      className={`h-4 w-4 ${
-                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                {/* Scroll to bottom button - absolutely positioned in parent */}
+                {showScrollButton && currentChat?.messages?.length > 0 && (
+                  <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
+                    <button
+                      onClick={handleScrollToBottom}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                        isDarkMode
+                          ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
+                          : 'border border-gray-200 bg-white/90 shadow-md hover:bg-gray-50'
                       }`}
-                      strokeWidth={2}
-                    />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                      aria-label="Scroll to bottom"
+                    >
+                      <ArrowDownIcon
+                        className={`h-4 w-4 ${
+                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                        }`}
+                        strokeWidth={2}
+                      />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
         </div>
       </div>
 

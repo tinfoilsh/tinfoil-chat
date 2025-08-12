@@ -6,7 +6,7 @@ import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
-import { memo, useEffect, useMemo, useState } from 'react'
+import React, { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
   FaFileAlt,
@@ -25,6 +25,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
+import { ChatInput } from './chat-input'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { PromptSelector } from './prompt-selector'
@@ -77,6 +78,16 @@ type ChatMessagesProps = {
   models?: BaseModel[]
   subscriptionLoading?: boolean
   onSelectPrompt?: (prompt: string) => void
+  onSubmit?: (e: React.FormEvent) => void
+  input?: string
+  setInput?: (value: string) => void
+  loadingState?: any
+  cancelGeneration?: () => void
+  inputRef?: React.RefObject<HTMLTextAreaElement>
+  handleInputFocus?: () => void
+  handleDocumentUpload?: (file: File) => Promise<void>
+  processedDocuments?: any[]
+  removeDocument?: (id: string) => void
 }
 
 // Lock animation moved to `./lock-animation`
@@ -527,6 +538,16 @@ const WelcomeScreen = memo(function WelcomeScreen({
   models,
   subscriptionLoading,
   onSelectPrompt,
+  onSubmit,
+  input,
+  setInput,
+  loadingState,
+  cancelGeneration,
+  inputRef,
+  handleInputFocus,
+  handleDocumentUpload,
+  processedDocuments,
+  removeDocument,
 }: {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
@@ -534,6 +555,16 @@ const WelcomeScreen = memo(function WelcomeScreen({
   models?: BaseModel[]
   subscriptionLoading?: boolean
   onSelectPrompt?: (prompt: string) => void
+  onSubmit?: (e: React.FormEvent) => void
+  input?: string
+  setInput?: (value: string) => void
+  loadingState?: any
+  cancelGeneration?: () => void
+  inputRef?: React.RefObject<HTMLTextAreaElement>
+  handleInputFocus?: () => void
+  handleDocumentUpload?: (file: File) => Promise<void>
+  processedDocuments?: any[]
+  removeDocument?: (id: string) => void
 }) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
@@ -684,8 +715,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
                 delay: 0.3,
               }}
             >
-              <b>This conversation is private:</b> nobody can see your messages,
-              not even Tinfoil.
+              This conversation is private: nobody can see your messages.
             </motion.p>
             <motion.p
               className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-2 text-sm leading-6`}
@@ -728,8 +758,41 @@ const WelcomeScreen = memo(function WelcomeScreen({
                 </svg>
               </Link>
             </motion.p>
+
+            {/* Centered Chat Input */}
+            {onSubmit && input !== undefined && setInput && (
+              <motion.div
+                className="mb-6 mt-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{
+                  duration: 0.5,
+                  ease: 'easeOut',
+                  delay: 0.4,
+                }}
+              >
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  handleSubmit={onSubmit}
+                  loadingState={loadingState}
+                  cancelGeneration={cancelGeneration || (() => {})}
+                  inputRef={inputRef || React.createRef()}
+                  handleInputFocus={handleInputFocus || (() => {})}
+                  inputMinHeight="28px"
+                  isDarkMode={isDarkMode}
+                  handleDocumentUpload={handleDocumentUpload}
+                  processedDocuments={processedDocuments}
+                  removeDocument={removeDocument}
+                  isPremium={isPremium}
+                  hasMessages={false}
+                />
+              </motion.div>
+            )}
+
+            {/* Prompt Selector below input */}
             {onSelectPrompt && (
-              <div className="mt-8 hidden md:block">
+              <div className="hidden md:block">
                 <PromptSelector
                   isDarkMode={isDarkMode}
                   onSelectPrompt={onSelectPrompt}
@@ -774,6 +837,16 @@ export function ChatMessages({
   models,
   subscriptionLoading,
   onSelectPrompt,
+  onSubmit,
+  input,
+  setInput,
+  loadingState,
+  cancelGeneration,
+  inputRef,
+  handleInputFocus,
+  handleDocumentUpload,
+  processedDocuments,
+  removeDocument,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const maxMessages = useMaxMessages()
@@ -821,6 +894,16 @@ export function ChatMessages({
             models={models}
             subscriptionLoading={subscriptionLoading}
             onSelectPrompt={onSelectPrompt}
+            onSubmit={onSubmit}
+            input={input}
+            setInput={setInput}
+            loadingState={loadingState}
+            cancelGeneration={cancelGeneration}
+            inputRef={inputRef}
+            handleInputFocus={handleInputFocus}
+            handleDocumentUpload={handleDocumentUpload}
+            processedDocuments={processedDocuments}
+            removeDocument={removeDocument}
           />
         </div>
         <div ref={messagesEndRef} className="hidden" />
