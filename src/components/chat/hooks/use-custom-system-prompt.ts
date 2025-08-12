@@ -196,6 +196,11 @@ export const useCustomSystemPrompt = (
     const basePrompt =
       isUsingCustomPrompt && customPrompt ? customPrompt : defaultSystemPrompt
 
+    // If personalization is disabled, return the base prompt without any replacements
+    if (!personalization.isEnabled) {
+      return basePrompt
+    }
+
     const userPreferencesXML = generateUserPreferencesXML()
 
     // Get the effective language (default to English if not set)
