@@ -487,7 +487,7 @@ const ChatMessage = memo(function ChatMessage({
           >
             <div className="flex items-center gap-2">
               <div
-                className={`prose w-full max-w-none break-words text-sm ${
+                className={`prose w-full max-w-none break-words text-base ${
                   isDarkMode
                     ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
