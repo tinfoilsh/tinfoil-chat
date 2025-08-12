@@ -30,7 +30,9 @@ export function useProfileSync() {
         profile1.profession !== profile2.profession ||
         JSON.stringify(profile1.traits) !== JSON.stringify(profile2.traits) ||
         profile1.additionalContext !== profile2.additionalContext ||
-        profile1.isUsingPersonalization !== profile2.isUsingPersonalization
+        profile1.isUsingPersonalization !== profile2.isUsingPersonalization ||
+        profile1.isUsingCustomPrompt !== profile2.isUsingCustomPrompt ||
+        profile1.customSystemPrompt !== profile2.customSystemPrompt
       )
     },
     [],
@@ -81,6 +83,17 @@ export function useProfileSync() {
     )
     if (isUsingPersonalization) {
       settings.isUsingPersonalization = isUsingPersonalization === 'true'
+    }
+
+    // Custom system prompt settings
+    const isUsingCustomPrompt = localStorage.getItem('isUsingCustomPrompt')
+    if (isUsingCustomPrompt) {
+      settings.isUsingCustomPrompt = isUsingCustomPrompt === 'true'
+    }
+
+    const customSystemPrompt = localStorage.getItem('customSystemPrompt')
+    if (customSystemPrompt) {
+      settings.customSystemPrompt = customSystemPrompt
     }
 
     return settings
@@ -142,6 +155,38 @@ export function useProfileSync() {
       localStorage.setItem(
         'isUsingPersonalization',
         settings.isUsingPersonalization.toString(),
+      )
+    }
+
+    // Custom system prompt settings
+    if (settings.isUsingCustomPrompt !== undefined) {
+      localStorage.setItem(
+        'isUsingCustomPrompt',
+        settings.isUsingCustomPrompt.toString(),
+      )
+    }
+
+    if (settings.customSystemPrompt !== undefined) {
+      localStorage.setItem('customSystemPrompt', settings.customSystemPrompt)
+    }
+
+    // Trigger custom system prompt change event
+    if (
+      settings.isUsingCustomPrompt !== undefined ||
+      settings.customSystemPrompt !== undefined
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('customSystemPromptChanged', {
+          detail: {
+            isEnabled:
+              settings.isUsingCustomPrompt ??
+              localStorage.getItem('isUsingCustomPrompt') === 'true',
+            customPrompt:
+              settings.customSystemPrompt ||
+              localStorage.getItem('customSystemPrompt') ||
+              '',
+          },
+        }),
       )
     }
 
@@ -353,6 +398,7 @@ export function useProfileSync() {
       'maxPromptMessagesChanged',
       'personalizationChanged',
       'languageChanged',
+      'customSystemPromptChanged',
     ]
 
     events.forEach((event) => {

@@ -27,6 +27,9 @@ export const useCustomSystemPrompt = (
       isEnabled: false,
     })
 
+  const [isUsingCustomPrompt, setIsUsingCustomPrompt] = useState(false)
+  const [customPrompt, setCustomPrompt] = useState('')
+
   // Load personalization settings from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -68,8 +71,15 @@ export const useCustomSystemPrompt = (
         language,
         isEnabled: savedEnabled,
       })
+
+      // Load custom system prompt settings
+      const savedUsingCustomPrompt = localStorage.getItem('isUsingCustomPrompt')
+      const savedCustomPrompt = localStorage.getItem('customSystemPrompt')
+
+      setIsUsingCustomPrompt(savedUsingCustomPrompt === 'true')
+      setCustomPrompt(savedCustomPrompt || defaultSystemPrompt || '')
     }
-  }, [])
+  }, [defaultSystemPrompt])
 
   // Listen for personalization changes from settings sidebar
   useEffect(() => {
@@ -100,6 +110,12 @@ export const useCustomSystemPrompt = (
       }))
     }
 
+    const handleCustomPromptChange = (event: CustomEvent) => {
+      const { isEnabled, customPrompt } = event.detail
+      setIsUsingCustomPrompt(isEnabled || false)
+      setCustomPrompt(customPrompt || defaultSystemPrompt || '')
+    }
+
     window.addEventListener(
       'personalizationChanged',
       handlePersonalizationChange as EventListener,
@@ -107,6 +123,10 @@ export const useCustomSystemPrompt = (
     window.addEventListener(
       'languageChanged',
       handleLanguageChange as EventListener,
+    )
+    window.addEventListener(
+      'customSystemPromptChanged',
+      handleCustomPromptChange as EventListener,
     )
 
     return () => {
@@ -118,8 +138,12 @@ export const useCustomSystemPrompt = (
         'languageChanged',
         handleLanguageChange as EventListener,
       )
+      window.removeEventListener(
+        'customSystemPromptChanged',
+        handleCustomPromptChange as EventListener,
+      )
     }
-  }, [personalization.language])
+  }, [personalization.language, defaultSystemPrompt])
 
   // Generate the user preferences XML
   const generateUserPreferencesXML = (): string => {
@@ -168,6 +192,10 @@ export const useCustomSystemPrompt = (
 
   // Generate the effective system prompt by replacing the placeholder
   const generatePersonalizedPrompt = (): string => {
+    // Use custom prompt if enabled
+    const basePrompt =
+      isUsingCustomPrompt && customPrompt ? customPrompt : defaultSystemPrompt
+
     const userPreferencesXML = generateUserPreferencesXML()
 
     // Get the effective language (default to English if not set)
@@ -189,8 +217,8 @@ export const useCustomSystemPrompt = (
     // Extract timezone separately
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    // Replace all placeholders in the default system prompt
-    const result = defaultSystemPrompt
+    // Replace all placeholders in the prompt
+    const result = basePrompt
       .replace('{USER_PREFERENCES}', userPreferencesXML)
       .replace('{LANGUAGE}', effectiveLanguage)
       .replace('{CURRENT_DATETIME}', currentDateTime)

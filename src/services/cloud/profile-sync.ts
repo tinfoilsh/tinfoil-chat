@@ -19,6 +19,10 @@ export interface ProfileData {
   additionalContext?: string
   isUsingPersonalization?: boolean
 
+  // Custom system prompt settings
+  isUsingCustomPrompt?: boolean
+  customSystemPrompt?: string
+
   // Metadata
   version?: number
   updatedAt?: string
