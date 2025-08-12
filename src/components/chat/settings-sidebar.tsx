@@ -43,6 +43,10 @@ export function SettingsSidebar({
   // Language setting (separate from personalization)
   const [language, setLanguage] = useState<string>('')
 
+  // Custom system prompt settings
+  const [isUsingCustomPrompt, setIsUsingCustomPrompt] = useState<boolean>(false)
+  const [customSystemPrompt, setCustomSystemPrompt] = useState<string>('')
+
   // Available personality traits
   const availableTraits = [
     'witty',
@@ -144,7 +148,21 @@ export function SettingsSidebar({
     if (savedLanguage) {
       setLanguage(savedLanguage)
     }
-  }, [])
+
+    // Load custom system prompt settings
+    const savedUsingCustomPrompt = localStorage.getItem('isUsingCustomPrompt')
+    const savedCustomPrompt = localStorage.getItem('customSystemPrompt')
+    if (savedUsingCustomPrompt !== null) {
+      setIsUsingCustomPrompt(savedUsingCustomPrompt === 'true')
+    }
+    if (savedCustomPrompt !== null) {
+      // Store the full prompt with system tags
+      setCustomSystemPrompt(savedCustomPrompt)
+    } else if (defaultSystemPrompt) {
+      // Initialize with default system prompt if no saved value
+      setCustomSystemPrompt(defaultSystemPrompt)
+    }
+  }, [defaultSystemPrompt])
 
   // Initial load settings from localStorage
   useEffect(() => {
@@ -164,7 +182,7 @@ export function SettingsSidebar({
         localStorage.setItem('userLanguage', languageName)
       }
     }
-  }, [isClient, defaultSystemPrompt, loadSettingsFromStorage])
+  }, [isClient, loadSettingsFromStorage])
 
   // Listen for profile sync updates
   useEffect(() => {
@@ -182,6 +200,10 @@ export function SettingsSidebar({
     window.addEventListener('maxPromptMessagesChanged', handleProfileSyncUpdate)
     window.addEventListener('personalizationChanged', handleProfileSyncUpdate)
     window.addEventListener('languageChanged', handleProfileSyncUpdate)
+    window.addEventListener(
+      'customSystemPromptChanged',
+      handleProfileSyncUpdate,
+    )
 
     return () => {
       window.removeEventListener('storage', loadSettingsFromStorage)
@@ -194,6 +216,10 @@ export function SettingsSidebar({
         handleProfileSyncUpdate,
       )
       window.removeEventListener('languageChanged', handleProfileSyncUpdate)
+      window.removeEventListener(
+        'customSystemPromptChanged',
+        handleProfileSyncUpdate,
+      )
     }
   }, [isClient, loadSettingsFromStorage])
 
@@ -346,6 +372,63 @@ export function SettingsSidebar({
 
   const handleThemeToggle = () => {
     toggleTheme()
+  }
+
+  // Helper to strip <system> tags for display
+  const stripSystemTags = (prompt: string): string => {
+    return prompt
+      .replace(/^<system>\s*\n?/, '')
+      .replace(/\n?<\/system>\s*$/, '')
+  }
+
+  // Helper to add <system> tags if not present
+  const ensureSystemTags = (prompt: string): string => {
+    const trimmed = prompt.trim()
+    if (!trimmed.startsWith('<system>')) {
+      return `<system>\n${trimmed}\n</system>`
+    }
+    return trimmed
+  }
+
+  // Handle custom system prompt changes
+  const handleToggleCustomPrompt = (enabled: boolean) => {
+    setIsUsingCustomPrompt(enabled)
+    if (isClient) {
+      localStorage.setItem('isUsingCustomPrompt', enabled.toString())
+      // Only dispatch event when toggling the feature
+      const promptWithTags = ensureSystemTags(customSystemPrompt)
+      window.dispatchEvent(
+        new CustomEvent('customSystemPromptChanged', {
+          detail: {
+            isEnabled: enabled,
+            customPrompt: promptWithTags,
+          },
+        }),
+      )
+    }
+  }
+
+  const handleCustomPromptChange = (value: string) => {
+    setCustomSystemPrompt(value)
+  }
+
+  const handleCustomPromptBlur = () => {
+    if (isClient) {
+      // Store with system tags
+      const promptWithTags = ensureSystemTags(customSystemPrompt)
+      localStorage.setItem('customSystemPrompt', promptWithTags)
+      // Only dispatch if currently enabled
+      if (isUsingCustomPrompt) {
+        window.dispatchEvent(
+          new CustomEvent('customSystemPromptChanged', {
+            detail: {
+              isEnabled: true,
+              customPrompt: promptWithTags,
+            },
+          }),
+        )
+      }
+    }
   }
 
   return (
@@ -701,6 +784,115 @@ export function SettingsSidebar({
                             }`}
                           >
                             Reset all fields
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Custom System Prompt Settings */}
+                <div
+                  className={`rounded-lg p-3 ${
+                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div
+                          className={`text-sm font-medium ${
+                            isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                          }`}
+                        >
+                          Custom System Prompt
+                        </div>
+                        <div
+                          className={`text-xs ${
+                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                          }`}
+                        >
+                          Override the default system prompt with your own
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={isUsingCustomPrompt}
+                            onChange={(e) =>
+                              handleToggleCustomPrompt(e.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <div
+                            className={`peer h-5 w-9 rounded-full after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-focus:outline-none ${
+                              isDarkMode
+                                ? 'bg-gray-600 after:border-gray-300 peer-checked:bg-emerald-600'
+                                : 'bg-gray-300 after:border-gray-300 peer-checked:bg-emerald-600'
+                            }`}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {isUsingCustomPrompt && (
+                      <div className="space-y-2">
+                        <textarea
+                          value={stripSystemTags(customSystemPrompt)}
+                          onChange={(e) =>
+                            handleCustomPromptChange(e.target.value)
+                          }
+                          onBlur={handleCustomPromptBlur}
+                          placeholder="Enter your custom system prompt..."
+                          rows={6}
+                          className={`w-full resize-none rounded-md border px-3 py-2 font-mono text-sm ${
+                            isDarkMode
+                              ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
+                              : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                          } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                        />
+                        <div
+                          className={`rounded-lg border p-3 ${
+                            isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                          }`}
+                        >
+                          <div
+                            className={`text-xs ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}
+                          >
+                            <span
+                              className={`font-medium ${
+                                isDarkMode
+                                  ? 'text-emerald-400'
+                                  : 'text-emerald-600'
+                              }`}
+                            >
+                              Tip:
+                            </span>{' '}
+                            Use placeholders like {'{USER_PREFERENCES}'},{' '}
+                            {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'}, and{' '}
+                            {'{TIMEZONE}'} to tell the model about your
+                            preferences, timezone, and the current time and
+                            date.
+                          </div>
+                        </div>
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => {
+                              handleCustomPromptChange(
+                                stripSystemTags(defaultSystemPrompt),
+                              )
+                              handleCustomPromptBlur()
+                            }}
+                            className={`rounded-md px-3 py-1.5 text-xs transition-all ${
+                              isDarkMode
+                                ? 'text-red-400 hover:text-red-300'
+                                : 'text-red-600 hover:text-red-500'
+                            } hover:underline`}
+                          >
+                            Restore default prompt
                           </button>
                         </div>
                       </div>
