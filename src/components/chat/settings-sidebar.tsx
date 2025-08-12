@@ -563,7 +563,7 @@ export function SettingsSidebar({
                     isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between">
                     <div className="mr-3 flex-1">
                       <div
                         className={`text-sm font-medium ${
@@ -630,7 +630,7 @@ export function SettingsSidebar({
                     <select
                       value={language}
                       onChange={(e) => handleLanguageChange(e.target.value)}
-                      className={`w-full rounded-md border px-3 py-2 text-sm ${
+                      className={`w-full rounded-md border py-2 pl-3 pr-8 text-sm ${
                         isDarkMode
                           ? 'border-gray-600 bg-gray-700 text-gray-200'
                           : 'border-gray-300 bg-white text-gray-900'
