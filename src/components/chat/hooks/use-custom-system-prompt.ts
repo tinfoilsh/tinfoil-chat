@@ -196,7 +196,10 @@ export const useCustomSystemPrompt = (
     const basePrompt =
       isUsingCustomPrompt && customPrompt ? customPrompt : defaultSystemPrompt
 
-    const userPreferencesXML = generateUserPreferencesXML()
+    // Generate user preferences XML only if personalization is enabled
+    const userPreferencesXML = personalization.isEnabled
+      ? generateUserPreferencesXML()
+      : ''
 
     // Get the effective language (default to English if not set)
     const effectiveLanguage = personalization.language.trim() || 'English'
@@ -217,7 +220,8 @@ export const useCustomSystemPrompt = (
     // Extract timezone separately
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    // Replace all placeholders in the prompt
+    // Always replace system placeholders to prevent them from appearing in the prompt
+    // Only include user preferences if personalization is enabled
     const result = basePrompt
       .replace('{USER_PREFERENCES}', userPreferencesXML)
       .replace('{LANGUAGE}', effectiveLanguage)
