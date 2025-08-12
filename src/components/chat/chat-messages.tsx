@@ -6,7 +6,7 @@ import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
-import { memo, useEffect, useMemo, useState } from 'react'
+import React, { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
   FaFileAlt,
@@ -25,8 +25,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
+import { ChatInput } from './chat-input'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
+import { ModelSelector } from './model-selector'
 import { PromptSelector } from './prompt-selector'
 import type { Message } from './types'
 
@@ -77,6 +79,23 @@ type ChatMessagesProps = {
   models?: BaseModel[]
   subscriptionLoading?: boolean
   onSelectPrompt?: (prompt: string) => void
+  onSubmit?: (e: React.FormEvent) => void
+  input?: string
+  setInput?: (value: string) => void
+  loadingState?: any
+  cancelGeneration?: () => void
+  inputRef?: React.RefObject<HTMLTextAreaElement>
+  handleInputFocus?: () => void
+  handleDocumentUpload?: (file: File) => Promise<void>
+  processedDocuments?: any[]
+  removeDocument?: (id: string) => void
+  selectedModel?: string
+  handleModelSelect?: (model: string) => void
+  expandedLabel?: string | null
+  handleLabelClick?: (
+    label: 'verify' | 'model' | 'info',
+    action: () => void,
+  ) => void
 }
 
 // Lock animation moved to `./lock-animation`
@@ -476,7 +495,7 @@ const ChatMessage = memo(function ChatMessage({
           >
             <div className="flex items-center gap-2">
               <div
-                className={`prose w-full max-w-none break-words text-sm ${
+                className={`prose w-full max-w-none break-words text-base ${
                   isDarkMode
                     ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
@@ -527,6 +546,20 @@ const WelcomeScreen = memo(function WelcomeScreen({
   models,
   subscriptionLoading,
   onSelectPrompt,
+  onSubmit,
+  input,
+  setInput,
+  loadingState,
+  cancelGeneration,
+  inputRef,
+  handleInputFocus,
+  handleDocumentUpload,
+  processedDocuments,
+  removeDocument,
+  selectedModel,
+  handleModelSelect,
+  expandedLabel,
+  handleLabelClick,
 }: {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
@@ -534,6 +567,23 @@ const WelcomeScreen = memo(function WelcomeScreen({
   models?: BaseModel[]
   subscriptionLoading?: boolean
   onSelectPrompt?: (prompt: string) => void
+  onSubmit?: (e: React.FormEvent) => void
+  input?: string
+  setInput?: (value: string) => void
+  loadingState?: any
+  cancelGeneration?: () => void
+  inputRef?: React.RefObject<HTMLTextAreaElement>
+  handleInputFocus?: () => void
+  handleDocumentUpload?: (file: File) => Promise<void>
+  processedDocuments?: any[]
+  removeDocument?: (id: string) => void
+  selectedModel?: string
+  handleModelSelect?: (model: string) => void
+  expandedLabel?: string | null
+  handleLabelClick?: (
+    label: 'verify' | 'model' | 'info',
+    action: () => void,
+  ) => void
 }) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
@@ -655,11 +705,8 @@ const WelcomeScreen = memo(function WelcomeScreen({
     >
       <div className="mb-6 w-full">
         <div className="grid grid-cols-1 items-start">
-          <div className="mb-2">
-            <LockAnimation isDarkMode={isDarkMode} size={32} />
-          </div>
           <motion.h1
-            className={`font-display text-3xl font-medium tracking-tight ${
+            className={`font-display flex items-center gap-3 text-3xl font-medium tracking-tight ${
               isDarkMode ? 'text-gray-100' : 'text-gray-800'
             }`}
             initial={{ opacity: 0, y: 10 }}
@@ -670,6 +717,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               delay: 0.2,
             }}
           >
+            <LockAnimation isDarkMode={isDarkMode} size={36} />
             {getGreeting()}
           </motion.h1>
 
@@ -684,8 +732,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
                 delay: 0.3,
               }}
             >
-              <b>This conversation is private:</b> nobody can see your messages,
-              not even Tinfoil.
+              This conversation is private: nobody can see your messages.
             </motion.p>
             <motion.p
               className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-2 text-sm leading-6`}
@@ -728,8 +775,131 @@ const WelcomeScreen = memo(function WelcomeScreen({
                 </svg>
               </Link>
             </motion.p>
+
+            {/* Model Selector - Desktop only */}
+            {isPremium && models && selectedModel && handleModelSelect && (
+              <motion.div
+                className="mt-6 hidden md:block"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{
+                  duration: 0.5,
+                  ease: 'easeOut',
+                  delay: 0.35,
+                }}
+              >
+                <div className="relative">
+                  <button
+                    type="button"
+                    data-model-selector
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (handleLabelClick) {
+                        handleLabelClick('model', () => {})
+                      }
+                    }}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+                      isDarkMode
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    } transition-colors`}
+                  >
+                    {(() => {
+                      const model = models.find(
+                        (m) => m.modelName === selectedModel,
+                      )
+                      if (!model) return null
+                      return (
+                        <>
+                          <img
+                            src={
+                              model.modelName
+                                .toLowerCase()
+                                .includes('openai') ||
+                              model.modelName.toLowerCase().includes('gpt')
+                                ? isDarkMode
+                                  ? '/model-icons/openai-dark.png'
+                                  : '/model-icons/openai-light.png'
+                                : model.image
+                            }
+                            alt={model.name}
+                            className="h-5 w-5"
+                          />
+                          <span
+                            className={`text-sm font-medium ${
+                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                            }`}
+                          >
+                            {model.name}
+                          </span>
+                          <svg
+                            className={`h-4 w-4 ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </>
+                      )
+                    })()}
+                  </button>
+
+                  {expandedLabel === 'model' && handleModelSelect && (
+                    <ModelSelector
+                      selectedModel={selectedModel}
+                      onSelect={handleModelSelect}
+                      isDarkMode={isDarkMode}
+                      isPremium={isPremium}
+                      models={models}
+                    />
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Centered Chat Input - Desktop only */}
+            {onSubmit && input !== undefined && setInput && (
+              <motion.div
+                className="mb-6 mt-6 hidden md:block"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{
+                  duration: 0.5,
+                  ease: 'easeOut',
+                  delay: 0.4,
+                }}
+              >
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  handleSubmit={onSubmit}
+                  loadingState={loadingState}
+                  cancelGeneration={cancelGeneration || (() => {})}
+                  inputRef={inputRef || React.createRef()}
+                  handleInputFocus={handleInputFocus || (() => {})}
+                  inputMinHeight="28px"
+                  isDarkMode={isDarkMode}
+                  handleDocumentUpload={handleDocumentUpload}
+                  processedDocuments={processedDocuments}
+                  removeDocument={removeDocument}
+                  isPremium={isPremium}
+                  hasMessages={false}
+                />
+              </motion.div>
+            )}
+
+            {/* Prompt Selector below input */}
             {onSelectPrompt && (
-              <div className="mt-8 hidden md:block">
+              <div className="hidden md:block">
                 <PromptSelector
                   isDarkMode={isDarkMode}
                   onSelectPrompt={onSelectPrompt}
@@ -774,6 +944,20 @@ export function ChatMessages({
   models,
   subscriptionLoading,
   onSelectPrompt,
+  onSubmit,
+  input,
+  setInput,
+  loadingState,
+  cancelGeneration,
+  inputRef,
+  handleInputFocus,
+  handleDocumentUpload,
+  processedDocuments,
+  removeDocument,
+  selectedModel,
+  handleModelSelect,
+  expandedLabel,
+  handleLabelClick,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const maxMessages = useMaxMessages()
@@ -821,6 +1005,20 @@ export function ChatMessages({
             models={models}
             subscriptionLoading={subscriptionLoading}
             onSelectPrompt={onSelectPrompt}
+            onSubmit={onSubmit}
+            input={input}
+            setInput={setInput}
+            loadingState={loadingState}
+            cancelGeneration={cancelGeneration}
+            inputRef={inputRef}
+            handleInputFocus={handleInputFocus}
+            handleDocumentUpload={handleDocumentUpload}
+            processedDocuments={processedDocuments}
+            removeDocument={removeDocument}
+            selectedModel={selectedModel}
+            handleModelSelect={handleModelSelect}
+            expandedLabel={expandedLabel}
+            handleLabelClick={handleLabelClick}
           />
         </div>
         <div ref={messagesEndRef} className="hidden" />
