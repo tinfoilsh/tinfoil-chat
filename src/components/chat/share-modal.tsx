@@ -104,7 +104,7 @@ export function ShareModal({
               isDarkMode ? 'text-gray-100' : 'text-gray-900'
             }`}
           >
-            Share Conversation
+            Copy Conversation
           </h2>
           <button
             onClick={onClose}

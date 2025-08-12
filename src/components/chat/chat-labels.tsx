@@ -1,11 +1,11 @@
 import { type BaseModel } from '@/app/config/models'
 import {
+  DocumentDuplicateIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
   LockOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
-import { PiShareFat } from 'react-icons/pi'
 import { ModelSelector } from './model-selector'
 import type { AIModel } from './types'
 
@@ -151,7 +151,7 @@ export function ChatLabels({
           )}
         </button>
 
-        {/* Share button - only show when there are messages */}
+        {/* Copy button - only show when there are messages */}
         {onShareClick && hasMessages && (
           <button
             type="button"
@@ -159,9 +159,9 @@ export function ChatLabels({
             className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
               isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
             } transition-colors hover:bg-opacity-80`}
-            title="Share"
+            title="Copy"
           >
-            <PiShareFat
+            <DocumentDuplicateIcon
               className={`h-5 w-5 ${
                 isDarkMode ? 'text-gray-200' : 'text-gray-600'
               }`}
@@ -172,7 +172,7 @@ export function ChatLabels({
                   isDarkMode ? 'text-gray-200' : 'text-gray-600'
                 }`}
               >
-                Share
+                Copy
               </span>
             )}
           </button>
