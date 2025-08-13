@@ -152,6 +152,10 @@ export function ChatInterface({
     ProcessedDocument[]
   >([])
 
+  // State for tracking verification status
+  const [currentVerificationState, setCurrentVerificationState] =
+    useState<any>(null)
+
   // Get the user's email
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
 
@@ -812,6 +816,7 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
+        onVerificationUpdate={setCurrentVerificationState}
         isDarkMode={isDarkMode}
         isClient={isClient}
       />
@@ -921,6 +926,7 @@ export function ChatInterface({
               isPremium={isPremium}
               models={models}
               subscriptionLoading={subscriptionLoading}
+              verificationState={currentVerificationState}
               onSubmit={wrappedHandleSubmit}
               input={input}
               setInput={setInput}

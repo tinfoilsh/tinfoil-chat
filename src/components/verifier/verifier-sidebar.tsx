@@ -14,6 +14,7 @@ type VerifierSidebarProps = {
   verificationComplete: boolean
   verificationSuccess?: boolean
   onVerificationComplete: (success: boolean) => void
+  onVerificationUpdate?: (state: any) => void
   isDarkMode: boolean
   isClient: boolean
 }
@@ -24,6 +25,7 @@ export function VerifierSidebar({
   verificationComplete,
   verificationSuccess,
   onVerificationComplete,
+  onVerificationUpdate,
   isDarkMode,
   isClient,
 }: VerifierSidebarProps) {
@@ -78,7 +80,7 @@ export function VerifierSidebar({
           {isClient && (
             <Verifier
               key={verifierKey.current}
-              onVerificationUpdate={() => {}}
+              onVerificationUpdate={onVerificationUpdate}
               onVerificationComplete={onVerificationComplete}
               isDarkMode={isDarkMode}
             />
