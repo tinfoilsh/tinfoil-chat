@@ -23,7 +23,7 @@ import {
 } from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -223,6 +223,7 @@ export function ChatSidebar({
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+  const previousChatCount = useRef(chats.length)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -279,6 +280,46 @@ export function ChatSidebar({
       })
     }
   }, [isSignedIn, getToken])
+
+  // Reset pagination when new chats are added
+  useEffect(() => {
+    // Detect if a new chat was added (chat count increased)
+    if (
+      isSignedIn &&
+      isInitialized &&
+      chats.length > previousChatCount.current &&
+      previousChatCount.current > 0 // Not the initial load
+    ) {
+      // A new chat was added, reset pagination to get fresh tokens
+      const resetPagination = async () => {
+        try {
+          // Get a fresh continuation token from the server
+          const result = await r2Storage.listChats({
+            limit: PAGINATION.CHATS_PER_PAGE,
+            includeContent: false,
+          })
+
+          if (result.nextContinuationToken) {
+            setNextToken(result.nextContinuationToken)
+            setHasMoreRemote(true)
+          } else {
+            setHasMoreRemote(false)
+            setNextToken(undefined)
+          }
+        } catch (error) {
+          logError('Failed to reset pagination after new chat', error, {
+            component: 'ChatSidebar',
+            action: 'resetPagination',
+          })
+        }
+      }
+
+      resetPagination()
+    }
+
+    // Update the previous count for next comparison
+    previousChatCount.current = chats.length
+  }, [chats.length, isSignedIn, isInitialized])
 
   // Clean up paginated chats on page refresh
   useEffect(() => {
