@@ -3,6 +3,13 @@ import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
   title: {
@@ -71,30 +78,22 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="overflow-x-hidden">
+    <html lang="en" className={`overflow-x-hidden ${inter.variable}`}>
       <head>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#111827" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
         <script
           defer
           data-domain="chat.tinfoil.sh"
           src="https://plausible.io/js/script.js"
         ></script>
       </head>
-      <body className="bg-gray-900 text-gray-100 antialiased">
+      <body
+        className={`bg-gray-900 text-gray-100 antialiased ${inter.className}`}
+      >
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
           {children}

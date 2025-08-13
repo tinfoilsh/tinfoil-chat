@@ -30,7 +30,9 @@ export async function GET() {
     const isChatStillActive = () => {
       if (chatStatus === 'active') return true
       if (chatStatus === 'canceled') {
-        const expiresAt = publicMetadata?.['chat_subscription_expires_at']
+        const expiresAt = publicMetadata?.['chat_subscription_expires_at'] as
+          | string
+          | undefined
         if (expiresAt) {
           // Check if expiration date is in the future
           return new Date(expiresAt) > new Date()
@@ -44,9 +46,10 @@ export async function GET() {
       if (tokenApiStatus === 'canceled') {
         // Assuming API subscription uses the same expiration field
         // Adjust if there's a separate field for API subscription expiration
-        const expiresAt =
-          publicMetadata?.['api_subscription_expires_at'] ||
-          publicMetadata?.['chat_subscription_expires_at']
+        const expiresAt = (publicMetadata?.['api_subscription_expires_at'] ||
+          publicMetadata?.['chat_subscription_expires_at']) as
+          | string
+          | undefined
         if (expiresAt) {
           return new Date(expiresAt) > new Date()
         }
