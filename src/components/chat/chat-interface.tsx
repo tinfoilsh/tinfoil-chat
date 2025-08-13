@@ -119,19 +119,7 @@ export function ChatInterface({
   const [isLoadingConfig, setIsLoadingConfig] = useState(true)
 
   // State for right sidebar
-  const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(() => {
-    // Check if user has a saved preference
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('verifierSidebarClosed')
-      // If user explicitly closed it before, respect that preference
-      if (saved === 'true') {
-        return false
-      }
-      // Otherwise, default to open on desktop
-      return window.innerWidth >= CONSTANTS.MOBILE_BREAKPOINT
-    }
-    return false
-  })
+  const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
 
   // State for settings sidebar
   const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
@@ -361,15 +349,10 @@ export function ChatInterface({
     }
   }
 
-  // Handler for setting verifier sidebar state with preference management
+  // Handler for setting verifier sidebar state
   const handleSetVerifierSidebarOpen = (isOpen: boolean) => {
     setIsVerifierSidebarOpen(isOpen)
-    if (!isOpen) {
-      // Save preference when user closes it
-      localStorage.setItem('verifierSidebarClosed', 'true')
-    } else {
-      // Clear the saved preference when user opens it
-      localStorage.removeItem('verifierSidebarClosed')
+    if (isOpen) {
       // If window is narrow, close left sidebar when opening right sidebar
       if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
         setIsSidebarOpen(false)
