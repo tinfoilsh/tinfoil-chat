@@ -706,7 +706,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
       <div className="w-full">
         <div className="grid grid-cols-1 items-start">
           <motion.h1
-            className={`font-display flex items-center gap-3 text-3xl font-medium tracking-tight ${
+            className={`flex items-center gap-3 text-3xl font-medium tracking-tight ${
               isDarkMode ? 'text-gray-100' : 'text-gray-800'
             }`}
             initial={{ opacity: 0, y: 10 }}
