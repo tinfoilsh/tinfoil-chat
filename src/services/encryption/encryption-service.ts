@@ -199,17 +199,17 @@ export class EncryptionService {
         throw new Error(`Invalid base64 encoding: ${error}`)
       }
 
-      // Decrypt
+      // Decrypt - ensure we have proper ArrayBuffer types
+      const ivBuffer = new Uint8Array(iv).buffer
+      const dataBuffer = new Uint8Array(data).buffer
+
       const decryptedData = await crypto.subtle.decrypt(
         {
           name: 'AES-GCM',
-          iv: iv,
+          iv: ivBuffer,
         },
         this.encryptionKey,
-        data.buffer.slice(
-          data.byteOffset,
-          data.byteOffset + data.byteLength,
-        ) as ArrayBuffer,
+        dataBuffer,
       )
 
       // Convert decrypted data to string
