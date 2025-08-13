@@ -216,6 +216,13 @@ export class EncryptionService {
       const decoder = new TextDecoder()
       const decryptedString = decoder.decode(decryptedData)
 
+      // Check if the decrypted data is compressed (starts with gzip header "H4sI")
+      // This indicates the data was encrypted with compression but we're trying to decrypt without decompression
+      if (decryptedString.startsWith('H4sI')) {
+        // This is compressed data that we can't decompress - mark as corrupted
+        throw new Error('DATA_CORRUPTED: Compressed data detected')
+      }
+
       // Parse JSON
       return JSON.parse(decryptedString)
     } catch (error) {

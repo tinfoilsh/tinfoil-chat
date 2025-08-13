@@ -280,6 +280,11 @@ export class CloudSyncService {
               const decrypted = await encryptionService.decrypt(encrypted)
               downloadedChat = decrypted
             } catch (decryptError) {
+              // Check if this is corrupted data (compressed)
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+
               // If decryption fails, store the encrypted data for later retry
               downloadedChat = {
                 id: remoteChat.id,
@@ -289,6 +294,7 @@ export class CloudSyncService {
                 updatedAt: remoteChat.updatedAt,
                 lastAccessedAt: Date.now(),
                 decryptionFailed: true,
+                dataCorrupted: isCorrupted,
                 encryptedData: remoteChat.content,
                 syncedAt: Date.now(),
                 locallyModified: false,
@@ -442,6 +448,11 @@ export class CloudSyncService {
             const decrypted = await encryptionService.decrypt(encrypted)
             chat = decrypted
           } catch (decryptError) {
+            // Check if this is corrupted data (compressed)
+            const isCorrupted =
+              decryptError instanceof Error &&
+              decryptError.message.includes('DATA_CORRUPTED')
+
             // If decryption fails, store the encrypted data for later retry
             chat = {
               id: remoteChat.id,
@@ -451,6 +462,7 @@ export class CloudSyncService {
               updatedAt: remoteChat.updatedAt,
               lastAccessedAt: Date.now(),
               decryptionFailed: true,
+              dataCorrupted: isCorrupted,
               encryptedData: remoteChat.content,
               syncedAt: Date.now(),
               locallyModified: false,

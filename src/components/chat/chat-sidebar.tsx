@@ -391,6 +391,11 @@ export function ChatSidebar({
               const decrypted = await encryptionService.decrypt(encrypted)
               fullChat = decrypted
             } catch (decryptError) {
+              // Check if this is corrupted data (compressed)
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+
               // If decryption fails, store the encrypted data for later retry
               fullChat = {
                 id: conv.id,
@@ -400,6 +405,7 @@ export function ChatSidebar({
                 updatedAt: conv.updatedAt,
                 lastAccessedAt: Date.now(),
                 decryptionFailed: true,
+                dataCorrupted: isCorrupted,
                 encryptedData: conv.content,
                 syncedAt: Date.now(),
                 locallyModified: false,
@@ -1087,7 +1093,9 @@ function ChatListItem({
                   }`}
                 >
                   {chat.decryptionFailed
-                    ? 'Failed to decrypt: wrong key'
+                    ? (chat as any).dataCorrupted
+                      ? 'Failed to decrypt: corrupted data'
+                      : 'Failed to decrypt: wrong key'
                     : chat.messages.length === 0
                       ? '\u00A0' // Non-breaking space for consistent height
                       : formatRelativeTime(chat.createdAt)}
