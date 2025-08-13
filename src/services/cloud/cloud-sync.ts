@@ -642,6 +642,20 @@ export class CloudSyncService {
           // Skip blank chats
           if (chat.isBlankChat) continue
 
+          // Skip chats that failed to decrypt
+          if (chat.decryptionFailed) {
+            logInfo('Skipping chat that failed to decrypt', {
+              component: 'CloudSync',
+              action: 'reencryptAndUploadChats',
+              metadata: {
+                chatId: chat.id,
+                hasEncryptedData: !!chat.encryptedData,
+                dataCorrupted: chat.dataCorrupted,
+              },
+            })
+            continue
+          }
+
           // For encrypted chats, they need to be decrypted first (will use old key from memory if available)
           // For decrypted chats, we can directly work with them
           let chatToReencrypt = chat
