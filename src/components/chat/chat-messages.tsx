@@ -1001,7 +1001,7 @@ export function ChatMessages({
           position: 'relative',
         }}
       >
-        <div className="w-full max-w-xl px-8">
+        <div className="w-full max-w-4xl px-8">
           <WelcomeScreen
             isDarkMode={isDarkMode}
             openAndExpandVerifier={openAndExpandVerifier}
