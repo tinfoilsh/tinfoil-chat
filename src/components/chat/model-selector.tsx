@@ -2,7 +2,7 @@
 
 import { type BaseModel, isModelAvailable } from '@/app/config/models'
 import { LockClosedIcon } from '@heroicons/react/24/outline'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AIModel } from './types'
 
 type ModelSelectorProps = {
@@ -11,6 +11,7 @@ type ModelSelectorProps = {
   isDarkMode: boolean
   isPremium: boolean
   models: BaseModel[]
+  preferredPosition?: 'above' | 'below' // Optional prop to prefer a position
 }
 
 export function ModelSelector({
@@ -19,13 +20,90 @@ export function ModelSelector({
   isDarkMode,
   isPremium,
   models,
+  preferredPosition = 'above', // Default to above
 }: ModelSelectorProps) {
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [isPositioned, setIsPositioned] = useState(false)
+
+  // Start with sensible defaults based on preferred positioning
+  const [dynamicStyles, setDynamicStyles] = useState<{
+    maxHeight: string
+    bottom?: string
+    top?: string
+  }>({
+    maxHeight: '400px',
+    ...(preferredPosition === 'below' ? { top: '100%' } : { bottom: '100%' }),
+  })
 
   const handleImageError = (modelName: string) => {
     setFailedImages((prev) => ({ ...prev, [modelName]: true }))
   }
+
+  // Calculate optimal positioning and height
+  useEffect(() => {
+    const calculatePosition = () => {
+      const menuElement = menuRef.current
+      if (!menuElement) return
+
+      // Get the parent button's position
+      const buttonElement = menuElement.parentElement
+      if (!buttonElement) return
+
+      const buttonRect = buttonElement.getBoundingClientRect()
+
+      // Calculate available space
+      const spaceAbove = buttonRect.top - 20 // 20px for padding
+      const spaceBelow = window.innerHeight - buttonRect.bottom - 20 // 20px for padding
+
+      // Determine position based on preference and available space
+      let useAbove = preferredPosition === 'above'
+
+      // Override preference if there's not enough space
+      if (
+        preferredPosition === 'above' &&
+        spaceAbove < 150 &&
+        spaceBelow > 150
+      ) {
+        useAbove = false
+      } else if (
+        preferredPosition === 'below' &&
+        spaceBelow < 150 &&
+        spaceAbove > 150
+      ) {
+        useAbove = true
+      }
+
+      if (useAbove) {
+        setDynamicStyles({
+          maxHeight: `${Math.min(spaceAbove, window.innerHeight * 0.7)}px`,
+          bottom: '100%',
+          top: undefined,
+        })
+      } else {
+        // Position below
+        setDynamicStyles({
+          maxHeight: `${Math.min(spaceBelow, window.innerHeight * 0.7)}px`,
+          top: '100%',
+          bottom: undefined,
+        })
+      }
+
+      setIsPositioned(true)
+    }
+
+    // Run immediately without delay
+    calculatePosition()
+
+    window.addEventListener('resize', calculatePosition)
+    window.addEventListener('scroll', calculatePosition)
+
+    return () => {
+      window.removeEventListener('resize', calculatePosition)
+      window.removeEventListener('scroll', calculatePosition)
+    }
+  }, [preferredPosition])
 
   // Filter models based on subscription status
   // Premium users: show only premium models
@@ -44,10 +122,16 @@ export function ModelSelector({
 
   return (
     <div
+      ref={menuRef}
       data-model-menu
-      className={`absolute bottom-full mb-2 w-[280px] rounded-lg border shadow-lg ${
+      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border shadow-lg ${
         isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
-      }`}
+      } ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
+      style={{
+        maxHeight: dynamicStyles.maxHeight,
+        ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
+        ...(dynamicStyles.top && { top: dynamicStyles.top }),
+      }}
     >
       {displayModels.map((model) => {
         const isAvailable = isModelAvailable(model, isPremium)

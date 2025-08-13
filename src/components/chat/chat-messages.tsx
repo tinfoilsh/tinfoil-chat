@@ -866,6 +866,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
                       isDarkMode={isDarkMode}
                       isPremium={isPremium}
                       models={models}
+                      preferredPosition="below"
                     />
                   )}
                 </div>
