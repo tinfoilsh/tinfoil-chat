@@ -29,7 +29,6 @@ import { ChatInput } from './chat-input'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
-import { PromptSelector } from './prompt-selector'
 import type { Message } from './types'
 
 // We'll use a custom hook to load math plugins
@@ -78,7 +77,6 @@ type ChatMessagesProps = {
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  onSelectPrompt?: (prompt: string) => void
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -545,7 +543,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium,
   models,
   subscriptionLoading,
-  onSelectPrompt,
   onSubmit,
   input,
   setInput,
@@ -566,7 +563,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  onSelectPrompt?: (prompt: string) => void
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -898,14 +894,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
             )}
 
             {/* Prompt Selector below input */}
-            {onSelectPrompt && (
-              <div className="hidden md:block">
-                <PromptSelector
-                  isDarkMode={isDarkMode}
-                  onSelectPrompt={onSelectPrompt}
-                />
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -943,7 +931,6 @@ export function ChatMessages({
   isPremium,
   models,
   subscriptionLoading,
-  onSelectPrompt,
   onSubmit,
   input,
   setInput,
@@ -1004,7 +991,6 @@ export function ChatMessages({
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}
-            onSelectPrompt={onSelectPrompt}
             onSubmit={onSubmit}
             input={input}
             setInput={setInput}
