@@ -677,17 +677,26 @@ export function ChatInterface({
           <div className="group relative">
             <button
               className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-                isDarkMode
-                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                currentChat?.messages?.length === 0
+                  ? isDarkMode
+                    ? 'cursor-not-allowed bg-gray-900 text-gray-500 opacity-50'
+                    : 'cursor-not-allowed border border-gray-200 bg-white text-gray-400 opacity-50'
+                  : isDarkMode
+                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
               }`}
               onClick={createNewChat}
               aria-label="Create new chat"
+              disabled={currentChat?.messages?.length === 0}
             >
               <PlusIcon className="h-5 w-5" />
             </button>
             <span
-              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity ${
+                currentChat?.messages?.length === 0
+                  ? ''
+                  : 'group-hover:opacity-100'
+              } ${
                 isDarkMode
                   ? 'bg-gray-700 text-gray-200'
                   : 'bg-gray-800 text-white'
