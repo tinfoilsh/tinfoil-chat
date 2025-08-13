@@ -534,7 +534,9 @@ export class CloudSyncService {
       batchSize?: number
     } = {},
   ): Promise<number> {
-    const { onProgress, batchSize = 5 } = options
+    const { onProgress } = options
+    // Ensure batchSize is a positive integer, default to 5 if invalid
+    const batchSize = Math.max(1, Math.floor(options.batchSize || 5))
     let decryptedCount = 0
     let chatsWithEncryptedData: any[] = []
 

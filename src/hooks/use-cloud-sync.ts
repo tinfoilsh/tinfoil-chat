@@ -29,6 +29,14 @@ export function useCloudSync() {
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
+  const isMountedRef = useRef(true)
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   // Initialize cloud sync when user is signed in
   useEffect(() => {
@@ -50,11 +58,13 @@ export function useCloudSync() {
         // Initialize encryption
         const key = await encryptionService.initialize()
 
-        setState((prev) => ({
-          ...prev,
-          encryptionKey: key,
-          isFirstTimeUser: isFirstTime,
-        }))
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            encryptionKey: key,
+            isFirstTimeUser: isFirstTime,
+          }))
+        }
 
         // Check if there's a pending migration sync
         const pendingSync = sessionStorage.getItem('pendingMigrationSync')
@@ -77,16 +87,20 @@ export function useCloudSync() {
           // This will properly manage the syncing state
           if (!syncingRef.current) {
             syncingRef.current = true
-            setState((prev) => ({ ...prev, syncing: true }))
+            if (isMountedRef.current) {
+              setState((prev) => ({ ...prev, syncing: true }))
+            }
 
             try {
               const result = await cloudSync.syncAllChats()
 
-              setState((prev) => ({
-                ...prev,
-                syncing: false,
-                lastSyncTime: Date.now(),
-              }))
+              if (isMountedRef.current) {
+                setState((prev) => ({
+                  ...prev,
+                  syncing: false,
+                  lastSyncTime: Date.now(),
+                }))
+              }
 
               logInfo(
                 `Migration sync complete: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
@@ -97,7 +111,9 @@ export function useCloudSync() {
                 },
               )
             } catch (error) {
-              setState((prev) => ({ ...prev, syncing: false }))
+              if (isMountedRef.current) {
+                setState((prev) => ({ ...prev, syncing: false }))
+              }
               if (
                 error instanceof Error &&
                 error.message.includes('Sync already in progress')
@@ -145,16 +161,20 @@ export function useCloudSync() {
     }
 
     syncingRef.current = true
-    setState((prev) => ({ ...prev, syncing: true }))
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, syncing: true }))
+    }
 
     try {
       const result = await cloudSync.syncAllChats()
 
-      setState((prev) => ({
-        ...prev,
-        syncing: false,
-        lastSyncTime: Date.now(),
-      }))
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          syncing: false,
+          lastSyncTime: Date.now(),
+        }))
+      }
 
       logInfo(
         `Sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
@@ -167,7 +187,9 @@ export function useCloudSync() {
 
       return result
     } catch (error) {
-      setState((prev) => ({ ...prev, syncing: false }))
+      if (isMountedRef.current) {
+        setState((prev) => ({ ...prev, syncing: false }))
+      }
       throw error
     } finally {
       syncingRef.current = false
@@ -186,24 +208,32 @@ export function useCloudSync() {
 
       if (runInBackground) {
         // Set initial progress state
-        setState((prev) => ({
-          ...prev,
-          decryptionProgress: { isDecrypting: true, current: 0, total: 0 },
-        }))
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            decryptionProgress: { isDecrypting: true, current: 0, total: 0 },
+          }))
+        }
 
         // Run decryption in background
         const promise = cloudSync.retryDecryptionWithNewKey({
           onProgress: (current, total) => {
-            setState((prev) => ({
-              ...prev,
-              decryptionProgress: { isDecrypting: true, current, total },
-            }))
+            // Only update state if component is still mounted
+            if (isMountedRef.current) {
+              setState((prev) => ({
+                ...prev,
+                decryptionProgress: { isDecrypting: true, current, total },
+              }))
+            }
           },
         })
 
         // Clean up progress state when done
         promise.finally(() => {
-          setState((prev) => ({ ...prev, decryptionProgress: null }))
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setState((prev) => ({ ...prev, decryptionProgress: null }))
+          }
         })
 
         // Return immediately, don't wait
@@ -231,7 +261,9 @@ export function useCloudSync() {
         const oldKey = encryptionService.getKey()
 
         await encryptionService.setKey(key)
-        setState((prev) => ({ ...prev, encryptionKey: key }))
+        if (isMountedRef.current) {
+          setState((prev) => ({ ...prev, encryptionKey: key }))
+        }
 
         // If the key changed OR this is the first time setting a key, retry decryption and sync
         if (!oldKey || oldKey !== key) {
@@ -281,7 +313,9 @@ export function useCloudSync() {
 
   // Clear first time user flag
   const clearFirstTimeUser = useCallback(() => {
-    setState((prev) => ({ ...prev, isFirstTimeUser: false }))
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, isFirstTimeUser: false }))
+    }
   }, [])
 
   return {

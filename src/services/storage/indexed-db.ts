@@ -147,6 +147,7 @@ export class IndexedDBStorage {
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
+          dataCorrupted: (chat as StoredChat).dataCorrupted,
           encryptedData: (chat as StoredChat).encryptedData,
           version: 1, // Current storage format version
         }
