@@ -378,9 +378,9 @@ export function ChatSidebar({
       })
 
       if (result.conversations && result.conversations.length > 0) {
-        // Process and save chat data to IndexedDB
-        for (const conv of result.conversations) {
-          if (!conv.content) continue
+        // Process chats in parallel for better performance
+        const processPromises = result.conversations.map(async (conv) => {
+          if (!conv.content) return
 
           try {
             const encrypted = JSON.parse(conv.content)
@@ -423,7 +423,10 @@ export function ChatSidebar({
               metadata: { chatId: conv.id },
             })
           }
-        }
+        })
+
+        // Wait for all processing to complete
+        await Promise.all(processPromises)
 
         // Trigger parent component to reload chats from IndexedDB
         if (onChatsUpdated) {

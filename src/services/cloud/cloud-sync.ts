@@ -425,10 +425,13 @@ export class CloudSyncService {
         includeContent: true,
       })
 
-      // Process the chat data from each remote chat
+      // Process the chat data from each remote chat in parallel
       const downloadedChats: StoredChat[] = []
-      for (const remoteChat of remoteList.conversations || []) {
-        if (!remoteChat.content) continue
+      const chatsToProcess = remoteList.conversations || []
+
+      // Process all chats in parallel for better performance
+      const processPromises = chatsToProcess.map(async (remoteChat) => {
+        if (!remoteChat.content) return null
 
         try {
           const encrypted = JSON.parse(remoteChat.content)
@@ -455,14 +458,23 @@ export class CloudSyncService {
             } as StoredChat
           }
 
-          if (chat) {
-            downloadedChats.push(chat)
-          }
+          return chat
         } catch (error) {
           logError(`Failed to process chat ${remoteChat.id}`, error, {
             component: 'CloudSync',
             action: 'loadChatsWithPagination',
           })
+          return null
+        }
+      })
+
+      // Wait for all decryptions to complete
+      const results = await Promise.all(processPromises)
+
+      // Filter out nulls and add to downloadedChats
+      for (const chat of results) {
+        if (chat) {
+          downloadedChats.push(chat)
         }
       }
 
