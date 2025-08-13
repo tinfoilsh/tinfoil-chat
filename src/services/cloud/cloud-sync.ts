@@ -504,7 +504,13 @@ export class CloudSyncService {
   }
 
   // Retry decryption for chats that failed to decrypt
-  async retryDecryptionWithNewKey(): Promise<number> {
+  async retryDecryptionWithNewKey(
+    options: {
+      onProgress?: (current: number, total: number) => void
+      batchSize?: number
+    } = {},
+  ): Promise<number> {
+    const { onProgress, batchSize = 5 } = options
     let decryptedCount = 0
     let chatsWithEncryptedData: any[] = []
 
@@ -513,44 +519,64 @@ export class CloudSyncService {
       chatsWithEncryptedData =
         await indexedDBStorage.getChatsWithEncryptedData()
 
-      for (const chat of chatsWithEncryptedData) {
-        try {
-          // Parse the stored encrypted data
-          const encryptedData = JSON.parse(chat.encryptedData)
+      const total = chatsWithEncryptedData.length
 
-          // Decrypt the chat data
-          const decryptedData = await encryptionService.decrypt(encryptedData)
+      // Process chats in batches to avoid blocking the UI
+      for (let i = 0; i < chatsWithEncryptedData.length; i += batchSize) {
+        const batch = chatsWithEncryptedData.slice(i, i + batchSize)
 
-          logInfo(`Decrypted chat ${chat.id}`, {
-            component: 'CloudSync',
-            action: 'retryDecryptionWithNewKey',
-            metadata: {
-              chatId: chat.id,
-              decryptedTitle: decryptedData.title,
-              messageCount: decryptedData.messages?.length || 0,
-            },
-          })
+        // Process batch in parallel
+        const batchPromises = batch.map(async (chat) => {
+          try {
+            // Parse the stored encrypted data
+            const encryptedData = JSON.parse(chat.encryptedData)
 
-          // Create properly decrypted chat with original data
-          const updatedChat: StoredChat = {
-            ...decryptedData, // Use all decrypted data first
-            id: chat.id, // Preserve the original ID
-            decryptionFailed: false,
-            encryptedData: undefined,
-            syncedAt: chat.syncedAt,
-            syncVersion: chat.syncVersion,
-            locallyModified: false,
+            // Decrypt the chat data
+            const decryptedData = await encryptionService.decrypt(encryptedData)
+
+            logInfo(`Decrypted chat ${chat.id}`, {
+              component: 'CloudSync',
+              action: 'retryDecryptionWithNewKey',
+              metadata: {
+                chatId: chat.id,
+                decryptedTitle: decryptedData.title,
+                messageCount: decryptedData.messages?.length || 0,
+              },
+            })
+
+            // Create properly decrypted chat with original data
+            const updatedChat: StoredChat = {
+              ...decryptedData, // Use all decrypted data first
+              id: chat.id, // Preserve the original ID
+              decryptionFailed: false,
+              encryptedData: undefined,
+              syncedAt: chat.syncedAt,
+              syncVersion: chat.syncVersion,
+              locallyModified: false,
+            }
+
+            await indexedDBStorage.saveChat(updatedChat)
+            return true
+          } catch (error) {
+            logError(`Failed to decrypt chat ${chat.id}`, error, {
+              component: 'CloudSync',
+              action: 'retryDecryptionWithNewKey',
+              metadata: { chatId: chat.id },
+            })
+            return false
           }
+        })
 
-          await indexedDBStorage.saveChat(updatedChat)
-          decryptedCount++
-        } catch (error) {
-          logError(`Failed to decrypt chat ${chat.id}`, error, {
-            component: 'CloudSync',
-            action: 'retryDecryptionWithNewKey',
-            metadata: { chatId: chat.id },
-          })
+        const results = await Promise.all(batchPromises)
+        decryptedCount += results.filter(Boolean).length
+
+        // Report progress
+        if (onProgress) {
+          onProgress(Math.min(i + batchSize, total), total)
         }
+
+        // Yield to the event loop between batches
+        await new Promise((resolve) => setTimeout(resolve, 0))
       }
     } catch (error) {
       logError('Failed to retry decryptions', error, {

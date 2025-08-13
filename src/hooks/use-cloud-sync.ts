@@ -11,6 +11,11 @@ export interface CloudSyncState {
   lastSyncTime: number | null
   encryptionKey: string | null
   isFirstTimeUser: boolean
+  decryptionProgress: {
+    isDecrypting: boolean
+    current: number
+    total: number
+  } | null
 }
 
 export function useCloudSync() {
@@ -20,6 +25,7 @@ export function useCloudSync() {
     lastSyncTime: null,
     encryptionKey: null,
     isFirstTimeUser: false,
+    decryptionProgress: null,
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
@@ -174,9 +180,48 @@ export function useCloudSync() {
   }, [])
 
   // Retry decryption for failed chats
-  const retryDecryptionWithNewKey = useCallback(async () => {
-    return await cloudSync.retryDecryptionWithNewKey()
-  }, [])
+  const retryDecryptionWithNewKey = useCallback(
+    async (options?: { runInBackground?: boolean }) => {
+      const { runInBackground = false } = options || {}
+
+      if (runInBackground) {
+        // Set initial progress state
+        setState((prev) => ({
+          ...prev,
+          decryptionProgress: { isDecrypting: true, current: 0, total: 0 },
+        }))
+
+        // Run decryption in background
+        const promise = cloudSync.retryDecryptionWithNewKey({
+          onProgress: (current, total) => {
+            setState((prev) => ({
+              ...prev,
+              decryptionProgress: { isDecrypting: true, current, total },
+            }))
+          },
+        })
+
+        // Clean up progress state when done
+        promise.finally(() => {
+          setState((prev) => ({ ...prev, decryptionProgress: null }))
+        })
+
+        // Return immediately, don't wait
+        promise.catch((error) => {
+          logError('Background decryption failed', error, {
+            component: 'useCloudSync',
+            action: 'retryDecryptionWithNewKey',
+          })
+        })
+
+        return 0 // Return immediately for background mode
+      }
+
+      // Run synchronously for non-background mode
+      return await cloudSync.retryDecryptionWithNewKey()
+    },
+    [],
+  )
 
   // Set encryption key (for syncing across devices)
   const setEncryptionKey = useCallback(
@@ -190,25 +235,35 @@ export function useCloudSync() {
 
         // If the key changed OR this is the first time setting a key, retry decryption and sync
         if (!oldKey || oldKey !== key) {
-          // First retry decryption for chats that failed with the old key
-          const decryptedCount = await retryDecryptionWithNewKey()
+          // Run decryption in background to avoid UI hang
+          retryDecryptionWithNewKey({ runInBackground: true })
 
-          // Then re-encrypt all local chats with the new key and upload them
-          const reencryptResult = await cloudSync.reencryptAndUploadChats()
+          // Re-encrypt and sync can also run in background
+          Promise.resolve().then(async () => {
+            try {
+              // Re-encrypt all local chats with the new key and upload them
+              const reencryptResult = await cloudSync.reencryptAndUploadChats()
 
-          logInfo('Re-encrypted chats after key change', {
-            component: 'useCloudSync',
-            action: 'setEncryptionKey',
-            metadata: {
-              decrypted: decryptedCount,
-              reencrypted: reencryptResult.reencrypted,
-              uploaded: reencryptResult.uploaded,
-              errors: reencryptResult.errors.length,
-            },
+              logInfo('Re-encrypted chats after key change', {
+                component: 'useCloudSync',
+                action: 'setEncryptionKey',
+                metadata: {
+                  reencrypted: reencryptResult.reencrypted,
+                  uploaded: reencryptResult.uploaded,
+                  errors: reencryptResult.errors.length,
+                },
+              })
+
+              // Then trigger a full sync to ensure everything is up to date
+              await syncChats()
+            } catch (error) {
+              logError('Failed to re-encrypt chats', error, {
+                component: 'useCloudSync',
+                action: 'setEncryptionKey',
+              })
+            }
           })
 
-          // Then trigger a full sync to ensure everything is up to date
-          await syncChats()
           return true // Always return true to trigger reload
         }
 
