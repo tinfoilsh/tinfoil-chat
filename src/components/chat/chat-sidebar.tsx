@@ -23,7 +23,7 @@ import {
 } from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -223,6 +223,7 @@ export function ChatSidebar({
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+  const previousChatCount = useRef(chats.length)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -279,6 +280,46 @@ export function ChatSidebar({
       })
     }
   }, [isSignedIn, getToken])
+
+  // Reset pagination when new chats are added
+  useEffect(() => {
+    // Detect if a new chat was added (chat count increased)
+    if (
+      isSignedIn &&
+      isInitialized &&
+      chats.length > previousChatCount.current &&
+      previousChatCount.current > 0 // Not the initial load
+    ) {
+      // A new chat was added, reset pagination to get fresh tokens
+      const resetPagination = async () => {
+        try {
+          // Get a fresh continuation token from the server
+          const result = await r2Storage.listChats({
+            limit: PAGINATION.CHATS_PER_PAGE,
+            includeContent: false,
+          })
+
+          if (result.nextContinuationToken) {
+            setNextToken(result.nextContinuationToken)
+            setHasMoreRemote(true)
+          } else {
+            setHasMoreRemote(false)
+            setNextToken(undefined)
+          }
+        } catch (error) {
+          logError('Failed to reset pagination after new chat', error, {
+            component: 'ChatSidebar',
+            action: 'resetPagination',
+          })
+        }
+      }
+
+      resetPagination()
+    }
+
+    // Update the previous count for next comparison
+    previousChatCount.current = chats.length
+  }, [chats.length, isSignedIn, isInitialized])
 
   // Clean up paginated chats on page refresh
   useEffect(() => {
@@ -368,6 +409,9 @@ export function ChatSidebar({
     setHasAttemptedLoadMore(true)
 
     try {
+      // Initialize encryption service once before processing
+      await encryptionService.initialize()
+
       const result = await r2Storage.listChats({
         limit: PAGINATION.CHATS_PER_PAGE,
         continuationToken: nextToken,
@@ -375,9 +419,9 @@ export function ChatSidebar({
       })
 
       if (result.conversations && result.conversations.length > 0) {
-        // Process and save chat data to IndexedDB
-        for (const conv of result.conversations) {
-          if (!conv.content) continue
+        // Process chats in parallel for better performance
+        const processPromises = result.conversations.map(async (conv) => {
+          if (!conv.content) return
 
           try {
             const encrypted = JSON.parse(conv.content)
@@ -385,10 +429,14 @@ export function ChatSidebar({
             // Try to decrypt the chat data
             let fullChat: StoredChat | null = null
             try {
-              await encryptionService.initialize()
               const decrypted = await encryptionService.decrypt(encrypted)
               fullChat = decrypted
             } catch (decryptError) {
+              // Check if this is corrupted data (compressed)
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+
               // If decryption fails, store the encrypted data for later retry
               fullChat = {
                 id: conv.id,
@@ -398,6 +446,7 @@ export function ChatSidebar({
                 updatedAt: conv.updatedAt,
                 lastAccessedAt: Date.now(),
                 decryptionFailed: true,
+                dataCorrupted: isCorrupted,
                 encryptedData: conv.content,
                 syncedAt: Date.now(),
                 locallyModified: false,
@@ -421,7 +470,10 @@ export function ChatSidebar({
               metadata: { chatId: conv.id },
             })
           }
-        }
+        })
+
+        // Wait for all processing to complete
+        await Promise.all(processPromises)
 
         // Trigger parent component to reload chats from IndexedDB
         if (onChatsUpdated) {
@@ -1082,7 +1134,9 @@ function ChatListItem({
                   }`}
                 >
                   {chat.decryptionFailed
-                    ? 'Failed to decrypt: wrong key'
+                    ? (chat as any).dataCorrupted
+                      ? 'Failed to decrypt: corrupted data'
+                      : 'Failed to decrypt: wrong key'
                     : chat.messages.length === 0
                       ? '\u00A0' // Non-breaking space for consistent height
                       : formatRelativeTime(chat.createdAt)}

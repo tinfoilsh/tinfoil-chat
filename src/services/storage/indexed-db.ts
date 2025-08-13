@@ -13,6 +13,7 @@ export interface StoredChat extends Chat {
   locallyModified?: boolean
   syncVersion?: number
   decryptionFailed?: boolean
+  dataCorrupted?: boolean // True if data appears to be corrupted (e.g., compressed with wrong key)
   encryptedData?: string
   version?: number // Storage format version
   loadedAt?: number // Timestamp when chat was loaded from pagination
@@ -146,6 +147,7 @@ export class IndexedDBStorage {
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
+          dataCorrupted: (chat as StoredChat).dataCorrupted,
           encryptedData: (chat as StoredChat).encryptedData,
           version: 1, // Current storage format version
         }

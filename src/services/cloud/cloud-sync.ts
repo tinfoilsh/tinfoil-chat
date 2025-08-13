@@ -280,6 +280,11 @@ export class CloudSyncService {
               const decrypted = await encryptionService.decrypt(encrypted)
               downloadedChat = decrypted
             } catch (decryptError) {
+              // Check if this is corrupted data (compressed)
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+
               // If decryption fails, store the encrypted data for later retry
               downloadedChat = {
                 id: remoteChat.id,
@@ -289,6 +294,7 @@ export class CloudSyncService {
                 updatedAt: remoteChat.updatedAt,
                 lastAccessedAt: Date.now(),
                 decryptionFailed: true,
+                dataCorrupted: isCorrupted,
                 encryptedData: remoteChat.content,
                 syncedAt: Date.now(),
                 locallyModified: false,
@@ -425,10 +431,13 @@ export class CloudSyncService {
         includeContent: true,
       })
 
-      // Process the chat data from each remote chat
+      // Process the chat data from each remote chat in parallel
       const downloadedChats: StoredChat[] = []
-      for (const remoteChat of remoteList.conversations || []) {
-        if (!remoteChat.content) continue
+      const chatsToProcess = remoteList.conversations || []
+
+      // Process all chats in parallel for better performance
+      const processPromises = chatsToProcess.map(async (remoteChat) => {
+        if (!remoteChat.content) return null
 
         try {
           const encrypted = JSON.parse(remoteChat.content)
@@ -439,6 +448,11 @@ export class CloudSyncService {
             const decrypted = await encryptionService.decrypt(encrypted)
             chat = decrypted
           } catch (decryptError) {
+            // Check if this is corrupted data (compressed)
+            const isCorrupted =
+              decryptError instanceof Error &&
+              decryptError.message.includes('DATA_CORRUPTED')
+
             // If decryption fails, store the encrypted data for later retry
             chat = {
               id: remoteChat.id,
@@ -448,6 +462,7 @@ export class CloudSyncService {
               updatedAt: remoteChat.updatedAt,
               lastAccessedAt: Date.now(),
               decryptionFailed: true,
+              dataCorrupted: isCorrupted,
               encryptedData: remoteChat.content,
               syncedAt: Date.now(),
               locallyModified: false,
@@ -455,14 +470,23 @@ export class CloudSyncService {
             } as StoredChat
           }
 
-          if (chat) {
-            downloadedChats.push(chat)
-          }
+          return chat
         } catch (error) {
           logError(`Failed to process chat ${remoteChat.id}`, error, {
             component: 'CloudSync',
             action: 'loadChatsWithPagination',
           })
+          return null
+        }
+      })
+
+      // Wait for all decryptions to complete
+      const results = await Promise.all(processPromises)
+
+      // Filter out nulls and add to downloadedChats
+      for (const chat of results) {
+        if (chat) {
+          downloadedChats.push(chat)
         }
       }
 
@@ -504,7 +528,15 @@ export class CloudSyncService {
   }
 
   // Retry decryption for chats that failed to decrypt
-  async retryDecryptionWithNewKey(): Promise<number> {
+  async retryDecryptionWithNewKey(
+    options: {
+      onProgress?: (current: number, total: number) => void
+      batchSize?: number
+    } = {},
+  ): Promise<number> {
+    const { onProgress } = options
+    // Ensure batchSize is a positive integer, default to 5 if invalid
+    const batchSize = Math.max(1, Math.floor(options.batchSize || 5))
     let decryptedCount = 0
     let chatsWithEncryptedData: any[] = []
 
@@ -513,44 +545,64 @@ export class CloudSyncService {
       chatsWithEncryptedData =
         await indexedDBStorage.getChatsWithEncryptedData()
 
-      for (const chat of chatsWithEncryptedData) {
-        try {
-          // Parse the stored encrypted data
-          const encryptedData = JSON.parse(chat.encryptedData)
+      const total = chatsWithEncryptedData.length
 
-          // Decrypt the chat data
-          const decryptedData = await encryptionService.decrypt(encryptedData)
+      // Process chats in batches to avoid blocking the UI
+      for (let i = 0; i < chatsWithEncryptedData.length; i += batchSize) {
+        const batch = chatsWithEncryptedData.slice(i, i + batchSize)
 
-          logInfo(`Decrypted chat ${chat.id}`, {
-            component: 'CloudSync',
-            action: 'retryDecryptionWithNewKey',
-            metadata: {
-              chatId: chat.id,
-              decryptedTitle: decryptedData.title,
-              messageCount: decryptedData.messages?.length || 0,
-            },
-          })
+        // Process batch in parallel
+        const batchPromises = batch.map(async (chat) => {
+          try {
+            // Parse the stored encrypted data
+            const encryptedData = JSON.parse(chat.encryptedData)
 
-          // Create properly decrypted chat with original data
-          const updatedChat: StoredChat = {
-            ...decryptedData, // Use all decrypted data first
-            id: chat.id, // Preserve the original ID
-            decryptionFailed: false,
-            encryptedData: undefined,
-            syncedAt: chat.syncedAt,
-            syncVersion: chat.syncVersion,
-            locallyModified: false,
+            // Decrypt the chat data
+            const decryptedData = await encryptionService.decrypt(encryptedData)
+
+            logInfo(`Decrypted chat ${chat.id}`, {
+              component: 'CloudSync',
+              action: 'retryDecryptionWithNewKey',
+              metadata: {
+                chatId: chat.id,
+                decryptedTitle: decryptedData.title,
+                messageCount: decryptedData.messages?.length || 0,
+              },
+            })
+
+            // Create properly decrypted chat with original data
+            const updatedChat: StoredChat = {
+              ...decryptedData, // Use all decrypted data first
+              id: chat.id, // Preserve the original ID
+              decryptionFailed: false,
+              encryptedData: undefined,
+              syncedAt: chat.syncedAt,
+              syncVersion: chat.syncVersion,
+              locallyModified: false,
+            }
+
+            await indexedDBStorage.saveChat(updatedChat)
+            return true
+          } catch (error) {
+            logError(`Failed to decrypt chat ${chat.id}`, error, {
+              component: 'CloudSync',
+              action: 'retryDecryptionWithNewKey',
+              metadata: { chatId: chat.id },
+            })
+            return false
           }
+        })
 
-          await indexedDBStorage.saveChat(updatedChat)
-          decryptedCount++
-        } catch (error) {
-          logError(`Failed to decrypt chat ${chat.id}`, error, {
-            component: 'CloudSync',
-            action: 'retryDecryptionWithNewKey',
-            metadata: { chatId: chat.id },
-          })
+        const results = await Promise.all(batchPromises)
+        decryptedCount += results.filter(Boolean).length
+
+        // Report progress
+        if (onProgress) {
+          onProgress(Math.min(i + batchSize, total), total)
         }
+
+        // Yield to the event loop between batches
+        await new Promise((resolve) => setTimeout(resolve, 0))
       }
     } catch (error) {
       logError('Failed to retry decryptions', error, {
@@ -591,6 +643,20 @@ export class CloudSyncService {
         try {
           // Skip blank chats
           if (chat.isBlankChat) continue
+
+          // Skip chats that failed to decrypt
+          if (chat.decryptionFailed) {
+            logInfo('Skipping chat that failed to decrypt', {
+              component: 'CloudSync',
+              action: 'reencryptAndUploadChats',
+              metadata: {
+                chatId: chat.id,
+                hasEncryptedData: !!chat.encryptedData,
+                dataCorrupted: chat.dataCorrupted,
+              },
+            })
+            continue
+          }
 
           // For encrypted chats, they need to be decrypted first (will use old key from memory if available)
           // For decrypted chats, we can directly work with them

@@ -1,7 +1,5 @@
 // Encryption service for end-to-end encryption of chat data
 
-import { compressionService } from '../compression/compression-service'
-
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
 
 export interface EncryptedData {
@@ -148,12 +146,9 @@ export class EncryptionService {
     // Convert data to string
     const dataString = JSON.stringify(data)
 
-    // Compress the data first
-    const compressed = await compressionService.compress(dataString)
-
-    // Encrypt the compressed data
+    // Encrypt the data directly
     const encoder = new TextEncoder()
-    const dataBytes = encoder.encode(compressed.compressed)
+    const dataBytes = encoder.encode(dataString)
 
     // Generate random IV
     const iv = crypto.getRandomValues(new Uint8Array(12))
@@ -188,17 +183,30 @@ export class EncryptionService {
     }
 
     try {
-      // Convert base64 back to bytes
-      const iv = Uint8Array.from(atob(encryptedData.iv), (c) => c.charCodeAt(0))
-      const data = Uint8Array.from(atob(encryptedData.data), (c) =>
-        c.charCodeAt(0),
-      )
+      // Validate input data
+      if (!encryptedData.iv || !encryptedData.data) {
+        throw new Error('Missing IV or data in encrypted data')
+      }
 
-      // Decrypt
+      // Convert base64 back to bytes with validation
+      let iv: Uint8Array
+      let data: Uint8Array
+
+      try {
+        iv = Uint8Array.from(atob(encryptedData.iv), (c) => c.charCodeAt(0))
+        data = Uint8Array.from(atob(encryptedData.data), (c) => c.charCodeAt(0))
+      } catch (error) {
+        throw new Error(`Invalid base64 encoding: ${error}`)
+      }
+
+      // Decrypt - use the existing buffers directly with proper typing
       const decryptedData = await crypto.subtle.decrypt(
         {
           name: 'AES-GCM',
-          iv: iv,
+          iv: iv.buffer.slice(
+            iv.byteOffset,
+            iv.byteOffset + iv.byteLength,
+          ) as ArrayBuffer,
         },
         this.encryptionKey,
         data.buffer.slice(
@@ -207,16 +215,21 @@ export class EncryptionService {
         ) as ArrayBuffer,
       )
 
-      // Convert decrypted data to string (this is the compressed data)
+      // Convert decrypted data to string
       const decoder = new TextDecoder()
-      const compressedString = decoder.decode(decryptedData)
+      const decryptedString = decoder.decode(decryptedData)
 
-      // Decompress
-      const decompressedString =
-        await compressionService.decompress(compressedString)
+      // Check if the decrypted data is compressed (starts with gzip header "H4sI")
+      // This is for backward compatibility with data that was compressed
+      if (decryptedString.startsWith('H4sI')) {
+        // We no longer support decompression - mark all compressed data as corrupted
+        throw new Error(
+          'DATA_CORRUPTED: Compressed data detected - decompression disabled',
+        )
+      }
 
-      // Parse JSON
-      return JSON.parse(decompressedString)
+      // Parse JSON directly for uncompressed data
+      return JSON.parse(decryptedString)
     } catch (error) {
       throw new Error(`Decryption failed: ${error}`)
     }
