@@ -188,11 +188,21 @@ export class EncryptionService {
     }
 
     try {
-      // Convert base64 back to bytes
-      const iv = Uint8Array.from(atob(encryptedData.iv), (c) => c.charCodeAt(0))
-      const data = Uint8Array.from(atob(encryptedData.data), (c) =>
-        c.charCodeAt(0),
-      )
+      // Validate input data
+      if (!encryptedData.iv || !encryptedData.data) {
+        throw new Error('Missing IV or data in encrypted data')
+      }
+
+      // Convert base64 back to bytes with validation
+      let iv: Uint8Array
+      let data: Uint8Array
+
+      try {
+        iv = Uint8Array.from(atob(encryptedData.iv), (c) => c.charCodeAt(0))
+        data = Uint8Array.from(atob(encryptedData.data), (c) => c.charCodeAt(0))
+      } catch (error) {
+        throw new Error(`Invalid base64 encoding: ${error}`)
+      }
 
       // Decrypt
       const decryptedData = await crypto.subtle.decrypt(

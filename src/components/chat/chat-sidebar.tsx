@@ -368,6 +368,9 @@ export function ChatSidebar({
     setHasAttemptedLoadMore(true)
 
     try {
+      // Initialize encryption service once before processing
+      await encryptionService.initialize()
+
       const result = await r2Storage.listChats({
         limit: PAGINATION.CHATS_PER_PAGE,
         continuationToken: nextToken,
@@ -385,7 +388,6 @@ export function ChatSidebar({
             // Try to decrypt the chat data
             let fullChat: StoredChat | null = null
             try {
-              await encryptionService.initialize()
               const decrypted = await encryptionService.decrypt(encrypted)
               fullChat = decrypted
             } catch (decryptError) {

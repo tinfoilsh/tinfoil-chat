@@ -76,26 +76,42 @@ export class CompressionService {
 
   // Decompress data
   async decompress(compressedData: string): Promise<string> {
+    if (!compressedData) {
+      throw new Error('No data to decompress')
+    }
+
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
     try {
       // Convert base64 back to bytes
       const compressedBytes = this.base64ToUint8Array(compressedData)
 
+      // Validate compressed data
+      if (compressedBytes.length === 0) {
+        throw new Error('Empty compressed data')
+      }
+
       // Create decompression stream
       const decompressionStream = new DecompressionStream('gzip')
       const writer = decompressionStream.writable.getWriter()
-      // Create a new Uint8Array to ensure proper type
-      await writer.write(new Uint8Array(compressedBytes))
+
+      // Write the compressed data directly
+      await writer.write(compressedBytes)
       await writer.close()
 
       // Read decompressed data
       const decompressedChunks: Uint8Array[] = []
-      const reader = decompressionStream.readable.getReader()
+      reader = decompressionStream.readable.getReader()
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         if (value) decompressedChunks.push(value)
       }
+
+      // Release the reader
+      reader.releaseLock()
+      reader = null
 
       // Combine chunks
       const totalLength = decompressedChunks.reduce(
@@ -113,9 +129,19 @@ export class CompressionService {
       const decoder = new TextDecoder()
       return decoder.decode(decompressedData)
     } catch (error) {
+      // Ensure reader is released on error
+      if (reader) {
+        try {
+          reader.releaseLock()
+        } catch {} // Ignore errors when releasing lock
+      }
+
       logError('Decompression failed', error, {
         component: 'CompressionService',
         action: 'decompress',
+        metadata: {
+          dataLength: compressedData?.length || 0,
+        },
       })
       throw new Error(`Decompression failed: ${error}`)
     }
