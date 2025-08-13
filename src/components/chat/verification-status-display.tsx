@@ -134,14 +134,14 @@ export const VerificationStatusDisplay = memo(
                       : isLoading
                         ? 'text-blue-500'
                         : isDarkMode
-                          ? 'text-gray-500'
+                          ? 'text-gray-400'
                           : 'text-gray-500'
                 }`}
               />
             </motion.div>
             <h3
               className={`text-xs font-medium ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                isDarkMode ? 'text-gray-300' : 'text-gray-600'
               }`}
             >
               {isComplete
@@ -185,7 +185,7 @@ export const VerificationStatusDisplay = memo(
                               ? 'text-blue-400'
                               : 'text-blue-600'
                             : isDarkMode
-                              ? 'text-gray-500'
+                              ? 'text-gray-400'
                               : 'text-gray-500'
                     }`}
                   >
