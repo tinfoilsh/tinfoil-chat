@@ -63,10 +63,12 @@ export const VerificationStatusDisplay = memo(
     const isComplete = steps.every((step) => step.status === 'success')
     const hasError = steps.some((step) => step.status === 'error')
 
-    // Trigger animation when verification starts
+    // Control animation based on loading state
     useEffect(() => {
       if (isLoading) {
         setIsAnimating(true)
+      } else {
+        setIsAnimating(false)
       }
     }, [isLoading])
 
