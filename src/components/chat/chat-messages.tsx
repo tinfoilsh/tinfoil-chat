@@ -708,7 +708,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
       <div className="w-full">
         <div className="grid grid-cols-1 items-start">
           <motion.h1
-            className={`flex items-center gap-3 text-3xl font-medium tracking-tight ${
+            className={`flex items-center gap-3 text-2xl font-medium tracking-tight md:text-3xl ${
               isDarkMode ? 'text-gray-100' : 'text-gray-800'
             }`}
             initial={{ opacity: 0, y: 10 }}
@@ -724,12 +724,12 @@ const WelcomeScreen = memo(function WelcomeScreen({
               alt="Tinfoil"
               width={36}
               height={36}
-              className="h-9 w-9"
+              className="hidden h-9 w-9 md:block"
             />
             {getGreeting()}
           </motion.h1>
 
-          <div className="mt-8">
+          <div className="mt-4 md:mt-8">
             <motion.p
               className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
               initial={{ opacity: 0 }}
@@ -907,7 +907,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
             )}
 
             {/* Verification Status Display */}
-            <div className="mt-8 hidden md:block">
+            <div className="mt-4 md:mt-8">
               <VerificationStatusDisplay
                 isDarkMode={isDarkMode}
                 onOpenVerifier={openAndExpandVerifier}

@@ -126,7 +126,7 @@ export const VerificationStatusDisplay = memo(
           }`}
         >
           {/* Header */}
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-1 flex items-center gap-2 md:mb-3">
             {hasError ? (
               <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
             ) : (
@@ -176,8 +176,8 @@ export const VerificationStatusDisplay = memo(
             </h3>
           </div>
 
-          {/* Verification Steps - Inline */}
-          <div className="flex flex-wrap gap-4 text-xs">
+          {/* Verification Steps - Inline - Hidden on mobile */}
+          <div className="hidden flex-wrap gap-4 text-xs md:flex">
             <AnimatePresence mode="wait">
               {steps.map((step, index) => (
                 <motion.div
