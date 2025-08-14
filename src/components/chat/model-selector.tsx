@@ -25,7 +25,6 @@ export function ModelSelector({
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const menuRef = useRef<HTMLDivElement>(null)
-  const [isPositioned, setIsPositioned] = useState(false)
 
   // Start with sensible defaults based on preferred positioning
   const [dynamicStyles, setDynamicStyles] = useState<{
@@ -89,8 +88,6 @@ export function ModelSelector({
           bottom: undefined,
         })
       }
-
-      setIsPositioned(true)
     }
 
     // Run immediately without delay
