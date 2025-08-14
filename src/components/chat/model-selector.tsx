@@ -42,6 +42,8 @@ export function ModelSelector({
 
   // Calculate optimal positioning and height
   useEffect(() => {
+    let animationFrameId: number | null = null
+
     const calculatePosition = () => {
       const menuElement = menuRef.current
       if (!menuElement) return
@@ -90,15 +92,29 @@ export function ModelSelector({
       }
     }
 
+    // Throttled version using requestAnimationFrame
+    const throttledCalculatePosition = () => {
+      if (animationFrameId !== null) {
+        return
+      }
+      animationFrameId = requestAnimationFrame(() => {
+        calculatePosition()
+        animationFrameId = null
+      })
+    }
+
     // Run immediately without delay
     calculatePosition()
 
-    window.addEventListener('resize', calculatePosition)
-    window.addEventListener('scroll', calculatePosition)
+    window.addEventListener('resize', throttledCalculatePosition)
+    window.addEventListener('scroll', throttledCalculatePosition)
 
     return () => {
-      window.removeEventListener('resize', calculatePosition)
-      window.removeEventListener('scroll', calculatePosition)
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId)
+      }
+      window.removeEventListener('resize', throttledCalculatePosition)
+      window.removeEventListener('scroll', throttledCalculatePosition)
     }
   }, [preferredPosition])
 
