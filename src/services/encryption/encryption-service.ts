@@ -1,5 +1,6 @@
 // Encryption service for end-to-end encryption of chat data
 
+import { isGzippedData, safeDecompress } from '@/utils/compression'
 import { logInfo } from '@/utils/error-handling'
 
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
@@ -222,32 +223,25 @@ export class EncryptionService {
       const decryptedString = decoder.decode(decryptedData)
 
       // Check if the decrypted data is compressed (starts with gzip header "H4sI")
-      if (decryptedString.startsWith('H4sI')) {
-        // Dynamically import compression utilities only when needed
-        const { isGzippedData, safeDecompress } = await import(
-          '@/utils/compression'
-        )
+      if (isGzippedData(decryptedString)) {
+        logInfo('Decompressing gzipped data', {
+          component: 'EncryptionService',
+          action: 'decrypt',
+          metadata: { dataLength: decryptedString.length },
+        })
 
-        if (isGzippedData(decryptedString)) {
-          logInfo('Decompressing gzipped data', {
-            component: 'EncryptionService',
-            action: 'decrypt',
-            metadata: { dataLength: decryptedString.length },
-          })
+        // Attempt safe decompression with timeout and validation
+        const decompressedString = safeDecompress(decryptedString)
 
-          // Attempt safe decompression with timeout and validation
-          const decompressedString = safeDecompress(decryptedString)
-
-          if (!decompressedString) {
-            // Decompression failed - data is likely corrupted
-            throw new Error(
-              'DATA_CORRUPTED: Failed to decompress data - may be corrupted or malformed',
-            )
-          }
-
-          // Parse the decompressed JSON
-          return JSON.parse(decompressedString)
+        if (!decompressedString) {
+          // Decompression failed - data is likely corrupted
+          throw new Error(
+            'DATA_CORRUPTED: Failed to decompress data - may be corrupted or malformed',
+          )
         }
+
+        // Parse the decompressed JSON
+        return JSON.parse(decompressedString)
       }
 
       // Parse JSON directly for uncompressed data

@@ -54,7 +54,7 @@ export function VerificationStatus({
       >
         <CheckIcon className="h-5 w-5 flex-shrink-0" />
         <div className="flex flex-col gap-1">
-          <p className="text-sm">Your chat is private.</p>
+          <p className="text-sm">Your chat is confidential.</p>
           <div
             className={`flex items-center gap-2 opacity-70 ${
               isDarkMode ? 'text-white' : 'text-gray-700'

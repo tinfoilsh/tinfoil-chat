@@ -33,11 +33,23 @@ export function useUIState(): UseUIStateReturn {
       return
     }
 
-    // Default to light mode when no saved preference
-    setIsDarkMode(false)
+    // Use browser's color scheme preference
+    const prefersDark = window.matchMedia(
+      '(prefers-color-scheme: dark)',
+    ).matches
+    setIsDarkMode(prefersDark)
 
-    // Note: Not using browser's color scheme preference anymore
-    // to ensure consistent light mode default for new users
+    // Listen for system theme changes if no saved preference
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = (e: MediaQueryListEvent) => {
+      // Only update if there's no saved preference
+      if (localStorage.getItem('theme') === null) {
+        setIsDarkMode(e.matches)
+      }
+    }
+
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
   }, [])
 
   // Add effect to handle window resizing

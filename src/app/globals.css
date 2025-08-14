@@ -1,4 +1,9 @@
 @layer base {
+  .font-helvetica-neue {
+    font-family: 'Helvetica Neue', 'Helvetica-Neue', Helvetica, sans-serif;
+    font-weight: 600;
+  }
+
   /* Use dynamic viewport units for better mobile handling */
   .h-dvh {
     height: 100dvh;

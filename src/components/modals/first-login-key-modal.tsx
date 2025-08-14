@@ -181,6 +181,37 @@ export function FirstLoginKeyModal({
 
                       <div className="mt-6 space-y-3">
                         <button
+                          onClick={handleNewKey}
+                          className={`w-full rounded-lg border p-4 text-left transition-colors ${
+                            isDarkMode
+                              ? 'border-gray-700 bg-gray-900 hover:bg-gray-800'
+                              : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <SparklesIcon
+                              className={`mt-0.5 h-5 w-5 ${isDarkMode ? 'text-white' : 'text-gray-700'}`}
+                            />
+                            <div>
+                              <h4
+                                className={`font-medium ${
+                                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                                }`}
+                              >
+                                Create New Encryption Key
+                              </h4>
+                              <p
+                                className={`mt-1 text-xs ${
+                                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                                }`}
+                              >
+                                Start fresh with a new key.
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
                           onClick={() => setShowImportView(true)}
                           className={`w-full rounded-lg border p-4 text-left transition-colors ${
                             isDarkMode
@@ -207,37 +238,6 @@ export function FirstLoginKeyModal({
                               >
                                 Sync with your other devices by importing your
                                 saved key.
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-
-                        <button
-                          onClick={handleNewKey}
-                          className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                            isDarkMode
-                              ? 'bg-white text-gray-900 hover:bg-gray-100'
-                              : 'bg-gray-900 text-white hover:bg-gray-800'
-                          } shadow-md`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <SparklesIcon
-                              className={`mt-0.5 h-5 w-5 ${isDarkMode ? 'text-gray-900' : 'text-white'}`}
-                            />
-                            <div>
-                              <h4
-                                className={`font-medium ${
-                                  isDarkMode ? 'text-gray-900' : 'text-white'
-                                }`}
-                              >
-                                Create New Encryption Key
-                              </h4>
-                              <p
-                                className={`mt-1 text-xs ${
-                                  isDarkMode ? 'text-gray-600' : 'text-gray-300'
-                                }`}
-                              >
-                                Start fresh with a new key.
                               </p>
                             </div>
                           </div>
