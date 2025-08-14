@@ -57,10 +57,13 @@ export async function GET() {
       return false
     }
 
+    const apiActive = isApiStillActive()
+    const chatActive = isChatStillActive()
+
     const response = {
-      is_subscribed: isApiStillActive(),
-      chat_subscription_active: isChatStillActive(),
-      api_subscription_active: isApiStillActive(),
+      is_subscribed: apiActive,
+      chat_subscription_active: chatActive,
+      api_subscription_active: apiActive,
     }
 
     return NextResponse.json(response)
