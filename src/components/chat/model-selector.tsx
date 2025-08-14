@@ -77,14 +77,14 @@ export function ModelSelector({
 
       if (useAbove) {
         setDynamicStyles({
-          maxHeight: `${Math.min(spaceAbove, window.innerHeight * 0.7)}px`,
+          maxHeight: `${Math.min(Math.max(0, spaceAbove), window.innerHeight * 0.7)}px`,
           bottom: '100%',
           top: undefined,
         })
       } else {
         // Position below
         setDynamicStyles({
-          maxHeight: `${Math.min(spaceBelow, window.innerHeight * 0.7)}px`,
+          maxHeight: `${Math.min(Math.max(0, spaceBelow), window.innerHeight * 0.7)}px`,
           top: '100%',
           bottom: undefined,
         })
