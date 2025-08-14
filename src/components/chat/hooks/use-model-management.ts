@@ -49,6 +49,10 @@ export function useModelManagement({
 
   // Track if we've validated against the loaded models
   const [hasValidated, setHasValidated] = useState(false)
+  // Track the last known premium status to detect changes
+  const [lastKnownPremiumStatus, setLastKnownPremiumStatus] = useState<
+    boolean | null
+  >(null)
 
   // Add state for expanded label
   const [expandedLabel, setExpandedLabel] = useState<LabelType>(null)
@@ -59,13 +63,18 @@ export function useModelManagement({
 
   // Effect to validate selected model when models are available and subscription status is loaded
   useEffect(() => {
+    // Check if premium status has changed
+    const premiumStatusChanged =
+      lastKnownPremiumStatus !== null && lastKnownPremiumStatus !== isPremium
+
     if (
       models.length > 0 &&
       isClient &&
-      !hasValidated &&
+      (!hasValidated || premiumStatusChanged) &&
       !subscriptionLoading
     ) {
       setHasValidated(true)
+      setLastKnownPremiumStatus(isPremium)
 
       // Get all available chat models for this user
       const availableChatModels = models.filter(
@@ -92,7 +101,10 @@ export function useModelManagement({
         const currentModelData = models.find(
           (m) => m.modelName === selectedModel,
         )
-        const isCurrentModelFree = !currentModelData?.paid
+
+        // Check if current model is free (including when paid field is undefined or false)
+        const isCurrentModelFree =
+          !currentModelData || currentModelData.paid !== true
 
         // Upgrade to premium model if currently using a free model
         if (
@@ -104,6 +116,20 @@ export function useModelManagement({
           )
           if (premiumModels.length > 0) {
             targetModel = premiumModels[0].modelName as AIModel
+            logWarning(
+              `Premium user detected with free model, upgrading to premium model`,
+              {
+                component: 'useModelManagement',
+                action: 'validateModel',
+                metadata: {
+                  previousModel: selectedModel,
+                  newModel: targetModel,
+                  isPremium,
+                  isCurrentModelFree,
+                  currentModelData,
+                },
+              },
+            )
           } else {
             // Fallback to first available model if no premium models
             targetModel = availableChatModels[0].modelName as AIModel
@@ -143,6 +169,7 @@ export function useModelManagement({
     hasValidated,
     selectedModel,
     subscriptionLoading,
+    lastKnownPremiumStatus,
   ])
 
   // Handle model selection

@@ -119,19 +119,7 @@ export function ChatInterface({
   const [isLoadingConfig, setIsLoadingConfig] = useState(true)
 
   // State for right sidebar
-  const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(() => {
-    // Check if user has a saved preference
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('verifierSidebarClosed')
-      // If user explicitly closed it before, respect that preference
-      if (saved === 'true') {
-        return false
-      }
-      // Otherwise, default to open on desktop
-      return window.innerWidth >= CONSTANTS.MOBILE_BREAKPOINT
-    }
-    return false
-  })
+  const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
 
   // State for settings sidebar
   const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
@@ -151,6 +139,10 @@ export function ChatInterface({
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
   >([])
+
+  // State for tracking verification status
+  const [currentVerificationState, setCurrentVerificationState] =
+    useState<any>(null)
 
   // Get the user's email
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
@@ -357,15 +349,10 @@ export function ChatInterface({
     }
   }
 
-  // Handler for setting verifier sidebar state with preference management
+  // Handler for setting verifier sidebar state
   const handleSetVerifierSidebarOpen = (isOpen: boolean) => {
     setIsVerifierSidebarOpen(isOpen)
-    if (!isOpen) {
-      // Save preference when user closes it
-      localStorage.setItem('verifierSidebarClosed', 'true')
-    } else {
-      // Clear the saved preference when user opens it
-      localStorage.removeItem('verifierSidebarClosed')
+    if (isOpen) {
       // If window is narrow, close left sidebar when opening right sidebar
       if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
         setIsSidebarOpen(false)
@@ -690,17 +677,26 @@ export function ChatInterface({
           <div className="group relative">
             <button
               className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-                isDarkMode
-                  ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                currentChat?.messages?.length === 0
+                  ? isDarkMode
+                    ? 'cursor-not-allowed bg-gray-900 text-gray-500 opacity-50'
+                    : 'cursor-not-allowed border border-gray-200 bg-white text-gray-400 opacity-50'
+                  : isDarkMode
+                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
+                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
               }`}
               onClick={createNewChat}
               aria-label="Create new chat"
+              disabled={currentChat?.messages?.length === 0}
             >
               <PlusIcon className="h-5 w-5" />
             </button>
             <span
-              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity ${
+                currentChat?.messages?.length === 0
+                  ? ''
+                  : 'group-hover:opacity-100'
+              } ${
                 isDarkMode
                   ? 'bg-gray-700 text-gray-200'
                   : 'bg-gray-800 text-white'
@@ -812,6 +808,7 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
+        onVerificationUpdate={setCurrentVerificationState}
         isDarkMode={isDarkMode}
         isClient={isClient}
       />
@@ -921,18 +918,7 @@ export function ChatInterface({
               isPremium={isPremium}
               models={models}
               subscriptionLoading={subscriptionLoading}
-              onSelectPrompt={(prompt) => {
-                // Append the selected prompt to the system prompt and send immediately
-                const enhancedSystemPrompt = `${effectiveSystemPrompt}\n\n${prompt}`
-                // Send with an empty user message (will be handled to show a default)
-                handleQuery(
-                  '',
-                  undefined,
-                  undefined,
-                  undefined,
-                  enhancedSystemPrompt,
-                )
-              }}
+              verificationState={currentVerificationState}
               onSubmit={wrappedHandleSubmit}
               input={input}
               setInput={setInput}

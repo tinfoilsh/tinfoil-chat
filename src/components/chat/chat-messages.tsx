@@ -1,11 +1,11 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
-import { LockAnimation } from '@/components/chat/lock-animation'
 import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
+import Image from 'next/image'
 import React, { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
@@ -23,14 +23,16 @@ import {
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import iconDark from '../../../public/icon-dark.png'
+import iconLight from '../../../public/icon-light.png'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
 import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
-import { PromptSelector } from './prompt-selector'
 import type { Message } from './types'
+import { VerificationStatusDisplay } from './verification-status-display'
 
 // We'll use a custom hook to load math plugins
 function useMathPlugins() {
@@ -78,7 +80,7 @@ type ChatMessagesProps = {
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  onSelectPrompt?: (prompt: string) => void
+  verificationState?: any
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -545,7 +547,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium,
   models,
   subscriptionLoading,
-  onSelectPrompt,
+  verificationState,
   onSubmit,
   input,
   setInput,
@@ -566,7 +568,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  onSelectPrompt?: (prompt: string) => void
+  verificationState?: any
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -703,10 +705,10 @@ const WelcomeScreen = memo(function WelcomeScreen({
         delay: 0.1,
       }}
     >
-      <div className="mb-6 w-full">
+      <div className="w-full">
         <div className="grid grid-cols-1 items-start">
           <motion.h1
-            className={`font-display flex items-center gap-3 text-3xl font-medium tracking-tight ${
+            className={`flex items-center gap-3 text-2xl font-medium tracking-tight md:text-3xl ${
               isDarkMode ? 'text-gray-100' : 'text-gray-800'
             }`}
             initial={{ opacity: 0, y: 10 }}
@@ -717,11 +719,17 @@ const WelcomeScreen = memo(function WelcomeScreen({
               delay: 0.2,
             }}
           >
-            <LockAnimation isDarkMode={isDarkMode} size={36} />
+            <Image
+              src={isDarkMode ? iconDark : iconLight}
+              alt="Tinfoil"
+              width={36}
+              height={36}
+              className="hidden h-9 w-9 md:block"
+            />
             {getGreeting()}
           </motion.h1>
 
-          <div>
+          <div className="mt-4 md:mt-8">
             <motion.p
               className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
               initial={{ opacity: 0 }}
@@ -735,7 +743,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               This conversation is private: nobody can see your messages.
             </motion.p>
             <motion.p
-              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-2 text-sm leading-6`}
+              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1 text-sm leading-6`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -779,7 +787,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
             {/* Model Selector - Desktop only */}
             {isPremium && models && selectedModel && handleModelSelect && (
               <motion.div
-                className="mt-6 hidden md:block"
+                className="mt-8 hidden md:block"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{
@@ -860,6 +868,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
                       isDarkMode={isDarkMode}
                       isPremium={isPremium}
                       models={models}
+                      preferredPosition="below"
                     />
                   )}
                 </div>
@@ -869,7 +878,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
             {/* Centered Chat Input - Desktop only */}
             {onSubmit && input !== undefined && setInput && (
               <motion.div
-                className="mb-6 mt-6 hidden md:block"
+                className="mt-8 hidden md:block"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{
@@ -897,15 +906,14 @@ const WelcomeScreen = memo(function WelcomeScreen({
               </motion.div>
             )}
 
-            {/* Prompt Selector below input */}
-            {onSelectPrompt && (
-              <div className="hidden md:block">
-                <PromptSelector
-                  isDarkMode={isDarkMode}
-                  onSelectPrompt={onSelectPrompt}
-                />
-              </div>
-            )}
+            {/* Verification Status Display */}
+            <div className="mt-4 md:mt-8">
+              <VerificationStatusDisplay
+                isDarkMode={isDarkMode}
+                onOpenVerifier={openAndExpandVerifier}
+                verificationState={verificationState}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -943,7 +951,7 @@ export function ChatMessages({
   isPremium,
   models,
   subscriptionLoading,
-  onSelectPrompt,
+  verificationState,
   onSubmit,
   input,
   setInput,
@@ -997,14 +1005,14 @@ export function ChatMessages({
           position: 'relative',
         }}
       >
-        <div className="w-full max-w-xl px-8">
+        <div className="w-full max-w-4xl px-8">
           <WelcomeScreen
             isDarkMode={isDarkMode}
             openAndExpandVerifier={openAndExpandVerifier}
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}
-            onSelectPrompt={onSelectPrompt}
+            verificationState={verificationState}
             onSubmit={onSubmit}
             input={input}
             setInput={setInput}

@@ -3,6 +3,13 @@ import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
   title: {
@@ -10,9 +17,10 @@ export const metadata: Metadata = {
     default: 'Tinfoil Private Chat',
   },
   description:
-    'Confidential AI chat application supporting multiple open source models through Tinfoil',
+    'Verifiably Private AI chat application supporting open source models through Tinfoil',
   keywords: [
     'AI chat',
+    'private AI',
     'privacy',
     'confidential computing',
     'open source',
@@ -24,7 +32,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Tinfoil Private Chat',
     description:
-      'Confidential AI chat application supporting multiple open source models through Tinfoil',
+      'Private AI chat application supporting open source models through Tinfoil',
     type: 'website',
     locale: 'en_US',
   },
@@ -32,7 +40,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'Tinfoil Private Chat',
     description:
-      'Confidential AI chat application supporting multiple open source models through Tinfoil',
+      'Private AI chat application supporting open source models through Tinfoil',
   },
   robots: {
     index: true,
@@ -71,24 +79,22 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="overflow-x-hidden">
+    <html lang="en" className={`overflow-x-hidden ${inter.variable}`}>
       <head>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#111827" />
-        <link
-          rel="stylesheet"
-          href="https://api.fontshare.com/css?f%5B%5D=switzer@400,500,600,700&amp;display=swap"
-        />
         <script
           defer
           data-domain="chat.tinfoil.sh"
           src="https://plausible.io/js/script.js"
         ></script>
       </head>
-      <body className="bg-gray-900 text-gray-100 antialiased">
+      <body
+        className={`bg-gray-900 text-gray-100 antialiased ${inter.className}`}
+      >
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
           {children}
