@@ -2,8 +2,8 @@ import { type BaseModel } from '@/app/config/models'
 import {
   DocumentDuplicateIcon,
   ExclamationTriangleIcon,
-  ShieldCheckIcon,
-  ShieldExclamationIcon,
+  LockClosedIcon,
+  LockOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
 import { ModelSelector } from './model-selector'
@@ -130,9 +130,9 @@ export function ChatLabels({
           }`}
         >
           {!verificationComplete ? (
-            <ShieldExclamationIcon className="h-5 w-5 animate-pulse text-yellow-500" />
+            <LockOpenIcon className="h-5 w-5 animate-pulse text-yellow-500" />
           ) : verificationSuccess ? (
-            <ShieldCheckIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
+            <LockClosedIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
           ) : (
             <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
           )}

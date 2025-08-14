@@ -755,15 +755,10 @@ export function ChatSidebar({
                 }
               }}
               className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
-                currentChat?.messages?.length === 0
-                  ? isDarkMode
-                    ? 'cursor-not-allowed border-gray-700 text-gray-500 opacity-50'
-                    : 'cursor-not-allowed border-gray-300 text-gray-400 opacity-50'
-                  : isDarkMode
-                    ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                    : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                isDarkMode
+                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
               }`}
-              disabled={currentChat?.messages?.length === 0}
             >
               <PlusIcon className="h-5 w-5" />
               New chat

@@ -1,6 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
 import {
-  Cog6ToothIcon,
   KeyIcon,
   MoonIcon,
   SunIcon,
@@ -478,20 +477,13 @@ export function SettingsSidebar({
             isDarkMode ? 'border-gray-800' : 'border-gray-200'
           } p-4`}
         >
-          <div className="flex items-center gap-2">
-            <Cog6ToothIcon
-              className={`h-6 w-6 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}
-            />
-            <h2
-              className={`text-lg font-semibold ${
-                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-              }`}
-            >
-              Settings
-            </h2>
-          </div>
+          <h2
+            className={`text-lg font-semibold ${
+              isDarkMode ? 'text-gray-100' : 'text-gray-900'
+            }`}
+          >
+            Settings
+          </h2>
           <button
             onClick={() => setIsOpen(false)}
             className={`rounded-lg p-2 transition-all duration-200 ${
