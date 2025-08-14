@@ -195,13 +195,9 @@ export const VerificationStatusDisplay = memo(
                   <span
                     className={`${
                       step.status === 'success'
-                        ? isDarkMode
-                          ? 'text-emerald-400'
-                          : 'text-emerald-600'
+                        ? 'text-emerald-500'
                         : step.status === 'error'
-                          ? isDarkMode
-                            ? 'text-red-400'
-                            : 'text-red-600'
+                          ? 'text-red-500'
                           : isDarkMode
                             ? 'text-gray-400'
                             : 'text-gray-500'
