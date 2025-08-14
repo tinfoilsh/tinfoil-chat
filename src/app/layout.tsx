@@ -17,9 +17,10 @@ export const metadata: Metadata = {
     default: 'Tinfoil Private Chat',
   },
   description:
-    'Confidential AI chat application supporting multiple open source models through Tinfoil',
+    'Verifiably Private AI chat application supporting open source models through Tinfoil',
   keywords: [
     'AI chat',
+    'private AI',
     'privacy',
     'confidential computing',
     'open source',
@@ -31,7 +32,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Tinfoil Private Chat',
     description:
-      'Confidential AI chat application supporting multiple open source models through Tinfoil',
+      'Private AI chat application supporting open source models through Tinfoil',
     type: 'website',
     locale: 'en_US',
   },
@@ -39,7 +40,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'Tinfoil Private Chat',
     description:
-      'Confidential AI chat application supporting multiple open source models through Tinfoil',
+      'Private AI chat application supporting open source models through Tinfoil',
   },
   robots: {
     index: true,

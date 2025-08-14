@@ -351,7 +351,7 @@ export function Verifier({
   }, [repo, enclave, isVerifying, updateStepStatus])
 
   useEffect(() => {
-    if (isWasmLoaded) {
+    if (!isWasmLoaded) {
       verifyAll()
     }
   }, [isWasmLoaded, verifyAll])

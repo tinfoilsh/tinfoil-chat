@@ -547,6 +547,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium,
   models,
   subscriptionLoading,
+  verificationState,
   onSubmit,
   input,
   setInput,
@@ -567,6 +568,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
+  verificationState?: any
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -909,6 +911,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               <VerificationStatusDisplay
                 isDarkMode={isDarkMode}
                 onOpenVerifier={openAndExpandVerifier}
+                verificationState={verificationState}
               />
             </div>
           </div>
@@ -1009,6 +1012,7 @@ export function ChatMessages({
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}
+            verificationState={verificationState}
             onSubmit={onSubmit}
             input={input}
             setInput={setInput}

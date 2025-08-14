@@ -77,16 +77,30 @@ export const VerificationStatusDisplay = memo(
         case 'success':
           return <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
         case 'error':
-          return <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+          return (
+            <div className="relative h-5 w-5 rounded-full bg-red-500">
+              <svg
+                className="absolute inset-0 h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M6 6L14 14M14 6L6 14"
+                  stroke="white"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          )
         case 'loading':
           return (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              className="h-5 w-5"
-            >
-              <ShieldCheckIcon className="h-5 w-5 text-blue-500" />
-            </motion.div>
+            <div
+              className={`h-5 w-5 rounded-full border-2 ${
+                isDarkMode ? 'border-gray-600' : 'border-gray-400'
+              }`}
+            />
           )
         default:
           return (
@@ -113,37 +127,43 @@ export const VerificationStatusDisplay = memo(
         >
           {/* Header */}
           <div className="mb-3 flex items-center gap-2">
-            <motion.div
-              animate={
-                isAnimating
-                  ? {
-                      rotate: [0, 5, -5, 0],
-                    }
-                  : {}
-              }
-              transition={{
-                duration: 2,
-                repeat: isAnimating ? Infinity : 0,
-                repeatDelay: 1,
-              }}
-            >
-              <ShieldCheckIcon
-                className={`h-4 w-4 ${
-                  isComplete
-                    ? 'text-emerald-500'
-                    : hasError
-                      ? 'text-red-500'
-                      : isLoading
-                        ? 'text-blue-500'
-                        : isDarkMode
-                          ? 'text-gray-400'
-                          : 'text-gray-500'
-                }`}
-              />
-            </motion.div>
+            {hasError ? (
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+            ) : (
+              <motion.div
+                animate={
+                  isAnimating
+                    ? {
+                        rotate: [0, 5, -5, 0],
+                      }
+                    : {}
+                }
+                transition={{
+                  duration: 2,
+                  repeat: isAnimating ? Infinity : 0,
+                  repeatDelay: 1,
+                }}
+              >
+                <ShieldCheckIcon
+                  className={`h-5 w-5 ${
+                    isComplete
+                      ? 'text-emerald-500'
+                      : isDarkMode
+                        ? 'text-gray-400'
+                        : 'text-gray-500'
+                  }`}
+                />
+              </motion.div>
+            )}
             <h3
               className={`text-xs font-medium ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                isComplete
+                  ? 'text-emerald-500'
+                  : hasError
+                    ? 'text-red-500'
+                    : isDarkMode
+                      ? 'text-gray-300'
+                      : 'text-gray-600'
               }`}
             >
               {isComplete
@@ -182,13 +202,9 @@ export const VerificationStatusDisplay = memo(
                           ? isDarkMode
                             ? 'text-red-400'
                             : 'text-red-600'
-                          : step.status === 'loading'
-                            ? isDarkMode
-                              ? 'text-blue-400'
-                              : 'text-blue-600'
-                            : isDarkMode
-                              ? 'text-gray-400'
-                              : 'text-gray-500'
+                          : isDarkMode
+                            ? 'text-gray-400'
+                            : 'text-gray-500'
                     }`}
                   >
                     {step.label}
