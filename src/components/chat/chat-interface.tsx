@@ -612,7 +612,7 @@ export function ChatInterface({
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-600"
+            className="rounded-lg bg-[#005050] px-4 py-2 text-white hover:bg-[#004040]"
           >
             Refresh Page
           </button>

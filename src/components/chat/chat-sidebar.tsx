@@ -609,8 +609,8 @@ export function ChatSidebar({
                 <button
                   className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-all ${
                     isDarkMode
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                      ? 'bg-[#005050] text-white hover:bg-[#004040]'
+                      : 'bg-[#005050] text-white hover:bg-[#004040]'
                   }`}
                 >
                   Sign in
