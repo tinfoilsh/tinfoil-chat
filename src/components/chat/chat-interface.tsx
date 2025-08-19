@@ -277,6 +277,17 @@ export function ChatInterface({
     }
   }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsSidebarOpen])
 
+  // Auto-focus input when component mounts and is ready
+  useEffect(() => {
+    if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
+      // Small delay to ensure DOM is ready and input is rendered
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 200)
+      return () => clearTimeout(timer)
+    }
+  }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
+
   // Get the selected model details
   const selectedModelDetails = models.find(
     (model) => model.modelName === selectedModel,

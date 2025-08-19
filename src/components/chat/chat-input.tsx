@@ -520,6 +520,7 @@ export function ChatInput({
           <textarea
             ref={inputRef}
             value={input}
+            autoFocus
             onFocus={handleInputFocus}
             onChange={(e) => {
               setInput(e.target.value)
