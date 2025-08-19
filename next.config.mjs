@@ -8,7 +8,7 @@ const nextConfig = {
     return config
   },
 
-  // Security headers configuration - only in production
+  // Security headers configuration
   async headers() {
     // Skip headers in development
     if (process.env.NODE_ENV === 'development') {
