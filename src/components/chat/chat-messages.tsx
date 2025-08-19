@@ -5,7 +5,6 @@ import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
-import Image from 'next/image'
 import React, { memo, useEffect, useMemo, useState } from 'react'
 import {
   FaFile,
@@ -23,8 +22,6 @@ import {
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import iconDark from '../../../public/icon-dark.png'
-import iconLight from '../../../public/icon-light.png'
 import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
@@ -719,13 +716,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
               delay: 0.2,
             }}
           >
-            <Image
-              src={isDarkMode ? iconDark : iconLight}
-              alt="Tinfoil"
-              width={36}
-              height={36}
-              className="hidden h-9 w-9 md:block"
-            />
             {getGreeting()}
           </motion.h1>
 
