@@ -219,8 +219,8 @@ ${encryptionKey.replace('key_', '')}
                             disabled={isConfirming}
                             className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
                               isDarkMode
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50'
-                                : 'bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50'
+                                ? 'bg-[#005050] text-white hover:bg-[#004040] disabled:opacity-50'
+                                : 'bg-[#005050] text-white hover:bg-[#004040] disabled:opacity-50'
                             }`}
                           >
                             Keep Local Data

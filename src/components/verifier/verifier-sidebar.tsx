@@ -1,12 +1,7 @@
-import { XMarkIcon } from '@heroicons/react/24/outline'
-import Image from 'next/image'
+import { ShieldCheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useRef } from 'react'
 import { CONSTANTS } from '../chat/constants'
 import { Verifier } from './verifier'
-
-// Import icons
-import iconDark from './assets/icon-dark.png'
-import iconLight from './assets/icon-light.png'
 
 type VerifierSidebarProps = {
   isOpen: boolean
@@ -14,6 +9,7 @@ type VerifierSidebarProps = {
   verificationComplete: boolean
   verificationSuccess?: boolean
   onVerificationComplete: (success: boolean) => void
+  onVerificationUpdate?: (state: any) => void
   isDarkMode: boolean
   isClient: boolean
 }
@@ -24,6 +20,7 @@ export function VerifierSidebar({
   verificationComplete,
   verificationSuccess,
   onVerificationComplete,
+  onVerificationUpdate,
   isDarkMode,
   isClient,
 }: VerifierSidebarProps) {
@@ -49,11 +46,10 @@ export function VerifierSidebar({
           } p-4`}
         >
           <div className="flex items-center gap-2">
-            <Image
-              src={isDarkMode ? iconDark : iconLight}
-              alt="Tinfoil Logo"
-              width={24}
-              height={24}
+            <ShieldCheckIcon
+              className={`h-6 w-6 ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}
             />
             <span
               className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
@@ -78,7 +74,7 @@ export function VerifierSidebar({
           {isClient && (
             <Verifier
               key={verifierKey.current}
-              onVerificationUpdate={() => {}}
+              onVerificationUpdate={onVerificationUpdate}
               onVerificationComplete={onVerificationComplete}
               isDarkMode={isDarkMode}
             />

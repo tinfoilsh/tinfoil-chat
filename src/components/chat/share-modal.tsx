@@ -149,8 +149,8 @@ export function ShareModal({
             onClick={handleCopy}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               isDarkMode
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                ? 'bg-[#005050] text-white hover:bg-[#004040]'
+                : 'bg-[#005050] text-white hover:bg-[#004040]'
             }`}
           >
             {isCopied ? (

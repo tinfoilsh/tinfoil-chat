@@ -609,8 +609,8 @@ export function ChatSidebar({
                 <button
                   className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-all ${
                     isDarkMode
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                      ? 'bg-[#005050] text-white hover:bg-[#004040]'
+                      : 'bg-[#005050] text-white hover:bg-[#004040]'
                   }`}
                 >
                   Sign in
@@ -755,10 +755,15 @@ export function ChatSidebar({
                 }
               }}
               className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
-                isDarkMode
-                  ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                currentChat?.messages?.length === 0
+                  ? isDarkMode
+                    ? 'cursor-not-allowed border-gray-700 text-gray-500 opacity-50'
+                    : 'cursor-not-allowed border-gray-300 text-gray-400 opacity-50'
+                  : isDarkMode
+                    ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                    : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
               }`}
+              disabled={currentChat?.messages?.length === 0}
             >
               <PlusIcon className="h-5 w-5" />
               New chat

@@ -21,13 +21,49 @@ export async function GET() {
 
     const publicMetadata = user.publicMetadata
 
+    // Check if subscription is active or canceled but not yet expired
+    const tokenApiStatus =
+      publicMetadata?.['token_based_api_subscription_status']
+    const chatStatus = publicMetadata?.['chat_subscription_status']
+
+    // For canceled subscriptions, check if they're still within the paid period
+    const isChatStillActive = () => {
+      if (chatStatus === 'active') return true
+      if (chatStatus === 'canceled') {
+        const expiresAt = publicMetadata?.['chat_subscription_expires_at'] as
+          | string
+          | undefined
+        if (expiresAt) {
+          // Check if expiration date is in the future
+          return new Date(expiresAt) > new Date()
+        }
+      }
+      return false
+    }
+
+    const isApiStillActive = () => {
+      if (tokenApiStatus === 'active') return true
+      if (tokenApiStatus === 'canceled') {
+        // Assuming API subscription uses the same expiration field
+        // Adjust if there's a separate field for API subscription expiration
+        const expiresAt = (publicMetadata?.['api_subscription_expires_at'] ||
+          publicMetadata?.['chat_subscription_expires_at']) as
+          | string
+          | undefined
+        if (expiresAt) {
+          return new Date(expiresAt) > new Date()
+        }
+      }
+      return false
+    }
+
+    const apiActive = isApiStillActive()
+    const chatActive = isChatStillActive()
+
     const response = {
-      is_subscribed:
-        publicMetadata?.['token_based_api_subscription_status'] === 'active',
-      chat_subscription_active:
-        publicMetadata?.['chat_subscription_status'] === 'active',
-      api_subscription_active:
-        publicMetadata?.['token_based_api_subscription_status'] === 'active',
+      is_subscribed: apiActive,
+      chat_subscription_active: chatActive,
+      api_subscription_active: apiActive,
     }
 
     return NextResponse.json(response)
