@@ -4,8 +4,16 @@ import { NextResponse } from 'next/server'
 // Define which routes should be protected
 const isProtectedRoute = createRouteMatcher(['/api/billing(.*)'])
 
+// Define public routes that don't require authentication
+const isPublicRoute = createRouteMatcher(['/', '/sign-in(.*)', '/sign-up(.*)'])
+
 export default clerkMiddleware(async (auth, req) => {
-  // Protect API routes
+  // Skip auth for public routes
+  if (isPublicRoute(req)) {
+    return NextResponse.next()
+  }
+
+  // Protect specific API routes
   if (isProtectedRoute(req)) {
     await auth.protect()
   }
