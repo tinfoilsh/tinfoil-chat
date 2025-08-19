@@ -1,11 +1,12 @@
-import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
 // Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute
 // the enclave verification functions written in Go
 import { CONSTANTS } from '../chat/constants'
+import { CollapsibleFlowDiagram } from './collapsible-flow-diagram'
 import { VERIFIER_CONSTANTS } from './constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
+import { VerificationFlow } from './verification-flow'
 import VerificationStatus from './verification-status'
 import './wasm_exec.js'
 
@@ -222,6 +223,9 @@ export function Verifier({
   )
 
   const [isVerifying, setIsVerifying] = useState(false)
+  const [verificationStatus, setVerificationStatus] = useState<
+    'idle' | 'verifying' | 'success' | 'error'
+  >('idle')
 
   const updateStepStatus = useCallback(
     (
@@ -358,6 +362,24 @@ export function Verifier({
 
   useEffect(() => {
     onVerificationUpdate?.(verificationState)
+
+    // Update verification status for the flow diagram
+    if (
+      verificationState.code.status === 'loading' ||
+      verificationState.runtime.status === 'loading'
+    ) {
+      setVerificationStatus('verifying')
+    } else if (
+      verificationState.code.status === 'success' &&
+      verificationState.runtime.status === 'success'
+    ) {
+      setVerificationStatus('success')
+    } else if (
+      verificationState.code.status === 'error' ||
+      verificationState.runtime.status === 'error'
+    ) {
+      setVerificationStatus('error')
+    }
   }, [verificationState, onVerificationUpdate])
 
   useEffect(() => {
@@ -419,99 +441,15 @@ export function Verifier({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {/* Info Section */}
-        <div
-          className={`border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} px-3 py-2 sm:px-4 sm:py-3`}
-        >
-          <p
-            className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
-          >
-            This automated verification tool lets you independently confirm that
-            the models are running in secure enclaves, ensuring your
-            conversations remain completely private.
-          </p>
-          <div className="mt-2">
-            <h4
-              className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-            >
-              Related Links
-            </h4>
-            <ul className="space-y-2">
-              <li>
-                <a
-                  href="https://docs.tinfoil.sh/verification/attestation-architecture"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400"
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                  Attestation Architecture
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://docs.tinfoil.sh/resources/how-it-works"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400"
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                  How It Works
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
         {/* Verification Content */}
         <div className="space-y-3 p-3 pb-6 sm:space-y-4 sm:p-4">
-          <div
-            className={`flex w-full flex-col items-center gap-4 rounded-lg ${isDarkMode ? 'bg-blue-500/10' : 'bg-blue-50'} p-4`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <div
-                className={`h-5 w-5 ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
-              >
-                {isWasmLoaded ? (
-                  <ShieldCheckIcon />
-                ) : (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                )}
-              </div>
-              <span
-                className={`text-sm ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-              >
-                {isWasmLoaded ? (
-                  <>
-                    <a
-                      href="https://github.com/tinfoilsh/verifier/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`underline ${isDarkMode ? 'hover:text-green-300' : 'hover:text-emerald-600'}`}
-                    >
-                      Verification Engine
-                    </a>
-                    {` Loaded (${VERIFIER_CONSTANTS.VERSION})`}
-                  </>
-                ) : (
-                  'Loading verification module...'
-                )}
-              </span>
-            </div>
-
-            {isWasmLoaded && (
-              <button
-                onClick={verifyAll}
-                disabled={isVerifying}
-                className={`w-full max-w-[200px] rounded-lg border px-3 py-2 text-sm disabled:opacity-50 md:w-auto ${
-                  isDarkMode
-                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {isVerifying ? 'Verifying...' : 'Verify Enclave Again'}
-              </button>
-            )}
-          </div>
+          {/* Verification Flow Diagram - Collapsible */}
+          <CollapsibleFlowDiagram isDarkMode={isDarkMode}>
+            <VerificationFlow
+              isDarkMode={isDarkMode}
+              verificationStatus={verificationStatus}
+            />
+          </CollapsibleFlowDiagram>
 
           {/* Process Steps */}
           <ProcessStep
