@@ -117,18 +117,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
   const [isExpanded, setIsExpanded] = useState(false)
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
-  // Process the markdown to extract all paragraphs - moved before any conditional returns
-  const paragraphs = useMemo(
-    () =>
-      thoughts
-        .split('\n\n')
-        .filter((p) => p.trim() !== '')
-        .map((p) => p.trim()),
-    [thoughts],
-  )
-
   // Don't render if thoughts are empty and not actively thinking
-  // Also don't render if there are no thoughts
   if (
     shouldDiscard ||
     (!thoughts.trim() && !isThinking) ||
@@ -192,53 +181,21 @@ const ThoughtProcess = memo(function ThoughtProcess({
         style={{ overflow: 'hidden' }}
       >
         <div
-          className={`px-4 py-2 text-sm ${
+          className={`px-4 py-3 text-sm ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}
         >
-          <div className="w-full">
-            {paragraphs.map((paragraph, i) => (
-              <div key={i} className="relative mb-5">
-                {/* Connecting line between steps */}
-                {i < paragraphs.length - 1 && (
-                  <div
-                    className={`absolute bottom-[-20px] left-[7px] top-4 w-[1px] ${
-                      isDarkMode ? 'bg-gray-500' : 'bg-gray-300'
-                    }`}
-                  ></div>
-                )}
-                <div className="flex items-start">
-                  <div className="relative z-10 mr-2 flex-shrink-0">
-                    <div className="flex items-center justify-center">
-                      <span
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                          isDarkMode
-                            ? 'border-gray-500 text-gray-300'
-                            : 'border-gray-400 text-gray-600'
-                        } z-10 text-[10px] font-medium ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
-                        style={{ userSelect: 'none' }}
-                      >
-                        {i + 1}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="min-h-[24px] flex-1 pb-2">
-                    <ReactMarkdown
-                      remarkPlugins={remarkPlugins}
-                      rehypePlugins={rehypePlugins}
-                      components={{
-                        p: ({ children }: { children?: React.ReactNode }) => (
-                          <>{children}</>
-                        ),
-                      }}
-                    >
-                      {paragraph}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+            components={{
+              p: ({ children }: { children?: React.ReactNode }) => (
+                <p className="mb-2 last:mb-0">{children}</p>
+              ),
+            }}
+          >
+            {thoughts}
+          </ReactMarkdown>
         </div>
       </motion.div>
     </div>
