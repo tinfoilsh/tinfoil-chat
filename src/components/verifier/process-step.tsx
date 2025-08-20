@@ -254,10 +254,10 @@ export function ProcessStep({
                     href="https://docs.nvidia.com/attestation/index.html"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex h-12 w-24 items-center justify-center rounded-lg border transition-all ${
+                    className={`flex h-12 w-24 items-center justify-center rounded-lg transition-all ${
                       isDarkMode
-                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
-                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
                     } p-2`}
                   >
                     <Image
@@ -265,17 +265,17 @@ export function ProcessStep({
                       alt="NVIDIA"
                       width={80}
                       height={24}
-                      className={`max-h-5 w-auto ${!isDarkMode ? 'invert' : ''}`}
+                      className={`max-h-5 w-auto opacity-60 ${!isDarkMode ? 'invert' : ''}`}
                     />
                   </a>
                   <a
                     href="https://www.amd.com/en/developer/sev.html"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex h-12 w-24 items-center justify-center rounded-lg border transition-all ${
+                    className={`flex h-12 w-24 items-center justify-center rounded-lg transition-all ${
                       isDarkMode
-                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
-                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
                     } p-2`}
                   >
                     <Image
@@ -283,17 +283,17 @@ export function ProcessStep({
                       alt="AMD"
                       width={48}
                       height={24}
-                      className={`max-h-3.5 w-auto ${isDarkMode ? 'invert' : ''}`}
+                      className={`max-h-3.5 w-auto opacity-60 ${isDarkMode ? 'invert' : ''}`}
                     />
                   </a>
                   <a
                     href="https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex h-12 w-24 items-center justify-center rounded-lg border transition-all ${
+                    className={`flex h-12 w-24 items-center justify-center rounded-lg transition-all ${
                       isDarkMode
-                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
-                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
                     } p-2`}
                   >
                     <Image
@@ -301,7 +301,7 @@ export function ProcessStep({
                       alt="Intel"
                       width={48}
                       height={24}
-                      className={`max-h-4 w-auto ${isDarkMode ? 'invert' : ''}`}
+                      className={`max-h-4 w-auto opacity-60 ${isDarkMode ? 'invert' : ''}`}
                     />
                   </a>
                 </div>
@@ -350,10 +350,10 @@ export function ProcessStep({
                     href={`https://github.com/${repo}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex h-14 w-28 flex-col items-center justify-center rounded-lg border transition-all ${
+                    className={`flex h-14 w-28 flex-col items-center justify-center rounded-lg transition-all ${
                       isDarkMode
-                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
-                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
                     } p-2`}
                   >
                     <div className="flex flex-1 items-center justify-center">
@@ -375,10 +375,10 @@ export function ProcessStep({
                     href={`https://search.sigstore.dev/?hash=${githubHash || ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`flex h-14 w-28 flex-col items-center justify-center rounded-lg border transition-all ${
+                    className={`flex h-14 w-28 flex-col items-center justify-center rounded-lg transition-all ${
                       isDarkMode
-                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
-                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-50 hover:bg-gray-100'
                     } p-2`}
                   >
                     <div className="flex flex-1 items-center justify-center">
