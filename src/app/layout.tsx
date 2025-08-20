@@ -4,6 +4,7 @@ import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import Script from 'next/script'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -86,15 +87,16 @@ export default function RootLayout({
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#111827" />
-        <script
-          defer
-          data-domain="chat.tinfoil.sh"
-          src="https://plausible.io/js/script.js"
-        ></script>
       </head>
       <body
         className={`bg-gray-900 text-gray-100 antialiased ${inter.className}`}
       >
+        <Script
+          defer
+          data-domain="chat.tinfoil.sh"
+          src="https://plausible.io/js/script.js"
+          strategy="afterInteractive"
+        />
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
           {children}

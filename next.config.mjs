@@ -23,7 +23,7 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' blob: https://plausible.io https://*.tinfoil.sh https://clerk.accounts.dev https://*.clerk.accounts.dev https://challenges.cloudflare.com https://tinfoilsh.github.io https://vercel.live",
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://plausible.io https://*.tinfoil.sh https://clerk.accounts.dev https://*.clerk.accounts.dev https://challenges.cloudflare.com https://tinfoilsh.github.io https://vercel.live",
               "worker-src 'self' blob:",
               "style-src 'self' 'unsafe-inline' https://api.fontshare.com",
               "font-src 'self' https://api.fontshare.com data:",
