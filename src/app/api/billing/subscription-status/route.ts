@@ -2,6 +2,9 @@ import { logError } from '@/utils/error-handling'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET() {
   try {
     const { userId } = await auth()
@@ -10,7 +13,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Use currentUser() instead of clerkClient() for edge runtime compatibility
     const user = await currentUser()
 
     if (!user) {
@@ -55,16 +57,11 @@ export async function GET() {
       return false
     }
 
-    const apiActive = isApiStillActive()
     const chatActive = isChatStillActive()
 
-    const response = {
-      is_subscribed: apiActive,
+    return NextResponse.json({
       chat_subscription_active: chatActive,
-      api_subscription_active: apiActive,
-    }
-
-    return NextResponse.json(response)
+    })
   } catch (error) {
     logError('Failed to check subscription status', error, {
       component: 'subscription-status-api',

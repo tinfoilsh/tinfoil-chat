@@ -6,6 +6,8 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
 
+export const runtime = 'nodejs'
+
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
