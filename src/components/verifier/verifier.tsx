@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 // Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute
 // the enclave verification functions written in Go
+import { AiOutlineLoading3Quarters } from 'react-icons/ai'
+import { FaGithub } from 'react-icons/fa'
+import { FiTool } from 'react-icons/fi'
+import { LuExternalLink, LuRefreshCcwDot } from 'react-icons/lu'
 import { CONSTANTS } from '../chat/constants'
 import { CollapsibleFlowDiagram } from './collapsible-flow-diagram'
 import { VERIFIER_CONSTANTS } from './constants'
@@ -431,7 +435,7 @@ export function Verifier({
     <div
       className={`flex h-full w-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}
     >
-      {/* Header with Verification Status */}
+      {/* Fixed Verification Banner */}
       <div className="flex-none">
         <VerificationStatus
           verificationState={verificationState}
@@ -441,13 +445,105 @@ export function Verifier({
 
       {/* Scrollable Content */}
       <div
-        className="w-full flex-1 overflow-y-auto"
+        className="relative w-full flex-1 overflow-y-auto"
         style={{
           scrollbarGutter: 'stable',
           overscrollBehavior: 'contain',
           WebkitOverflowScrolling: 'touch',
         }}
       >
+        {/* Scrollable title and description section */}
+        <div className="px-3 py-3 sm:px-4 sm:py-4">
+          {/* Title - left aligned like process steps */}
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex items-center">
+              <FiTool
+                className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
+              />
+            </div>
+            <div className="flex-1">
+              <h3
+                className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+              >
+                Verification Tool
+              </h3>
+            </div>
+            <div className="flex items-center">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] ${
+                  isDarkMode
+                    ? 'bg-gray-800/50 text-gray-400'
+                    : 'bg-gray-100/80 text-gray-600'
+                }`}
+              >
+                In-Browser Verifier {VERIFIER_CONSTANTS.VERSION}
+              </span>
+            </div>
+          </div>
+
+          {/* Description */}
+          <p
+            className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
+          >
+            This automated verification tool lets you independently confirm that
+            the models are running in secure enclaves, ensuring your
+            conversations remain completely private.{' '}
+            <a
+              href="https://docs.tinfoil.sh/verification/attestation-architecture"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-700 hover:text-gray-900'} inline-flex items-center gap-1 hover:underline`}
+            >
+              Attestation architecture
+              <LuExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </p>
+        </div>
+        {/* Sticky buttons section */}
+        <div
+          className={`sticky top-0 z-10 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'} p-3 sm:p-4`}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (!isVerifying) {
+                  void verifyAll()
+                }
+              }}
+              disabled={isVerifying}
+              className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium text-white transition-colors ${
+                isVerifying
+                  ? 'cursor-not-allowed bg-[#005050]/60'
+                  : 'bg-[#005050] hover:bg-[#004040]'
+              }`}
+            >
+              {isVerifying ? (
+                <AiOutlineLoading3Quarters className="h-4 w-4 animate-spin" />
+              ) : (
+                <LuRefreshCcwDot className="h-4 w-4" />
+              )}
+              {isVerifying ? 'Verifying...' : 'Verify Again'}
+            </button>
+
+            <button
+              onClick={() =>
+                window.open(
+                  'https://github.com/tinfoilsh/verifier/',
+                  '_blank',
+                  'noopener,noreferrer',
+                )
+              }
+              className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                isDarkMode
+                  ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <FaGithub className="h-4 w-4" />
+              View Code
+            </button>
+          </div>
+        </div>
         {/* Verification Content */}
         <div className="space-y-3 p-3 pb-6 sm:space-y-4 sm:p-4">
           {/* Verification Flow Diagram - Collapsible */}

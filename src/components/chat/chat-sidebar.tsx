@@ -1,5 +1,5 @@
 import { PAGINATION } from '@/config'
-import { SignInButton, UserButton, useAuth } from '@clerk/nextjs'
+import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
@@ -32,6 +32,32 @@ import type { Chat } from './types'
 function isIOSDevice() {
   if (typeof navigator === 'undefined') return false
   return /iPad|iPhone|iPod/.test(navigator.userAgent)
+}
+
+// User-scoped pagination state to prevent data leaks across users
+// Maps userId to their pagination state to ensure proper isolation
+const userPaginationStates = new Map<
+  string,
+  {
+    nextToken: string | undefined
+    hasInitialized: boolean
+  }
+>()
+
+// Helper to get user-specific pagination state
+function getUserPaginationState(userId: string) {
+  if (!userPaginationStates.has(userId)) {
+    userPaginationStates.set(userId, {
+      nextToken: undefined,
+      hasInitialized: false,
+    })
+  }
+  return userPaginationStates.get(userId)!
+}
+
+// Helper to clear pagination state for a user (e.g., on logout)
+function clearUserPaginationState(userId: string) {
+  userPaginationStates.delete(userId)
 }
 
 // Utility function to format relative timestamps
@@ -83,13 +109,13 @@ type ChatSidebarProps = {
   updateChatTitle: (chatId: string, newTitle: string) => void
   deleteChat: (chatId: string) => void
   isClient: boolean
-  verificationComplete: boolean
-  verificationSuccess?: boolean
-  selectedModel: string
   isPremium?: boolean
-  onVerificationComplete: (success: boolean) => void
   onEncryptionKeyClick?: () => void
   onChatsUpdated?: () => void
+  verificationComplete?: boolean
+  verificationSuccess?: boolean
+  onVerificationComplete?: (success: boolean) => void
+  onVerificationUpdate?: (state: any) => void
 }
 
 // Add this constant at the top of the file
@@ -111,7 +137,7 @@ function downloadChats(chats: Chat[]) {
     markdown += `**Created:** ${new Date(chat.createdAt).toLocaleString()}\n`
     markdown += `**Messages:** ${chat.messages.length}\n\n---\n\n`
 
-    chat.messages.forEach((message, messageIndex) => {
+    chat.messages.forEach((message) => {
       const timestamp = new Date(message.timestamp).toLocaleString()
       const role = message.role === 'user' ? 'User' : 'Assistant'
 
@@ -198,10 +224,6 @@ export function ChatSidebar({
   updateChatTitle,
   deleteChat,
   isClient,
-  verificationComplete,
-  verificationSuccess,
-  onVerificationComplete,
-  selectedModel,
   isPremium = true,
   onEncryptionKeyClick,
   onChatsUpdated,
@@ -209,21 +231,30 @@ export function ChatSidebar({
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
-  // Show all local chats - pagination is only for remote
-  const [displayedChatsCount, setDisplayedChatsCount] = useState(999999)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [nextToken, setNextToken] = useState<string | undefined>(undefined)
   const [isIOS, setIsIOS] = useState(false)
   const { isSignedIn, getToken } = useAuth()
+  const { user } = useUser()
   // Start optimistically assuming there might be more chats
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
   const previousChatCount = useRef(chats.length)
+
+  // Use global pagination state for persistence across remounts
+  const [, forceUpdate] = useState({})
+
+  // Custom setter that updates user-scoped state and triggers re-render
+  const setNextToken = (token: string | undefined) => {
+    if (user?.id) {
+      const userState = getUserPaginationState(user.id)
+      userState.nextToken = token
+      forceUpdate({}) // Trigger re-render
+    }
+  }
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -231,17 +262,15 @@ export function ChatSidebar({
   // Apply zoom prevention for mobile
   usePreventZoom()
 
-  // Calculate if we should show the Load More button optimistically
-  // Show if: we have synced chats AND (we have a continuation token OR we have exactly PAGINATION.CHATS_PER_PAGE synced chats)
+  // Calculate if we should show the Load More button
   const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
-  // Simplified logic: Show load more if:
+  // Show load more if:
   // 1. User is signed in
-  // 2. We haven't determined there are no more chats OR we haven't attempted to load yet
-  // 3. We have enough chats to suggest pagination OR we have a continuation token
+  // 2. Either: we have more remote chats, OR we haven't tried loading yet and have enough chats to suggest pagination
   const shouldShowLoadMore =
     isSignedIn &&
-    (hasMoreRemote || !hasAttemptedLoadMore) &&
-    (nextToken || chats.length >= PAGINATION.CHATS_PER_PAGE)
+    (hasMoreRemote ||
+      (!hasAttemptedLoadMore && syncedChatsCount >= PAGINATION.CHATS_PER_PAGE))
 
   // Add window resize listener and iOS detection
   useEffect(() => {
@@ -265,11 +294,6 @@ export function ChatSidebar({
     setIsInitialLoad(false)
   }, [])
 
-  // Reset pagination when chats change (e.g., new chat created, user switched)
-  useEffect(() => {
-    setDisplayedChatsCount(PAGINATION.CHATS_PER_PAGE)
-  }, [chats.length])
-
   // Initialize r2Storage with token getter when component mounts
   useEffect(() => {
     if (isSignedIn && getToken) {
@@ -281,50 +305,71 @@ export function ChatSidebar({
     }
   }, [isSignedIn, getToken])
 
-  // Reset pagination when new chats are added
+  // Reset pagination state when user changes
+  useEffect(() => {
+    const userId = user?.id
+    if (userId) {
+      // Initialize user state if it doesn't exist
+      // This automatically handles user changes since each user has their own state
+      getUserPaginationState(userId)
+    }
+  }, [user?.id])
+
+  // Track if we just loaded more chats via pagination
+  const justLoadedMoreRef = useRef(false)
+
+  // Reset pagination when new chats are added (but not when loading more via pagination)
   useEffect(() => {
     // Detect if a new chat was added (chat count increased)
     if (
       isSignedIn &&
-      isInitialized &&
       chats.length > previousChatCount.current &&
       previousChatCount.current > 0 // Not the initial load
     ) {
-      // A new chat was added, reset pagination to get fresh tokens
-      const resetPagination = async () => {
-        try {
-          // Get a fresh continuation token from the server
-          const result = await r2Storage.listChats({
-            limit: PAGINATION.CHATS_PER_PAGE,
-            includeContent: false,
-          })
+      // Check if this was from pagination or a new chat
+      if (justLoadedMoreRef.current) {
+        // This was from pagination, don't reset
+        justLoadedMoreRef.current = false
+      } else {
+        // This was a new chat, reset pagination
+        const resetPagination = async () => {
+          try {
+            // Get a fresh continuation token from the server
+            const result = await r2Storage.listChats({
+              limit: PAGINATION.CHATS_PER_PAGE,
+              includeContent: false,
+            })
 
-          if (result.nextContinuationToken) {
-            setNextToken(result.nextContinuationToken)
-            setHasMoreRemote(true)
-          } else {
-            setHasMoreRemote(false)
-            setNextToken(undefined)
+            if (result.nextContinuationToken) {
+              setNextToken(result.nextContinuationToken)
+              setHasMoreRemote(true)
+            } else {
+              setHasMoreRemote(false)
+              setNextToken(undefined)
+            }
+          } catch (error) {
+            logError('Failed to reset pagination after new chat', error, {
+              component: 'ChatSidebar',
+              action: 'resetPagination',
+            })
           }
-        } catch (error) {
-          logError('Failed to reset pagination after new chat', error, {
-            component: 'ChatSidebar',
-            action: 'resetPagination',
-          })
         }
-      }
 
-      resetPagination()
+        resetPagination()
+      }
     }
 
     // Update the previous count for next comparison
     previousChatCount.current = chats.length
-  }, [chats.length, isSignedIn, isInitialized])
+  }, [chats.length, isSignedIn, setNextToken])
 
   // Clean up paginated chats on page refresh
   useEffect(() => {
     const cleanupAndInitialize = async () => {
-      if (!isSignedIn) return
+      if (!isSignedIn || !user?.id) return
+
+      const userState = getUserPaginationState(user.id)
+      if (userState.hasInitialized) return
 
       try {
         // On page load, clean up chats loaded via pagination
@@ -370,37 +415,44 @@ export function ChatSidebar({
         })
 
         if (result.nextContinuationToken) {
-          // Set the token to start from page 2
-          setNextToken(result.nextContinuationToken)
-          setHasMoreRemote(true)
+          // Only set the token if we don't already have a different one
+          // (to avoid resetting after pagination has already started)
+          if (
+            !userState.nextToken ||
+            userState.nextToken === result.nextContinuationToken
+          ) {
+            setNextToken(result.nextContinuationToken)
+            setHasMoreRemote(true)
+          }
         } else {
           // No more pages available
           setHasMoreRemote(false)
         }
-        setIsInitialized(true)
+
+        // Mark as initialized to prevent re-running
+        userState.hasInitialized = true
       } catch (error) {
         logError('Failed to cleanup and initialize pagination', error, {
           component: 'ChatSidebar',
           action: 'cleanupAndInitialize',
         })
-        setIsInitialized(true) // Set initialized even on error to prevent blocking
       }
     }
 
     cleanupAndInitialize()
-  }, [isSignedIn, onChatsUpdated])
+  }, [isSignedIn, user?.id, onChatsUpdated, setNextToken])
 
   // Load more chats from backend
   const loadMoreChats = async () => {
+    // Always use the user-scoped state for the most up-to-date token
+    const currentToken = user?.id
+      ? getUserPaginationState(user.id).nextToken
+      : undefined
+
     if (isLoadingMore || !isSignedIn) return
 
-    // If not initialized yet, wait for initialization
-    if (!isInitialized) {
-      return
-    }
-
-    // If we don't have a token after initialization, there are no more pages
-    if (!nextToken) {
+    // If we don't have a token and have already attempted to load, there are no more pages
+    if (!currentToken && hasAttemptedLoadMore) {
       setHasMoreRemote(false)
       return
     }
@@ -412,9 +464,26 @@ export function ChatSidebar({
       // Initialize encryption service once before processing
       await encryptionService.initialize()
 
+      // If we don't have a token yet, try to get the initial one
+      let tokenToUse = currentToken
+
+      if (!tokenToUse && !hasAttemptedLoadMore) {
+        // Get the initial continuation token
+        const initialResult = await r2Storage.listChats({
+          limit: PAGINATION.CHATS_PER_PAGE,
+          includeContent: false,
+        })
+        tokenToUse = initialResult.nextContinuationToken
+      }
+
+      if (!tokenToUse) {
+        setHasMoreRemote(false)
+        setIsLoadingMore(false)
+        return
+      }
       const result = await r2Storage.listChats({
         limit: PAGINATION.CHATS_PER_PAGE,
-        continuationToken: nextToken,
+        continuationToken: tokenToUse,
         includeContent: true,
       })
 
@@ -475,18 +544,17 @@ export function ChatSidebar({
         // Wait for all processing to complete
         await Promise.all(processPromises)
 
+        // Mark that we just loaded more via pagination
+        justLoadedMoreRef.current = true
+
         // Trigger parent component to reload chats from IndexedDB
         if (onChatsUpdated) {
           onChatsUpdated()
         }
 
+        // Update pagination state
         setNextToken(result.nextContinuationToken)
         setHasMoreRemote(!!result.nextContinuationToken)
-
-        // If there's no next token, we've reached the end
-        if (!result.nextContinuationToken) {
-          setHasAttemptedLoadMore(true)
-        }
       } else {
         // No conversations returned - we've reached the end
         setHasMoreRemote(false)
@@ -992,21 +1060,29 @@ export function ChatSidebar({
             } p-3`}
           >
             <p
-              className={`text-xs ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-              } text-center leading-relaxed`}
+              className={`text-center text-xs leading-relaxed ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-800'
+              }`}
             >
               By using this service, you agree to Tinfoil&apos;s{' '}
               <Link
                 href="https://tinfoil.sh/terms"
-                className="text-emerald-500 hover:text-emerald-600"
+                className={
+                  isDarkMode
+                    ? 'text-white underline hover:text-gray-200'
+                    : 'text-[#005050] underline hover:text-[#004040]'
+                }
               >
                 Terms of Service
               </Link>{' '}
               and{' '}
               <Link
                 href="https://tinfoil.sh/privacy"
-                className="text-emerald-500 hover:text-emerald-600"
+                className={
+                  isDarkMode
+                    ? 'text-white underline hover:text-gray-200'
+                    : 'text-[#005050] underline hover:text-[#004040]'
+                }
               >
                 Privacy Policy
               </Link>
