@@ -69,7 +69,7 @@ export function MeasurementDiff({
         ) : (
           <ExclamationTriangleIcon className="h-5 w-5" />
         )}
-        <span>
+        <span className="text-sm">
           {isVerified ? 'Measurements Match' : 'Measurement mismatch detected'}
         </span>
       </div>

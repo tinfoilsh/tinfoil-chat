@@ -1,10 +1,10 @@
 import {
   ChevronDownIcon,
-  ChevronRightIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
+import { BsFillFileEarmarkBinaryFill } from 'react-icons/bs'
 import { StatusIcon } from './status-icon'
 
 // Import verification logos
@@ -14,6 +14,7 @@ import cpuLogo from './assets/cpu.svg'
 import gitLogo from './assets/git.svg'
 import githubLogo from './assets/github.svg'
 import gpuLogo from './assets/gpu.svg'
+import intelLogo from './assets/intel.svg'
 import nvidiaLogo from './assets/nvidia.svg'
 import sigstoreLightLogo from './assets/sigstore-light.svg'
 import sigstoreLogo from './assets/sigstore.svg'
@@ -102,7 +103,6 @@ export function ProcessStep({
   const [isOpen, setIsOpen] = useState(
     status === 'error' || error !== undefined,
   )
-  const [showCode, setShowCode] = useState(false)
 
   useEffect(() => {
     if (status === 'error' || error !== undefined) {
@@ -161,7 +161,6 @@ export function ProcessStep({
             >
               {description}
             </p>
-            {children}
 
             {error && status === 'error' && (
               <div
@@ -212,12 +211,8 @@ export function ProcessStep({
                   {extractMeasurement(measurements)}
                   <div className="mt-2 flex items-center justify-end gap-2">
                     {digestType === 'SOURCE' ? (
-                      <Image
-                        src={gitLogo}
-                        alt="Source Code"
-                        width={24}
-                        height={24}
-                        className={`${isDarkMode ? 'invert' : ''} opacity-50`}
+                      <BsFillFileEarmarkBinaryFill
+                        className={`h-6 w-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} opacity-70`}
                       />
                     ) : (
                       <>
@@ -244,6 +239,72 @@ export function ProcessStep({
                     )}
                   </div>
                 </pre>
+              </div>
+            )}
+
+            {isRemoteAttestation && (
+              <div className="mt-3">
+                <h4
+                  className={`mb-2 text-center text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                >
+                  Runtime attested by
+                </h4>
+                <div className="mt-2 flex items-center justify-center space-x-3">
+                  <a
+                    href="https://docs.nvidia.com/attestation/index.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex h-12 w-24 items-center justify-center rounded-lg border transition-all ${
+                      isDarkMode
+                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
+                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                    } p-2`}
+                  >
+                    <Image
+                      src={nvidiaLogo}
+                      alt="NVIDIA"
+                      width={80}
+                      height={24}
+                      className={`max-h-5 w-auto ${!isDarkMode ? 'invert' : ''}`}
+                    />
+                  </a>
+                  <a
+                    href="https://www.amd.com/en/developer/sev.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex h-12 w-24 items-center justify-center rounded-lg border transition-all ${
+                      isDarkMode
+                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
+                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                    } p-2`}
+                  >
+                    <Image
+                      src={amdLogo}
+                      alt="AMD"
+                      width={48}
+                      height={24}
+                      className={`max-h-3.5 w-auto ${isDarkMode ? 'invert' : ''}`}
+                    />
+                  </a>
+                  <a
+                    href="https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex h-12 w-24 items-center justify-center rounded-lg border transition-all ${
+                      isDarkMode
+                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
+                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                    } p-2`}
+                  >
+                    <Image
+                      src={intelLogo}
+                      alt="Intel"
+                      width={48}
+                      height={24}
+                      className={`max-h-4 w-auto ${isDarkMode ? 'invert' : ''}`}
+                    />
+                  </a>
+                </div>
               </div>
             )}
 
@@ -277,119 +338,69 @@ export function ProcessStep({
               </div>
             )}
 
-            {isRemoteAttestation && (
+            {isSourceCodeVerified && (
               <div className="mt-3">
                 <h4
-                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-2 text-center text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
                 >
-                  Runtime attested by:
+                  Code integrity attested by
                 </h4>
-                <div className="mt-2 flex items-center space-x-4">
-                  <div
-                    className={`flex h-12 w-24 flex-col items-center justify-center ${isDarkMode ? 'bg-white/5' : 'bg-gray-100'} rounded-lg p-2`}
+                <div className="mt-2 flex items-center justify-center space-x-3">
+                  <a
+                    href={`https://github.com/${repo}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex h-14 w-28 flex-col items-center justify-center rounded-lg border transition-all ${
+                      isDarkMode
+                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
+                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                    } p-2`}
                   >
-                    <a
-                      href="https://docs.nvidia.com/attestation/index.html"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex h-full w-full flex-col items-center justify-between"
+                    <div className="flex flex-1 items-center justify-center">
+                      <Image
+                        src={githubLogo}
+                        alt="GitHub"
+                        width={80}
+                        height={24}
+                        className={`h-auto max-h-5 w-auto max-w-full ${isDarkMode ? 'invert' : ''}`}
+                      />
+                    </div>
+                    <span
+                      className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}
                     >
-                      <div className="flex flex-1 items-center justify-center">
-                        <Image
-                          src={nvidiaLogo}
-                          alt="NVIDIA"
-                          width={80}
-                          height={24}
-                          className={`${!isDarkMode ? 'invert' : ''}`}
-                        />
-                      </div>
-                    </a>
-                  </div>
-                  <div
-                    className={`flex h-12 w-24 flex-col items-center justify-center ${isDarkMode ? 'bg-white/5' : 'bg-gray-100'} rounded-lg p-2`}
+                      GitHub
+                    </span>
+                  </a>
+                  <a
+                    href={`https://search.sigstore.dev/?hash=${githubHash || ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex h-14 w-28 flex-col items-center justify-center rounded-lg border transition-all ${
+                      isDarkMode
+                        ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
+                        : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                    } p-2`}
                   >
-                    <a
-                      href="https://www.amd.com/en/developer/sev.html"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex h-full w-full flex-col items-center justify-between"
+                    <div className="flex flex-1 items-center justify-center">
+                      <Image
+                        src={isDarkMode ? sigstoreLogo : sigstoreLightLogo}
+                        alt="Sigstore"
+                        width={80}
+                        height={24}
+                        className="h-auto max-h-5 max-w-full"
+                      />
+                    </div>
+                    <span
+                      className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}
                     >
-                      <div className="flex flex-1 items-center justify-center">
-                        <Image
-                          src={amdLogo}
-                          alt="AMD"
-                          width={48}
-                          height={24}
-                          className={isDarkMode ? 'invert' : ''}
-                        />
-                      </div>
-                    </a>
-                  </div>
+                      Sigstore
+                    </span>
+                  </a>
                 </div>
               </div>
             )}
 
-            {isSourceCodeVerified && (
-              <div className="mt-3">
-                <h4
-                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-                >
-                  Code integrity attested by:
-                </h4>
-                <div className="mt-2 flex items-center space-x-4">
-                  <div
-                    className={`flex h-14 w-28 flex-col items-center justify-center ${isDarkMode ? 'bg-white/5' : 'bg-gray-100'} rounded-lg p-2`}
-                  >
-                    <a
-                      href={`https://github.com/${repo}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex h-full w-full flex-col items-center"
-                    >
-                      <div className="flex flex-1 items-center justify-center">
-                        <Image
-                          src={githubLogo}
-                          alt="GitHub"
-                          width={80}
-                          height={24}
-                          className={`h-auto max-h-6 w-auto max-w-full ${isDarkMode ? 'invert' : ''}`}
-                        />
-                      </div>
-                      <span
-                        className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}
-                      >
-                        GitHub
-                      </span>
-                    </a>
-                  </div>
-                  <div
-                    className={`flex h-14 w-28 flex-col items-center justify-center ${isDarkMode ? 'bg-white/5' : 'bg-gray-100'} rounded-lg p-2`}
-                  >
-                    <a
-                      href={`https://search.sigstore.dev/?hash=${githubHash || ''}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex h-full w-full flex-col items-center"
-                    >
-                      <div className="flex flex-1 items-center justify-center">
-                        <Image
-                          src={isDarkMode ? sigstoreLogo : sigstoreLightLogo}
-                          alt="Sigstore"
-                          width={80}
-                          height={24}
-                          className="h-auto max-h-6 max-w-full"
-                        />
-                      </div>
-                      <span
-                        className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-1`}
-                      >
-                        Sigstore
-                      </span>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
+            {children}
 
             {technicalDetails && (
               <div>
@@ -409,25 +420,40 @@ export function ProcessStep({
             {links && (
               <div>
                 <h4
-                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-3 text-center text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
                 >
                   Related Links
                 </h4>
-                <ul className="space-y-2">
+                <div className="flex justify-center">
                   {links.map((link, idx) => (
-                    <li key={idx}>
-                      <a
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400"
+                    <a
+                      key={idx}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-all ${
+                        isDarkMode
+                          ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
+                          : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
+                      }`}
+                    >
+                      <Image
+                        src={gitLogo}
+                        alt="Git"
+                        width={16}
+                        height={16}
+                        className={`${isDarkMode ? 'invert' : ''} opacity-70`}
+                      />
+                      <span
+                        className={
+                          isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                        }
                       >
-                        <ChevronRightIcon className="h-4 w-4" />
                         {link.text}
-                      </a>
-                    </li>
+                      </span>
+                    </a>
                   ))}
-                </ul>
+                </div>
               </div>
             )}
           </div>

@@ -1,11 +1,12 @@
-import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useState } from 'react'
 // Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute
 // the enclave verification functions written in Go
 import { CONSTANTS } from '../chat/constants'
+import { CollapsibleFlowDiagram } from './collapsible-flow-diagram'
 import { VERIFIER_CONSTANTS } from './constants'
 import { MeasurementDiff } from './measurement-diff'
 import { ProcessStep } from './process-step'
+import { VerificationFlow } from './verification-flow'
 import VerificationStatus from './verification-status'
 import './wasm_exec.js'
 
@@ -86,6 +87,8 @@ type VerifierProps = {
   onVerificationUpdate?: (state: VerificationState) => void // Callback for state changes
   onVerificationComplete?: (success: boolean) => void // Callback when verification finishes
   isDarkMode?: boolean
+  flowDiagramExpanded?: boolean
+  onFlowDiagramToggle?: () => void
 }
 
 type VerificationStatus = 'error' | 'pending' | 'loading' | 'success'
@@ -192,6 +195,8 @@ export function Verifier({
   onVerificationUpdate,
   onVerificationComplete,
   isDarkMode = true,
+  flowDiagramExpanded,
+  onFlowDiagramToggle,
 }: VerifierProps) {
   const [isWasmLoaded, setIsWasmLoaded] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
@@ -222,6 +227,9 @@ export function Verifier({
   )
 
   const [isVerifying, setIsVerifying] = useState(false)
+  const [verificationStatus, setVerificationStatus] = useState<
+    'idle' | 'verifying' | 'success' | 'error'
+  >('idle')
 
   const updateStepStatus = useCallback(
     (
@@ -358,6 +366,27 @@ export function Verifier({
 
   useEffect(() => {
     onVerificationUpdate?.(verificationState)
+
+    // Update verification status for the flow diagram
+    if (
+      verificationState.code.status === 'loading' ||
+      verificationState.runtime.status === 'loading' ||
+      verificationState.security.status === 'loading'
+    ) {
+      setVerificationStatus('verifying')
+    } else if (
+      verificationState.code.status === 'success' &&
+      verificationState.runtime.status === 'success' &&
+      verificationState.security.status === 'success'
+    ) {
+      setVerificationStatus('success')
+    } else if (
+      verificationState.code.status === 'error' ||
+      verificationState.runtime.status === 'error' ||
+      verificationState.security.status === 'error'
+    ) {
+      setVerificationStatus('error')
+    }
   }, [verificationState, onVerificationUpdate])
 
   useEffect(() => {
@@ -419,99 +448,19 @@ export function Verifier({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {/* Info Section */}
-        <div
-          className={`border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} px-3 py-2 sm:px-4 sm:py-3`}
-        >
-          <p
-            className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
-          >
-            This automated verification tool lets you independently confirm that
-            the models are running in secure enclaves, ensuring your
-            conversations remain completely private.
-          </p>
-          <div className="mt-2">
-            <h4
-              className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-            >
-              Related Links
-            </h4>
-            <ul className="space-y-2">
-              <li>
-                <a
-                  href="https://docs.tinfoil.sh/verification/attestation-architecture"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400"
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                  Attestation Architecture
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://docs.tinfoil.sh/resources/how-it-works"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400"
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                  How It Works
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
         {/* Verification Content */}
         <div className="space-y-3 p-3 pb-6 sm:space-y-4 sm:p-4">
-          <div
-            className={`flex w-full flex-col items-center gap-4 rounded-lg ${isDarkMode ? 'bg-blue-500/10' : 'bg-blue-50'} p-4`}
+          {/* Verification Flow Diagram - Collapsible */}
+          <CollapsibleFlowDiagram
+            isDarkMode={isDarkMode}
+            isExpanded={flowDiagramExpanded}
+            onToggle={onFlowDiagramToggle}
           >
-            <div className="flex items-center justify-center gap-2">
-              <div
-                className={`h-5 w-5 ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
-              >
-                {isWasmLoaded ? (
-                  <ShieldCheckIcon />
-                ) : (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                )}
-              </div>
-              <span
-                className={`text-sm ${isWasmLoaded ? (isDarkMode ? 'text-white' : 'text-gray-900') : isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}
-              >
-                {isWasmLoaded ? (
-                  <>
-                    <a
-                      href="https://github.com/tinfoilsh/verifier/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`underline ${isDarkMode ? 'hover:text-green-300' : 'hover:text-emerald-600'}`}
-                    >
-                      Verification Engine
-                    </a>
-                    {` Loaded (${VERIFIER_CONSTANTS.VERSION})`}
-                  </>
-                ) : (
-                  'Loading verification module...'
-                )}
-              </span>
-            </div>
-
-            {isWasmLoaded && (
-              <button
-                onClick={verifyAll}
-                disabled={isVerifying}
-                className={`w-full max-w-[200px] rounded-lg border px-3 py-2 text-sm disabled:opacity-50 md:w-auto ${
-                  isDarkMode
-                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {isVerifying ? 'Verifying...' : 'Verify Enclave Again'}
-              </button>
-            )}
-          </div>
+            <VerificationFlow
+              isDarkMode={isDarkMode}
+              verificationStatus={verificationStatus}
+            />
+          </CollapsibleFlowDiagram>
 
           {/* Process Steps */}
           <ProcessStep
@@ -519,7 +468,7 @@ export function Verifier({
               'REMOTE_ATTESTATION',
               verificationState.runtime.status,
             )}
-            description="Verifies that the secure enclave environment is set up correctly. The response consists of a signed attestation by NVIDIA and AMD of the enclave environment and the digest of the binary (i.e., code) running inside it."
+            description="Verifies the secure hardware environment. The response consists of a signed measurement by a combination of NVIDIA, AMD, and Intel certifying the enclave environment and the digest of the binary (i.e., code) actively running inside it."
             status={verificationState.runtime.status}
             error={verificationState.runtime.error}
             measurements={verificationState.runtime.measurements}
@@ -533,7 +482,7 @@ export function Verifier({
               'CODE_INTEGRITY',
               verificationState.code.status,
             )}
-            description="Verifies that the source code published publicly by Tinfoil on GitHub was correctly built through GitHub Actions and the resulting binary is available and immutable on the Sigstore transparency log."
+            description="Verifies that the source code published publicly by Tinfoil on GitHub was correctly built through GitHub Actions and that the resulting binary is available on the Sigstore transparency log."
             status={verificationState.code.status}
             error={verificationState.code.error}
             measurements={verificationState.code.measurements}
