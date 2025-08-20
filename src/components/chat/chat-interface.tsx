@@ -797,7 +797,6 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
-        selectedModel={selectedModel}
         isPremium={isPremium}
         onEncryptionKeyClick={
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
