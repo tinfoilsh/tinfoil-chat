@@ -4,14 +4,13 @@ import {
 } from '@heroicons/react/24/outline'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import { BsFillFileEarmarkBinaryFill } from 'react-icons/bs'
+import { IoCodeSlashOutline } from 'react-icons/io5'
 import { StatusIcon } from './status-icon'
 
 // Import verification logos
 import amdLogo from './assets/amd.svg'
 import certLogo from './assets/cert.svg'
 import cpuLogo from './assets/cpu.svg'
-import gitLogo from './assets/git.svg'
 import githubLogo from './assets/github.svg'
 import gpuLogo from './assets/gpu.svg'
 import intelLogo from './assets/intel.svg'
@@ -78,7 +77,6 @@ type ProcessStepProps = {
   error?: string
   measurements?: MeasurementData | string
   technicalDetails?: string
-  links?: Array<{ text: string; url: string }>
   children?: React.ReactNode
   digestType?: DigestType
   repo: string
@@ -93,7 +91,6 @@ export function ProcessStep({
   error,
   measurements,
   technicalDetails,
-  links,
   children,
   digestType,
   repo,
@@ -211,8 +208,9 @@ export function ProcessStep({
                   {extractMeasurement(measurements)}
                   <div className="mt-2 flex items-center justify-end gap-2">
                     {digestType === 'SOURCE' ? (
-                      <BsFillFileEarmarkBinaryFill
-                        className={`h-6 w-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} opacity-70`}
+                      <IoCodeSlashOutline
+                        className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'} opacity-50`}
+                        size={24}
                       />
                     ) : (
                       <>
@@ -414,46 +412,6 @@ export function ProcessStep({
                 >
                   {technicalDetails}
                 </p>
-              </div>
-            )}
-
-            {links && (
-              <div>
-                <h4
-                  className={`mb-3 text-center text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-                >
-                  Related Links
-                </h4>
-                <div className="flex justify-center">
-                  {links.map((link, idx) => (
-                    <a
-                      key={idx}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-all ${
-                        isDarkMode
-                          ? 'border-blue-500/50 bg-blue-500/10 hover:border-blue-500 hover:bg-blue-500/20'
-                          : 'border-blue-500/40 bg-blue-50/50 hover:border-blue-500 hover:bg-blue-50'
-                      }`}
-                    >
-                      <Image
-                        src={gitLogo}
-                        alt="Git"
-                        width={16}
-                        height={16}
-                        className={`${isDarkMode ? 'invert' : ''} opacity-70`}
-                      />
-                      <span
-                        className={
-                          isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                        }
-                      >
-                        {link.text}
-                      </span>
-                    </a>
-                  ))}
-                </div>
               </div>
             )}
           </div>

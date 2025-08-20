@@ -69,7 +69,7 @@ export function VerificationStatus({
               height={15}
               className={`${!isDarkMode ? 'invert' : ''} pt-0.5`}
             />
-            <span className="text-sm">|</span>
+            <span className="text-sm">·</span>
             <Image
               src={amdLogo}
               alt="AMD"
@@ -77,12 +77,12 @@ export function VerificationStatus({
               height={15}
               className={`${isDarkMode ? 'invert' : ''} pt-0.5`}
             />
-            <span className="text-sm">|</span>
+            <span className="text-sm">·</span>
             <Image
               src={intelLogo}
               alt="Intel"
-              width={30}
-              height={12}
+              width={25}
+              height={10}
               className={`${isDarkMode ? 'invert' : ''}`}
             />
           </div>
