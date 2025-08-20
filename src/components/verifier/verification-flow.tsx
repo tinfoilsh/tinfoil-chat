@@ -12,6 +12,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
+import { useEffect } from 'react'
 import { FaUser } from 'react-icons/fa'
 import { FiGithub, FiKey, FiShield } from 'react-icons/fi'
 import { LuBrain, LuCpu } from 'react-icons/lu'
@@ -206,6 +207,22 @@ function VerificationFlowDiagram({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const reactFlowInstance = useReactFlow()
+
+  // Update edge styles when theme changes
+  useEffect(() => {
+    setEdges((eds) =>
+      eds.map((edge) => ({
+        ...edge,
+        style: {
+          stroke: isDarkMode
+            ? 'rgba(255, 255, 255, 0.4)'
+            : 'rgba(107, 114, 128, 0.5)',
+          strokeDasharray: '5 5',
+          strokeWidth: 1.5,
+        },
+      })),
+    )
+  }, [isDarkMode, setEdges])
 
   const nodeTypes = {
     turbo: TurboNode,
