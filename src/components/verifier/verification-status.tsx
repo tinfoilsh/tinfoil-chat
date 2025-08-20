@@ -83,7 +83,7 @@ export function VerificationStatus({
               alt="Intel"
               width={30}
               height={12}
-              className={`${isDarkMode ? 'invert' : ''} pt-0.5`}
+              className={`${isDarkMode ? 'invert' : ''}`}
             />
           </div>
         </div>
