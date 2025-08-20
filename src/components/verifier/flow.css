@@ -1,5 +1,5 @@
 /* Limit styles to the diagram only so we don't override global site styles */
-* {
+.react-flow * {
   box-sizing: border-box;
 }
 
