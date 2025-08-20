@@ -87,12 +87,8 @@ export function ChatInterface({
   const { toast } = useToast()
   const { isSignedIn } = useAuth()
   const { user } = useUser()
-  const {
-    chat_subscription_active,
-    is_subscribed,
-    api_subscription_active,
-    isLoading: subscriptionLoading,
-  } = useSubscriptionStatus()
+  const { chat_subscription_active, isLoading: subscriptionLoading } =
+    useSubscriptionStatus()
 
   // Initialize cloud sync
   const {

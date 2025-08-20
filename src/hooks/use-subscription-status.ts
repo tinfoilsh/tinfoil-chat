@@ -5,9 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 const SUBSCRIPTION_CACHE_KEY = 'cached_subscription_status'
 
 interface CachedSubscription {
-  is_subscribed: boolean
   chat_subscription_active: boolean
-  api_subscription_active: boolean
 }
 
 export function useSubscriptionStatus() {
@@ -37,9 +35,7 @@ export function useSubscriptionStatus() {
   const [error, setError] = useState<string | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState(
     cachedStatus || {
-      is_subscribed: false,
       chat_subscription_active: false,
-      api_subscription_active: false,
     },
   )
 

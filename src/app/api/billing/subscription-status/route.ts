@@ -57,16 +57,11 @@ export async function GET() {
       return false
     }
 
-    const apiActive = isApiStillActive()
     const chatActive = isChatStillActive()
 
-    const response = {
-      is_subscribed: apiActive,
+    return NextResponse.json({
       chat_subscription_active: chatActive,
-      api_subscription_active: apiActive,
-    }
-
-    return NextResponse.json(response)
+    })
   } catch (error) {
     logError('Failed to check subscription status', error, {
       component: 'subscription-status-api',
