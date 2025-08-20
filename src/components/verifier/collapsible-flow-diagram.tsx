@@ -23,6 +23,7 @@ export function CollapsibleFlowDiagram({
       } @container`}
     >
       <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-4 text-left"
         aria-expanded={isExpanded}
