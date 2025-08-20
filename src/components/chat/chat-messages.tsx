@@ -253,10 +253,11 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
         },
         table({ children, node, ...props }: any) {
           return (
-            <div className="my-4 overflow-x-auto">
+            <div className="my-4 w-full overflow-x-auto">
               <table
                 {...props}
-                className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+                className={`divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+                style={{ minWidth: 'max-content' }}
               >
                 {children}
               </table>
@@ -290,7 +291,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
           return (
             <th
               {...props}
-              className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
+              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
             >
               {children}
             </th>
@@ -300,7 +301,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
           return (
             <td
               {...props}
-              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-normal break-words`}
+              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-nowrap`}
             >
               {children}
             </td>
@@ -451,23 +452,21 @@ const ChatMessage = memo(function ChatMessage({
                 isUser
                   ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
                   : ''
-              } overflow-hidden`}
+              } overflow-x-auto`}
             >
-              <div className="flex items-center gap-2">
-                <div
-                  className={`prose w-full max-w-none break-words text-base ${
-                    isDarkMode
-                      ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
-                      : isUser
-                        ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                        : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                  }`}
-                >
-                  <MemoizedMarkdown
-                    content={message.content}
-                    isDarkMode={isDarkMode}
-                  />
-                </div>
+              <div
+                className={`prose w-full max-w-none text-base ${
+                  isDarkMode
+                    ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
+                    : isUser
+                      ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                      : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                }`}
+              >
+                <MemoizedMarkdown
+                  content={message.content}
+                  isDarkMode={isDarkMode}
+                />
               </div>
             </div>
           </div>
