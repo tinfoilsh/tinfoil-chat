@@ -88,7 +88,7 @@ export function CollapsibleFlowDiagram({
           }`}
         >
           <div
-            className={`rounded-b-lg py-4 ${
+            className={`rounded-b-lg px-4 py-4 ${
               isDarkMode ? 'bg-gray-800/50' : 'bg-gray-50'
             }`}
           >

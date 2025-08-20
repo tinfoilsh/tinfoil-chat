@@ -3,6 +3,7 @@ import Image from 'next/image'
 
 // Import verification logos
 import amdLogo from './assets/amd.svg'
+import intelLogo from './assets/intel.svg'
 import nvidiaLogo from './assets/nvidia.svg'
 
 type VerificationState = {
@@ -37,7 +38,7 @@ export function VerificationStatus({
       >
         <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0" />
         <p className="overflow-hidden break-words break-all text-sm">
-          Verification failed. Please check the error messages.
+          Verification failed. Please check the errors.
         </p>
       </div>
     )
@@ -68,10 +69,18 @@ export function VerificationStatus({
               height={15}
               className={`${!isDarkMode ? 'invert' : ''} pt-0.5`}
             />
-            <span className="text-sm">and</span>
+            <span className="text-sm">|</span>
             <Image
               src={amdLogo}
               alt="AMD"
+              width={35}
+              height={15}
+              className={`${isDarkMode ? 'invert' : ''} pt-0.5`}
+            />
+            <span className="text-sm">|</span>
+            <Image
+              src={intelLogo}
+              alt="Intel"
               width={35}
               height={15}
               className={`${isDarkMode ? 'invert' : ''} pt-0.5`}
