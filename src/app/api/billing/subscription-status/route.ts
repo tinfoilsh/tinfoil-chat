@@ -1,6 +1,9 @@
 import { logError } from '@/utils/error-handling'
-import { auth, currentUser } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function GET() {
   try {
@@ -10,8 +13,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Use currentUser() instead of clerkClient() for edge runtime compatibility
-    const user = await currentUser()
+    const client = await clerkClient()
+    const user = await client.users.getUser(userId)
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })

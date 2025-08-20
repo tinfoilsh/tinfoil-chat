@@ -69,15 +69,12 @@ export function useSubscriptionStatus() {
         }
 
         // Get authentication token
-        const token = await getToken()
-        if (!token) {
-          throw new Error('No authentication token available')
-        }
-
+        // Prefer cookie-based auth for server routes; Clerk's server SDK
+        // reads session from cookies. Only include Authorization if present.
+        const token = await getToken().catch(() => null)
         const response = await fetch(`/api/billing/subscription-status`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          cache: 'no-store',
         })
 
         if (!response.ok) {
