@@ -6,6 +6,7 @@ import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useMemo, useState } from 'react'
+import { BsCopy } from 'react-icons/bs'
 import {
   FaFile,
   FaFileAlt,
@@ -441,34 +442,65 @@ const ChatMessage = memo(function ChatMessage({
       )}
       {/* Only show content if it exists and is not just document content */}
       {message.content && (
-        <div
-          className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
-        >
+        <>
           <div
-            className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
-              isUser
-                ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
-                : ''
-            } overflow-hidden`}
+            className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
           >
-            <div className="flex items-center gap-2">
-              <div
-                className={`prose w-full max-w-none break-words text-base ${
-                  isDarkMode
-                    ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
-                    : isUser
-                      ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                      : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                }`}
-              >
-                <MemoizedMarkdown
-                  content={message.content}
-                  isDarkMode={isDarkMode}
-                />
+            <div
+              className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
+                isUser
+                  ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
+                  : ''
+              } overflow-hidden`}
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className={`prose w-full max-w-none break-words text-base ${
+                    isDarkMode
+                      ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
+                      : isUser
+                        ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                        : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                  }`}
+                >
+                  <MemoizedMarkdown
+                    content={message.content}
+                    isDarkMode={isDarkMode}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
+          {/* Copy button for assistant messages */}
+          {!isUser && (
+            <div className="mt-1 px-4">
+              <div className="group relative inline-block">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(message.content)
+                  }}
+                  className={`flex items-center justify-center rounded p-1.5 transition-colors ${
+                    isDarkMode
+                      ? 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                  }`}
+                  aria-label="Copy message"
+                >
+                  <BsCopy className="h-3.5 w-3.5" />
+                </button>
+                <span
+                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                    isDarkMode
+                      ? 'bg-gray-700 text-gray-200'
+                      : 'bg-gray-800 text-white'
+                  }`}
+                >
+                  Copy
+                </span>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
