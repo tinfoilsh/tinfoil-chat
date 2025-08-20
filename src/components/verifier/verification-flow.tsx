@@ -38,7 +38,7 @@ function VerificationFlowDiagram({
   const initialNodes: (CustomNode | ContainerNodeType)[] = [
     {
       id: 'secure-hardware',
-      position: { x: 74, y: -360 },
+      position: { x: 77, y: -360 },
       data: {
         title: 'Secure Hardware Enclave',
         icon: <LuCpu className="h-5 w-5" />,
@@ -109,7 +109,7 @@ function VerificationFlowDiagram({
     },
     {
       id: 'user',
-      position: { x: 140, y: 280 },
+      position: { x: 144, y: 280 },
       data: {
         title: 'This Chat',
         icon: <FaUser />,
