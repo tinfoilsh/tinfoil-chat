@@ -992,21 +992,29 @@ export function ChatSidebar({
             } p-3`}
           >
             <p
-              className={`text-xs ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-              } text-center leading-relaxed`}
+              className={`text-center text-xs leading-relaxed ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-800'
+              }`}
             >
               By using this service, you agree to Tinfoil&apos;s{' '}
               <Link
                 href="https://tinfoil.sh/terms"
-                className="text-emerald-500 hover:text-emerald-600"
+                className={
+                  isDarkMode
+                    ? 'text-white underline hover:text-gray-200'
+                    : 'text-[#005050] underline hover:text-[#004040]'
+                }
               >
                 Terms of Service
               </Link>{' '}
               and{' '}
               <Link
                 href="https://tinfoil.sh/privacy"
-                className="text-emerald-500 hover:text-emerald-600"
+                className={
+                  isDarkMode
+                    ? 'text-white underline hover:text-gray-200'
+                    : 'text-[#005050] underline hover:text-[#004040]'
+                }
               >
                 Privacy Policy
               </Link>
