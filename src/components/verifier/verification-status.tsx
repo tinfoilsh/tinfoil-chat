@@ -81,8 +81,8 @@ export function VerificationStatus({
             <Image
               src={intelLogo}
               alt="Intel"
-              width={35}
-              height={15}
+              width={30}
+              height={12}
               className={`${isDarkMode ? 'invert' : ''} pt-0.5`}
             />
           </div>
