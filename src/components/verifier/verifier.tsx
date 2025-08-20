@@ -366,17 +366,20 @@ export function Verifier({
     // Update verification status for the flow diagram
     if (
       verificationState.code.status === 'loading' ||
-      verificationState.runtime.status === 'loading'
+      verificationState.runtime.status === 'loading' ||
+      verificationState.security.status === 'loading'
     ) {
       setVerificationStatus('verifying')
     } else if (
       verificationState.code.status === 'success' &&
-      verificationState.runtime.status === 'success'
+      verificationState.runtime.status === 'success' &&
+      verificationState.security.status === 'success'
     ) {
       setVerificationStatus('success')
     } else if (
       verificationState.code.status === 'error' ||
-      verificationState.runtime.status === 'error'
+      verificationState.runtime.status === 'error' ||
+      verificationState.security.status === 'error'
     ) {
       setVerificationStatus('error')
     }
