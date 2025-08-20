@@ -1,10 +1,6 @@
 import { ShieldCheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useRef, useState } from 'react'
-import { AiOutlineLoading3Quarters } from 'react-icons/ai'
-import { FaGithub } from 'react-icons/fa'
-import { LuRefreshCcwDot } from 'react-icons/lu'
 import { CONSTANTS } from '../chat/constants'
-import { VERIFIER_CONSTANTS } from './constants'
 import { Verifier } from './verifier'
 
 type VerifierSidebarProps = {
@@ -103,84 +99,7 @@ export function VerifierSidebar({
           )}
         </div>
 
-        {/* Related Links Section - pinned to bottom */}
-        <div
-          className={`flex-none border-t ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} px-3 py-2 sm:px-4 sm:py-3`}
-        >
-          {/* Action buttons */}
-          <div className="mb-3 flex items-center justify-center gap-3">
-            <button
-              onClick={() => {
-                if (!isVerifying) {
-                  setTriggerVerify((prev) => prev + 1)
-                  setIsVerifying(true)
-                }
-              }}
-              disabled={isVerifying}
-              className={`flex min-w-[130px] items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors ${
-                isVerifying
-                  ? 'cursor-not-allowed bg-[#005050]/60'
-                  : 'bg-[#005050] hover:bg-[#004040]'
-              }`}
-            >
-              {isVerifying ? (
-                <AiOutlineLoading3Quarters className="h-4 w-4 animate-spin" />
-              ) : (
-                <LuRefreshCcwDot className="h-4 w-4" />
-              )}
-              {isVerifying ? 'Verifying...' : 'Verify Again'}
-            </button>
-
-            <button
-              onClick={() =>
-                window.open(
-                  'https://github.com/tinfoilsh/verifier/',
-                  '_blank',
-                  'noopener,noreferrer',
-                )
-              }
-              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <FaGithub className="h-4 w-4" />
-              View Code
-            </button>
-          </div>
-
-          <p
-            className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
-          >
-            This automated verification tool lets you independently confirm that
-            the models are running in secure enclaves, ensuring your
-            conversations remain completely private.
-          </p>
-          <div className="mt-3">
-            <button
-              onClick={() =>
-                window.open(
-                  'https://docs.tinfoil.sh/verification/attestation-architecture',
-                  '_blank',
-                  'noopener,noreferrer',
-                )
-              }
-              className={`w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              Attestation Architecture
-            </button>
-            <p
-              className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'} mt-3 text-center`}
-            >
-              In-Browser Verifier {VERIFIER_CONSTANTS.VERSION}
-            </p>
-          </div>
-        </div>
+        {/* Footer removed; actions moved to top inside verifier */}
       </div>
 
       {/* Mobile overlay */}
