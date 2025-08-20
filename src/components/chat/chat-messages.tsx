@@ -441,11 +441,13 @@ const ChatMessage = memo(function ChatMessage({
       )}
       {/* Only show content if it exists and is not just document content */}
       {message.content && (
-        <div className={`w-full px-4 py-2 ${isUser ? 'flex justify-end' : ''}`}>
+        <div
+          className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
+        >
           <div
             className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
               isUser
-                ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-500'} rounded-2xl rounded-tr-sm px-4 py-2`
+                ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
                 : ''
             } overflow-hidden`}
           >
@@ -455,7 +457,7 @@ const ChatMessage = memo(function ChatMessage({
                   isDarkMode
                     ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
-                      ? 'text-white prose-headings:text-white prose-a:text-gray-200 hover:prose-a:text-gray-100 prose-strong:text-white prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                      ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
