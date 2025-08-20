@@ -1,5 +1,5 @@
 import { logError } from '@/utils/error-handling'
-import { auth, clerkClient } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -13,8 +13,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const client = await clerkClient()
-    const user = await client.users.getUser(userId)
+    const user = await currentUser()
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })

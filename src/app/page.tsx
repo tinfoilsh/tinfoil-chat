@@ -1,6 +1,6 @@
 'use client'
 
-export const runtime = 'nodejs'
+// Inherit nodejs runtime from layout; no override here
 
 import { ChatInterface } from '@/components/chat'
 
