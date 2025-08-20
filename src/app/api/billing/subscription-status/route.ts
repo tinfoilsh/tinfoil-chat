@@ -2,8 +2,6 @@ import { logError } from '@/utils/error-handling'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
-export const runtime = 'edge'
-
 export async function GET() {
   try {
     const { userId } = await auth()
