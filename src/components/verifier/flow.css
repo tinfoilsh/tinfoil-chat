@@ -1,6 +1,9 @@
 /* Limit styles to the diagram only so we don't override global site styles */
 .react-flow * {
   box-sizing: border-box;
+  /* Safari/Firefox specific resets for consistent rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Disable initial load animations for child nodes */
@@ -216,22 +219,30 @@
   right: -10px;
   left: auto;
   transform: translateY(-50%);
+  -webkit-transform: translateY(-50%);
+  -moz-transform: translateY(-50%);
 }
 
 .react-flow__handle-left.connection-handle {
   left: -10px;
   right: auto;
   transform: translateY(-50%);
+  -webkit-transform: translateY(-50%);
+  -moz-transform: translateY(-50%);
 }
 
 .react-flow__handle-top.connection-handle {
   top: -10px;
   transform: translateX(-50%);
+  -webkit-transform: translateX(-50%);
+  -moz-transform: translateX(-50%);
 }
 
 .react-flow__handle-bottom.connection-handle {
   bottom: -10px;
   transform: translateX(-50%);
+  -webkit-transform: translateX(-50%);
+  -moz-transform: translateX(-50%);
 }
 
 /* Custom styling for handles with connection markers */
@@ -256,6 +267,9 @@
   marker-start: url(#circle-marker);
   marker-end: url(#circle-marker);
   transition: stroke 0.2s ease;
+  /* Safari/Firefox SVG rendering fix */
+  shape-rendering: geometricPrecision;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Dark mode edge styling */
