@@ -31,6 +31,7 @@ export function VerifierSidebar({
   const verifierKey = useRef<number>(0)
   const [triggerVerify, setTriggerVerify] = useState(0)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [flowDiagramExpanded, setFlowDiagramExpanded] = useState(false)
 
   return (
     <>
@@ -94,6 +95,10 @@ export function VerifierSidebar({
                 setIsVerifying(false)
               }}
               isDarkMode={isDarkMode}
+              flowDiagramExpanded={flowDiagramExpanded}
+              onFlowDiagramToggle={() =>
+                setFlowDiagramExpanded(!flowDiagramExpanded)
+              }
             />
           )}
         </div>

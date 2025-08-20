@@ -7,13 +7,18 @@ import { BsDiagram3 } from 'react-icons/bs'
 type CollapsibleFlowDiagramProps = {
   children: React.ReactNode
   isDarkMode?: boolean
+  isExpanded?: boolean
+  onToggle?: () => void
 }
 
 export function CollapsibleFlowDiagram({
   children,
   isDarkMode = false,
+  isExpanded: controlledIsExpanded,
+  onToggle,
 }: CollapsibleFlowDiagramProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [internalIsExpanded, setInternalIsExpanded] = useState(false)
+  const isExpanded = controlledIsExpanded ?? internalIsExpanded
   const contentId = useId()
 
   return (
@@ -24,7 +29,13 @@ export function CollapsibleFlowDiagram({
     >
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          if (onToggle) {
+            onToggle()
+          } else {
+            setInternalIsExpanded(!internalIsExpanded)
+          }
+        }}
         className="w-full p-4 text-left"
         aria-expanded={isExpanded}
         aria-controls={contentId}

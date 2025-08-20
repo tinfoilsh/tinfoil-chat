@@ -87,6 +87,8 @@ type VerifierProps = {
   onVerificationUpdate?: (state: VerificationState) => void // Callback for state changes
   onVerificationComplete?: (success: boolean) => void // Callback when verification finishes
   isDarkMode?: boolean
+  flowDiagramExpanded?: boolean
+  onFlowDiagramToggle?: () => void
 }
 
 type VerificationStatus = 'error' | 'pending' | 'loading' | 'success'
@@ -193,6 +195,8 @@ export function Verifier({
   onVerificationUpdate,
   onVerificationComplete,
   isDarkMode = true,
+  flowDiagramExpanded,
+  onFlowDiagramToggle,
 }: VerifierProps) {
   const [isWasmLoaded, setIsWasmLoaded] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
@@ -447,7 +451,11 @@ export function Verifier({
         {/* Verification Content */}
         <div className="space-y-3 p-3 pb-6 sm:space-y-4 sm:p-4">
           {/* Verification Flow Diagram - Collapsible */}
-          <CollapsibleFlowDiagram isDarkMode={isDarkMode}>
+          <CollapsibleFlowDiagram
+            isDarkMode={isDarkMode}
+            isExpanded={flowDiagramExpanded}
+            onToggle={onFlowDiagramToggle}
+          >
             <VerificationFlow
               isDarkMode={isDarkMode}
               verificationStatus={verificationStatus}
