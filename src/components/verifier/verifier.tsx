@@ -498,54 +498,54 @@ export function Verifier({
               <LuExternalLink className="h-3.5 w-3.5" />
             </a>
           </p>
-        </div>
-        {/* Sticky buttons section */}
-        <div
-          className={`sticky top-0 z-10 ${isDarkMode ? 'bg-gray-900' : 'bg-white'} border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-200'} p-3 sm:p-4`}
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (!isVerifying) {
-                  void verifyAll()
-                }
-              }}
-              disabled={isVerifying}
-              className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium text-white transition-colors ${
-                isVerifying
-                  ? 'cursor-not-allowed bg-[#005050]/60'
-                  : 'bg-[#005050] hover:bg-[#004040]'
-              }`}
-            >
-              {isVerifying ? (
-                <AiOutlineLoading3Quarters className="h-4 w-4 animate-spin" />
-              ) : (
-                <LuRefreshCcwDot className="h-4 w-4" />
-              )}
-              {isVerifying ? 'Verifying...' : 'Verify Again'}
-            </button>
+          {/* Action buttons section */}
+          <div className="my-6">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  if (!isVerifying) {
+                    void verifyAll()
+                  }
+                }}
+                disabled={isVerifying}
+                className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                  isVerifying
+                    ? 'cursor-not-allowed border-gray-600 bg-gray-700 text-gray-400'
+                    : isDarkMode
+                      ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {isVerifying ? (
+                  <AiOutlineLoading3Quarters className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LuRefreshCcwDot className="h-4 w-4" />
+                )}
+                {isVerifying ? 'Verifying...' : 'Verify Again'}
+              </button>
 
-            <button
-              onClick={() =>
-                window.open(
-                  'https://github.com/tinfoilsh/verifier/',
-                  '_blank',
-                  'noopener,noreferrer',
-                )
-              }
-              className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <FaGithub className="h-4 w-4" />
-              View Code
-            </button>
+              <button
+                onClick={() =>
+                  window.open(
+                    'https://github.com/tinfoilsh/verifier/',
+                    '_blank',
+                    'noopener,noreferrer',
+                  )
+                }
+                className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
+                  isDarkMode
+                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <FaGithub className="h-4 w-4" />
+                View Code
+              </button>
+            </div>
           </div>
         </div>
         {/* Verification Content */}
-        <div className="space-y-3 p-3 pb-6 sm:space-y-4 sm:p-4">
+        <div className="space-y-3 px-3 pb-6 sm:space-y-4 sm:px-4">
           {/* Verification Flow Diagram - Collapsible */}
           <CollapsibleFlowDiagram
             isDarkMode={isDarkMode}
@@ -586,12 +586,6 @@ export function Verifier({
             repo={repo}
             githubHash={digest || undefined}
             isDarkMode={isDarkMode}
-            links={[
-              {
-                text: 'GitHub Release',
-                url: `https://github.com/${repo}/releases`,
-              },
-            ]}
           />
 
           <ProcessStep

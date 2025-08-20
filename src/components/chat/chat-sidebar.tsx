@@ -921,7 +921,7 @@ export function ChatSidebar({
                   .map((chat) => (
                     <div key={chat.id} className="relative">
                       <div
-                        onClick={async () => {
+                        onClick={() => {
                           // Don't allow selecting encrypted chats
                           if (chat.decryptionFailed) {
                             return
@@ -929,19 +929,6 @@ export function ChatSidebar({
 
                           handleChatSelect(chat.id)
 
-                          // Only close sidebar on mobile
-                          if (windowWidth < MOBILE_BREAKPOINT) {
-                            setIsOpen(false)
-                          }
-                        }}
-                        onTouchEnd={(e) => {
-                          // Prevent the click event from firing after touch
-                          e.preventDefault()
-                          // Don't allow selecting encrypted chats
-                          if (chat.decryptionFailed) {
-                            return
-                          }
-                          handleChatSelect(chat.id)
                           // Only close sidebar on mobile
                           if (windowWidth < MOBILE_BREAKPOINT) {
                             setIsOpen(false)

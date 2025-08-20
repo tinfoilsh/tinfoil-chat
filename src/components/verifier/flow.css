@@ -12,6 +12,12 @@
   transition: none !important;
 }
 
+/* Also disable for attestation node to prevent initial layout shift */
+.react-flow__node[data-id='attestation'] {
+  animation: none !important;
+  transition: none !important;
+}
+
 .react-flow__node[data-id='ai-model']:hover {
   transition:
     box-shadow 0.2s ease,

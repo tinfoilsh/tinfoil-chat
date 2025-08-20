@@ -1,11 +1,11 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
-import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useMemo, useState } from 'react'
+import { BsCopy } from 'react-icons/bs'
 import {
   FaFile,
   FaFileAlt,
@@ -117,18 +117,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
   const [isExpanded, setIsExpanded] = useState(false)
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
-  // Process the markdown to extract all paragraphs - moved before any conditional returns
-  const paragraphs = useMemo(
-    () =>
-      thoughts
-        .split('\n\n')
-        .filter((p) => p.trim() !== '')
-        .map((p) => p.trim()),
-    [thoughts],
-  )
-
   // Don't render if thoughts are empty and not actively thinking
-  // Also don't render if there are no thoughts
   if (
     shouldDiscard ||
     (!thoughts.trim() && !isThinking) ||
@@ -192,53 +181,21 @@ const ThoughtProcess = memo(function ThoughtProcess({
         style={{ overflow: 'hidden' }}
       >
         <div
-          className={`px-4 py-2 text-sm ${
+          className={`px-4 py-3 text-sm ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}
         >
-          <div className="w-full">
-            {paragraphs.map((paragraph, i) => (
-              <div key={i} className="relative mb-5">
-                {/* Connecting line between steps */}
-                {i < paragraphs.length - 1 && (
-                  <div
-                    className={`absolute bottom-[-20px] left-[7px] top-4 w-[1px] ${
-                      isDarkMode ? 'bg-gray-500' : 'bg-gray-300'
-                    }`}
-                  ></div>
-                )}
-                <div className="flex items-start">
-                  <div className="relative z-10 mr-2 flex-shrink-0">
-                    <div className="flex items-center justify-center">
-                      <span
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                          isDarkMode
-                            ? 'border-gray-500 text-gray-300'
-                            : 'border-gray-400 text-gray-600'
-                        } z-10 text-[10px] font-medium ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
-                        style={{ userSelect: 'none' }}
-                      >
-                        {i + 1}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="min-h-[24px] flex-1 pb-2">
-                    <ReactMarkdown
-                      remarkPlugins={remarkPlugins}
-                      rehypePlugins={rehypePlugins}
-                      components={{
-                        p: ({ children }: { children?: React.ReactNode }) => (
-                          <>{children}</>
-                        ),
-                      }}
-                    >
-                      {paragraph}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ReactMarkdown
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
+            components={{
+              p: ({ children }: { children?: React.ReactNode }) => (
+                <p className="mb-2 last:mb-0">{children}</p>
+              ),
+            }}
+          >
+            {thoughts}
+          </ReactMarkdown>
         </div>
       </motion.div>
     </div>
@@ -295,10 +252,11 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
         },
         table({ children, node, ...props }: any) {
           return (
-            <div className="my-4 overflow-x-auto">
+            <div className="my-4 w-full overflow-x-auto">
               <table
                 {...props}
-                className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+                className={`divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+                style={{ minWidth: 'max-content' }}
               >
                 {children}
               </table>
@@ -332,7 +290,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
           return (
             <th
               {...props}
-              className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
+              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
             >
               {children}
             </th>
@@ -342,7 +300,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
           return (
             <td
               {...props}
-              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-normal break-words`}
+              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-nowrap`}
             >
               {children}
             </td>
@@ -484,21 +442,23 @@ const ChatMessage = memo(function ChatMessage({
       )}
       {/* Only show content if it exists and is not just document content */}
       {message.content && (
-        <div className={`w-full px-4 py-2 ${isUser ? 'flex justify-end' : ''}`}>
+        <>
           <div
-            className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
-              isUser
-                ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-500'} rounded-2xl rounded-tr-sm px-4 py-2`
-                : ''
-            } overflow-hidden`}
+            className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
           >
-            <div className="flex items-center gap-2">
+            <div
+              className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
+                isUser
+                  ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
+                  : ''
+              } overflow-x-auto`}
+            >
               <div
-                className={`prose w-full max-w-none break-words text-base ${
+                className={`prose w-full max-w-none text-base ${
                   isDarkMode
                     ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
-                      ? 'text-white prose-headings:text-white prose-a:text-gray-200 hover:prose-a:text-gray-100 prose-strong:text-white prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
+                      ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
@@ -509,7 +469,36 @@ const ChatMessage = memo(function ChatMessage({
               </div>
             </div>
           </div>
-        </div>
+          {/* Copy button for assistant messages */}
+          {!isUser && (
+            <div className="mt-1 px-4">
+              <div className="group relative inline-block">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(message.content)
+                  }}
+                  className={`flex items-center justify-center rounded p-1.5 transition-colors ${
+                    isDarkMode
+                      ? 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                  }`}
+                  aria-label="Copy message"
+                >
+                  <BsCopy className="h-3.5 w-3.5" />
+                </button>
+                <span
+                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
+                    isDarkMode
+                      ? 'bg-gray-700 text-gray-200'
+                      : 'bg-gray-800 text-white'
+                  }`}
+                >
+                  Copy
+                </span>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -743,35 +732,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               }}
             >
               Each message is end‑to‑end encrypted and <em>only</em> processed
-              inside secure hardware enclaves.{' '}
-              <Link
-                href="https://docs.tinfoil.sh/resources/how-it-works"
-                className={`${
-                  isDarkMode
-                    ? 'text-gray-400 hover:text-gray-300'
-                    : 'text-gray-500 hover:text-gray-700'
-                } inline-flex items-center gap-1`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Learn more about how it works"
-              >
-                Learn more
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  aria-hidden="true"
-                  className="h-[0.95em] w-[0.95em]"
-                >
-                  <path
-                    d="M4 10h10m0 0-4-4m4 4-4 4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </Link>
+              inside secure hardware enclaves.
             </motion.p>
 
             {/* Model Selector - Desktop only */}
@@ -896,12 +857,13 @@ const WelcomeScreen = memo(function WelcomeScreen({
               </motion.div>
             )}
 
-            {/* Verification Status Display */}
+            {/* Verification Status Display - Compact mode on all screen sizes */}
             <div className="mt-4 md:mt-8">
               <VerificationStatusDisplay
                 isDarkMode={isDarkMode}
                 onOpenVerifier={openAndExpandVerifier}
                 verificationState={verificationState}
+                isCompact={true}
               />
             </div>
           </div>
@@ -959,11 +921,6 @@ export function ChatMessages({
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const maxMessages = useMaxMessages()
-
-  // Check if there's already a thinking message in the chat
-  const hasThinkingMessage = messages.some(
-    (msg) => (msg as MessageWithThoughts).isThinking,
-  )
 
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {

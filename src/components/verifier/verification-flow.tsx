@@ -12,7 +12,7 @@ import {
   type Edge,
   type Node,
 } from '@xyflow/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { FaUser } from 'react-icons/fa'
 import { FiGithub, FiKey, FiShield } from 'react-icons/fi'
 import { LuBrain, LuCpu } from 'react-icons/lu'
@@ -35,10 +35,11 @@ function VerificationFlowDiagram({
   isDarkMode,
   verificationStatus = 'idle',
 }: VerificationFlowProps) {
+  const [isReady, setIsReady] = useState(false)
   const initialNodes: (CustomNode | ContainerNodeType)[] = [
     {
       id: 'secure-hardware',
-      position: { x: 77, y: -360 },
+      position: { x: 77, y: -400 },
       data: {
         title: 'Secure Hardware Enclave',
         icon: <LuCpu className="h-5 w-5" />,
@@ -47,13 +48,13 @@ function VerificationFlowDiagram({
       type: 'container',
       style: {
         width: 280,
-        height: 160,
+        height: 220,
         zIndex: 0,
       },
     },
     {
       id: 'client',
-      position: { x: 130, y: 155 },
+      position: { x: 130, y: -20 },
       data: {
         title: 'Tinfoil Verifier',
         icon: <ShieldCheckIcon className="h-5 w-5" />,
@@ -65,7 +66,7 @@ function VerificationFlowDiagram({
     },
     {
       id: 'ai-model',
-      position: { x: 65, y: 65 },
+      position: { x: 65, y: 50 },
       data: {
         title: 'AI Model',
         icon: <LuBrain />,
@@ -79,17 +80,22 @@ function VerificationFlowDiagram({
     },
     {
       id: 'attestation',
-      position: { x: 95, y: -150 },
+      position: { x: 20, y: 130 },
       data: {
         title: 'Enclave Attestation',
         subtitle: 'Enclave Runtime Verification',
         icon: <FiShield />,
       },
       type: 'turbo',
+      parentId: 'secure-hardware',
+      extent: 'parent',
+      style: {
+        zIndex: 1,
+      },
     },
     {
       id: 'transparency',
-      position: { x: -40, y: 0 },
+      position: { x: -40, y: -150 },
       data: {
         title: 'Transparency Log',
         subtitle: 'Artifact Verification',
@@ -99,7 +105,7 @@ function VerificationFlowDiagram({
     },
     {
       id: 'github',
-      position: { x: 300, y: 0 },
+      position: { x: 300, y: -150 },
       data: {
         title: 'GitHub',
         subtitle: 'Source Code',
@@ -109,7 +115,7 @@ function VerificationFlowDiagram({
     },
     {
       id: 'user',
-      position: { x: 144, y: 280 },
+      position: { x: 144, y: 100 },
       data: {
         title: 'This Chat',
         icon: <FaUser />,
@@ -122,22 +128,6 @@ function VerificationFlowDiagram({
   ]
 
   const initialEdges: Edge[] = [
-    {
-      id: 'secure-hardware-attestation',
-      source: 'secure-hardware',
-      target: 'attestation',
-      type: 'turbo',
-      sourceHandle: 'source-bottom',
-      targetHandle: 'target-top',
-      animated: true,
-      style: {
-        stroke: isDarkMode
-          ? 'rgba(255, 255, 255, 0.4)'
-          : 'rgba(107, 114, 128, 0.5)',
-        strokeDasharray: '5 5',
-        strokeWidth: 1.5,
-      },
-    },
     {
       id: 'attestation-client',
       source: 'attestation',
@@ -278,8 +268,12 @@ function VerificationFlowDiagram({
         }
       `}</style>
       <div
-        className={`verification-flow-container h-[400px] w-full ${isDarkMode ? 'dark' : ''}`}
-        style={{ fontSize: '120%' }}
+        className={`verification-flow-container h-[280px] w-full ${isDarkMode ? 'dark' : ''}`}
+        style={{
+          fontSize: '120%',
+          opacity: isReady ? 1 : 0,
+          transition: 'opacity 120ms ease',
+        }}
       >
         <ReactFlow
           nodes={nodes}
@@ -289,8 +283,14 @@ function VerificationFlowDiagram({
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
-          fitView
-          fitViewOptions={{ padding: 0, maxZoom: 1 }}
+          fitView={false}
+          onInit={(instance) => {
+            try {
+              instance.fitView({ padding: 0.05 })
+            } finally {
+              requestAnimationFrame(() => setIsReady(true))
+            }
+          }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
@@ -342,7 +342,7 @@ export function VerificationFlow({
   verificationStatus,
 }: VerificationFlowProps) {
   return (
-    <div className="px-4 py-0">
+    <div className="px-2 py-0">
       <div className="overflow-hidden rounded-lg bg-transparent">
         <VerificationFlowWrapper
           isDarkMode={isDarkMode}
