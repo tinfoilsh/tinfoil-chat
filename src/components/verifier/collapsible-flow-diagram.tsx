@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { BsDiagram3 } from 'react-icons/bs'
 
 type CollapsibleFlowDiagramProps = {
@@ -14,6 +14,7 @@ export function CollapsibleFlowDiagram({
   isDarkMode = false,
 }: CollapsibleFlowDiagramProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const contentId = useId()
 
   return (
     <div
@@ -25,7 +26,7 @@ export function CollapsibleFlowDiagram({
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full p-4 text-left"
         aria-expanded={isExpanded}
-        aria-controls="flow-diagram-content"
+        aria-controls={contentId}
       >
         <div className="flex flex-row items-center gap-3 md:gap-4">
           <div className="flex items-center">
@@ -69,7 +70,7 @@ export function CollapsibleFlowDiagram({
 
       {isExpanded && (
         <div
-          id="flow-diagram-content"
+          id={contentId}
           className={`border-t ${
             isDarkMode ? 'border-gray-800' : 'border-gray-200'
           }`}
