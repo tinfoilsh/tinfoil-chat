@@ -208,21 +208,45 @@ function VerificationFlowDiagram({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const reactFlowInstance = useReactFlow()
 
-  // Update edge styles when theme changes
+  // Update edge styles when theme or verification status changes
   useEffect(() => {
     setEdges((eds) =>
       eds.map((edge) => ({
         ...edge,
+        animated: verificationStatus === 'verifying',
         style: {
-          stroke: isDarkMode
-            ? 'rgba(255, 255, 255, 0.4)'
-            : 'rgba(107, 114, 128, 0.5)',
-          strokeDasharray: '5 5',
-          strokeWidth: 1.5,
+          stroke:
+            verificationStatus === 'success'
+              ? 'rgba(16, 185, 129, 0.6)'
+              : verificationStatus === 'error'
+                ? 'rgba(239, 68, 68, 0.6)'
+                : isDarkMode
+                  ? 'rgba(255, 255, 255, 0.4)'
+                  : 'rgba(107, 114, 128, 0.5)',
+          strokeDasharray: verificationStatus === 'verifying' ? '5 5' : '5 5',
+          strokeWidth: verificationStatus === 'verifying' ? 2 : 1.5,
         },
       })),
     )
-  }, [isDarkMode, setEdges])
+  }, [isDarkMode, verificationStatus, setEdges])
+
+  // Update node styles when verification status changes
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === 'client') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              verificationStatus,
+            },
+          }
+        }
+        return node
+      }),
+    )
+  }, [verificationStatus, setNodes])
 
   const nodeTypes = {
     turbo: TurboNode,
