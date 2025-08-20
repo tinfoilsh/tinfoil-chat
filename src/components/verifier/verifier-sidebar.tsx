@@ -1,5 +1,4 @@
-import { XMarkIcon } from '@heroicons/react/24/outline'
-import Image from 'next/image'
+import { ShieldCheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { useRef, useState } from 'react'
 import { AiOutlineLoading3Quarters } from 'react-icons/ai'
 import { FaGithub } from 'react-icons/fa'
@@ -53,12 +52,10 @@ export function VerifierSidebar({
           } p-4`}
         >
           <div className="flex items-center gap-2">
-            <Image
-              src="/tinfoil.webp"
-              alt="Tinfoil logo"
-              width={24}
-              height={24}
-              className="flex-shrink-0"
+            <ShieldCheckIcon
+              className={`h-6 w-6 ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}
             />
             <span
               className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
