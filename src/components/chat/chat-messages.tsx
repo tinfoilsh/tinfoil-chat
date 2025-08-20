@@ -1,7 +1,6 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
-import { Link } from '@/components/link'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
@@ -733,35 +732,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
               }}
             >
               Each message is end‑to‑end encrypted and <em>only</em> processed
-              inside secure hardware enclaves.{' '}
-              <Link
-                href="https://docs.tinfoil.sh/resources/how-it-works"
-                className={`${
-                  isDarkMode
-                    ? 'text-gray-400 hover:text-gray-300'
-                    : 'text-gray-500 hover:text-gray-700'
-                } inline-flex items-center gap-1`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Learn more about how it works"
-              >
-                Learn more
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  aria-hidden="true"
-                  className="h-[0.95em] w-[0.95em]"
-                >
-                  <path
-                    d="M4 10h10m0 0-4-4m4 4-4 4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </Link>
+              inside secure hardware enclaves.
             </motion.p>
 
             {/* Model Selector - Desktop only */}
@@ -886,12 +857,13 @@ const WelcomeScreen = memo(function WelcomeScreen({
               </motion.div>
             )}
 
-            {/* Verification Status Display */}
+            {/* Verification Status Display - Compact mode on all screen sizes */}
             <div className="mt-4 md:mt-8">
               <VerificationStatusDisplay
                 isDarkMode={isDarkMode}
                 onOpenVerifier={openAndExpandVerifier}
                 verificationState={verificationState}
+                isCompact={true}
               />
             </div>
           </div>
@@ -949,11 +921,6 @@ export function ChatMessages({
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const maxMessages = useMaxMessages()
-
-  // Check if there's already a thinking message in the chat
-  const hasThinkingMessage = messages.some(
-    (msg) => (msg as MessageWithThoughts).isThinking,
-  )
 
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {

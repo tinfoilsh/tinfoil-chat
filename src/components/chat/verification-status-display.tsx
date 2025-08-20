@@ -23,6 +23,7 @@ type VerificationStatusDisplayProps = {
     runtime: { status: string }
     security: { status: string }
   }
+  isCompact?: boolean
 }
 
 export const VerificationStatusDisplay = memo(
@@ -30,6 +31,7 @@ export const VerificationStatusDisplay = memo(
     isDarkMode,
     onOpenVerifier,
     verificationState,
+    isCompact = false,
   }: VerificationStatusDisplayProps) {
     const [isAnimating, setIsAnimating] = useState(false)
 
@@ -113,6 +115,76 @@ export const VerificationStatusDisplay = memo(
       }
     }
 
+    // Compact mode for inline display
+    if (isCompact) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, x: 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+        >
+          <button
+            onClick={onOpenVerifier}
+            className={`group transition-opacity hover:opacity-100 ${
+              isLoading ? 'opacity-100' : 'opacity-70'
+            }`}
+          >
+            {/* Compact Header Only */}
+            <div className="flex items-center gap-2">
+              {hasError ? (
+                <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
+              ) : (
+                <motion.div
+                  animate={
+                    isAnimating
+                      ? {
+                          rotate: [0, 5, -5, 0],
+                        }
+                      : {}
+                  }
+                  transition={{
+                    duration: 2,
+                    repeat: isAnimating ? Infinity : 0,
+                    repeatDelay: 1,
+                  }}
+                >
+                  <ShieldCheckIcon
+                    className={`h-4 w-4 ${
+                      isComplete
+                        ? 'text-emerald-500'
+                        : isDarkMode
+                          ? 'text-gray-400'
+                          : 'text-gray-500'
+                    }`}
+                  />
+                </motion.div>
+              )}
+              <span
+                className={`text-xs font-medium ${
+                  isComplete
+                    ? 'text-emerald-500'
+                    : hasError
+                      ? 'text-red-500'
+                      : isDarkMode
+                        ? 'text-gray-300'
+                        : 'text-gray-600'
+                }`}
+              >
+                {hasError
+                  ? 'Security verification failed'
+                  : isComplete
+                    ? 'Security verification succeeded'
+                    : isLoading
+                      ? 'Verifying security...'
+                      : 'Verify security →'}
+              </span>
+            </div>
+          </button>
+        </motion.div>
+      )
+    }
+
+    // Full mode for standalone display
     return (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
