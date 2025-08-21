@@ -4,6 +4,7 @@ import { cloudSync } from '../cloud/cloud-sync'
 import { r2Storage } from '../cloud/r2-storage'
 import { streamingTracker } from '../cloud/streaming-tracker'
 import { encryptionService } from '../encryption/encryption-service'
+import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
 import { migrationEvents } from './migration-events'
@@ -216,6 +217,10 @@ export class ChatStorageService {
 
   async deleteChat(id: string): Promise<void> {
     await this.initialize()
+
+    // Mark as deleted to prevent re-sync
+    deletedChatsTracker.markAsDeleted(id)
+
     await indexedDBStorage.deleteChat(id)
 
     // Also delete from cloud storage (non-blocking)
