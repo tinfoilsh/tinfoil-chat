@@ -1233,7 +1233,7 @@ function ChatListItem({
         </div>
 
         {!isEditing && (
-          <div className="ml-2 flex opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="ml-2 flex opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
             {!chat.decryptionFailed && isPremium && (
               <button
                 className={`mr-1 rounded p-1 transition-colors ${

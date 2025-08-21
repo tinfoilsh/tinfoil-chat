@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useMemo, useState } from 'react'
-import { BsCopy } from 'react-icons/bs'
+import { BsCheckLg, BsCopy } from 'react-icons/bs'
 import {
   FaFile,
   FaFileAlt,
@@ -106,15 +106,35 @@ const ThoughtProcess = memo(function ThoughtProcess({
   isThinking = false,
   shouldDiscard = false,
   isCompleted = false,
+  messageId,
+  expandedThoughtsState,
+  setExpandedThoughtsState,
 }: {
   thoughts: string
   isDarkMode: boolean
   isThinking?: boolean
   shouldDiscard?: boolean
   isCompleted?: boolean
+  messageId?: string
+  expandedThoughtsState?: Record<string, boolean>
+  setExpandedThoughtsState?: React.Dispatch<
+    React.SetStateAction<Record<string, boolean>>
+  >
 }) {
-  // Always start collapsed - user must click to expand
-  const [isExpanded, setIsExpanded] = useState(false)
+  // Use lifted state if available, otherwise local state
+  const isExpanded =
+    messageId && expandedThoughtsState
+      ? (expandedThoughtsState[messageId] ?? false)
+      : false
+
+  const handleToggle = () => {
+    if (messageId && setExpandedThoughtsState) {
+      setExpandedThoughtsState((prevState) => ({
+        ...prevState,
+        [messageId]: !prevState[messageId],
+      }))
+    }
+  }
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
   // Don't render if thoughts are empty and not actively thinking
@@ -133,7 +153,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
       }`}
     >
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleToggle}
         className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
           isDarkMode
             ? 'text-gray-200 hover:bg-gray-600/50'
@@ -320,14 +340,21 @@ const ChatMessage = memo(function ChatMessage({
   shouldDiscardThoughts = false,
   isLastMessage = false,
   isWaitingForResponse = false,
+  expandedThoughtsState,
+  setExpandedThoughtsState,
 }: {
   message: MessageWithThoughts
   isDarkMode: boolean
   shouldDiscardThoughts?: boolean
   isLastMessage?: boolean
   isWaitingForResponse?: boolean
+  expandedThoughtsState?: Record<string, boolean>
+  setExpandedThoughtsState?: React.Dispatch<
+    React.SetStateAction<Record<string, boolean>>
+  >
 }) {
   const isUser = message.role === 'user'
+  const [isCopied, setIsCopied] = useState(false)
 
   // Check if this is a completed thought-only message
   const isCompletedThought = Boolean(
@@ -437,6 +464,9 @@ const ChatMessage = memo(function ChatMessage({
             isThinking={message.isThinking}
             shouldDiscard={shouldDiscardThoughts}
             isCompleted={isCompletedThought}
+            messageId={`${message.timestamp}-${message.role}`}
+            expandedThoughtsState={expandedThoughtsState}
+            setExpandedThoughtsState={setExpandedThoughtsState}
           />
         </div>
       )}
@@ -472,30 +502,30 @@ const ChatMessage = memo(function ChatMessage({
           {/* Copy button for assistant messages */}
           {!isUser && (
             <div className="mt-1 px-4">
-              <div className="group relative inline-block">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(message.content)
-                  }}
-                  className={`flex items-center justify-center rounded p-1.5 transition-colors ${
-                    isDarkMode
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(message.content)
+                  setIsCopied(true)
+                  setTimeout(() => setIsCopied(false), 2000)
+                }}
+                className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-all ${
+                  isCopied
+                    ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
+                    : isDarkMode
                       ? 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
                       : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                  }`}
-                  aria-label="Copy message"
-                >
+                }`}
+                aria-label="Copy message"
+              >
+                {isCopied ? (
+                  <>
+                    <BsCheckLg className="h-3.5 w-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
                   <BsCopy className="h-3.5 w-3.5" />
-                </button>
-                <span
-                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-                    isDarkMode
-                      ? 'bg-gray-700 text-gray-200'
-                      : 'bg-gray-800 text-white'
-                  }`}
-                >
-                  Copy
-                </span>
-              </div>
+                )}
+              </button>
             </div>
           )}
         </>
@@ -920,6 +950,9 @@ export function ChatMessages({
   handleLabelClick,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
+  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
+    Record<string, boolean>
+  >({})
   const maxMessages = useMaxMessages()
 
   // Separate messages into archived and live sections - memoize this calculation
@@ -995,6 +1028,8 @@ export function ChatMessages({
                 shouldDiscardThoughts={false}
                 isLastMessage={false}
                 isWaitingForResponse={false}
+                expandedThoughtsState={expandedThoughtsState}
+                setExpandedThoughtsState={setExpandedThoughtsState}
               />
             ))}
           </div>
@@ -1013,6 +1048,8 @@ export function ChatMessages({
           shouldDiscardThoughts={false}
           isLastMessage={i === liveMessages.length - 1}
           isWaitingForResponse={false}
+          expandedThoughtsState={expandedThoughtsState}
+          setExpandedThoughtsState={setExpandedThoughtsState}
         />
       ))}
       {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
