@@ -109,12 +109,21 @@ class DeletedChatsTracker {
   getDeletedIds(): string[] {
     const now = Date.now()
     const validIds: string[] = []
+    const expiredIds: string[] = []
 
     this.deletedChats.forEach((deletedAt, chatId) => {
       if (now - deletedAt < EXPIRY_TIME) {
         validIds.push(chatId)
+      } else {
+        expiredIds.push(chatId)
       }
     })
+
+    // Remove expired entries from memory
+    if (expiredIds.length > 0) {
+      expiredIds.forEach((id) => this.deletedChats.delete(id))
+      this.saveToStorage()
+    }
 
     return validIds
   }
