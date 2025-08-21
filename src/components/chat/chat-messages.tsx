@@ -117,7 +117,9 @@ const ThoughtProcess = memo(function ThoughtProcess({
   isCompleted?: boolean
   messageId?: string
   expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: (state: Record<string, boolean>) => void
+  setExpandedThoughtsState?: React.Dispatch<
+    React.SetStateAction<Record<string, boolean>>
+  >
 }) {
   // Use lifted state if available, otherwise local state
   const isExpanded =
@@ -126,11 +128,11 @@ const ThoughtProcess = memo(function ThoughtProcess({
       : false
 
   const handleToggle = () => {
-    if (messageId && setExpandedThoughtsState && expandedThoughtsState) {
-      setExpandedThoughtsState({
-        ...expandedThoughtsState,
-        [messageId]: !isExpanded,
-      })
+    if (messageId && setExpandedThoughtsState) {
+      setExpandedThoughtsState((prevState) => ({
+        ...prevState,
+        [messageId]: !prevState[messageId],
+      }))
     }
   }
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
@@ -347,7 +349,9 @@ const ChatMessage = memo(function ChatMessage({
   isLastMessage?: boolean
   isWaitingForResponse?: boolean
   expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: (state: Record<string, boolean>) => void
+  setExpandedThoughtsState?: React.Dispatch<
+    React.SetStateAction<Record<string, boolean>>
+  >
 }) {
   const isUser = message.role === 'user'
   const [isCopied, setIsCopied] = useState(false)
