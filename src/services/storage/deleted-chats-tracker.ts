@@ -52,10 +52,14 @@ class DeletedChatsTracker {
       }
     })
 
-    if (entries.length > 0) {
-      sessionStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(entries))
-    } else {
-      sessionStorage.removeItem(DELETED_CHATS_KEY)
+    try {
+      if (entries.length > 0) {
+        sessionStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(entries))
+      } else {
+        sessionStorage.removeItem(DELETED_CHATS_KEY)
+      }
+    } catch (error) {
+      // Silently fail - storage may be unavailable or full
     }
   }
 
