@@ -1,4 +1,5 @@
 import { profileSync } from '@/services/cloud/profile-sync'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { logError, logInfo } from '@/utils/error-handling'
 
@@ -31,6 +32,13 @@ export async function performSignoutCleanup(): Promise<void> {
     logInfo('Cleared profile sync cache', {
       component: 'signoutCleanup',
       action: 'clearProfileCache',
+    })
+
+    // Clear deleted chats tracker
+    deletedChatsTracker.clear()
+    logInfo('Cleared deleted chats tracker', {
+      component: 'signoutCleanup',
+      action: 'clearDeletedChatsTracker',
     })
 
     // Clear specific localStorage items first
