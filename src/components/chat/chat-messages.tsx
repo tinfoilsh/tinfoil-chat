@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useMemo, useState } from 'react'
-import { BsCopy } from 'react-icons/bs'
+import { BsCheckLg, BsCopy } from 'react-icons/bs'
 import {
   FaFile,
   FaFileAlt,
@@ -350,6 +350,7 @@ const ChatMessage = memo(function ChatMessage({
   setExpandedThoughtsState?: (state: Record<string, boolean>) => void
 }) {
   const isUser = message.role === 'user'
+  const [isCopied, setIsCopied] = useState(false)
 
   // Check if this is a completed thought-only message
   const isCompletedThought = Boolean(
@@ -497,30 +498,30 @@ const ChatMessage = memo(function ChatMessage({
           {/* Copy button for assistant messages */}
           {!isUser && (
             <div className="mt-1 px-4">
-              <div className="group relative inline-block">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(message.content)
-                  }}
-                  className={`flex items-center justify-center rounded p-1.5 transition-colors ${
-                    isDarkMode
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(message.content)
+                  setIsCopied(true)
+                  setTimeout(() => setIsCopied(false), 2000)
+                }}
+                className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-all ${
+                  isCopied
+                    ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
+                    : isDarkMode
                       ? 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
                       : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                  }`}
-                  aria-label="Copy message"
-                >
+                }`}
+                aria-label="Copy message"
+              >
+                {isCopied ? (
+                  <>
+                    <BsCheckLg className="h-3.5 w-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
                   <BsCopy className="h-3.5 w-3.5" />
-                </button>
-                <span
-                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-                    isDarkMode
-                      ? 'bg-gray-700 text-gray-200'
-                      : 'bg-gray-800 text-white'
-                  }`}
-                >
-                  Copy
-                </span>
-              </div>
+                )}
+              </button>
             </div>
           )}
         </>
