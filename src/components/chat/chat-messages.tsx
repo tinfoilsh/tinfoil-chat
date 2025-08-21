@@ -106,15 +106,33 @@ const ThoughtProcess = memo(function ThoughtProcess({
   isThinking = false,
   shouldDiscard = false,
   isCompleted = false,
+  messageId,
+  expandedThoughtsState,
+  setExpandedThoughtsState,
 }: {
   thoughts: string
   isDarkMode: boolean
   isThinking?: boolean
   shouldDiscard?: boolean
   isCompleted?: boolean
+  messageId?: string
+  expandedThoughtsState?: Record<string, boolean>
+  setExpandedThoughtsState?: (state: Record<string, boolean>) => void
 }) {
-  // Always start collapsed - user must click to expand
-  const [isExpanded, setIsExpanded] = useState(false)
+  // Use lifted state if available, otherwise local state
+  const isExpanded =
+    messageId && expandedThoughtsState
+      ? (expandedThoughtsState[messageId] ?? false)
+      : false
+
+  const handleToggle = () => {
+    if (messageId && setExpandedThoughtsState && expandedThoughtsState) {
+      setExpandedThoughtsState({
+        ...expandedThoughtsState,
+        [messageId]: !isExpanded,
+      })
+    }
+  }
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
   // Don't render if thoughts are empty and not actively thinking
@@ -133,7 +151,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
       }`}
     >
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleToggle}
         className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
           isDarkMode
             ? 'text-gray-200 hover:bg-gray-600/50'
@@ -320,12 +338,16 @@ const ChatMessage = memo(function ChatMessage({
   shouldDiscardThoughts = false,
   isLastMessage = false,
   isWaitingForResponse = false,
+  expandedThoughtsState,
+  setExpandedThoughtsState,
 }: {
   message: MessageWithThoughts
   isDarkMode: boolean
   shouldDiscardThoughts?: boolean
   isLastMessage?: boolean
   isWaitingForResponse?: boolean
+  expandedThoughtsState?: Record<string, boolean>
+  setExpandedThoughtsState?: (state: Record<string, boolean>) => void
 }) {
   const isUser = message.role === 'user'
 
@@ -437,6 +459,9 @@ const ChatMessage = memo(function ChatMessage({
             isThinking={message.isThinking}
             shouldDiscard={shouldDiscardThoughts}
             isCompleted={isCompletedThought}
+            messageId={`${message.timestamp}-${message.role}`}
+            expandedThoughtsState={expandedThoughtsState}
+            setExpandedThoughtsState={setExpandedThoughtsState}
           />
         </div>
       )}
@@ -920,6 +945,9 @@ export function ChatMessages({
   handleLabelClick,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
+  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
+    Record<string, boolean>
+  >({})
   const maxMessages = useMaxMessages()
 
   // Separate messages into archived and live sections - memoize this calculation
@@ -995,6 +1023,8 @@ export function ChatMessages({
                 shouldDiscardThoughts={false}
                 isLastMessage={false}
                 isWaitingForResponse={false}
+                expandedThoughtsState={expandedThoughtsState}
+                setExpandedThoughtsState={setExpandedThoughtsState}
               />
             ))}
           </div>
@@ -1013,6 +1043,8 @@ export function ChatMessages({
           shouldDiscardThoughts={false}
           isLastMessage={i === liveMessages.length - 1}
           isWaitingForResponse={false}
+          expandedThoughtsState={expandedThoughtsState}
+          setExpandedThoughtsState={setExpandedThoughtsState}
         />
       ))}
       {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
