@@ -1,6 +1,7 @@
 import { PAGINATION } from '@/config'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
+import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
 import { streamingTracker } from './streaming-tracker'
@@ -257,6 +258,16 @@ export class CloudSyncService {
 
       // Process remote chats
       for (const remoteChat of remoteConversations) {
+        // Skip if this chat was recently deleted
+        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
+          logInfo('Skipping sync for recently deleted chat', {
+            component: 'CloudSync',
+            action: 'syncAllChats',
+            metadata: { chatId: remoteChat.id },
+          })
+          continue
+        }
+
         const localChat = localChatMap.get(remoteChat.id)
 
         // Process if:
@@ -375,6 +386,16 @@ export class CloudSyncService {
 
     try {
       await r2Storage.deleteChat(chatId)
+
+      // Successfully deleted from cloud, can remove from tracker
+      // This allows the chat to be re-created with the same ID if needed
+      deletedChatsTracker.removeFromDeleted(chatId)
+
+      logInfo('Chat successfully deleted from cloud', {
+        component: 'CloudSync',
+        action: 'deleteFromCloud',
+        metadata: { chatId },
+      })
     } catch (error) {
       // Silently fail if no auth token set
       if (
@@ -437,6 +458,16 @@ export class CloudSyncService {
 
       // Process all chats in parallel for better performance
       const processPromises = chatsToProcess.map(async (remoteChat) => {
+        // Skip if this chat was recently deleted
+        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
+          logInfo('Skipping load for recently deleted chat', {
+            component: 'CloudSync',
+            action: 'loadChatsWithPagination',
+            metadata: { chatId: remoteChat.id },
+          })
+          return null
+        }
+
         if (!remoteChat.content) return null
 
         try {

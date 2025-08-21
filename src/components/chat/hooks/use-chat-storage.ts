@@ -1,4 +1,5 @@
 import { chatStorage } from '@/services/storage/chat-storage'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -80,12 +81,15 @@ export function useChatStorage({
         // Create a map to track chats by ID for deduplication
         const chatMap = new Map<string, Chat>()
 
-        // First add saved chats
+        // First add saved chats (filtering out recently deleted ones)
         savedChats.forEach((chat: Chat) => {
-          chatMap.set(chat.id, {
-            ...chat,
-            createdAt: new Date(chat.createdAt),
-          })
+          // Skip if this chat was recently deleted
+          if (!deletedChatsTracker.isDeleted(chat.id)) {
+            chatMap.set(chat.id, {
+              ...chat,
+              createdAt: new Date(chat.createdAt),
+            })
+          }
         })
 
         // Then add blank chats and recently created chats that aren't saved yet
@@ -179,10 +183,12 @@ export function useChatStorage({
           if (!isMounted) return
 
           if (savedChats.length > 0) {
-            const parsedChats = savedChats.map((chat) => ({
-              ...chat,
-              createdAt: new Date(chat.createdAt),
-            }))
+            const parsedChats = savedChats
+              .filter((chat) => !deletedChatsTracker.isDeleted(chat.id))
+              .map((chat) => ({
+                ...chat,
+                createdAt: new Date(chat.createdAt),
+              }))
             // Find all usable (non-encrypted) chats
             const usableChats = parsedChats.filter(
               (chat) => !(chat as any).decryptionFailed,
@@ -272,6 +278,9 @@ export function useChatStorage({
   // Delete a chat
   const deleteChat = useCallback(
     (chatId: string) => {
+      // Mark as deleted immediately to prevent re-sync
+      deletedChatsTracker.markAsDeleted(chatId)
+
       setChats((prevChats) => {
         const newChats = prevChats.filter((chat) => chat.id !== chatId)
 
