@@ -65,6 +65,7 @@ function useMathPlugins() {
 type MessageWithThoughts = Message & {
   thoughts?: string
   isThinking?: boolean
+  thinkingDuration?: number
 }
 
 type ChatMessagesProps = {
@@ -105,7 +106,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
   isDarkMode,
   isThinking = false,
   shouldDiscard = false,
-  isCompleted = false,
+  thinkingDuration,
   messageId,
   expandedThoughtsState,
   setExpandedThoughtsState,
@@ -114,7 +115,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
   isDarkMode: boolean
   isThinking?: boolean
   shouldDiscard?: boolean
-  isCompleted?: boolean
+  thinkingDuration?: number
   messageId?: string
   expandedThoughtsState?: Record<string, boolean>
   setExpandedThoughtsState?: React.Dispatch<
@@ -162,15 +163,22 @@ const ThoughtProcess = memo(function ThoughtProcess({
       >
         <div className="flex items-center gap-2">
           <LuBrain className="h-5 w-5 opacity-70" />
-          <span className="text-sm font-medium">
-            {isThinking
-              ? 'Thinking'
-              : isCompleted
-                ? 'Thoughts'
-                : 'Thought Process'}
-          </span>
-          {isThinking && (
-            <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
+          {isThinking ? (
+            <>
+              <span className="text-sm font-medium">Thinking</span>
+              <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-bold">Thoughts</span>
+              {thinkingDuration && (
+                <span className="text-sm font-normal opacity-70">
+                  {thinkingDuration < 60
+                    ? `${thinkingDuration.toFixed(1)} seconds`
+                    : `${(thinkingDuration / 60).toFixed(1)} minutes`}
+                </span>
+              )}
+            </div>
           )}
         </div>
         <svg
@@ -356,11 +364,6 @@ const ChatMessage = memo(function ChatMessage({
   const isUser = message.role === 'user'
   const [isCopied, setIsCopied] = useState(false)
 
-  // Check if this is a completed thought-only message
-  const isCompletedThought = Boolean(
-    !message.content && message.thoughts && !message.isThinking,
-  )
-
   // Only show thoughts if we have actual thoughts content or are actively thinking
   const shouldShowThoughts =
     !shouldDiscardThoughts &&
@@ -463,7 +466,7 @@ const ChatMessage = memo(function ChatMessage({
             isDarkMode={isDarkMode}
             isThinking={message.isThinking}
             shouldDiscard={shouldDiscardThoughts}
-            isCompleted={isCompletedThought}
+            thinkingDuration={message.thinkingDuration}
             messageId={`${message.timestamp}-${message.role}`}
             expandedThoughtsState={expandedThoughtsState}
             setExpandedThoughtsState={setExpandedThoughtsState}
