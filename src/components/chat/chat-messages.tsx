@@ -499,8 +499,8 @@ const ChatMessage = memo(function ChatMessage({
               </div>
             </div>
           </div>
-          {/* Copy button for assistant messages */}
-          {!isUser && (
+          {/* Copy button for assistant messages - hidden during streaming */}
+          {!isUser && !(isLastMessage && isWaitingForResponse) && (
             <div className="mt-1 px-4">
               <button
                 onClick={() => {
@@ -1027,7 +1027,7 @@ export function ChatMessages({
                 isDarkMode={isDarkMode}
                 shouldDiscardThoughts={false}
                 isLastMessage={false}
-                isWaitingForResponse={false}
+                isWaitingForResponse={isWaitingForResponse}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={setExpandedThoughtsState}
               />
@@ -1047,7 +1047,7 @@ export function ChatMessages({
           isDarkMode={isDarkMode}
           shouldDiscardThoughts={false}
           isLastMessage={i === liveMessages.length - 1}
-          isWaitingForResponse={false}
+          isWaitingForResponse={isWaitingForResponse}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={setExpandedThoughtsState}
         />
