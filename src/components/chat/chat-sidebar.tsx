@@ -23,7 +23,7 @@ import {
 } from '@/services/storage/indexed-db'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -248,13 +248,16 @@ export function ChatSidebar({
   const [, forceUpdate] = useState({})
 
   // Custom setter that updates user-scoped state and triggers re-render
-  const setNextToken = (token: string | undefined) => {
-    if (user?.id) {
-      const userState = getUserPaginationState(user.id)
-      userState.nextToken = token
-      forceUpdate({}) // Trigger re-render
-    }
-  }
+  const setNextToken = useCallback(
+    (token: string | undefined) => {
+      if (user?.id) {
+        const userState = getUserPaginationState(user.id)
+        userState.nextToken = token
+        forceUpdate({}) // Trigger re-render
+      }
+    },
+    [user?.id],
+  )
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync

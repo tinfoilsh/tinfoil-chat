@@ -78,6 +78,16 @@ export function useChatMessaging({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const currentChatIdRef = useRef<string>(currentChat?.id || '')
   const isStreamingRef = useRef(false)
+  const thinkingStartTimeRef = useRef<number | null>(null)
+
+  // Helper to calculate thinking duration and reset timer
+  const getThinkingDuration = () => {
+    const duration = thinkingStartTimeRef.current
+      ? (Date.now() - thinkingStartTimeRef.current) / 1000
+      : undefined
+    thinkingStartTimeRef.current = null
+    return duration
+  }
 
   // Override model selection for free users - use first available free model
   const effectiveModel = !storeHistory
@@ -170,6 +180,7 @@ export function useChatMessaging({
     }
     setLoadingState('idle')
     setIsThinking(false)
+    thinkingStartTimeRef.current = null
 
     // If we're in thinking mode, remove the last message if it's a thinking message
     if (isStreamingRef.current) {
@@ -514,6 +525,7 @@ export function useChatMessaging({
             else if (isInThinkingMode && thoughtsBuffer.trim()) {
               isInThinkingMode = false
               setIsThinking(false)
+              const thinkingDuration = getThinkingDuration()
 
               if (isUsingReasoningFormat) {
                 // For reasoning_content format, keep thoughts as thoughts
@@ -523,6 +535,7 @@ export function useChatMessaging({
                   thoughts: thoughtsBuffer.trim(),
                   timestamp: new Date(),
                   isThinking: false,
+                  thinkingDuration,
                 }
               } else {
                 // For <think> format, convert thoughts to content
@@ -531,6 +544,7 @@ export function useChatMessaging({
                   content: thoughtsBuffer.trim(), // Convert thoughts to content
                   timestamp: new Date(),
                   isThinking: false,
+                  thinkingDuration,
                 }
               }
               if (currentChatIdRef.current === updatedChat.id) {
@@ -593,6 +607,7 @@ export function useChatMessaging({
                 isUsingReasoningFormat = true
                 isInThinkingMode = true
                 setIsThinking(true)
+                thinkingStartTimeRef.current = Date.now()
                 setIsWaitingForResponse(false)
                 isFirstChunk = false // No need to buffer for reasoning_content
 
@@ -630,6 +645,7 @@ export function useChatMessaging({
                 if (content && isInThinkingMode) {
                   isInThinkingMode = false
                   setIsThinking(false)
+                  const thinkingDuration = getThinkingDuration()
 
                   // Finalize the thoughts and start regular content
                   assistantMessage = {
@@ -637,6 +653,7 @@ export function useChatMessaging({
                     thoughts: thoughtsBuffer.trim() || undefined,
                     content: content,
                     isThinking: false,
+                    thinkingDuration,
                   }
                 } else if (reasoningContent) {
                   // Still in thinking mode with new reasoning content
@@ -677,6 +694,12 @@ export function useChatMessaging({
                 if (isInThinkingMode) {
                   isInThinkingMode = false
                   setIsThinking(false)
+                  const thinkingDuration = getThinkingDuration()
+                  // Update the assistant message with the duration
+                  assistantMessage = {
+                    ...assistantMessage,
+                    thinkingDuration,
+                  }
                 }
 
                 // Update with content (thoughts already set above)
@@ -721,6 +744,7 @@ export function useChatMessaging({
                     if (content.includes('<think>')) {
                       isInThinkingMode = true
                       setIsThinking(true)
+                      thinkingStartTimeRef.current = Date.now()
                       content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
                     }
 
@@ -740,6 +764,7 @@ export function useChatMessaging({
               ) {
                 isInThinkingMode = false
                 setIsThinking(false)
+                const thinkingDuration = getThinkingDuration()
 
                 // Split content at </think> tag
                 const parts = content.split('</think>')
@@ -752,6 +777,7 @@ export function useChatMessaging({
                   ...assistantMessage,
                   thoughts: finalThoughts || undefined,
                   isThinking: false,
+                  thinkingDuration,
                 }
 
                 // Add remaining content if it exists
@@ -910,6 +936,7 @@ export function useChatMessaging({
         }
 
         setIsThinking(false)
+        thinkingStartTimeRef.current = null
         setIsWaitingForResponse(false) // Always ensure loading state is cleared
 
         // Ensure we trigger a final sync if we have content

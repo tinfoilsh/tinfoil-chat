@@ -7,6 +7,7 @@ export type Message = {
   timestamp: Date
   thoughts?: string
   isThinking?: boolean
+  thinkingDuration?: number // Duration in seconds
   isError?: boolean
 }
 
