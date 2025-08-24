@@ -266,6 +266,14 @@ export function useChatMessaging({
         return
       }
 
+      // Clear input immediately when send button is pressed
+      setInput('')
+
+      // Reset textarea height
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto'
+      }
+
       const controller = new AbortController()
       setAbortController(controller)
       setLoadingState('loading')
@@ -376,13 +384,6 @@ export function useChatMessaging({
       } else {
         // For non-signed-in users, always save to sessionStorage
         sessionChatStorage.saveChat(updatedChat)
-      }
-
-      setInput('')
-
-      // Reset textarea height
-      if (inputRef.current) {
-        inputRef.current.style.height = 'auto'
       }
 
       // Initial scroll after user message is added
