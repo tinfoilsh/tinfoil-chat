@@ -642,6 +642,7 @@ export function ChatInput({
                   className={`h-4 w-4 transition-colors ${
                     isDarkMode ? 'text-gray-700' : 'text-gray-100'
                   }`}
+                  style={{ transform: 'translateX(0.25px)' }}
                 />
               )}
             </button>
