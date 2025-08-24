@@ -23,7 +23,7 @@ import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ScrollableFeed from 'react-scrollable-feed'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
@@ -496,6 +496,39 @@ export function ChatInterface({
   const removeDocument = (id: string) => {
     setProcessedDocuments((prev) => prev.filter((doc) => doc.id !== id))
   }
+
+  // Calculate context usage percentage (memoized to prevent re-calculation during streaming)
+  const contextUsagePercentage = useMemo(() => {
+    // Calculate context usage
+    const contextLimit = parseContextWindowTokens(
+      selectedModelDetails?.contextWindow,
+    )
+
+    let totalTokens = 0
+
+    // Count tokens from messages
+    if (currentChat?.messages) {
+      currentChat.messages.forEach((msg) => {
+        totalTokens += estimateTokenCount(msg.content)
+        if (msg.thoughts) {
+          totalTokens += estimateTokenCount(msg.thoughts)
+        }
+      })
+    }
+
+    // Count tokens from documents
+    if (processedDocuments) {
+      processedDocuments.forEach((doc) => {
+        totalTokens += estimateTokenCount(doc.content)
+      })
+    }
+
+    return (totalTokens / contextLimit) * 100
+  }, [
+    currentChat?.messages,
+    processedDocuments,
+    selectedModelDetails?.contextWindow,
+  ])
 
   // Wrap handleSubmit to include document content
   const wrappedHandleSubmit = (e: React.FormEvent) => {
@@ -1003,33 +1036,7 @@ export function ChatInterface({
                       (isSidebarOpen &&
                         (isVerifierSidebarOpen || isSettingsSidebarOpen))
                     }
-                    contextUsagePercentage={(() => {
-                      // Calculate context usage
-                      const contextLimit = parseContextWindowTokens(
-                        selectedModelDetails?.contextWindow,
-                      )
-
-                      let totalTokens = 0
-
-                      // Count tokens from messages
-                      if (currentChat?.messages) {
-                        currentChat.messages.forEach((msg) => {
-                          totalTokens += estimateTokenCount(msg.content)
-                          if (msg.thoughts) {
-                            totalTokens += estimateTokenCount(msg.thoughts)
-                          }
-                        })
-                      }
-
-                      // Count tokens from documents
-                      if (processedDocuments) {
-                        processedDocuments.forEach((doc) => {
-                          totalTokens += estimateTokenCount(doc.content)
-                        })
-                      }
-
-                      return (totalTokens / contextLimit) * 100
-                    })()}
+                    contextUsagePercentage={contextUsagePercentage}
                   />
 
                   {/* Input */}
