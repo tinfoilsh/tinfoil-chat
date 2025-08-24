@@ -195,12 +195,12 @@ export function ChatLabels({
                 strokeWidth="2"
                 fill="none"
               />
-              {/* Progress circle - white */}
+              {/* Progress circle */}
               <circle
                 cx="12"
                 cy="12"
                 r="10"
-                stroke="white"
+                stroke={isDarkMode ? 'white' : '#111827'}
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray={`${2 * Math.PI * 10}`}

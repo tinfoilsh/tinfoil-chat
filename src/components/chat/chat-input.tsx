@@ -6,7 +6,6 @@ import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
   MicrophoneIcon,
-  PaperAirplaneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
@@ -24,6 +23,7 @@ import {
   FaFileVideo,
   FaFileWord,
 } from 'react-icons/fa'
+import { FaArrowUp } from 'react-icons/fa6'
 import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
 import type { LoadingState } from './types'
@@ -622,19 +622,27 @@ export function ChatInput({
                   handleSubmit(e)
                 }
               }}
-              className={`rounded-lg p-1.5 ${
+              className={`group flex items-center justify-center rounded-full ${
                 isDarkMode
-                  ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                  : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
-              } disabled:opacity-50`}
+                  ? 'bg-gray-400 hover:bg-gray-500'
+                  : 'bg-gray-600 hover:bg-gray-500'
+              } h-7 w-7 transition-colors disabled:opacity-50`}
               disabled={
                 loadingState !== 'loading' && (isTranscribing || isConverting)
               }
             >
               {loadingState === 'loading' ? (
-                <StopIcon className="h-5 w-5" />
+                <div
+                  className={`h-2.5 w-2.5 transition-colors ${
+                    isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                  }`}
+                />
               ) : (
-                <PaperAirplaneIcon className="h-5 w-5" />
+                <FaArrowUp
+                  className={`h-4 w-4 transition-colors ${
+                    isDarkMode ? 'text-gray-700' : 'text-gray-100'
+                  }`}
+                />
               )}
             </button>
           </div>
