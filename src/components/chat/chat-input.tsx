@@ -83,7 +83,7 @@ const MacFileIcon = ({
       <div className="flex flex-col items-center">
         <div
           className={`flex items-center justify-center rounded-md p-1 ${
-            isDarkMode ? 'bg-gray-800/40' : 'bg-gray-100'
+            isDarkMode ? 'bg-gray-900/40' : 'bg-gray-100'
           } shadow-sm`}
         >
           <svg
@@ -114,7 +114,7 @@ const MacFileIcon = ({
   // Get appropriate icon based on file type
   let FileIcon = FaFile
   let bgColorLight = 'bg-gray-100'
-  let bgColorDark = 'bg-gray-800/40'
+  let bgColorDark = 'bg-gray-900/40'
   let iconColor = 'text-gray-500'
 
   switch (type) {
@@ -429,7 +429,7 @@ export function ChatInput({
         <div
           className={`mb-2 flex items-center gap-2 overflow-x-auto rounded-lg px-2 py-2 ${
             isDarkMode
-              ? 'border border-gray-600 bg-gray-700/40'
+              ? 'border border-gray-800 bg-gray-900/40'
               : 'border border-gray-200 bg-gray-100/70'
           }`}
         >
@@ -469,7 +469,7 @@ export function ChatInput({
                     }}
                     className={`absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${
                       isDarkMode
-                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                     aria-label="Remove document"
@@ -555,7 +555,7 @@ export function ChatInput({
             onClick={triggerFileInput}
             className={`rounded-lg p-1.5 ${
               isDarkMode
-                ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
                 : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
             }`}
             title="Upload document"
@@ -572,7 +572,7 @@ export function ChatInput({
                   isRecording
                     ? 'animate-pulse text-red-500'
                     : isDarkMode
-                      ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                      ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
                       : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
                 } disabled:opacity-50`}
                 title={
@@ -624,7 +624,7 @@ export function ChatInput({
               }}
               className={`rounded-lg p-1.5 ${
                 isDarkMode
-                  ? 'text-gray-400 hover:bg-gray-600 hover:text-gray-300'
+                  ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
                   : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
               } disabled:opacity-50`}
               disabled={

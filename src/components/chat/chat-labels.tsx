@@ -84,7 +84,7 @@ export function ChatLabels({
               handleLabelClick('model', () => {})
             }}
             className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
             } ${
               expandedLabel === 'model' ? 'bg-opacity-80' : ''
             } transition-colors hover:bg-opacity-80`}
@@ -128,7 +128,7 @@ export function ChatLabels({
           type="button"
           onClick={openAndExpandVerifier}
           className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-            isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
           }`}
         >
           {!verificationComplete ? (
@@ -159,7 +159,7 @@ export function ChatLabels({
             type="button"
             onClick={onShareClick}
             className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
             } transition-colors hover:bg-opacity-80`}
             title="Copy"
           >
@@ -185,10 +185,7 @@ export function ChatLabels({
       {contextUsagePercentage !== undefined && (
         <div className="flex items-center gap-1.5">
           <div className="relative h-6 w-6">
-            <svg
-              className="h-6 w-6 -rotate-90 transform"
-              viewBox="0 0 24 24"
-            >
+            <svg className="h-6 w-6 -rotate-90 transform" viewBox="0 0 24 24">
               {/* Background circle */}
               <circle
                 cx="12"

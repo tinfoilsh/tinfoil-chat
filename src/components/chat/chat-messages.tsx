@@ -919,10 +919,10 @@ const MessagesSeparator = memo(function MessagesSeparator({
   return (
     <div className={`relative my-6 flex items-center justify-center`}>
       <div
-        className={`absolute w-full border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+        className={`absolute w-full border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-300'}`}
       ></div>
       <span
-        className={`relative px-4 ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'} text-sm font-medium`}
+        className={`relative px-4 ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-500'} text-sm font-medium`}
       >
         Archived Messages
       </span>
