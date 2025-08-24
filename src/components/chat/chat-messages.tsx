@@ -348,6 +348,7 @@ const ChatMessage = memo(function ChatMessage({
   shouldDiscardThoughts = false,
   isLastMessage = false,
   isWaitingForResponse = false,
+  loadingState = 'idle',
   expandedThoughtsState,
   setExpandedThoughtsState,
 }: {
@@ -356,6 +357,7 @@ const ChatMessage = memo(function ChatMessage({
   shouldDiscardThoughts?: boolean
   isLastMessage?: boolean
   isWaitingForResponse?: boolean
+  loadingState?: string
   expandedThoughtsState?: Record<string, boolean>
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
@@ -503,7 +505,7 @@ const ChatMessage = memo(function ChatMessage({
             </div>
           </div>
           {/* Copy button for assistant messages - hidden during streaming */}
-          {!isUser && !(isLastMessage && isWaitingForResponse) && (
+          {!isUser && !(isLastMessage && loadingState === 'loading') && (
             <div className="mt-1 px-4">
               <button
                 onClick={() => {
@@ -1051,6 +1053,7 @@ export function ChatMessages({
           shouldDiscardThoughts={false}
           isLastMessage={i === liveMessages.length - 1}
           isWaitingForResponse={isWaitingForResponse}
+          loadingState={loadingState}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={setExpandedThoughtsState}
         />
