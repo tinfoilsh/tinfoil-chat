@@ -180,6 +180,7 @@ export function useChatMessaging({
     }
     setLoadingState('idle')
     setIsThinking(false)
+    setIsWaitingForResponse(false)
     thinkingStartTimeRef.current = null
 
     // If we're in thinking mode, remove the last message if it's a thinking message
