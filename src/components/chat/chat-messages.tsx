@@ -170,14 +170,16 @@ const ThoughtProcess = memo(function ThoughtProcess({
             </>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold">Thoughts</span>
-              {thinkingDuration && (
-                <span className="text-sm font-normal opacity-70">
-                  {thinkingDuration < 60
-                    ? `${thinkingDuration.toFixed(1)} seconds`
-                    : `${(thinkingDuration / 60).toFixed(1)} minutes`}
-                </span>
-              )}
+              <span className="text-sm">
+                <span className="font-bold">Thought</span>
+                {thinkingDuration && (
+                  <span className="font-normal opacity-70">
+                    {thinkingDuration < 60
+                      ? ` for ${thinkingDuration.toFixed(1)} seconds`
+                      : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
+                  </span>
+                )}
+              </span>
             </div>
           )}
         </div>
