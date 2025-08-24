@@ -519,7 +519,7 @@ export function SettingsSidebar({
               <div className="space-y-2">
                 <div
                   className={`flex items-center justify-between rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
                   }`}
                 >
                   <div>
@@ -568,7 +568,7 @@ export function SettingsSidebar({
               <div className="space-y-2">
                 <div
                   className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
                   }`}
                 >
                   <div className="flex items-start justify-between">
@@ -615,7 +615,7 @@ export function SettingsSidebar({
                 {/* Language Setting */}
                 <div
                   className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
                   }`}
                 >
                   <div className="space-y-2">
@@ -656,7 +656,7 @@ export function SettingsSidebar({
                 {/* Custom System Prompt Settings */}
                 <div
                   className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
                   }`}
                 >
                   <div className="space-y-3">

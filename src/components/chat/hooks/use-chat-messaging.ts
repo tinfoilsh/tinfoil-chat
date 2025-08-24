@@ -180,6 +180,7 @@ export function useChatMessaging({
     }
     setLoadingState('idle')
     setIsThinking(false)
+    setIsWaitingForResponse(false)
     thinkingStartTimeRef.current = null
 
     // If we're in thinking mode, remove the last message if it's a thinking message
@@ -264,6 +265,14 @@ export function useChatMessaging({
           action: 'handleQuery',
         })
         return
+      }
+
+      // Clear input immediately when send button is pressed
+      setInput('')
+
+      // Reset textarea height
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto'
       }
 
       const controller = new AbortController()
@@ -376,13 +385,6 @@ export function useChatMessaging({
       } else {
         // For non-signed-in users, always save to sessionStorage
         sessionChatStorage.saveChat(updatedChat)
-      }
-
-      setInput('')
-
-      // Reset textarea height
-      if (inputRef.current) {
-        inputRef.current.style.height = 'auto'
       }
 
       // Initial scroll after user message is added

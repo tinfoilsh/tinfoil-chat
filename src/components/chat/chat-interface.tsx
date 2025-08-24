@@ -23,7 +23,7 @@ import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ScrollableFeed from 'react-scrollable-feed'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
@@ -497,6 +497,39 @@ export function ChatInterface({
     setProcessedDocuments((prev) => prev.filter((doc) => doc.id !== id))
   }
 
+  // Calculate context usage percentage (memoized to prevent re-calculation during streaming)
+  const contextUsagePercentage = useMemo(() => {
+    // Calculate context usage
+    const contextLimit = parseContextWindowTokens(
+      selectedModelDetails?.contextWindow,
+    )
+
+    let totalTokens = 0
+
+    // Count tokens from messages
+    if (currentChat?.messages) {
+      currentChat.messages.forEach((msg) => {
+        totalTokens += estimateTokenCount(msg.content)
+        if (msg.thoughts) {
+          totalTokens += estimateTokenCount(msg.thoughts)
+        }
+      })
+    }
+
+    // Count tokens from documents
+    if (processedDocuments) {
+      processedDocuments.forEach((doc) => {
+        totalTokens += estimateTokenCount(doc.content)
+      })
+    }
+
+    return (totalTokens / contextLimit) * 100
+  }, [
+    currentChat?.messages,
+    processedDocuments,
+    selectedModelDetails?.contextWindow,
+  ])
+
   // Wrap handleSubmit to include document content
   const wrappedHandleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -620,7 +653,7 @@ export function ChatInterface({
   return (
     <div
       className={`flex overflow-hidden ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white'
+        isDarkMode ? 'bg-gray-900' : 'bg-white'
       }`}
       style={{
         position: 'fixed',
@@ -651,7 +684,7 @@ export function ChatInterface({
             className={`fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
               isDarkMode
                 ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
             }`}
             onClick={() => {
               setIsSidebarOpen(true)
@@ -687,10 +720,10 @@ export function ChatInterface({
                 currentChat?.messages?.length === 0
                   ? isDarkMode
                     ? 'cursor-not-allowed bg-gray-900 text-gray-500 opacity-50'
-                    : 'cursor-not-allowed border border-gray-200 bg-white text-gray-400 opacity-50'
+                    : 'cursor-not-allowed bg-white text-gray-400 opacity-50'
                   : isDarkMode
                     ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
               onClick={createNewChat}
               aria-label="Create new chat"
@@ -720,10 +753,10 @@ export function ChatInterface({
                 isSettingsSidebarOpen
                   ? isDarkMode
                     ? 'cursor-default bg-gray-700 text-gray-400'
-                    : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
+                    : 'cursor-default bg-gray-200 text-gray-400'
                   : isDarkMode
                     ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
               onClick={handleOpenSettingsSidebar}
               aria-label={
@@ -751,10 +784,10 @@ export function ChatInterface({
                 isVerifierSidebarOpen
                   ? isDarkMode
                     ? 'cursor-default bg-gray-700 text-gray-400'
-                    : 'cursor-default border border-gray-300 bg-gray-200 text-gray-400'
+                    : 'cursor-default bg-gray-200 text-gray-400'
                   : isDarkMode
                     ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
               onClick={handleOpenVerifierSidebar}
               aria-label={
@@ -858,7 +891,7 @@ export function ChatInterface({
         }}
       >
         <div
-          className={`relative flex h-full flex-col ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}
+          className={`relative flex h-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}
         >
           {/* Decryption Progress Banner */}
           {decryptionProgress && decryptionProgress.isDecrypting && (
@@ -908,7 +941,7 @@ export function ChatInterface({
           <ScrollableFeed
             ref={scrollableFeedRef}
             className={`relative flex-1 ${
-              isDarkMode ? 'bg-gray-800' : 'bg-white'
+              isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
             onScroll={(isAtBottom: boolean) => {
               setShowScrollButton(!isAtBottom)
@@ -948,7 +981,7 @@ export function ChatInterface({
               (currentChat?.messages && currentChat.messages.length > 0)) && (
               <div
                 className={`relative flex-shrink-0 ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-white'
+                  isDarkMode ? 'bg-gray-900' : 'bg-white'
                 } p-4`}
                 style={{
                   minHeight: '80px',
@@ -957,9 +990,7 @@ export function ChatInterface({
                   transition: 'border 0.2s ease-in-out',
                   borderTop: isBottomDragActive
                     ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
-                    : isDarkMode
-                      ? '1px solid rgb(55, 65, 81)' // gray-700
-                      : '1px solid rgb(229, 231, 235)', // gray-200
+                    : 'none',
                   borderLeft: isBottomDragActive
                     ? '2px solid rgba(52, 211, 153, 0.5)'
                     : 'none',
@@ -1005,6 +1036,7 @@ export function ChatInterface({
                       (isSidebarOpen &&
                         (isVerifierSidebarOpen || isSettingsSidebarOpen))
                     }
+                    contextUsagePercentage={contextUsagePercentage}
                   />
 
                   {/* Input */}

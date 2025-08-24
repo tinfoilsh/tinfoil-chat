@@ -26,6 +26,7 @@ type ChatLabelsProps = {
   onShareClick?: () => void
   hasMessages?: boolean
   isCompactMode?: boolean
+  contextUsagePercentage?: number
 }
 
 export function ChatLabels({
@@ -42,6 +43,7 @@ export function ChatLabels({
   onShareClick,
   hasMessages = false,
   isCompactMode = false,
+  contextUsagePercentage,
 }: ChatLabelsProps) {
   // Model selection handler - enforces handleModelSelect is defined
   const onModelSelect = useCallback(
@@ -68,7 +70,7 @@ export function ChatLabels({
   }
 
   return (
-    <div className="mb-2 flex items-center gap-2">
+    <div className="mb-2 flex items-center justify-between gap-2">
       {/* Left side labels group */}
       <div className="flex gap-2">
         {/* Model label */}
@@ -82,7 +84,7 @@ export function ChatLabels({
               handleLabelClick('model', () => {})
             }}
             className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
             } ${
               expandedLabel === 'model' ? 'bg-opacity-80' : ''
             } transition-colors hover:bg-opacity-80`}
@@ -126,7 +128,7 @@ export function ChatLabels({
           type="button"
           onClick={openAndExpandVerifier}
           className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-            isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
           }`}
         >
           {!verificationComplete ? (
@@ -157,7 +159,7 @@ export function ChatLabels({
             type="button"
             onClick={onShareClick}
             className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-600' : 'bg-gray-200'
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
             } transition-colors hover:bg-opacity-80`}
             title="Copy"
           >
@@ -178,6 +180,46 @@ export function ChatLabels({
           </button>
         )}
       </div>
+
+      {/* Right side - Context usage indicator */}
+      {contextUsagePercentage !== undefined && contextUsagePercentage > 10 && (
+        <div className="flex items-center gap-1.5">
+          <div className="relative h-6 w-6">
+            <svg className="h-6 w-6 -rotate-90 transform" viewBox="0 0 24 24">
+              {/* Background circle */}
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke={isDarkMode ? '#374151' : '#E5E7EB'}
+                strokeWidth="2"
+                fill="none"
+              />
+              {/* Progress circle */}
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke={isDarkMode ? 'white' : '#111827'}
+                strokeWidth="2"
+                fill="none"
+                strokeDasharray={`${2 * Math.PI * 10}`}
+                strokeDashoffset={`${2 * Math.PI * 10 * (1 - contextUsagePercentage / 100)}`}
+                className="transition-all duration-300"
+              />
+            </svg>
+          </div>
+          {!isCompactMode && (
+            <span
+              className={`text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}
+            >
+              {contextUsagePercentage.toFixed(0)}% of context used
+            </span>
+          )}
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes lock-close {

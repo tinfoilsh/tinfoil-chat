@@ -170,14 +170,16 @@ const ThoughtProcess = memo(function ThoughtProcess({
             </>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold">Thoughts</span>
-              {thinkingDuration && (
-                <span className="text-sm font-normal opacity-70">
-                  {thinkingDuration < 60
-                    ? `${thinkingDuration.toFixed(1)} seconds`
-                    : `${(thinkingDuration / 60).toFixed(1)} minutes`}
-                </span>
-              )}
+              <span className="text-sm">
+                <span className="font-bold">Thought</span>
+                {thinkingDuration && (
+                  <span className="font-normal opacity-70">
+                    {thinkingDuration < 60
+                      ? ` for ${thinkingDuration.toFixed(1)} seconds`
+                      : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
+                  </span>
+                )}
+              </span>
             </div>
           )}
         </div>
@@ -348,6 +350,7 @@ const ChatMessage = memo(function ChatMessage({
   shouldDiscardThoughts = false,
   isLastMessage = false,
   isWaitingForResponse = false,
+  loadingState = 'idle',
   expandedThoughtsState,
   setExpandedThoughtsState,
 }: {
@@ -356,6 +359,7 @@ const ChatMessage = memo(function ChatMessage({
   shouldDiscardThoughts?: boolean
   isLastMessage?: boolean
   isWaitingForResponse?: boolean
+  loadingState?: string
   expandedThoughtsState?: Record<string, boolean>
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
@@ -503,7 +507,7 @@ const ChatMessage = memo(function ChatMessage({
             </div>
           </div>
           {/* Copy button for assistant messages - hidden during streaming */}
-          {!isUser && !(isLastMessage && isWaitingForResponse) && (
+          {!isUser && !(isLastMessage && loadingState === 'loading') && (
             <div className="mt-1 px-4">
               <button
                 onClick={() => {
@@ -915,10 +919,10 @@ const MessagesSeparator = memo(function MessagesSeparator({
   return (
     <div className={`relative my-6 flex items-center justify-center`}>
       <div
-        className={`absolute w-full border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+        className={`absolute w-full border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-300'}`}
       ></div>
       <span
-        className={`relative px-4 ${isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-white text-gray-500'} text-sm font-medium`}
+        className={`relative px-4 ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-500'} text-sm font-medium`}
       >
         Archived Messages
       </span>
@@ -1051,6 +1055,7 @@ export function ChatMessages({
           shouldDiscardThoughts={false}
           isLastMessage={i === liveMessages.length - 1}
           isWaitingForResponse={isWaitingForResponse}
+          loadingState={loadingState}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={setExpandedThoughtsState}
         />
