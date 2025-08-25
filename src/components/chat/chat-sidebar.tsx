@@ -9,7 +9,6 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import JSZip from 'jszip'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { FaLock } from 'react-icons/fa'
 import { MdOutlineCloudOff } from 'react-icons/md'
@@ -122,7 +121,7 @@ type ChatSidebarProps = {
 const MOBILE_BREAKPOINT = 1024 // Same as in chat-interface.tsx
 
 // Function to download all chats as markdown files in a zip
-function downloadChats(chats: Chat[]) {
+async function downloadChats(chats: Chat[]) {
   if (chats.length === 0) return
 
   // Create markdown content for each chat
@@ -151,6 +150,7 @@ function downloadChats(chats: Chat[]) {
 
   // Create and download zip file
   try {
+    const JSZip = (await import('jszip')).default
     const zip = new JSZip()
 
     // Add each chat file to the zip

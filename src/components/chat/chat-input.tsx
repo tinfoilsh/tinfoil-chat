@@ -23,7 +23,7 @@ import {
   FaFileVideo,
   FaFileWord,
 } from 'react-icons/fa'
-import { FaArrowUp } from 'react-icons/fa6'
+import { FiArrowUp } from 'react-icons/fi'
 import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
 import type { LoadingState } from './types'
@@ -237,6 +237,9 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
+  const [isDragOver, setIsDragOver] = useState(false)
+
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
@@ -422,6 +425,47 @@ export function ChatInput({
     }
   }, [sendAudioForTranscription, stopRecording, toast])
 
+  // --- Drag and drop handlers (for welcome screen) ---
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!isDragOver) {
+        setIsDragOver(true)
+      }
+    },
+    [isDragOver],
+  )
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set to false if we're leaving the input container completely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragOver(false)
+
+      const files = e.dataTransfer.files
+      if (files && files.length > 0 && handleDocumentUpload) {
+        handleDocumentUpload(files[0])
+      }
+    },
+    [handleDocumentUpload],
+  )
+
   return (
     <div className="flex flex-col gap-2">
       {/* Display processed documents above input area */}
@@ -502,11 +546,17 @@ export function ChatInput({
       )}
 
       <div
-        className={`flex flex-col rounded-2xl border shadow-lg ${
-          isDarkMode
-            ? 'border-gray-600 bg-gray-700'
-            : 'border-gray-300 bg-gray-100'
+        className={`flex flex-col rounded-2xl border shadow-lg transition-colors ${
+          isDragOver
+            ? 'border-emerald-500 bg-emerald-50/10'
+            : isDarkMode
+              ? 'border-gray-600 bg-gray-700'
+              : 'border-gray-300 bg-gray-100'
         }`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <input
           type="file"
@@ -622,11 +672,20 @@ export function ChatInput({
                   handleSubmit(e)
                 }
               }}
-              className={`group flex items-center justify-center rounded-full ${
-                isDarkMode
-                  ? 'bg-gray-400 hover:bg-gray-500'
-                  : 'bg-gray-600 hover:bg-gray-500'
-              } h-7 w-7 transition-colors disabled:opacity-50`}
+              className="group flex h-6 w-6 items-center justify-center rounded-full transition-colors disabled:opacity-50"
+              style={{
+                backgroundColor: isDarkMode ? '#ffffff' : '#005050',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = isDarkMode
+                  ? '#f3f4f6'
+                  : '#003a3a'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = isDarkMode
+                  ? '#ffffff'
+                  : '#005050'
+              }}
               disabled={
                 loadingState !== 'loading' && (isTranscribing || isConverting)
               }
@@ -634,15 +693,12 @@ export function ChatInput({
               {loadingState === 'loading' ? (
                 <div
                   className={`h-2.5 w-2.5 transition-colors ${
-                    isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                    isDarkMode ? 'bg-gray-600' : 'bg-white'
                   }`}
                 />
               ) : (
-                <FaArrowUp
-                  className={`h-4 w-4 transition-colors ${
-                    isDarkMode ? 'text-gray-700' : 'text-gray-100'
-                  }`}
-                  style={{ transform: 'translateX(0.25px)' }}
+                <FiArrowUp
+                  className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-gray-600' : 'text-white'}`}
                 />
               )}
             </button>
