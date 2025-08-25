@@ -23,7 +23,7 @@ import {
   FaFileVideo,
   FaFileWord,
 } from 'react-icons/fa'
-import { FaArrowUp } from 'react-icons/fa6'
+import { FiArrowUp } from 'react-icons/fi'
 import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
 import type { LoadingState } from './types'
@@ -622,11 +622,20 @@ export function ChatInput({
                   handleSubmit(e)
                 }
               }}
-              className={`group flex items-center justify-center rounded-full ${
-                isDarkMode
-                  ? 'bg-gray-400 hover:bg-gray-500'
-                  : 'bg-gray-600 hover:bg-gray-500'
-              } h-7 w-7 transition-colors disabled:opacity-50`}
+              className="group flex h-6 w-6 items-center justify-center rounded-full transition-colors disabled:opacity-50"
+              style={{
+                backgroundColor: isDarkMode ? '#ffffff' : '#005050',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = isDarkMode
+                  ? '#f3f4f6'
+                  : '#003a3a'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = isDarkMode
+                  ? '#ffffff'
+                  : '#005050'
+              }}
               disabled={
                 loadingState !== 'loading' && (isTranscribing || isConverting)
               }
@@ -634,15 +643,12 @@ export function ChatInput({
               {loadingState === 'loading' ? (
                 <div
                   className={`h-2.5 w-2.5 transition-colors ${
-                    isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                    isDarkMode ? 'bg-gray-600' : 'bg-white'
                   }`}
                 />
               ) : (
-                <FaArrowUp
-                  className={`h-4 w-4 transition-colors ${
-                    isDarkMode ? 'text-gray-700' : 'text-gray-100'
-                  }`}
-                  style={{ transform: 'translateX(0.25px)' }}
+                <FiArrowUp
+                  className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-gray-600' : 'text-white'}`}
                 />
               )}
             </button>
