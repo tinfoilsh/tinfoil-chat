@@ -636,10 +636,30 @@ export function ChatInterface({
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
+      <div
+        className={`flex h-screen items-center justify-center ${
+          isClient ? (isDarkMode ? 'bg-gray-900' : 'bg-white') : ''
+        }`}
+      >
         <div className="relative h-10 w-10">
-          <div className="absolute inset-0 animate-spin rounded-full border-4 border-gray-200 border-t-gray-900"></div>
-          <div className="absolute inset-0 rounded-full border-4 border-gray-200 opacity-30"></div>
+          <div
+            className={`absolute inset-0 animate-spin rounded-full border-4 ${
+              isClient
+                ? isDarkMode
+                  ? 'border-gray-700 border-t-gray-100'
+                  : 'border-gray-200 border-t-gray-900'
+                : 'border-gray-700 border-t-gray-100'
+            }`}
+          ></div>
+          <div
+            className={`absolute inset-0 rounded-full border-4 ${
+              isClient
+                ? isDarkMode
+                  ? 'border-gray-700 opacity-30'
+                  : 'border-gray-200 opacity-30'
+                : 'border-gray-700 opacity-30'
+            }`}
+          ></div>
         </div>
       </div>
     )
@@ -648,13 +668,25 @@ export function ChatInterface({
   // Show error state if no models are available (configuration error)
   if (!isLoadingConfig && models.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
+      <div
+        className={`flex h-screen items-center justify-center ${
+          isClient ? (isDarkMode ? 'bg-gray-900' : 'bg-white') : ''
+        }`}
+      >
         <div className="text-center">
           <div className="mb-2 text-xl text-red-500">⚠️</div>
-          <h2 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h2
+            className={`mb-2 text-lg font-semibold ${
+              isClient ? (isDarkMode ? 'text-gray-100' : 'text-gray-900') : ''
+            }`}
+          >
             Configuration Error
           </h2>
-          <p className="mb-4 text-gray-600 dark:text-gray-400">
+          <p
+            className={`${
+              isClient ? (isDarkMode ? 'text-gray-400' : 'text-gray-600') : ''
+            } mb-4`}
+          >
             No models are available. Please check the API configuration.
           </p>
           <button
