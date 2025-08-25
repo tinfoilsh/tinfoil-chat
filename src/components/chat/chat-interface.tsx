@@ -23,13 +23,13 @@ import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ScrollableFeed from 'react-scrollable-feed'
 import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
 import { EncryptionKeyModal } from '../modals/encryption-key-modal'
 import { FirstLoginKeyModal } from '../modals/first-login-key-modal'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
-import { VerifierSidebar } from '../verifier/verifier-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
@@ -38,9 +38,20 @@ import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
-import { SettingsSidebar } from './settings-sidebar'
-import { ShareModal } from './share-modal'
 import type { VerificationState } from './types'
+// Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
+const VerifierSidebarLazy = dynamic(
+  () => import('../verifier/verifier-sidebar').then((m) => m.VerifierSidebar),
+  { ssr: false },
+)
+const SettingsSidebarLazy = dynamic(
+  () => import('./settings-sidebar').then((m) => m.SettingsSidebar),
+  { ssr: false },
+)
+const ShareModalLazy = dynamic(
+  () => import('./share-modal').then((m) => m.ShareModal),
+  { ssr: false },
+)
 
 type ChatInterfaceProps = {
   verificationState?: VerificationState
@@ -178,37 +189,44 @@ export function ChatInterface({
     return unsubscribe
   }, [isSignedIn])
 
-  // Load models and system prompt
+  // Load system prompt immediately; load paid models first if subscription is already known
   useEffect(() => {
-    const loadConfig = async () => {
+    let cancelled = false
+    const loadInitial = async () => {
       try {
-        const [modelsData, systemPromptData] = await Promise.all([
-          getAIModels(isPremium),
-          getSystemPrompt(),
+        // Always fetch system prompt ASAP
+        const promptPromise = getSystemPrompt()
+
+        // If subscription is already known (from cache), prefer correct model set initially
+        const isPremiumNow =
+          !subscriptionLoading && (chat_subscription_active ?? false)
+        const modelsPromise = getAIModels(isPremiumNow)
+
+        const [systemPromptData, initialModels] = await Promise.all([
+          promptPromise,
+          modelsPromise,
         ])
-        setModels(modelsData)
-        setSystemPrompt(systemPromptData)
+        if (!cancelled) {
+          setSystemPrompt(systemPromptData)
+          setModels(initialModels)
+          setIsLoadingConfig(false)
+        }
       } catch (error) {
         logError('Failed to load chat configuration', error, {
           component: 'ChatInterface',
           action: 'loadConfig',
         })
-        toast({
-          title: 'Configuration Error',
-          description:
-            'Failed to load chat configuration. Please refresh the page.',
-          variant: 'destructive',
-          position: 'top-left',
-        })
-      } finally {
-        setIsLoadingConfig(false)
+        if (!cancelled) {
+          setIsLoadingConfig(false)
+        }
       }
     }
 
-    if (!subscriptionLoading) {
-      loadConfig()
+    loadInitial()
+    return () => {
+      cancelled = true
     }
-  }, [isPremium, subscriptionLoading, toast])
+  }, [subscriptionLoading, chat_subscription_active])
 
   const {
     // State
@@ -615,8 +633,8 @@ export function ChatInterface({
     [handleFileUpload],
   )
 
-  // Show loading state while critical data is loading
-  if (subscriptionLoading || isLoadingConfig) {
+  // Show loading state while critical config is loading. Do not block on subscription.
+  if (isLoadingConfig) {
     return (
       <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-800">
         <div className="relative h-10 w-10">
@@ -838,7 +856,7 @@ export function ChatInterface({
       />
 
       {/* Right Verifier Sidebar */}
-      <VerifierSidebar
+      <VerifierSidebarLazy
         isOpen={isVerifierSidebarOpen}
         setIsOpen={handleSetVerifierSidebarOpen}
         verificationComplete={verificationComplete}
@@ -853,7 +871,7 @@ export function ChatInterface({
       />
 
       {/* Share Modal */}
-      <ShareModal
+      <ShareModalLazy
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         messages={currentChat?.messages || []}
@@ -861,7 +879,7 @@ export function ChatInterface({
       />
 
       {/* Settings Sidebar */}
-      <SettingsSidebar
+      <SettingsSidebarLazy
         isOpen={isSettingsSidebarOpen}
         setIsOpen={setIsSettingsSidebarOpen}
         isDarkMode={isDarkMode}
