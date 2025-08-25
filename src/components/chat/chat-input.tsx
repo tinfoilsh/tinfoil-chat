@@ -237,6 +237,9 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
+  const [isDragOver, setIsDragOver] = useState(false)
+
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
@@ -422,6 +425,47 @@ export function ChatInput({
     }
   }, [sendAudioForTranscription, stopRecording, toast])
 
+  // --- Drag and drop handlers (for welcome screen) ---
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (!isDragOver) {
+        setIsDragOver(true)
+      }
+    },
+    [isDragOver],
+  )
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set to false if we're leaving the input container completely
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragOver(false)
+
+      const files = e.dataTransfer.files
+      if (files && files.length > 0 && handleDocumentUpload) {
+        handleDocumentUpload(files[0])
+      }
+    },
+    [handleDocumentUpload],
+  )
+
   return (
     <div className="flex flex-col gap-2">
       {/* Display processed documents above input area */}
@@ -502,11 +546,17 @@ export function ChatInput({
       )}
 
       <div
-        className={`flex flex-col rounded-2xl border shadow-lg ${
-          isDarkMode
-            ? 'border-gray-600 bg-gray-700'
-            : 'border-gray-300 bg-gray-100'
+        className={`flex flex-col rounded-2xl border shadow-lg transition-colors ${
+          isDragOver
+            ? 'border-emerald-500 bg-emerald-50/10'
+            : isDarkMode
+              ? 'border-gray-600 bg-gray-700'
+              : 'border-gray-300 bg-gray-100'
         }`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <input
           type="file"
