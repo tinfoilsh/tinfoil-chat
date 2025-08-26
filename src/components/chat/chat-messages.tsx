@@ -52,11 +52,21 @@ function useMathPlugins() {
         .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
           setPlugins({
             remarkPlugins: [
+              [remarkMathMod.default, { singleDollarTextMath: true }],
               remarkGfm,
-              remarkMathMod.default,
               remarkBreaksMod.default,
             ] as any[],
-            rehypePlugins: [rehypeKatexMod.default] as any[],
+            // Be lenient on KaTeX errors so we render best-effort instead of throwing
+            rehypePlugins: [
+              [
+                rehypeKatexMod.default,
+                {
+                  throwOnError: false,
+                  strict: false,
+                  output: 'htmlAndMathml',
+                },
+              ],
+            ] as any[],
           })
         })
         .catch(() => {
@@ -67,6 +77,70 @@ function useMathPlugins() {
   }, [])
 
   return plugins
+}
+
+// Shared helper to normalize common TeX delimiters/environments to remark-math
+// friendly forms. Avoids touching code blocks/inline code and obvious URLs.
+function convertTeXDelimitersToRemarkMath(text: string): string {
+  const transform = (segment: string) => {
+    let s = segment
+    // Combined wrapper: \[ \begin{equation} ... \end{equation} \]
+    s = s.replace(
+      /\\\[\s*\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}\s*\\\]/g,
+      (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+    )
+    // equation/equation* environments → block $$ ... $$ with surrounding newlines
+    s = s.replace(
+      /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
+      (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+    )
+    // align/align* → use aligned inside block math for KaTeX compatibility
+    s = s.replace(
+      /\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
+    )
+    // gather/gather* → gathered inside block math
+    s = s.replace(
+      /\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{gathered}\n${inner.trim()}\n\\end{gathered}\n$$\n\n`,
+    )
+    // multline/multline* → fallback to aligned inside block math
+    s = s.replace(
+      /\\begin\{multline\*?\}([\s\S]*?)\\end\{multline\*?\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
+    )
+    // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
+    s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
+    s = s.replace(
+      /\\\[([\s\S]*?)\\\]/g,
+      (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+    )
+    // Inline math: \( ... \) → $ ... $
+    s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
+    // Collapse accidental $$$$ from nested replacements
+    s = s.replace(/\$\$\$\$/g, '$$')
+    return s
+  }
+
+  // Avoid touching fenced code blocks (``` and ~~~) and inline code (`code`)
+  const splitter = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
+  const parts = text.split(splitter)
+  return parts
+    .map((part) => {
+      const isBacktickFence = part.startsWith('```')
+      const isTildeFence = part.startsWith('~~~')
+      const isInlineCode = part.startsWith('`') && part.endsWith('`')
+      if (isBacktickFence || isTildeFence || isInlineCode) {
+        return part
+      }
+      // Avoid converting math markers inside URLs like https://example.com/a$b
+      const looksLikeUrl = /https?:\/\//i.test(part)
+      return looksLikeUrl ? part : transform(part)
+    })
+    .join('')
 }
 
 // Add new types
@@ -145,6 +219,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
     }
   }
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
+  const processedThoughts = convertTeXDelimitersToRemarkMath(thoughts)
 
   // Don't render if thoughts are empty and not actively thinking
   if (
@@ -232,7 +307,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
               ),
             }}
           >
-            {thoughts}
+            {processedThoughts}
           </ReactMarkdown>
         </div>
       </motion.div>
@@ -265,6 +340,24 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
         /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
         (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
       )
+      // align/align* → use aligned inside block math for KaTeX compatibility
+      s = s.replace(
+        /\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}/g,
+        (_, inner) =>
+          `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
+      )
+      // gather/gather* → gathered inside block math
+      s = s.replace(
+        /\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}/g,
+        (_, inner) =>
+          `\n\n$$\n\\begin{gathered}\n${inner.trim()}\n\\end{gathered}\n$$\n\n`,
+      )
+      // multline/multline* → fallback to aligned inside block math
+      s = s.replace(
+        /\\begin\{multline\*?\}([\s\S]*?)\\end\{multline\*?\}/g,
+        (_, inner) =>
+          `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
+      )
       // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
       s = s.replace(
         /\\\[([\s\S]*?)\\\]/g,
@@ -285,9 +378,13 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
         const isBacktickFence = part.startsWith('```')
         const isTildeFence = part.startsWith('~~~')
         const isInlineCode = part.startsWith('`') && part.endsWith('`')
-        return isBacktickFence || isTildeFence || isInlineCode
-          ? part
-          : transform(part)
+        // Do not transform inside code fences or inline code
+        if (isBacktickFence || isTildeFence || isInlineCode) {
+          return part
+        }
+        // Avoid converting math markers inside URLs like https://example.com/a$b
+        const looksLikeUrl = /https?:\/\//i.test(part)
+        return looksLikeUrl ? part : transform(part)
       })
       .join('')
   }
@@ -541,7 +638,7 @@ const ChatMessage = memo(function ChatMessage({
               <div
                 className={`prose w-full max-w-none text-base ${
                   isDarkMode
-                    ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
+                    ? 'prose-invert text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
                       ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
