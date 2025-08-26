@@ -151,10 +151,8 @@ function convertTeXDelimitersToRemarkMath(text: string): string {
     // Inline math: \( ... \) → $ ... $
     s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
 
-    // Collapse accidental $$$$ from nested replacements
+    // Collapse accidental $$$$ from nested replacements (only 4+ dollars)
     s = s.replace(/\$\$\$\$/g, '$$')
-    // Also collapse triple dollars
-    s = s.replace(/\$\$\$/g, '$$')
     return s
   }
 
