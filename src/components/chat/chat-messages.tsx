@@ -151,10 +151,6 @@ function convertTeXDelimitersToRemarkMath(text: string): string {
     // Inline math: \( ... \) → $ ... $
     s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
 
-    // Fix some common symbol issues for KaTeX compatibility
-    s = s.replace(/\\digamma/g, '\\varGamma')
-    s = s.replace(/\\eth/g, '\\partial')
-
     // Collapse accidental $$$$ from nested replacements
     s = s.replace(/\$\$\$\$/g, '$$')
     // Also collapse triple dollars
