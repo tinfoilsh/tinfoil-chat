@@ -44,10 +44,18 @@ function useMathPlugins() {
   useEffect(() => {
     // Load math plugins only in browser
     if (typeof window !== 'undefined') {
-      Promise.all([import('remark-math'), import('rehype-katex')])
-        .then(([remarkMathMod, rehypeKatexMod]) => {
+      Promise.all([
+        import('remark-math'),
+        import('rehype-katex'),
+        import('remark-breaks'),
+      ])
+        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
           setPlugins({
-            remarkPlugins: [remarkGfm, remarkMathMod.default] as any[],
+            remarkPlugins: [
+              remarkGfm,
+              remarkMathMod.default,
+              remarkBreaksMod.default,
+            ] as any[],
             rehypePlugins: [rehypeKatexMod.default] as any[],
           })
         })
@@ -240,11 +248,44 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
   content: string
   isDarkMode: boolean
 }) {
-  // Convert single newlines to markdown line breaks (two spaces + newline)
-  const processedContent = content.replace(/\n/g, '  \n')
-
   // Use the hook to get math plugins
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
+
+  // Normalize LaTeX math delimiters to what remark-math parses ($ and $$)
+  const convertTeXDelimitersToRemarkMath = (text: string) => {
+    const transform = (segment: string) => {
+      let s = segment
+      // Combined wrapper: \[ \begin{equation} ... \end{equation} \]
+      s = s.replace(
+        /\\\[\s*\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}\s*\\\]/g,
+        (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+      )
+      // equation/equation* environments → block $$ ... $$ with surrounding newlines
+      s = s.replace(
+        /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
+        (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+      )
+      // Display math: \[ ... \] → block $$ ... $$
+      // If inner already contains $$ or an environment, don't wrap again
+      s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => {
+        const hasBlock = inner.includes('$$') || /\\begin\{.*?\}/.test(inner)
+        return hasBlock ? `\n\n${inner}\n\n` : `\n\n$$\n${inner.trim()}\n$$\n\n`
+      })
+      // Inline math: \( ... \) → $ ... $
+      s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
+      // Collapse accidental $$$$ from nested replacements
+      s = s.replace(/\$\$\$\$/g, '$$')
+      return s
+    }
+
+    // Avoid touching fenced code blocks
+    const parts = text.split(/(```[\s\S]*?```)/g)
+    return parts
+      .map((part) => (part.startsWith('```') ? part : transform(part)))
+      .join('')
+  }
+
+  const processedContent = convertTeXDelimitersToRemarkMath(content)
 
   return (
     <ReactMarkdown
