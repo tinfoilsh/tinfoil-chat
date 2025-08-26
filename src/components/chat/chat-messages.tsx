@@ -44,11 +44,42 @@ function useMathPlugins() {
   useEffect(() => {
     // Load math plugins only in browser
     if (typeof window !== 'undefined') {
-      Promise.all([import('remark-math'), import('rehype-katex')])
-        .then(([remarkMathMod, rehypeKatexMod]) => {
+      Promise.all([
+        import('remark-math'),
+        import('rehype-katex'),
+        import('remark-breaks'),
+      ])
+        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
           setPlugins({
-            remarkPlugins: [remarkGfm, remarkMathMod.default] as any[],
-            rehypePlugins: [rehypeKatexMod.default] as any[],
+            remarkPlugins: [
+              [remarkMathMod.default, { singleDollarTextMath: true }],
+              remarkGfm,
+              remarkBreaksMod.default,
+            ] as any[],
+            // Be lenient on KaTeX errors so we render best-effort instead of throwing
+            rehypePlugins: [
+              [
+                rehypeKatexMod.default,
+                {
+                  throwOnError: false,
+                  strict: false,
+                  output: 'htmlAndMathml',
+                  macros: {
+                    // Define macros for symbols that might not be available
+                    '\\digamma': "\\Gamma'",
+                    '\\eth': '\\partial',
+                    '\\Im': '\\mathfrak{Im}',
+                    '\\Re': '\\mathfrak{Re}',
+                    // Some additional common symbols
+                    '\\RR': '\\mathbb{R}',
+                    '\\NN': '\\mathbb{N}',
+                    '\\ZZ': '\\mathbb{Z}',
+                    '\\QQ': '\\mathbb{Q}',
+                    '\\CC': '\\mathbb{C}',
+                  },
+                },
+              ],
+            ] as any[],
           })
         })
         .catch(() => {
@@ -59,6 +90,88 @@ function useMathPlugins() {
   }, [])
 
   return plugins
+}
+
+// Shared helper to normalize common TeX delimiters/environments to remark-math
+// friendly forms. Avoids touching code blocks/inline code and obvious URLs.
+function convertTeXDelimitersToRemarkMath(text: string): string {
+  const transform = (segment: string) => {
+    let s = segment
+    // Combined wrapper: \[ \begin{equation} ... \end{equation} \]
+    s = s.replace(
+      /\\\[\s*\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}\s*\\\]/g,
+      (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+    )
+    // equation/equation* environments → block $$ ... $$ with surrounding newlines
+    s = s.replace(
+      /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
+      (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+    )
+    // align/align* → use aligned inside block math for KaTeX compatibility
+    s = s.replace(
+      /\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
+    )
+    // gather/gather* → gathered inside block math
+    s = s.replace(
+      /\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{gathered}\n${inner.trim()}\n\\end{gathered}\n$$\n\n`,
+    )
+    // multline/multline* → fallback to aligned inside block math
+    s = s.replace(
+      /\\begin\{multline\*?\}([\s\S]*?)\\end\{multline\*?\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
+    )
+    // cases environment → wrap in display math
+    s = s.replace(
+      /\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{cases}\n${inner.trim()}\n\\end{cases}\n$$\n\n`,
+    )
+    // matrix environments → wrap in display math
+    s = s.replace(
+      /\\begin\{(matrix|pmatrix|bmatrix|vmatrix|Vmatrix)\}([\s\S]*?)\\end\{\1\}/g,
+      (_, env, inner) =>
+        `\n\n$$\n\\begin{${env}}\n${inner.trim()}\n\\end{${env}}\n$$\n\n`,
+    )
+    // array environment → wrap in display math
+    s = s.replace(
+      /\\begin\{array\}(\{[^}]*\})([\s\S]*?)\\end\{array\}/g,
+      (_, colspec, inner) =>
+        `\n\n$$\n\\begin{array}${colspec}\n${inner.trim()}\n\\end{array}\n$$\n\n`,
+    )
+    // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
+    s = s.replace(
+      /\\\[([\s\S]*?)\\\]/g,
+      (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+    )
+    // Inline math: \( ... \) → $ ... $
+    s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
+
+    // Collapse accidental $$$$ from nested replacements (only 4+ dollars)
+    s = s.replace(/\$\$\$\$/g, '$$')
+    return s
+  }
+
+  // Avoid touching fenced code blocks (``` and ~~~) and inline code (`code`)
+  const splitter = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
+  const parts = text.split(splitter)
+  return parts
+    .map((part) => {
+      const isBacktickFence = part.startsWith('```')
+      const isTildeFence = part.startsWith('~~~')
+      const isInlineCode = part.startsWith('`') && part.endsWith('`')
+      if (isBacktickFence || isTildeFence || isInlineCode) {
+        return part
+      }
+      // Avoid converting math markers inside URLs like https://example.com/a$b
+      const looksLikeUrl = /https?:\/\//i.test(part)
+      return looksLikeUrl ? part : transform(part)
+    })
+    .join('')
 }
 
 // Add new types
@@ -137,6 +250,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
     }
   }
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
+  const processedThoughts = convertTeXDelimitersToRemarkMath(thoughts)
 
   // Don't render if thoughts are empty and not actively thinking
   if (
@@ -224,7 +338,7 @@ const ThoughtProcess = memo(function ThoughtProcess({
               ),
             }}
           >
-            {thoughts}
+            {processedThoughts}
           </ReactMarkdown>
         </div>
       </motion.div>
@@ -240,11 +354,11 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
   content: string
   isDarkMode: boolean
 }) {
-  // Convert single newlines to markdown line breaks (two spaces + newline)
-  const processedContent = content.replace(/\n/g, '  \n')
-
   // Use the hook to get math plugins
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
+
+  // Use shared converter (same as ThoughtProcess) to keep behavior consistent
+  const processedContent = convertTeXDelimitersToRemarkMath(content)
 
   return (
     <ReactMarkdown
@@ -493,7 +607,7 @@ const ChatMessage = memo(function ChatMessage({
               <div
                 className={`prose w-full max-w-none text-base ${
                   isDarkMode
-                    ? 'text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
+                    ? 'prose-invert text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
                       ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
