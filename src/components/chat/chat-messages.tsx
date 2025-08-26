@@ -64,6 +64,19 @@ function useMathPlugins() {
                   throwOnError: false,
                   strict: false,
                   output: 'htmlAndMathml',
+                  macros: {
+                    // Define macros for symbols that might not be available
+                    '\\digamma': "\\Gamma'",
+                    '\\eth': '\\partial',
+                    '\\Im': '\\mathfrak{Im}',
+                    '\\Re': '\\mathfrak{Re}',
+                    // Some additional common symbols
+                    '\\RR': '\\mathbb{R}',
+                    '\\NN': '\\mathbb{N}',
+                    '\\ZZ': '\\mathbb{Z}',
+                    '\\QQ': '\\mathbb{Q}',
+                    '\\CC': '\\mathbb{C}',
+                  },
                 },
               ],
             ] as any[],
@@ -112,6 +125,24 @@ function convertTeXDelimitersToRemarkMath(text: string): string {
       (_, inner) =>
         `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
     )
+    // cases environment → wrap in display math
+    s = s.replace(
+      /\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g,
+      (_, inner) =>
+        `\n\n$$\n\\begin{cases}\n${inner.trim()}\n\\end{cases}\n$$\n\n`,
+    )
+    // matrix environments → wrap in display math
+    s = s.replace(
+      /\\begin\{(matrix|pmatrix|bmatrix|vmatrix|Vmatrix)\}([\s\S]*?)\\end\{\1\}/g,
+      (_, env, inner) =>
+        `\n\n$$\n\\begin{${env}}\n${inner.trim()}\n\\end{${env}}\n$$\n\n`,
+    )
+    // array environment → wrap in display math
+    s = s.replace(
+      /\\begin\{array\}(\{[^}]*\})([\s\S]*?)\\end\{array\}/g,
+      (_, colspec, inner) =>
+        `\n\n$$\n\\begin{array}${colspec}\n${inner.trim()}\n\\end{array}\n$$\n\n`,
+    )
     // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
     s = s.replace(
       /\\\[([\s\S]*?)\\\]/g,
@@ -119,8 +150,15 @@ function convertTeXDelimitersToRemarkMath(text: string): string {
     )
     // Inline math: \( ... \) → $ ... $
     s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
+
+    // Fix some common symbol issues for KaTeX compatibility
+    s = s.replace(/\\digamma/g, '\\varGamma')
+    s = s.replace(/\\eth/g, '\\partial')
+
     // Collapse accidental $$$$ from nested replacements
     s = s.replace(/\$\$\$\$/g, '$$')
+    // Also collapse triple dollars
+    s = s.replace(/\$\$\$/g, '$$')
     return s
   }
 
