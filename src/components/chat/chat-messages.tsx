@@ -265,12 +265,11 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
         /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
         (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
       )
-      // Display math: \[ ... \] → block $$ ... $$
-      // If inner already contains $$ or an environment, don't wrap again
-      s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => {
-        const hasBlock = inner.includes('$$') || /\\begin\{.*?\}/.test(inner)
-        return hasBlock ? `\n\n${inner}\n\n` : `\n\n$$\n${inner.trim()}\n$$\n\n`
-      })
+      // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
+      s = s.replace(
+        /\\\[([\s\S]*?)\\\]/g,
+        (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
+      )
       // Inline math: \( ... \) → $ ... $
       s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
       // Collapse accidental $$$$ from nested replacements
@@ -278,10 +277,18 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
       return s
     }
 
-    // Avoid touching fenced code blocks
-    const parts = text.split(/(```[\s\S]*?```)/g)
+    // Avoid touching fenced code blocks (``` and ~~~) and inline code (`code`)
+    const splitter = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
+    const parts = text.split(splitter)
     return parts
-      .map((part) => (part.startsWith('```') ? part : transform(part)))
+      .map((part) => {
+        const isBacktickFence = part.startsWith('```')
+        const isTildeFence = part.startsWith('~~~')
+        const isInlineCode = part.startsWith('`') && part.endsWith('`')
+        return isBacktickFence || isTildeFence || isInlineCode
+          ? part
+          : transform(part)
+      })
       .join('')
   }
 
