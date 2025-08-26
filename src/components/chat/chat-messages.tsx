@@ -113,7 +113,6 @@ function convertTeXDelimitersToRemarkMath(text: string): string {
         `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
     )
     // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
-    s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
     s = s.replace(
       /\\\[([\s\S]*?)\\\]/g,
       (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
@@ -326,69 +325,7 @@ const MemoizedMarkdown = memo(function MemoizedMarkdown({
   // Use the hook to get math plugins
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
-  // Normalize LaTeX math delimiters to what remark-math parses ($ and $$)
-  const convertTeXDelimitersToRemarkMath = (text: string) => {
-    const transform = (segment: string) => {
-      let s = segment
-      // Combined wrapper: \[ \begin{equation} ... \end{equation} \]
-      s = s.replace(
-        /\\\[\s*\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}\s*\\\]/g,
-        (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
-      )
-      // equation/equation* environments → block $$ ... $$ with surrounding newlines
-      s = s.replace(
-        /\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g,
-        (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
-      )
-      // align/align* → use aligned inside block math for KaTeX compatibility
-      s = s.replace(
-        /\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}/g,
-        (_, inner) =>
-          `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
-      )
-      // gather/gather* → gathered inside block math
-      s = s.replace(
-        /\\begin\{gather\*?\}([\s\S]*?)\\end\{gather\*?\}/g,
-        (_, inner) =>
-          `\n\n$$\n\\begin{gathered}\n${inner.trim()}\n\\end{gathered}\n$$\n\n`,
-      )
-      // multline/multline* → fallback to aligned inside block math
-      s = s.replace(
-        /\\begin\{multline\*?\}([\s\S]*?)\\end\{multline\*?\}/g,
-        (_, inner) =>
-          `\n\n$$\n\\begin{aligned}\n${inner.trim()}\n\\end{aligned}\n$$\n\n`,
-      )
-      // Display math: \[ ... \] → block $$ ... $$ (always wrap to ensure environments render)
-      s = s.replace(
-        /\\\[([\s\S]*?)\\\]/g,
-        (_, inner) => `\n\n$$\n${inner.trim()}\n$$\n\n`,
-      )
-      // Inline math: \( ... \) → $ ... $
-      s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => `$${inner}$`)
-      // Collapse accidental $$$$ from nested replacements
-      s = s.replace(/\$\$\$\$/g, '$$')
-      return s
-    }
-
-    // Avoid touching fenced code blocks (``` and ~~~) and inline code (`code`)
-    const splitter = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
-    const parts = text.split(splitter)
-    return parts
-      .map((part) => {
-        const isBacktickFence = part.startsWith('```')
-        const isTildeFence = part.startsWith('~~~')
-        const isInlineCode = part.startsWith('`') && part.endsWith('`')
-        // Do not transform inside code fences or inline code
-        if (isBacktickFence || isTildeFence || isInlineCode) {
-          return part
-        }
-        // Avoid converting math markers inside URLs like https://example.com/a$b
-        const looksLikeUrl = /https?:\/\//i.test(part)
-        return looksLikeUrl ? part : transform(part)
-      })
-      .join('')
-  }
-
+  // Use shared converter (same as ThoughtProcess) to keep behavior consistent
   const processedContent = convertTeXDelimitersToRemarkMath(content)
 
   return (
