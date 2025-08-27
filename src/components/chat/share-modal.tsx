@@ -1,4 +1,5 @@
 import { useToast } from '@/hooks/use-toast'
+import { convertLatexForCopy } from '@/utils/latex-processing'
 import {
   CheckIcon,
   DocumentDuplicateIcon,
@@ -38,7 +39,7 @@ export function ShareModal({
 
       // Add the message content
       if (message.content) {
-        markdown += message.content + '\n\n'
+        markdown += convertLatexForCopy(message.content) + '\n\n'
       }
 
       // Add document references if any
