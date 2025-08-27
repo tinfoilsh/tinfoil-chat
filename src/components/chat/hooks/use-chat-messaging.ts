@@ -115,39 +115,61 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
-      // Update state using functional updates to avoid stale closures
+      // Prevent redundant identical updates that could cause render thrashing
+      const lastMessage = newMessages[newMessages.length - 1]
+      const updateKey = `${chatId}|${newMessages.length}|${lastMessage?.content?.length || 0}|${lastMessage?.thoughts?.length || 0}|${isThinking ? '1' : '0'}`
+      ;(updateChatWithHistoryCheck as any)._lastKey ??= ''
+      if ((updateChatWithHistoryCheck as any)._lastKey === updateKey) {
+        return
+      }
+      ;(updateChatWithHistoryCheck as any)._lastKey = updateKey
+
       let updatedChat: Chat | undefined
+      const isForCurrentChat = chatId === currentChatIdRef.current
 
-      setCurrentChat((prevChat) => {
-        updatedChat = {
-          ...prevChat,
-          messages: newMessages,
-        }
-        return updatedChat
-      })
+      // Only update currentChat state if we're updating the currently viewed chat
+      if (isForCurrentChat) {
+        setCurrentChat((prevChat) => {
+          updatedChat = {
+            ...prevChat,
+            messages: newMessages,
+          }
+          return updatedChat
+        })
+      }
 
+      // Always reflect changes in the chats array and capture the updated chat
       setChats((prevChats) =>
-        prevChats.map((c) =>
-          c.id === chatId ? { ...c, messages: newMessages } : c,
-        ),
+        prevChats.map((c) => {
+          if (c.id === chatId) {
+            const mapped = { ...c, messages: newMessages }
+            // If current chat wasn't updated above (not active), capture from list
+            if (!isForCurrentChat) {
+              updatedChat = mapped
+            }
+            return mapped
+          }
+          return c
+        }),
       )
 
       // Save to storage (skip during thinking state unless immediate)
-      // Do this after state updates to avoid multiple setState calls
       if ((!isThinking || immediate) && updatedChat) {
         if (storeHistory) {
           // Skip cloud sync during streaming (unless immediate flag is set for final save)
           const skipCloudSync = isStreamingRef.current && !immediate
 
-          // Save the updated chat object to storage
           chatStorage
             .saveChat(updatedChat, skipCloudSync)
             .then((savedChat) => {
               // Only update if the ID actually changed
-              if (updatedChat && savedChat.id !== updatedChat.id) {
-                const originalChatId = updatedChat.id
+              if (savedChat.id !== updatedChat!.id) {
+                const originalChatId = updatedChat!.id
                 currentChatIdRef.current = savedChat.id
-                setCurrentChat(savedChat)
+                // Only update current chat if it's the one being viewed
+                if (isForCurrentChat) {
+                  setCurrentChat(savedChat)
+                }
                 setChats((prevChats) =>
                   prevChats.map((c) =>
                     c.id === originalChatId ? savedChat : c,
