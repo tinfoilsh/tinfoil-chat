@@ -192,12 +192,8 @@ export const useCustomSystemPrompt = (
     return userPreferencesXML
   }
 
-  // Generate the effective system prompt by replacing the placeholder
-  const generatePersonalizedPrompt = (): string => {
-    // Use custom prompt if enabled
-    const basePrompt =
-      isUsingCustomPrompt && customPrompt ? customPrompt : defaultSystemPrompt
-
+  // Shared helper to replace placeholders in text
+  const replacePlaceholders = (text: string): string => {
     // Generate user preferences XML only if personalization is enabled
     const userPreferencesXML = personalization.isEnabled
       ? generateUserPreferencesXML()
@@ -222,15 +218,20 @@ export const useCustomSystemPrompt = (
     // Extract timezone separately
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    // Always replace system placeholders to prevent them from appearing in the prompt
-    // Only include user preferences if personalization is enabled
-    const result = basePrompt
+    // Replace all placeholders
+    return text
       .replace('{USER_PREFERENCES}', userPreferencesXML)
       .replace('{LANGUAGE}', effectiveLanguage)
       .replace('{CURRENT_DATETIME}', currentDateTime)
       .replace('{TIMEZONE}', timezone)
+  }
 
-    return result
+  // Generate the effective system prompt by replacing the placeholder
+  const generatePersonalizedPrompt = (): string => {
+    // Use custom prompt if enabled
+    const basePrompt =
+      isUsingCustomPrompt && customPrompt ? customPrompt : defaultSystemPrompt
+    return replacePlaceholders(basePrompt)
   }
 
   const effectiveSystemPrompt = generatePersonalizedPrompt()
@@ -238,29 +239,7 @@ export const useCustomSystemPrompt = (
   // Apply the same replacements to rules
   const processRules = (): string => {
     if (!rules) return ''
-
-    const userPreferencesXML = personalization.isEnabled
-      ? generateUserPreferencesXML()
-      : ''
-    const effectiveLanguage = personalization.language.trim() || 'English'
-    const now = new Date()
-    const currentDateTime = now.toLocaleString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      timeZoneName: 'short',
-    })
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-    return rules
-      .replace('{USER_PREFERENCES}', userPreferencesXML)
-      .replace('{LANGUAGE}', effectiveLanguage)
-      .replace('{CURRENT_DATETIME}', currentDateTime)
-      .replace('{TIMEZONE}', timezone)
+    return replacePlaceholders(rules)
   }
 
   return {
