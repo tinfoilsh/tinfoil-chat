@@ -110,19 +110,21 @@ export function useChatMessaging({
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = useCallback(
     (
-      setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
-      currentChat: Chat,
-      setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
       chatId: string,
       newMessages: Message[],
       immediate = false,
       isThinking = false,
     ) => {
       // Update state using functional updates to avoid stale closures
-      setCurrentChat((prevChat) => ({
-        ...prevChat,
-        messages: newMessages,
-      }))
+      let updatedChat: Chat | undefined
+
+      setCurrentChat((prevChat) => {
+        updatedChat = {
+          ...prevChat,
+          messages: newMessages,
+        }
+        return updatedChat
+      })
 
       setChats((prevChats) =>
         prevChats.map((c) =>
@@ -131,27 +133,24 @@ export function useChatMessaging({
       )
 
       // Save to storage (skip during thinking state unless immediate)
-      if (!isThinking || immediate) {
+      // Do this after state updates to avoid multiple setState calls
+      if ((!isThinking || immediate) && updatedChat) {
         if (storeHistory) {
           // Skip cloud sync during streaming (unless immediate flag is set for final save)
           const skipCloudSync = isStreamingRef.current && !immediate
 
-          // Create the updated chat object for storage
-          const updatedChat = {
-            ...currentChat,
-            messages: newMessages,
-          }
-
+          // Save the updated chat object to storage
           chatStorage
             .saveChat(updatedChat, skipCloudSync)
             .then((savedChat) => {
               // Only update if the ID actually changed
-              if (savedChat.id !== updatedChat.id) {
+              if (updatedChat && savedChat.id !== updatedChat.id) {
+                const originalChatId = updatedChat.id
                 currentChatIdRef.current = savedChat.id
                 setCurrentChat(savedChat)
                 setChats((prevChats) =>
                   prevChats.map((c) =>
-                    c.id === updatedChat.id ? savedChat : c,
+                    c.id === originalChatId ? savedChat : c,
                   ),
                 )
               }
@@ -163,15 +162,11 @@ export function useChatMessaging({
             })
         } else {
           // Save to session storage for non-signed-in users
-          const updatedChat = {
-            ...currentChat,
-            messages: newMessages,
-          }
           sessionChatStorage.saveChat(updatedChat)
         }
       }
     },
-    [storeHistory],
+    [storeHistory, setChats, setCurrentChat],
   )
 
   // Cancel generation function
@@ -521,9 +516,6 @@ export function useChatMessaging({
               if (currentChatIdRef.current === updatedChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
                 updateChatWithHistoryCheck(
-                  setChats,
-                  updatedChat,
-                  setCurrentChat,
                   updatedChat.id,
                   newMessages,
                   false,
@@ -563,9 +555,6 @@ export function useChatMessaging({
                 const newMessages = [...updatedMessages, assistantMessage]
                 // Save to localStorage and update display
                 updateChatWithHistoryCheck(
-                  setChats,
-                  updatedChat,
-                  setCurrentChat,
                   chatId,
                   newMessages,
                   true, // immediate = true for final save
@@ -633,15 +622,7 @@ export function useChatMessaging({
                   if (currentChatIdRef.current === updatedChat.id) {
                     const chatId = currentChatIdRef.current
                     const newMessages = [...updatedMessages, assistantMessage]
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      true,
-                    )
+                    updateChatWithHistoryCheck(chatId, newMessages, false, true)
                   }
                 }
                 continue
@@ -683,9 +664,6 @@ export function useChatMessaging({
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
                   updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
                     chatId,
                     newMessages,
                     false,
@@ -723,15 +701,7 @@ export function useChatMessaging({
                 if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                  updateChatWithHistoryCheck(chatId, newMessages, false, false)
                 }
                 continue
               }
@@ -800,15 +770,7 @@ export function useChatMessaging({
                 if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                  updateChatWithHistoryCheck(chatId, newMessages, false, false)
                 }
                 continue
               }
@@ -825,15 +787,7 @@ export function useChatMessaging({
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
 
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    true,
-                  )
+                  updateChatWithHistoryCheck(chatId, newMessages, false, true)
                 }
               } else if (!isInThinkingMode) {
                 // Not in thinking mode, append to regular content
@@ -854,9 +808,6 @@ export function useChatMessaging({
                     const newMessages = [...updatedMessages, assistantMessage]
 
                     updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
                       chatId,
                       newMessages,
                       false,
@@ -883,9 +834,6 @@ export function useChatMessaging({
           if (chatId === updatedChat.id) {
             const finalMessages = [...updatedMessages, assistantMessage]
             updateChatWithHistoryCheck(
-              setChats,
-              updatedChat,
-              setCurrentChat,
               chatId,
               finalMessages,
               true, // immediate = true for final save
@@ -927,9 +875,6 @@ export function useChatMessaging({
           }
 
           updateChatWithHistoryCheck(
-            setChats,
-            updatedChat,
-            setCurrentChat,
             updatedChat.id,
             [...updatedMessages, errorMessage],
             true, // immediate = true to ensure error is saved
@@ -980,8 +925,8 @@ export function useChatMessaging({
       systemPrompt,
       getApiKeyFromHook,
       messagesEndRef,
-      updateChatWithHistoryCheck,
       maxMessages,
+      rules,
     ],
   )
 

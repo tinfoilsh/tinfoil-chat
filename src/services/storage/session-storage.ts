@@ -17,10 +17,12 @@ export const sessionChatStorage = {
       return chats.map((chat) => ({
         ...chat,
         createdAt: new Date(chat.createdAt),
-        messages: chat.messages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
-        })),
+        messages: Array.isArray(chat.messages)
+          ? chat.messages.map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp),
+            }))
+          : [], // Default to empty array if messages is not an array
       }))
     } catch (error) {
       logError('Failed to get chats from session storage', error, {
@@ -34,6 +36,29 @@ export const sessionChatStorage = {
   // Save a chat to session storage
   saveChat(chat: Chat): void {
     try {
+      // Validate chat parameter
+      if (!chat) {
+        logError(
+          'Cannot save chat: chat parameter is undefined or null',
+          undefined,
+          {
+            component: 'sessionChatStorage',
+            action: 'saveChat',
+            metadata: { chat },
+          },
+        )
+        return
+      }
+
+      if (!chat.id) {
+        logError('Cannot save chat: chat.id is undefined or null', undefined, {
+          component: 'sessionChatStorage',
+          action: 'saveChat',
+          metadata: { chat },
+        })
+        return
+      }
+
       const chats = this.getAllChats()
       const existingIndex = chats.findIndex((c) => c.id === chat.id)
 
@@ -48,7 +73,7 @@ export const sessionChatStorage = {
       logError('Failed to save chat to session storage', error, {
         component: 'sessionChatStorage',
         action: 'saveChat',
-        metadata: { chatId: chat.id },
+        metadata: { chatId: chat?.id || 'undefined' },
       })
     }
   },
