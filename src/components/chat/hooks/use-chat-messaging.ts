@@ -118,40 +118,58 @@ export function useChatMessaging({
       immediate = false,
       isThinking = false,
     ) => {
-      // Update state using functional updates to avoid stale closures
-      setCurrentChat((prevChat) => ({
-        ...prevChat,
-        messages: newMessages,
-      }))
+      // Track the updated chat for saving
+      let updatedChatForSaving: Chat | undefined
 
+      // Only update currentChat if this is the active chat
+      const isCurrentChat = currentChat.id === chatId
+
+      if (isCurrentChat) {
+        // Update current chat state and capture the fresh state
+        setCurrentChat((prevChat) => {
+          const freshChat = {
+            ...prevChat,
+            messages: newMessages,
+          }
+          updatedChatForSaving = freshChat
+          return freshChat
+        })
+      }
+
+      // Always update the chats array
       setChats((prevChats) =>
-        prevChats.map((c) =>
-          c.id === chatId ? { ...c, messages: newMessages } : c,
-        ),
+        prevChats.map((c) => {
+          if (c.id === chatId) {
+            const updatedChat = { ...c, messages: newMessages }
+            // If we didn't capture it from setCurrentChat, capture it here
+            if (!updatedChatForSaving) {
+              updatedChatForSaving = updatedChat
+            }
+            return updatedChat
+          }
+          return c
+        }),
       )
 
       // Save to storage (skip during thinking state unless immediate)
-      if (!isThinking || immediate) {
+      if ((!isThinking || immediate) && updatedChatForSaving) {
         if (storeHistory) {
           // Skip cloud sync during streaming (unless immediate flag is set for final save)
           const skipCloudSync = isStreamingRef.current && !immediate
 
-          // Create the updated chat object for storage
-          const updatedChat = {
-            ...currentChat,
-            messages: newMessages,
-          }
-
           chatStorage
-            .saveChat(updatedChat, skipCloudSync)
+            .saveChat(updatedChatForSaving, skipCloudSync)
             .then((savedChat) => {
               // Only update if the ID actually changed
-              if (savedChat.id !== updatedChat.id) {
+              if (savedChat.id !== updatedChatForSaving!.id) {
                 currentChatIdRef.current = savedChat.id
-                setCurrentChat(savedChat)
+                // Only update currentChat if this is the active chat
+                if (isCurrentChat) {
+                  setCurrentChat(savedChat)
+                }
                 setChats((prevChats) =>
                   prevChats.map((c) =>
-                    c.id === updatedChat.id ? savedChat : c,
+                    c.id === updatedChatForSaving!.id ? savedChat : c,
                   ),
                 )
               }
@@ -163,11 +181,7 @@ export function useChatMessaging({
             })
         } else {
           // Save to session storage for non-signed-in users
-          const updatedChat = {
-            ...currentChat,
-            messages: newMessages,
-          }
-          sessionChatStorage.saveChat(updatedChat)
+          sessionChatStorage.saveChat(updatedChatForSaving)
         }
       }
     },
