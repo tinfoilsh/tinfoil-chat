@@ -2,6 +2,9 @@
  * LaTeX processing utilities for chat messages
  */
 
+// Regex to match code blocks that should be preserved without processing
+const CODE_BLOCK_SPLITTER = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
+
 // Check if LaTeX content appears to be document-level LaTeX (not math)
 export function isUnsupportedLatex(content: string): boolean {
   // Common document-level LaTeX patterns that KaTeX doesn't support
@@ -102,8 +105,7 @@ export function convertLatexForCopy(text: string): string {
 // Clean up common LaTeX issues that break KaTeX rendering
 export function sanitizeUnsupportedMathBlocks(text: string): string {
   // Preserve code blocks as-is
-  const splitter = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
-  const parts = text.split(splitter)
+  const parts = text.split(CODE_BLOCK_SPLITTER)
 
   // Simple cleanup for unsupported commands within math content
   const sanitizeMathContent = (content: string): string => {
