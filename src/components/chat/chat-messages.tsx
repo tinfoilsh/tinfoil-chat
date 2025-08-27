@@ -551,7 +551,9 @@ const ChatMessage = memo(function ChatMessage({
                       logWarning('Failed to copy message to clipboard', {
                         component: 'ChatMessage',
                         action: 'copyMessage',
-                        error: error?.message || 'Unknown error',
+                        metadata: {
+                          errorMessage: error?.message || 'Unknown error',
+                        },
                       })
                     })
                 }}

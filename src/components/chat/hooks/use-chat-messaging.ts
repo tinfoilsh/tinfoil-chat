@@ -966,6 +966,7 @@ export function useChatMessaging({
       messagesEndRef,
       maxMessages,
       rules,
+      updateChatWithHistoryCheck,
     ],
   )
 
