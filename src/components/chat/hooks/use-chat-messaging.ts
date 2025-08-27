@@ -111,42 +111,30 @@ export function useChatMessaging({
   const updateChatWithHistoryCheck = useCallback(
     (
       setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
-      currentChat: Chat,
+      chatSnapshot: Chat,
       setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
       chatId: string,
       newMessages: Message[],
       immediate = false,
       isThinking = false,
     ) => {
-      // Track the updated chat for saving
-      let updatedChatForSaving: Chat | undefined
-
-      // Only update currentChat if this is the active chat
-      const isCurrentChat = currentChat.id === chatId
-
-      if (isCurrentChat) {
-        // Update current chat state and capture the fresh state
-        setCurrentChat((prevChat) => {
-          const freshChat = {
-            ...prevChat,
-            messages: newMessages,
-          }
-          updatedChatForSaving = freshChat
-          return freshChat
-        })
+      // Compute the updated chat synchronously to avoid relying on deferred state updates
+      const isCurrentChat = currentChatIdRef.current === chatId
+      // Build the updated chat object synchronously based on the provided chat snapshot
+      // Always align the id with the target chatId to avoid re-introducing a stale/temporary id
+      const updatedChatForSaving: Chat = {
+        ...chatSnapshot,
+        id: chatId,
+        messages: newMessages,
       }
+
+      // Update current chat state if this is the active chat
+      if (isCurrentChat) setCurrentChat(updatedChatForSaving)
 
       // Always update the chats array
       setChats((prevChats) =>
         prevChats.map((c) => {
-          if (c.id === chatId) {
-            const updatedChat = { ...c, messages: newMessages }
-            // If we didn't capture it from setCurrentChat, capture it here
-            if (!updatedChatForSaving) {
-              updatedChatForSaving = updatedChat
-            }
-            return updatedChat
-          }
+          if (c.id === chatId) return updatedChatForSaving
           return c
         }),
       )
