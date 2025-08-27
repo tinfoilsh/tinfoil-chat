@@ -93,11 +93,14 @@ export function isUnsupportedLatex(content: string): boolean {
 }
 
 // Process LaTeX content for proper rendering
+// Currently a pass-through - LaTeX delimiters are handled by remark-math/rehype-katex
 export function processLatexTags(text: string): string {
   return text
 }
 
 // Convert LaTeX content for copying
+// Currently a pass-through - maintains consistency with processLatexTags
+// Does NOT wrap content in $$ to avoid breaking unsupported LaTeX
 export function convertLatexForCopy(text: string): string {
   return text
 }
