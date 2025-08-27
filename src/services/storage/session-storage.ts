@@ -44,7 +44,6 @@ export const sessionChatStorage = {
           {
             component: 'sessionChatStorage',
             action: 'saveChat',
-            metadata: { chat },
           },
         )
         return
@@ -54,7 +53,6 @@ export const sessionChatStorage = {
         logError('Cannot save chat: chat.id is undefined or null', undefined, {
           component: 'sessionChatStorage',
           action: 'saveChat',
-          metadata: { chat },
         })
         return
       }
