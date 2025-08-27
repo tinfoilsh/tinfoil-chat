@@ -134,7 +134,7 @@ export function useChatMessaging({
             )
             .toString(36)
         : '0'
-      const updateKey = `${chatId}|${newMessages.length}|${contentHash}|${thoughtsHash}|${isThinking ? '1' : '0'}`
+      const updateKey = `${chatId}|${newMessages.length}|${contentHash}|${thoughtsHash}|${isThinking ? '1' : '0'}|${immediate ? '1' : '0'}`
       ;(updateChatWithHistoryCheck as any)._lastKey ??= ''
       if ((updateChatWithHistoryCheck as any)._lastKey === updateKey) {
         return
