@@ -453,7 +453,7 @@ export function useChatMessaging({
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
-        let finalSystemPrompt = baseSystemPrompt.replace(
+        let finalSystemPrompt = baseSystemPrompt.replaceAll(
           '{MODEL_NAME}',
           model.name,
         )
@@ -461,7 +461,7 @@ export function useChatMessaging({
         // Always append rules if they exist
         if (rules) {
           // Apply same replacements to rules
-          const processedRules = rules.replace('{MODEL_NAME}', model.name)
+          const processedRules = rules.replaceAll('{MODEL_NAME}', model.name)
           finalSystemPrompt += '\n' + processedRules
         }
 
