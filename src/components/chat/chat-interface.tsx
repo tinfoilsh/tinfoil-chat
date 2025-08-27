@@ -4,7 +4,7 @@
 
 import {
   getAIModels,
-  getSystemPrompt,
+  getSystemPromptAndRules,
   type BaseModel,
 } from '@/app/config/models'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
@@ -123,6 +123,7 @@ export function ChatInterface({
   // State for API data
   const [models, setModels] = useState<BaseModel[]>([])
   const [systemPrompt, setSystemPrompt] = useState<string>('')
+  const [rules, setRules] = useState<string>('')
   const [isLoadingConfig, setIsLoadingConfig] = useState(true)
 
   // State for right sidebar
@@ -158,7 +159,10 @@ export function ChatInterface({
   const isPremium = chat_subscription_active ?? false
 
   // Use custom system prompt hook
-  const { effectiveSystemPrompt } = useCustomSystemPrompt(systemPrompt)
+  const { effectiveSystemPrompt, processedRules } = useCustomSystemPrompt(
+    systemPrompt,
+    rules,
+  )
 
   // Check for migration and show intro modal
   useEffect(() => {
@@ -194,20 +198,21 @@ export function ChatInterface({
     let cancelled = false
     const loadInitial = async () => {
       try {
-        // Always fetch system prompt ASAP
-        const promptPromise = getSystemPrompt()
+        // Always fetch system prompt and rules ASAP
+        const promptPromise = getSystemPromptAndRules()
 
         // If subscription is already known (from cache), prefer correct model set initially
         const isPremiumNow =
           !subscriptionLoading && (chat_subscription_active ?? false)
         const modelsPromise = getAIModels(isPremiumNow)
 
-        const [systemPromptData, initialModels] = await Promise.all([
+        const [promptData, initialModels] = await Promise.all([
           promptPromise,
           modelsPromise,
         ])
         if (!cancelled) {
-          setSystemPrompt(systemPromptData)
+          setSystemPrompt(promptData.systemPrompt)
+          setRules(promptData.rules)
           setModels(initialModels)
           setIsLoadingConfig(false)
         }
@@ -273,6 +278,7 @@ export function ChatInterface({
     reloadChats,
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
+    rules: processedRules,
     storeHistory: isSignedIn, // Enable storage for all signed-in users
     isPremium: isPremium,
     models: models,

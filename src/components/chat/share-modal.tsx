@@ -36,7 +36,7 @@ export function ShareModal({
         markdown += '## Assistant\n\n'
       }
 
-      // Add the message content
+      // Add the message content (raw, without processing)
       if (message.content) {
         markdown += message.content + '\n\n'
       }

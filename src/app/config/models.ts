@@ -91,8 +91,11 @@ export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
   }
 }
 
-// Fetch system prompt from the API
-export const getSystemPrompt = async (): Promise<string> => {
+// Fetch system prompt and rules from the API
+export const getSystemPromptAndRules = async (): Promise<{
+  systemPrompt: string
+  rules: string
+}> => {
   try {
     const url = `${API_BASE_URL}/api/app/system-prompt`
     const response = await fetch(url)
@@ -102,12 +105,18 @@ export const getSystemPrompt = async (): Promise<string> => {
     }
 
     const data = await response.json()
-    return `<system>\n${data.systemPrompt}\n</system>`
+    return {
+      systemPrompt: `<system>\n${data.systemPrompt}\n</system>`,
+      rules: data.rules,
+    }
   } catch (error) {
     logError('Failed to fetch system prompt', error, {
-      component: 'getSystemPrompt',
+      component: 'getSystemPromptAndRules',
     })
-    // Return a basic fallback system prompt
-    return `<system> You are an intelligent and helpful assistant named Tin. </system>`
+    // Return a basic fallback
+    return {
+      systemPrompt: `<system> You are an intelligent and helpful assistant named Tin. </system>`,
+      rules: '',
+    }
   }
 }
