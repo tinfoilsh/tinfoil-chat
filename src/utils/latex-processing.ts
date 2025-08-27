@@ -23,37 +23,66 @@ export function isUnsupportedLatex(content: string): boolean {
     // and avoid blocking array-related commands like \hline/\cline/\multicolumn
   ]
 
-  // Check if it contains document-level LaTeX
-  const hasDocumentLatex = documentPatterns.some((pattern) =>
+  // First, check for specific supported math environments
+  const supportedMathEnvironments = [
+    'matrix',
+    'pmatrix',
+    'bmatrix',
+    'vmatrix',
+    'Vmatrix',
+    'cases',
+    'aligned',
+    'align',
+    'alignat',
+    'gather',
+    'gathered',
+    'array',
+    'split',
+    'equation',
+    'multline',
+    'subarray',
+  ]
+
+  // Find all \begin{...} environments in the content
+  const envMatches = content.match(/\\begin\{([a-zA-Z]+)\*?\}/g) || []
+  const environments = envMatches
+    .map((match) => {
+      const envName = match.match(/\\begin\{([a-zA-Z]+)\*?\}/)
+      return envName ? envName[1] : null
+    })
+    .filter(Boolean)
+
+  // Check if ALL environments are supported math environments
+  const hasOnlyMathEnvironments =
+    environments.length > 0 &&
+    environments.every((env) => supportedMathEnvironments.includes(env!))
+
+  // If there are environments and they're NOT all math environments, it's unsupported
+  if (environments.length > 0 && !hasOnlyMathEnvironments) {
+    return true
+  }
+
+  // Now check for other document-level LaTeX patterns (excluding \begin/\end)
+  const otherDocumentPatterns = [
+    /\\usepackage/,
+    /\\documentclass/,
+    /\\section/,
+    /\\chapter/,
+    /\\item\s/,
+    /\\caption/,
+    /\\label/,
+    /\\ref/,
+    /\\cite/,
+    /\\bibliography/,
+    /\\centering/,
+  ]
+
+  // If any other document-level pattern is found, it's unsupported
+  const hasOtherDocumentLatex = otherDocumentPatterns.some((pattern) =>
     pattern.test(content),
   )
-  if (hasDocumentLatex) {
-    // But allow certain math environments that KaTeX does support
-    const supportedMathEnvironments = [
-      'matrix',
-      'pmatrix',
-      'bmatrix',
-      'vmatrix',
-      'Vmatrix',
-      'cases',
-      'aligned',
-      'align',
-      'alignat',
-      'gather',
-      'gathered',
-      'array',
-      'split',
-      'equation',
-      'multline',
-      'subarray',
-    ]
 
-    // Check if it's actually a supported math environment
-    const envMatch = content.match(/\\begin\{([a-zA-Z]+)\*?\}/)
-    if (envMatch && supportedMathEnvironments.includes(envMatch[1])) {
-      return false // It's a supported math environment
-    }
-
+  if (hasOtherDocumentLatex) {
     return true // It's document-level LaTeX
   }
 
@@ -114,8 +143,9 @@ export function sanitizeUnsupportedMathBlocks(text: string): string {
       )
 
       // Clean up inline math $...$ and \(...\)
+      // Match $ that are not escaped (not preceded by \) and not doubled ($$)
       transformed = transformed.replace(
-        /(^|[^$])\$(?!\$)([\s\S]*?)\$(?!\$)/g,
+        /(^|[^\\$])\$(?!\$)((?:[^$\\]|\\[^$]|\\$)*?)\$(?!\$)/g,
         (_m, prefix: string, inner: string) => {
           return prefix + '$' + sanitizeMathContent(inner) + '$'
         },

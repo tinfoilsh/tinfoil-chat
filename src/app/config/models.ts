@@ -107,7 +107,7 @@ export const getSystemPromptAndRules = async (): Promise<{
     const data = await response.json()
     return {
       systemPrompt: `<system>\n${data.systemPrompt}\n</system>`,
-      rules: data.rules || '',
+      rules: data.rules,
     }
   } catch (error) {
     logError('Failed to fetch system prompt', error, {

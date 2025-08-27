@@ -541,9 +541,19 @@ const ChatMessage = memo(function ChatMessage({
               <button
                 onClick={() => {
                   const textToCopy = convertLatexForCopy(message.content)
-                  navigator.clipboard.writeText(textToCopy)
-                  setIsCopied(true)
-                  setTimeout(() => setIsCopied(false), 2000)
+                  navigator.clipboard
+                    .writeText(textToCopy)
+                    .then(() => {
+                      setIsCopied(true)
+                      setTimeout(() => setIsCopied(false), 2000)
+                    })
+                    .catch((error) => {
+                      logWarning('Failed to copy message to clipboard', {
+                        component: 'ChatMessage',
+                        action: 'copyMessage',
+                        error: error?.message || 'Unknown error',
+                      })
+                    })
                 }}
                 className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-all ${
                   isCopied
