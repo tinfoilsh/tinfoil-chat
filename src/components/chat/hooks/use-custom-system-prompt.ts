@@ -11,11 +11,13 @@ type PersonalizationSettings = {
 
 type UseCustomSystemPromptReturn = {
   effectiveSystemPrompt: string
+  processedRules: string
   isUsingPersonalization: boolean
 }
 
 export const useCustomSystemPrompt = (
   defaultSystemPrompt: string,
+  rules: string = '',
 ): UseCustomSystemPromptReturn => {
   const [personalization, setPersonalization] =
     useState<PersonalizationSettings>({
@@ -233,8 +235,37 @@ export const useCustomSystemPrompt = (
 
   const effectiveSystemPrompt = generatePersonalizedPrompt()
 
+  // Apply the same replacements to rules
+  const processRules = (): string => {
+    if (!rules) return ''
+
+    const userPreferencesXML = personalization.isEnabled
+      ? generateUserPreferencesXML()
+      : ''
+    const effectiveLanguage = personalization.language.trim() || 'English'
+    const now = new Date()
+    const currentDateTime = now.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    })
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    return rules
+      .replace('{USER_PREFERENCES}', userPreferencesXML)
+      .replace('{LANGUAGE}', effectiveLanguage)
+      .replace('{CURRENT_DATETIME}', currentDateTime)
+      .replace('{TIMEZONE}', timezone)
+  }
+
   return {
     effectiveSystemPrompt,
+    processedRules: processRules(),
     isUsingPersonalization: personalization.isEnabled,
   }
 }

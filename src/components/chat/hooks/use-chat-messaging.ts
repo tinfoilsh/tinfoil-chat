@@ -16,6 +16,7 @@ import { useMaxMessages } from './use-max-messages'
 
 interface UseChatMessagingProps {
   systemPrompt: string
+  rules?: string
   storeHistory: boolean
   isPremium: boolean
   models: BaseModel[]
@@ -49,6 +50,7 @@ interface UseChatMessagingReturn {
 
 export function useChatMessaging({
   systemPrompt,
+  rules = '',
   storeHistory,
   isPremium,
   models,
@@ -417,10 +419,17 @@ export function useChatMessaging({
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
-        const finalSystemPrompt = baseSystemPrompt.replace(
+        let finalSystemPrompt = baseSystemPrompt.replace(
           '{MODEL_NAME}',
           model.name,
         )
+
+        // Always append rules if they exist
+        if (rules) {
+          // Apply same replacements to rules
+          const processedRules = rules.replace('{MODEL_NAME}', model.name)
+          finalSystemPrompt += '\n' + processedRules
+        }
 
         const response = await fetch(proxyUrl, {
           method: 'POST',

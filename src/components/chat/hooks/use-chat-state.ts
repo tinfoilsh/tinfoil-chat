@@ -63,12 +63,14 @@ interface UseChatStateReturn {
 
 export function useChatState({
   systemPrompt,
+  rules = '',
   storeHistory = true,
   isPremium = true,
   models = [],
   subscriptionLoading = false,
 }: {
   systemPrompt: string
+  rules?: string
   storeHistory?: boolean
   isPremium?: boolean
   models?: BaseModel[]
@@ -138,6 +140,7 @@ export function useChatState({
     getApiKey,
   } = useChatMessaging({
     systemPrompt,
+    rules,
     storeHistory,
     isPremium,
     models,
