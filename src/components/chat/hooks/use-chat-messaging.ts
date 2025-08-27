@@ -110,86 +110,54 @@ export function useChatMessaging({
   // A modified version of updateChat that respects the storeHistory flag
   const updateChatWithHistoryCheck = useCallback(
     (
+      setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
+      chatSnapshot: Chat,
+      setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
       chatId: string,
       newMessages: Message[],
       immediate = false,
       isThinking = false,
     ) => {
-      // Prevent redundant identical updates that could cause render thrashing
-      const lastMessage = newMessages[newMessages.length - 1]
-      // Create a simple hash of the content to ensure we don't miss different messages with same length
-      const contentHash = lastMessage?.content
-        ? Array.from(lastMessage.content)
-            .reduce(
-              (hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0,
-              0,
-            )
-            .toString(36)
-        : '0'
-      const thoughtsHash = lastMessage?.thoughts
-        ? Array.from(lastMessage.thoughts)
-            .reduce(
-              (hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0,
-              0,
-            )
-            .toString(36)
-        : '0'
-      const updateKey = `${chatId}|${newMessages.length}|${contentHash}|${thoughtsHash}|${isThinking ? '1' : '0'}|${immediate ? '1' : '0'}`
-      ;(updateChatWithHistoryCheck as any)._lastKey ??= ''
-      if ((updateChatWithHistoryCheck as any)._lastKey === updateKey) {
-        return
-      }
-      ;(updateChatWithHistoryCheck as any)._lastKey = updateKey
-
-      let updatedChat: Chat | undefined
-      const isForCurrentChat = chatId === currentChatIdRef.current
-
-      // Only update currentChat state if we're updating the currently viewed chat
-      if (isForCurrentChat) {
-        setCurrentChat((prevChat) => {
-          updatedChat = {
-            ...prevChat,
-            messages: newMessages,
-          }
-          return updatedChat
-        })
+      // Compute the updated chat synchronously to avoid relying on deferred state updates
+      const isCurrentChat = currentChatIdRef.current === chatId
+      // Build the updated chat object synchronously based on the provided chat snapshot
+      // Always align the id with the target chatId to avoid re-introducing a stale/temporary id
+      const updatedChatForSaving: Chat = {
+        ...chatSnapshot,
+        id: chatId,
+        messages: newMessages,
       }
 
-      // Always reflect changes in the chats array and capture the updated chat
+      // Update current chat state if this is the active chat
+      if (isCurrentChat) setCurrentChat(updatedChatForSaving)
+
+      // Always update the chats array
       setChats((prevChats) =>
         prevChats.map((c) => {
-          if (c.id === chatId) {
-            const mapped = { ...c, messages: newMessages }
-            // If current chat wasn't updated above (not active), capture from list
-            if (!isForCurrentChat) {
-              updatedChat = mapped
-            }
-            return mapped
-          }
+          if (c.id === chatId) return updatedChatForSaving
           return c
         }),
       )
 
       // Save to storage (skip during thinking state unless immediate)
-      if ((!isThinking || immediate) && updatedChat) {
+      if ((!isThinking || immediate) && updatedChatForSaving) {
         if (storeHistory) {
           // Skip cloud sync during streaming (unless immediate flag is set for final save)
           const skipCloudSync = isStreamingRef.current && !immediate
 
           chatStorage
-            .saveChat(updatedChat, skipCloudSync)
+            .saveChat(updatedChatForSaving, skipCloudSync)
             .then((savedChat) => {
               // Only update if the ID actually changed
-              if (savedChat.id !== updatedChat!.id) {
-                const originalChatId = updatedChat!.id
+              if (savedChat.id !== updatedChatForSaving!.id) {
                 currentChatIdRef.current = savedChat.id
-                // Only update current chat if it's the one being viewed
-                if (isForCurrentChat) {
+                // Only update currentChat if this is the active chat
+                if (isCurrentChat) {
                   setCurrentChat(savedChat)
                 }
                 setChats((prevChats) =>
                   prevChats.map((c) =>
-                    c.id === originalChatId ? savedChat : c,
+                    c.id === updatedChatForSaving!.id ? savedChat : c,
                   ),
                 )
               }
@@ -201,11 +169,11 @@ export function useChatMessaging({
             })
         } else {
           // Save to session storage for non-signed-in users
-          sessionChatStorage.saveChat(updatedChat)
+          sessionChatStorage.saveChat(updatedChatForSaving)
         }
       }
     },
-    [storeHistory, setChats, setCurrentChat],
+    [storeHistory],
   )
 
   // Cancel generation function
@@ -555,6 +523,9 @@ export function useChatMessaging({
               if (currentChatIdRef.current === updatedChat.id) {
                 const newMessages = [...updatedMessages, assistantMessage]
                 updateChatWithHistoryCheck(
+                  setChats,
+                  updatedChat,
+                  setCurrentChat,
                   updatedChat.id,
                   newMessages,
                   false,
@@ -594,6 +565,9 @@ export function useChatMessaging({
                 const newMessages = [...updatedMessages, assistantMessage]
                 // Save to localStorage and update display
                 updateChatWithHistoryCheck(
+                  setChats,
+                  updatedChat,
+                  setCurrentChat,
                   chatId,
                   newMessages,
                   true, // immediate = true for final save
@@ -661,7 +635,15 @@ export function useChatMessaging({
                   if (currentChatIdRef.current === updatedChat.id) {
                     const chatId = currentChatIdRef.current
                     const newMessages = [...updatedMessages, assistantMessage]
-                    updateChatWithHistoryCheck(chatId, newMessages, false, true)
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      true,
+                    )
                   }
                 }
                 continue
@@ -703,6 +685,9 @@ export function useChatMessaging({
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
                   updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
                     chatId,
                     newMessages,
                     false,
@@ -740,7 +725,15 @@ export function useChatMessaging({
                 if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(chatId, newMessages, false, false)
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    false,
+                  )
                 }
                 continue
               }
@@ -809,7 +802,15 @@ export function useChatMessaging({
                 if (currentChatIdRef.current === updatedChat.id) {
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(chatId, newMessages, false, false)
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    false,
+                  )
                 }
                 continue
               }
@@ -826,7 +827,15 @@ export function useChatMessaging({
                   const chatId = currentChatIdRef.current
                   const newMessages = [...updatedMessages, assistantMessage]
 
-                  updateChatWithHistoryCheck(chatId, newMessages, false, true)
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    true,
+                  )
                 }
               } else if (!isInThinkingMode) {
                 // Not in thinking mode, append to regular content
@@ -847,6 +856,9 @@ export function useChatMessaging({
                     const newMessages = [...updatedMessages, assistantMessage]
 
                     updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
                       chatId,
                       newMessages,
                       false,
@@ -873,6 +885,9 @@ export function useChatMessaging({
           if (chatId === updatedChat.id) {
             const finalMessages = [...updatedMessages, assistantMessage]
             updateChatWithHistoryCheck(
+              setChats,
+              updatedChat,
+              setCurrentChat,
               chatId,
               finalMessages,
               true, // immediate = true for final save
@@ -914,6 +929,9 @@ export function useChatMessaging({
           }
 
           updateChatWithHistoryCheck(
+            setChats,
+            updatedChat,
+            setCurrentChat,
             updatedChat.id,
             [...updatedMessages, errorMessage],
             true, // immediate = true to ensure error is saved
