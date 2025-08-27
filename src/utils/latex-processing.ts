@@ -8,9 +8,9 @@ const CODE_BLOCK_SPLITTER = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g
 // Check if LaTeX content appears to be document-level LaTeX (not math)
 export function isUnsupportedLatex(content: string): boolean {
   // Common document-level LaTeX patterns that KaTeX doesn't support
+  // Note: Do NOT treat inline text macros (\text..., \textcolor) as document-level
+  // and avoid blocking array-related commands like \hline/\cline/\multicolumn
   const documentPatterns = [
-    /\\begin\{[a-zA-Z]+\*?\}/, // Any \begin{environment} (we'll allow specific math ones below)
-    /\\end\{[a-zA-Z]+\*?\}/, // Any \end{environment}
     /\\usepackage/,
     /\\documentclass/,
     /\\section/,
@@ -22,8 +22,6 @@ export function isUnsupportedLatex(content: string): boolean {
     /\\cite/,
     /\\bibliography/,
     /\\centering/,
-    // Note: Do NOT treat inline text macros (\text..., \textcolor) as document-level
-    // and avoid blocking array-related commands like \hline/\cline/\multicolumn
   ]
 
   // First, check for specific supported math environments
@@ -65,27 +63,13 @@ export function isUnsupportedLatex(content: string): boolean {
     return true
   }
 
-  // Now check for other document-level LaTeX patterns (excluding \begin/\end)
-  const otherDocumentPatterns = [
-    /\\usepackage/,
-    /\\documentclass/,
-    /\\section/,
-    /\\chapter/,
-    /\\item\s/,
-    /\\caption/,
-    /\\label/,
-    /\\ref/,
-    /\\cite/,
-    /\\bibliography/,
-    /\\centering/,
-  ]
-
-  // If any other document-level pattern is found, it's unsupported
-  const hasOtherDocumentLatex = otherDocumentPatterns.some((pattern) =>
+  // Check for document-level LaTeX patterns
+  // If any document-level pattern is found, it's unsupported
+  const hasDocumentLatex = documentPatterns.some((pattern) =>
     pattern.test(content),
   )
 
-  if (hasOtherDocumentLatex) {
+  if (hasDocumentLatex) {
     return true // It's document-level LaTeX
   }
 
