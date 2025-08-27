@@ -117,7 +117,24 @@ export function useChatMessaging({
     ) => {
       // Prevent redundant identical updates that could cause render thrashing
       const lastMessage = newMessages[newMessages.length - 1]
-      const updateKey = `${chatId}|${newMessages.length}|${lastMessage?.content?.length || 0}|${lastMessage?.thoughts?.length || 0}|${isThinking ? '1' : '0'}`
+      // Create a simple hash of the content to ensure we don't miss different messages with same length
+      const contentHash = lastMessage?.content
+        ? Array.from(lastMessage.content)
+            .reduce(
+              (hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0,
+              0,
+            )
+            .toString(36)
+        : '0'
+      const thoughtsHash = lastMessage?.thoughts
+        ? Array.from(lastMessage.thoughts)
+            .reduce(
+              (hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0,
+              0,
+            )
+            .toString(36)
+        : '0'
+      const updateKey = `${chatId}|${newMessages.length}|${contentHash}|${thoughtsHash}|${isThinking ? '1' : '0'}`
       ;(updateChatWithHistoryCheck as any)._lastKey ??= ''
       if ((updateChatWithHistoryCheck as any)._lastKey === updateKey) {
         return
