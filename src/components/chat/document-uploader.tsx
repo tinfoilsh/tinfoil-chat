@@ -24,7 +24,11 @@ export const getFileIconType = (filename: string): string => {
     lowerFilename.endsWith('.jpg') ||
     lowerFilename.endsWith('.jpeg') ||
     lowerFilename.endsWith('.png') ||
-    lowerFilename.endsWith('.gif')
+    lowerFilename.endsWith('.gif') ||
+    lowerFilename.endsWith('.webp') ||
+    lowerFilename.endsWith('.bmp') ||
+    lowerFilename.endsWith('.tiff') ||
+    lowerFilename.endsWith('.tif')
   )
     return 'image'
 
