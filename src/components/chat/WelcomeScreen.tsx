@@ -6,7 +6,8 @@ import { motion } from 'framer-motion'
 import React, { memo, useEffect, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ModelSelector } from './model-selector'
-import type { LabelType } from './types'
+import type { ProcessedDocument } from './renderers/types'
+import type { LabelType, LoadingState } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 
 interface WelcomeScreenProps {
@@ -19,12 +20,12 @@ interface WelcomeScreenProps {
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
-  loadingState?: any
+  loadingState?: LoadingState
   cancelGeneration?: () => void
   inputRef?: React.RefObject<HTMLTextAreaElement>
   handleInputFocus?: () => void
   handleDocumentUpload?: (file: File) => Promise<void>
-  processedDocuments?: any[]
+  processedDocuments?: ProcessedDocument[]
   removeDocument?: (id: string) => void
   selectedModel?: string
   handleModelSelect?: (model: string) => void
@@ -295,10 +296,10 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   input={input}
                   setInput={setInput}
                   handleSubmit={onSubmit}
-                  loadingState={loadingState}
-                  cancelGeneration={cancelGeneration || (() => {})}
-                  inputRef={inputRef || React.createRef()}
-                  handleInputFocus={handleInputFocus || (() => {})}
+                  loadingState={loadingState ?? 'idle'}
+                  cancelGeneration={cancelGeneration ?? (() => {})}
+                  inputRef={inputRef ?? React.createRef()}
+                  handleInputFocus={handleInputFocus ?? (() => {})}
                   inputMinHeight="28px"
                   isDarkMode={isDarkMode}
                   handleDocumentUpload={handleDocumentUpload}
