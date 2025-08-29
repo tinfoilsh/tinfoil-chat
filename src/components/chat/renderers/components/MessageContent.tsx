@@ -85,7 +85,7 @@ export const MessageContent = memo(function MessageContent({
           children?: React.ReactNode
           inline?: boolean
         } & React.HTMLAttributes<HTMLElement>) {
-          const match = /language-(\w+)/.exec(className || '')
+          const match = /language-([\w+#-]+)/.exec(className || '')
           const language = match ? match[1] : ''
 
           if (!props.inline && language) {
