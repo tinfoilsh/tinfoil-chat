@@ -1,5 +1,5 @@
 import type { BaseModel } from '@/app/config/models'
-import type { Message } from '@/components/chat/types'
+import type { LoadingState, Message } from '@/components/chat/types'
 
 export interface MessageRenderProps {
   message: Message
@@ -25,7 +25,7 @@ export interface InputRenderProps {
   model: BaseModel
   input: string
   setInput: (value: string) => void
-  loadingState: 'idle' | 'loading' | 'streaming'
+  loadingState: LoadingState
   cancelGeneration: () => void
   inputRef: React.RefObject<HTMLTextAreaElement>
   handleInputFocus: () => void
