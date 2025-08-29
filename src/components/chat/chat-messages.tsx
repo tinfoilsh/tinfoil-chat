@@ -9,7 +9,7 @@ import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
-import { DefaultMessageRenderer, getRendererRegistry } from './renderers'
+import { DefaultMessageRenderer, getRendererRegistry } from './renderers/client'
 import type { Message } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 

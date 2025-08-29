@@ -1,30 +1,27 @@
-// Central export for all renderers
+// Server-safe exports only
+// For client components, import from './client'
+
+// Registry functions (server-safe)
 export { getRendererRegistry, resetRendererRegistry } from './registry'
+
+// Type exports (server-safe)
 export type {
-  InputRenderer,
   InputRenderProps,
-  MessageRenderer,
+  InputRenderer,
   MessageRenderProps,
+  MessageRenderer,
+  ProcessedDocument,
   UIProvider,
 } from './types'
 
-// Default renderers
-export { DefaultInputRenderer } from './default/DefaultInputRenderer'
-export { DefaultMessageRenderer } from './default/DefaultMessageRenderer'
-
-// Components
-export { DocumentList } from './components/DocumentList'
-export { MessageActions } from './components/MessageActions'
-export { MessageContent } from './components/MessageContent'
-export { ThoughtProcess } from './components/ThoughtProcess'
-
-// Initialization function - should be called explicitly at app startup
-import { DefaultInputRenderer } from './default/DefaultInputRenderer'
-import { DefaultMessageRenderer } from './default/DefaultMessageRenderer'
-import { getRendererRegistry } from './registry'
-
-export function initializeRenderers(): void {
-  const registry = getRendererRegistry()
-  registry.setDefaultMessageRenderer(DefaultMessageRenderer)
-  registry.setDefaultInputRenderer(DefaultInputRenderer)
-}
+// Re-export client components from the client barrel for backward compatibility
+// Note: These will trigger client boundary when imported
+export {
+  DefaultInputRenderer,
+  DefaultMessageRenderer,
+  DocumentList,
+  MessageActions,
+  MessageContent,
+  ThoughtProcess,
+  initializeRenderers,
+} from './client'

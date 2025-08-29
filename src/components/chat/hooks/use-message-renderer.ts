@@ -5,7 +5,7 @@ import {
   DefaultInputRenderer,
   DefaultMessageRenderer,
   getRendererRegistry,
-} from '../renderers'
+} from '../renderers/client'
 
 export function useMessageRenderer(message: Message, model: BaseModel | null) {
   return useMemo(() => {
