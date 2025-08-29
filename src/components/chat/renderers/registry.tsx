@@ -73,16 +73,11 @@ class RendererRegistry {
       id: 'fallback',
       modelPattern: /.*/,
       canRender: () => true,
-      render: ({ message }) => {
-        // Return a simple div with the message content
-        // This would normally be JSX but we're in a .ts file
-        const React = require('react')
-        return React.createElement(
-          'div',
-          { className: 'p-4' },
-          React.createElement('p', null, message.content),
-        )
-      },
+      render: ({ message }) => (
+        <div className="p-4">
+          <p>{message.content}</p>
+        </div>
+      ),
     }
   }
 
@@ -91,27 +86,21 @@ class RendererRegistry {
       id: 'fallback',
       modelPattern: /.*/,
       canRender: () => true,
-      render: ({ onSubmit, input, setInput }) => {
-        // Return a simple form
-        // This would normally be JSX but we're in a .ts file
-        const React = require('react')
-        return React.createElement(
-          'form',
-          {
-            onSubmit: (e: React.FormEvent) => {
-              e.preventDefault()
-              onSubmit(input)
-            },
-          },
-          React.createElement('input', {
-            type: 'text',
-            value: input,
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-              setInput(e.target.value),
-            className: 'w-full p-2 border rounded',
-          }),
-        )
-      },
+      render: ({ onSubmit, input, setInput }) => (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            onSubmit(input)
+          }}
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            className="w-full rounded border p-2"
+          />
+        </form>
+      ),
     }
   }
 }
