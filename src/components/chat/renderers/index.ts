@@ -18,13 +18,12 @@ export { MessageActions } from './components/MessageActions'
 export { MessageContent } from './components/MessageContent'
 export { ThoughtProcess } from './components/ThoughtProcess'
 
-// Initialize registry with default renderers
+// Initialization function - should be called explicitly at app startup
 import { DefaultInputRenderer } from './default/DefaultInputRenderer'
 import { DefaultMessageRenderer } from './default/DefaultMessageRenderer'
 import { getRendererRegistry } from './registry'
 
-// Register defaults
-if (typeof window !== 'undefined') {
+export function initializeRenderers(): void {
   const registry = getRendererRegistry()
   registry.setDefaultMessageRenderer(DefaultMessageRenderer)
   registry.setDefaultInputRenderer(DefaultInputRenderer)

@@ -38,6 +38,7 @@ import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
+import { initializeRenderers } from './renderers'
 import type { VerificationState } from './types'
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
 const VerifierSidebarLazy = dynamic(
@@ -163,6 +164,11 @@ export function ChatInterface({
     systemPrompt,
     rules,
   )
+
+  // Initialize renderers on mount
+  useEffect(() => {
+    initializeRenderers()
+  }, [])
 
   // Check for migration and show intro modal
   useEffect(() => {
