@@ -39,7 +39,11 @@ export const StreamingText = memo(function StreamingText({
           setShowCursor(false)
         }, 500) // Hide after 500ms
       }
-      return
+      return () => {
+        if (cursorTimeoutRef.current) {
+          clearTimeout(cursorTimeoutRef.current)
+        }
+      }
     }
 
     // Detect if content is changing (streaming)
