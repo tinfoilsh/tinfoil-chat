@@ -1,6 +1,16 @@
 import type { BaseModel } from '@/app/config/models'
 import type { LoadingState, Message } from '@/components/chat/types'
 
+// ProcessedDocument type for chat input documents
+export type ProcessedDocument = {
+  id: string
+  name: string
+  time: Date
+  content?: string
+  isUploading?: boolean
+  imageData?: { base64: string; mimeType: string }
+}
+
 export interface MessageRenderProps {
   message: Message
   model: BaseModel
@@ -30,7 +40,7 @@ export interface InputRenderProps {
   inputRef: React.RefObject<HTMLTextAreaElement>
   handleInputFocus: () => void
   handleDocumentUpload?: (file: File) => Promise<void>
-  processedDocuments?: any[]
+  processedDocuments?: ProcessedDocument[]
   removeDocument?: (id: string) => void
   hasMessages?: boolean
 }
