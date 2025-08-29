@@ -3,7 +3,7 @@
 import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
-import React, { memo, useEffect, useState } from 'react'
+import React, { memo, useEffect, useRef, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
@@ -60,6 +60,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 }: WelcomeScreenProps) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
+  const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
 
   // Load nickname from localStorage and listen for changes
   useEffect(() => {
@@ -298,7 +299,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   handleSubmit={onSubmit}
                   loadingState={loadingState ?? 'idle'}
                   cancelGeneration={cancelGeneration ?? (() => {})}
-                  inputRef={inputRef ?? React.createRef()}
+                  inputRef={inputRef ?? fallbackInputRef}
                   handleInputFocus={handleInputFocus ?? (() => {})}
                   inputMinHeight="28px"
                   isDarkMode={isDarkMode}
