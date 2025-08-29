@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import React, { memo, useEffect, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ModelSelector } from './model-selector'
+import type { LabelType } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 
 interface WelcomeScreenProps {
@@ -27,9 +28,9 @@ interface WelcomeScreenProps {
   removeDocument?: (id: string) => void
   selectedModel?: string
   handleModelSelect?: (model: string) => void
-  expandedLabel?: string | null
+  expandedLabel?: LabelType
   handleLabelClick?: (
-    label: 'verify' | 'model' | 'info',
+    label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
 }
