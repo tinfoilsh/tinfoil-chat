@@ -9,16 +9,9 @@ import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
-import { DefaultMessageRenderer } from './renderers/default/DefaultMessageRenderer'
-import { getRendererRegistry } from './renderers/registry'
+import { DefaultMessageRenderer, getRendererRegistry } from './renderers'
 import type { Message } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
-
-// Register default renderer
-if (typeof window !== 'undefined') {
-  const registry = getRendererRegistry()
-  registry.setDefaultMessageRenderer(DefaultMessageRenderer)
-}
 
 type ChatMessagesProps = {
   messages: Message[]
@@ -74,15 +67,19 @@ const ChatMessage = memo(function ChatMessage({
     ? getRendererRegistry().getMessageRenderer(message, model)
     : DefaultMessageRenderer
 
-  return renderer.render({
-    message,
-    model: model || ({ modelName: 'default' } as BaseModel),
-    isDarkMode,
-    isLastMessage,
-    isStreaming,
-    expandedThoughtsState,
-    setExpandedThoughtsState,
-  })
+  const RendererComponent = renderer.render
+
+  return (
+    <RendererComponent
+      message={message}
+      model={model || ({ modelName: 'default' } as BaseModel)}
+      isDarkMode={isDarkMode}
+      isLastMessage={isLastMessage}
+      isStreaming={isStreaming}
+      expandedThoughtsState={expandedThoughtsState}
+      setExpandedThoughtsState={setExpandedThoughtsState}
+    />
+  )
 })
 
 // Add a new component for the loading state
