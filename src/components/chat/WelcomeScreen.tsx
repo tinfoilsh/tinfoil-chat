@@ -72,7 +72,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
       // Listen for personalization changes
       const handlePersonalizationChange = (event: CustomEvent) => {
-        setNickname(event.detail.nickname || '')
+        setNickname(event.detail?.nickname ?? '')
       }
 
       window.addEventListener(
