@@ -1,5 +1,5 @@
 // Central export for all renderers
-export { rendererRegistry } from './registry'
+export { getRendererRegistry, resetRendererRegistry } from './registry'
 export type {
   InputRenderer,
   InputRenderProps,
@@ -21,10 +21,11 @@ export { ThoughtProcess } from './components/ThoughtProcess'
 // Initialize registry with default renderers
 import { DefaultInputRenderer } from './default/DefaultInputRenderer'
 import { DefaultMessageRenderer } from './default/DefaultMessageRenderer'
-import { rendererRegistry } from './registry'
+import { getRendererRegistry } from './registry'
 
 // Register defaults
 if (typeof window !== 'undefined') {
-  rendererRegistry.setDefaultMessageRenderer(DefaultMessageRenderer)
-  rendererRegistry.setDefaultInputRenderer(DefaultInputRenderer)
+  const registry = getRendererRegistry()
+  registry.setDefaultMessageRenderer(DefaultMessageRenderer)
+  registry.setDefaultInputRenderer(DefaultInputRenderer)
 }

@@ -10,13 +10,14 @@ import { ChatInput } from './chat-input'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
 import { DefaultMessageRenderer } from './renderers/default/DefaultMessageRenderer'
-import { rendererRegistry } from './renderers/registry'
+import { getRendererRegistry } from './renderers/registry'
 import type { Message } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 
 // Register default renderer
 if (typeof window !== 'undefined') {
-  rendererRegistry.setDefaultMessageRenderer(DefaultMessageRenderer)
+  const registry = getRendererRegistry()
+  registry.setDefaultMessageRenderer(DefaultMessageRenderer)
 }
 
 type ChatMessagesProps = {
@@ -70,7 +71,7 @@ const ChatMessage = memo(function ChatMessage({
   >
 }) {
   const renderer = model
-    ? rendererRegistry.getMessageRenderer(message, model)
+    ? getRendererRegistry().getMessageRenderer(message, model)
     : DefaultMessageRenderer
 
   return renderer.render({

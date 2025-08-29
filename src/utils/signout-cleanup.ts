@@ -1,3 +1,4 @@
+import { resetRendererRegistry } from '@/components/chat/renderers'
 import { profileSync } from '@/services/cloud/profile-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -25,6 +26,13 @@ export async function performSignoutCleanup(): Promise<void> {
     logInfo('Starting signout cleanup', {
       component: 'signoutCleanup',
       action: 'performSignoutCleanup',
+    })
+
+    // Reset renderer registry to clear any cached renderers
+    resetRendererRegistry()
+    logInfo('Reset renderer registry', {
+      component: 'signoutCleanup',
+      action: 'resetRendererRegistry',
     })
 
     // Clear profile sync cache

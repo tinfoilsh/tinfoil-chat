@@ -60,6 +60,14 @@ class RendererRegistry {
     return null
   }
 
+  reset() {
+    this.messageRenderers = []
+    this.inputRenderers = []
+    this.providers.clear()
+    this.defaultMessageRenderer = null
+    this.defaultInputRenderer = null
+  }
+
   private createFallbackMessageRenderer(): MessageRenderer {
     return {
       id: 'fallback',
@@ -108,4 +116,18 @@ class RendererRegistry {
   }
 }
 
-export const rendererRegistry = new RendererRegistry()
+let registryInstance: RendererRegistry | null = null
+
+export function getRendererRegistry(): RendererRegistry {
+  if (!registryInstance) {
+    registryInstance = new RendererRegistry()
+  }
+  return registryInstance
+}
+
+export function resetRendererRegistry(): void {
+  if (registryInstance) {
+    registryInstance.reset()
+  }
+  registryInstance = null
+}
