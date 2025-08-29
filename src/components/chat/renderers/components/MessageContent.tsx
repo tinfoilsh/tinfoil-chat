@@ -1,6 +1,7 @@
 'use client'
 
 import { CodeBlock } from '@/components/code-block'
+import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
@@ -53,7 +54,16 @@ function useMathPlugins() {
             ] as any[],
           })
         })
-        .catch(() => {})
+        .catch((error) => {
+          logError('Failed to load markdown plugins', error, {
+            component: 'MessageContent',
+            action: 'loadPlugins',
+            metadata: {
+              plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
+            },
+          })
+          // Keep default plugins as fallback
+        })
     }
   }, [])
 
