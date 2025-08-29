@@ -1,0 +1,167 @@
+'use client'
+
+import { CodeBlock } from '@/components/code-block'
+import {
+  processLatexTags,
+  sanitizeUnsupportedMathBlocks,
+} from '@/utils/latex-processing'
+import 'katex/dist/katex.min.css'
+import { memo, useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+
+interface MessageContentProps {
+  content: string
+  isDarkMode: boolean
+  isUser?: boolean
+}
+
+function useMathPlugins() {
+  const [plugins, setPlugins] = useState<{
+    remarkPlugins: any[]
+    rehypePlugins: any[]
+  }>({
+    remarkPlugins: [remarkGfm],
+    rehypePlugins: [],
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      Promise.all([
+        import('remark-math'),
+        import('rehype-katex'),
+        import('remark-breaks'),
+      ])
+        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
+          setPlugins({
+            remarkPlugins: [
+              remarkMathMod.default,
+              remarkGfm,
+              remarkBreaksMod.default,
+            ] as any[],
+            rehypePlugins: [
+              [
+                rehypeKatexMod.default,
+                {
+                  throwOnError: false,
+                  strict: false,
+                  output: 'htmlAndMathml',
+                  errorColor: '#cc0000',
+                  trust: false,
+                },
+              ],
+            ] as any[],
+          })
+        })
+        .catch(() => {})
+    }
+  }, [])
+
+  return plugins
+}
+
+export const MessageContent = memo(function MessageContent({
+  content,
+  isDarkMode,
+  isUser = false,
+}: MessageContentProps) {
+  const { remarkPlugins, rehypePlugins } = useMathPlugins()
+  const processedContent = processLatexTags(content)
+  const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={{
+        code({
+          node,
+          className,
+          children,
+          ...props
+        }: {
+          node?: unknown
+          className?: string
+          children?: React.ReactNode
+          inline?: boolean
+        } & React.HTMLAttributes<HTMLElement>) {
+          const match = /language-(\w+)/.exec(className || '')
+          const language = match ? match[1] : ''
+
+          if (!props.inline && language) {
+            return (
+              <CodeBlock
+                code={String(children).replace(/\n$/, '')}
+                language={language}
+                isDarkMode={isDarkMode}
+              />
+            )
+          }
+          return (
+            <code className={`${className || ''} break-words`} {...props}>
+              {children}
+            </code>
+          )
+        },
+        table({ children, node, ...props }: any) {
+          return (
+            <div className="my-4 w-full overflow-x-auto">
+              <table
+                {...props}
+                className={`divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+                style={{ minWidth: 'max-content' }}
+              >
+                {children}
+              </table>
+            </div>
+          )
+        },
+        thead({ children, node, ...props }: any) {
+          return (
+            <thead
+              {...props}
+              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}
+            >
+              {children}
+            </thead>
+          )
+        },
+        tbody({ children, node, ...props }: any) {
+          return (
+            <tbody
+              {...props}
+              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-white'}`}
+            >
+              {children}
+            </tbody>
+          )
+        },
+        tr({ children, node, ...props }: any) {
+          return <tr {...props}>{children}</tr>
+        },
+        th({ children, node, ...props }: any) {
+          return (
+            <th
+              {...props}
+              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
+            >
+              {children}
+            </th>
+          )
+        },
+        td({ children, node, ...props }: any) {
+          return (
+            <td
+              {...props}
+              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-nowrap`}
+            >
+              {children}
+            </td>
+          )
+        },
+      }}
+    >
+      {sanitizedContent}
+    </ReactMarkdown>
+  )
+})

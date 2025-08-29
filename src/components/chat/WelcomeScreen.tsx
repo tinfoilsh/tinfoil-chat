@@ -3,29 +3,14 @@
 import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
-import 'katex/dist/katex.min.css'
-import React, { memo, useEffect, useMemo, useState } from 'react'
-import { LoadingDots } from '../loading-dots'
+import React, { memo, useEffect, useState } from 'react'
 import { ChatInput } from './chat-input'
-import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
-import { DefaultMessageRenderer } from './renderers/default/DefaultMessageRenderer'
-import { rendererRegistry } from './renderers/registry'
-import type { Message } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 
-// Register default renderer
-if (typeof window !== 'undefined') {
-  rendererRegistry.setDefaultMessageRenderer(DefaultMessageRenderer)
-}
-
-type ChatMessagesProps = {
-  messages: Message[]
+interface WelcomeScreenProps {
   isDarkMode: boolean
-  chatId: string
-  messagesEndRef: React.RefObject<HTMLDivElement>
   openAndExpandVerifier: () => void
-  isWaitingForResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
@@ -49,65 +34,7 @@ type ChatMessagesProps = {
   ) => void
 }
 
-// Simple wrapper component that uses the renderer
-const ChatMessage = memo(function ChatMessage({
-  message,
-  model,
-  isDarkMode,
-  isLastMessage = false,
-  isStreaming = false,
-  expandedThoughtsState,
-  setExpandedThoughtsState,
-}: {
-  message: Message
-  model?: BaseModel | null
-  isDarkMode: boolean
-  isLastMessage?: boolean
-  isStreaming?: boolean
-  expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: React.Dispatch<
-    React.SetStateAction<Record<string, boolean>>
-  >
-}) {
-  const renderer = model
-    ? rendererRegistry.getMessageRenderer(message, model)
-    : DefaultMessageRenderer
-
-  return renderer.render({
-    message,
-    model: model || ({ modelName: 'default' } as BaseModel),
-    isDarkMode,
-    isLastMessage,
-    isStreaming,
-    expandedThoughtsState,
-    setExpandedThoughtsState,
-  })
-})
-
-// Add a new component for the loading state
-const LoadingMessage = memo(function LoadingMessage({
-  isDarkMode,
-}: {
-  isDarkMode: boolean
-}) {
-  return (
-    <div className="group mb-6 flex w-full flex-col items-start">
-      <div className="px-4 py-2">
-        <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
-      </div>
-    </div>
-  )
-})
-
-export const scrollToBottom = (
-  messagesEndRef: React.RefObject<HTMLDivElement>,
-  behavior: ScrollBehavior = 'smooth',
-) => {
-  messagesEndRef.current?.scrollIntoView({ behavior })
-}
-
-// Welcome screen component to reduce renders
-const WelcomeScreen = memo(function WelcomeScreen({
+export const WelcomeScreen = memo(function WelcomeScreen({
   isDarkMode,
   openAndExpandVerifier,
   isPremium,
@@ -128,31 +55,7 @@ const WelcomeScreen = memo(function WelcomeScreen({
   handleModelSelect,
   expandedLabel,
   handleLabelClick,
-}: {
-  isDarkMode: boolean
-  openAndExpandVerifier: () => void
-  isPremium?: boolean
-  models?: BaseModel[]
-  subscriptionLoading?: boolean
-  verificationState?: any
-  onSubmit?: (e: React.FormEvent) => void
-  input?: string
-  setInput?: (value: string) => void
-  loadingState?: any
-  cancelGeneration?: () => void
-  inputRef?: React.RefObject<HTMLTextAreaElement>
-  handleInputFocus?: () => void
-  handleDocumentUpload?: (file: File) => Promise<void>
-  processedDocuments?: any[]
-  removeDocument?: (id: string) => void
-  selectedModel?: string
-  handleModelSelect?: (model: string) => void
-  expandedLabel?: string | null
-  handleLabelClick?: (
-    label: 'verify' | 'model' | 'info',
-    action: () => void,
-  ) => void
-}) {
+}: WelcomeScreenProps) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
 
@@ -205,7 +108,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
               : 'from-gray-200 to-gray-300'
           }`}
         />
-
         <div className="space-y-4">
           {[1, 2, 3].map((index) => (
             <div key={index} className="flex items-start gap-3">
@@ -225,36 +127,6 @@ const WelcomeScreen = memo(function WelcomeScreen({
               />
             </div>
           ))}
-        </div>
-
-        <div className="mt-12">
-          <div
-            className={`mb-4 h-6 w-64 rounded bg-gradient-to-r ${
-              isDarkMode
-                ? 'from-gray-700 to-gray-600'
-                : 'from-gray-200 to-gray-300'
-            }`}
-          />
-          <div className="space-y-3">
-            {[1, 2].map((index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div
-                  className={`h-4 w-4 flex-shrink-0 rounded bg-gradient-to-r ${
-                    isDarkMode
-                      ? 'from-gray-700 to-gray-600'
-                      : 'from-gray-200 to-gray-300'
-                  }`}
-                />
-                <div
-                  className={`h-4 w-32 rounded bg-gradient-to-r ${
-                    isDarkMode
-                      ? 'from-gray-700 to-gray-600'
-                      : 'from-gray-200 to-gray-300'
-                  }`}
-                />
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     )
@@ -452,164 +324,3 @@ const WelcomeScreen = memo(function WelcomeScreen({
     </motion.div>
   )
 })
-
-// Separator component
-const MessagesSeparator = memo(function MessagesSeparator({
-  isDarkMode,
-}: {
-  isDarkMode: boolean
-}) {
-  return (
-    <div className={`relative my-6 flex items-center justify-center`}>
-      <div
-        className={`absolute w-full border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-300'}`}
-      ></div>
-      <span
-        className={`relative px-4 ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-500'} text-sm font-medium`}
-      >
-        Archived Messages
-      </span>
-    </div>
-  )
-})
-
-export function ChatMessages({
-  messages,
-  isDarkMode,
-  chatId,
-  messagesEndRef,
-  openAndExpandVerifier,
-  isWaitingForResponse = false,
-  isPremium,
-  models,
-  subscriptionLoading,
-  verificationState,
-  onSubmit,
-  input,
-  setInput,
-  loadingState,
-  cancelGeneration,
-  inputRef,
-  handleInputFocus,
-  handleDocumentUpload,
-  processedDocuments,
-  removeDocument,
-  selectedModel,
-  handleModelSelect,
-  expandedLabel,
-  handleLabelClick,
-}: ChatMessagesProps) {
-  const [mounted, setMounted] = useState(false)
-  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
-    Record<string, boolean>
-  >({})
-  const maxMessages = useMaxMessages()
-
-  // Get the current model
-  const currentModel = useMemo(() => {
-    if (!models || !selectedModel) return null
-    return models.find((m) => m.modelName === selectedModel)
-  }, [models, selectedModel])
-
-  // Separate messages into archived and live sections - memoize this calculation
-  const { archivedMessages, liveMessages } = useMemo(() => {
-    const archived =
-      messages.length > maxMessages ? messages.slice(0, -maxMessages) : []
-    const live =
-      messages.length > maxMessages ? messages.slice(-maxMessages) : messages
-    return { archivedMessages: archived, liveMessages: live }
-  }, [messages, maxMessages])
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return (
-      <div className="h-full">
-        <div ref={messagesEndRef} />
-      </div>
-    )
-  }
-
-  if (messages.length === 0) {
-    return (
-      <div
-        className="flex h-full items-center justify-center"
-        style={{
-          height: '100%',
-          position: 'relative',
-        }}
-      >
-        <div className="w-full max-w-4xl px-8">
-          <WelcomeScreen
-            isDarkMode={isDarkMode}
-            openAndExpandVerifier={openAndExpandVerifier}
-            isPremium={isPremium}
-            models={models}
-            subscriptionLoading={subscriptionLoading}
-            verificationState={verificationState}
-            onSubmit={onSubmit}
-            input={input}
-            setInput={setInput}
-            loadingState={loadingState}
-            cancelGeneration={cancelGeneration}
-            inputRef={inputRef}
-            handleInputFocus={handleInputFocus}
-            handleDocumentUpload={handleDocumentUpload}
-            processedDocuments={processedDocuments}
-            removeDocument={removeDocument}
-            selectedModel={selectedModel}
-            handleModelSelect={handleModelSelect}
-            expandedLabel={expandedLabel}
-            handleLabelClick={handleLabelClick}
-          />
-        </div>
-        <div ref={messagesEndRef} className="hidden" />
-      </div>
-    )
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
-      {/* Archived Messages - only shown if there are more than the max prompt messages */}
-      {archivedMessages.length > 0 && (
-        <>
-          <div className={`opacity-70`}>
-            {archivedMessages.map((message, i) => (
-              <ChatMessage
-                key={`archived-${i}`}
-                message={message}
-                model={currentModel}
-                isDarkMode={isDarkMode}
-                isLastMessage={false}
-                isStreaming={false}
-                expandedThoughtsState={expandedThoughtsState}
-                setExpandedThoughtsState={setExpandedThoughtsState}
-              />
-            ))}
-          </div>
-
-          {/* Separator */}
-          <MessagesSeparator isDarkMode={isDarkMode} />
-        </>
-      )}
-
-      {/* Live Messages - the last messages up to max prompt limit */}
-      {liveMessages.map((message, i) => (
-        <ChatMessage
-          key={`${chatId}-${i}`}
-          message={message}
-          model={currentModel}
-          isDarkMode={isDarkMode}
-          isLastMessage={i === liveMessages.length - 1}
-          isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
-          expandedThoughtsState={expandedThoughtsState}
-          setExpandedThoughtsState={setExpandedThoughtsState}
-        />
-      ))}
-      {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
-      <div ref={messagesEndRef} />
-    </div>
-  )
-}
