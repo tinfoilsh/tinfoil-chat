@@ -1,5 +1,6 @@
 'use client'
 
+import { CONSTANTS } from '@/components/chat/constants'
 import { logWarning } from '@/utils/error-handling'
 import { convertLatexForCopy } from '@/utils/latex-processing'
 import { memo, useState } from 'react'
@@ -22,7 +23,7 @@ export const MessageActions = memo(function MessageActions({
       .writeText(textToCopy)
       .then(() => {
         setIsCopied(true)
-        setTimeout(() => setIsCopied(false), 2000)
+        setTimeout(() => setIsCopied(false), CONSTANTS.COPY_TIMEOUT_MS)
       })
       .catch((error) => {
         logWarning('Failed to copy message to clipboard', {

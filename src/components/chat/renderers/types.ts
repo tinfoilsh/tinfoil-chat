@@ -15,10 +15,10 @@ export interface MessageRenderProps {
 
 export interface InputRenderProps {
   onSubmit: (
-    content: string,
-    documentContent?: string,
-    documents?: Array<{ name: string }>,
-    imageData?: Array<{ base64: string; mimeType: string }>,
+    content: Message['content'],
+    documentContent?: Message['documentContent'],
+    documents?: Message['documents'],
+    imageData?: Message['imageData'],
   ) => void
   isDarkMode: boolean
   isPremium: boolean
