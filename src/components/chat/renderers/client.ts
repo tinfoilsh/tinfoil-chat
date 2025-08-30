@@ -4,7 +4,7 @@
 // Import from this file when using these components in client components
 
 // Registry functions (needed by client components)
-export { getRendererRegistry } from './registry'
+export { getRegistryVersion, getRendererRegistry } from './registry'
 
 // Default renderers
 export { DefaultInputRenderer } from './default/DefaultInputRenderer'

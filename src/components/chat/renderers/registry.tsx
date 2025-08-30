@@ -8,6 +8,7 @@ class RendererRegistry {
   private providers: Map<string, UIProvider> = new Map()
   private defaultMessageRenderer: MessageRenderer | null = null
   private defaultInputRenderer: InputRenderer | null = null
+  private version = 0
 
   registerMessageRenderer(renderer: MessageRenderer) {
     // Remove existing renderer with same id to prevent duplicates
@@ -91,6 +92,11 @@ class RendererRegistry {
     this.providers.clear()
     this.defaultMessageRenderer = null
     this.defaultInputRenderer = null
+    this.version++
+  }
+
+  getVersion() {
+    return this.version
   }
 }
 
@@ -100,6 +106,7 @@ class RendererRegistry {
 // 2. User switch (via AuthCleanupHandler when different user logs in)
 // This prevents renderer/provider state from leaking between user sessions
 let registryInstance: RendererRegistry | null = null
+let globalVersion = 0
 
 export function getRendererRegistry(): RendererRegistry {
   if (!registryInstance) {
@@ -113,4 +120,9 @@ export function resetRendererRegistry(): void {
     registryInstance.reset()
   }
   registryInstance = null
+  globalVersion++
+}
+
+export function getRegistryVersion(): number {
+  return registryInstance ? registryInstance.getVersion() : globalVersion
 }
