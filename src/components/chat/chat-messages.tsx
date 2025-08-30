@@ -101,8 +101,12 @@ const LoadingMessage = memo(function LoadingMessage({
 }) {
   return (
     <div className="group mb-6 flex w-full flex-col items-start">
-      <div className="px-4 py-2">
-        <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+      <div className="w-full px-4 py-2">
+        {/* Container with minimum height to prevent layout shift */}
+        {/* Matches the typical height of a single line of text response */}
+        <div className="flex min-h-[28px] items-center">
+          <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+        </div>
       </div>
     </div>
   )
