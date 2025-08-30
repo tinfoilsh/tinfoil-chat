@@ -98,11 +98,12 @@ export const MessageContent = memo(function MessageContent({
           const match = /language-([\w+#-]+)/.exec(className || '')
           const language = match ? match[1] : ''
 
-          if (!props.inline && language) {
+          if (!props.inline) {
+            // All code blocks should use CodeBlock component, even without a language
             return (
               <CodeBlock
                 code={String(children).replace(/\n$/, '')}
-                language={language}
+                language={language || 'text'}
                 isDarkMode={isDarkMode}
               />
             )
