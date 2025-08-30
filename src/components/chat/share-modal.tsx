@@ -35,7 +35,7 @@ export function ShareModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Intercept Cmd+A (Mac) or Ctrl+A (Windows/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable)) {
         e.preventDefault()
         e.stopPropagation()
 
