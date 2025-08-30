@@ -196,14 +196,14 @@ export const WelcomeScreen = memo(function WelcomeScreen({
               inside secure hardware enclaves.
             </motion.p>
 
-            {/* Model Selector - Desktop only */}
+            {/* Model Selector */}
             {isPremium &&
               models &&
               selectedModel &&
               handleModelSelect &&
               handleLabelClick && (
                 <motion.div
-                  className="mt-8 hidden md:block"
+                  className="mt-8"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{
