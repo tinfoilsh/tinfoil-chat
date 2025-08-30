@@ -18,7 +18,9 @@ const DefaultMessage = ({
   const isUser = message.role === 'user'
   const [showActions, setShowActions] = React.useState(false)
   const lastContentRef = React.useRef(message.content)
-  const showActionsTimeoutRef = React.useRef<NodeJS.Timeout>()
+  const showActionsTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null)
   const hasInitialized = React.useRef(false)
 
   // Track content changes to show/hide copy button during streaming

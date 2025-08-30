@@ -16,7 +16,7 @@ export const MessageActions = memo(function MessageActions({
   isDarkMode,
 }: MessageActionsProps) {
   const [isCopied, setIsCopied] = useState(false)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
@@ -30,12 +30,12 @@ export const MessageActions = memo(function MessageActions({
     const textToCopy = convertLatexForCopy(content)
 
     // Check if clipboard API is available
-    const copyPromise =
-      typeof navigator !== 'undefined' && navigator.clipboard?.writeText
-        ? navigator.clipboard.writeText(textToCopy)
-        : Promise.reject(new Error('Clipboard API not available'))
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return // Silently fail if clipboard API is not available
+    }
 
-    copyPromise
+    navigator.clipboard
+      .writeText(textToCopy)
       .then(() => {
         setIsCopied(true)
         if (timeoutRef.current) {
@@ -74,7 +74,7 @@ export const MessageActions = memo(function MessageActions({
         {isCopied ? (
           <>
             <BsCheckLg className="h-3.5 w-3.5" />
-            <span>Copied!</span>
+            <span aria-live="polite">Copied!</span>
           </>
         ) : (
           <BsCopy className="h-3.5 w-3.5" />

@@ -72,8 +72,8 @@ export const DocumentList = memo(function DocumentList({
     <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
       {documents.map((doc, index) => {
         const hasImageData = imageData && imageData[index]
-        // Create a stable key using document name and a hash of its content
-        // If multiple docs have the same name, append index to ensure uniqueness
+        // Create a stable key using document name
+        // If multiple docs have the same name, append occurrence count to ensure uniqueness
         const nameCount = documents.filter(
           (d, i) => i <= index && d.name === doc.name,
         ).length

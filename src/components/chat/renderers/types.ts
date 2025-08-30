@@ -66,6 +66,6 @@ export interface UIProvider {
     thoughts?: boolean
     documents?: boolean
     streaming?: boolean
-    multiModal?: boolean
+    multimodal?: boolean
   }
 }
