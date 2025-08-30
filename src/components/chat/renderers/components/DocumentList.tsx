@@ -31,6 +31,7 @@ export const DocumentList = memo(function DocumentList({
     const type = getFileIconType(filename)
     const iconProps = {
       className: `h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`,
+      'aria-hidden': true,
     }
     switch (type) {
       case 'pdf':
