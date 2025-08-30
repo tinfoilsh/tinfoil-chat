@@ -125,6 +125,11 @@ class RendererRegistry {
   }
 }
 
+// Module-level singleton instance
+// IMPORTANT: This registry is reset on:
+// 1. User logout (via performSignoutCleanup in signout-cleanup.ts)
+// 2. User switch (via AuthCleanupHandler when different user logs in)
+// This prevents renderer/provider state from leaking between user sessions
 let registryInstance: RendererRegistry | null = null
 
 export function getRendererRegistry(): RendererRegistry {
