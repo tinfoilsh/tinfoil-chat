@@ -1,5 +1,5 @@
 // Server-safe exports only
-// For client components, import from './client'
+// For client components, import from './client' or './client-exports'
 
 // Registry functions (server-safe)
 export { getRendererRegistry, resetRendererRegistry } from './registry'
@@ -14,14 +14,6 @@ export type {
   UIProvider,
 } from './types'
 
-// Re-export client components from the client barrel for backward compatibility
-// Note: These will trigger client boundary when imported
-export {
-  DefaultInputRenderer,
-  DefaultMessageRenderer,
-  DocumentList,
-  MessageActions,
-  MessageContent,
-  ThoughtProcess,
-  initializeRenderers,
-} from './client'
+// Note: Client components have been moved to './client-exports'
+// to prevent forcing server components into client boundary.
+// Import client components directly from './client' or './client-exports'
