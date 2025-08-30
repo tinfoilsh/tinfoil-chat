@@ -1,71 +1,18 @@
 import { getAIModels, type BaseModel } from '@/app/config/models'
 import { logError } from '@/utils/error-handling'
+import {
+  getDocumentFormat,
+  getFileIconType as getFileIcon,
+} from '@/utils/file-types'
 import { isImageFile, scaleAndEncodeImage } from '@/utils/preprocessing'
 import { useState } from 'react'
 import { CONSTANTS } from './constants'
 import type { DocumentProcessingResult } from './types'
 
 /**
- * Determine the file type for icon display
+ * Re-export getFileIconType for backward compatibility
  */
-export const getFileIconType = (filename: string): string => {
-  const lowerFilename = filename.toLowerCase()
-
-  if (lowerFilename.endsWith('.pdf')) return 'pdf'
-  if (lowerFilename.endsWith('.doc') || lowerFilename.endsWith('.docx'))
-    return 'docx'
-  if (lowerFilename.endsWith('.ppt') || lowerFilename.endsWith('.pptx'))
-    return 'pptx'
-  if (lowerFilename.endsWith('.xls') || lowerFilename.endsWith('.xlsx'))
-    return 'xlsx'
-  if (lowerFilename.endsWith('.csv')) return 'csv'
-
-  if (
-    lowerFilename.endsWith('.jpg') ||
-    lowerFilename.endsWith('.jpeg') ||
-    lowerFilename.endsWith('.png') ||
-    lowerFilename.endsWith('.gif') ||
-    lowerFilename.endsWith('.webp') ||
-    lowerFilename.endsWith('.bmp') ||
-    lowerFilename.endsWith('.tiff') ||
-    lowerFilename.endsWith('.tif')
-  )
-    return 'image'
-
-  if (
-    lowerFilename.endsWith('.mp3') ||
-    lowerFilename.endsWith('.wav') ||
-    lowerFilename.endsWith('.ogg')
-  )
-    return 'audio'
-
-  if (
-    lowerFilename.endsWith('.mp4') ||
-    lowerFilename.endsWith('.mov') ||
-    lowerFilename.endsWith('.avi')
-  )
-    return 'video'
-
-  if (
-    lowerFilename.endsWith('.zip') ||
-    lowerFilename.endsWith('.rar') ||
-    lowerFilename.endsWith('.tar')
-  )
-    return 'zip'
-
-  if (lowerFilename.endsWith('.html') || lowerFilename.endsWith('.htm'))
-    return 'html'
-  if (lowerFilename.endsWith('.js') || lowerFilename.endsWith('.jsx'))
-    return 'js'
-  if (lowerFilename.endsWith('.ts') || lowerFilename.endsWith('.tsx'))
-    return 'ts'
-  if (lowerFilename.endsWith('.css')) return 'css'
-  if (lowerFilename.endsWith('.md')) return 'md'
-  if (lowerFilename.endsWith('.txt')) return 'txt'
-
-  // Default
-  return 'file'
-}
+export const getFileIconType = getFileIcon
 
 /**
  * Handles the document upload and processing logic
@@ -113,30 +60,7 @@ export const useDocumentUploader = (
 
   // Determine the format based on file extension
   const getFormatFromFileType = (file: File): string => {
-    const filename = file.name.toLowerCase()
-
-    if (filename.endsWith('.pdf')) return 'pdf'
-    if (filename.endsWith('.docx')) return 'docx'
-    if (filename.endsWith('.pptx')) return 'pptx'
-    if (filename.endsWith('.html') || filename.endsWith('.htm')) return 'html'
-    if (filename.endsWith('.md')) return 'md'
-    if (filename.endsWith('.csv')) return 'csv'
-    if (filename.endsWith('.xlsx')) return 'xlsx'
-    if (
-      filename.endsWith('.jpg') ||
-      filename.endsWith('.jpeg') ||
-      filename.endsWith('.png') ||
-      filename.endsWith('.gif') ||
-      filename.endsWith('.webp') ||
-      filename.endsWith('.bmp') ||
-      filename.endsWith('.tiff') ||
-      filename.endsWith('.tif')
-    )
-      return 'image'
-    if (filename.endsWith('.txt')) return 'asciidoc' // Treat text as asciidoc
-
-    // Default to pdf if we can't determine
-    return 'pdf'
+    return getDocumentFormat(file.name)
   }
 
   // Handle text files directly in the browser
