@@ -88,7 +88,7 @@ function MyChat({ message, model }) {
 ### Using the Simplified Chat Messages
 
 ```typescript
-import { ChatMessagesSimplified } from '@/components/chat/chat-messages'
+import { ChatMessages } from '@/components/chat/chat-messages'
 
 // The simplified version automatically uses the renderer system
 <ChatMessagesSimplified
