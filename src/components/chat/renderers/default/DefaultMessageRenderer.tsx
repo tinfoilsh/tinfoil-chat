@@ -124,7 +124,6 @@ const DefaultMessage = ({
                   content={message.content}
                   isDarkMode={isDarkMode}
                   isUser={isUser}
-                  isStreaming={Boolean(isStreaming && isLastMessage)}
                 />
               </div>
             </div>
