@@ -75,10 +75,12 @@ export const DocumentList = memo(function DocumentList({
         const isImage = doc.name
           .toLowerCase()
           .match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff)$/i)
+        // Create a stable key using document name and index
+        const uniqueKey = `${doc.name}-${index}`
 
         return (
           <div
-            key={index}
+            key={uniqueKey}
             className={`flex items-center rounded-lg ${
               isDarkMode
                 ? 'bg-gray-700/50 hover:bg-gray-700/70'
