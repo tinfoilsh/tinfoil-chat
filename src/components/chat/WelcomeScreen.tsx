@@ -191,95 +191,99 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             </motion.p>
 
             {/* Model Selector - Desktop only */}
-            {isPremium && models && selectedModel && handleModelSelect && (
-              <motion.div
-                className="mt-8 hidden md:block"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{
-                  duration: 0.5,
-                  ease: 'easeOut',
-                  delay: 0.35,
-                }}
-              >
-                <div className="relative">
-                  <button
-                    type="button"
-                    data-model-selector
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (handleLabelClick) {
-                        handleLabelClick('model', () => {})
-                      }
-                    }}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                      isDarkMode
-                        ? 'bg-gray-700 hover:bg-gray-600'
-                        : 'bg-gray-100 hover:bg-gray-200'
-                    } transition-colors`}
-                  >
-                    {(() => {
-                      const model = models.find(
-                        (m) => m.modelName === selectedModel,
-                      )
-                      if (!model) return null
-                      return (
-                        <>
-                          <img
-                            src={
-                              model.modelName
-                                .toLowerCase()
-                                .includes('openai') ||
-                              model.modelName.toLowerCase().includes('gpt')
-                                ? isDarkMode
-                                  ? '/model-icons/openai-dark.png'
-                                  : '/model-icons/openai-light.png'
-                                : model.image
-                            }
-                            alt={model.name}
-                            className="h-5 w-5"
-                          />
-                          <span
-                            className={`text-sm font-medium ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                            }`}
-                          >
-                            {model.name}
-                          </span>
-                          <svg
-                            className={`h-4 w-4 ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                            }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
+            {isPremium &&
+              models &&
+              selectedModel &&
+              handleModelSelect &&
+              handleLabelClick && (
+                <motion.div
+                  className="mt-8 hidden md:block"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{
+                    duration: 0.5,
+                    ease: 'easeOut',
+                    delay: 0.35,
+                  }}
+                >
+                  <div className="relative">
+                    <button
+                      type="button"
+                      data-model-selector
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (handleLabelClick) {
+                          handleLabelClick('model', () => {})
+                        }
+                      }}
+                      className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+                        isDarkMode
+                          ? 'bg-gray-700 hover:bg-gray-600'
+                          : 'bg-gray-100 hover:bg-gray-200'
+                      } transition-colors`}
+                    >
+                      {(() => {
+                        const model = models.find(
+                          (m) => m.modelName === selectedModel,
+                        )
+                        if (!model) return null
+                        return (
+                          <>
+                            <img
+                              src={
+                                model.modelName
+                                  .toLowerCase()
+                                  .includes('openai') ||
+                                model.modelName.toLowerCase().includes('gpt')
+                                  ? isDarkMode
+                                    ? '/model-icons/openai-dark.png'
+                                    : '/model-icons/openai-light.png'
+                                  : model.image
+                              }
+                              alt={model.name}
+                              className="h-5 w-5"
                             />
-                          </svg>
-                        </>
-                      )
-                    })()}
-                  </button>
+                            <span
+                              className={`text-sm font-medium ${
+                                isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                              }`}
+                            >
+                              {model.name}
+                            </span>
+                            <svg
+                              className={`h-4 w-4 ${
+                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                              />
+                            </svg>
+                          </>
+                        )
+                      })()}
+                    </button>
 
-                  {expandedLabel === 'model' && handleModelSelect && (
-                    <ModelSelector
-                      selectedModel={selectedModel}
-                      onSelect={handleModelSelect}
-                      isDarkMode={isDarkMode}
-                      isPremium={isPremium}
-                      models={models}
-                      preferredPosition="below"
-                    />
-                  )}
-                </div>
-              </motion.div>
-            )}
+                    {expandedLabel === 'model' && handleModelSelect && (
+                      <ModelSelector
+                        selectedModel={selectedModel}
+                        onSelect={handleModelSelect}
+                        isDarkMode={isDarkMode}
+                        isPremium={isPremium}
+                        models={models}
+                        preferredPosition="below"
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              )}
 
             {/* Centered Chat Input - Desktop only */}
             {onSubmit && input !== undefined && setInput && (
