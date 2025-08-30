@@ -94,7 +94,7 @@ class RendererRegistry {
           }}
         >
           <input
-            type="text"
+            type="text" aria-label="Message input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className="w-full rounded border p-2"
