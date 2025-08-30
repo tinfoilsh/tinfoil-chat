@@ -4,7 +4,7 @@ import {
   DocumentDuplicateIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Message } from './types'
 
 type ShareModalProps = {
@@ -22,6 +22,37 @@ export function ShareModal({
 }: ShareModalProps) {
   const { toast } = useToast()
   const [isCopied, setIsCopied] = useState(false)
+  const contentRef = useRef<HTMLPreElement>(null)
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Intercept Cmd+A (Mac) or Ctrl+A (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault()
+        e.stopPropagation()
+
+        // Select all text in the modal content
+        if (contentRef.current) {
+          const selection = window.getSelection()
+          const range = document.createRange()
+          range.selectNodeContents(contentRef.current)
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+        }
+      }
+    }
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown)
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -121,6 +152,7 @@ export function ShareModal({
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
           <pre
+            ref={contentRef}
             className={`whitespace-pre-wrap font-mono text-sm ${
               isDarkMode ? 'text-gray-300' : 'text-gray-700'
             }`}
