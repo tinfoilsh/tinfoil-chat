@@ -74,8 +74,12 @@ export const DocumentList = memo(function DocumentList({
         const hasImageData = imageData && imageData[index]
         // Use shared helper for consistent image detection
         const isImage = getFileIconType(doc.name) === 'image'
-        // Create a stable key using document name and index
-        const uniqueKey = `${doc.name}-${index}`
+        // Create a stable key using document name and a hash of its content
+        // If multiple docs have the same name, append index to ensure uniqueness
+        const nameCount = documents.filter(
+          (d, i) => i <= index && d.name === doc.name,
+        ).length
+        const uniqueKey = nameCount > 1 ? `${doc.name}-${nameCount}` : doc.name
 
         return (
           <div
