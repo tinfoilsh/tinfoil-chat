@@ -39,6 +39,7 @@ import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { initializeRenderers } from './renderers/client'
+import type { ProcessedDocument } from './renderers/types'
 import type { VerificationState } from './types'
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
 const VerifierSidebarLazy = dynamic(
@@ -60,16 +61,6 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
-}
-
-// Type for processed documents
-type ProcessedDocument = {
-  id: string
-  name: string
-  time: Date
-  content?: string
-  isUploading?: boolean
-  imageData?: { base64: string; mimeType: string }
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)

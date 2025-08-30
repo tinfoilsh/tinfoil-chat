@@ -26,17 +26,8 @@ import {
 import { FiArrowUp } from 'react-icons/fi'
 import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
+import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
-
-// Add type for processed documents
-type ProcessedDocument = {
-  id: string
-  name: string
-  time: Date
-  content?: string
-  isUploading?: boolean
-  imageData?: { base64: string; mimeType: string }
-}
 
 type ChatInputProps = {
   input: string
