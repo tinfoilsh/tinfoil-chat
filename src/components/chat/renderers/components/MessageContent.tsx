@@ -114,6 +114,31 @@ export const MessageContent = memo(function MessageContent({
             </code>
           )
         },
+        // Override pre to render CodeBlock directly for fenced code blocks
+        pre({ children, ...props }: { children?: React.ReactNode }) {
+          // Extract code content and language from the pre > code structure
+          if (
+            children &&
+            typeof children === 'object' &&
+            'props' in (children as any)
+          ) {
+            const codeProps = (children as any).props
+            const className = codeProps?.className || ''
+            const match = /language-([\w+#-]+)/.exec(className)
+            const language = match ? match[1] : 'text'
+            const code = String(codeProps?.children || '').replace(/\n$/, '')
+
+            return (
+              <CodeBlock
+                code={code}
+                language={language}
+                isDarkMode={isDarkMode}
+              />
+            )
+          }
+          // Fallback to default pre rendering
+          return <pre {...props}>{children}</pre>
+        },
         table({ children, node, ...props }: any) {
           return (
             <div className="my-4 w-full overflow-x-auto">
