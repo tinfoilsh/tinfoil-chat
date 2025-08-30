@@ -30,9 +30,10 @@ export const MessageActions = memo(function MessageActions({
     const textToCopy = convertLatexForCopy(content)
 
     // Check if clipboard API is available
-    const copyPromise = navigator.clipboard?.writeText
-      ? navigator.clipboard.writeText(textToCopy)
-      : Promise.reject(new Error('Clipboard API not available'))
+    const copyPromise =
+      typeof navigator !== 'undefined' && navigator.clipboard?.writeText
+        ? navigator.clipboard.writeText(textToCopy)
+        : Promise.reject(new Error('Clipboard API not available'))
 
     copyPromise
       .then(() => {
