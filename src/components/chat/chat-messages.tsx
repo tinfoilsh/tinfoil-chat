@@ -54,7 +54,7 @@ const ChatMessage = memo(function ChatMessage({
   setExpandedThoughtsState,
 }: {
   message: Message
-  model?: BaseModel | null
+  model: BaseModel
   isDarkMode: boolean
   isLastMessage?: boolean
   isStreaming?: boolean
@@ -63,27 +63,24 @@ const ChatMessage = memo(function ChatMessage({
     React.SetStateAction<Record<string, boolean>>
   >
 }) {
-  // Get renderer from registry if model is provided
-  // Always ensure we have a proper renderer, not the minimal fallback
-  let renderer = DefaultMessageRenderer
+  // Get renderer from registry
+  const registryRenderer = getRendererRegistry().getMessageRenderer(
+    message,
+    model,
+  )
 
-  if (model) {
-    const registryRenderer = getRendererRegistry().getMessageRenderer(
-      message,
-      model,
-    )
-    // Only use registry renderer if it's not the minimal fallback
-    if (registryRenderer.id !== 'fallback') {
-      renderer = registryRenderer
-    }
-  }
+  // Use registry renderer if it's not the minimal fallback, otherwise use default
+  const renderer =
+    registryRenderer.id !== 'fallback'
+      ? registryRenderer
+      : DefaultMessageRenderer
 
   const RendererComponent = renderer.render
 
   return (
     <RendererComponent
       message={message}
-      model={model || ({ modelName: 'default' } as BaseModel)}
+      model={model}
       isDarkMode={isDarkMode}
       isLastMessage={isLastMessage}
       isStreaming={isStreaming}
@@ -518,10 +515,14 @@ export function ChatMessages({
   >({})
   const maxMessages = useMaxMessages()
 
-  // Get the current model
+  // Get the current model - always defined since config must load
   const currentModel = useMemo(() => {
-    if (!models || !selectedModel) return null
-    return models.find((m) => m.modelName === selectedModel)
+    if (!models || models.length === 0 || !selectedModel) {
+      // This should never happen since chat interface doesn't load without config
+      // but TypeScript needs this check
+      return models?.[0] || null
+    }
+    return models.find((m) => m.modelName === selectedModel) || models[0]
   }, [models, selectedModel])
 
   // Separate messages into archived and live sections - memoize this calculation
@@ -581,6 +582,11 @@ export function ChatMessages({
         <div ref={messagesEndRef} className="hidden" />
       </div>
     )
+  }
+
+  // Early return if no model (should never happen)
+  if (!currentModel) {
+    return <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24" />
   }
 
   return (
