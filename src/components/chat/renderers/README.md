@@ -60,9 +60,10 @@ export const MyModelRenderer: MessageRenderer = {
 
 ```typescript
 // In your initialization code
-import { rendererRegistry } from '@/components/chat/renderers'
+import { getRendererRegistry } from '@/components/chat/renderers'
 import { MyModelRenderer } from './MyModelRenderer'
 
+const rendererRegistry = getRendererRegistry()
 rendererRegistry.registerMessageRenderer(MyModelRenderer)
 ```
 
