@@ -12,6 +12,8 @@ type ShareModalProps = {
   onClose: () => void
   messages: Message[]
   isDarkMode: boolean
+  isSidebarOpen?: boolean
+  isRightSidebarOpen?: boolean
 }
 
 export function ShareModal({
@@ -19,6 +21,8 @@ export function ShareModal({
   onClose,
   messages,
   isDarkMode,
+  isSidebarOpen = false,
+  isRightSidebarOpen = false,
 }: ShareModalProps) {
   const { toast } = useToast()
   const [isCopied, setIsCopied] = useState(false)
@@ -113,16 +117,38 @@ export function ShareModal({
 
   const markdown = convertToMarkdown()
 
+  // Calculate the positioning to center within the chat area
+  const CHAT_SIDEBAR_WIDTH = 300
+  const SETTINGS_SIDEBAR_WIDTH = 345
+  const leftOffset = isSidebarOpen ? CHAT_SIDEBAR_WIDTH : 0
+  const rightOffset = isRightSidebarOpen ? SETTINGS_SIDEBAR_WIDTH : 0
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{
+        left: `${leftOffset}px`,
+        right: `${rightOffset}px`,
+      }}
+    >
+      {/* Backdrop - covers entire viewport */}
+      <div
+        className="fixed inset-0 bg-black/50"
+        onClick={onClose}
+        style={{
+          left: 0,
+          right: 0,
+        }}
+      />
 
       {/* Modal */}
       <div
         className={`relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col rounded-xl shadow-xl ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
         }`}
+        style={{
+          maxWidth: `min(896px, calc(90vw - ${leftOffset + rightOffset}px))`,
+        }}
       >
         {/* Header */}
         <div

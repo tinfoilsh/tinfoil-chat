@@ -911,6 +911,13 @@ export function ChatInterface({
         onClose={() => setIsShareModalOpen(false)}
         messages={currentChat?.messages || []}
         isDarkMode={isDarkMode}
+        isSidebarOpen={
+          isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+        }
+        isRightSidebarOpen={
+          (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
+          windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+        }
       />
 
       {/* Settings Sidebar */}
