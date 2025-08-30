@@ -86,16 +86,20 @@ function MyChat({ message, model }) {
 }
 ```
 
-### Using the Simplified Chat Messages
+### Using Chat Messages with Renderers
 
 ```typescript
 import { ChatMessages } from '@/components/chat/chat-messages'
 
-// The simplified version automatically uses the renderer system
-<ChatMessagesSimplified
+// ChatMessages automatically uses the renderer system
+<ChatMessages
   messages={messages}
-  model={selectedModel}
-  // ... other props
+  selectedModel={selectedModel}
+  models={models}
+  isDarkMode={isDarkMode}
+  chatId={chatId}
+  messagesEndRef={messagesEndRef}
+  // ... other required props
 />
 ```
 
