@@ -9,7 +9,7 @@ import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
-import { DefaultMessageRenderer, getRendererRegistry } from './renderers/client'
+import { getRendererRegistry } from './renderers/client'
 import type { Message } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 
@@ -64,16 +64,7 @@ const ChatMessage = memo(function ChatMessage({
   >
 }) {
   // Get renderer from registry
-  const registryRenderer = getRendererRegistry().getMessageRenderer(
-    message,
-    model,
-  )
-
-  // Use registry renderer if it's not the minimal fallback, otherwise use default
-  const renderer =
-    registryRenderer.id !== 'fallback'
-      ? registryRenderer
-      : DefaultMessageRenderer
+  const renderer = getRendererRegistry().getMessageRenderer(message, model)
 
   const RendererComponent = renderer.render
 
