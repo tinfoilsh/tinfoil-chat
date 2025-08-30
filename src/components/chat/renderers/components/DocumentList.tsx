@@ -72,9 +72,8 @@ export const DocumentList = memo(function DocumentList({
     <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
       {documents.map((doc, index) => {
         const hasImageData = imageData && imageData[index]
-        const isImage = doc.name
-          .toLowerCase()
-          .match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff)$/i)
+        // Use shared helper for consistent image detection
+        const isImage = getFileIconType(doc.name) === 'image'
         // Create a stable key using document name and index
         const uniqueKey = `${doc.name}-${index}`
 
