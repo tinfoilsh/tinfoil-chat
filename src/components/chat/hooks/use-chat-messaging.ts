@@ -508,6 +508,49 @@ export function useChatMessaging({
         let sseBuffer = '' // Buffer for potentially incomplete SSE messages
         let isUsingReasoningFormat = false // Track if we're using reasoning_content format
 
+        // Batch UI updates per animation frame during streaming
+        let rafId: number | null = null
+        const scheduleStreamingUpdate = (isThinkingFlag: boolean) => {
+          if (rafId !== null) return
+          rafId =
+            typeof window !== 'undefined' &&
+            typeof window.requestAnimationFrame === 'function'
+              ? window.requestAnimationFrame(() => {
+                  rafId = null
+                  if (currentChatIdRef.current === updatedChat.id) {
+                    const chatId = currentChatIdRef.current
+                    const messageToSave = assistantMessage as Message
+                    const newMessages = [...updatedMessages, messageToSave]
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      isThinkingFlag,
+                    )
+                  }
+                })
+              : (setTimeout(() => {
+                  if (currentChatIdRef.current === updatedChat.id) {
+                    const chatId = currentChatIdRef.current
+                    const messageToSave = assistantMessage as Message
+                    const newMessages = [...updatedMessages, messageToSave]
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      isThinkingFlag,
+                    )
+                  }
+                  rafId = null
+                }, 16) as unknown as number)
+        }
+
         while (true) {
           const { done, value } = await reader!.read()
           if (done || currentChatIdRef.current !== updatedChat.id) {
@@ -633,17 +676,7 @@ export function useChatMessaging({
                     isThinking: true,
                   }
                   if (currentChatIdRef.current === updatedChat.id) {
-                    const chatId = currentChatIdRef.current
-                    const newMessages = [...updatedMessages, assistantMessage]
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      true,
-                    )
+                    scheduleStreamingUpdate(true)
                   }
                 }
                 continue
@@ -682,17 +715,7 @@ export function useChatMessaging({
                   (reasoningContent || content) &&
                   currentChatIdRef.current === updatedChat.id
                 ) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    isInThinkingMode,
-                  )
+                  scheduleStreamingUpdate(isInThinkingMode)
                 }
 
                 // Continue processing if we have content to handle below
@@ -723,17 +746,7 @@ export function useChatMessaging({
                 }
 
                 if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                  scheduleStreamingUpdate(false)
                 }
                 continue
               }
@@ -800,17 +813,7 @@ export function useChatMessaging({
                 }
 
                 if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                  scheduleStreamingUpdate(false)
                 }
                 continue
               }
@@ -824,18 +827,7 @@ export function useChatMessaging({
                   isThinking: true,
                 }
                 if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    true,
-                  )
+                  scheduleStreamingUpdate(true)
                 }
               } else if (!isInThinkingMode) {
                 // Not in thinking mode, append to regular content
@@ -852,18 +844,7 @@ export function useChatMessaging({
                     isThinking: false,
                   }
                   if (currentChatIdRef.current === updatedChat.id) {
-                    const chatId = currentChatIdRef.current
-                    const newMessages = [...updatedMessages, assistantMessage]
-
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      false,
-                    )
+                    scheduleStreamingUpdate(false)
                   }
                 }
               }

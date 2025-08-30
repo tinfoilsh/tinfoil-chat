@@ -74,14 +74,7 @@ export const StreamingText = memo(function StreamingText({
     }
   }, [content, isUser, isStreaming])
 
-  // Add cursor to content if streaming
-  const displayContent = showCursor && !isUser ? content + ' ●' : content
-
   return (
-    <MessageContent
-      content={displayContent}
-      isDarkMode={isDarkMode}
-      isUser={isUser}
-    />
+    <MessageContent content={content} isDarkMode={isDarkMode} isUser={isUser} />
   )
 })
