@@ -586,7 +586,11 @@ export function ChatMessages({
 
   // Early return if no model (should never happen)
   if (!currentModel) {
-    return <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24" />
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
+        <div ref={messagesEndRef} className="hidden" />
+      </div>
+    )
   }
 
   return (
