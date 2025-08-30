@@ -65,6 +65,12 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   // Load nickname from localStorage and listen for changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Clear nickname when user changes or is not authenticated
+      if (!user?.id) {
+        setNickname('')
+        return
+      }
+
       const savedNickname = localStorage.getItem('userNickname')
       if (savedNickname) {
         setNickname(savedNickname)
@@ -87,7 +93,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
         )
       }
     }
-  }, [])
+  }, [user?.id])
 
   // Determine the greeting text
   const getGreeting = () => {

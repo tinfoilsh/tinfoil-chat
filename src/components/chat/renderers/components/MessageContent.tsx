@@ -6,7 +6,6 @@ import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
-import 'katex/dist/katex.min.css'
 import { memo, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'

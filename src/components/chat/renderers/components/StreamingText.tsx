@@ -7,8 +7,6 @@ interface StreamingTextProps {
   content: string
   isDarkMode: boolean
   isUser?: boolean
-  // When true, content is streaming and may update very frequently
-  isStreaming?: boolean
 }
 
 export const StreamingText = memo(function StreamingText({

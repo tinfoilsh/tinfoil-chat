@@ -36,6 +36,8 @@ class RendererRegistry {
       this.inputRenderers = this.inputRenderers.filter(
         (r) => r.id !== existingProvider.inputRenderer.id,
       )
+      // Delete and re-add to ensure correct insertion order for precedence
+      this.providers.delete(provider.id)
     }
 
     this.providers.set(provider.id, provider)
@@ -124,5 +126,7 @@ export function resetRendererRegistry(): void {
 }
 
 export function getRegistryVersion(): number {
-  return registryInstance ? registryInstance.getVersion() : globalVersion
+  // Combine global and instance versions to maintain monotonicity
+  // globalVersion tracks resets, instance version tracks changes within a session
+  return globalVersion + (registryInstance ? registryInstance.getVersion() : 0)
 }

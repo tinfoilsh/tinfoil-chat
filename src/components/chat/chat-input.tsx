@@ -2,6 +2,7 @@
 
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
+import { logError } from '@/utils/error-handling'
 import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
@@ -122,6 +123,7 @@ const MacFileIcon = ({
       iconColor = 'text-blue-500'
       break
     case 'xlsx':
+    case 'csv':
       FileIcon = FaFileExcel
       bgColorLight = 'bg-green-50'
       bgColorDark = 'bg-green-900/20'
@@ -478,7 +480,16 @@ export function ChatInput({
         const file = new File([pastedText], fileName, { type: 'text/plain' })
 
         // Upload the file through the existing document upload system
-        handleDocumentUpload(file)
+        handleDocumentUpload(file).catch((error) => {
+          logError('Failed to upload pasted text as document', error, {
+            component: 'ChatInput',
+            action: 'handlePaste',
+            metadata: {
+              textLength: pastedText.length,
+              fileName,
+            },
+          })
+        })
       }
       // If text is short enough, let it paste normally (default behavior)
     },
