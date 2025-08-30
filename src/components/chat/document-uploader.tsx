@@ -126,7 +126,11 @@ export const useDocumentUploader = (
       filename.endsWith('.jpg') ||
       filename.endsWith('.jpeg') ||
       filename.endsWith('.png') ||
-      filename.endsWith('.gif')
+      filename.endsWith('.gif') ||
+      filename.endsWith('.webp') ||
+      filename.endsWith('.bmp') ||
+      filename.endsWith('.tiff') ||
+      filename.endsWith('.tif')
     )
       return 'image'
     if (filename.endsWith('.txt')) return 'asciidoc' // Treat text as asciidoc
