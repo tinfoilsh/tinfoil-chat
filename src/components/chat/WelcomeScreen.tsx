@@ -7,7 +7,7 @@ import React, { memo, useEffect, useRef, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
-import type { LabelType, LoadingState } from './types'
+import type { LabelType, LoadingState, VerificationState } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
 
 interface WelcomeScreenProps {
@@ -16,7 +16,7 @@ interface WelcomeScreenProps {
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  verificationState?: any
+  verificationState?: VerificationState
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
