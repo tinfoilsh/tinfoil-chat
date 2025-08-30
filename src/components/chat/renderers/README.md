@@ -12,7 +12,7 @@ The renderer system uses a **registry pattern** to manage different renderers fo
 
 ## Core Components
 
-### Registry (`registry.ts`)
+### Registry (`registry.tsx`)
 
 - Central registry for all renderers
 - Manages message and input renderers
