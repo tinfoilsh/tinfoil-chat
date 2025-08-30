@@ -10,14 +10,33 @@ class RendererRegistry {
   private defaultInputRenderer: InputRenderer | null = null
 
   registerMessageRenderer(renderer: MessageRenderer) {
+    // Remove existing renderer with same id to prevent duplicates
+    this.messageRenderers = this.messageRenderers.filter(
+      (r) => r.id !== renderer.id,
+    )
     this.messageRenderers.unshift(renderer)
   }
 
   registerInputRenderer(renderer: InputRenderer) {
+    // Remove existing renderer with same id to prevent duplicates
+    this.inputRenderers = this.inputRenderers.filter(
+      (r) => r.id !== renderer.id,
+    )
     this.inputRenderers.unshift(renderer)
   }
 
   registerProvider(provider: UIProvider) {
+    // If provider already exists, remove its old renderers first
+    const existingProvider = this.providers.get(provider.id)
+    if (existingProvider) {
+      this.messageRenderers = this.messageRenderers.filter(
+        (r) => r.id !== existingProvider.messageRenderer.id,
+      )
+      this.inputRenderers = this.inputRenderers.filter(
+        (r) => r.id !== existingProvider.inputRenderer.id,
+      )
+    }
+
     this.providers.set(provider.id, provider)
     this.registerMessageRenderer(provider.messageRenderer)
     this.registerInputRenderer(provider.inputRenderer)
