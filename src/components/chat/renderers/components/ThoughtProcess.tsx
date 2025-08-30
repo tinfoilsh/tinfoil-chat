@@ -105,11 +105,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const processedThoughts = processLatexTags(thoughts)
   const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
 
-  if (
-    shouldDiscard ||
-    (!thoughts.trim() && !isThinking) ||
-    thoughts.trim() === ''
-  ) {
+  if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
     return null
   }
 
