@@ -116,6 +116,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       }`}
     >
       <button
+        type="button"
         onClick={handleToggle}
         className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
           isDarkMode
@@ -124,7 +125,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         } rounded-lg transition-colors`}
       >
         <div className="flex items-center gap-2">
-          <LuBrain className="h-5 w-5 opacity-70" />
+          <LuBrain className="h-5 w-5 opacity-70" aria-hidden="true" />
           {isThinking ? (
             <>
               <span className="text-sm font-medium">Thinking</span>
@@ -150,6 +151,8 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
+          aria-hidden="true"
+          focusable="false"
         >
           <path
             strokeLinecap="round"

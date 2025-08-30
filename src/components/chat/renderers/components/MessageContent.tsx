@@ -95,21 +95,18 @@ export const MessageContent = memo(function MessageContent({
           children?: React.ReactNode
           inline?: boolean
         } & React.HTMLAttributes<HTMLElement>) {
-          const match = /language-([\w+#-]+)/.exec(className || '')
-          const language = match ? match[1] : ''
-
-          if (!props.inline) {
-            // All code blocks should use CodeBlock component, even without a language
+          // Only handle inline code here, let pre handle block code
+          if (props.inline) {
             return (
-              <CodeBlock
-                code={String(children).replace(/\n$/, '')}
-                language={language || 'text'}
-                isDarkMode={isDarkMode}
-              />
+              <code className={`${className || ''} break-words`} {...props}>
+                {children}
+              </code>
             )
           }
+          // For block code, just return the code element as-is
+          // The pre component will handle rendering it as a CodeBlock
           return (
-            <code className={`${className || ''} break-words`} {...props}>
+            <code className={className} {...props}>
               {children}
             </code>
           )

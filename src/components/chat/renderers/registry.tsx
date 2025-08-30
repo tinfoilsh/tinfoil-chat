@@ -73,7 +73,9 @@ class RendererRegistry {
   }
 
   getProvider(model: BaseModel): UIProvider | null {
-    for (const provider of this.providers.values()) {
+    // Iterate in reverse to give precedence to most recently registered providers
+    const providersArray = Array.from(this.providers.values()).reverse()
+    for (const provider of providersArray) {
       // Reset lastIndex to prevent issues with global/sticky regex flags
       provider.modelPattern.lastIndex = 0
       if (provider.modelPattern.test(model.modelName)) {
