@@ -5,6 +5,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useRef, useState } from 'react'
+import { CONSTANTS } from './constants'
 import type { Message } from './types'
 
 type ShareModalProps = {
@@ -118,10 +119,10 @@ export function ShareModal({
   const markdown = convertToMarkdown()
 
   // Calculate the positioning to center within the chat area
-  const CHAT_SIDEBAR_WIDTH = 300
-  const SETTINGS_SIDEBAR_WIDTH = 345
-  const leftOffset = isSidebarOpen ? CHAT_SIDEBAR_WIDTH : 0
-  const rightOffset = isRightSidebarOpen ? SETTINGS_SIDEBAR_WIDTH : 0
+  const leftOffset = isSidebarOpen ? CONSTANTS.CHAT_SIDEBAR_WIDTH_PX : 0
+  const rightOffset = isRightSidebarOpen
+    ? CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX
+    : 0
 
   return (
     <div
