@@ -149,7 +149,6 @@ const DefaultMessage = ({
 
 export const DefaultMessageRenderer: MessageRenderer = {
   id: 'default',
-  modelPattern: /.*/,
   canRender: () => true,
   render: DefaultMessage,
 }

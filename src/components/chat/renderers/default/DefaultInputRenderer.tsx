@@ -5,7 +5,6 @@ import type { InputRenderer, InputRenderProps } from '../types'
 
 export const DefaultInputRenderer: InputRenderer = {
   id: 'default',
-  modelPattern: /.*/,
   canRender: () => true,
 
   render: (props: InputRenderProps) => {

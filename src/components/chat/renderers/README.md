@@ -46,7 +46,6 @@ When you need model-specific UI features, you can create custom renderers:
 // src/components/chat/renderers/custom/MyModelRenderer.tsx
 export const MyModelRenderer: MessageRenderer = {
   id: 'my-model',
-  modelPattern: /^my-model-/,
   canRender: (message, model) => model.modelName.startsWith('my-model'),
   render: (props) => {
     // Custom rendering logic

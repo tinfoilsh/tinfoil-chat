@@ -47,14 +47,12 @@ export interface InputRenderProps {
 
 export interface MessageRenderer {
   id: string
-  modelPattern: RegExp
   canRender: (message: Message, model: BaseModel) => boolean
   render: (props: MessageRenderProps) => JSX.Element
 }
 
 export interface InputRenderer {
   id: string
-  modelPattern: RegExp
   canRender: (model: BaseModel) => boolean
   render: (props: InputRenderProps) => JSX.Element
 }

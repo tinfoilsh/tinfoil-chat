@@ -92,7 +92,6 @@ class RendererRegistry {
   private createFallbackMessageRenderer(): MessageRenderer {
     return {
       id: 'fallback',
-      modelPattern: /.*/,
       canRender: () => true,
       render: ({ message }) => (
         <div className="p-4">
@@ -105,7 +104,6 @@ class RendererRegistry {
   private createFallbackInputRenderer(): InputRenderer {
     return {
       id: 'fallback',
-      modelPattern: /.*/,
       canRender: () => true,
       render: ({ onSubmit, input, setInput }) => (
         <form
