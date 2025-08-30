@@ -63,9 +63,20 @@ const ChatMessage = memo(function ChatMessage({
     React.SetStateAction<Record<string, boolean>>
   >
 }) {
-  const renderer = model
-    ? getRendererRegistry().getMessageRenderer(message, model)
-    : DefaultMessageRenderer
+  // Get renderer from registry if model is provided
+  // Always ensure we have a proper renderer, not the minimal fallback
+  let renderer = DefaultMessageRenderer
+
+  if (model) {
+    const registryRenderer = getRendererRegistry().getMessageRenderer(
+      message,
+      model,
+    )
+    // Only use registry renderer if it's not the minimal fallback
+    if (registryRenderer.id !== 'fallback') {
+      renderer = registryRenderer
+    }
+  }
 
   const RendererComponent = renderer.render
 

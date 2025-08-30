@@ -28,8 +28,13 @@ export const MessageActions = memo(function MessageActions({
 
   const handleCopy = () => {
     const textToCopy = convertLatexForCopy(content)
-    navigator.clipboard
-      .writeText(textToCopy)
+
+    // Check if clipboard API is available
+    const copyPromise = navigator.clipboard?.writeText
+      ? navigator.clipboard.writeText(textToCopy)
+      : Promise.reject(new Error('Clipboard API not available'))
+
+    copyPromise
       .then(() => {
         setIsCopied(true)
         if (timeoutRef.current) {
