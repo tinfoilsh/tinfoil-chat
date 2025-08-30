@@ -92,6 +92,7 @@ export const DocumentList = memo(function DocumentList({
                     src={`data:${imageData![index].mimeType};base64,${imageData![index].base64}`}
                     alt={doc.name}
                     className="h-full w-full object-cover"
+                    loading="lazy"
                   />
                 </div>
                 <span
