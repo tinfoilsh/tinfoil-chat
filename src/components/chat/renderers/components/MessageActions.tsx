@@ -3,7 +3,7 @@
 import { CONSTANTS } from '@/components/chat/constants'
 import { logWarning } from '@/utils/error-handling'
 import { convertLatexForCopy } from '@/utils/latex-processing'
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { BsCheckLg, BsCopy } from 'react-icons/bs'
 
 interface MessageActionsProps {
@@ -16,6 +16,15 @@ export const MessageActions = memo(function MessageActions({
   isDarkMode,
 }: MessageActionsProps) {
   const [isCopied, setIsCopied] = useState(false)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleCopy = () => {
     const textToCopy = convertLatexForCopy(content)
@@ -23,7 +32,13 @@ export const MessageActions = memo(function MessageActions({
       .writeText(textToCopy)
       .then(() => {
         setIsCopied(true)
-        setTimeout(() => setIsCopied(false), CONSTANTS.COPY_TIMEOUT_MS)
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+        }
+        timeoutRef.current = setTimeout(() => {
+          setIsCopied(false)
+          timeoutRef.current = null
+        }, CONSTANTS.COPY_TIMEOUT_MS)
       })
       .catch((error) => {
         logWarning('Failed to copy message to clipboard', {
@@ -39,6 +54,7 @@ export const MessageActions = memo(function MessageActions({
   return (
     <div className="mt-1 px-4">
       <button
+        type="button"
         onClick={handleCopy}
         className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-all ${
           isCopied
