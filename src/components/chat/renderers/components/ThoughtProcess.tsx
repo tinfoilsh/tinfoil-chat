@@ -1,6 +1,7 @@
 'use client'
 
 import { LoadingDots } from '@/components/loading-dots'
+import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
@@ -61,7 +62,15 @@ function useMathPlugins() {
             ] as any[],
           })
         })
-        .catch(() => {})
+        .catch((error) => {
+          logError('Failed to load markdown plugins', error, {
+            component: 'ThoughtProcess',
+            action: 'loadPlugins',
+            metadata: {
+              plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
+            },
+          })
+        })
     }
   }, [])
 
