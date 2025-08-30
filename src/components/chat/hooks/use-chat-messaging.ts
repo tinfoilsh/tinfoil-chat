@@ -397,6 +397,7 @@ export function useChatMessaging({
       let assistantMessage: Message | null = null
       // Track the initial chat ID for streaming tracker
       const streamingChatId = updatedChat.id
+      let rafId: number | null = null
 
       try {
         isStreamingRef.current = true
@@ -509,7 +510,6 @@ export function useChatMessaging({
         let isUsingReasoningFormat = false // Track if we're using reasoning_content format
 
         // Batch UI updates per animation frame during streaming
-        let rafId: number | null = null
         const scheduleStreamingUpdate = (isThinkingFlag: boolean) => {
           if (rafId !== null) return
           rafId =
@@ -554,6 +554,19 @@ export function useChatMessaging({
         while (true) {
           const { done, value } = await reader!.read()
           if (done || currentChatIdRef.current !== updatedChat.id) {
+            // Cancel any pending RAF/timeout before exiting
+            if (rafId !== null) {
+              if (
+                typeof window !== 'undefined' &&
+                typeof window.cancelAnimationFrame === 'function'
+              ) {
+                window.cancelAnimationFrame(rafId)
+              } else {
+                clearTimeout(rafId as unknown as NodeJS.Timeout)
+              }
+              rafId = null
+            }
+
             // Handle any remaining buffered content when stream ends
             if (isFirstChunk && initialContentBuffer.trim()) {
               // Process the buffered content even if it's less than 20 characters
@@ -894,6 +907,19 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
+        // Cancel any pending RAF/timeout on error
+        if (rafId !== null) {
+          if (
+            typeof window !== 'undefined' &&
+            typeof window.cancelAnimationFrame === 'function'
+          ) {
+            window.cancelAnimationFrame(rafId)
+          } else {
+            clearTimeout(rafId as unknown as NodeJS.Timeout)
+          }
+          rafId = null
+        }
+
         setIsWaitingForResponse(false) // Make sure to clear waiting state on error
         // Only log and show error message if it's not an abort error
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
