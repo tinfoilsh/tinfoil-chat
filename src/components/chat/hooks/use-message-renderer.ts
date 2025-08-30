@@ -1,23 +1,17 @@
 import type { BaseModel } from '@/app/config/models'
 import type { Message } from '@/components/chat/types'
 import { useMemo } from 'react'
-import {
-  DefaultInputRenderer,
-  DefaultMessageRenderer,
-  getRendererRegistry,
-} from '../renderers/client'
+import { getRendererRegistry } from '../renderers/client'
 
-export function useMessageRenderer(message: Message, model: BaseModel | null) {
+export function useMessageRenderer(message: Message, model: BaseModel) {
   return useMemo(() => {
-    if (!model) return DefaultMessageRenderer
     const registry = getRendererRegistry()
     return registry.getMessageRenderer(message, model)
   }, [message, model])
 }
 
-export function useInputRenderer(model: BaseModel | null) {
+export function useInputRenderer(model: BaseModel) {
   return useMemo(() => {
-    if (!model) return DefaultInputRenderer
     const registry = getRendererRegistry()
     return registry.getInputRenderer(model)
   }, [model])

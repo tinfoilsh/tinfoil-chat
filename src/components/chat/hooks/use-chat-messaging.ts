@@ -397,7 +397,7 @@ export function useChatMessaging({
       let assistantMessage: Message | null = null
       // Track the initial chat ID for streaming tracker
       const streamingChatId = updatedChat.id
-      let rafId: number | null = null
+      let rafId: number | ReturnType<typeof setTimeout> | null = null
 
       try {
         isStreamingRef.current = true
@@ -532,7 +532,7 @@ export function useChatMessaging({
                     )
                   }
                 })
-              : (setTimeout(() => {
+              : setTimeout(() => {
                   if (currentChatIdRef.current === updatedChat.id) {
                     const chatId = currentChatIdRef.current
                     const messageToSave = assistantMessage as Message
@@ -548,7 +548,7 @@ export function useChatMessaging({
                     )
                   }
                   rafId = null
-                }, 16) as unknown as number)
+                }, 16)
         }
 
         while (true) {
@@ -558,11 +558,12 @@ export function useChatMessaging({
             if (rafId !== null) {
               if (
                 typeof window !== 'undefined' &&
-                typeof window.cancelAnimationFrame === 'function'
+                typeof window.cancelAnimationFrame === 'function' &&
+                typeof rafId === 'number'
               ) {
                 window.cancelAnimationFrame(rafId)
               } else {
-                clearTimeout(rafId as unknown as NodeJS.Timeout)
+                clearTimeout(rafId as ReturnType<typeof setTimeout>)
               }
               rafId = null
             }
@@ -911,11 +912,12 @@ export function useChatMessaging({
         if (rafId !== null) {
           if (
             typeof window !== 'undefined' &&
-            typeof window.cancelAnimationFrame === 'function'
+            typeof window.cancelAnimationFrame === 'function' &&
+            typeof rafId === 'number'
           ) {
             window.cancelAnimationFrame(rafId)
           } else {
-            clearTimeout(rafId as unknown as NodeJS.Timeout)
+            clearTimeout(rafId as ReturnType<typeof setTimeout>)
           }
           rafId = null
         }

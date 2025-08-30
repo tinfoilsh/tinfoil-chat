@@ -54,20 +54,22 @@ class RendererRegistry {
     const renderer = this.messageRenderers.find((r) =>
       r.canRender(message, model),
     )
-    return (
-      renderer ||
-      this.defaultMessageRenderer ||
-      this.createFallbackMessageRenderer()
-    )
+    // Return found renderer or default (which should always be set)
+    // If neither exists, it's a configuration error
+    if (!renderer && !this.defaultMessageRenderer) {
+      throw new Error('No default message renderer configured')
+    }
+    return renderer || this.defaultMessageRenderer!
   }
 
   getInputRenderer(model: BaseModel): InputRenderer {
     const renderer = this.inputRenderers.find((r) => r.canRender(model))
-    return (
-      renderer ||
-      this.defaultInputRenderer ||
-      this.createFallbackInputRenderer()
-    )
+    // Return found renderer or default (which should always be set)
+    // If neither exists, it's a configuration error
+    if (!renderer && !this.defaultInputRenderer) {
+      throw new Error('No default input renderer configured')
+    }
+    return renderer || this.defaultInputRenderer!
   }
 
   getProvider(model: BaseModel): UIProvider | null {
@@ -87,41 +89,6 @@ class RendererRegistry {
     this.providers.clear()
     this.defaultMessageRenderer = null
     this.defaultInputRenderer = null
-  }
-
-  private createFallbackMessageRenderer(): MessageRenderer {
-    return {
-      id: 'fallback',
-      canRender: () => true,
-      render: ({ message }) => (
-        <div className="p-4">
-          <p>{message.content}</p>
-        </div>
-      ),
-    }
-  }
-
-  private createFallbackInputRenderer(): InputRenderer {
-    return {
-      id: 'fallback',
-      canRender: () => true,
-      render: ({ onSubmit, input, setInput }) => (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            onSubmit(input)
-          }}
-        >
-          <input
-            type="text"
-            aria-label="Message input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="w-full rounded border p-2"
-          />
-        </form>
-      ),
-    }
   }
 }
 
