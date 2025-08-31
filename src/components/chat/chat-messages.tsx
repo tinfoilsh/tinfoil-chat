@@ -43,7 +43,7 @@ type ChatMessagesProps = {
   ) => void
 }
 
-// Optimized wrapper component that manages its own expanded state
+// Optimized wrapper component that receives expanded state from parent
 const ChatMessage = memo(
   function ChatMessage({
     message,
@@ -51,18 +51,19 @@ const ChatMessage = memo(
     isDarkMode,
     isLastMessage = false,
     isStreaming = false,
+    expandedThoughtsState,
+    setExpandedThoughtsState,
   }: {
     message: Message
     model: BaseModel
     isDarkMode: boolean
     isLastMessage?: boolean
     isStreaming?: boolean
+    expandedThoughtsState: Record<string, boolean>
+    setExpandedThoughtsState: React.Dispatch<
+      React.SetStateAction<Record<string, boolean>>
+    >
   }) {
-    // Manage expanded state locally to prevent re-renders of other messages
-    const [expandedThoughtsState, setExpandedThoughtsState] = useState<
-      Record<string, boolean>
-    >({})
-
     // Get renderer from registry
     const renderer = getRendererRegistry().getMessageRenderer(message, model)
 
@@ -87,7 +88,9 @@ const ChatMessage = memo(
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
-      prevProps.isStreaming === nextProps.isStreaming
+      prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.expandedThoughtsState === nextProps.expandedThoughtsState &&
+      prevProps.setExpandedThoughtsState === nextProps.setExpandedThoughtsState
     )
   },
 )
@@ -512,6 +515,9 @@ export function ChatMessages({
   handleLabelClick,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
+  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
+    Record<string, boolean>
+  >({})
   const maxMessages = useMaxMessages()
 
   // Get the current model - always defined since config must load
@@ -606,6 +612,8 @@ export function ChatMessages({
                 isDarkMode={isDarkMode}
                 isLastMessage={false}
                 isStreaming={false}
+                expandedThoughtsState={expandedThoughtsState}
+                setExpandedThoughtsState={setExpandedThoughtsState}
               />
             ))}
           </div>
@@ -624,6 +632,8 @@ export function ChatMessages({
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
           isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
+          expandedThoughtsState={expandedThoughtsState}
+          setExpandedThoughtsState={setExpandedThoughtsState}
         />
       ))}
       {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
