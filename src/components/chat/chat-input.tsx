@@ -2,6 +2,7 @@
 
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
+import { logError } from '@/utils/error-handling'
 import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
@@ -26,17 +27,8 @@ import {
 import { FiArrowUp } from 'react-icons/fi'
 import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
+import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
-
-// Add type for processed documents
-type ProcessedDocument = {
-  id: string
-  name: string
-  time: Date
-  content?: string
-  isUploading?: boolean
-  imageData?: { base64: string; mimeType: string }
-}
 
 type ChatInputProps = {
   input: string
@@ -131,6 +123,7 @@ const MacFileIcon = ({
       iconColor = 'text-blue-500'
       break
     case 'xlsx':
+    case 'csv':
       FileIcon = FaFileExcel
       bgColorLight = 'bg-green-50'
       bgColorDark = 'bg-green-900/20'
@@ -466,6 +459,43 @@ export function ChatInput({
     [handleDocumentUpload],
   )
 
+  // Handle paste event for long text detection
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const pastedText = e.clipboardData.getData('text')
+
+      // Check if pasted text exceeds threshold
+      if (
+        pastedText.length > CONSTANTS.LONG_PASTE_THRESHOLD &&
+        handleDocumentUpload
+      ) {
+        e.preventDefault() // Prevent the text from being pasted into the textarea
+
+        // Create a .txt file from the pasted text
+        const timestamp = new Date()
+          .toISOString()
+          .replace(/[:.]/g, '-')
+          .slice(0, -5)
+        const fileName = `pasted-text-${timestamp}.txt`
+        const file = new File([pastedText], fileName, { type: 'text/plain' })
+
+        // Upload the file through the existing document upload system
+        handleDocumentUpload(file).catch((error) => {
+          logError('Failed to upload pasted text as document', error, {
+            component: 'ChatInput',
+            action: 'handlePaste',
+            metadata: {
+              textLength: pastedText.length,
+              fileName,
+            },
+          })
+        })
+      }
+      // If text is short enough, let it paste normally (default behavior)
+    },
+    [handleDocumentUpload],
+  )
+
   return (
     <div className="flex flex-col gap-2">
       {/* Display processed documents above input area */}
@@ -577,6 +607,7 @@ export function ChatInput({
               e.target.style.height = inputMinHeight
               e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
             }}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()

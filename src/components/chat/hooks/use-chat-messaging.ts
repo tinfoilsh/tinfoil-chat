@@ -397,6 +397,7 @@ export function useChatMessaging({
       let assistantMessage: Message | null = null
       // Track the initial chat ID for streaming tracker
       const streamingChatId = updatedChat.id
+      let rafId: number | ReturnType<typeof setTimeout> | null = null
 
       try {
         isStreamingRef.current = true
@@ -508,9 +509,65 @@ export function useChatMessaging({
         let sseBuffer = '' // Buffer for potentially incomplete SSE messages
         let isUsingReasoningFormat = false // Track if we're using reasoning_content format
 
+        // Batch UI updates per animation frame during streaming
+        const scheduleStreamingUpdate = (isThinkingFlag: boolean) => {
+          if (rafId !== null) return
+          rafId =
+            typeof window !== 'undefined' &&
+            typeof window.requestAnimationFrame === 'function'
+              ? window.requestAnimationFrame(() => {
+                  rafId = null
+                  if (currentChatIdRef.current === updatedChat.id) {
+                    const chatId = currentChatIdRef.current
+                    const messageToSave = assistantMessage as Message
+                    const newMessages = [...updatedMessages, messageToSave]
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      isThinkingFlag,
+                    )
+                  }
+                })
+              : setTimeout(() => {
+                  if (currentChatIdRef.current === updatedChat.id) {
+                    const chatId = currentChatIdRef.current
+                    const messageToSave = assistantMessage as Message
+                    const newMessages = [...updatedMessages, messageToSave]
+                    updateChatWithHistoryCheck(
+                      setChats,
+                      updatedChat,
+                      setCurrentChat,
+                      chatId,
+                      newMessages,
+                      false,
+                      isThinkingFlag,
+                    )
+                  }
+                  rafId = null
+                }, 16)
+        }
+
         while (true) {
           const { done, value } = await reader!.read()
           if (done || currentChatIdRef.current !== updatedChat.id) {
+            // Cancel any pending RAF/timeout before exiting
+            if (rafId !== null) {
+              if (
+                typeof window !== 'undefined' &&
+                typeof window.cancelAnimationFrame === 'function' &&
+                typeof rafId === 'number'
+              ) {
+                window.cancelAnimationFrame(rafId)
+              } else {
+                clearTimeout(rafId as ReturnType<typeof setTimeout>)
+              }
+              rafId = null
+            }
+
             // Handle any remaining buffered content when stream ends
             if (isFirstChunk && initialContentBuffer.trim()) {
               // Process the buffered content even if it's less than 20 characters
@@ -633,17 +690,7 @@ export function useChatMessaging({
                     isThinking: true,
                   }
                   if (currentChatIdRef.current === updatedChat.id) {
-                    const chatId = currentChatIdRef.current
-                    const newMessages = [...updatedMessages, assistantMessage]
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      true,
-                    )
+                    scheduleStreamingUpdate(true)
                   }
                 }
                 continue
@@ -682,17 +729,7 @@ export function useChatMessaging({
                   (reasoningContent || content) &&
                   currentChatIdRef.current === updatedChat.id
                 ) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    isInThinkingMode,
-                  )
+                  scheduleStreamingUpdate(isInThinkingMode)
                 }
 
                 // Continue processing if we have content to handle below
@@ -723,17 +760,7 @@ export function useChatMessaging({
                 }
 
                 if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                  scheduleStreamingUpdate(false)
                 }
                 continue
               }
@@ -800,17 +827,7 @@ export function useChatMessaging({
                 }
 
                 if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    false,
-                  )
+                  scheduleStreamingUpdate(false)
                 }
                 continue
               }
@@ -824,18 +841,7 @@ export function useChatMessaging({
                   isThinking: true,
                 }
                 if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const newMessages = [...updatedMessages, assistantMessage]
-
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    true,
-                  )
+                  scheduleStreamingUpdate(true)
                 }
               } else if (!isInThinkingMode) {
                 // Not in thinking mode, append to regular content
@@ -852,18 +858,7 @@ export function useChatMessaging({
                     isThinking: false,
                   }
                   if (currentChatIdRef.current === updatedChat.id) {
-                    const chatId = currentChatIdRef.current
-                    const newMessages = [...updatedMessages, assistantMessage]
-
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      false,
-                    )
+                    scheduleStreamingUpdate(false)
                   }
                 }
               }
@@ -913,6 +908,20 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
+        // Cancel any pending RAF/timeout on error
+        if (rafId !== null) {
+          if (
+            typeof window !== 'undefined' &&
+            typeof window.cancelAnimationFrame === 'function' &&
+            typeof rafId === 'number'
+          ) {
+            window.cancelAnimationFrame(rafId)
+          } else {
+            clearTimeout(rafId as ReturnType<typeof setTimeout>)
+          }
+          rafId = null
+        }
+
         setIsWaitingForResponse(false) // Make sure to clear waiting state on error
         // Only log and show error message if it's not an abort error
         if (!(error instanceof DOMException && error.name === 'AbortError')) {

@@ -1,99 +1,17 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
-import { logWarning } from '@/utils/error-handling'
-import {
-  convertLatexForCopy,
-  processLatexTags,
-  sanitizeUnsupportedMathBlocks,
-} from '@/utils/latex-processing'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useMemo, useState } from 'react'
-import { BsCheckLg, BsCopy } from 'react-icons/bs'
-import {
-  FaFile,
-  FaFileAlt,
-  FaFileArchive,
-  FaFileAudio,
-  FaFileCode,
-  FaFileExcel,
-  FaFileImage,
-  FaFilePdf,
-  FaFilePowerpoint,
-  FaFileVideo,
-  FaFileWord,
-} from 'react-icons/fa'
-import { LuBrain } from 'react-icons/lu'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { CodeBlock } from '../code-block'
 import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
-import { getFileIconType } from './document-uploader'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { ModelSelector } from './model-selector'
+import { getRendererRegistry } from './renderers/client'
 import type { Message } from './types'
 import { VerificationStatusDisplay } from './verification-status-display'
-
-// Load math rendering plugins for KaTeX
-function useMathPlugins() {
-  const [plugins, setPlugins] = useState<{
-    remarkPlugins: any[]
-    rehypePlugins: any[]
-  }>({
-    remarkPlugins: [remarkGfm],
-    rehypePlugins: [],
-  })
-
-  useEffect(() => {
-    // Load math plugins only in browser
-    if (typeof window !== 'undefined') {
-      Promise.all([
-        import('remark-math'),
-        import('rehype-katex'),
-        import('remark-breaks'),
-      ])
-        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
-          setPlugins({
-            remarkPlugins: [
-              remarkMathMod.default,
-              remarkGfm,
-              remarkBreaksMod.default,
-            ] as any[],
-            rehypePlugins: [
-              [
-                rehypeKatexMod.default,
-                {
-                  throwOnError: false,
-                  strict: false,
-                  output: 'htmlAndMathml',
-                  errorColor: '#cc0000',
-                  trust: false,
-                },
-              ],
-            ] as any[],
-          })
-        })
-        .catch(() => {
-          // If loading fails, just use basic plugins
-          logWarning('Math rendering plugins failed to load', {
-            component: 'ChatMessages',
-          })
-        })
-    }
-  }, [])
-
-  return plugins
-}
-
-// Add new types
-type MessageWithThoughts = Message & {
-  thoughts?: string
-  isThinking?: boolean
-  thinkingDuration?: number
-}
 
 type ChatMessagesProps = {
   messages: Message[]
@@ -125,461 +43,41 @@ type ChatMessagesProps = {
   ) => void
 }
 
-// Lock animation moved to `./lock-animation`
-
-// Add new component for thought process display
-const ThoughtProcess = memo(function ThoughtProcess({
-  thoughts,
-  isDarkMode,
-  isThinking = false,
-  shouldDiscard = false,
-  thinkingDuration,
-  messageId,
-  expandedThoughtsState,
-  setExpandedThoughtsState,
-}: {
-  thoughts: string
-  isDarkMode: boolean
-  isThinking?: boolean
-  shouldDiscard?: boolean
-  thinkingDuration?: number
-  messageId?: string
-  expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: React.Dispatch<
-    React.SetStateAction<Record<string, boolean>>
-  >
-}) {
-  // Use lifted state if available, otherwise local state
-  const isExpanded =
-    messageId && expandedThoughtsState
-      ? (expandedThoughtsState[messageId] ?? false)
-      : false
-
-  const handleToggle = () => {
-    if (messageId && setExpandedThoughtsState) {
-      setExpandedThoughtsState((prevState) => ({
-        ...prevState,
-        [messageId]: !prevState[messageId],
-      }))
-    }
-  }
-  const { remarkPlugins, rehypePlugins } = useMathPlugins()
-  const processedThoughts = processLatexTags(thoughts)
-  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
-
-  // Don't render if thoughts are empty and not actively thinking
-  if (
-    shouldDiscard ||
-    (!thoughts.trim() && !isThinking) ||
-    thoughts.trim() === ''
-  ) {
-    return null
-  }
-
-  return (
-    <div
-      className={`mx-4 mb-4 mt-2 rounded-lg ${
-        isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100'
-      }`}
-    >
-      <button
-        onClick={handleToggle}
-        className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
-          isDarkMode
-            ? 'text-gray-200 hover:bg-gray-600/50'
-            : 'text-gray-700 hover:bg-gray-200'
-        } rounded-lg transition-colors`}
-      >
-        <div className="flex items-center gap-2">
-          <LuBrain className="h-5 w-5 opacity-70" />
-          {isThinking ? (
-            <>
-              <span className="text-sm font-medium">Thinking</span>
-              <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">
-                <span className="font-bold">Thought</span>
-                {thinkingDuration && (
-                  <span className="font-normal opacity-70">
-                    {thinkingDuration < 60
-                      ? ` for ${thinkingDuration.toFixed(1)} seconds`
-                      : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-        </div>
-        <svg
-          className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </button>
-
-      <motion.div
-        initial={false}
-        animate={{
-          height: isExpanded ? 'auto' : 0,
-          opacity: isExpanded ? 1 : 0,
-        }}
-        transition={{
-          duration: 0.2,
-          ease: 'easeInOut',
-        }}
-        style={{ overflow: 'hidden' }}
-      >
-        <div
-          className={`px-4 py-3 text-sm ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-          }`}
-        >
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={rehypePlugins}
-            components={{
-              p: ({ children }: { children?: React.ReactNode }) => (
-                <p className="mb-2 last:mb-0">{children}</p>
-              ),
-            }}
-          >
-            {sanitizedThoughts}
-          </ReactMarkdown>
-        </div>
-      </motion.div>
-    </div>
-  )
-})
-
-// Create a memoized markdown renderer to prevent unnecessary re-renders
-const MemoizedMarkdown = memo(function MemoizedMarkdown({
-  content,
-  isDarkMode,
-}: {
-  content: string
-  isDarkMode: boolean
-}) {
-  // Use the hook to get math plugins
-  const { remarkPlugins, rehypePlugins } = useMathPlugins()
-
-  const processedContent = processLatexTags(content)
-  const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
-
-  return (
-    <ReactMarkdown
-      remarkPlugins={remarkPlugins}
-      rehypePlugins={rehypePlugins}
-      components={{
-        code({
-          node,
-          className,
-          children,
-          ...props
-        }: {
-          node?: unknown
-          className?: string
-          children?: React.ReactNode
-          inline?: boolean
-        } & React.HTMLAttributes<HTMLElement>) {
-          const match = /language-(\w+)/.exec(className || '')
-          const language = match ? match[1] : ''
-
-          if (!props.inline && language) {
-            return (
-              <CodeBlock
-                code={String(children).replace(/\n$/, '')}
-                language={language}
-                isDarkMode={isDarkMode}
-              />
-            )
-          }
-          return (
-            <code className={`${className || ''} break-words`} {...props}>
-              {children}
-            </code>
-          )
-        },
-        table({ children, node, ...props }: any) {
-          return (
-            <div className="my-4 w-full overflow-x-auto">
-              <table
-                {...props}
-                className={`divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
-                style={{ minWidth: 'max-content' }}
-              >
-                {children}
-              </table>
-            </div>
-          )
-        },
-        thead({ children, node, ...props }: any) {
-          return (
-            <thead
-              {...props}
-              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}
-            >
-              {children}
-            </thead>
-          )
-        },
-        tbody({ children, node, ...props }: any) {
-          return (
-            <tbody
-              {...props}
-              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-white'}`}
-            >
-              {children}
-            </tbody>
-          )
-        },
-        tr({ children, node, ...props }: any) {
-          return <tr {...props}>{children}</tr>
-        },
-        th({ children, node, ...props }: any) {
-          return (
-            <th
-              {...props}
-              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
-            >
-              {children}
-            </th>
-          )
-        },
-        td({ children, node, ...props }: any) {
-          return (
-            <td
-              {...props}
-              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-nowrap`}
-            >
-              {children}
-            </td>
-          )
-        },
-      }}
-    >
-      {sanitizedContent}
-    </ReactMarkdown>
-  )
-})
-
-// Memoize the ChatMessage component to prevent re-renders
+// Simple wrapper component that uses the renderer
 const ChatMessage = memo(function ChatMessage({
   message,
+  model,
   isDarkMode,
-  shouldDiscardThoughts = false,
   isLastMessage = false,
-  isWaitingForResponse = false,
-  loadingState = 'idle',
+  isStreaming = false,
   expandedThoughtsState,
   setExpandedThoughtsState,
 }: {
-  message: MessageWithThoughts
+  message: Message
+  model: BaseModel
   isDarkMode: boolean
-  shouldDiscardThoughts?: boolean
   isLastMessage?: boolean
-  isWaitingForResponse?: boolean
-  loadingState?: string
+  isStreaming?: boolean
   expandedThoughtsState?: Record<string, boolean>
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
 }) {
-  const isUser = message.role === 'user'
-  const [isCopied, setIsCopied] = useState(false)
+  // Get renderer from registry
+  const renderer = getRendererRegistry().getMessageRenderer(message, model)
 
-  // Only show thoughts if we have actual thoughts content or are actively thinking
-  const shouldShowThoughts =
-    !shouldDiscardThoughts &&
-    (message.thoughts?.trim() !== '' || message.isThinking)
-
-  const getFileIcon = (filename: string) => {
-    const type = getFileIconType(filename)
-    const iconProps = {
-      className: `h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`,
-    }
-    switch (type) {
-      case 'pdf':
-        return <FaFilePdf {...iconProps} />
-      case 'docx':
-        return <FaFileWord {...iconProps} />
-      case 'pptx':
-        return <FaFilePowerpoint {...iconProps} />
-      case 'xlsx':
-      case 'csv':
-        return <FaFileExcel {...iconProps} />
-      case 'image':
-        return <FaFileImage {...iconProps} />
-      case 'audio':
-        return <FaFileAudio {...iconProps} />
-      case 'video':
-        return <FaFileVideo {...iconProps} />
-      case 'zip':
-        return <FaFileArchive {...iconProps} />
-      case 'html':
-      case 'js':
-      case 'ts':
-      case 'css':
-      case 'md':
-        return <FaFileCode {...iconProps} />
-      case 'txt':
-        return <FaFileAlt {...iconProps} />
-      default:
-        return <FaFile {...iconProps} />
-    }
-  }
+  const RendererComponent = renderer.render
 
   return (
-    <div
-      className={`flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
-    >
-      {/* Display document icons for user messages */}
-      {isUser && message.documents && message.documents.length > 0 && (
-        <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
-          {message.documents.map((doc, index) => {
-            // Check if we have corresponding image data
-            const hasImageData = message.imageData && message.imageData[index]
-            const isImage = doc.name
-              .toLowerCase()
-              .match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff)$/i)
-
-            return (
-              <div
-                key={index}
-                className={`flex items-center rounded-lg ${
-                  isDarkMode
-                    ? 'bg-gray-700/50 hover:bg-gray-700/70'
-                    : 'bg-gray-100 hover:bg-gray-200'
-                } overflow-hidden transition-colors duration-200`}
-              >
-                {hasImageData && isImage ? (
-                  <div className="flex items-center">
-                    <div className="h-10 w-10 overflow-hidden">
-                      <img
-                        src={`data:${message.imageData![index].mimeType};base64,${message.imageData![index].base64}`}
-                        alt={doc.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <span
-                      className={`ml-2 mr-3 max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-                    >
-                      {doc.name}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center px-3 py-1.5">
-                    <div className="mr-2">{getFileIcon(doc.name)}</div>
-                    <span
-                      className={`max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-                    >
-                      {doc.name}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {/* Only show thoughts component if we have thoughts or are thinking */}
-      {!isUser && shouldShowThoughts && (
-        <div className="mb-2 w-full">
-          <ThoughtProcess
-            thoughts={message.thoughts ?? ''}
-            isDarkMode={isDarkMode}
-            isThinking={message.isThinking}
-            shouldDiscard={shouldDiscardThoughts}
-            thinkingDuration={message.thinkingDuration}
-            messageId={`${message.timestamp}-${message.role}`}
-            expandedThoughtsState={expandedThoughtsState}
-            setExpandedThoughtsState={setExpandedThoughtsState}
-          />
-        </div>
-      )}
-      {/* Only show content if it exists and is not just document content */}
-      {message.content && (
-        <>
-          <div
-            className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
-          >
-            <div
-              className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
-                isUser
-                  ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
-                  : ''
-              } overflow-x-auto`}
-            >
-              <div
-                className={`prose w-full max-w-none text-base ${
-                  isDarkMode
-                    ? 'prose-invert text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
-                    : isUser
-                      ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                      : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                }`}
-              >
-                <MemoizedMarkdown
-                  content={message.content}
-                  isDarkMode={isDarkMode}
-                />
-              </div>
-            </div>
-          </div>
-          {/* Copy button for assistant messages - hidden during streaming */}
-          {!isUser && !(isLastMessage && loadingState === 'loading') && (
-            <div className="mt-1 px-4">
-              <button
-                onClick={() => {
-                  const textToCopy = convertLatexForCopy(message.content)
-                  navigator.clipboard
-                    .writeText(textToCopy)
-                    .then(() => {
-                      setIsCopied(true)
-                      setTimeout(() => setIsCopied(false), 2000)
-                    })
-                    .catch((error) => {
-                      logWarning('Failed to copy message to clipboard', {
-                        component: 'ChatMessage',
-                        action: 'copyMessage',
-                        metadata: {
-                          errorMessage: error?.message || 'Unknown error',
-                        },
-                      })
-                    })
-                }}
-                className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-all ${
-                  isCopied
-                    ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
-                    : isDarkMode
-                      ? 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
-                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                }`}
-                aria-label="Copy message"
-              >
-                {isCopied ? (
-                  <>
-                    <BsCheckLg className="h-3.5 w-3.5" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <BsCopy className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+    <RendererComponent
+      message={message}
+      model={model}
+      isDarkMode={isDarkMode}
+      isLastMessage={isLastMessage}
+      isStreaming={isStreaming}
+      expandedThoughtsState={expandedThoughtsState}
+      setExpandedThoughtsState={setExpandedThoughtsState}
+    />
   )
 })
 
@@ -591,8 +89,12 @@ const LoadingMessage = memo(function LoadingMessage({
 }) {
   return (
     <div className="group mb-6 flex w-full flex-col items-start">
-      <div className="px-4 py-2">
-        <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+      <div className="w-full px-4 py-2">
+        {/* Container with minimum height to prevent layout shift */}
+        {/* Matches the typical height of a single line of text response */}
+        <div className="flex min-h-[28px] items-center">
+          <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+        </div>
       </div>
     </div>
   )
@@ -1004,6 +506,16 @@ export function ChatMessages({
   >({})
   const maxMessages = useMaxMessages()
 
+  // Get the current model - always defined since config must load
+  const currentModel = useMemo(() => {
+    if (!models || models.length === 0 || !selectedModel) {
+      // This should never happen since chat interface doesn't load without config
+      // but TypeScript needs this check
+      return models?.[0] || null
+    }
+    return models.find((m) => m.modelName === selectedModel) || models[0]
+  }, [models, selectedModel])
+
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
@@ -1063,6 +575,15 @@ export function ChatMessages({
     )
   }
 
+  // Early return if no model (should never happen)
+  if (!currentModel) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
+        <div ref={messagesEndRef} className="hidden" />
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
       {/* Archived Messages - only shown if there are more than the max prompt messages */}
@@ -1072,11 +593,11 @@ export function ChatMessages({
             {archivedMessages.map((message, i) => (
               <ChatMessage
                 key={`archived-${i}`}
-                message={message as MessageWithThoughts}
+                message={message}
+                model={currentModel}
                 isDarkMode={isDarkMode}
-                shouldDiscardThoughts={false}
                 isLastMessage={false}
-                isWaitingForResponse={isWaitingForResponse}
+                isStreaming={false}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={setExpandedThoughtsState}
               />
@@ -1092,12 +613,11 @@ export function ChatMessages({
       {liveMessages.map((message, i) => (
         <ChatMessage
           key={`${chatId}-${i}`}
-          message={message as MessageWithThoughts}
+          message={message}
+          model={currentModel}
           isDarkMode={isDarkMode}
-          shouldDiscardThoughts={false}
           isLastMessage={i === liveMessages.length - 1}
-          isWaitingForResponse={isWaitingForResponse}
-          loadingState={loadingState}
+          isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={setExpandedThoughtsState}
         />

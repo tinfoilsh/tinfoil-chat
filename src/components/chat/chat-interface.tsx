@@ -38,6 +38,8 @@ import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
+import { initializeRenderers } from './renderers/client'
+import type { ProcessedDocument } from './renderers/types'
 import type { VerificationState } from './types'
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
 const VerifierSidebarLazy = dynamic(
@@ -59,16 +61,6 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
-}
-
-// Type for processed documents
-type ProcessedDocument = {
-  id: string
-  name: string
-  time: Date
-  content?: string
-  isUploading?: boolean
-  imageData?: { base64: string; mimeType: string }
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -163,6 +155,11 @@ export function ChatInterface({
     systemPrompt,
     rules,
   )
+
+  // Initialize renderers on mount
+  useEffect(() => {
+    initializeRenderers()
+  }, [])
 
   // Check for migration and show intro modal
   useEffect(() => {
@@ -914,6 +911,13 @@ export function ChatInterface({
         onClose={() => setIsShareModalOpen(false)}
         messages={currentChat?.messages || []}
         isDarkMode={isDarkMode}
+        isSidebarOpen={
+          isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+        }
+        isRightSidebarOpen={
+          (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
+          windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+        }
       />
 
       {/* Settings Sidebar */}

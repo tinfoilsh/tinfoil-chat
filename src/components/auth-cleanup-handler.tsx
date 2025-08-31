@@ -1,6 +1,8 @@
 'use client'
 
+import { resetRendererRegistry } from '@/components/chat/renderers'
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
+import { logInfo } from '@/utils/error-handling'
 import {
   getEncryptionKey,
   hasEncryptionKey,
@@ -19,6 +21,25 @@ export function AuthCleanupHandler() {
 
   useEffect(() => {
     if (!isLoaded) return
+
+    // Check if user switched (different user logged in)
+    if (
+      isSignedIn &&
+      user?.id &&
+      previousUserIdRef.current &&
+      previousUserIdRef.current !== user.id
+    ) {
+      // User switched - reset renderer registry to prevent state leakage
+      resetRendererRegistry()
+      logInfo('Reset renderer registry due to user switch', {
+        component: 'AuthCleanupHandler',
+        action: 'userSwitch',
+        metadata: {
+          previousUserId: previousUserIdRef.current,
+          newUserId: user.id,
+        },
+      })
+    }
 
     // Check if user just signed out (was signed in before, now not signed in)
     if (

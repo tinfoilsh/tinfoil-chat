@@ -4,7 +4,8 @@ import {
   DocumentDuplicateIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { CONSTANTS } from './constants'
 import type { Message } from './types'
 
 type ShareModalProps = {
@@ -12,6 +13,8 @@ type ShareModalProps = {
   onClose: () => void
   messages: Message[]
   isDarkMode: boolean
+  isSidebarOpen?: boolean
+  isRightSidebarOpen?: boolean
 }
 
 export function ShareModal({
@@ -19,9 +22,50 @@ export function ShareModal({
   onClose,
   messages,
   isDarkMode,
+  isSidebarOpen = false,
+  isRightSidebarOpen = false,
 }: ShareModalProps) {
   const { toast } = useToast()
   const [isCopied, setIsCopied] = useState(false)
+  const contentRef = useRef<HTMLPreElement>(null)
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Intercept Cmd+A (Mac) or Ctrl+A (Windows/Linux)
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key.toLowerCase() === 'a' &&
+        !(
+          e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement ||
+          (e.target as HTMLElement)?.isContentEditable
+        )
+      ) {
+        e.preventDefault()
+        e.stopPropagation()
+
+        // Select all text in the modal content
+        if (contentRef.current) {
+          const selection = window.getSelection()
+          const range = document.createRange()
+          range.selectNodeContents(contentRef.current)
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+        }
+      }
+    }
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown)
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -82,16 +126,38 @@ export function ShareModal({
 
   const markdown = convertToMarkdown()
 
+  // Calculate the positioning to center within the chat area
+  const leftOffset = isSidebarOpen ? CONSTANTS.CHAT_SIDEBAR_WIDTH_PX : 0
+  const rightOffset = isRightSidebarOpen
+    ? CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX
+    : 0
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{
+        left: `${leftOffset}px`,
+        right: `${rightOffset}px`,
+      }}
+    >
+      {/* Backdrop - covers entire viewport */}
+      <div
+        className="fixed inset-0 bg-black/50"
+        onClick={onClose}
+        style={{
+          left: 0,
+          right: 0,
+        }}
+      />
 
       {/* Modal */}
       <div
         className={`relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col rounded-xl shadow-xl ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
         }`}
+        style={{
+          maxWidth: `min(896px, calc(90vw - ${leftOffset + rightOffset}px))`,
+        }}
       >
         {/* Header */}
         <div
@@ -121,6 +187,7 @@ export function ShareModal({
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
           <pre
+            ref={contentRef}
             className={`whitespace-pre-wrap font-mono text-sm ${
               isDarkMode ? 'text-gray-300' : 'text-gray-700'
             }`}

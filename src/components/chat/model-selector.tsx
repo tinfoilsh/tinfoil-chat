@@ -153,6 +153,7 @@ export function ModelSelector({
 
         return (
           <button
+            type="button"
             key={model.modelName}
             className={`relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
               isAvailable
@@ -167,7 +168,20 @@ export function ModelSelector({
                   ? 'cursor-not-allowed text-gray-500'
                   : 'cursor-not-allowed text-gray-400'
             }`}
-            onClick={() => isAvailable && onSelect(model.modelName as AIModel)}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (isAvailable) {
+                onSelect(model.modelName as AIModel)
+              }
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (isAvailable) {
+                onSelect(model.modelName as AIModel)
+              }
+            }}
             disabled={!isAvailable}
           >
             <div className="relative">
