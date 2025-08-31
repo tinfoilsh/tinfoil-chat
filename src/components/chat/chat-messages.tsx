@@ -43,43 +43,54 @@ type ChatMessagesProps = {
   ) => void
 }
 
-// Simple wrapper component that uses the renderer
-const ChatMessage = memo(function ChatMessage({
-  message,
-  model,
-  isDarkMode,
-  isLastMessage = false,
-  isStreaming = false,
-  expandedThoughtsState,
-  setExpandedThoughtsState,
-}: {
-  message: Message
-  model: BaseModel
-  isDarkMode: boolean
-  isLastMessage?: boolean
-  isStreaming?: boolean
-  expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: React.Dispatch<
-    React.SetStateAction<Record<string, boolean>>
-  >
-}) {
-  // Get renderer from registry
-  const renderer = getRendererRegistry().getMessageRenderer(message, model)
+// Optimized wrapper component that manages its own expanded state
+const ChatMessage = memo(
+  function ChatMessage({
+    message,
+    model,
+    isDarkMode,
+    isLastMessage = false,
+    isStreaming = false,
+  }: {
+    message: Message
+    model: BaseModel
+    isDarkMode: boolean
+    isLastMessage?: boolean
+    isStreaming?: boolean
+  }) {
+    // Manage expanded state locally to prevent re-renders of other messages
+    const [expandedThoughtsState, setExpandedThoughtsState] = useState<
+      Record<string, boolean>
+    >({})
 
-  const RendererComponent = renderer.render
+    // Get renderer from registry
+    const renderer = getRendererRegistry().getMessageRenderer(message, model)
 
-  return (
-    <RendererComponent
-      message={message}
-      model={model}
-      isDarkMode={isDarkMode}
-      isLastMessage={isLastMessage}
-      isStreaming={isStreaming}
-      expandedThoughtsState={expandedThoughtsState}
-      setExpandedThoughtsState={setExpandedThoughtsState}
-    />
-  )
-})
+    const RendererComponent = renderer.render
+
+    return (
+      <RendererComponent
+        message={message}
+        model={model}
+        isDarkMode={isDarkMode}
+        isLastMessage={isLastMessage}
+        isStreaming={isStreaming}
+        expandedThoughtsState={expandedThoughtsState}
+        setExpandedThoughtsState={setExpandedThoughtsState}
+      />
+    )
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    return (
+      prevProps.message === nextProps.message &&
+      prevProps.model === nextProps.model &&
+      prevProps.isDarkMode === nextProps.isDarkMode &&
+      prevProps.isLastMessage === nextProps.isLastMessage &&
+      prevProps.isStreaming === nextProps.isStreaming
+    )
+  },
+)
 
 // Add a new component for the loading state
 const LoadingMessage = memo(function LoadingMessage({
@@ -501,9 +512,6 @@ export function ChatMessages({
   handleLabelClick,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
-  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
-    Record<string, boolean>
-  >({})
   const maxMessages = useMaxMessages()
 
   // Get the current model - always defined since config must load
@@ -598,8 +606,6 @@ export function ChatMessages({
                 isDarkMode={isDarkMode}
                 isLastMessage={false}
                 isStreaming={false}
-                expandedThoughtsState={expandedThoughtsState}
-                setExpandedThoughtsState={setExpandedThoughtsState}
               />
             ))}
           </div>
@@ -618,8 +624,6 @@ export function ChatMessages({
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
           isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
-          expandedThoughtsState={expandedThoughtsState}
-          setExpandedThoughtsState={setExpandedThoughtsState}
         />
       ))}
       {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}

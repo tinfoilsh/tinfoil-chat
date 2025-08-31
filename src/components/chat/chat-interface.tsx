@@ -636,6 +636,11 @@ export function ChatInterface({
     [handleFileUpload],
   )
 
+  // Callback for scroll feed to prevent inline hook usage
+  const handleScrollFeedScroll = useCallback((isAtBottom: boolean) => {
+    setShowScrollButton(!isAtBottom)
+  }, [])
+
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
     return (
@@ -1003,9 +1008,7 @@ export function ChatInterface({
             className={`relative flex-1 ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
-            onScroll={(isAtBottom: boolean) => {
-              setShowScrollButton(!isAtBottom)
-            }}
+            onScroll={handleScrollFeedScroll}
           >
             <ChatMessages
               messages={currentChat?.messages || []}

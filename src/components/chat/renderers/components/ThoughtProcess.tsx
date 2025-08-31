@@ -6,7 +6,6 @@ import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
-import { motion } from 'framer-motion'
 import { memo, useEffect, useState } from 'react'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
@@ -163,17 +162,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         </svg>
       </button>
 
-      <motion.div
-        initial={false}
-        animate={{
+      <div
+        style={{
           height: isExpanded ? 'auto' : 0,
           opacity: isExpanded ? 1 : 0,
+          overflow: 'hidden',
+          transition: 'height 0.2s ease-in-out, opacity 0.2s ease-in-out',
         }}
-        transition={{
-          duration: 0.2,
-          ease: 'easeInOut',
-        }}
-        style={{ overflow: 'hidden' }}
       >
         <div
           className={`px-4 py-3 text-sm ${
@@ -192,7 +187,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             {sanitizedThoughts}
           </ReactMarkdown>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 })
