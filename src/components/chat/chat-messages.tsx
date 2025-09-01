@@ -83,6 +83,12 @@ const ChatMessage = memo(
   },
   (prevProps, nextProps) => {
     // Custom comparison to prevent unnecessary re-renders
+    // Always re-render if this is the streaming message
+    if (nextProps.isStreaming && nextProps.isLastMessage) {
+      // Always re-render streaming messages to show updates
+      return false
+    }
+
     // For messages with thinking, be more careful about re-renders
     if (prevProps.message.isThinking || nextProps.message.isThinking) {
       // Only re-render if the actual message content or thinking state changed
@@ -93,15 +99,14 @@ const ChatMessage = memo(
         prevProps.model === nextProps.model &&
         prevProps.isDarkMode === nextProps.isDarkMode &&
         prevProps.isLastMessage === nextProps.isLastMessage &&
-        prevProps.isStreaming === nextProps.isStreaming &&
-        prevProps.setExpandedThoughtsState ===
-          nextProps.setExpandedThoughtsState
+        prevProps.isStreaming === nextProps.isStreaming
       )
     }
 
-    // Default comparison for non-thinking messages
+    // Default comparison for non-streaming, non-thinking messages
     return (
-      prevProps.message === nextProps.message &&
+      prevProps.message.content === nextProps.message.content &&
+      prevProps.message.thoughts === nextProps.message.thoughts &&
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
@@ -130,6 +135,21 @@ const LoadingMessage = memo(function LoadingMessage({
     </div>
   )
 })
+
+// Helper to generate unique message keys
+const getMessageKey = (
+  prefix: string,
+  message: Message,
+  index: number,
+): string => {
+  // Use a combination of role, index, and timestamp to ensure uniqueness
+  const timestamp = message.timestamp
+    ? message.timestamp instanceof Date
+      ? message.timestamp.getTime()
+      : String(message.timestamp)
+    : ''
+  return `${prefix}-${index}-${message.role}-${timestamp}`
+}
 
 export const scrollToBottom = (
   messagesEndRef: React.RefObject<HTMLDivElement>,
@@ -631,7 +651,7 @@ export function ChatMessages({
           <div className={`opacity-70`}>
             {archivedMessages.map((message, i) => (
               <ChatMessage
-                key={`archived-${message.timestamp || i}`}
+                key={getMessageKey(`${chatId}-archived`, message, i)}
                 message={message}
                 model={currentModel}
                 isDarkMode={isDarkMode}
@@ -651,7 +671,7 @@ export function ChatMessages({
       {/* Live Messages - the last messages up to max prompt limit */}
       {liveMessages.map((message, i) => (
         <ChatMessage
-          key={`${chatId}-${message.timestamp || i}`}
+          key={getMessageKey(`${chatId}-live`, message, i)}
           message={message}
           model={currentModel}
           isDarkMode={isDarkMode}

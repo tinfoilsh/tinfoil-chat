@@ -97,7 +97,14 @@ export const MessageContent = memo(function MessageContent({
           // Only handle inline code here, let pre handle block code
           if (props.inline) {
             return (
-              <code className={`${className || ''} break-words`} {...props}>
+              <code
+                className={`${className || ''} break-words rounded px-1.5 py-0.5 font-mono text-sm ${
+                  isDarkMode
+                    ? 'bg-gray-700 text-gray-200'
+                    : 'bg-gray-100 text-gray-800'
+                }`}
+                {...props}
+              >
                 {children}
               </code>
             )

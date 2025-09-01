@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import {
   oneDark,
@@ -40,7 +40,7 @@ const LIGHT_THEME = {
   },
 }
 
-export function CodeBlock({
+export const CodeBlock = memo(function CodeBlock({
   code,
   language,
   isDarkMode = true,
@@ -119,4 +119,4 @@ export function CodeBlock({
       </SyntaxHighlighter>
     </div>
   )
-}
+})

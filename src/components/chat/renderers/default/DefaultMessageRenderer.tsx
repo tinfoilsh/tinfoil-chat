@@ -3,7 +3,7 @@
 import React, { memo } from 'react'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
-import { StreamingText } from '../components/StreamingText'
+import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { ThoughtProcess } from '../components/ThoughtProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
@@ -16,6 +16,16 @@ const DefaultMessage = memo(function DefaultMessage({
   setExpandedThoughtsState,
 }: MessageRenderProps) {
   const isUser = message.role === 'user'
+
+  // Generate a stable unique ID for this message
+  const messageUniqueId = React.useMemo(() => {
+    const timestamp = message.timestamp
+      ? message.timestamp instanceof Date
+        ? message.timestamp.getTime()
+        : String(message.timestamp)
+      : Date.now()
+    return `${message.role}-${timestamp}-${message.content?.substring(0, 10) || 'empty'}`
+  }, [message.role, message.timestamp, message.content])
   const [showActions, setShowActions] = React.useState(false)
   const lastContentRef = React.useRef(message.content)
   const showActionsTimeoutRef = React.useRef<ReturnType<
@@ -91,7 +101,7 @@ const DefaultMessage = memo(function DefaultMessage({
             isDarkMode={isDarkMode}
             isThinking={message.isThinking}
             thinkingDuration={message.thinkingDuration}
-            messageId={`${message.timestamp}-${message.role}`}
+            messageId={messageUniqueId}
             expandedThoughtsState={expandedThoughtsState}
             setExpandedThoughtsState={setExpandedThoughtsState}
           />
@@ -120,10 +130,11 @@ const DefaultMessage = memo(function DefaultMessage({
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
-                <StreamingText
+                <StreamingChunkedText
                   content={message.content}
                   isDarkMode={isDarkMode}
                   isUser={isUser}
+                  isStreaming={isStreaming}
                 />
               </div>
             </div>
