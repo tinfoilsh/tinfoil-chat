@@ -11,6 +11,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import QRCode from 'react-qr-code'
 
 interface EncryptionKeyModalProps {
   isOpen: boolean
@@ -364,6 +365,36 @@ ${encryptionKey.replace('key_', '')}
                       Keep this key safe. You'll need it to decrypt your chats
                       on other devices.
                     </p>
+
+                    {/* QR Code Section */}
+                    {encryptionKey && (
+                      <div className="mt-4">
+                        <div
+                          className={`flex flex-col items-center rounded-lg border p-4 ${
+                            isDarkMode
+                              ? 'border-gray-700 bg-gray-900/50'
+                              : 'border-gray-200 bg-gray-50'
+                          }`}
+                        >
+                          <div className="rounded-lg bg-white p-3">
+                            <QRCode
+                              value={encryptionKey}
+                              size={180}
+                              level="H"
+                              bgColor="#FFFFFF"
+                              fgColor="#000000"
+                            />
+                          </div>
+                          <p
+                            className={`mt-3 text-xs ${
+                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                            }`}
+                          >
+                            Scan to transfer key to another device
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Update Key Section */}
