@@ -171,7 +171,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         }}
       >
         <div
-          className={`px-4 py-3 text-sm ${
+          className={`overflow-x-auto px-4 py-3 text-sm ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}
         >
@@ -180,8 +180,27 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             rehypePlugins={rehypePlugins}
             components={{
               p: ({ children }: { children?: React.ReactNode }) => (
-                <p className="mb-2 last:mb-0">{children}</p>
+                <p className="mb-2 break-words last:mb-0">{children}</p>
               ),
+              pre: ({ children }: { children?: React.ReactNode }) => (
+                <pre className="my-2 overflow-x-auto rounded-md bg-black/10 p-3 text-xs">
+                  {children}
+                </pre>
+              ),
+              code: ({
+                inline,
+                children,
+              }: {
+                inline?: boolean
+                children?: React.ReactNode
+              }) =>
+                inline ? (
+                  <code className="break-words rounded bg-black/10 px-1 py-0.5 text-xs">
+                    {children}
+                  </code>
+                ) : (
+                  <code className="block break-all text-xs">{children}</code>
+                ),
             }}
           >
             {sanitizedThoughts}
