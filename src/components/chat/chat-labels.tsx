@@ -182,7 +182,7 @@ export function ChatLabels({
       </div>
 
       {/* Right side - Context usage indicator */}
-      {contextUsagePercentage !== undefined && contextUsagePercentage > 10 && (
+      {contextUsagePercentage !== undefined && contextUsagePercentage > 50 && (
         <div className="flex items-center gap-1.5">
           <div className="relative h-6 w-6">
             <svg className="h-6 w-6 -rotate-90 transform" viewBox="0 0 24 24">

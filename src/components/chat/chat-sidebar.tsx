@@ -925,8 +925,11 @@ export function ChatSidebar({
                     <div key={chat.id} className="relative">
                       <div
                         onClick={() => {
-                          // Don't allow selecting encrypted chats
+                          // Open encryption key modal for encrypted chats
                           if (chat.decryptionFailed) {
+                            if (onEncryptionKeyClick) {
+                              onEncryptionKeyClick()
+                            }
                             return
                           }
 
@@ -939,9 +942,13 @@ export function ChatSidebar({
                         }}
                         className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
                           chat.decryptionFailed
-                            ? isDarkMode
-                              ? 'cursor-not-allowed border-gray-700 text-gray-500'
-                              : 'cursor-not-allowed border-gray-300 text-gray-400'
+                            ? onEncryptionKeyClick
+                              ? isDarkMode
+                                ? 'cursor-pointer border-gray-700 hover:border-gray-600 hover:bg-gray-800'
+                                : 'cursor-pointer border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                              : isDarkMode
+                                ? 'cursor-not-allowed border-gray-700 opacity-60'
+                                : 'cursor-not-allowed border-gray-300 opacity-60'
                             : currentChat?.id === chat.id
                               ? isDarkMode
                                 ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
@@ -1168,23 +1175,25 @@ function ChatListItem({
             </form>
           ) : (
             <>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                {/* Lock icon for encrypted chats - moved to the left */}
+                {chat.decryptionFailed && (
+                  <FaLock
+                    className="h-3.5 w-3.5 flex-shrink-0 text-orange-500"
+                    title="Encrypted chat"
+                  />
+                )}
                 <div
                   className={`truncate text-sm font-medium ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
+                    chat.decryptionFailed
+                      ? 'text-orange-500'
+                      : isDarkMode
+                        ? 'text-gray-100'
+                        : 'text-gray-900'
                   }`}
                 >
                   {chat.decryptionFailed ? 'Encrypted' : chat.title}
                 </div>
-                {/* Lock icon for encrypted chats */}
-                {chat.decryptionFailed && (
-                  <FaLock
-                    className={`h-3 w-3 ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}
-                    title="Encrypted chat"
-                  />
-                )}
                 {/* New chat indicator */}
                 {chat.messages.length === 0 && !chat.decryptionFailed && (
                   <div
@@ -1193,7 +1202,7 @@ function ChatListItem({
                   />
                 )}
               </div>
-              {/* Show timestamp with sync indicator or decryption error */}
+              {/* Show decryption error with red text */}
               <div className="flex items-center gap-1.5">
                 <div
                   className={`text-xs ${
