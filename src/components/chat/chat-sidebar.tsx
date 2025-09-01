@@ -942,9 +942,13 @@ export function ChatSidebar({
                         }}
                         className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
                           chat.decryptionFailed
-                            ? isDarkMode
-                              ? 'cursor-pointer border-gray-700 hover:border-gray-600 hover:bg-gray-800'
-                              : 'cursor-pointer border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            ? onEncryptionKeyClick
+                              ? isDarkMode
+                                ? 'cursor-pointer border-gray-700 hover:border-gray-600 hover:bg-gray-800'
+                                : 'cursor-pointer border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                              : isDarkMode
+                                ? 'cursor-not-allowed border-gray-700 opacity-60'
+                                : 'cursor-not-allowed border-gray-300 opacity-60'
                             : currentChat?.id === chat.id
                               ? isDarkMode
                                 ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
