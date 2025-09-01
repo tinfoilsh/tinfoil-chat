@@ -76,118 +76,153 @@ function useMathPlugins() {
   return plugins
 }
 
-export const ThoughtProcess = memo(function ThoughtProcess({
-  thoughts,
-  isDarkMode,
-  isThinking = false,
-  shouldDiscard = false,
-  thinkingDuration,
-  messageId,
-  expandedThoughtsState,
-  setExpandedThoughtsState,
-}: ThoughtProcessProps) {
-  const isExpanded =
-    messageId && expandedThoughtsState
-      ? (expandedThoughtsState[messageId] ?? false)
-      : false
+export const ThoughtProcess = memo(
+  function ThoughtProcess({
+    thoughts,
+    isDarkMode,
+    isThinking = false,
+    shouldDiscard = false,
+    thinkingDuration,
+    messageId,
+    expandedThoughtsState,
+    setExpandedThoughtsState,
+  }: ThoughtProcessProps) {
+    const isExpanded =
+      messageId && expandedThoughtsState
+        ? (expandedThoughtsState[messageId] ?? false)
+        : false
 
-  const handleToggle = () => {
-    if (messageId && setExpandedThoughtsState) {
-      setExpandedThoughtsState((prevState) => ({
-        ...prevState,
-        [messageId]: !prevState[messageId],
-      }))
+    const handleToggle = () => {
+      if (messageId && setExpandedThoughtsState) {
+        setExpandedThoughtsState((prevState) => ({
+          ...prevState,
+          [messageId]: !prevState[messageId],
+        }))
+      }
     }
-  }
 
-  const { remarkPlugins, rehypePlugins } = useMathPlugins()
-  const processedThoughts = processLatexTags(thoughts)
-  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
+    const { remarkPlugins, rehypePlugins } = useMathPlugins()
+    const processedThoughts = processLatexTags(thoughts)
+    const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
 
-  if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
-    return null
-  }
+    if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
+      return null
+    }
 
-  return (
-    <div
-      className={`mx-4 mb-4 mt-2 rounded-lg ${
-        isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100'
-      }`}
-    >
-      <button
-        type="button"
-        onClick={handleToggle}
-        className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
-          isDarkMode
-            ? 'text-gray-200 hover:bg-gray-600/50'
-            : 'text-gray-700 hover:bg-gray-200'
-        } rounded-lg transition-colors`}
-      >
-        <div className="flex items-center gap-2">
-          <LuBrain className="h-5 w-5 opacity-70" aria-hidden="true" />
-          {isThinking ? (
-            <>
-              <span className="text-sm font-medium">Thinking</span>
-              <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">
-                <span className="font-bold">Thought</span>
-                {thinkingDuration && (
-                  <span className="font-normal opacity-70">
-                    {thinkingDuration < 60
-                      ? ` for ${thinkingDuration.toFixed(1)} seconds`
-                      : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-        </div>
-        <svg
-          className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </button>
-
+    return (
       <div
-        style={{
-          height: isExpanded ? 'auto' : 0,
-          opacity: isExpanded ? 1 : 0,
-          overflow: 'hidden',
-          transition: 'height 0.2s ease-in-out, opacity 0.2s ease-in-out',
-        }}
+        className={`mx-4 mb-4 mt-2 rounded-lg ${
+          isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100'
+        }`}
       >
-        <div
-          className={`px-4 py-3 text-sm ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-          }`}
+        <button
+          type="button"
+          onClick={handleToggle}
+          className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
+            isDarkMode
+              ? 'text-gray-200 hover:bg-gray-600/50'
+              : 'text-gray-700 hover:bg-gray-200'
+          } rounded-lg transition-colors`}
         >
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={rehypePlugins}
-            components={{
-              p: ({ children }: { children?: React.ReactNode }) => (
-                <p className="mb-2 last:mb-0">{children}</p>
-              ),
-            }}
+          <div className="flex items-center gap-2">
+            <LuBrain className="h-5 w-5 opacity-70" aria-hidden="true" />
+            {isThinking ? (
+              <>
+                <span className="text-sm font-medium">Thinking</span>
+                <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">
+                  <span className="font-bold">Thought</span>
+                  {thinkingDuration && (
+                    <span className="font-normal opacity-70">
+                      {thinkingDuration < 60
+                        ? ` for ${thinkingDuration.toFixed(1)} seconds`
+                        : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+          <svg
+            className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+            focusable="false"
           >
-            {sanitizedThoughts}
-          </ReactMarkdown>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+        </button>
+
+        <div
+          style={{
+            height: isExpanded ? 'auto' : 0,
+            opacity: isExpanded ? 1 : 0,
+            overflow: 'hidden',
+            transition: 'height 0.2s ease-in-out, opacity 0.2s ease-in-out',
+          }}
+        >
+          <div
+            className={`px-4 py-3 text-sm ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            }`}
+          >
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
+              components={{
+                p: ({ children }: { children?: React.ReactNode }) => (
+                  <p className="mb-2 last:mb-0">{children}</p>
+                ),
+              }}
+            >
+              {sanitizedThoughts}
+            </ReactMarkdown>
+          </div>
         </div>
       </div>
-    </div>
-  )
-})
+    )
+  },
+  // Custom comparison to prevent re-renders when only expanded state changes for other messages
+  (prevProps, nextProps) => {
+    // If this is a thinking message, only re-render if thoughts or thinking state changes
+    if (prevProps.isThinking || nextProps.isThinking) {
+      return (
+        prevProps.thoughts === nextProps.thoughts &&
+        prevProps.isThinking === nextProps.isThinking &&
+        prevProps.isDarkMode === nextProps.isDarkMode &&
+        prevProps.shouldDiscard === nextProps.shouldDiscard &&
+        prevProps.thinkingDuration === nextProps.thinkingDuration &&
+        prevProps.messageId === nextProps.messageId
+      )
+    }
+
+    // For non-thinking messages, include expanded state in comparison
+    const thisMessageExpanded =
+      prevProps.messageId && prevProps.expandedThoughtsState
+        ? prevProps.expandedThoughtsState[prevProps.messageId]
+        : false
+    const nextMessageExpanded =
+      nextProps.messageId && nextProps.expandedThoughtsState
+        ? nextProps.expandedThoughtsState[nextProps.messageId]
+        : false
+
+    return (
+      prevProps.thoughts === nextProps.thoughts &&
+      prevProps.isDarkMode === nextProps.isDarkMode &&
+      prevProps.shouldDiscard === nextProps.shouldDiscard &&
+      prevProps.thinkingDuration === nextProps.thinkingDuration &&
+      prevProps.messageId === nextProps.messageId &&
+      thisMessageExpanded === nextMessageExpanded
+    )
+  },
+)

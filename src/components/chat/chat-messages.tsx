@@ -4,7 +4,7 @@ import { type BaseModel } from '@/app/config/models'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
-import React, { memo, useEffect, useMemo, useState } from 'react'
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { LoadingDots } from '../loading-dots'
 import { ChatInput } from './chat-input'
 import { useMaxMessages } from './hooks/use-max-messages'
@@ -83,14 +83,46 @@ const ChatMessage = memo(
   },
   (prevProps, nextProps) => {
     // Custom comparison to prevent unnecessary re-renders
+    // Skip re-render if only expanded state changed and it's not the last message during streaming
+    const expandedStateChanged =
+      prevProps.expandedThoughtsState !== nextProps.expandedThoughtsState
+    const isStreamingLastMessage =
+      nextProps.isLastMessage && nextProps.isStreaming
+
+    // If only expanded state changed and we're not the streaming message, skip re-render
+    if (
+      expandedStateChanged &&
+      !isStreamingLastMessage &&
+      prevProps.message === nextProps.message &&
+      prevProps.model === nextProps.model &&
+      prevProps.isDarkMode === nextProps.isDarkMode &&
+      prevProps.isLastMessage === nextProps.isLastMessage &&
+      prevProps.isStreaming === nextProps.isStreaming
+    ) {
+      return true // Skip re-render
+    }
+
+    // For messages with thinking, be more careful about re-renders
+    if (prevProps.message.isThinking || nextProps.message.isThinking) {
+      // Only re-render if the actual message content or thinking state changed
+      return (
+        prevProps.message.content === nextProps.message.content &&
+        prevProps.message.thoughts === nextProps.message.thoughts &&
+        prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevProps.model === nextProps.model &&
+        prevProps.isDarkMode === nextProps.isDarkMode &&
+        prevProps.isLastMessage === nextProps.isLastMessage &&
+        prevProps.isStreaming === nextProps.isStreaming
+      )
+    }
+
+    // Default comparison for non-thinking messages
     return (
       prevProps.message === nextProps.message &&
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
-      prevProps.isStreaming === nextProps.isStreaming &&
-      prevProps.expandedThoughtsState === nextProps.expandedThoughtsState &&
-      prevProps.setExpandedThoughtsState === nextProps.setExpandedThoughtsState
+      prevProps.isStreaming === nextProps.isStreaming
     )
   },
 )
@@ -520,6 +552,14 @@ export function ChatMessages({
   >({})
   const maxMessages = useMaxMessages()
 
+  // Memoize the setter to prevent function reference changes
+  const memoizedSetExpandedThoughtsState = useCallback(
+    (updater: React.SetStateAction<Record<string, boolean>>) => {
+      setExpandedThoughtsState(updater)
+    },
+    [],
+  )
+
   // Get the current model - always defined since config must load
   const currentModel = useMemo(() => {
     if (!models || models.length === 0 || !selectedModel) {
@@ -606,14 +646,14 @@ export function ChatMessages({
           <div className={`opacity-70`}>
             {archivedMessages.map((message, i) => (
               <ChatMessage
-                key={`archived-${i}`}
+                key={`archived-${message.timestamp || i}`}
                 message={message}
                 model={currentModel}
                 isDarkMode={isDarkMode}
                 isLastMessage={false}
                 isStreaming={false}
                 expandedThoughtsState={expandedThoughtsState}
-                setExpandedThoughtsState={setExpandedThoughtsState}
+                setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
               />
             ))}
           </div>
@@ -626,14 +666,14 @@ export function ChatMessages({
       {/* Live Messages - the last messages up to max prompt limit */}
       {liveMessages.map((message, i) => (
         <ChatMessage
-          key={`${chatId}-${i}`}
+          key={`${chatId}-${message.timestamp || i}`}
           message={message}
           model={currentModel}
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
           isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
           expandedThoughtsState={expandedThoughtsState}
-          setExpandedThoughtsState={setExpandedThoughtsState}
+          setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
         />
       ))}
       {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
