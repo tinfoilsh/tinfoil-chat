@@ -83,25 +83,6 @@ const ChatMessage = memo(
   },
   (prevProps, nextProps) => {
     // Custom comparison to prevent unnecessary re-renders
-    // Skip re-render if only expanded state changed and it's not the last message during streaming
-    const expandedStateChanged =
-      prevProps.expandedThoughtsState !== nextProps.expandedThoughtsState
-    const isStreamingLastMessage =
-      nextProps.isLastMessage && nextProps.isStreaming
-
-    // If only expanded state changed and we're not the streaming message, skip re-render
-    if (
-      expandedStateChanged &&
-      !isStreamingLastMessage &&
-      prevProps.message === nextProps.message &&
-      prevProps.model === nextProps.model &&
-      prevProps.isDarkMode === nextProps.isDarkMode &&
-      prevProps.isLastMessage === nextProps.isLastMessage &&
-      prevProps.isStreaming === nextProps.isStreaming
-    ) {
-      return true // Skip re-render
-    }
-
     // For messages with thinking, be more careful about re-renders
     if (prevProps.message.isThinking || nextProps.message.isThinking) {
       // Only re-render if the actual message content or thinking state changed
@@ -112,7 +93,9 @@ const ChatMessage = memo(
         prevProps.model === nextProps.model &&
         prevProps.isDarkMode === nextProps.isDarkMode &&
         prevProps.isLastMessage === nextProps.isLastMessage &&
-        prevProps.isStreaming === nextProps.isStreaming
+        prevProps.isStreaming === nextProps.isStreaming &&
+        prevProps.setExpandedThoughtsState ===
+          nextProps.setExpandedThoughtsState
       )
     }
 
@@ -122,7 +105,9 @@ const ChatMessage = memo(
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
-      prevProps.isStreaming === nextProps.isStreaming
+      prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.expandedThoughtsState === nextProps.expandedThoughtsState &&
+      prevProps.setExpandedThoughtsState === nextProps.setExpandedThoughtsState
     )
   },
 )
