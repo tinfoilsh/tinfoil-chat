@@ -366,9 +366,9 @@ ${encryptionKey.replace('key_', '')}
                       on other devices.
                     </p>
 
-                    {/* QR Code Section */}
+                    {/* QR Code Section - Desktop Only */}
                     {encryptionKey && (
-                      <div className="mt-4">
+                      <div className="mt-4 hidden sm:block">
                         <div
                           className={`flex flex-col items-center rounded-lg border p-4 ${
                             isDarkMode
