@@ -8,7 +8,6 @@ import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { scrollToBottom } from '../chat-messages'
 import { ChatError, generateTitle } from '../chat-utils'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
@@ -26,6 +25,7 @@ interface UseChatMessagingProps {
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
   messagesEndRef: React.RefObject<HTMLDivElement>
+  scrollToBottom?: () => void
 }
 
 interface UseChatMessagingReturn {
@@ -60,6 +60,7 @@ export function useChatMessaging({
   setChats,
   setCurrentChat,
   messagesEndRef,
+  scrollToBottom,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
   const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
@@ -392,7 +393,9 @@ export function useChatMessaging({
       }
 
       // Initial scroll after user message is added
-      setTimeout(() => scrollToBottom(messagesEndRef, 'auto'), 0)
+      if (scrollToBottom) {
+        setTimeout(() => scrollToBottom(), 0)
+      }
 
       let assistantMessage: Message | null = null
       // Track the initial chat ID for streaming tracker

@@ -230,6 +230,27 @@ export function ChatInterface({
     }
   }, [subscriptionLoading, chat_subscription_active])
 
+  // State for scroll button - define early so it can be used in useChatState
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const scrollableFeedRef = useRef<any>(null)
+  const scrollButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+
+  // Function to scroll to bottom
+  const handleScrollToBottom = () => {
+    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
+      scrollableFeedRef.current.scrollToBottom()
+    }
+  }
+
+  // Expose scroll function to chat state
+  const triggerScrollToBottom = useCallback(() => {
+    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
+      scrollableFeedRef.current.scrollToBottom()
+    }
+  }, [])
+
   const {
     // State
     chats,
@@ -280,6 +301,7 @@ export function ChatInterface({
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
+    scrollToBottom: triggerScrollToBottom,
   })
 
   // Effect to handle window resize and enforce single sidebar rule
@@ -294,16 +316,27 @@ export function ChatInterface({
     }
   }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsSidebarOpen])
 
-  // Auto-focus input when component mounts and is ready
+  // Auto-focus input and scroll when component mounts and is ready
   useEffect(() => {
     if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
       // Small delay to ensure DOM is ready and input is rendered
       const timer = setTimeout(() => {
         inputRef.current?.focus()
+        // Scroll to bottom if chat has messages
+        if (currentChat.messages && currentChat.messages.length > 0) {
+          triggerScrollToBottom()
+        }
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
+  }, [
+    isClient,
+    isLoadingConfig,
+    subscriptionLoading,
+    currentChat,
+    inputRef,
+    triggerScrollToBottom,
+  ])
 
   // Get the selected model details
   const selectedModelDetails = models.find(
@@ -603,20 +636,6 @@ export function ChatInterface({
   // --- Drag & Drop across bottom input area ---
   const [isBottomDragActive, setIsBottomDragActive] = useState(false)
 
-  // State for scroll button
-  const [showScrollButton, setShowScrollButton] = useState(false)
-  const scrollableFeedRef = useRef<any>(null)
-  const scrollButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
-
-  // Function to scroll to bottom
-  const handleScrollToBottom = () => {
-    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
-      scrollableFeedRef.current.scrollToBottom()
-    }
-  }
-
   const handleBottomDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsBottomDragActive(true)
@@ -627,18 +646,6 @@ export function ChatInterface({
     setIsBottomDragActive(false)
   }, [])
 
-  const handleBottomDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsBottomDragActive(false)
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleFileUpload(e.dataTransfer.files[0])
-      }
-    },
-    [handleFileUpload],
-  )
-
   // Callback for scroll feed
   const handleScrollFeedScroll = useCallback((isAtBottom: boolean) => {
     // Clear any pending timeout
@@ -647,13 +654,15 @@ export function ChatInterface({
     }
 
     if (!isAtBottom) {
-      // Show button immediately when not at bottom
-      setShowScrollButton(true)
+      // Show the button after a short delay to avoid immediate pop
+      scrollButtonTimeoutRef.current = setTimeout(() => {
+        setShowScrollButton(true)
+      }, CONSTANTS.SCROLL_BUTTON_SHOW_DELAY_MS || 150)
     } else {
       // Hide button with delay when at bottom
       scrollButtonTimeoutRef.current = setTimeout(() => {
         setShowScrollButton(false)
-      }, 200)
+      }, CONSTANTS.SCROLL_BUTTON_HIDE_DELAY_MS || 200)
     }
   }, [])
 
@@ -1033,6 +1042,7 @@ export function ChatInterface({
             className={`relative flex-1 ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
+            viewableDetectionEpsilon={CONSTANTS.SCROLL_BUTTON_EPSILON_PX}
             onScroll={handleScrollFeedScroll}
             animateScroll={(element: HTMLElement, offset: number) => {
               // Use requestAnimationFrame for smooth scrolling
@@ -1064,7 +1074,6 @@ export function ChatInterface({
               messages={currentChat?.messages || []}
               isDarkMode={isDarkMode}
               chatId={currentChat.id}
-              messagesEndRef={messagesEndRef}
               openAndExpandVerifier={modifiedOpenAndExpandVerifier}
               isWaitingForResponse={isWaitingForResponse}
               isPremium={isPremium}

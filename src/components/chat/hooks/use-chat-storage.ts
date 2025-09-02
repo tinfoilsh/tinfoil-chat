@@ -21,6 +21,7 @@ function createNewChatObjectSync(): Chat {
 
 interface UseChatStorageProps {
   storeHistory: boolean
+  scrollToBottom?: () => void
 }
 
 interface UseChatStorageReturn {
@@ -40,6 +41,7 @@ interface UseChatStorageReturn {
 
 export function useChatStorage({
   storeHistory,
+  scrollToBottom,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -331,8 +333,12 @@ export function useChatStorage({
     (chatId: string) => {
       const selectedChat = chats.find((chat) => chat.id === chatId) || chats[0]
       switchChat(selectedChat)
+      // Scroll to bottom after switching chat
+      if (scrollToBottom) {
+        setTimeout(() => scrollToBottom(), 100)
+      }
     },
-    [chats, switchChat],
+    [chats, switchChat, scrollToBottom],
   )
 
   // Update chat title

@@ -17,7 +17,7 @@ type ChatMessagesProps = {
   messages: Message[]
   isDarkMode: boolean
   chatId: string
-  messagesEndRef: React.RefObject<HTMLDivElement>
+  messagesEndRef?: React.RefObject<HTMLDivElement>
   openAndExpandVerifier: () => void
   isWaitingForResponse?: boolean
   isPremium?: boolean
@@ -149,13 +149,6 @@ const getMessageKey = (
       : String(message.timestamp)
     : ''
   return `${prefix}-${index}-${message.role}-${timestamp}`
-}
-
-export const scrollToBottom = (
-  messagesEndRef: React.RefObject<HTMLDivElement>,
-  behavior: ScrollBehavior = 'smooth',
-) => {
-  messagesEndRef.current?.scrollIntoView({ behavior })
 }
 
 // Welcome screen component to reduce renders
@@ -529,7 +522,6 @@ export function ChatMessages({
   messages,
   isDarkMode,
   chatId,
-  messagesEndRef,
   openAndExpandVerifier,
   isWaitingForResponse = false,
   isPremium,
@@ -589,11 +581,7 @@ export function ChatMessages({
   }, [])
 
   if (!mounted) {
-    return (
-      <div className="h-full">
-        <div ref={messagesEndRef} />
-      </div>
-    )
+    return <div className="h-full"></div>
   }
 
   if (messages.length === 0) {
@@ -629,18 +617,13 @@ export function ChatMessages({
             handleLabelClick={handleLabelClick}
           />
         </div>
-        <div ref={messagesEndRef} className="hidden" />
       </div>
     )
   }
 
   // Early return if no model (should never happen)
   if (!currentModel) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
-        <div ref={messagesEndRef} className="hidden" />
-      </div>
-    )
+    return <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24"></div>
   }
 
   return (
@@ -682,7 +665,6 @@ export function ChatMessages({
         />
       ))}
       {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
-      <div ref={messagesEndRef} />
     </div>
   )
 }
