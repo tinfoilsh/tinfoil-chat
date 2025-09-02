@@ -25,8 +25,8 @@ const DefaultMessageComponent = ({
         ? message.timestamp.getTime()
         : String(message.timestamp)
       : Date.now()
-    return `${message.role}-${timestamp}-${message.content?.substring(0, 10) || 'empty'}`
-  }, [message.role, message.timestamp, message.content])
+    return `${message.role}-${timestamp}`
+  }, [message.role, message.timestamp])
   const [showActions, setShowActions] = React.useState(false)
   const lastContentRef = React.useRef(message.content)
   const showActionsTimeoutRef = React.useRef<ReturnType<
