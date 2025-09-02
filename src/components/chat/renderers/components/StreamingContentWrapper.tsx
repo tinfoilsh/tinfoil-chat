@@ -20,12 +20,27 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
   const [minHeight, setMinHeight] = useState<number | undefined>(undefined)
   const maxHeightRef = useRef<number>(0)
   const measurementFrameRef = useRef<number | null>(null)
+  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   useEffect(() => {
     if (!isStreaming) {
-      // Reset when streaming ends
-      setMinHeight(undefined)
-      maxHeightRef.current = 0
+      // When streaming ends, transition to 0 first, then remove after transition completes
+      if (minHeight !== undefined) {
+        setMinHeight(0)
+
+        // Clear any existing timeout
+        if (transitionTimeoutRef.current) {
+          clearTimeout(transitionTimeoutRef.current)
+        }
+
+        // Remove minHeight after transition completes
+        transitionTimeoutRef.current = setTimeout(() => {
+          setMinHeight(undefined)
+          maxHeightRef.current = 0
+        }, 300) // Match transition duration
+      }
       return
     }
 
@@ -56,16 +71,20 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
         cancelAnimationFrame(measurementFrameRef.current)
         measurementFrameRef.current = null
       }
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current)
+        transitionTimeoutRef.current = null
+      }
     }
-  }, [isStreaming])
+  }, [isStreaming, minHeight])
 
   return (
     <div
       ref={contentRef}
       style={{
-        minHeight: isStreaming && minHeight ? `${minHeight}px` : undefined,
-        // Smooth transition when streaming ends
-        transition: !isStreaming ? 'min-height 0.3s ease-out' : undefined,
+        minHeight: minHeight !== undefined ? `${minHeight}px` : undefined,
+        // Smooth transition both when streaming and when ending
+        transition: 'min-height 0.3s ease-out',
       }}
     >
       {children}
