@@ -624,15 +624,12 @@ export function ChatSidebar({
         @keyframes subtlePulse {
           0% {
             opacity: 1;
-            transform: scale(1);
           }
           50% {
             opacity: 0.88;
-            transform: scale(1.008);
           }
           100% {
             opacity: 1;
-            transform: scale(1);
           }
         }
       `}</style>
