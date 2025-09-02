@@ -647,32 +647,10 @@ export function ChatInterface({
     }
 
     if (!isAtBottom) {
-      // Not at bottom - check distance
-      if (scrollableFeedRef.current) {
-        const container = scrollableFeedRef.current.getScrollContainer?.()
-        if (container) {
-          const distanceFromBottom =
-            container.scrollHeight -
-            container.scrollTop -
-            container.clientHeight
-
-          // Show button if scrolled up more than 200px
-          if (distanceFromBottom > 200) {
-            setShowScrollButton(true)
-          } else {
-            // Less than 200px but not at bottom - don't change state yet
-            // This creates a buffer zone
-          }
-        } else {
-          // Fallback - if we can't get container, trust the isAtBottom
-          setShowScrollButton(true)
-        }
-      } else {
-        // Fallback - show button if not at bottom
-        setShowScrollButton(true)
-      }
+      // Show button immediately when not at bottom
+      setShowScrollButton(true)
     } else {
-      // At bottom - hide with delay
+      // Hide button with delay when at bottom
       scrollButtonTimeoutRef.current = setTimeout(() => {
         setShowScrollButton(false)
       }, 200)
