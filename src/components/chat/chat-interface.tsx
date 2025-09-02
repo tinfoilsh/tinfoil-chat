@@ -1045,29 +1045,8 @@ export function ChatInterface({
             viewableDetectionEpsilon={CONSTANTS.SCROLL_BUTTON_EPSILON_PX}
             onScroll={handleScrollFeedScroll}
             animateScroll={(element: HTMLElement, offset: number) => {
-              // Use requestAnimationFrame for smooth scrolling
-              const start = element.scrollTop
-              const distance = offset - start
-              const duration = 300 // milliseconds
-              let startTime: number | null = null
-
-              const animation = (currentTime: number) => {
-                if (startTime === null) startTime = currentTime
-                const timeElapsed = currentTime - startTime
-                const progress = Math.min(timeElapsed / duration, 1)
-
-                // Easing function for smooth acceleration/deceleration
-                const easeInOutQuad = (t: number) =>
-                  t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-
-                element.scrollTop = start + distance * easeInOutQuad(progress)
-
-                if (progress < 1) {
-                  requestAnimationFrame(animation)
-                }
-              }
-
-              requestAnimationFrame(animation)
+              // Instant scroll when loading a chat (no animation)
+              element.scrollTop = offset
             }}
           >
             <ChatMessages
