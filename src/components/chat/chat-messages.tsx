@@ -93,6 +93,10 @@ const ChatMessage = memo(
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevProps.message.documentContent ===
+          nextProps.message.documentContent &&
+        prevProps.message.documents === nextProps.message.documents &&
+        prevProps.message.imageData === nextProps.message.imageData &&
         prevProps.model === nextProps.model &&
         prevProps.isDarkMode === nextProps.isDarkMode &&
         prevProps.isLastMessage === nextProps.isLastMessage &&
@@ -101,9 +105,14 @@ const ChatMessage = memo(
     }
 
     // Default comparison for non-streaming, non-thinking messages
+    // Note: documentContent, documents, and imageData are immutable after message creation
+    // but we include them for completeness and to handle any edge cases
     return (
       prevProps.message.content === nextProps.message.content &&
       prevProps.message.thoughts === nextProps.message.thoughts &&
+      prevProps.message.documentContent === nextProps.message.documentContent &&
+      prevProps.message.documents === nextProps.message.documents &&
+      prevProps.message.imageData === nextProps.message.imageData &&
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
