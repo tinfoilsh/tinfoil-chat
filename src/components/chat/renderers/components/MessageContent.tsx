@@ -35,7 +35,12 @@ function useMathPlugins() {
         .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
           setPlugins({
             remarkPlugins: [
-              remarkMathMod.default,
+              [
+                remarkMathMod.default,
+                {
+                  singleDollarTextMath: false, // Disable $ delimiter
+                },
+              ],
               remarkGfm,
               remarkBreaksMod.default,
             ] as any[],

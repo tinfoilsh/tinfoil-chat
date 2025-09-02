@@ -77,9 +77,40 @@ export function isUnsupportedLatex(content: string): boolean {
 }
 
 // Process LaTeX content for proper rendering
-// Currently a pass-through - LaTeX delimiters are handled by remark-math/rehype-katex
+// Convert \(...\) and \[...\] to $$ delimiters that remark-math understands
 export function processLatexTags(text: string): string {
-  return text
+  // Preserve code blocks as-is
+  const parts = text.split(CODE_BLOCK_SPLITTER)
+
+  return parts
+    .map((part) => {
+      const isCodeBlock =
+        part.startsWith('```') ||
+        part.startsWith('~~~') ||
+        (part.startsWith('`') && part.endsWith('`'))
+      if (isCodeBlock) return part
+
+      let transformed = part
+
+      // Convert \[...\] to $$...$$ on its own line (display math)
+      transformed = transformed.replace(
+        /\\\[([\s\S]*?)\\\]/g,
+        (match, inner) => {
+          // Check if it's already on its own line
+          const trimmed = inner.trim()
+          return `\n\n$$${trimmed}$$\n\n`
+        },
+      )
+
+      // Convert \(...\) to $$...$$ (inline math)
+      transformed = transformed.replace(
+        /\\\(([\s\S]*?)\\\)/g,
+        (match, inner) => `$$${inner}$$`,
+      )
+
+      return transformed
+    })
+    .join('')
 }
 
 // Convert LaTeX content for copying
@@ -117,32 +148,11 @@ export function sanitizeUnsupportedMathBlocks(text: string): string {
 
       let transformed = part
 
-      // Clean up display math $$...$$ and \[...\]
+      // Clean up $$...$$ blocks (which now include converted \[...\] and \(...\))
       transformed = transformed.replace(
         /\$\$([\s\S]*?)\$\$/g,
         (_m, inner: string) => {
           return '$$' + sanitizeMathContent(inner) + '$$'
-        },
-      )
-      transformed = transformed.replace(
-        /\\\[([\s\S]*?)\\\]/g,
-        (_m, inner: string) => {
-          return '\\[' + sanitizeMathContent(inner) + '\\]'
-        },
-      )
-
-      // Clean up inline math $...$ and \(...\)
-      // Match $ that are not escaped (not preceded by \) and not doubled ($$)
-      transformed = transformed.replace(
-        /(^|[^\\$])\$(?!\$)((?:[^$\\]|\\[^$]|\\$)*?)\$(?!\$)/g,
-        (_m, prefix: string, inner: string) => {
-          return prefix + '$' + sanitizeMathContent(inner) + '$'
-        },
-      )
-      transformed = transformed.replace(
-        /\\\(([\s\S]*?)\\\)/g,
-        (_m, inner: string) => {
-          return '\\(' + sanitizeMathContent(inner) + '\\)'
         },
       )
 
