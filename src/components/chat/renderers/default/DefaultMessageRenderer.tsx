@@ -133,8 +133,8 @@ const DefaultMessageComponent = ({
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
-                {!isUser && isLastMessage ? (
-                  <StreamingContentWrapper isStreaming={isStreaming}>
+                {!isUser && isStreaming && isLastMessage ? (
+                  <StreamingContentWrapper isStreaming={true}>
                     <StreamingChunkedText
                       content={message.content}
                       isDarkMode={isDarkMode}
