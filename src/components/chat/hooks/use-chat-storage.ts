@@ -333,12 +333,8 @@ export function useChatStorage({
     (chatId: string) => {
       const selectedChat = chats.find((chat) => chat.id === chatId) || chats[0]
       switchChat(selectedChat)
-      // Scroll to bottom after switching chat
-      if (scrollToBottom) {
-        setTimeout(() => scrollToBottom(), 100)
-      }
     },
-    [chats, switchChat, scrollToBottom],
+    [chats, switchChat],
   )
 
   // Update chat title
