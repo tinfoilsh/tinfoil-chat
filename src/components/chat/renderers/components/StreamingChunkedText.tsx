@@ -29,9 +29,10 @@ function splitIntoChunks(
   // Find all complete tables
   // A complete table must have:
   // 1. Header row (|...|)
-  // 2. Separator row (|---|---|)
+  // 2. Separator row (|---|---|) with proper column separators
   // 3. At least one data row (|...|)
-  const tableRegex = /(?:^|\n)(\|[^\n]+\|\n\|[-: ]+\|\n(?:\|[^\n]+\|\n?)+)/gm
+  const tableRegex =
+    /(?:^|\n)(\|[^\n]+\|\n\|(?:[-: ]+\|)+\n(?:\|[^\n]+\|\n?)+)/gm
   const tableMatches = Array.from(content.matchAll(tableRegex))
 
   // Combine and sort all matches by position
