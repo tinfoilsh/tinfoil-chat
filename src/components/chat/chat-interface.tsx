@@ -24,7 +24,14 @@ import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -722,16 +729,25 @@ export function ChatInterface({
   }, [])
 
   // Throttled scroll handler
+  const lastScrollCheckRef = useRef<number>(0)
   const handleScroll = useCallback(() => {
-    // Clear existing timeout
-    if (scrollCheckTimeoutRef.current) {
-      clearTimeout(scrollCheckTimeoutRef.current)
-    }
+    const now = Date.now()
+    const timeSinceLastCheck = now - lastScrollCheckRef.current
 
-    // Throttle scroll checks to every 100ms for performance
-    scrollCheckTimeoutRef.current = setTimeout(() => {
+    // Check immediately if enough time has passed since last check
+    if (timeSinceLastCheck >= 100) {
       checkScrollPosition()
-    }, 100)
+      lastScrollCheckRef.current = now
+    } else {
+      // Otherwise schedule a check after the remaining throttle time
+      if (scrollCheckTimeoutRef.current) {
+        clearTimeout(scrollCheckTimeoutRef.current)
+      }
+      scrollCheckTimeoutRef.current = setTimeout(() => {
+        checkScrollPosition()
+        lastScrollCheckRef.current = Date.now()
+      }, 100 - timeSinceLastCheck)
+    }
   }, [checkScrollPosition])
 
   // Check scroll position when content or layout changes
@@ -769,6 +785,40 @@ export function ChatInterface({
       }
     }
   }, [checkScrollPosition])
+
+  // Anchor scroll to bottom when streaming starts and user is near bottom to prevent jolt
+  const prevWaitingRef = useRef<boolean>(isWaitingForResponse)
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    const ANCHOR_THRESHOLD = 120
+    const isNearBottom = distanceFromBottom <= ANCHOR_THRESHOLD
+
+    if (prevWaitingRef.current && !isWaitingForResponse && isNearBottom) {
+      // First content chunk just arrived; keep anchored at bottom before paint
+      el.scrollTop = el.scrollHeight
+    }
+    prevWaitingRef.current = isWaitingForResponse
+  }, [isWaitingForResponse])
+
+  // Also anchor on message append if user is near bottom
+  const prevMsgLenRef = useRef<number>(currentChat?.messages?.length || 0)
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const newLen = currentChat?.messages?.length || 0
+    if (newLen > prevMsgLenRef.current) {
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight
+      const ANCHOR_THRESHOLD = 120
+      if (distanceFromBottom <= ANCHOR_THRESHOLD) {
+        el.scrollTop = el.scrollHeight
+      }
+    }
+    prevMsgLenRef.current = newLen
+  }, [currentChat?.messages?.length])
 
   // Check scroll position during streaming
   useEffect(() => {
