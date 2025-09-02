@@ -737,7 +737,15 @@ export function ChatInterface({
   // Check scroll position when content or layout changes
   useEffect(() => {
     checkScrollPosition()
-  }, [checkScrollPosition, currentChat?.id])
+    // Scroll to bottom when switching to a chat with messages
+    if (currentChat?.messages && currentChat.messages.length > 0) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        scrollToBottom(false)
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [checkScrollPosition, currentChat?.id, scrollToBottom])
 
   // Set up ResizeObserver for content changes (e.g., during streaming)
   useEffect(() => {
@@ -1127,11 +1135,11 @@ export function ChatInterface({
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
-            className={`relative flex-1 overflow-y-auto ${
+            className={`relative flex flex-1 overflow-y-auto ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
           >
-            <div>
+            <div className="flex flex-1">
               <ChatMessages
                 messages={currentChat?.messages || []}
                 isDarkMode={isDarkMode}
