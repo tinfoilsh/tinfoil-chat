@@ -1103,7 +1103,7 @@ export function ChatInterface({
             className={`relative flex-1 ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
-            viewableDetectionEpsilon={CONSTANTS.SCROLL_BUTTON_EPSILON_PX}
+            viewableDetectionEpsilon={CONSTANTS.VIEWABLE_DETECTION_EPSILON_PX}
             onScroll={handleScrollFeedScroll}
             forceScroll={false}
             animateScroll={(element: HTMLElement, offset: number) => {

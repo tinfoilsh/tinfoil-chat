@@ -35,6 +35,8 @@ export const CONSTANTS = {
   LONG_PASTE_THRESHOLD: 3000,
   // How far from bottom before showing the scroll-to-bottom button (pixels)
   SCROLL_BUTTON_EPSILON_PX: 0,
+  // Threshold for detecting if user is "at bottom" for auto-scroll behavior (pixels)
+  VIEWABLE_DETECTION_EPSILON_PX: 10,
   // Delays for scroll button visibility transitions
   SCROLL_BUTTON_SHOW_DELAY_MS: 50,
   SCROLL_BUTTON_HIDE_DELAY_MS: 50,
