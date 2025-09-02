@@ -13,6 +13,8 @@ const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
+  preload: true,
+  adjustFontFallback: true,
 })
 
 export const metadata: Metadata = {
@@ -85,6 +87,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`overflow-x-hidden ${inter.variable}`}>
       <head>
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link rel="preconnect" href="https://clerk.accounts.dev" />
+        <link rel="dns-prefetch" href="https://plausible.io" />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"

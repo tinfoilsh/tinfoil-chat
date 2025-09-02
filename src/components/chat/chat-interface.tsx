@@ -26,9 +26,6 @@ import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ScrollableFeed from 'react-scrollable-feed'
-import { CloudSyncIntroModal } from '../modals/cloud-sync-intro-modal'
-import { EncryptionKeyModal } from '../modals/encryption-key-modal'
-import { FirstLoginKeyModal } from '../modals/first-login-key-modal'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -41,6 +38,24 @@ import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { VerificationState } from './types'
+// Lazy-load modals that aren't shown on initial load
+const CloudSyncIntroModal = dynamic(
+  () =>
+    import('../modals/cloud-sync-intro-modal').then(
+      (m) => m.CloudSyncIntroModal,
+    ),
+  { ssr: false },
+)
+const EncryptionKeyModal = dynamic(
+  () =>
+    import('../modals/encryption-key-modal').then((m) => m.EncryptionKeyModal),
+  { ssr: false },
+)
+const FirstLoginKeyModal = dynamic(
+  () =>
+    import('../modals/first-login-key-modal').then((m) => m.FirstLoginKeyModal),
+  { ssr: false },
+)
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
 const VerifierSidebarLazy = dynamic(
   () => import('../verifier/verifier-sidebar').then((m) => m.VerifierSidebar),
@@ -190,27 +205,31 @@ export function ChatInterface({
     return unsubscribe
   }, [isSignedIn])
 
-  // Load system prompt immediately; load paid models first if subscription is already known
+  // Load models and system prompt immediately in parallel
+  // Use cached subscription status to load the right models from the start
   useEffect(() => {
     let cancelled = false
     const loadInitial = async () => {
       try {
-        // Always fetch system prompt and rules ASAP
-        const promptPromise = getSystemPromptAndRules()
+        // Check if we have cached subscription status to use the right endpoint immediately
+        const cachedStatus =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('cached_subscription_status')
+            : null
+        const isPremiumCached = cachedStatus
+          ? JSON.parse(cachedStatus).chat_subscription_active
+          : false
 
-        // If subscription is already known (from cache), prefer correct model set initially
-        const isPremiumNow =
-          !subscriptionLoading && (chat_subscription_active ?? false)
-        const modelsPromise = getAIModels(isPremiumNow)
-
-        const [promptData, initialModels] = await Promise.all([
-          promptPromise,
-          modelsPromise,
+        // Fetch everything in parallel with best guess for model endpoint
+        const [promptData, models] = await Promise.all([
+          getSystemPromptAndRules(),
+          getAIModels(isPremiumCached), // Use cached status or default to free
         ])
+
         if (!cancelled) {
           setSystemPrompt(promptData.systemPrompt)
           setRules(promptData.rules)
-          setModels(initialModels)
+          setModels(models)
           setIsLoadingConfig(false)
         }
       } catch (error) {
@@ -228,7 +247,45 @@ export function ChatInterface({
     return () => {
       cancelled = true
     }
-  }, [subscriptionLoading, chat_subscription_active])
+  }, [])
+
+  // Update models if subscription status changes from cached value
+  useEffect(() => {
+    if (subscriptionLoading || isLoadingConfig) return
+
+    let cancelled = false
+    const updateModelsIfNeeded = async () => {
+      try {
+        // Check if we need to reload models based on actual subscription status
+        const cachedStatus =
+          typeof window !== 'undefined'
+            ? localStorage.getItem('cached_subscription_status')
+            : null
+        const wasPremiumCached = cachedStatus
+          ? JSON.parse(cachedStatus).chat_subscription_active
+          : false
+        const isPremiumNow = chat_subscription_active ?? false
+
+        // Only reload if status changed from what we initially loaded
+        if (wasPremiumCached !== isPremiumNow) {
+          const updatedModels = await getAIModels(isPremiumNow)
+          if (!cancelled) {
+            setModels(updatedModels)
+          }
+        }
+      } catch (error) {
+        logError('Failed to update models', error, {
+          component: 'ChatInterface',
+          action: 'updateModels',
+        })
+      }
+    }
+
+    updateModelsIfNeeded()
+    return () => {
+      cancelled = true
+    }
+  }, [subscriptionLoading, chat_subscription_active, isLoadingConfig])
 
   // State for scroll button - define early so it can be used in useChatState
   const [showScrollButton, setShowScrollButton] = useState(false)
