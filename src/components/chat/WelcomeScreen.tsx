@@ -197,8 +197,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             </motion.p>
 
             {/* Model Selector */}
-            {isPremium &&
-              models &&
+            {models &&
               selectedModel &&
               handleModelSelect &&
               handleLabelClick && (
@@ -282,7 +281,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                         selectedModel={selectedModel}
                         onSelect={handleModelSelect}
                         isDarkMode={isDarkMode}
-                        isPremium={isPremium}
+                        isPremium={isPremium ?? false}
                         models={models}
                         preferredPosition="below"
                       />
