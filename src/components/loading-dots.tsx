@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
+import { memo } from 'react'
 
-export function LoadingDots({
+export const LoadingDots = memo(function LoadingDots({
   isThinking = false,
   isDarkMode = false,
 }: {
@@ -30,4 +31,4 @@ export function LoadingDots({
       ))}
     </div>
   )
-}
+})

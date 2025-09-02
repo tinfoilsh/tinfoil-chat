@@ -230,6 +230,20 @@ export function ChatInterface({
     }
   }, [subscriptionLoading, chat_subscription_active])
 
+  // State for scroll button - define early so it can be used in useChatState
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const scrollableFeedRef = useRef<any>(null)
+  const scrollButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+
+  // Function to scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
+      scrollableFeedRef.current.scrollToBottom()
+    }
+  }, [])
+
   const {
     // State
     chats,
@@ -280,6 +294,7 @@ export function ChatInterface({
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
+    scrollToBottom: scrollToBottom,
   })
 
   // Effect to handle window resize and enforce single sidebar rule
@@ -294,16 +309,27 @@ export function ChatInterface({
     }
   }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsSidebarOpen])
 
-  // Auto-focus input when component mounts and is ready
+  // Auto-focus input and scroll when component mounts and is ready
   useEffect(() => {
     if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
       // Small delay to ensure DOM is ready and input is rendered
       const timer = setTimeout(() => {
         inputRef.current?.focus()
+        // Scroll to bottom if chat has messages
+        if (currentChat.messages && currentChat.messages.length > 0) {
+          scrollToBottom()
+        }
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
+  }, [
+    isClient,
+    isLoadingConfig,
+    subscriptionLoading,
+    currentChat,
+    inputRef,
+    scrollToBottom,
+  ])
 
   // Get the selected model details
   const selectedModelDetails = models.find(
@@ -603,17 +629,6 @@ export function ChatInterface({
   // --- Drag & Drop across bottom input area ---
   const [isBottomDragActive, setIsBottomDragActive] = useState(false)
 
-  // State for scroll button
-  const [showScrollButton, setShowScrollButton] = useState(false)
-  const scrollableFeedRef = useRef<any>(null)
-
-  // Function to scroll to bottom
-  const handleScrollToBottom = () => {
-    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
-      scrollableFeedRef.current.scrollToBottom()
-    }
-  }
-
   const handleBottomDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsBottomDragActive(true)
@@ -624,21 +639,33 @@ export function ChatInterface({
     setIsBottomDragActive(false)
   }, [])
 
-  const handleBottomDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsBottomDragActive(false)
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        handleFileUpload(e.dataTransfer.files[0])
-      }
-    },
-    [handleFileUpload],
-  )
-
-  // Callback for scroll feed to prevent inline hook usage
+  // Callback for scroll feed
   const handleScrollFeedScroll = useCallback((isAtBottom: boolean) => {
-    setShowScrollButton(!isAtBottom)
+    // Clear any pending timeout
+    if (scrollButtonTimeoutRef.current) {
+      clearTimeout(scrollButtonTimeoutRef.current)
+    }
+
+    if (!isAtBottom) {
+      // Show the button after a short delay to avoid immediate pop
+      scrollButtonTimeoutRef.current = setTimeout(() => {
+        setShowScrollButton(true)
+      }, CONSTANTS.SCROLL_BUTTON_SHOW_DELAY_MS ?? 150)
+    } else {
+      // Hide button with delay when at bottom
+      scrollButtonTimeoutRef.current = setTimeout(() => {
+        setShowScrollButton(false)
+      }, CONSTANTS.SCROLL_BUTTON_HIDE_DELAY_MS ?? 200)
+    }
+  }, [])
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollButtonTimeoutRef.current) {
+        clearTimeout(scrollButtonTimeoutRef.current)
+      }
+    }
   }, [])
 
   // Show loading state while critical config is loading. Do not block on subscription.
@@ -1008,14 +1035,20 @@ export function ChatInterface({
             className={`relative flex-1 ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
+            viewableDetectionEpsilon={CONSTANTS.SCROLL_BUTTON_EPSILON_PX}
             onScroll={handleScrollFeedScroll}
+            forceScroll={false}
+            animateScroll={(element: HTMLElement, offset: number) => {
+              // Always use instant scroll (no animation)
+              element.scrollTop = offset
+            }}
           >
             <ChatMessages
               messages={currentChat?.messages || []}
               isDarkMode={isDarkMode}
               chatId={currentChat.id}
-              messagesEndRef={messagesEndRef}
               openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+              setIsSidebarOpen={setIsSidebarOpen}
               isWaitingForResponse={isWaitingForResponse}
               isPremium={isPremium}
               models={models}
@@ -1083,6 +1116,7 @@ export function ChatInterface({
                     verificationComplete={verificationComplete}
                     verificationSuccess={verificationSuccess}
                     openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+                    setIsSidebarOpen={setIsSidebarOpen}
                     expandedLabel={expandedLabel}
                     handleLabelClick={handleLabelClick}
                     selectedModel={selectedModel}
@@ -1127,7 +1161,7 @@ export function ChatInterface({
                 {showScrollButton && currentChat?.messages?.length > 0 && (
                   <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
                     <button
-                      onClick={handleScrollToBottom}
+                      onClick={scrollToBottom}
                       className={`flex h-10 w-10 items-center justify-center rounded-full ${
                         isDarkMode
                           ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'

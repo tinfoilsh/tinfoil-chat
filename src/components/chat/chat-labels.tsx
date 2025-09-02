@@ -13,6 +13,7 @@ type ChatLabelsProps = {
   verificationComplete: boolean
   verificationSuccess?: boolean
   openAndExpandVerifier: () => void
+  setIsSidebarOpen?: (isOpen: boolean) => void
   expandedLabel: 'verify' | 'model' | 'info' | null
   handleLabelClick: (
     label: 'verify' | 'model' | 'info',
@@ -33,6 +34,7 @@ export function ChatLabels({
   verificationComplete,
   verificationSuccess,
   openAndExpandVerifier,
+  setIsSidebarOpen,
   expandedLabel,
   handleLabelClick,
   selectedModel,
@@ -119,6 +121,17 @@ export function ChatLabels({
               isDarkMode={isDarkMode}
               isPremium={isPremium}
               models={models}
+              onPremiumModelClick={() => {
+                if (setIsSidebarOpen) {
+                  setIsSidebarOpen(true)
+                  // Dispatch event to highlight the appropriate box
+                  window.dispatchEvent(
+                    new CustomEvent('highlightSidebarBox', {
+                      detail: { isPremium },
+                    }),
+                  )
+                }
+              }}
             />
           )}
         </div>

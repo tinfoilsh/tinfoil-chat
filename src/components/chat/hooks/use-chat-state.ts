@@ -68,6 +68,7 @@ export function useChatState({
   isPremium = true,
   models = [],
   subscriptionLoading = false,
+  scrollToBottom,
 }: {
   systemPrompt: string
   rules?: string
@@ -75,6 +76,7 @@ export function useChatState({
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
+  scrollToBottom?: () => void
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -104,7 +106,7 @@ export function useChatState({
     setIsInitialLoad,
     isInitialLoad,
     reloadChats,
-  } = useChatStorage({ storeHistory })
+  } = useChatStorage({ storeHistory, scrollToBottom })
 
   // Model Management
   const {
@@ -150,6 +152,7 @@ export function useChatState({
     setChats,
     setCurrentChat,
     messagesEndRef,
+    scrollToBottom,
   })
 
   // Add effect to handle clicks outside the model selector

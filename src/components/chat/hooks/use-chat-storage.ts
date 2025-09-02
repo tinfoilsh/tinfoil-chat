@@ -21,6 +21,7 @@ function createNewChatObjectSync(): Chat {
 
 interface UseChatStorageProps {
   storeHistory: boolean
+  scrollToBottom?: () => void
 }
 
 interface UseChatStorageReturn {
@@ -40,6 +41,7 @@ interface UseChatStorageReturn {
 
 export function useChatStorage({
   storeHistory,
+  scrollToBottom,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)

@@ -1,13 +1,14 @@
 'use client'
 
-import React from 'react'
+import React, { memo } from 'react'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
-import { StreamingText } from '../components/StreamingText'
+import { StreamingChunkedText } from '../components/StreamingChunkedText'
+import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
-const DefaultMessage = ({
+const DefaultMessageComponent = ({
   message,
   isDarkMode,
   isLastMessage,
@@ -16,6 +17,16 @@ const DefaultMessage = ({
   setExpandedThoughtsState,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
+
+  // Generate a stable unique ID for this message
+  const messageUniqueId = React.useMemo(() => {
+    const timestamp = message.timestamp
+      ? message.timestamp instanceof Date
+        ? message.timestamp.getTime()
+        : String(message.timestamp)
+      : Date.now()
+    return `${message.role}-${timestamp}`
+  }, [message.role, message.timestamp])
   const [showActions, setShowActions] = React.useState(false)
   const lastContentRef = React.useRef(message.content)
   const showActionsTimeoutRef = React.useRef<ReturnType<
@@ -86,15 +97,17 @@ const DefaultMessage = ({
       {/* Show thoughts for assistant messages */}
       {!isUser && message.thoughts && (
         <div className="mb-2 w-full">
-          <ThoughtProcess
-            thoughts={message.thoughts}
-            isDarkMode={isDarkMode}
-            isThinking={message.isThinking}
-            thinkingDuration={message.thinkingDuration}
-            messageId={`${message.timestamp}-${message.role}`}
-            expandedThoughtsState={expandedThoughtsState}
-            setExpandedThoughtsState={setExpandedThoughtsState}
-          />
+          <StreamingContentWrapper isStreaming={Boolean(message.isThinking)}>
+            <ThoughtProcess
+              thoughts={message.thoughts}
+              isDarkMode={isDarkMode}
+              isThinking={message.isThinking}
+              thinkingDuration={message.thinkingDuration}
+              messageId={messageUniqueId}
+              expandedThoughtsState={expandedThoughtsState}
+              setExpandedThoughtsState={setExpandedThoughtsState}
+            />
+          </StreamingContentWrapper>
         </div>
       )}
 
@@ -120,11 +133,23 @@ const DefaultMessage = ({
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
-                <StreamingText
-                  content={message.content}
-                  isDarkMode={isDarkMode}
-                  isUser={isUser}
-                />
+                {!isUser && isStreaming && isLastMessage ? (
+                  <StreamingContentWrapper isStreaming={true}>
+                    <StreamingChunkedText
+                      content={message.content}
+                      isDarkMode={isDarkMode}
+                      isUser={isUser}
+                      isStreaming={isStreaming}
+                    />
+                  </StreamingContentWrapper>
+                ) : (
+                  <StreamingChunkedText
+                    content={message.content}
+                    isDarkMode={isDarkMode}
+                    isUser={isUser}
+                    isStreaming={isStreaming}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -148,8 +173,10 @@ const DefaultMessage = ({
   )
 }
 
+const DefaultMessage = memo(DefaultMessageComponent)
+
 export const DefaultMessageRenderer: MessageRenderer = {
   id: 'default',
   canRender: () => true,
-  render: DefaultMessage,
+  render: DefaultMessage as (props: MessageRenderProps) => JSX.Element,
 }

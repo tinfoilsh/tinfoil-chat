@@ -33,4 +33,9 @@ export const CONSTANTS = {
   VERIFIER_SIDEBAR_WIDTH_PX: 345,
   // Long text paste threshold (characters) - texts longer than this will be converted to .txt file
   LONG_PASTE_THRESHOLD: 3000,
+  // How far from bottom before showing the scroll-to-bottom button (pixels)
+  SCROLL_BUTTON_EPSILON_PX: 0,
+  // Delays for scroll button visibility transitions
+  SCROLL_BUTTON_SHOW_DELAY_MS: 50,
+  SCROLL_BUTTON_HIDE_DELAY_MS: 50,
 } as const
