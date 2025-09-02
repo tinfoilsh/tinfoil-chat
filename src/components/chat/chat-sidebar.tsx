@@ -246,6 +246,7 @@ export function ChatSidebar({
   const [hasMoreRemote, setHasMoreRemote] = useState(false)
   const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
   const previousChatCount = useRef(chats.length)
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Use global pagination state for persistence across remounts
   const [, forceUpdate] = useState({})
@@ -279,9 +280,15 @@ export function ChatSidebar({
         setHighlightBox('premium')
       }
 
+      // Clear any existing timeout to prevent race conditions
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current)
+      }
+
       // Clear highlight after 2 pulses (2.4 seconds total)
-      setTimeout(() => {
+      highlightTimeoutRef.current = setTimeout(() => {
         setHighlightBox(null)
+        highlightTimeoutRef.current = null
       }, 2400)
     }
 
@@ -294,6 +301,10 @@ export function ChatSidebar({
         'highlightSidebarBox',
         handleHighlightEvent as EventListener,
       )
+      // Clear timeout on cleanup
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current)
+      }
     }
   }, [isSignedIn])
 
