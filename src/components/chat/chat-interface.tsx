@@ -238,14 +238,7 @@ export function ChatInterface({
   )
 
   // Function to scroll to bottom
-  const handleScrollToBottom = () => {
-    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
-      scrollableFeedRef.current.scrollToBottom()
-    }
-  }
-
-  // Expose scroll function to chat state
-  const triggerScrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback(() => {
     if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
       scrollableFeedRef.current.scrollToBottom()
     }
@@ -301,7 +294,7 @@ export function ChatInterface({
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
-    scrollToBottom: triggerScrollToBottom,
+    scrollToBottom: scrollToBottom,
   })
 
   // Effect to handle window resize and enforce single sidebar rule
@@ -324,7 +317,7 @@ export function ChatInterface({
         inputRef.current?.focus()
         // Scroll to bottom if chat has messages
         if (currentChat.messages && currentChat.messages.length > 0) {
-          triggerScrollToBottom()
+          scrollToBottom()
         }
       }, 200)
       return () => clearTimeout(timer)
@@ -335,7 +328,7 @@ export function ChatInterface({
     subscriptionLoading,
     currentChat,
     inputRef,
-    triggerScrollToBottom,
+    scrollToBottom,
   ])
 
   // Get the selected model details
@@ -1168,7 +1161,7 @@ export function ChatInterface({
                 {showScrollButton && currentChat?.messages?.length > 0 && (
                   <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
                     <button
-                      onClick={handleScrollToBottom}
+                      onClick={scrollToBottom}
                       className={`flex h-10 w-10 items-center justify-center rounded-full ${
                         isDarkMode
                           ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
