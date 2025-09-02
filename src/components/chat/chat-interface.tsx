@@ -650,7 +650,7 @@ export function ChatInterface({
       // Show the button after a short delay to avoid immediate pop
       scrollButtonTimeoutRef.current = setTimeout(() => {
         setShowScrollButton(true)
-      }, CONSTANTS.SCROLL_BUTTON_SHOW_DELAY_MS || 150)
+      }, CONSTANTS.SCROLL_BUTTON_SHOW_DELAY_MS ?? 150)
     } else {
       // Hide button with delay when at bottom
       scrollButtonTimeoutRef.current = setTimeout(() => {
