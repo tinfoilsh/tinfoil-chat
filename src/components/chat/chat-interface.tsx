@@ -25,7 +25,6 @@ import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import ScrollableFeed from 'react-scrollable-feed'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -300,15 +299,23 @@ export function ChatInterface({
 
   // State for scroll button - define early so it can be used in useChatState
   const [showScrollButton, setShowScrollButton] = useState(false)
-  const scrollableFeedRef = useRef<any>(null)
-  const scrollButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const scrollCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
 
-  // Function to scroll to bottom
-  const scrollToBottom = useCallback(() => {
-    if (scrollableFeedRef.current && scrollableFeedRef.current.scrollToBottom) {
-      scrollableFeedRef.current.scrollToBottom()
+  // Function to scroll to bottom with optional smooth behavior
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (scrollContainerRef.current) {
+      const el = scrollContainerRef.current
+      if (smooth) {
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: 'smooth',
+        })
+      } else {
+        el.scrollTop = el.scrollHeight
+      }
     }
   }, [])
 
@@ -362,7 +369,7 @@ export function ChatInterface({
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
-    scrollToBottom: scrollToBottom,
+    // Intentionally do not pass scrollToBottom to disable autoscroll
   })
 
   // Effect to handle window resize and enforce single sidebar rule
@@ -377,27 +384,16 @@ export function ChatInterface({
     }
   }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsSidebarOpen])
 
-  // Auto-focus input and scroll when component mounts and is ready
+  // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
     if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
       // Small delay to ensure DOM is ready and input is rendered
       const timer = setTimeout(() => {
         inputRef.current?.focus()
-        // Scroll to bottom if chat has messages
-        if (currentChat.messages && currentChat.messages.length > 0) {
-          scrollToBottom()
-        }
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [
-    isClient,
-    isLoadingConfig,
-    subscriptionLoading,
-    currentChat,
-    inputRef,
-    scrollToBottom,
-  ])
+  }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
 
   // Get the selected model details
   const selectedModelDetails = models.find(
@@ -654,6 +650,11 @@ export function ChatInterface({
       return
     }
 
+    // Scroll to bottom after a brief delay to ensure loading dots are rendered
+    setTimeout(() => {
+      scrollToBottom(false)
+    }, 50)
+
     // Filter out documents that are still uploading
     const completedDocuments = processedDocuments.filter(
       (doc) => !doc.isUploading,
@@ -707,34 +708,59 @@ export function ChatInterface({
     setIsBottomDragActive(false)
   }, [])
 
-  // Callback for scroll feed
-  const handleScrollFeedScroll = useCallback((isAtBottom: boolean) => {
-    // Clear any pending timeout
-    if (scrollButtonTimeoutRef.current) {
-      clearTimeout(scrollButtonTimeoutRef.current)
-    }
+  // Check if scroll button should be shown (throttled for performance)
+  const checkScrollPosition = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
 
-    if (!isAtBottom) {
-      // Show the button after a short delay to avoid immediate pop
-      scrollButtonTimeoutRef.current = setTimeout(() => {
-        setShowScrollButton(true)
-      }, CONSTANTS.SCROLL_BUTTON_SHOW_DELAY_MS ?? 150)
-    } else {
-      // Hide button with delay when at bottom
-      scrollButtonTimeoutRef.current = setTimeout(() => {
-        setShowScrollButton(false)
-      }, CONSTANTS.SCROLL_BUTTON_HIDE_DELAY_MS ?? 200)
-    }
+    const SCROLL_THRESHOLD = 50 // pixels from bottom to consider "at bottom"
+    const isOverflowing = el.scrollHeight > el.clientHeight
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    const shouldShow = isOverflowing && distanceFromBottom > SCROLL_THRESHOLD
+
+    setShowScrollButton(shouldShow)
   }, [])
 
-  // Clean up timeout on unmount
+  // Throttled scroll handler
+  const handleScroll = useCallback(() => {
+    // Clear existing timeout
+    if (scrollCheckTimeoutRef.current) {
+      clearTimeout(scrollCheckTimeoutRef.current)
+    }
+
+    // Throttle scroll checks to every 100ms for performance
+    scrollCheckTimeoutRef.current = setTimeout(() => {
+      checkScrollPosition()
+    }, 100)
+  }, [checkScrollPosition])
+
+  // Check scroll position when content or layout changes
   useEffect(() => {
+    checkScrollPosition()
+  }, [checkScrollPosition, currentChat?.id])
+
+  // Set up ResizeObserver for content changes (e.g., during streaming)
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const resizeObserver = new ResizeObserver(() => {
+      checkScrollPosition()
+    })
+
+    // Observe the scroll container's first child (the content wrapper)
+    const contentWrapper = container.firstElementChild
+    if (contentWrapper) {
+      resizeObserver.observe(contentWrapper)
+    }
+
     return () => {
-      if (scrollButtonTimeoutRef.current) {
-        clearTimeout(scrollButtonTimeoutRef.current)
+      resizeObserver.disconnect()
+      if (scrollCheckTimeoutRef.current) {
+        clearTimeout(scrollCheckTimeoutRef.current)
       }
     }
-  }, [])
+  }, [checkScrollPosition])
 
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
@@ -1098,46 +1124,42 @@ export function ChatInterface({
           )}
 
           {/* Messages Area */}
-          <ScrollableFeed
-            ref={scrollableFeedRef}
-            className={`relative flex-1 ${
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className={`relative flex-1 overflow-y-auto ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
-            viewableDetectionEpsilon={CONSTANTS.VIEWABLE_DETECTION_EPSILON_PX}
-            onScroll={handleScrollFeedScroll}
-            forceScroll={false}
-            animateScroll={(element: HTMLElement, offset: number) => {
-              // Always use instant scroll (no animation)
-              element.scrollTop = offset
-            }}
           >
-            <ChatMessages
-              messages={currentChat?.messages || []}
-              isDarkMode={isDarkMode}
-              chatId={currentChat.id}
-              openAndExpandVerifier={modifiedOpenAndExpandVerifier}
-              setIsSidebarOpen={setIsSidebarOpen}
-              isWaitingForResponse={isWaitingForResponse}
-              isPremium={isPremium}
-              models={models}
-              subscriptionLoading={subscriptionLoading}
-              verificationState={currentVerificationState}
-              onSubmit={wrappedHandleSubmit}
-              input={input}
-              setInput={setInput}
-              loadingState={loadingState}
-              cancelGeneration={cancelGeneration}
-              inputRef={inputRef}
-              handleInputFocus={handleInputFocus}
-              handleDocumentUpload={handleFileUpload}
-              processedDocuments={processedDocuments}
-              removeDocument={removeDocument}
-              selectedModel={selectedModel}
-              handleModelSelect={handleModelSelect}
-              expandedLabel={expandedLabel}
-              handleLabelClick={handleLabelClick}
-            />
-          </ScrollableFeed>
+            <div>
+              <ChatMessages
+                messages={currentChat?.messages || []}
+                isDarkMode={isDarkMode}
+                chatId={currentChat.id}
+                openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+                setIsSidebarOpen={setIsSidebarOpen}
+                isWaitingForResponse={isWaitingForResponse}
+                isPremium={isPremium}
+                models={models}
+                subscriptionLoading={subscriptionLoading}
+                verificationState={currentVerificationState}
+                onSubmit={wrappedHandleSubmit}
+                input={input}
+                setInput={setInput}
+                loadingState={loadingState}
+                cancelGeneration={cancelGeneration}
+                inputRef={inputRef}
+                handleInputFocus={handleInputFocus}
+                handleDocumentUpload={handleFileUpload}
+                processedDocuments={processedDocuments}
+                removeDocument={removeDocument}
+                selectedModel={selectedModel}
+                handleModelSelect={handleModelSelect}
+                expandedLabel={expandedLabel}
+                handleLabelClick={handleLabelClick}
+              />
+            </div>
+          </div>
 
           {/* Input Form - Show on mobile always, on desktop only when there are messages */}
           {isClient &&
@@ -1229,7 +1251,7 @@ export function ChatInterface({
                 {showScrollButton && currentChat?.messages?.length > 0 && (
                   <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
                     <button
-                      onClick={scrollToBottom}
+                      onClick={() => scrollToBottom()}
                       className={`flex h-10 w-10 items-center justify-center rounded-full ${
                         isDarkMode
                           ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
