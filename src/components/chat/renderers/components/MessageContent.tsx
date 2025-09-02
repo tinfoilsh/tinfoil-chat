@@ -159,7 +159,7 @@ export const MessageContent = memo(function MessageContent({
           return (
             <thead
               {...props}
-              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}
+              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}
             >
               {children}
             </thead>
@@ -169,7 +169,7 @@ export const MessageContent = memo(function MessageContent({
           return (
             <tbody
               {...props}
-              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-white'}`}
+              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-gray-50'}`}
             >
               {children}
             </tbody>
@@ -182,7 +182,7 @@ export const MessageContent = memo(function MessageContent({
           return (
             <th
               {...props}
-              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-500'}`}
+              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
             >
               {children}
             </th>
@@ -192,7 +192,7 @@ export const MessageContent = memo(function MessageContent({
           return (
             <td
               {...props}
-              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-900'} whitespace-nowrap`}
+              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} whitespace-nowrap`}
             >
               {children}
             </td>
