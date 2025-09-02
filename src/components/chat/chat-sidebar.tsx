@@ -631,7 +631,7 @@ export function ChatSidebar({
   return (
     <>
       {/* CSS for subtle pulse animation */}
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes subtlePulse {
           0% {
             opacity: 1;
