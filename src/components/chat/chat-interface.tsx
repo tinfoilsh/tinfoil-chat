@@ -1044,8 +1044,9 @@ export function ChatInterface({
             }`}
             viewableDetectionEpsilon={CONSTANTS.SCROLL_BUTTON_EPSILON_PX}
             onScroll={handleScrollFeedScroll}
+            forceScroll={isWaitingForResponse || loadingState === 'loading'}
             animateScroll={(element: HTMLElement, offset: number) => {
-              // Instant scroll when loading a chat (no animation)
+              // Always use instant scroll (no animation)
               element.scrollTop = offset
             }}
           >

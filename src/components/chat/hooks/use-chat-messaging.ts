@@ -993,10 +993,10 @@ export function useChatMessaging({
       effectiveModel,
       systemPrompt,
       getApiKeyFromHook,
-      messagesEndRef,
       maxMessages,
       rules,
       updateChatWithHistoryCheck,
+      scrollToBottom,
     ],
   )
 

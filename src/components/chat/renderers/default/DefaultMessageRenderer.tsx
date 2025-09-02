@@ -8,14 +8,14 @@ import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
-const DefaultMessage = memo(function DefaultMessage({
+const DefaultMessageComponent = ({
   message,
   isDarkMode,
   isLastMessage,
   isStreaming,
   expandedThoughtsState,
   setExpandedThoughtsState,
-}: MessageRenderProps) {
+}: MessageRenderProps) => {
   const isUser = message.role === 'user'
 
   // Generate a stable unique ID for this message
@@ -171,10 +171,12 @@ const DefaultMessage = memo(function DefaultMessage({
       )}
     </div>
   )
-})
+}
+
+const DefaultMessage = memo(DefaultMessageComponent)
 
 export const DefaultMessageRenderer: MessageRenderer = {
   id: 'default',
   canRender: () => true,
-  render: DefaultMessage,
+  render: DefaultMessageComponent,
 }
