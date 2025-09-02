@@ -261,16 +261,27 @@ export function ChatInterface({
           typeof window !== 'undefined'
             ? localStorage.getItem('cached_subscription_status')
             : null
-        const wasPremiumCached = cachedStatus
-          ? JSON.parse(cachedStatus).chat_subscription_active
-          : false
+
         const isPremiumNow = chat_subscription_active ?? false
 
-        // Only reload if status changed from what we initially loaded
-        if (wasPremiumCached !== isPremiumNow) {
+        // Reload models if:
+        // 1. No cache exists (post-logout scenario)
+        // 2. Cached status differs from actual status
+        if (!cachedStatus) {
+          // No cache means user just logged in/out - always reload to ensure correct models
           const updatedModels = await getAIModels(isPremiumNow)
           if (!cancelled) {
             setModels(updatedModels)
+          }
+        } else {
+          // Cache exists - only reload if status changed
+          const wasPremiumCached =
+            JSON.parse(cachedStatus).chat_subscription_active
+          if (wasPremiumCached !== isPremiumNow) {
+            const updatedModels = await getAIModels(isPremiumNow)
+            if (!cancelled) {
+              setModels(updatedModels)
+            }
           }
         }
       } catch (error) {
