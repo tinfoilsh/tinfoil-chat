@@ -2,6 +2,7 @@ import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
@@ -103,6 +104,7 @@ export default function RootLayout({
           <AuthCleanupHandler />
           {children}
           <Toaster />
+          <SpeedInsights />
         </ClerkProvider>
       </body>
     </html>
