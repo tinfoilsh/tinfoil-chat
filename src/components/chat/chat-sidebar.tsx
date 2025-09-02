@@ -1,3 +1,8 @@
+import {
+  AiOutlineCloudSync,
+  FaLock,
+  MdOutlineCloudOff,
+} from '@/components/icons/lazy-icons'
 import { PAGINATION } from '@/config'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
@@ -9,9 +14,6 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import { AiOutlineCloudSync } from 'react-icons/ai'
-import { FaLock } from 'react-icons/fa'
-import { MdOutlineCloudOff } from 'react-icons/md'
 import { CONSTANTS } from './constants'
 
 import { r2Storage } from '@/services/cloud/r2-storage'

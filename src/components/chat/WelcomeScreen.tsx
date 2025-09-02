@@ -108,40 +108,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
     return 'Tinfoil Private Chat'
   }
 
-  // Show loading state while subscription is loading
-  if (subscriptionLoading) {
-    return (
-      <div className="w-full animate-pulse">
-        <div
-          className={`mb-6 h-9 rounded-lg bg-gradient-to-r ${
-            isDarkMode
-              ? 'from-gray-700 to-gray-600'
-              : 'from-gray-200 to-gray-300'
-          }`}
-        />
-        <div className="space-y-4">
-          {[1, 2, 3].map((index) => (
-            <div key={index} className="flex items-start gap-3">
-              <div
-                className={`mt-1 h-5 w-5 flex-shrink-0 rounded bg-gradient-to-r ${
-                  isDarkMode
-                    ? 'from-gray-700 to-gray-600'
-                    : 'from-gray-200 to-gray-300'
-                }`}
-              />
-              <div
-                className={`h-5 flex-1 rounded bg-gradient-to-r ${
-                  isDarkMode
-                    ? 'from-gray-700 to-gray-600'
-                    : 'from-gray-200 to-gray-300'
-                }`}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  // Don't show loading skeleton - show the welcome screen immediately
+  // Models will populate when they're loaded
 
   return (
     <motion.div

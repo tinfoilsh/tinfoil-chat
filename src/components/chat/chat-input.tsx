@@ -1,16 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
 
-import { useApiKey } from '@/hooks/use-api-key'
-import { useToast } from '@/hooks/use-toast'
-import { logError } from '@/utils/error-handling'
-import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
-import {
-  DocumentIcon,
-  MicrophoneIcon,
-  StopIcon,
-} from '@heroicons/react/24/outline'
-import type { FormEvent, RefObject } from 'react'
-import { useCallback, useRef, useState } from 'react'
 import {
   FaFile,
   FaFileAlt,
@@ -23,8 +12,19 @@ import {
   FaFilePowerpoint,
   FaFileVideo,
   FaFileWord,
-} from 'react-icons/fa'
-import { FiArrowUp } from 'react-icons/fi'
+  FiArrowUp,
+} from '@/components/icons/lazy-icons'
+import { useApiKey } from '@/hooks/use-api-key'
+import { useToast } from '@/hooks/use-toast'
+import { logError } from '@/utils/error-handling'
+import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
+import {
+  DocumentIcon,
+  MicrophoneIcon,
+  StopIcon,
+} from '@heroicons/react/24/outline'
+import type { FormEvent, RefObject } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { CONSTANTS } from './constants'
 import { getFileIconType } from './document-uploader'
 import type { ProcessedDocument } from './renderers/types'
