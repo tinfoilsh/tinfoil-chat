@@ -139,13 +139,13 @@ const getMessageKey = (
   message: Message,
   index: number,
 ): string => {
-  // Use a combination of role, index, and timestamp to ensure uniqueness
+  // Use role and timestamp for stable unique keys (no index to avoid reordering issues)
   const timestamp = message.timestamp
     ? message.timestamp instanceof Date
       ? message.timestamp.getTime()
       : String(message.timestamp)
-    : ''
-  return `${prefix}-${index}-${message.role}-${timestamp}`
+    : `fallback-${index}` // Only use index as fallback when no timestamp
+  return `${prefix}-${message.role}-${timestamp}`
 }
 
 // Removed duplicate WelcomeScreen component - using imported version from './WelcomeScreen'
