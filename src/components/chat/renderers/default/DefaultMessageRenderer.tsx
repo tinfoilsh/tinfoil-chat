@@ -4,6 +4,7 @@ import React, { memo } from 'react'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
+import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
@@ -96,15 +97,17 @@ const DefaultMessage = memo(function DefaultMessage({
       {/* Show thoughts for assistant messages */}
       {!isUser && message.thoughts && (
         <div className="mb-2 w-full">
-          <ThoughtProcess
-            thoughts={message.thoughts}
-            isDarkMode={isDarkMode}
-            isThinking={message.isThinking}
-            thinkingDuration={message.thinkingDuration}
-            messageId={messageUniqueId}
-            expandedThoughtsState={expandedThoughtsState}
-            setExpandedThoughtsState={setExpandedThoughtsState}
-          />
+          <StreamingContentWrapper isStreaming={Boolean(message.isThinking)}>
+            <ThoughtProcess
+              thoughts={message.thoughts}
+              isDarkMode={isDarkMode}
+              isThinking={message.isThinking}
+              thinkingDuration={message.thinkingDuration}
+              messageId={messageUniqueId}
+              expandedThoughtsState={expandedThoughtsState}
+              setExpandedThoughtsState={setExpandedThoughtsState}
+            />
+          </StreamingContentWrapper>
         </div>
       )}
 
@@ -130,12 +133,23 @@ const DefaultMessage = memo(function DefaultMessage({
                       : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
                 }`}
               >
-                <StreamingChunkedText
-                  content={message.content}
-                  isDarkMode={isDarkMode}
-                  isUser={isUser}
-                  isStreaming={isStreaming}
-                />
+                {!isUser && isStreaming && isLastMessage ? (
+                  <StreamingContentWrapper isStreaming={true}>
+                    <StreamingChunkedText
+                      content={message.content}
+                      isDarkMode={isDarkMode}
+                      isUser={isUser}
+                      isStreaming={isStreaming}
+                    />
+                  </StreamingContentWrapper>
+                ) : (
+                  <StreamingChunkedText
+                    content={message.content}
+                    isDarkMode={isDarkMode}
+                    isUser={isUser}
+                    isStreaming={isStreaming}
+                  />
+                )}
               </div>
             </div>
           </div>

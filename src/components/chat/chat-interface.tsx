@@ -606,6 +606,9 @@ export function ChatInterface({
   // State for scroll button
   const [showScrollButton, setShowScrollButton] = useState(false)
   const scrollableFeedRef = useRef<any>(null)
+  const scrollButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   // Function to scroll to bottom
   const handleScrollToBottom = () => {
@@ -636,9 +639,53 @@ export function ChatInterface({
     [handleFileUpload],
   )
 
-  // Callback for scroll feed to prevent inline hook usage
+  // Callback for scroll feed
   const handleScrollFeedScroll = useCallback((isAtBottom: boolean) => {
-    setShowScrollButton(!isAtBottom)
+    // Clear any pending timeout
+    if (scrollButtonTimeoutRef.current) {
+      clearTimeout(scrollButtonTimeoutRef.current)
+    }
+
+    if (!isAtBottom) {
+      // Not at bottom - check distance
+      if (scrollableFeedRef.current) {
+        const container = scrollableFeedRef.current.getScrollContainer?.()
+        if (container) {
+          const distanceFromBottom =
+            container.scrollHeight -
+            container.scrollTop -
+            container.clientHeight
+
+          // Show button if scrolled up more than 200px
+          if (distanceFromBottom > 200) {
+            setShowScrollButton(true)
+          } else {
+            // Less than 200px but not at bottom - don't change state yet
+            // This creates a buffer zone
+          }
+        } else {
+          // Fallback - if we can't get container, trust the isAtBottom
+          setShowScrollButton(true)
+        }
+      } else {
+        // Fallback - show button if not at bottom
+        setShowScrollButton(true)
+      }
+    } else {
+      // At bottom - hide with delay
+      scrollButtonTimeoutRef.current = setTimeout(() => {
+        setShowScrollButton(false)
+      }, 200)
+    }
+  }, [])
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollButtonTimeoutRef.current) {
+        clearTimeout(scrollButtonTimeoutRef.current)
+      }
+    }
   }, [])
 
   // Show loading state while critical config is loading. Do not block on subscription.
@@ -1009,6 +1056,31 @@ export function ChatInterface({
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
             onScroll={handleScrollFeedScroll}
+            animateScroll={(element: HTMLElement, offset: number) => {
+              // Use requestAnimationFrame for smooth scrolling
+              const start = element.scrollTop
+              const distance = offset - start
+              const duration = 300 // milliseconds
+              let startTime: number | null = null
+
+              const animation = (currentTime: number) => {
+                if (startTime === null) startTime = currentTime
+                const timeElapsed = currentTime - startTime
+                const progress = Math.min(timeElapsed / duration, 1)
+
+                // Easing function for smooth acceleration/deceleration
+                const easeInOutQuad = (t: number) =>
+                  t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+                element.scrollTop = start + distance * easeInOutQuad(progress)
+
+                if (progress < 1) {
+                  requestAnimationFrame(animation)
+                }
+              }
+
+              requestAnimationFrame(animation)
+            }}
           >
             <ChatMessages
               messages={currentChat?.messages || []}
