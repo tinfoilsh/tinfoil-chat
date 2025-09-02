@@ -13,6 +13,7 @@ import { VerificationStatusDisplay } from './verification-status-display'
 interface WelcomeScreenProps {
   isDarkMode: boolean
   openAndExpandVerifier: () => void
+  setIsSidebarOpen?: (isOpen: boolean) => void
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
@@ -39,6 +40,7 @@ interface WelcomeScreenProps {
 export const WelcomeScreen = memo(function WelcomeScreen({
   isDarkMode,
   openAndExpandVerifier,
+  setIsSidebarOpen,
   isPremium,
   models,
   subscriptionLoading,
@@ -284,6 +286,17 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                         isPremium={isPremium ?? false}
                         models={models}
                         preferredPosition="below"
+                        onPremiumModelClick={() => {
+                          if (setIsSidebarOpen) {
+                            setIsSidebarOpen(true)
+                            // Dispatch event to highlight the appropriate box
+                            window.dispatchEvent(
+                              new CustomEvent('highlightSidebarBox', {
+                                detail: { isPremium },
+                              }),
+                            )
+                          }
+                        }}
                       />
                     )}
                   </div>

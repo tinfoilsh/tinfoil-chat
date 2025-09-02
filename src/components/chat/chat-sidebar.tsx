@@ -237,6 +237,9 @@ export function ChatSidebar({
   )
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
+  const [highlightBox, setHighlightBox] = useState<'signin' | 'premium' | null>(
+    null,
+  )
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
   // Start optimistically assuming there might be more chats
@@ -264,6 +267,35 @@ export function ChatSidebar({
 
   // Apply zoom prevention for mobile
   usePreventZoom()
+
+  // Listen for highlight events
+  useEffect(() => {
+    const handleHighlightEvent = (event: CustomEvent) => {
+      const { isPremium: userIsPremium } = event.detail
+      // Determine which box to highlight based on user state
+      if (!isSignedIn) {
+        setHighlightBox('signin')
+      } else if (!userIsPremium) {
+        setHighlightBox('premium')
+      }
+
+      // Clear highlight after 2 pulses (2.4 seconds total)
+      setTimeout(() => {
+        setHighlightBox(null)
+      }, 2400)
+    }
+
+    window.addEventListener(
+      'highlightSidebarBox',
+      handleHighlightEvent as EventListener,
+    )
+    return () => {
+      window.removeEventListener(
+        'highlightSidebarBox',
+        handleHighlightEvent as EventListener,
+      )
+    }
+  }, [isSignedIn])
 
   // Calculate if we should show the Load More button
   const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
@@ -587,6 +619,24 @@ export function ChatSidebar({
 
   return (
     <>
+      {/* CSS for subtle pulse animation */}
+      <style jsx>{`
+        @keyframes subtlePulse {
+          0% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.88;
+            transform: scale(1.008);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+      `}</style>
+
       {/* Sidebar wrapper */}
       <div
         className={`${
@@ -656,11 +706,21 @@ export function ChatSidebar({
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
-              className={`m-2 flex-none rounded-lg border p-4 ${
-                isDarkMode
-                  ? 'border-emerald-500/30 bg-emerald-950/20'
-                  : 'border-emerald-500/30 bg-emerald-50/50'
+              className={`m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
+                highlightBox === 'signin'
+                  ? isDarkMode
+                    ? 'border-emerald-400/50 bg-emerald-900/30'
+                    : 'border-emerald-500/50 bg-emerald-100/60'
+                  : isDarkMode
+                    ? 'border-emerald-500/30 bg-emerald-950/20'
+                    : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
+              style={{
+                animation:
+                  highlightBox === 'signin'
+                    ? 'subtlePulse 1.2s ease-in-out infinite'
+                    : undefined,
+              }}
             >
               <h4
                 className={`mb-1 text-sm font-semibold ${
@@ -693,11 +753,21 @@ export function ChatSidebar({
           {/* Message for signed-in non-premium users */}
           {isSignedIn && !isPremium && (
             <div
-              className={`m-2 flex-none rounded-lg border p-4 ${
-                isDarkMode
-                  ? 'border-emerald-500/30 bg-emerald-950/20'
-                  : 'border-emerald-500/30 bg-emerald-50/50'
+              className={`m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
+                highlightBox === 'premium'
+                  ? isDarkMode
+                    ? 'border-emerald-400/50 bg-emerald-900/30'
+                    : 'border-emerald-500/50 bg-emerald-100/60'
+                  : isDarkMode
+                    ? 'border-emerald-500/30 bg-emerald-950/20'
+                    : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
+              style={{
+                animation:
+                  highlightBox === 'premium'
+                    ? 'subtlePulse 1.2s ease-in-out infinite'
+                    : undefined,
+              }}
             >
               <div className="flex-1">
                 <h4

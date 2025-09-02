@@ -15,6 +15,7 @@ type ChatMessagesProps = {
   chatId: string
   messagesEndRef?: React.RefObject<HTMLDivElement>
   openAndExpandVerifier: () => void
+  setIsSidebarOpen?: (isOpen: boolean) => void
   isWaitingForResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
@@ -173,6 +174,7 @@ export function ChatMessages({
   isDarkMode,
   chatId,
   openAndExpandVerifier,
+  setIsSidebarOpen,
   isWaitingForResponse = false,
   isPremium,
   models,
@@ -247,6 +249,7 @@ export function ChatMessages({
           <WelcomeScreen
             isDarkMode={isDarkMode}
             openAndExpandVerifier={openAndExpandVerifier}
+            setIsSidebarOpen={setIsSidebarOpen}
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}

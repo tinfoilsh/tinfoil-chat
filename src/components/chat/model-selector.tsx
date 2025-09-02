@@ -12,6 +12,7 @@ type ModelSelectorProps = {
   isPremium: boolean
   models: BaseModel[]
   preferredPosition?: 'above' | 'below' // Optional prop to prefer a position
+  onPremiumModelClick?: () => void // Called when a non-premium user clicks a premium model
 }
 
 export function ModelSelector({
@@ -21,6 +22,7 @@ export function ModelSelector({
   isPremium,
   models,
   preferredPosition = 'above', // Default to above
+  onPremiumModelClick,
 }: ModelSelectorProps) {
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
@@ -164,15 +166,21 @@ export function ModelSelector({
                   : `text-gray-700 ${
                       isSelected ? 'bg-gray-100' : 'hover:bg-gray-100'
                     }`
-                : isDarkMode
-                  ? 'cursor-not-allowed text-gray-500'
-                  : 'cursor-not-allowed text-gray-400'
+                : isPremiumModel && !isPremium && onPremiumModelClick
+                  ? isDarkMode
+                    ? 'cursor-pointer text-gray-400 hover:bg-gray-600/30'
+                    : 'cursor-pointer text-gray-500 hover:bg-gray-100/50'
+                  : isDarkMode
+                    ? 'cursor-not-allowed text-gray-500'
+                    : 'cursor-not-allowed text-gray-400'
             }`}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
               if (isAvailable) {
                 onSelect(model.modelName as AIModel)
+              } else if (isPremiumModel && !isPremium && onPremiumModelClick) {
+                onPremiumModelClick()
               }
             }}
             onTouchEnd={(e) => {
@@ -180,9 +188,14 @@ export function ModelSelector({
               e.stopPropagation()
               if (isAvailable) {
                 onSelect(model.modelName as AIModel)
+              } else if (isPremiumModel && !isPremium && onPremiumModelClick) {
+                onPremiumModelClick()
               }
             }}
-            disabled={!isAvailable}
+            disabled={
+              !isAvailable &&
+              (!isPremiumModel || isPremium || !onPremiumModelClick)
+            }
           >
             <div className="relative">
               <img

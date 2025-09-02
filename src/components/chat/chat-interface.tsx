@@ -1075,6 +1075,7 @@ export function ChatInterface({
               isDarkMode={isDarkMode}
               chatId={currentChat.id}
               openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+              setIsSidebarOpen={setIsSidebarOpen}
               isWaitingForResponse={isWaitingForResponse}
               isPremium={isPremium}
               models={models}
@@ -1142,6 +1143,7 @@ export function ChatInterface({
                     verificationComplete={verificationComplete}
                     verificationSuccess={verificationSuccess}
                     openAndExpandVerifier={modifiedOpenAndExpandVerifier}
+                    setIsSidebarOpen={setIsSidebarOpen}
                     expandedLabel={expandedLabel}
                     handleLabelClick={handleLabelClick}
                     selectedModel={selectedModel}
