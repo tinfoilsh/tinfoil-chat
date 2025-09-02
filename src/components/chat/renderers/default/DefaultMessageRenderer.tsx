@@ -34,6 +34,17 @@ const DefaultMessageComponent = ({
   > | null>(null)
   const hasInitialized = React.useRef(false)
 
+  // Track if thoughts have ever been shown during streaming to keep wrapper stable
+  const hasShownThoughts = React.useRef(false)
+  React.useEffect(() => {
+    if (
+      message.thoughts &&
+      (message.isThinking || (isLastMessage && isStreaming))
+    ) {
+      hasShownThoughts.current = true
+    }
+  }, [message.thoughts, message.isThinking, isLastMessage, isStreaming])
+
   // Track content changes to show/hide copy button during streaming
   React.useEffect(() => {
     if (!isUser) {
@@ -97,7 +108,11 @@ const DefaultMessageComponent = ({
       {/* Show thoughts for assistant messages */}
       {!isUser && message.thoughts && (
         <div className="mb-2 w-full">
-          <StreamingContentWrapper isStreaming={Boolean(message.isThinking)}>
+          <StreamingContentWrapper
+            isStreaming={Boolean(
+              hasShownThoughts.current && isLastMessage && isStreaming,
+            )}
+          >
             <ThoughtProcess
               thoughts={message.thoughts}
               isDarkMode={isDarkMode}
