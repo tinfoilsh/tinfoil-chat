@@ -178,5 +178,5 @@ const DefaultMessage = memo(DefaultMessageComponent)
 export const DefaultMessageRenderer: MessageRenderer = {
   id: 'default',
   canRender: () => true,
-  render: DefaultMessageComponent,
+  render: DefaultMessage,
 }
