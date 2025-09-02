@@ -770,6 +770,18 @@ export function ChatInterface({
     }
   }, [checkScrollPosition])
 
+  // Check scroll position during streaming
+  useEffect(() => {
+    if (isWaitingForResponse || loadingState === 'loading') {
+      // Check scroll position more frequently during streaming
+      const interval = setInterval(() => {
+        checkScrollPosition()
+      }, 200)
+
+      return () => clearInterval(interval)
+    }
+  }, [isWaitingForResponse, loadingState, checkScrollPosition])
+
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
     return (
