@@ -655,7 +655,7 @@ export function ChatInterface({
       // Hide button with delay when at bottom
       scrollButtonTimeoutRef.current = setTimeout(() => {
         setShowScrollButton(false)
-      }, CONSTANTS.SCROLL_BUTTON_HIDE_DELAY_MS || 200)
+      }, CONSTANTS.SCROLL_BUTTON_HIDE_DELAY_MS ?? 200)
     }
   }, [])
 
