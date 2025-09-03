@@ -93,8 +93,14 @@ export function useChatMessaging({
   }
 
   // Override model selection for free users - use first available free model
+  // EXCEPT when Dev Simulator is selected (for testing)
   const effectiveModel = !storeHistory
     ? (() => {
+        // Allow Dev Simulator for testing even when not signed in
+        if (selectedModel === 'dev-simulator') {
+          return selectedModel
+        }
+
         // Find the first free chat model
         const firstFreeModel = models.find(
           (model) =>
@@ -421,8 +427,11 @@ export function useChatMessaging({
           throw new Error(`Model ${effectiveModel} not found`)
         }
 
-        // Always use the proxy
-        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
+        // Use dev simulator endpoint for dev model, otherwise use the proxy
+        const proxyUrl =
+          model.modelName === 'dev-simulator'
+            ? '/api/dev/simulator'
+            : `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
         let finalSystemPrompt = baseSystemPrompt.replaceAll(
@@ -437,12 +446,18 @@ export function useChatMessaging({
           finalSystemPrompt += '\n' + processedRules
         }
 
+        // Only require API key for non-dev models
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+
+        if (model.modelName !== 'dev-simulator') {
+          headers.Authorization = `Bearer ${await getApiKeyFromHook()}`
+        }
+
         const response = await fetch(proxyUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${await getApiKeyFromHook()}`,
-          },
+          headers,
           body: JSON.stringify({
             model: model.modelName,
             messages: [
