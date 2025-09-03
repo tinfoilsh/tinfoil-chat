@@ -247,13 +247,7 @@ export function ChatMessages({
 
   if (messages.length === 0) {
     return (
-      <div
-        className="flex h-full items-center justify-center"
-        style={{
-          height: '100%',
-          position: 'relative',
-        }}
-      >
+      <div className="flex w-full flex-1 items-center justify-center">
         <div className="w-full max-w-4xl px-8">
           <WelcomeScreen
             isDarkMode={isDarkMode}
