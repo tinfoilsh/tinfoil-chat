@@ -93,16 +93,17 @@ export function processLatexTags(text: string): string {
       let transformed = part
 
       // Convert \[...\] to $$...$$ on its own line (display math)
+      // Display math needs $$ on separate lines
       transformed = transformed.replace(
         /\\\[([\s\S]*?)\\\]/g,
         (match, inner) => {
-          // Check if it's already on its own line
           const trimmed = inner.trim()
-          return `\n\n$$${trimmed}$$\n\n`
+          return `\n\n$$\n${trimmed}\n$$\n\n`
         },
       )
 
-      // Convert \(...\) to $$...$$ (inline math)
+      // Convert \(...\) to $$...$$ on same line (inline math)
+      // When singleDollarTextMath is false, $$ on same line = inline math
       transformed = transformed.replace(
         /\\\(([\s\S]*?)\\\)/g,
         (match, inner) => `$$${inner}$$`,
