@@ -177,9 +177,13 @@ export function useModelManagement({
     (modelName: AIModel) => {
       // Allow Dev Simulator for all users in development
       const isDevSimulator = modelName === 'dev-simulator'
+      const currentIsDevSimulator = selectedModel === 'dev-simulator'
 
-      // Prevent free users from changing models (except Dev Simulator)
-      if (!storeHistory && !isDevSimulator) return
+      // Allow model switching if:
+      // 1. User has storeHistory enabled (premium/chat storage enabled)
+      // 2. Switching TO dev-simulator
+      // 3. Switching FROM dev-simulator to a free model
+      if (!storeHistory && !isDevSimulator && !currentIsDevSimulator) return
 
       // Verify the model is available for the user
       if (!isModelNameAvailable(modelName, models, isPremium)) {
@@ -200,7 +204,7 @@ export function useModelManagement({
       // Save to local storage
       localStorage.setItem('selectedModel', modelName)
     },
-    [storeHistory, models, isPremium],
+    [storeHistory, models, isPremium, selectedModel],
   )
 
   // Handle label click
