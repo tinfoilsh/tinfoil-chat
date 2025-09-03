@@ -137,7 +137,7 @@ const DefaultMessageComponent = ({
                 isUser
                   ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
                   : ''
-              } overflow-x-auto`}
+              } overflow-x-auto overflow-y-visible`}
             >
               <div
                 className={`prose w-full max-w-none text-base ${
