@@ -48,6 +48,10 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
           () => {
             setIsHolding(false)
             holdTimeoutRef.current = null
+            // Reset heights after hold to start fresh for next session
+            setMinHeight(undefined)
+            maxHeightRef.current = 0
+            hasEverStreamedRef.current = false
           },
           Math.max(0, holdAfterStopMs),
         )
@@ -89,6 +93,11 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
       if (measurementFrameRef.current) {
         cancelAnimationFrame(measurementFrameRef.current)
         measurementFrameRef.current = null
+      }
+      // Clear hold timeout on unmount or when effect re-runs
+      if (holdTimeoutRef.current) {
+        clearTimeout(holdTimeoutRef.current)
+        holdTimeoutRef.current = null
       }
     }
   }, [isStreaming, holdAfterStopMs])

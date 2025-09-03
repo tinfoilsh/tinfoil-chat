@@ -1,4 +1,5 @@
 import { isModelNameAvailable, type BaseModel } from '@/app/config/models'
+import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
 import { CONSTANTS } from '../constants'
@@ -176,8 +177,9 @@ export function useModelManagement({
   const handleModelSelect = useCallback(
     (modelName: AIModel) => {
       // Allow Dev Simulator for all users in development
-      const isDevSimulator = modelName === 'dev-simulator'
-      const currentIsDevSimulator = selectedModel === 'dev-simulator'
+      const isDevSimulator = modelName === DEV_SIMULATOR_MODEL.modelName
+      const currentIsDevSimulator =
+        selectedModel === DEV_SIMULATOR_MODEL.modelName
 
       // Allow model switching if:
       // 1. User has storeHistory enabled (premium/chat storage enabled)
