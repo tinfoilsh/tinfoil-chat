@@ -50,6 +50,41 @@
   }
 }
 
+/* Prevent vertical scrollbars in message content */
+.katex-display {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  max-width: 100%;
+}
+
+.katex-display > .katex {
+  max-width: 100%;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  padding: 0.5rem 0;
+}
+
+/* Ensure code blocks don't create vertical scrollbars */
+.prose pre {
+  overflow-y: visible !important;
+  max-height: none !important;
+}
+
+/* Prevent vertical scrollbars while maintaining horizontal scroll for wide content */
+.prose {
+  overflow-y: visible !important;
+}
+
+/* KaTeX specific overflow fixes */
+.katex-html {
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+}
+
+.katex .base {
+  overflow-y: visible !important;
+}
+
 /* Subtle one-shot sheen for text clipped backgrounds */
 /* Removed sheen styles */
 
