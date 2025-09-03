@@ -53,7 +53,7 @@
 /* Prevent vertical scrollbars in message content */
 .katex-display {
   overflow-x: auto !important;
-  overflow-y: visible !important;
+  overflow-y: hidden !important;
   max-width: 100%;
 }
 
