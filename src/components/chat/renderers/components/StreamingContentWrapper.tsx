@@ -20,12 +20,20 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
   const [minHeight, setMinHeight] = useState<number | undefined>(undefined)
   const maxHeightRef = useRef<number>(0)
   const measurementFrameRef = useRef<number | null>(null)
+  const hasEverStreamedRef = useRef<boolean>(false)
 
   useEffect(() => {
+    // Track if we've streamed at least once to keep the wrapper stable during toggles
+    if (isStreaming) {
+      hasEverStreamedRef.current = true
+    }
+
     if (!isStreaming) {
-      // Reset immediately when streaming ends - no transition to prevent scroll issues
-      setMinHeight(undefined)
-      maxHeightRef.current = 0
+      // If we never streamed, clear any minHeight. If we streamed before, keep last minHeight
+      if (!hasEverStreamedRef.current) {
+        setMinHeight(undefined)
+        maxHeightRef.current = 0
+      }
       return
     }
 

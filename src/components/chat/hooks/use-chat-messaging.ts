@@ -681,20 +681,22 @@ export function useChatMessaging({
                 isInThinkingMode = true
                 setIsThinking(true)
                 thinkingStartTimeRef.current = Date.now()
+                // Immediately surface the assistant message as thinking to avoid UI gap
+                assistantMessage = {
+                  ...assistantMessage,
+                  thoughts: reasoningContent || '',
+                  isThinking: true,
+                }
+                if (currentChatIdRef.current === updatedChat.id) {
+                  scheduleStreamingUpdate(true)
+                }
+                // Hide loading dots right after we've queued the thinking message
                 setIsWaitingForResponse(false)
                 isFirstChunk = false // No need to buffer for reasoning_content
 
-                // Only add non-empty reasoning content
+                // Only add non-empty reasoning content to buffer
                 if (reasoningContent) {
                   thoughtsBuffer = reasoningContent
-                  assistantMessage = {
-                    ...assistantMessage,
-                    thoughts: thoughtsBuffer,
-                    isThinking: true,
-                  }
-                  if (currentChatIdRef.current === updatedChat.id) {
-                    scheduleStreamingUpdate(true)
-                  }
                 }
                 continue
               } else if (isUsingReasoningFormat && hasReasoningContent) {
@@ -788,7 +790,26 @@ export function useChatMessaging({
                       isInThinkingMode = true
                       setIsThinking(true)
                       thinkingStartTimeRef.current = Date.now()
-                      content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
+                      // Remove everything up to and including <think>
+                      content = content.replace(/^[\s\S]*?<think>/, '')
+                      // Immediately surface the assistant message as thinking (even if no tokens yet)
+                      assistantMessage = {
+                        ...assistantMessage,
+                        isThinking: true,
+                        thoughts: '',
+                      }
+                      if (content) {
+                        // Consume initial post-<think> content into thoughts buffer
+                        thoughtsBuffer += content
+                        assistantMessage = {
+                          ...assistantMessage,
+                          thoughts: thoughtsBuffer,
+                        }
+                        content = '' // prevent double-processing below
+                      }
+                      if (currentChatIdRef.current === updatedChat.id) {
+                        scheduleStreamingUpdate(true)
+                      }
                     }
 
                     // Remove loading dots only after processing the first chunk
