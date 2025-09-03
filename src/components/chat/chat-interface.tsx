@@ -763,6 +763,18 @@ export function ChatInterface({
 
   // Set up ResizeObserver for content changes (e.g., during streaming)
   const savedScrollTopRef = useRef<number | null>(null)
+  const lastMessageRef = useRef<(typeof currentChat.messages)[0] | null>(null)
+
+  // Update the last message ref when messages change
+  useEffect(() => {
+    const messages = currentChat?.messages
+    if (messages && messages.length > 0) {
+      lastMessageRef.current = messages[messages.length - 1]
+    } else {
+      lastMessageRef.current = null
+    }
+  }, [currentChat?.messages])
+
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container) return
@@ -781,8 +793,7 @@ export function ChatInterface({
 
         // During thoughts streaming, don't interfere with scroll
         // The scroll is already handled by the message addition logic
-        const lastMessage =
-          currentChat?.messages?.[currentChat.messages.length - 1]
+        const lastMessage = lastMessageRef.current
         const isThoughtsStreaming =
           lastMessage?.role === 'assistant' &&
           (lastMessage.isThinking ||
@@ -813,7 +824,7 @@ export function ChatInterface({
         clearTimeout(scrollCheckTimeoutRef.current)
       }
     }
-  }, [checkScrollPosition, currentChat?.messages])
+  }, [checkScrollPosition])
 
   // Anchor scroll to bottom when streaming starts and user is near bottom to prevent jolt
   const isThoughtsStreamingRef = useRef<boolean>(false)
