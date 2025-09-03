@@ -102,6 +102,16 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
     }
   }, [isStreaming, holdAfterStopMs])
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (holdTimeoutRef.current) {
+        clearTimeout(holdTimeoutRef.current)
+        holdTimeoutRef.current = null
+      }
+    }
+  }, [])
+
   return (
     <div
       ref={contentRef}
