@@ -6,7 +6,7 @@ import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -96,6 +96,9 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       ? (expandedThoughtsState[messageId] ?? false)
       : false
 
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [contentHeight, setContentHeight] = useState<number>(0)
+
   const handleToggle = () => {
     if (messageId && setExpandedThoughtsState) {
       setExpandedThoughtsState((prevState) => ({
@@ -104,6 +107,19 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       }))
     }
   }
+
+  // Measure content height for smooth animation
+  useEffect(() => {
+    if (contentRef.current) {
+      const resizeObserver = new ResizeObserver(() => {
+        if (contentRef.current) {
+          setContentHeight(contentRef.current.scrollHeight)
+        }
+      })
+      resizeObserver.observe(contentRef.current)
+      return () => resizeObserver.disconnect()
+    }
+  }, [thoughts])
 
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const processedThoughts = processLatexTags(thoughts)
@@ -168,14 +184,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       </button>
 
       <div
+        className="overflow-hidden transition-all duration-300 ease-out"
         style={{
-          height: isExpanded ? 'auto' : 0,
-          opacity: isExpanded ? 1 : 0,
-          overflow: 'hidden',
-          transition: 'height 0.2s ease-in-out, opacity 0.2s ease-in-out',
+          maxHeight: isExpanded ? `${contentHeight}px` : '0px',
         }}
       >
         <div
+          ref={contentRef}
           className={`overflow-x-auto px-4 py-3 text-sm ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}
