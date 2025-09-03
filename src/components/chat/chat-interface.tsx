@@ -803,6 +803,67 @@ export function ChatInterface({
     prevWaitingRef.current = isWaitingForResponse
   }, [isWaitingForResponse])
 
+  // When content starts after thoughts, auto-scroll to bottom once if user is near bottom
+  const lastMsgSnapshotRef = useRef<{
+    key: string
+    contentLen: number
+    isThinking: boolean
+    thoughtsLen: number
+  } | null>(null)
+  const scrolledOnContentStartForKeyRef = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el || !currentChat?.messages || currentChat.messages.length === 0)
+      return
+
+    const last = currentChat.messages[currentChat.messages.length - 1]
+    if (last.role !== 'assistant') {
+      lastMsgSnapshotRef.current = null
+      return
+    }
+
+    const key = `${last.role}-$${
+      last.timestamp instanceof Date
+        ? last.timestamp.getTime()
+        : String(last.timestamp || '')
+    }`
+
+    const prev = lastMsgSnapshotRef.current
+    const prevSameMsg = prev && prev.key === key
+    const prevContentLen = prevSameMsg ? prev.contentLen : 0
+    const prevWasThinking = prevSameMsg ? prev.isThinking : false
+    const prevThoughtsLen = prevSameMsg ? prev.thoughtsLen : 0
+
+    const nowContentLen = (last.content || '').length
+    const nowThoughtsLen = (last.thoughts || '').length
+    const didStartContentNow =
+      prevSameMsg && prevContentLen === 0 && nowContentLen > 0
+    const wasThinkingStream =
+      prevWasThinking || (prevThoughtsLen > 0 && prevContentLen === 0)
+
+    // Update snapshot for next run
+    lastMsgSnapshotRef.current = {
+      key,
+      contentLen: nowContentLen,
+      isThinking: Boolean(last.isThinking),
+      thoughtsLen: nowThoughtsLen,
+    }
+
+    if (!didStartContentNow || !wasThinkingStream) return
+
+    // Only auto-scroll if user is near bottom and we haven't already scrolled for this message
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    const ANCHOR_THRESHOLD = 120
+    const isNearBottom = distanceFromBottom <= ANCHOR_THRESHOLD
+    if (!isNearBottom) return
+
+    if (scrolledOnContentStartForKeyRef.current === key) return
+    scrolledOnContentStartForKeyRef.current = key
+
+    // Scroll to bottom so the first sentences of content are visible
+    el.scrollTop = el.scrollHeight
+  }, [currentChat?.messages])
+
   // Also anchor on message append if user is near bottom
   const prevMsgLenRef = useRef<number>(currentChat?.messages?.length || 0)
   useLayoutEffect(() => {
