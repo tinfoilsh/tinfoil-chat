@@ -168,6 +168,8 @@ export async function* simulateStream(
 ): AsyncGenerator<string, void, unknown> {
   const pattern = getSimulatorPattern(query)
 
+  await delay(1000)
+
   // If there are thoughts, yield them first with thinking tags
   if (pattern.thoughts) {
     // Start with thinking tag

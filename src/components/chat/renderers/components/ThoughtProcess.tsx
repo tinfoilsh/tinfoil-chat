@@ -115,14 +115,14 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
   return (
     <div
-      className={`mx-4 mb-4 mt-2 rounded-lg ${
+      className={`mb-2 mt-2 rounded-lg ${
         isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100'
       }`}
     >
       <button
         type="button"
         onClick={handleToggle}
-        className={`flex w-full items-center justify-between px-3.5 py-2 text-left ${
+        className={`flex h-10 w-full items-center justify-between px-4 text-left ${
           isDarkMode
             ? 'text-gray-200 hover:bg-gray-600/50'
             : 'text-gray-700 hover:bg-gray-200'

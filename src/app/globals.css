@@ -52,3 +52,8 @@
 
 /* Subtle one-shot sheen for text clipped backgrounds */
 /* Removed sheen styles */
+
+/* Prevent browser scroll anchoring on dynamic streaming blocks */
+.no-scroll-anchoring {
+  overflow-anchor: none;
+}

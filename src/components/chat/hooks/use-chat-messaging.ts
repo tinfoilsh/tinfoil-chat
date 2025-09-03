@@ -702,11 +702,25 @@ export function useChatMessaging({
                   thoughts: reasoningContent || '',
                   isThinking: true,
                 }
+                // Flush the thinking message synchronously so layout doesn't dip
                 if (currentChatIdRef.current === updatedChat.id) {
-                  scheduleStreamingUpdate(true)
+                  const chatId = currentChatIdRef.current
+                  const messageToSave = assistantMessage as Message
+                  const newMessages = [...updatedMessages, messageToSave]
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    true,
+                  )
+                  // Hide loading dots on the next frame
+                  requestAnimationFrame(() => {
+                    setIsWaitingForResponse(false)
+                  })
                 }
-                // Hide loading dots right after we've queued the thinking message
-                setIsWaitingForResponse(false)
                 isFirstChunk = false // No need to buffer for reasoning_content
 
                 // Only add non-empty reasoning content to buffer
@@ -822,13 +836,27 @@ export function useChatMessaging({
                         }
                         content = '' // prevent double-processing below
                       }
+                      // Flush the initial thinking state synchronously to avoid a frame with no placeholder
                       if (currentChatIdRef.current === updatedChat.id) {
-                        scheduleStreamingUpdate(true)
+                        const chatId = currentChatIdRef.current
+                        const messageToSave = assistantMessage as Message
+                        const newMessages = [...updatedMessages, messageToSave]
+                        updateChatWithHistoryCheck(
+                          setChats,
+                          updatedChat,
+                          setCurrentChat,
+                          chatId,
+                          newMessages,
+                          false,
+                          true,
+                        )
                       }
                     }
 
                     // Remove loading dots only after processing the first chunk
-                    setIsWaitingForResponse(false)
+                    requestAnimationFrame(() => {
+                      setIsWaitingForResponse(false)
+                    })
                   } else {
                     continue // Keep buffering
                   }

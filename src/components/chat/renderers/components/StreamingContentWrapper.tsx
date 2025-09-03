@@ -5,6 +5,8 @@ import { memo, useEffect, useRef, useState } from 'react'
 interface StreamingContentWrapperProps {
   children: React.ReactNode
   isStreaming: boolean
+  // Keep minHeight for a short period after streaming stops to avoid scroll bounce
+  holdAfterStopMs?: number
 }
 
 /**
@@ -15,25 +17,49 @@ interface StreamingContentWrapperProps {
 export const StreamingContentWrapper = memo(function StreamingContentWrapper({
   children,
   isStreaming,
+  holdAfterStopMs = 250,
 }: StreamingContentWrapperProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [minHeight, setMinHeight] = useState<number | undefined>(undefined)
   const maxHeightRef = useRef<number>(0)
   const measurementFrameRef = useRef<number | null>(null)
   const hasEverStreamedRef = useRef<boolean>(false)
+  const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isHolding, setIsHolding] = useState<boolean>(false)
 
   useEffect(() => {
     // Track if we've streamed at least once to keep the wrapper stable during toggles
     if (isStreaming) {
       hasEverStreamedRef.current = true
+      // Cancel any pending hold
+      if (holdTimeoutRef.current) {
+        clearTimeout(holdTimeoutRef.current)
+        holdTimeoutRef.current = null
+      }
+      setIsHolding(false)
+    } else {
+      // When streaming stops, briefly hold the minHeight to avoid a bounce
+      if (hasEverStreamedRef.current) {
+        setIsHolding(true)
+        if (holdTimeoutRef.current) {
+          clearTimeout(holdTimeoutRef.current)
+        }
+        holdTimeoutRef.current = setTimeout(
+          () => {
+            setIsHolding(false)
+            holdTimeoutRef.current = null
+          },
+          Math.max(0, holdAfterStopMs),
+        )
+      } else {
+        // If we never streamed, clear values
+        setMinHeight(undefined)
+        maxHeightRef.current = 0
+        setIsHolding(false)
+      }
     }
 
     if (!isStreaming) {
-      // If we never streamed, clear any minHeight. If we streamed before, keep last minHeight
-      if (!hasEverStreamedRef.current) {
-        setMinHeight(undefined)
-        maxHeightRef.current = 0
-      }
       return
     }
 
@@ -65,13 +91,16 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
         measurementFrameRef.current = null
       }
     }
-  }, [isStreaming])
+  }, [isStreaming, holdAfterStopMs])
 
   return (
     <div
       ref={contentRef}
       style={{
-        minHeight: isStreaming && minHeight ? `${minHeight}px` : undefined,
+        minHeight:
+          (isStreaming || isHolding) && minHeight
+            ? `${minHeight}px`
+            : undefined,
       }}
     >
       {children}
