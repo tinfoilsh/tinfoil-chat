@@ -1,7 +1,12 @@
 import { simulateStream } from '@/utils/dev-simulator'
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
+  // Only allow in development environment
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   try {
     const body = await req.json()
     const messages = body.messages || []
@@ -48,5 +53,9 @@ export async function POST(req: NextRequest) {
 
 // Only allow POST requests
 export async function GET() {
+  // Return 404 in production to hide the endpoint
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   return new Response('Method not allowed', { status: 405 })
 }

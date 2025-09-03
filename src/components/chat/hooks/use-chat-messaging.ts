@@ -512,6 +512,13 @@ export function useChatMessaging({
         })
 
         if (!response.ok) {
+          // Special handling for dev simulator in production
+          if (response.status === 404 && model.modelName === 'dev-simulator') {
+            throw new ChatError(
+              'Dev simulator is only available in development environment',
+              'FETCH_ERROR',
+            )
+          }
           throw new ChatError(
             `Server returned ${response.status}: ${response.statusText}`,
             'FETCH_ERROR',
