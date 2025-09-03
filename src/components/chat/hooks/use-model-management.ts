@@ -175,8 +175,11 @@ export function useModelManagement({
   // Handle model selection
   const handleModelSelect = useCallback(
     (modelName: AIModel) => {
-      // Prevent free users from changing models
-      if (!storeHistory) return
+      // Allow Dev Simulator for all users in development
+      const isDevSimulator = modelName === 'dev-simulator'
+
+      // Prevent free users from changing models (except Dev Simulator)
+      if (!storeHistory && !isDevSimulator) return
 
       // Verify the model is available for the user
       if (!isModelNameAvailable(modelName, models, isPremium)) {
