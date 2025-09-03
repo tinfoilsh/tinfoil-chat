@@ -25,14 +25,29 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
+        // Set up abort handling
+        const abortHandler = () => {
+          controller.close()
+        }
+
+        // Listen for client disconnect
+        req.signal.addEventListener('abort', abortHandler)
+
         try {
           // Use the simulator to generate streaming response
           for await (const chunk of simulateStream(query)) {
+            // Check if client has disconnected
+            if (req.signal.aborted) {
+              break
+            }
             controller.enqueue(encoder.encode(chunk))
           }
           controller.close()
         } catch (error) {
           controller.error(error)
+        } finally {
+          // Clean up event listener
+          req.signal.removeEventListener('abort', abortHandler)
         }
       },
     })
