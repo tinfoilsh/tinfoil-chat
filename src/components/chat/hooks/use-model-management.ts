@@ -1,4 +1,5 @@
 import { isModelNameAvailable, type BaseModel } from '@/app/config/models'
+import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
 import { CONSTANTS } from '../constants'
@@ -175,8 +176,16 @@ export function useModelManagement({
   // Handle model selection
   const handleModelSelect = useCallback(
     (modelName: AIModel) => {
-      // Prevent free users from changing models
-      if (!storeHistory) return
+      // Allow Dev Simulator for all users in development
+      const isDevSimulator = modelName === DEV_SIMULATOR_MODEL.modelName
+      const currentIsDevSimulator =
+        selectedModel === DEV_SIMULATOR_MODEL.modelName
+
+      // Allow model switching if:
+      // 1. User has storeHistory enabled (premium/chat storage enabled)
+      // 2. Switching TO dev-simulator
+      // 3. Switching FROM dev-simulator to a free model
+      if (!storeHistory && !isDevSimulator && !currentIsDevSimulator) return
 
       // Verify the model is available for the user
       if (!isModelNameAvailable(modelName, models, isPremium)) {
@@ -197,7 +206,7 @@ export function useModelManagement({
       // Save to local storage
       localStorage.setItem('selectedModel', modelName)
     },
-    [storeHistory, models, isPremium],
+    [storeHistory, models, isPremium, selectedModel],
   )
 
   // Handle label click

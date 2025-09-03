@@ -93,8 +93,14 @@ export function useChatMessaging({
   }
 
   // Override model selection for free users - use first available free model
+  // EXCEPT when Dev Simulator is selected (for testing)
   const effectiveModel = !storeHistory
     ? (() => {
+        // Allow Dev Simulator for testing even when not signed in
+        if (selectedModel === 'dev-simulator') {
+          return selectedModel
+        }
+
         // Find the first free chat model
         const firstFreeModel = models.find(
           (model) =>
@@ -421,8 +427,11 @@ export function useChatMessaging({
           throw new Error(`Model ${effectiveModel} not found`)
         }
 
-        // Always use the proxy
-        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
+        // Use dev simulator endpoint for dev model, otherwise use the proxy
+        const proxyUrl =
+          model.modelName === 'dev-simulator'
+            ? '/api/dev/simulator'
+            : `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
         let finalSystemPrompt = baseSystemPrompt.replaceAll(
@@ -437,12 +446,18 @@ export function useChatMessaging({
           finalSystemPrompt += '\n' + processedRules
         }
 
+        // Only require API key for non-dev models
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        }
+
+        if (model.modelName !== 'dev-simulator') {
+          headers.Authorization = `Bearer ${await getApiKeyFromHook()}`
+        }
+
         const response = await fetch(proxyUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${await getApiKeyFromHook()}`,
-          },
+          headers,
           body: JSON.stringify({
             model: model.modelName,
             messages: [
@@ -497,6 +512,13 @@ export function useChatMessaging({
         })
 
         if (!response.ok) {
+          // Special handling for dev simulator in production
+          if (response.status === 404 && model.modelName === 'dev-simulator') {
+            throw new ChatError(
+              'Dev simulator is only available in development environment',
+              'FETCH_ERROR',
+            )
+          }
           throw new ChatError(
             `Server returned ${response.status}: ${response.statusText}`,
             'FETCH_ERROR',
@@ -681,20 +703,36 @@ export function useChatMessaging({
                 isInThinkingMode = true
                 setIsThinking(true)
                 thinkingStartTimeRef.current = Date.now()
-                setIsWaitingForResponse(false)
+                // Immediately surface the assistant message as thinking to avoid UI gap
+                assistantMessage = {
+                  ...assistantMessage,
+                  thoughts: reasoningContent || '',
+                  isThinking: true,
+                }
+                // Flush the thinking message synchronously so layout doesn't dip
+                if (currentChatIdRef.current === updatedChat.id) {
+                  const chatId = currentChatIdRef.current
+                  const messageToSave = assistantMessage as Message
+                  const newMessages = [...updatedMessages, messageToSave]
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    updatedChat,
+                    setCurrentChat,
+                    chatId,
+                    newMessages,
+                    false,
+                    true,
+                  )
+                  // Hide loading dots on the next frame
+                  requestAnimationFrame(() => {
+                    setIsWaitingForResponse(false)
+                  })
+                }
                 isFirstChunk = false // No need to buffer for reasoning_content
 
-                // Only add non-empty reasoning content
+                // Only add non-empty reasoning content to buffer
                 if (reasoningContent) {
                   thoughtsBuffer = reasoningContent
-                  assistantMessage = {
-                    ...assistantMessage,
-                    thoughts: thoughtsBuffer,
-                    isThinking: true,
-                  }
-                  if (currentChatIdRef.current === updatedChat.id) {
-                    scheduleStreamingUpdate(true)
-                  }
                 }
                 continue
               } else if (isUsingReasoningFormat && hasReasoningContent) {
@@ -788,11 +826,44 @@ export function useChatMessaging({
                       isInThinkingMode = true
                       setIsThinking(true)
                       thinkingStartTimeRef.current = Date.now()
-                      content = content.replace(/^[\s\S]*?<think>/, '') // Remove everything up to and including <think>
+                      // Remove everything up to and including <think>
+                      content = content.replace(/^[\s\S]*?<think>/, '')
+                      // Immediately surface the assistant message as thinking (even if no tokens yet)
+                      assistantMessage = {
+                        ...assistantMessage,
+                        isThinking: true,
+                        thoughts: '',
+                      }
+                      if (content) {
+                        // Consume initial post-<think> content into thoughts buffer
+                        thoughtsBuffer += content
+                        assistantMessage = {
+                          ...assistantMessage,
+                          thoughts: thoughtsBuffer,
+                        }
+                        content = '' // prevent double-processing below
+                      }
+                      // Flush the initial thinking state synchronously to avoid a frame with no placeholder
+                      if (currentChatIdRef.current === updatedChat.id) {
+                        const chatId = currentChatIdRef.current
+                        const messageToSave = assistantMessage as Message
+                        const newMessages = [...updatedMessages, messageToSave]
+                        updateChatWithHistoryCheck(
+                          setChats,
+                          updatedChat,
+                          setCurrentChat,
+                          chatId,
+                          newMessages,
+                          false,
+                          true,
+                        )
+                      }
                     }
 
                     // Remove loading dots only after processing the first chunk
-                    setIsWaitingForResponse(false)
+                    requestAnimationFrame(() => {
+                      setIsWaitingForResponse(false)
+                    })
                   } else {
                     continue // Keep buffering
                   }

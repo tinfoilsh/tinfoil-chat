@@ -106,25 +106,32 @@ const DefaultMessageComponent = ({
       )}
 
       {/* Show thoughts for assistant messages */}
-      {!isUser && message.thoughts && (
-        <div className="mb-2 w-full">
-          <StreamingContentWrapper
-            isStreaming={Boolean(
-              hasShownThoughts.current && isLastMessage && isStreaming,
-            )}
-          >
-            <ThoughtProcess
-              thoughts={message.thoughts}
-              isDarkMode={isDarkMode}
-              isThinking={message.isThinking}
-              thinkingDuration={message.thinkingDuration}
-              messageId={messageUniqueId}
-              expandedThoughtsState={expandedThoughtsState}
-              setExpandedThoughtsState={setExpandedThoughtsState}
-            />
-          </StreamingContentWrapper>
-        </div>
-      )}
+      {!isUser &&
+        (message.isThinking ||
+          (typeof message.thoughts === 'string' &&
+            message.thoughts.trim().length > 0)) && (
+          <div className="no-scroll-anchoring w-full px-4 py-2">
+            <div className="mb-2 w-full">
+              <StreamingContentWrapper
+                isStreaming={Boolean(
+                  hasShownThoughts.current &&
+                    isLastMessage &&
+                    (isStreaming || message.isThinking),
+                )}
+              >
+                <ThoughtProcess
+                  thoughts={message.thoughts || ''}
+                  isDarkMode={isDarkMode}
+                  isThinking={message.isThinking}
+                  thinkingDuration={message.thinkingDuration}
+                  messageId={messageUniqueId}
+                  expandedThoughtsState={expandedThoughtsState}
+                  setExpandedThoughtsState={setExpandedThoughtsState}
+                />
+              </StreamingContentWrapper>
+            </div>
+          </div>
+        )}
 
       {/* Message content */}
       {message.content && (

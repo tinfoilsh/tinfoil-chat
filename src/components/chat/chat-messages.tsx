@@ -123,19 +123,30 @@ const ChatMessage = memo(
   },
 )
 
-// Add a new component for the loading state
+// Loading indicator with EXACT same structure as collapsed ThoughtProcess
 const LoadingMessage = memo(function LoadingMessage({
   isDarkMode,
 }: {
   isDarkMode: boolean
 }) {
   return (
-    <div className="group mb-6 flex w-full flex-col items-start">
+    <div className="no-scroll-anchoring group mb-6 flex w-full flex-col items-start">
       <div className="w-full px-4 py-2">
-        {/* Container with minimum height to prevent layout shift */}
-        {/* Matches the typical height of a single line of text response */}
-        <div className="flex min-h-[28px] items-center">
-          <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+        <div className="mb-2 w-full">
+          {/* EXACT same structure as ThoughtProcess container */}
+          <div className={`mb-2 mt-2 rounded-lg bg-transparent`}>
+            <div
+              className={`flex h-10 w-full items-center justify-between px-4 text-left ${
+                isDarkMode ? 'text-gray-200' : 'text-gray-700'
+              } rounded-lg`}
+            >
+              <div className="flex items-center gap-2">
+                <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+              </div>
+              {/* Empty div for the chevron space to match layout */}
+              <div className="h-5 w-5" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -282,6 +293,16 @@ export function ChatMessages({
     return <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24"></div>
   }
 
+  // Show loading dots only if waiting and no assistant thinking message exists yet
+  const lastMessage = liveMessages[liveMessages.length - 1]
+  const hasAssistantThinking = Boolean(
+    lastMessage &&
+      lastMessage.role === 'assistant' &&
+      (lastMessage.isThinking ||
+        (lastMessage.thoughts && !lastMessage.content)),
+  )
+  const showLoadingPlaceholder = isWaitingForResponse && !hasAssistantThinking
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
       {/* Archived Messages - only shown if there are more than the max prompt messages */}
@@ -320,7 +341,7 @@ export function ChatMessages({
           setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
         />
       ))}
-      {isWaitingForResponse && <LoadingMessage isDarkMode={isDarkMode} />}
+      {showLoadingPlaceholder && <LoadingMessage isDarkMode={isDarkMode} />}
     </div>
   )
 }

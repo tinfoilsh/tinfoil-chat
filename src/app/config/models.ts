@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/config'
+import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logError } from '@/utils/error-handling'
 
 // Base model type with all possible properties
@@ -68,8 +69,21 @@ export const isModelNameAvailable = (
   )
 }
 
+// Helper function to check if running in local development
+const isLocalDevelopment = (): boolean => {
+  return (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.hostname.startsWith('10.'))
+  )
+}
+
 // Fetch models from the API
 export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
+  const isLocalDev = isLocalDevelopment()
+
   try {
     const endpoint = paid ? '/api/app/models?paid=true' : '/api/app/models'
     const url = `${API_BASE_URL}${endpoint}`
@@ -80,13 +94,23 @@ export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
     }
 
     const models: BaseModel[] = await response.json()
+
+    // Add Dev Simulator model when running locally
+    if (isLocalDev) {
+      console.log('🧪 Dev Simulator enabled for local development')
+      models.unshift(DEV_SIMULATOR_MODEL)
+    }
+
     return models
   } catch (error) {
     logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
       metadata: { paid },
     })
-    // Return empty array as fallback
+    // Return empty array as fallback (with Dev model in development)
+    if (isLocalDev) {
+      return [DEV_SIMULATOR_MODEL]
+    }
     return []
   }
 }
