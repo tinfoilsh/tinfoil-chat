@@ -599,7 +599,7 @@ export function useChatMessaging({
               assistantMessage = {
                 role: 'assistant',
                 content: initialContentBuffer.trim(),
-                timestamp: new Date(),
+                timestamp: assistantMessage?.timestamp || new Date(), // Preserve timestamp if it exists
                 isThinking: false,
               }
               if (currentChatIdRef.current === updatedChat.id) {
@@ -628,7 +628,7 @@ export function useChatMessaging({
                   role: 'assistant',
                   content: '', // No regular content was received
                   thoughts: thoughtsBuffer.trim(),
-                  timestamp: new Date(),
+                  timestamp: assistantMessage?.timestamp || new Date(), // Preserve timestamp
                   isThinking: false,
                   thinkingDuration,
                 }
@@ -637,7 +637,7 @@ export function useChatMessaging({
                 assistantMessage = {
                   role: 'assistant',
                   content: thoughtsBuffer.trim(), // Convert thoughts to content
-                  timestamp: new Date(),
+                  timestamp: assistantMessage?.timestamp || new Date(), // Preserve timestamp
                   isThinking: false,
                   thinkingDuration,
                 }

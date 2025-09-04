@@ -97,7 +97,10 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       : false
 
   const contentRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = useState<number>(0)
+  const lastScrollPositionRef = useRef<number>(0)
+  const isUserScrollingRef = useRef<boolean>(false)
 
   const handleToggle = () => {
     if (messageId && setExpandedThoughtsState) {
@@ -108,18 +111,74 @@ export const ThoughtProcess = memo(function ThoughtProcess({
     }
   }
 
+  // Track user scrolling
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current
+    if (!scrollContainer || !isExpanded) return
+
+    let scrollTimeout: ReturnType<typeof setTimeout>
+
+    const handleScroll = () => {
+      isUserScrollingRef.current = true
+      lastScrollPositionRef.current = scrollContainer.scrollTop
+
+      clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        isUserScrollingRef.current = false
+      }, 150)
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll)
+      clearTimeout(scrollTimeout)
+    }
+  }, [isExpanded])
+
+  // Preserve scroll position during streaming updates
+  useEffect(() => {
+    if (
+      isExpanded &&
+      scrollContainerRef.current &&
+      isThinking &&
+      !isUserScrollingRef.current
+    ) {
+      // Restore scroll position after content update
+      const scrollContainer = scrollContainerRef.current
+      if (lastScrollPositionRef.current > 0) {
+        scrollContainer.scrollTop = lastScrollPositionRef.current
+      }
+    }
+  }, [thoughts, isExpanded, isThinking])
+
+  // Reset max height when thinking stops
+  useEffect(() => {
+    if (!isThinking && contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight)
+    }
+  }, [isThinking])
+
   // Measure content height for smooth animation
   useEffect(() => {
     if (contentRef.current) {
       const resizeObserver = new ResizeObserver(() => {
         if (contentRef.current) {
-          setContentHeight(contentRef.current.scrollHeight)
+          setContentHeight((prevHeight) => {
+            const newHeight = contentRef.current!.scrollHeight
+            // During streaming (isThinking), only allow height to grow, never shrink
+            // This prevents scroll resets when content temporarily contracts
+            if (isThinking) {
+              return Math.max(prevHeight, newHeight)
+            }
+            return newHeight
+          })
         }
       })
       resizeObserver.observe(contentRef.current)
       return () => resizeObserver.disconnect()
     }
-  }, [thoughts])
+  }, [thoughts, isThinking])
 
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const processedThoughts = processLatexTags(thoughts)
@@ -184,14 +243,16 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       </button>
 
       <div
+        ref={scrollContainerRef}
         className="overflow-hidden transition-all duration-300 ease-out"
         style={{
-          maxHeight: isExpanded ? `${contentHeight}px` : '0px',
+          maxHeight: isExpanded ? `min(${contentHeight}px, 400px)` : '0px',
+          overflowY: isExpanded && contentHeight > 400 ? 'auto' : 'hidden',
         }}
       >
         <div
           ref={contentRef}
-          className={`overflow-x-auto px-4 py-3 text-sm ${
+          className={`px-4 py-3 text-sm ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}
         >

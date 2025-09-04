@@ -147,6 +147,19 @@ export function useChatStorage({
         const updatedChat = savedChats.find((chat) => chat.id === currentChatId)
         if (updatedChat) {
           setCurrentChat((prevChat) => {
+            // Skip update if we're actively streaming (assistant is thinking or generating)
+            const lastMessage = prevChat.messages[prevChat.messages.length - 1]
+            const isActivelyStreaming =
+              lastMessage &&
+              lastMessage.role === 'assistant' &&
+              (lastMessage.isThinking ||
+                (lastMessage.thoughts && !lastMessage.content) ||
+                (!lastMessage.thoughts && !lastMessage.content))
+
+            if (isActivelyStreaming) {
+              return prevChat // Don't update during active streaming
+            }
+
             // Only update if the chat has actually changed
             if (
               prevChat.id === updatedChat.id &&
