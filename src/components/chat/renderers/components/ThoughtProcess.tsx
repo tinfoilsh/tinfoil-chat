@@ -246,8 +246,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         ref={scrollContainerRef}
         className="overflow-hidden transition-all duration-300 ease-out"
         style={{
-          maxHeight: isExpanded ? `min(${contentHeight}px, 400px)` : '0px',
-          overflowY: isExpanded && contentHeight > 400 ? 'auto' : 'hidden',
+          maxHeight: isExpanded ? `${contentHeight}px` : '0px',
         }}
       >
         <div
