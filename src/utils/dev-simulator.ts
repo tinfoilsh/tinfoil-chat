@@ -74,52 +74,59 @@ This response includes multiple paragraphs to test scrolling behavior when longe
   },
 
   'test real stream': {
-    thoughts: Array(30)
+    thoughts: Array(150)
       .fill(0)
       .map((_, i) => {
         const thoughts = [
-          `I need to analyze this request carefully. Let me break down what's being asked...`,
-          `The user wants to understand how the streaming mechanism works in production.`,
-          `Looking at the codebase structure to identify the key components...`,
-          `The streaming uses Server-Sent Events (SSE) to deliver content progressively.`,
-          `Character-by-character streaming creates more frequent React re-renders.`,
-          `Each update potentially triggers component lifecycle methods.`,
-          `Message keys are based on timestamps which must remain stable.`,
-          `If timestamps change during streaming, React unmounts and remounts components.`,
-          `This would cause any internal state like scroll position to be lost.`,
-          `The fix involves preserving the original timestamp throughout the stream.`,
+          `Analyzing the request in detail. This requires deep consideration of multiple factors and their interactions...`,
+          `The streaming mechanism operates under intense real-time constraints, processing hundreds of updates per second.`,
+          `Each character triggers a full React reconciliation cycle, potentially causing performance bottlenecks.`,
+          `Network packets arrive irregularly - sometimes in bursts, sometimes with long delays, stressing the buffering logic.`,
+          `The browser's event loop must process each SSE chunk while maintaining 60fps rendering and user interactions.`,
+          `Memory allocation patterns during streaming can trigger garbage collection at critical moments.`,
+          `ResizeObserver callbacks fire continuously as content expands, competing with scroll event handlers.`,
+          `The virtual DOM diff algorithm runs hundreds of times per second during character-by-character updates.`,
+          `Component lifecycle methods execute repeatedly, each potentially modifying state or triggering side effects.`,
+          `Scroll position calculations become unstable when content height changes rapidly during streaming.`,
         ]
-        return thoughts[i % thoughts.length]
+        return `${thoughts[i % thoughts.length]} This creates extreme stress on the rendering pipeline, forcing React to make difficult optimization decisions. The component tree may thrash between different states as updates arrive faster than the browser can paint.`
       })
       .join('\n\n'),
-    content: `Based on my analysis, here's what happens during real API streaming:
+    content: Array(100)
+      .fill(0)
+      .map(
+        (_, i) =>
+          `Intensive paragraph ${i + 1}: ${Array(5)
+            .fill(0)
+            .map(
+              () =>
+                'This streaming test pushes the system to its absolute limits with rapid character-by-character updates.',
+            )
+            .join(
+              ' ',
+            )} The UI must remain responsive despite the overwhelming data flow.`,
+      )
+      .join('\n\n'),
+    thinkingDurationMs: 25000, // 25 seconds - plenty of time to test scrolling
+    streamDelayMs: 1, // 1ms between characters (1000 chars/second)
+    chunkSize: 1,
+  },
 
-**Key Differences from Simulation:**
-
-1. **Chunk Size**: Real APIs often send individual characters or very small chunks (1-3 chars), especially for reasoning models that stream token by token.
-
-2. **Timing Variability**: Network latency causes irregular intervals between chunks - sometimes 5ms, sometimes 50ms, creating a more unpredictable pattern.
-
-3. **Edge Cases**: Real streaming hits edge cases more frequently:
-   - Stream ending mid-thought
-   - Buffered content being processed after stream ends
-   - Thinking mode transitions at unexpected times
-
-4. **React Rendering**: With character-by-character updates:
-   - More frequent re-render checks (potentially 100+ per second)
-   - Higher chance of hitting race conditions
-   - Greater likelihood of triggering the 5-second sync interval during active streaming
-
-The bug was specifically triggered when:
-- Thoughts were expanded during streaming
-- User was actively scrolling
-- A timestamp recreation occurred (from edge cases or sync)
-- React treated it as a new component, resetting scroll position
-
-This simulator pattern mimics production behavior more accurately.`,
-    thinkingDurationMs: 8000, // Realistic thinking time
-    streamDelayMs: 3, // Very fast, like real API
-    chunkSize: 1, // Character by character
+  'test extreme': {
+    thoughts: Array(300)
+      .fill(0)
+      .map(
+        (_, i) =>
+          `Extreme thought ${i + 1}: Processing at maximum intensity with continuous updates flooding the system...`,
+      )
+      .join('\n'),
+    content: Array(200)
+      .fill(0)
+      .map(() => 'EXTREME STREAMING TEST! Maximum stress! ')
+      .join(''),
+    thinkingDurationMs: 60000, // 60 seconds of thinking
+    streamDelayMs: 0.5, // Will be clamped to 1ms
+    chunkSize: 1,
   },
 
   'test no thoughts': {
