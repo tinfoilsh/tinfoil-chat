@@ -111,6 +111,40 @@ export const ThoughtProcess = memo(function ThoughtProcess({
     }
   }
 
+  // Fix main scroll container when thoughts collapse
+  useEffect(() => {
+    if (!isExpanded && typeof window !== 'undefined') {
+      // When thoughts collapse, check if main scroll needs adjustment
+      const checkAndFixScroll = () => {
+        const mainScrollContainer = document.querySelector(
+          '[data-scroll-container="main"]',
+        ) as HTMLElement
+        if (mainScrollContainer) {
+          // Use requestAnimationFrame to ensure DOM has updated
+          requestAnimationFrame(() => {
+            const { scrollHeight, clientHeight, scrollTop } =
+              mainScrollContainer
+            const maxScroll = Math.max(0, scrollHeight - clientHeight)
+
+            // If we're scrolled beyond actual content, reset
+            if (scrollTop > maxScroll) {
+              mainScrollContainer.scrollTop = maxScroll
+            }
+
+            // Trigger scroll event to update button
+            mainScrollContainer.dispatchEvent(new Event('scroll'))
+          })
+        }
+      }
+
+      // Check immediately and after transition
+      checkAndFixScroll()
+      const timeoutId = setTimeout(checkAndFixScroll, 350)
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [isExpanded])
+
   // Track user scrolling
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current
