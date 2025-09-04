@@ -73,6 +73,62 @@ This response includes multiple paragraphs to test scrolling behavior when longe
     chunkSize: 10,
   },
 
+  'test real stream': {
+    thoughts: Array(150)
+      .fill(0)
+      .map((_, i) => {
+        const thoughts = [
+          `Analyzing the request in detail. This requires deep consideration of multiple factors and their interactions...`,
+          `The streaming mechanism operates under intense real-time constraints, processing hundreds of updates per second.`,
+          `Each character triggers a full React reconciliation cycle, potentially causing performance bottlenecks.`,
+          `Network packets arrive irregularly - sometimes in bursts, sometimes with long delays, stressing the buffering logic.`,
+          `The browser's event loop must process each SSE chunk while maintaining 60fps rendering and user interactions.`,
+          `Memory allocation patterns during streaming can trigger garbage collection at critical moments.`,
+          `ResizeObserver callbacks fire continuously as content expands, competing with scroll event handlers.`,
+          `The virtual DOM diff algorithm runs hundreds of times per second during character-by-character updates.`,
+          `Component lifecycle methods execute repeatedly, each potentially modifying state or triggering side effects.`,
+          `Scroll position calculations become unstable when content height changes rapidly during streaming.`,
+        ]
+        return `${thoughts[i % thoughts.length]} This creates extreme stress on the rendering pipeline, forcing React to make difficult optimization decisions. The component tree may thrash between different states as updates arrive faster than the browser can paint.`
+      })
+      .join('\n\n'),
+    content: Array(100)
+      .fill(0)
+      .map(
+        (_, i) =>
+          `Intensive paragraph ${i + 1}: ${Array(5)
+            .fill(0)
+            .map(
+              () =>
+                'This streaming test pushes the system to its absolute limits with rapid character-by-character updates.',
+            )
+            .join(
+              ' ',
+            )} The UI must remain responsive despite the overwhelming data flow.`,
+      )
+      .join('\n\n'),
+    thinkingDurationMs: 25000, // 25 seconds - plenty of time to test scrolling
+    streamDelayMs: 1, // 1ms between characters (1000 chars/second)
+    chunkSize: 1,
+  },
+
+  'test extreme': {
+    thoughts: Array(300)
+      .fill(0)
+      .map(
+        (_, i) =>
+          `Extreme thought ${i + 1}: Processing at maximum intensity with continuous updates flooding the system...`,
+      )
+      .join('\n'),
+    content: Array(200)
+      .fill(0)
+      .map(() => 'EXTREME STREAMING TEST! Maximum stress! ')
+      .join(''),
+    thinkingDurationMs: 60000, // 60 seconds of thinking
+    streamDelayMs: 0.5, // Will be clamped to 1ms
+    chunkSize: 1,
+  },
+
   'test no thoughts': {
     content: `This is a direct response without any thinking phase.
     
@@ -427,7 +483,9 @@ export async function* simulateStream(
   const contentChunks = chunkText(pattern.content, pattern.chunkSize || 7)
   for (const chunk of contentChunks) {
     yield `data: {"choices":[{"delta":{"content":"${escapeJson(chunk)}"}}]}\n\n`
-    await delay(pattern.streamDelayMs || 40)
+    // Add variance for 'test real stream' to simulate network jitter
+    const variance = pattern.chunkSize === 1 ? pattern.streamDelayMs || 0 : 0
+    await delay(pattern.streamDelayMs || 40, variance)
   }
 
   // Send done signal
@@ -453,7 +511,11 @@ function escapeJson(str: string): string {
     .replace(/\t/g, '\\t')
 }
 
-// Helper for delays
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Helper for delays with optional variance to simulate network jitter
+function delay(ms: number, variance: number = 0): Promise<void> {
+  const actualDelay =
+    variance > 0
+      ? ms + (Math.random() - 0.5) * 2 * variance // ±variance ms
+      : ms
+  return new Promise((resolve) => setTimeout(resolve, Math.max(1, actualDelay)))
 }

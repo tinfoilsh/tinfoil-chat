@@ -1335,6 +1335,7 @@ export function ChatInterface({
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
+            data-scroll-container="main"
             className={`relative flex flex-1 overflow-y-auto ${
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}

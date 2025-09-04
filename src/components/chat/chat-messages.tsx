@@ -80,10 +80,30 @@ const ChatMessage = memo(
   },
   (prevProps, nextProps) => {
     // Custom comparison to prevent unnecessary re-renders
-    // Always re-render if this is the streaming message
+
+    // Generate stable message IDs for expanded state comparison
+    const getMessageId = (message: Message) => {
+      const timestamp = message.timestamp
+        ? message.timestamp instanceof Date
+          ? message.timestamp.getTime()
+          : String(message.timestamp)
+        : 'no-timestamp'
+      return `${message.role}-${timestamp}`
+    }
+
+    const messageId = getMessageId(nextProps.message)
+    const prevExpanded = prevProps.expandedThoughtsState[messageId] ?? false
+    const nextExpanded = nextProps.expandedThoughtsState[messageId] ?? false
+
+    // Always re-render if this is the streaming message and content/thoughts changed
     if (nextProps.isStreaming && nextProps.isLastMessage) {
-      // Always re-render streaming messages to show updates
-      return false
+      // Only re-render if content, thoughts, or expanded state actually changed
+      return (
+        prevProps.message.content === nextProps.message.content &&
+        prevProps.message.thoughts === nextProps.message.thoughts &&
+        prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevExpanded === nextExpanded
+      )
     }
 
     // For messages with thinking, be more careful about re-renders
@@ -100,7 +120,8 @@ const ChatMessage = memo(
         prevProps.model === nextProps.model &&
         prevProps.isDarkMode === nextProps.isDarkMode &&
         prevProps.isLastMessage === nextProps.isLastMessage &&
-        prevProps.isStreaming === nextProps.isStreaming
+        prevProps.isStreaming === nextProps.isStreaming &&
+        prevExpanded === nextExpanded
       )
     }
 
@@ -117,7 +138,7 @@ const ChatMessage = memo(
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
       prevProps.isStreaming === nextProps.isStreaming &&
-      prevProps.expandedThoughtsState === nextProps.expandedThoughtsState &&
+      prevExpanded === nextExpanded &&
       prevProps.setExpandedThoughtsState === nextProps.setExpandedThoughtsState
     )
   },
