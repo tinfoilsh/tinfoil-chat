@@ -73,6 +73,55 @@ This response includes multiple paragraphs to test scrolling behavior when longe
     chunkSize: 10,
   },
 
+  'test real stream': {
+    thoughts: Array(30)
+      .fill(0)
+      .map((_, i) => {
+        const thoughts = [
+          `I need to analyze this request carefully. Let me break down what's being asked...`,
+          `The user wants to understand how the streaming mechanism works in production.`,
+          `Looking at the codebase structure to identify the key components...`,
+          `The streaming uses Server-Sent Events (SSE) to deliver content progressively.`,
+          `Character-by-character streaming creates more frequent React re-renders.`,
+          `Each update potentially triggers component lifecycle methods.`,
+          `Message keys are based on timestamps which must remain stable.`,
+          `If timestamps change during streaming, React unmounts and remounts components.`,
+          `This would cause any internal state like scroll position to be lost.`,
+          `The fix involves preserving the original timestamp throughout the stream.`,
+        ]
+        return thoughts[i % thoughts.length]
+      })
+      .join('\n\n'),
+    content: `Based on my analysis, here's what happens during real API streaming:
+
+**Key Differences from Simulation:**
+
+1. **Chunk Size**: Real APIs often send individual characters or very small chunks (1-3 chars), especially for reasoning models that stream token by token.
+
+2. **Timing Variability**: Network latency causes irregular intervals between chunks - sometimes 5ms, sometimes 50ms, creating a more unpredictable pattern.
+
+3. **Edge Cases**: Real streaming hits edge cases more frequently:
+   - Stream ending mid-thought
+   - Buffered content being processed after stream ends
+   - Thinking mode transitions at unexpected times
+
+4. **React Rendering**: With character-by-character updates:
+   - More frequent re-render checks (potentially 100+ per second)
+   - Higher chance of hitting race conditions
+   - Greater likelihood of triggering the 5-second sync interval during active streaming
+
+The bug was specifically triggered when:
+- Thoughts were expanded during streaming
+- User was actively scrolling
+- A timestamp recreation occurred (from edge cases or sync)
+- React treated it as a new component, resetting scroll position
+
+This simulator pattern mimics production behavior more accurately.`,
+    thinkingDurationMs: 8000, // Realistic thinking time
+    streamDelayMs: 3, // Very fast, like real API
+    chunkSize: 1, // Character by character
+  },
+
   'test no thoughts': {
     content: `This is a direct response without any thinking phase.
     
@@ -427,7 +476,9 @@ export async function* simulateStream(
   const contentChunks = chunkText(pattern.content, pattern.chunkSize || 7)
   for (const chunk of contentChunks) {
     yield `data: {"choices":[{"delta":{"content":"${escapeJson(chunk)}"}}]}\n\n`
-    await delay(pattern.streamDelayMs || 40)
+    // Add variance for 'test real stream' to simulate network jitter
+    const variance = pattern.chunkSize === 1 ? pattern.streamDelayMs || 0 : 0
+    await delay(pattern.streamDelayMs || 40, variance)
   }
 
   // Send done signal
@@ -453,7 +504,11 @@ function escapeJson(str: string): string {
     .replace(/\t/g, '\\t')
 }
 
-// Helper for delays
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Helper for delays with optional variance to simulate network jitter
+function delay(ms: number, variance: number = 0): Promise<void> {
+  const actualDelay =
+    variance > 0
+      ? ms + (Math.random() - 0.5) * 2 * variance // ±variance ms
+      : ms
+  return new Promise((resolve) => setTimeout(resolve, Math.max(1, actualDelay)))
 }
