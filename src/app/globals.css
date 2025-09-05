@@ -121,7 +121,7 @@
 
 /* Responsive adjustments for narrow screens */
 @media (max-width: 640px) {
-  /* Allow code to wrap on very small screens if needed */
+  /* Reduce code font size on very small screens */
   .prose pre {
     font-size: 0.75rem;
   }
