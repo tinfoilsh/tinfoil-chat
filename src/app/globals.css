@@ -75,6 +75,68 @@
   overflow-y: visible !important;
 }
 
+/* Prose responsive fixes */
+.prose {
+  max-width: 100% !important;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  min-width: 0; /* Allow prose to shrink */
+}
+
+/* Fix code blocks to be contained but scrollable */
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto !important; /* Force horizontal scroll for code blocks */
+  overflow-y: visible;
+  white-space: pre;
+}
+
+/* Ensure inline code wraps */
+.prose code {
+  word-break: break-word;
+}
+
+/* Tables should scroll horizontally when needed */
+.table-container {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent horizontal scroll at message level */
+.prose > * {
+  max-width: 100%;
+}
+
+/* Fix images */
+.prose img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Fix blockquotes */
+.prose blockquote {
+  word-wrap: break-word;
+}
+
+/* Responsive adjustments for narrow screens */
+@media (max-width: 640px) {
+  /* Reduce code font size on very small screens */
+  .prose pre {
+    font-size: 0.75rem;
+  }
+
+  /* Make tables more compact */
+  .prose table {
+    font-size: 0.75rem;
+  }
+
+  /* Ensure long URLs break */
+  .prose a {
+    word-break: break-all;
+  }
+}
+
 /* KaTeX specific overflow fixes */
 .katex-html {
   overflow-x: auto !important;

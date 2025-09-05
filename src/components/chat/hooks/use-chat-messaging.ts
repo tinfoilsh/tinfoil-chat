@@ -92,8 +92,7 @@ export function useChatMessaging({
     return duration
   }
 
-  // Override model selection for free users - use first available free model
-  // EXCEPT when Dev Simulator is selected (for testing)
+  // For users without storeHistory (free/non-signed-in), validate the selected model
   const effectiveModel = !storeHistory
     ? (() => {
         // Allow Dev Simulator for testing even when not signed in
@@ -101,7 +100,23 @@ export function useChatMessaging({
           return selectedModel
         }
 
-        // Find the first free chat model
+        // Check if the selected model is available for free users
+        const selectedModelData = models.find(
+          (model) => model.modelName === selectedModel,
+        )
+
+        // If selected model is free and available, use it
+        if (
+          selectedModelData &&
+          selectedModelData.type === 'chat' &&
+          selectedModelData.chat === true &&
+          (selectedModelData.paid === undefined ||
+            selectedModelData.paid === false)
+        ) {
+          return selectedModel
+        }
+
+        // Otherwise fall back to first free chat model
         const firstFreeModel = models.find(
           (model) =>
             model.type === 'chat' &&

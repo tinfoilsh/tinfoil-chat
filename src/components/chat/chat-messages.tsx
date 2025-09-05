@@ -325,7 +325,7 @@ export function ChatMessages({
   const showLoadingPlaceholder = isWaitingForResponse && !hasAssistantThinking
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-24">
+    <div className="mx-auto w-full min-w-0 max-w-3xl px-4 pb-6 pt-24">
       {/* Archived Messages - only shown if there are more than the max prompt messages */}
       {archivedMessages.length > 0 && (
         <>

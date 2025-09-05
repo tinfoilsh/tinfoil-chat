@@ -144,10 +144,10 @@ const DefaultMessageComponent = ({
                 isUser
                   ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
                   : ''
-              } overflow-x-auto overflow-y-hidden`}
+              }`}
             >
               <div
-                className={`prose w-full max-w-none text-base ${
+                className={`prose w-full max-w-none overflow-x-auto text-base ${
                   isDarkMode
                     ? 'prose-invert text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
                     : isUser
