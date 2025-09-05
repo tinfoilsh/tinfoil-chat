@@ -109,7 +109,6 @@ export const CodeBlock = memo(function CodeBlock({
             ? '1px solid rgb(31 41 55)'
             : '1px solid rgb(229 231 235)',
           overflowX: 'auto',
-          // Ensure vertical scroll isn’t trapped; let page handle it
           overflowY: 'visible',
           maxWidth: '100%',
         }}

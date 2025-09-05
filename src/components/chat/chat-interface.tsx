@@ -1340,7 +1340,7 @@ export function ChatInterface({
               isDarkMode ? 'bg-gray-900' : 'bg-white'
             }`}
           >
-            <div className="flex flex-1">
+            <div className="flex min-w-0 flex-1">
               <ChatMessages
                 messages={currentChat?.messages || []}
                 isDarkMode={isDarkMode}
