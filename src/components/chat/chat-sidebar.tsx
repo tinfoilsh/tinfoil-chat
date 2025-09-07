@@ -1200,15 +1200,18 @@ function TypingAnimation({
 
     // Cursor blinking effect
     const cursorInterval = setInterval(() => {
-      setShowCursor(prev => !prev)
+      setShowCursor((prev) => !prev)
     }, 530)
 
     if (phase === 'deleting') {
       // Delete characters one by one
       if (currentText.length > 0) {
-        timeoutId = setTimeout(() => {
-          setCurrentText(prev => prev.slice(0, -1))
-        }, 50 + Math.random() * 30) // Vary speed slightly for realism
+        timeoutId = setTimeout(
+          () => {
+            setCurrentText((prev) => prev.slice(0, -1))
+          },
+          50 + Math.random() * 30,
+        ) // Vary speed slightly for realism
       } else {
         // Start typing phase
         setPhase('typing')
@@ -1216,9 +1219,12 @@ function TypingAnimation({
     } else if (phase === 'typing') {
       // Type new characters one by one
       if (currentText.length < toText.length) {
-        timeoutId = setTimeout(() => {
-          setCurrentText(toText.slice(0, currentText.length + 1))
-        }, 80 + Math.random() * 40) // Vary speed slightly for realism
+        timeoutId = setTimeout(
+          () => {
+            setCurrentText(toText.slice(0, currentText.length + 1))
+          },
+          80 + Math.random() * 40,
+        ) // Vary speed slightly for realism
       } else {
         // Animation complete
         clearInterval(cursorInterval)
@@ -1237,7 +1243,7 @@ function TypingAnimation({
   return (
     <span className="inline-flex items-baseline">
       <span>{currentText}</span>
-      <span 
+      <span
         className={`ml-0.5 inline-block w-0.5 ${
           isDarkMode ? 'bg-gray-300' : 'bg-gray-700'
         } ${showCursor ? 'opacity-100' : 'opacity-0'}`}
@@ -1280,7 +1286,11 @@ function ChatListItem({
 
   // Animate title changes
   useEffect(() => {
-    if (prevTitleRef.current !== chat.title && chat.title !== 'New Chat' && prevTitleRef.current !== '') {
+    if (
+      prevTitleRef.current !== chat.title &&
+      chat.title !== 'New Chat' &&
+      prevTitleRef.current !== ''
+    ) {
       // Title changed - trigger typing animation
       setAnimationFromTitle(prevTitleRef.current)
       setAnimationToTitle(chat.title)

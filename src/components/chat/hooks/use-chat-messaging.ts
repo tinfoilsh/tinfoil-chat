@@ -966,10 +966,35 @@ export function useChatMessaging({
               models.length > 0
             ) {
               try {
-                // Find a free model for title generation
-                const freeModel = models.find(
-                  (model) =>
-                    model.type === 'chat' && model.chat === true && !model.paid,
+                // Log what models we have for debugging
+                console.log(
+                  'Available models for title generation:',
+                  models.map((m) => ({
+                    name: m.modelName,
+                    type: m.type,
+                    chat: m.chat,
+                    paid: m.paid,
+                  })),
+                )
+
+                // Find a free model for title generation - specifically look for llama-free first
+                let freeModel = models.find(
+                  (model) => model.modelName === 'llama-free',
+                )
+
+                // If llama-free not found, look for any free chat model
+                if (!freeModel) {
+                  freeModel = models.find(
+                    (model) =>
+                      model.type === 'chat' &&
+                      model.chat === true &&
+                      (model.paid === false || model.paid === undefined),
+                  )
+                }
+
+                console.log(
+                  'Selected model for title generation:',
+                  freeModel?.modelName,
                 )
 
                 if (freeModel) {
@@ -992,9 +1017,11 @@ export function useChatMessaging({
                       ),
                     )
                   }
+                } else {
+                  console.log('No free model found for title generation')
                 }
               } catch (error) {
-                // Title generation failed silently, keep default title
+                console.error('Title generation error:', error)
               }
             }
 
