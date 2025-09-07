@@ -252,6 +252,16 @@ export function useProfileSync() {
       if (cloudProfile) {
         const cloudVersion = cloudProfile.version || 0
 
+        // Re-check pending changes after fetch to avoid race with local edits
+        if (hasPendingChanges.current) {
+          return
+        }
+
+        // Ignore stale cloud versions to prevent overwriting newer local state
+        if (cloudVersion < lastSyncedVersion.current) {
+          return
+        }
+
         // Check if the cloud profile is actually different from what we have
         if (hasProfileChanged(cloudProfile, lastSyncedProfile.current)) {
           // Apply cloud settings to localStorage
@@ -389,6 +399,8 @@ export function useProfileSync() {
     if (!isSignedIn) return
 
     const handleSettingsChange = () => {
+      // Immediately mark as pending to prevent cloud overwrites during debounce
+      hasPendingChanges.current = true
       syncToCloud()
     }
 
