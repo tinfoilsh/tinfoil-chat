@@ -1197,6 +1197,7 @@ function TypingAnimation({
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout
+    let completionTimeoutId: NodeJS.Timeout
 
     // Cursor blinking effect
     const cursorInterval = setInterval(() => {
@@ -1228,7 +1229,7 @@ function TypingAnimation({
       } else {
         // Animation complete
         clearInterval(cursorInterval)
-        setTimeout(() => {
+        completionTimeoutId = setTimeout(() => {
           onComplete()
         }, 500) // Show final result for a moment before completing
       }
@@ -1236,6 +1237,7 @@ function TypingAnimation({
 
     return () => {
       clearTimeout(timeoutId)
+      clearTimeout(completionTimeoutId)
       clearInterval(cursorInterval)
     }
   }, [currentText, phase, toText, onComplete])

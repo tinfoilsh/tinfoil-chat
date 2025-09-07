@@ -1018,10 +1018,16 @@ export function useChatMessaging({
                     )
                   }
                 } else {
-                  console.log('No free model found for title generation')
+                  logWarning('No free model found for title generation', {
+                    component: 'useChatMessaging',
+                    action: 'generateTitle',
+                  })
                 }
               } catch (error) {
-                console.error('Title generation error:', error)
+                logError('Title generation error', error, {
+                  component: 'useChatMessaging',
+                  action: 'generateTitle',
+                })
               }
             }
 
