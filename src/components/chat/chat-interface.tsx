@@ -759,7 +759,12 @@ export function ChatInterface({
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [checkScrollPosition, currentChat?.id, scrollToBottom])
+  }, [
+    checkScrollPosition,
+    currentChat?.id,
+    currentChat?.messages,
+    scrollToBottom,
+  ])
 
   // Set up ResizeObserver for content changes (e.g., during streaming)
   const savedScrollTopRef = useRef<number | null>(null)

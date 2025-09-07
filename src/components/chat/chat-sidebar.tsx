@@ -1179,6 +1179,82 @@ export function ChatSidebar({
   )
 }
 
+// Typing animation component
+function TypingAnimation({
+  fromText,
+  toText,
+  onComplete,
+  isDarkMode,
+}: {
+  fromText: string
+  toText: string
+  onComplete: () => void
+  isDarkMode: boolean
+}) {
+  const [currentText, setCurrentText] = useState(fromText)
+  const [showCursor, setShowCursor] = useState(true)
+  const [phase, setPhase] = useState<'deleting' | 'typing'>('deleting')
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout
+    let completionTimeoutId: NodeJS.Timeout
+
+    // Cursor blinking effect
+    const cursorInterval = setInterval(() => {
+      setShowCursor((prev) => !prev)
+    }, 530)
+
+    if (phase === 'deleting') {
+      // Delete characters one by one
+      if (currentText.length > 0) {
+        timeoutId = setTimeout(
+          () => {
+            setCurrentText((prev) => prev.slice(0, -1))
+          },
+          50 + Math.random() * 30,
+        ) // Vary speed slightly for realism
+      } else {
+        // Start typing phase
+        setPhase('typing')
+      }
+    } else if (phase === 'typing') {
+      // Type new characters one by one
+      if (currentText.length < toText.length) {
+        timeoutId = setTimeout(
+          () => {
+            setCurrentText(toText.slice(0, currentText.length + 1))
+          },
+          80 + Math.random() * 40,
+        ) // Vary speed slightly for realism
+      } else {
+        // Animation complete
+        clearInterval(cursorInterval)
+        completionTimeoutId = setTimeout(() => {
+          onComplete()
+        }, 500) // Show final result for a moment before completing
+      }
+    }
+
+    return () => {
+      clearTimeout(timeoutId)
+      clearTimeout(completionTimeoutId)
+      clearInterval(cursorInterval)
+    }
+  }, [currentText, phase, toText, onComplete])
+
+  return (
+    <span className="inline-flex items-baseline">
+      <span>{currentText}</span>
+      <span
+        className={`ml-0.5 inline-block w-0.5 ${
+          isDarkMode ? 'bg-gray-300' : 'bg-gray-700'
+        } ${showCursor ? 'opacity-100' : 'opacity-0'}`}
+        style={{ height: '1.1em', transform: 'translateY(0.05em)' }}
+      />
+    </span>
+  )
+}
+
 // Helper components
 function ChatListItem({
   chat,
@@ -1203,6 +1279,37 @@ function ChatListItem({
   isDarkMode: boolean
   isSignedIn: boolean
 }) {
+  // Track previous title for animation
+  const [displayTitle, setDisplayTitle] = useState(chat.title)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const [animationFromTitle, setAnimationFromTitle] = useState('')
+  const [animationToTitle, setAnimationToTitle] = useState('')
+  const prevTitleRef = useRef(chat.title)
+
+  // Animate title changes
+  useEffect(() => {
+    if (
+      prevTitleRef.current !== chat.title &&
+      chat.title !== 'New Chat' &&
+      prevTitleRef.current !== ''
+    ) {
+      // Title changed - trigger typing animation
+      setAnimationFromTitle(prevTitleRef.current)
+      setAnimationToTitle(chat.title)
+      setIsAnimating(true)
+    } else {
+      // Instant update for "New Chat" title or initial load
+      setDisplayTitle(chat.title)
+      prevTitleRef.current = chat.title
+    }
+  }, [chat.title])
+
+  const handleAnimationComplete = () => {
+    setDisplayTitle(chat.title)
+    setIsAnimating(false)
+    prevTitleRef.current = chat.title
+  }
+
   // Handle edit form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1272,7 +1379,18 @@ function ChatListItem({
                         : 'text-gray-900'
                   }`}
                 >
-                  {chat.decryptionFailed ? 'Encrypted' : chat.title}
+                  {chat.decryptionFailed ? (
+                    'Encrypted'
+                  ) : isAnimating ? (
+                    <TypingAnimation
+                      fromText={animationFromTitle}
+                      toText={animationToTitle}
+                      onComplete={handleAnimationComplete}
+                      isDarkMode={isDarkMode}
+                    />
+                  ) : (
+                    displayTitle
+                  )}
                 </div>
                 {/* New chat indicator */}
                 {chat.messages.length === 0 && !chat.decryptionFailed && (
