@@ -321,26 +321,16 @@ export function useChatMessaging({
           }
         : null
 
-      // Generate title immediately if this is the first message
+      // Track if this is the first message for title generation
       let updatedChat = { ...currentChat }
       const isFirstMessage = currentChat.messages.length === 0
 
       if (isFirstMessage) {
-        // Use query for title if available, otherwise extract from system prompt
-        const titleSource =
-          query.trim() || (systemPromptOverride ? 'Assistant Task' : 'New Chat')
-        const title = generateTitle(titleSource)
-        // Make sure title is not empty
-        const safeTitle =
-          title.trim() || 'Chat about ' + titleSource.slice(0, 20) + '...'
-
-        // Update the current chat with:
-        // - New title
-        // - Clear blank flag
-        // - Update createdAt to now (when first message is sent)
+        // For first message, just use a temporary title
+        // Real title will be generated after assistant response
         updatedChat = {
           ...currentChat,
-          title: safeTitle,
+          title: 'New Chat',
           isBlankChat: false,
           createdAt: new Date(), // Set creation time to when first message is sent
         }
@@ -968,6 +958,36 @@ export function useChatMessaging({
           const chatId = currentChatIdRef.current
           if (chatId === updatedChat.id) {
             const finalMessages = [...updatedMessages, assistantMessage]
+
+            // Generate title after first assistant response
+            if (isFirstMessage && updatedChat.title === 'New Chat') {
+              try {
+                const titleMessages = finalMessages.map((msg) => ({
+                  role: msg.role,
+                  content: msg.content || '',
+                }))
+                const generatedTitle = await generateTitle(
+                  titleMessages,
+                  apiKey,
+                )
+                if (generatedTitle && generatedTitle !== 'New Chat') {
+                  updatedChat = { ...updatedChat, title: generatedTitle }
+                  // Update title in the chats array
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === chatId ? { ...c, title: generatedTitle } : c,
+                    ),
+                  )
+                }
+              } catch (error) {
+                // Title generation failed, keep default title
+                logWarning('Failed to generate chat title', {
+                  component: 'useChatMessaging',
+                  action: 'generateTitle',
+                })
+              }
+            }
+
             updateChatWithHistoryCheck(
               setChats,
               updatedChat,

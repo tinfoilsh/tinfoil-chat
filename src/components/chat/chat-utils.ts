@@ -1,4 +1,5 @@
 import React from 'react'
+import { CONSTANTS } from './constants'
 import type { Chat } from './types'
 
 export class ChatError extends Error {
@@ -11,203 +12,79 @@ export class ChatError extends Error {
   }
 }
 
-export function generateTitle(text: string): string {
-  // Clean the text
-  const cleanText = text
-    .replace(/[^\w\s]/g, ' ') // Remove special characters
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .trim()
+export async function generateTitle(
+  messages: Array<{ role: string; content: string }>,
+  apiKey?: string | null,
+): Promise<string> {
+  // Return default if no messages
+  if (!messages || messages.length === 0) {
+    return 'New Chat'
+  }
 
-  // Get words and filter out common words and very short words
-  const words = cleanText.split(' ').filter((word) => {
-    const lower = word.toLowerCase()
-    // Skip common words and short words
-    const commonWords = [
-      // Articles
-      'the',
-      'a',
-      'an',
+  try {
+    // Prepare conversation history for the title generator
+    // Limit to first few exchanges to avoid token limits
+    const conversationForTitle = messages
+      .slice(0, Math.min(4, messages.length))
+      .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
+      .join('\n\n')
 
-      // Conjunctions
-      'and',
-      'or',
-      'but',
-      'nor',
-      'yet',
-      'so',
-      'for',
+    // Use the free model endpoint via the proxy (llama-free)
+    const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/chat/completions`
 
-      // Prepositions
-      'in',
-      'on',
-      'at',
-      'to',
-      'for',
-      'of',
-      'with',
-      'by',
-      'from',
-      'up',
-      'about',
-      'into',
-      'over',
-      'after',
-      'beneath',
-      'under',
-      'above',
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    }
 
-      // Pronouns
-      'i',
-      'you',
-      'he',
-      'she',
-      'it',
-      'we',
-      'they',
-      'me',
-      'him',
-      'her',
-      'us',
-      'them',
-      'my',
-      'your',
-      'his',
-      'her',
-      'its',
-      'our',
-      'their',
-      'mine',
-      'yours',
-      'hers',
-      'ours',
-      'theirs',
-      'this',
-      'that',
-      'these',
-      'those',
-      'who',
-      'whom',
-      'whose',
-      'which',
-      'what',
+    // Add API key if available
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`
+    }
 
-      // Auxiliary verbs
-      'am',
-      'is',
-      'are',
-      'was',
-      'were',
-      'be',
-      'been',
-      'being',
-      'have',
-      'has',
-      'had',
-      'do',
-      'does',
-      'did',
-      'can',
-      'could',
-      'will',
-      'would',
-      'shall',
-      'should',
-      'may',
-      'might',
-      'must',
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: 'llama-free',
+        messages: [
+          {
+            role: 'system',
+            content: CONSTANTS.TITLE_GENERATION_PROMPT,
+          },
+          {
+            role: 'user',
+            content: `Generate a title for this conversation:\n\n${conversationForTitle}`,
+          },
+        ],
+        stream: false,
+        max_tokens: 30,
+      }),
+    })
 
-      // Common adverbs
-      'very',
-      'really',
-      'just',
-      'now',
-      'then',
-      'here',
-      'there',
-      'when',
-      'where',
-      'why',
-      'how',
-      'all',
-      'any',
-      'both',
-      'each',
-      'few',
-      'more',
-      'most',
-      'other',
-      'some',
-      'such',
+    if (!response.ok) {
+      return 'New Chat'
+    }
 
-      // Common adjectives
-      'new',
-      'good',
-      'high',
-      'old',
-      'great',
-      'big',
-      'small',
-      'many',
-      'own',
-      'same',
-      'few',
-      'much',
+    const data = await response.json()
+    const title = data.choices?.[0]?.message?.content?.trim() || ''
 
-      // Numbers and time words
-      'one',
-      'two',
-      'three',
-      'first',
-      'last',
-      'next',
-      'time',
-      'year',
-      'day',
-      'week',
-      'month',
+    // Clean up the title (remove quotes if present)
+    const cleanTitle = title.replace(/^["']|["']$/g, '').trim()
 
-      // Other common words
-      'like',
-      'get',
-      'go',
-      'make',
-      'know',
-      'will',
-      'think',
-      'take',
-      'see',
-      'come',
-      'well',
-      'way',
-      'also',
-      'back',
-      'even',
-      'still',
-      'way',
-      'take',
-      'every',
-      'since',
-      'please',
-      'much',
-      'want',
-      'need',
-      'right',
-      'left',
-    ]
-    return word.length > 2 && !commonWords.includes(lower)
-  })
+    // Validate and return the generated title
+    if (cleanTitle && cleanTitle.length > 0 && cleanTitle.length <= 50) {
+      return cleanTitle
+    }
 
-  // Take first 4-5 meaningful words
-  const title = words.slice(0, 5).join(' ')
-
-  // Ensure reasonable length and capitalize first letter
-  return title.length > 0
-    ? (title.charAt(0).toUpperCase() + title.slice(1)).slice(0, 50)
-    : 'New Chat'
+    return 'New Chat'
+  } catch (error) {
+    // If generation fails, just return default title
+    return 'New Chat'
+  }
 }
 
 export function updateChatTitle(
-  chats: Chat[],
+  _chats: Chat[],
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
   currentChat: Chat,
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
