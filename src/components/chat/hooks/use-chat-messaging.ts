@@ -960,31 +960,41 @@ export function useChatMessaging({
             const finalMessages = [...updatedMessages, assistantMessage]
 
             // Generate title after first assistant response
-            if (isFirstMessage && updatedChat.title === 'New Chat') {
+            if (
+              isFirstMessage &&
+              updatedChat.title === 'New Chat' &&
+              models.length > 0
+            ) {
               try {
-                const titleMessages = finalMessages.map((msg) => ({
-                  role: msg.role,
-                  content: msg.content || '',
-                }))
-                const generatedTitle = await generateTitle(
-                  titleMessages,
-                  apiKey,
+                // Find a free model for title generation
+                const freeModel = models.find(
+                  (model) =>
+                    model.type === 'chat' && model.chat === true && !model.paid,
                 )
-                if (generatedTitle && generatedTitle !== 'New Chat') {
-                  updatedChat = { ...updatedChat, title: generatedTitle }
-                  // Update title in the chats array
-                  setChats((prevChats) =>
-                    prevChats.map((c) =>
-                      c.id === chatId ? { ...c, title: generatedTitle } : c,
-                    ),
+
+                if (freeModel) {
+                  const titleMessages = finalMessages.map((msg) => ({
+                    role: msg.role,
+                    content: msg.content || '',
+                  }))
+                  const generatedTitle = await generateTitle(
+                    titleMessages,
+                    apiKey,
+                    freeModel.modelName,
+                    freeModel.endpoint,
                   )
+                  if (generatedTitle && generatedTitle !== 'New Chat') {
+                    updatedChat = { ...updatedChat, title: generatedTitle }
+                    // Update title in the chats array
+                    setChats((prevChats) =>
+                      prevChats.map((c) =>
+                        c.id === chatId ? { ...c, title: generatedTitle } : c,
+                      ),
+                    )
+                  }
                 }
               } catch (error) {
-                // Title generation failed, keep default title
-                logWarning('Failed to generate chat title', {
-                  component: 'useChatMessaging',
-                  action: 'generateTitle',
-                })
+                // Title generation failed silently, keep default title
               }
             }
 

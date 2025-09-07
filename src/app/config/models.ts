@@ -81,11 +81,15 @@ const isLocalDevelopment = (): boolean => {
 }
 
 // Fetch models from the API
-export const getAIModels = async (paid: boolean): Promise<BaseModel[]> => {
+export const getAIModels = async (
+  isPremiumUser: boolean,
+): Promise<BaseModel[]> => {
   const isLocalDev = isLocalDevelopment()
 
   try {
-    const endpoint = paid ? '/api/app/models?paid=true' : '/api/app/models'
+    // Always fetch ALL models regardless of user status
+    // We'll filter client-side based on what the user can access
+    const endpoint = '/api/app/models?paid=true'
     const url = `${API_BASE_URL}${endpoint}`
     const response = await fetch(url)
 

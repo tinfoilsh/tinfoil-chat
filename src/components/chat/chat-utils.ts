@@ -15,9 +15,16 @@ export class ChatError extends Error {
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
   apiKey?: string | null,
+  freeModelName?: string,
+  freeModelEndpoint?: string,
 ): Promise<string> {
   // Return default if no messages
   if (!messages || messages.length === 0) {
+    return 'New Chat'
+  }
+
+  // If no free model info provided, return default
+  if (!freeModelName || !freeModelEndpoint) {
     return 'New Chat'
   }
 
@@ -29,8 +36,8 @@ export async function generateTitle(
       .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
       .join('\n\n')
 
-    // Use the free model endpoint via the proxy (llama-free)
-    const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/chat/completions`
+    // Use the model's endpoint via the proxy
+    const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${freeModelEndpoint}`
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -45,7 +52,7 @@ export async function generateTitle(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: 'llama-free',
+        model: freeModelName,
         messages: [
           {
             role: 'system',
