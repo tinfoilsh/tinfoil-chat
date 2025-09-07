@@ -24,14 +24,7 @@ import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
 import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { ChatInput } from './chat-input'
 import { ChatLabels } from './chat-labels'
@@ -376,7 +369,8 @@ export function ChatInterface({
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
-    // Intentionally do not pass scrollToBottom to disable autoscroll
+    // Scroll on user send to keep view anchored when thinking placeholder appears
+    scrollToBottom: scrollToBottom,
   })
 
   // Effect to handle window resize and enforce single sidebar rule
@@ -759,221 +753,110 @@ export function ChatInterface({
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [
-    checkScrollPosition,
-    currentChat?.id,
-    currentChat?.messages,
-    scrollToBottom,
-  ])
+  }, [checkScrollPosition, currentChat?.id, scrollToBottom])
 
-  // Set up ResizeObserver for content changes (e.g., during streaming)
-  const savedScrollTopRef = useRef<number | null>(null)
-  const lastMessageRef = useRef<(typeof currentChat.messages)[0] | null>(null)
-
-  // Update the last message ref when messages change
-  useEffect(() => {
-    const messages = currentChat?.messages
-    if (messages && messages.length > 0) {
-      lastMessageRef.current = messages[messages.length - 1]
-    } else {
-      lastMessageRef.current = null
-    }
-  }, [currentChat?.messages])
-
+  // Re-check button visibility when content size changes (no scrolling)
   useEffect(() => {
     const container = scrollContainerRef.current
-    if (!container) return
+    if (!container || typeof ResizeObserver === 'undefined') return
 
     let rafId: number | null = null
-    const resizeObserver = new ResizeObserver(() => {
-      // Cancel any pending animation frame
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
-      }
-
-      // Debounce resize events to prevent rapid firing during streaming
+    const observer = new ResizeObserver(() => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => {
-        const el = scrollContainerRef.current
-        if (!el) return
-
-        // During thoughts streaming, don't interfere with scroll
-        // The scroll is already handled by the message addition logic
-        const lastMessage = lastMessageRef.current
-        const isThoughtsStreaming =
-          lastMessage?.role === 'assistant' &&
-          (lastMessage.isThinking ||
-            (lastMessage.thoughts && !lastMessage.content))
-
-        // Clear saved position when not streaming thoughts
-        if (!isThoughtsStreaming) {
-          savedScrollTopRef.current = null
-        }
-
         checkScrollPosition()
         rafId = null
       })
     })
 
-    // Observe the scroll container's first child (the content wrapper)
-    const contentWrapper = container.firstElementChild
-    if (contentWrapper) {
-      resizeObserver.observe(contentWrapper)
-    }
+    const content = container.firstElementChild
+    if (content) observer.observe(content)
 
     return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
-      }
-      resizeObserver.disconnect()
-      if (scrollCheckTimeoutRef.current) {
-        clearTimeout(scrollCheckTimeoutRef.current)
-      }
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      observer.disconnect()
     }
   }, [checkScrollPosition])
 
-  // Anchor scroll to bottom when streaming starts and user is near bottom to prevent jolt
-  const isThoughtsStreamingRef = useRef<boolean>(false)
-  useLayoutEffect(() => {
-    // Check if we're currently streaming thoughts
-    const lastMessage = currentChat?.messages?.[currentChat.messages.length - 1]
-    const isThoughtsStreaming = Boolean(
-      lastMessage?.role === 'assistant' &&
-        (lastMessage.isThinking ||
-          (lastMessage.thoughts && !lastMessage.content)),
-    )
+  // Re-check on window resize
+  useEffect(() => {
+    const onResize = () => checkScrollPosition()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [checkScrollPosition])
 
-    isThoughtsStreamingRef.current = isThoughtsStreaming
-    prevWaitingRef.current = isWaitingForResponse
-  }, [isWaitingForResponse, currentChat?.messages])
+  // Re-check when messages/streaming state updates (no scrolling)
+  useEffect(() => {
+    checkScrollPosition()
+  }, [
+    checkScrollPosition,
+    currentChat?.messages,
+    isWaitingForResponse,
+    loadingState,
+  ])
 
-  // When content starts after thoughts, auto-scroll to bottom once if user is near bottom
-  const lastMsgSnapshotRef = useRef<{
+  // Nudge scroll slightly when content starts after thinking, only if near bottom
+  const contentStartSnapshotRef = useRef<{
     key: string
     contentLen: number
-    isThinking: boolean
-    thoughtsLen: number
+    wasThinking: boolean
   } | null>(null)
-  const scrolledOnContentStartForKeyRef = useRef<string | null>(null)
-  useLayoutEffect(() => {
+  const scrolledForContentStartKeyRef = useRef<string | null>(null)
+  useEffect(() => {
     const el = scrollContainerRef.current
-    if (!el || !currentChat?.messages || currentChat.messages.length === 0)
-      return
+    const messages = currentChat?.messages
+    if (!el || !messages || messages.length === 0) return
 
-    const last = currentChat.messages[currentChat.messages.length - 1]
+    const last = messages[messages.length - 1]
     if (last.role !== 'assistant') {
-      lastMsgSnapshotRef.current = null
+      contentStartSnapshotRef.current = null
       return
     }
 
-    const key = `${last.role}-$${
+    const key = `${
       last.timestamp instanceof Date
         ? last.timestamp.getTime()
         : String(last.timestamp || '')
     }`
 
-    const prev = lastMsgSnapshotRef.current
-    const prevSameMsg = prev && prev.key === key
-    const prevContentLen = prevSameMsg ? prev.contentLen : 0
-    const prevWasThinking = prevSameMsg ? prev.isThinking : false
-    const prevThoughtsLen = prevSameMsg ? prev.thoughtsLen : 0
-
+    const prev = contentStartSnapshotRef.current
+    const prevSame = prev && prev.key === key
+    const prevContentLen = prevSame ? prev.contentLen : 0
     const nowContentLen = (last.content || '').length
-    const nowThoughtsLen = (last.thoughts || '').length
-    const didStartContentNow =
-      prevSameMsg && prevContentLen === 0 && nowContentLen > 0
-    const wasThinkingStream =
-      prevWasThinking || (prevThoughtsLen > 0 && prevContentLen === 0)
+    const nowThinkingish = Boolean(
+      last.isThinking ||
+        ((last.thoughts || '').length > 0 && nowContentLen === 0),
+    )
 
-    // Update snapshot for next run
-    lastMsgSnapshotRef.current = {
+    const contentStartedNow =
+      prevSame && prevContentLen === 0 && nowContentLen > 0
+    const wasThinkingBefore = Boolean(prev?.wasThinking)
+
+    if (
+      contentStartedNow &&
+      wasThinkingBefore &&
+      scrolledForContentStartKeyRef.current !== key
+    ) {
+      const distanceFromBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight
+      const ANCHOR_THRESHOLD = 140
+      const isNearBottom = distanceFromBottom <= ANCHOR_THRESHOLD
+      if (isNearBottom) {
+        scrolledForContentStartKeyRef.current = key
+        el.scrollTo({ top: el.scrollTop + 120, behavior: 'smooth' })
+      }
+    }
+
+    // Update snapshot
+    contentStartSnapshotRef.current = {
       key,
       contentLen: nowContentLen,
-      isThinking: Boolean(last.isThinking),
-      thoughtsLen: nowThoughtsLen,
+      wasThinking: nowThinkingish || Boolean(prev?.wasThinking),
     }
-
-    // Skip auto-scroll during thoughts streaming to prevent jitter
-    const isThoughtsStreaming =
-      last.isThinking ||
-      (nowThoughtsLen > 0 &&
-        nowContentLen === 0 &&
-        prevThoughtsLen !== nowThoughtsLen)
-    if (isThoughtsStreaming) return
-
-    if (!didStartContentNow || !wasThinkingStream) return
-
-    // Only auto-scroll if user is near bottom and we haven't already scrolled for this message
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    const ANCHOR_THRESHOLD = 120
-    const isNearBottom = distanceFromBottom <= ANCHOR_THRESHOLD
-    if (!isNearBottom) return
-
-    if (scrolledOnContentStartForKeyRef.current === key) return
-    scrolledOnContentStartForKeyRef.current = key
-
-    // Use smooth scrolling to prevent jarring jump
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: 'smooth',
-    })
   }, [currentChat?.messages])
 
-  // Handle scroll when messages are added or loading state changes
-  const prevMsgLenRef = useRef<number>(currentChat?.messages?.length || 0)
-  const prevWaitingRef = useRef<boolean>(false)
-  const hasScrolledForUserMsg = useRef<boolean>(false)
-
-  useLayoutEffect(() => {
-    const el = scrollContainerRef.current
-    if (!el) return
-
-    const newLen = currentChat?.messages?.length || 0
-    const messageAdded = newLen > prevMsgLenRef.current
-    const waitingStateChanged = isWaitingForResponse !== prevWaitingRef.current
-
-    if (messageAdded) {
-      const lastMessage =
-        currentChat?.messages?.[currentChat.messages.length - 1]
-
-      // For user messages, scroll once and mark it
-      if (lastMessage?.role === 'user' && !hasScrolledForUserMsg.current) {
-        el.scrollTop = el.scrollHeight
-        hasScrolledForUserMsg.current = true
-      }
-      // For assistant messages
-      else if (lastMessage?.role === 'assistant') {
-        hasScrolledForUserMsg.current = false
-        // Only scroll for content messages, not thoughts, and only if near bottom
-        const isThoughtsMessage =
-          lastMessage.isThinking ||
-          (lastMessage.thoughts && !lastMessage.content)
-        if (!isThoughtsMessage) {
-          const distanceFromBottom =
-            el.scrollHeight - el.scrollTop - el.clientHeight
-          if (distanceFromBottom <= 120) {
-            el.scrollTop = el.scrollHeight
-          }
-        }
-      }
-    }
-
-    // Do not change scroll on loading state changes to avoid bounce
-
-    prevMsgLenRef.current = newLen
-    prevWaitingRef.current = isWaitingForResponse
-  }, [currentChat?.messages, isWaitingForResponse])
-
-  // Check scroll position during streaming
-  useEffect(() => {
-    if (isWaitingForResponse || loadingState === 'loading') {
-      // Check scroll position more frequently during streaming
-      const interval = setInterval(() => {
-        checkScrollPosition()
-      }, 200)
-
-      return () => clearInterval(interval)
-    }
-  }, [isWaitingForResponse, loadingState, checkScrollPosition])
+  // Removed all automatic scroll behaviors during streaming. Scrolling now only occurs
+  // via the explicit button or when a chat is loaded/switched.
 
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
