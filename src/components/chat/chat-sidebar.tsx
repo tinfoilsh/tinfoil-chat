@@ -1203,6 +1203,39 @@ function ChatListItem({
   isDarkMode: boolean
   isSignedIn: boolean
 }) {
+  // Track previous title for animation
+  const [displayTitle, setDisplayTitle] = useState(chat.title)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const prevTitleRef = useRef(chat.title)
+
+  // Animate title changes
+  useEffect(() => {
+    if (prevTitleRef.current !== chat.title && chat.title !== 'New Chat') {
+      // Title changed - trigger animation
+      setIsAnimating(true)
+
+      // Small delay to allow fade out
+      const fadeOutTimer = setTimeout(() => {
+        setDisplayTitle(chat.title)
+      }, 150)
+
+      // Remove animation class after animation completes
+      const animationTimer = setTimeout(() => {
+        setIsAnimating(false)
+        prevTitleRef.current = chat.title
+      }, 300)
+
+      return () => {
+        clearTimeout(fadeOutTimer)
+        clearTimeout(animationTimer)
+      }
+    } else if (chat.title === 'New Chat') {
+      // Instant update for "New Chat" title
+      setDisplayTitle(chat.title)
+      prevTitleRef.current = chat.title
+    }
+  }, [chat.title])
+
   // Handle edit form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1264,15 +1297,15 @@ function ChatListItem({
                   />
                 )}
                 <div
-                  className={`truncate text-sm font-medium ${
+                  className={`truncate text-sm font-medium transition-opacity duration-150 ${
                     chat.decryptionFailed
                       ? 'text-orange-500'
                       : isDarkMode
                         ? 'text-gray-100'
                         : 'text-gray-900'
-                  }`}
+                  } ${isAnimating ? 'opacity-0' : 'opacity-100'}`}
                 >
-                  {chat.decryptionFailed ? 'Encrypted' : chat.title}
+                  {chat.decryptionFailed ? 'Encrypted' : displayTitle}
                 </div>
                 {/* New chat indicator */}
                 {chat.messages.length === 0 && !chat.decryptionFailed && (
