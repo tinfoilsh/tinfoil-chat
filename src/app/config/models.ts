@@ -109,7 +109,7 @@ export const getAIModels = async (
   } catch (error) {
     logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
-      metadata: { paid },
+      metadata: { isPremiumUser },
     })
     // Return empty array as fallback (with Dev model in development)
     if (isLocalDev) {

@@ -1136,6 +1136,7 @@ export function useChatMessaging({
       effectiveModel,
       systemPrompt,
       getApiKeyFromHook,
+      apiKey,
       maxMessages,
       rules,
       updateChatWithHistoryCheck,
