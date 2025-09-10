@@ -5,7 +5,23 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        // Use CSS vars from next/font for consistency across apps
+        sans: [
+          'var(--font-sans)',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Arial',
+          'Noto Sans',
+          'sans-serif',
+          'Apple Color Emoji',
+          'Segoe UI Emoji',
+        ],
+        display: ['var(--font-aeonik)', 'sans-serif'],
+        'aeonik-fono': ['var(--font-aeonik-fono)', 'sans-serif'],
+        aeonik: ['var(--font-aeonik)', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace'],
       },
       borderRadius: {

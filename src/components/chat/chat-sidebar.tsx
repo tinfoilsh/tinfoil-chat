@@ -967,15 +967,15 @@ export function ChatSidebar({
               </div>
             </div>
             <div
-              className={`mt-1 text-xs ${
+              className={`font-base mt-1 text-xs ${
                 isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}
             >
               {isSignedIn ? (
                 <>
-                  Your chats are encrypted and synced to the cloud.
-                  <br />
-                  The encryption key is only stored in your browser.
+                  Your chats are encrypted and synced to the cloud. The
+                  encryption key is only stored on this browser and never sent
+                  to Tinfoil.
                 </>
               ) : (
                 'Your chats are stored temporarily in this browser tab.'
