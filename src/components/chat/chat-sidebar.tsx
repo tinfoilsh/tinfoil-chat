@@ -671,7 +671,7 @@ export function ChatSidebar({
             title="Home"
             className="flex items-center"
           >
-            <Logo className="mt-1 h-8 w-auto" dark={isDarkMode} />
+            <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
             {/* User button for signed-in users */}
