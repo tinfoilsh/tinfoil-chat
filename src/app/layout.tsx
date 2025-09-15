@@ -90,26 +90,48 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
       {
         url: '/icon-light.png',
         media: '(prefers-color-scheme: light)',
+        sizes: '192x192',
+        type: 'image/png',
       },
       {
         url: '/icon-dark.png',
         media: '(prefers-color-scheme: dark)',
+        sizes: '192x192',
+        type: 'image/png',
       },
     ],
     apple: [
       {
         url: '/apple-touch-icon-light.png',
+        sizes: '180x180',
         media: '(prefers-color-scheme: light)',
       },
       {
         url: '/apple-touch-icon-dark.png',
+        sizes: '180x180',
         media: '(prefers-color-scheme: dark)',
       },
       {
-        url: '/apple-touch-icon.png', // Fallback for browsers that don't support media queries
+        url: '/apple-touch-icon.png',
+        sizes: '180x180',
+      },
+    ],
+    other: [
+      {
+        rel: 'android-chrome',
+        url: '/android-chrome-192x192.png',
+        sizes: '192x192',
+      },
+      {
+        rel: 'android-chrome',
+        url: '/android-chrome-512x512.png',
+        sizes: '512x512',
       },
     ],
   },
@@ -129,6 +151,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://clerk.accounts.dev" />
         <link rel="dns-prefetch" href="https://plausible.io" />
+        <link rel="manifest" href="/site.webmanifest" />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
