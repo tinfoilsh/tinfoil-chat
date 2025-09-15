@@ -192,7 +192,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           handleLabelClick('model', () => {})
                         }
                       }}
-                      className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+                      className={`flex items-center gap-2 rounded-lg px-3 py-2 font-aeonik-fono ${
                         isDarkMode
                           ? 'bg-gray-700 hover:bg-gray-600'
                           : 'bg-gray-100 hover:bg-gray-200'
@@ -303,7 +303,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             )}
 
             {/* Verification Status Display - Compact mode on all screen sizes */}
-            <div className="mt-4 md:mt-8">
+            <div className="mt-4 font-aeonik-fono md:mt-8">
               <VerificationStatusDisplay
                 isDarkMode={isDarkMode}
                 onOpenVerifier={openAndExpandVerifier}

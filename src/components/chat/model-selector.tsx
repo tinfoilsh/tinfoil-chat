@@ -139,7 +139,7 @@ export function ModelSelector({
     <div
       ref={menuRef}
       data-model-menu
-      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border shadow-lg ${
+      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border font-aeonik-fono shadow-lg ${
         isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
       } ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
       style={{
