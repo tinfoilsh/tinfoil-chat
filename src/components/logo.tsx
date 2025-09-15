@@ -14,7 +14,7 @@ export function Logo({
     <Image
       src={dark ? '/logo-white.svg' : '/logo-green.svg'}
       alt="Tinfoil"
-      width={120}
+      width={194}
       height={50}
       className={clsx(className)}
       priority
