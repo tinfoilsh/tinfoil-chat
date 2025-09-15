@@ -671,7 +671,7 @@ export function ChatSidebar({
             title="Home"
             className="flex items-center"
           >
-            <Logo className="mt-1 h-8 w-auto" dark={isDarkMode} />
+            <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
           </Link>
           <div className="flex items-center gap-3">
             {/* User button for signed-in users */}
@@ -967,15 +967,15 @@ export function ChatSidebar({
               </div>
             </div>
             <div
-              className={`mt-1 text-xs ${
+              className={`font-base mt-1 text-xs ${
                 isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}
             >
               {isSignedIn ? (
                 <>
-                  Your chats are encrypted and synced to the cloud.
-                  <br />
-                  The encryption key is only stored in your browser.
+                  Your chats are encrypted and synced to the cloud. The
+                  encryption key is only stored on this browser and never sent
+                  to Tinfoil.
                 </>
               ) : (
                 'Your chats are stored temporarily in this browser tab.'

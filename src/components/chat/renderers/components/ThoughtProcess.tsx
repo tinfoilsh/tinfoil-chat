@@ -285,7 +285,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       >
         <div
           ref={contentRef}
-          className={`px-4 py-3 text-sm ${
+          className={`px-4 py-3 font-aeonik-fono text-sm ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}
         >
@@ -297,7 +297,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 <p className="mb-2 break-words last:mb-0">{children}</p>
               ),
               pre: ({ children }: { children?: React.ReactNode }) => (
-                <pre className="my-2 overflow-x-auto rounded-md bg-black/10 p-3 text-xs">
+                <pre className="my-2 overflow-x-auto rounded-md bg-black/10 p-3 font-mono text-xs">
                   {children}
                 </pre>
               ),
@@ -309,11 +309,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 children?: React.ReactNode
               }) =>
                 inline ? (
-                  <code className="break-words rounded bg-black/10 px-1 py-0.5 text-xs">
+                  <code className="break-words rounded bg-black/10 px-1 py-0.5 font-mono text-xs">
                     {children}
                   </code>
                 ) : (
-                  <code className="block break-all text-xs">{children}</code>
+                  <code className="block break-all font-mono text-xs">
+                    {children}
+                  </code>
                 ),
             }}
           >

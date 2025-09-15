@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import Script from 'next/script'
 
 export const runtime = 'nodejs'
@@ -12,9 +13,44 @@ export const runtime = 'nodejs'
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-inter',
+  variable: '--font-sans',
   preload: true,
   adjustFontFallback: true,
+})
+
+const aeonikFono = localFont({
+  src: [
+    {
+      path: './fonts/aeonikfono-regular.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    { path: './fonts/aeonikfono-medium.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/aeonikfono-bold.woff2', weight: '700', style: 'normal' },
+  ],
+  variable: '--font-aeonik-fono',
+  display: 'swap',
+})
+
+const aeonik = localFont({
+  src: [
+    { path: './fonts/aeonik-regular.woff2', weight: '400', style: 'normal' },
+    {
+      path: './fonts/aeonik-regularitalic.woff2',
+      weight: '400',
+      style: 'italic',
+    },
+    { path: './fonts/aeonik-semibold.woff2', weight: '600', style: 'normal' },
+    {
+      path: './fonts/aeonik-semibolditalic.woff2',
+      weight: '600',
+      style: 'italic',
+    },
+    { path: './fonts/aeonik-bold.woff2', weight: '700', style: 'normal' },
+    { path: './fonts/aeonik-bolditalic.woff2', weight: '700', style: 'italic' },
+  ],
+  variable: '--font-aeonik',
+  display: 'swap',
 })
 
 export const metadata: Metadata = {
@@ -54,26 +90,48 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
       {
         url: '/icon-light.png',
         media: '(prefers-color-scheme: light)',
+        sizes: '192x192',
+        type: 'image/png',
       },
       {
         url: '/icon-dark.png',
         media: '(prefers-color-scheme: dark)',
+        sizes: '192x192',
+        type: 'image/png',
       },
     ],
     apple: [
       {
         url: '/apple-touch-icon-light.png',
+        sizes: '180x180',
         media: '(prefers-color-scheme: light)',
       },
       {
         url: '/apple-touch-icon-dark.png',
+        sizes: '180x180',
         media: '(prefers-color-scheme: dark)',
       },
       {
-        url: '/apple-touch-icon.png', // Fallback for browsers that don't support media queries
+        url: '/apple-touch-icon.png',
+        sizes: '180x180',
+      },
+    ],
+    other: [
+      {
+        rel: 'android-chrome',
+        url: '/android-chrome-192x192.png',
+        sizes: '192x192',
+      },
+      {
+        rel: 'android-chrome',
+        url: '/android-chrome-512x512.png',
+        sizes: '512x512',
       },
     ],
   },
@@ -85,11 +143,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`overflow-x-hidden ${inter.variable}`}>
+    <html
+      lang="en"
+      className={`overflow-x-hidden ${inter.variable} ${aeonikFono.variable} ${aeonik.variable}`}
+    >
       <head>
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://clerk.accounts.dev" />
         <link rel="dns-prefetch" href="https://plausible.io" />
+        <link rel="manifest" href="/site.webmanifest" />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
@@ -97,7 +159,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#111827" />
       </head>
       <body
-        className={`bg-gray-900 text-gray-100 antialiased ${inter.className}`}
+        className={`bg-gray-900 font-aeonik-fono text-gray-100 antialiased`}
       >
         <Script
           defer

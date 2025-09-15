@@ -12,10 +12,10 @@ export function Logo({
 }) {
   return (
     <Image
-      src={dark ? '/tinfoill-logo.png' : '/tinfoill-logo-light.png'}
+      src={dark ? '/logo-white.svg' : '/logo-green.svg'}
       alt="Tinfoil"
-      width={200}
-      height={90}
+      width={194}
+      height={50}
       className={clsx(className)}
       priority
     />
