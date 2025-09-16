@@ -1,7 +1,7 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
-import { useUser } from '@clerk/nextjs'
+import { useClerk, useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import React, { memo, useEffect, useRef, useState } from 'react'
 import { ChatInput } from './chat-input'
@@ -60,7 +60,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   expandedLabel,
   handleLabelClick,
 }: WelcomeScreenProps) {
-  const { user } = useUser()
+  const { user, isSignedIn } = useUser()
+  const { openSignIn } = useClerk()
   const [nickname, setNickname] = useState<string>('')
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -141,7 +142,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
           <div className="mt-4 md:mt-8">
             <motion.p
-              className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg`}
+              className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} font-aeonik text-lg`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -153,7 +154,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
               This conversation is private: nobody can see your messages.
             </motion.p>
             <motion.p
-              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1 text-sm leading-6`}
+              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1 font-aeonik text-lg leading-6`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -162,8 +163,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                 delay: 0.3,
               }}
             >
-              Each message is end‑to‑end encrypted and <em>only</em> processed
-              inside secure hardware enclaves.
+              Each message is end‑to‑end encrypted directly to a secure hardware
+              enclave where it is processed, and never exposed to third parties.
             </motion.p>
 
             {/* Model Selector */}
@@ -255,6 +256,13 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                         models={models}
                         preferredPosition="below"
                         onPremiumModelClick={() => {
+                          if (!isSignedIn) {
+                            if (handleLabelClick) {
+                              handleLabelClick('model', () => {})
+                            }
+                            void openSignIn()
+                            return
+                          }
                           if (setIsSidebarOpen) {
                             setIsSidebarOpen(true)
                             // Dispatch event to highlight the appropriate box

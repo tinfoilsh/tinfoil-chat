@@ -8,16 +8,16 @@ export function StatusIcon({ status }: StatusIconProps) {
   const iconMap = {
     success: {
       bg: 'bg-emerald-500',
-      icon: <CheckIcon className="h-3 w-3 text-white" />,
+      icon: <CheckIcon className="h-[8.8px] w-[8.8px] text-white" />,
     },
     error: {
       bg: 'bg-red-500',
-      icon: <XMarkIcon className="h-3 w-3 text-white" />,
+      icon: <XMarkIcon className="h-[8.8px] w-[8.8px] text-white" />,
     },
     loading: {
       bg: 'bg-blue-500',
       icon: (
-        <div className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+        <div className="h-[8.8px] w-[8.8px] animate-spin rounded-full border border-white border-t-transparent" />
       ),
     },
     pending: {
@@ -30,7 +30,7 @@ export function StatusIcon({ status }: StatusIconProps) {
 
   return (
     <div
-      className={`flex h-6 w-6 items-center justify-center rounded-full ${bg}`}
+      className={`flex h-[17.6px] w-[17.6px] items-center justify-center rounded-full ${bg}`}
     >
       {icon}
     </div>

@@ -35,7 +35,7 @@ export function VerifierSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : 'translate-x-full'
-        } fixed right-0 z-40 flex h-dvh w-[85vw] flex-col border-l ${
+        } fixed right-0 z-40 flex h-dvh w-[85vw] flex-col border-l font-aeonik ${
           isDarkMode
             ? 'border-gray-700 bg-gray-900'
             : 'border-gray-200 bg-white'
@@ -55,7 +55,9 @@ export function VerifierSidebar({
               }`}
             />
             <span
-              className={`text-xl font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+              className={`font-aeonik text-xl font-medium ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}
             >
               Verification Center
             </span>

@@ -3,7 +3,7 @@ import {
   FaLock,
   MdOutlineCloudOff,
 } from '@/components/icons/lazy-icons'
-import { PAGINATION } from '@/config'
+import { API_BASE_URL, PAGINATION } from '@/config'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -242,6 +242,8 @@ export function ChatSidebar({
   const [highlightBox, setHighlightBox] = useState<'signin' | 'premium' | null>(
     null,
   )
+  const [upgradeLoading, setUpgradeLoading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
   // Start optimistically assuming there might be more chats
@@ -441,9 +443,9 @@ export function ChatSidebar({
         // to ensure a clean state that matches what cloud sync expects
         if (sortedSyncedChats.length > PAGINATION.CHATS_PER_PAGE) {
           let deletedAny = false
-          const chatsToDelete = sortedSyncedChats.slice(
-            PAGINATION.CHATS_PER_PAGE,
-          )
+          const chatsToDelete = sortedSyncedChats
+            .slice(PAGINATION.CHATS_PER_PAGE)
+            .filter((chat) => !(chat as any).decryptionFailed)
 
           for (const chat of chatsToDelete) {
             // Delete all chats beyond the first page on refresh
@@ -629,6 +631,46 @@ export function ChatSidebar({
       )
     }
   }, [isClient])
+
+  const handleUpgradeToPro = useCallback(async () => {
+    if (!getToken) {
+      return
+    }
+
+    setUpgradeError(null)
+    setUpgradeLoading(true)
+    try {
+      const token = await getToken()
+      if (!token) {
+        throw new Error('No authentication token available')
+      }
+
+      const returnUrl = encodeURIComponent(window.location.origin)
+      const response = await fetch(
+        `${API_BASE_URL}/api/billing/chat-checkout-link?returnUrl=${returnUrl}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to generate checkout link')
+      }
+
+      const data = await response.json()
+      if (!data?.url) {
+        throw new Error('Checkout link unavailable')
+      }
+
+      window.location.href = data.url as string
+    } catch (error) {
+      setUpgradeError('Failed to start checkout. Please try again later.')
+    } finally {
+      setUpgradeLoading(false)
+    }
+  }, [getToken])
 
   return (
     <>
@@ -858,29 +900,44 @@ export function ChatSidebar({
                   </div>
                 </div>
                 <div className="mt-4">
-                  <Link
-                    href="https://tinfoil.sh/pricing"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleUpgradeToPro()
+                    }}
+                    disabled={upgradeLoading}
                     className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
                       isDarkMode
                         ? 'text-emerald-400 hover:text-emerald-300'
                         : 'text-emerald-600 hover:text-emerald-500'
-                    }`}
+                    } ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
                   >
-                    Upgrade to Pro
-                    <svg
-                      className="h-3 w-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                    {upgradeLoading ? 'Redirecting…' : 'Upgrade to Pro'}
+                    {!upgradeLoading && (
+                      <svg
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                  {upgradeError && (
+                    <p
+                      className={`mt-2 text-xs ${
+                        isDarkMode ? 'text-red-400' : 'text-red-600'
+                      }`}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </Link>
+                      {upgradeError}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -931,7 +988,7 @@ export function ChatSidebar({
           >
             <div className="flex items-center justify-between">
               <h3
-                className={`truncate text-sm font-medium ${
+                className={`truncate font-aeonik-fono text-sm font-medium ${
                   isDarkMode ? 'text-gray-200' : 'text-gray-800'
                 }`}
               >
@@ -967,7 +1024,7 @@ export function ChatSidebar({
               </div>
             </div>
             <div
-              className={`font-base mt-1 text-xs ${
+              className={`font-base mt-1 font-aeonik-fono text-xs ${
                 isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}
             >
@@ -1371,7 +1428,7 @@ function ChatListItem({
                   />
                 )}
                 <div
-                  className={`truncate text-sm font-medium ${
+                  className={`truncate font-aeonik-fono text-sm font-medium ${
                     chat.decryptionFailed
                       ? 'text-orange-500'
                       : isDarkMode
