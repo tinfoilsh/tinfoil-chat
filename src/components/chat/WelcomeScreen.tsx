@@ -141,7 +141,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
           <div className="mt-4 md:mt-8">
             <motion.p
-              className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} text-lg font-aeonik-fono`}
+              className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} font-aeonik-fono text-lg`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -153,7 +153,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
               This conversation is private: nobody can see your messages.
             </motion.p>
             <motion.p
-              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1 text-lg leading-6 font-aeonik-fono`}
+              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1 font-aeonik-fono text-lg leading-6`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -162,8 +162,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                 delay: 0.3,
               }}
             >
-              Each message is end‑to‑end encrypted directly to a secure
-              hardware enclave where it is processed, and never exposed to third parties.
+              Each message is end‑to‑end encrypted directly to a secure hardware
+              enclave where it is processed, and never exposed to third parties.
             </motion.p>
 
             {/* Model Selector */}
