@@ -465,7 +465,7 @@ export function SettingsSidebar({
           damping: 30,
           stiffness: 300,
         }}
-        className={`fixed right-0 top-0 z-50 flex h-full w-[85vw] flex-col border-l ${
+        className={`fixed right-0 top-0 z-50 flex h-full w-[85vw] flex-col border-l font-aeonik ${
           isDarkMode
             ? 'border-gray-800 bg-gray-900'
             : 'border-gray-200 bg-white'
@@ -485,7 +485,7 @@ export function SettingsSidebar({
               }`}
             />
             <h2
-              className={`text-lg font-semibold ${
+              className={`font-aeonik text-lg font-semibold ${
                 isDarkMode ? 'text-gray-100' : 'text-gray-900'
               }`}
             >
@@ -510,7 +510,7 @@ export function SettingsSidebar({
             {/* Appearance section */}
             <div>
               <h3
-                className={`mb-3 text-sm font-medium ${
+                className={`mb-3 font-aeonik text-sm font-medium ${
                   isDarkMode ? 'text-gray-200' : 'text-gray-800'
                 }`}
               >
@@ -524,14 +524,14 @@ export function SettingsSidebar({
                 >
                   <div>
                     <div
-                      className={`text-sm font-medium ${
+                      className={`font-aeonik text-sm font-medium ${
                         isDarkMode ? 'text-gray-200' : 'text-gray-800'
                       }`}
                     >
                       Theme
                     </div>
                     <div
-                      className={`text-xs ${
+                      className={`font-aeonik-fono text-xs ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-600'
                       }`}
                     >
@@ -559,7 +559,7 @@ export function SettingsSidebar({
             {/* Chat Settings */}
             <div>
               <h3
-                className={`mb-3 text-sm font-medium ${
+                className={`mb-3 font-aeonik text-sm font-medium ${
                   isDarkMode ? 'text-gray-200' : 'text-gray-800'
                 }`}
               >
@@ -574,14 +574,14 @@ export function SettingsSidebar({
                   <div className="flex items-start justify-between">
                     <div className="mr-3 flex-1">
                       <div
-                        className={`text-sm font-medium ${
+                        className={`font-aeonik text-sm font-medium ${
                           isDarkMode ? 'text-gray-200' : 'text-gray-800'
                         }`}
                       >
                         Messages in Context
                       </div>
                       <div
-                        className={`text-xs ${
+                        className={`font-aeonik-fono text-xs ${
                           isDarkMode ? 'text-gray-400' : 'text-gray-600'
                         }`}
                       >
@@ -621,14 +621,14 @@ export function SettingsSidebar({
                   <div className="space-y-2">
                     <div>
                       <div
-                        className={`text-sm font-medium ${
+                        className={`font-aeonik text-sm font-medium ${
                           isDarkMode ? 'text-gray-200' : 'text-gray-800'
                         }`}
                       >
                         Response Language
                       </div>
                       <div
-                        className={`text-xs ${
+                        className={`font-aeonik-fono text-xs ${
                           isDarkMode ? 'text-gray-400' : 'text-gray-600'
                         }`}
                       >
@@ -663,14 +663,14 @@ export function SettingsSidebar({
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div
-                          className={`text-sm font-medium ${
+                          className={`font-aeonik text-sm font-medium ${
                             isDarkMode ? 'text-gray-200' : 'text-gray-800'
                           }`}
                         >
                           Custom System Prompt
                         </div>
                         <div
-                          className={`text-xs ${
+                          className={`font-aeonik-fono text-xs ${
                             isDarkMode ? 'text-gray-400' : 'text-gray-600'
                           }`}
                         >
@@ -720,12 +720,12 @@ export function SettingsSidebar({
                           }`}
                         >
                           <div
-                            className={`text-xs ${
+                            className={`font-aeonik-fono text-xs ${
                               isDarkMode ? 'text-gray-400' : 'text-gray-600'
                             }`}
                           >
                             <span
-                              className={`font-medium ${
+                              className={`font-aeonik font-medium ${
                                 isDarkMode
                                   ? 'text-emerald-400'
                                   : 'text-emerald-600'
@@ -767,14 +767,14 @@ export function SettingsSidebar({
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div
-                          className={`text-sm font-medium ${
+                          className={`font-aeonik text-sm font-medium ${
                             isDarkMode ? 'text-gray-200' : 'text-gray-800'
                           }`}
                         >
                           Personalization
                         </div>
                         <div
-                          className={`text-xs ${
+                          className={`font-aeonik-fono text-xs ${
                             isDarkMode ? 'text-gray-400' : 'text-gray-600'
                           }`}
                         >
@@ -807,7 +807,7 @@ export function SettingsSidebar({
                         {/* Nickname Field */}
                         <div>
                           <label
-                            className={`mb-1 block text-xs font-medium ${
+                            className={`mb-1 block font-aeonik text-xs font-medium ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-700'
                             }`}
                           >
@@ -831,7 +831,7 @@ export function SettingsSidebar({
                         {/* Profession Field */}
                         <div>
                           <label
-                            className={`mb-1 block text-xs font-medium ${
+                            className={`mb-1 block font-aeonik text-xs font-medium ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-700'
                             }`}
                           >
@@ -855,7 +855,7 @@ export function SettingsSidebar({
                         {/* Traits Selection */}
                         <div>
                           <label
-                            className={`mb-2 block text-xs font-medium ${
+                            className={`mb-2 block font-aeonik text-xs font-medium ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-700'
                             }`}
                           >
@@ -884,7 +884,7 @@ export function SettingsSidebar({
                         {/* Additional Context */}
                         <div>
                           <label
-                            className={`mb-1 block text-xs font-medium ${
+                            className={`mb-1 block font-aeonik text-xs font-medium ${
                               isDarkMode ? 'text-gray-300' : 'text-gray-700'
                             }`}
                           >
@@ -929,7 +929,7 @@ export function SettingsSidebar({
             {onEncryptionKeyClick && (
               <div>
                 <h3
-                  className={`mb-3 text-sm font-medium ${
+                  className={`mb-3 font-aeonik text-sm font-medium ${
                     isDarkMode ? 'text-gray-200' : 'text-gray-800'
                   }`}
                 >
@@ -952,14 +952,14 @@ export function SettingsSidebar({
                       />
                       <div className="text-left">
                         <div
-                          className={`text-sm font-medium ${
+                          className={`font-aeonik text-sm font-medium ${
                             isDarkMode ? 'text-gray-200' : 'text-gray-800'
                           }`}
                         >
                           Chat Encryption Key
                         </div>
                         <div
-                          className={`text-xs ${
+                          className={`font-aeonik-fono text-xs ${
                             isDarkMode ? 'text-gray-400' : 'text-gray-600'
                           }`}
                         >

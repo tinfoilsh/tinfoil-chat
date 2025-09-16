@@ -931,7 +931,7 @@ export function ChatSidebar({
           >
             <div className="flex items-center justify-between">
               <h3
-                className={`truncate text-sm font-medium ${
+                className={`truncate font-aeonik-fono text-sm font-medium ${
                   isDarkMode ? 'text-gray-200' : 'text-gray-800'
                 }`}
               >
@@ -967,7 +967,7 @@ export function ChatSidebar({
               </div>
             </div>
             <div
-              className={`font-base mt-1 text-xs ${
+              className={`font-base mt-1 font-aeonik-fono text-xs ${
                 isDarkMode ? 'text-gray-400' : 'text-gray-600'
               }`}
             >
@@ -1371,7 +1371,7 @@ function ChatListItem({
                   />
                 )}
                 <div
-                  className={`truncate text-sm font-medium ${
+                  className={`truncate font-aeonik-fono text-sm font-medium ${
                     chat.decryptionFailed
                       ? 'text-orange-500'
                       : isDarkMode
