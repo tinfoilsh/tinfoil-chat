@@ -98,7 +98,7 @@ ${encryptionKey.replace('key_', '')}
               >
                 <Dialog.Title
                   as="h3"
-                  className={`text-lg font-medium leading-6 ${
+                  className={`font-aeonik text-lg font-medium leading-6 ${
                     isDarkMode ? 'text-gray-100' : 'text-gray-900'
                   }`}
                 >
@@ -126,9 +126,9 @@ ${encryptionKey.replace('key_', '')}
                     <>
                       {/* Step 1: Backup Key */}
                       <div>
-                        <div className="mb-3 flex items-start gap-3">
+                        <div className="mb-3 flex items-center gap-3">
                           <div
-                            className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+                            className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
                               hasDownloadedKey
                                 ? 'bg-emerald-500'
                                 : isDarkMode
@@ -149,7 +149,7 @@ ${encryptionKey.replace('key_', '')}
                             )}
                           </div>
                           <p
-                            className={`text-sm ${
+                            className={`font-aeonik text-sm ${
                               isDarkMode ? 'text-gray-200' : 'text-gray-700'
                             }`}
                           >
@@ -180,9 +180,9 @@ ${encryptionKey.replace('key_', '')}
 
                       {/* Step 2: Data Options */}
                       <div>
-                        <div className="mb-3 flex items-start gap-3">
+                        <div className="mb-3 flex items-center gap-3">
                           <div
-                            className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+                            className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
                               isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
                             }`}
                           >
@@ -195,7 +195,7 @@ ${encryptionKey.replace('key_', '')}
                             </span>
                           </div>
                           <p
-                            className={`text-sm ${
+                            className={`font-aeonik text-sm ${
                               isDarkMode ? 'text-gray-200' : 'text-gray-700'
                             }`}
                           >
