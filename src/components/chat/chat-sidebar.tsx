@@ -22,9 +22,13 @@ import {
   indexedDBStorage,
   type StoredChat,
 } from '@/services/storage/indexed-db'
+import {
+  ensureValidISODate,
+  getConversationTimestampFromId,
+} from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -557,12 +561,17 @@ export function ChatSidebar({
                 decryptError.message.includes('DATA_CORRUPTED')
 
               // If decryption fails, store the encrypted data for later retry
+              const safeCreatedAt = ensureValidISODate(conv.createdAt, conv.id)
+              const safeUpdatedAt = ensureValidISODate(
+                conv.updatedAt ?? conv.createdAt,
+                conv.id,
+              )
               fullChat = {
                 id: conv.id,
                 title: 'Encrypted',
                 messages: [],
-                createdAt: conv.createdAt,
-                updatedAt: conv.updatedAt,
+                createdAt: safeCreatedAt,
+                updatedAt: safeUpdatedAt,
                 lastAccessedAt: Date.now(),
                 decryptionFailed: true,
                 dataCorrupted: isCorrupted,
@@ -574,6 +583,15 @@ export function ChatSidebar({
             }
 
             if (fullChat) {
+              fullChat.createdAt = ensureValidISODate(
+                fullChat.createdAt,
+                fullChat.id,
+              )
+              fullChat.updatedAt = ensureValidISODate(
+                fullChat.updatedAt ?? fullChat.createdAt,
+                fullChat.id,
+              )
+              fullChat.loadedAt = Date.now()
               // Save to IndexedDB - this will trigger a reload of chats
               await indexedDBStorage.saveChat(fullChat)
               // Mark as synced since we just downloaded from cloud
@@ -631,6 +649,49 @@ export function ChatSidebar({
       )
     }
   }, [isClient])
+
+  const getChatSortTimestamp = useCallback((chat: Chat) => {
+    const createdValue =
+      chat.createdAt instanceof Date
+        ? chat.createdAt.getTime()
+        : new Date(chat.createdAt).getTime()
+
+    if (!Number.isNaN(createdValue)) {
+      return createdValue
+    }
+
+    const storedChat = chat as unknown as StoredChat
+    const candidateTimes: Array<number | undefined> = [
+      typeof storedChat.syncedAt === 'number' ? storedChat.syncedAt : undefined,
+      storedChat.updatedAt
+        ? new Date(storedChat.updatedAt).getTime()
+        : undefined,
+      storedChat.loadedAt,
+    ]
+
+    for (const candidate of candidateTimes) {
+      if (typeof candidate === 'number' && !Number.isNaN(candidate)) {
+        return candidate
+      }
+    }
+
+    return getConversationTimestampFromId(chat.id) ?? 0
+  }, [])
+
+  const sortedChats = useMemo(() => {
+    return [...chats].sort((a, b) => {
+      // Blank chats should always be at the top
+      const aIsBlank = a.isBlankChat === true
+      const bIsBlank = b.isBlankChat === true
+
+      if (aIsBlank && !bIsBlank) return -1
+      if (!aIsBlank && bIsBlank) return 1
+
+      const timeA = getChatSortTimestamp(a)
+      const timeB = getChatSortTimestamp(b)
+      return timeB - timeA
+    })
+  }, [chats, getChatSortTimestamp])
 
   const handleUpgradeToPro = useCallback(async () => {
     if (!getToken) {
@@ -1044,82 +1105,68 @@ export function ChatSidebar({
           <div className="flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
               {isClient &&
-                chats
-                  .sort((a, b) => {
-                    // Blank chats should always be at the top
-                    const aIsBlank = a.isBlankChat === true
-                    const bIsBlank = b.isBlankChat === true
-
-                    if (aIsBlank && !bIsBlank) return -1
-                    if (!aIsBlank && bIsBlank) return 1
-
-                    // For non-empty chats, sort by createdAt (newest first)
-                    const timeA = new Date(a.createdAt).getTime()
-                    const timeB = new Date(b.createdAt).getTime()
-                    return timeB - timeA
-                  })
-                  .map((chat) => (
-                    <div key={chat.id} className="relative">
-                      <div
-                        onClick={() => {
-                          // Open encryption key modal for encrypted chats
-                          if (chat.decryptionFailed) {
-                            if (onEncryptionKeyClick) {
-                              onEncryptionKeyClick()
-                            }
-                            return
+                sortedChats.map((chat) => (
+                  <div key={chat.id} className="relative">
+                    <div
+                      onClick={() => {
+                        // Open encryption key modal for encrypted chats
+                        if (chat.decryptionFailed) {
+                          if (onEncryptionKeyClick) {
+                            onEncryptionKeyClick()
                           }
+                          return
+                        }
 
-                          handleChatSelect(chat.id)
+                        handleChatSelect(chat.id)
 
-                          // Only close sidebar on mobile
-                          if (windowWidth < MOBILE_BREAKPOINT) {
-                            setIsOpen(false)
-                          }
-                        }}
-                        className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
-                          chat.decryptionFailed
-                            ? onEncryptionKeyClick
-                              ? isDarkMode
-                                ? 'cursor-pointer border-gray-700 hover:border-gray-600 hover:bg-gray-800'
-                                : 'cursor-pointer border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                              : isDarkMode
-                                ? 'cursor-not-allowed border-gray-700 opacity-60'
-                                : 'cursor-not-allowed border-gray-300 opacity-60'
-                            : currentChat?.id === chat.id
-                              ? isDarkMode
-                                ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
-                                : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
-                              : isDarkMode
-                                ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                                : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-                        }`}
-                      >
-                        {/* Chat item content */}
-                        <ChatListItem
-                          chat={chat}
-                          isEditing={editingChatId === chat.id}
-                          editingTitle={editingTitle}
-                          setEditingTitle={setEditingTitle}
-                          updateChatTitle={updateChatTitle}
-                          setEditingChatId={setEditingChatId}
-                          setDeletingChatId={setDeletingChatId}
-                          isPremium={isPremium}
-                          isDarkMode={isDarkMode}
-                          isSignedIn={isSignedIn ?? false}
-                        />
-                      </div>
-                      {/* Delete confirmation */}
-                      {deletingChatId === chat.id && (
-                        <DeleteConfirmation
-                          chatId={chat.id}
-                          onDelete={deleteChat}
-                          onCancel={() => setDeletingChatId(null)}
-                          isDarkMode={isDarkMode}
-                        />
-                      )}
+                        // Only close sidebar on mobile
+                        if (windowWidth < MOBILE_BREAKPOINT) {
+                          setIsOpen(false)
+                        }
+                      }}
+                      className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
+                        chat.decryptionFailed
+                          ? onEncryptionKeyClick
+                            ? isDarkMode
+                              ? 'cursor-pointer border-gray-700 hover:border-gray-600 hover:bg-gray-800'
+                              : 'cursor-pointer border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            : isDarkMode
+                              ? 'cursor-not-allowed border-gray-700 opacity-60'
+                              : 'cursor-not-allowed border-gray-300 opacity-60'
+                          : currentChat?.id === chat.id
+                            ? isDarkMode
+                              ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
+                              : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
+                            : isDarkMode
+                              ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
+                              : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                      }`}
+                    >
+                      {/* Chat item content */}
+                      <ChatListItem
+                        chat={chat}
+                        isEditing={editingChatId === chat.id}
+                        editingTitle={editingTitle}
+                        setEditingTitle={setEditingTitle}
+                        updateChatTitle={updateChatTitle}
+                        setEditingChatId={setEditingChatId}
+                        setDeletingChatId={setDeletingChatId}
+                        isPremium={isPremium}
+                        isDarkMode={isDarkMode}
+                        isSignedIn={isSignedIn ?? false}
+                      />
                     </div>
-                  ))}
+                    {/* Delete confirmation */}
+                    {deletingChatId === chat.id && (
+                      <DeleteConfirmation
+                        chatId={chat.id}
+                        onDelete={deleteChat}
+                        onCancel={() => setDeletingChatId(null)}
+                        isDarkMode={isDarkMode}
+                      />
+                    )}
+                  </div>
+                ))}
 
               {/* Load More button - only for remote chats */}
               {shouldShowLoadMore && (

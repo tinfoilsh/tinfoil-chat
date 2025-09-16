@@ -150,6 +150,10 @@ export class IndexedDBStorage {
           dataCorrupted: (chat as StoredChat).dataCorrupted,
           encryptedData: (chat as StoredChat).encryptedData,
           version: 1, // Current storage format version
+          loadedAt:
+            (chat as StoredChat).loadedAt ??
+            existingChat?.loadedAt ??
+            undefined,
         }
 
         const putRequest = store.put(storedChat)

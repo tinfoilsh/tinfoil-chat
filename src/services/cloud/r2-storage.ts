@@ -1,3 +1,4 @@
+import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { DB_VERSION, type StoredChat } from '../storage/indexed-db'
@@ -125,18 +126,13 @@ export class R2StorageService {
         return decrypted
       } catch (decryptError) {
         // If decryption fails, store the encrypted data for later retry
-        // Extract timestamp from the chat ID to use as createdAt
-        const timestamp = chatId.split('_')[0]
-        const parsedTimestamp = parseInt(timestamp, 10)
-        const createdAtMs = !isNaN(parsedTimestamp)
-          ? 9999999999999 - parsedTimestamp
-          : Date.now()
+        const safeCreatedAt = ensureValidISODate(undefined, chatId)
 
         return {
           id: chatId,
           title: 'Encrypted',
           messages: [],
-          createdAt: new Date(createdAtMs).toISOString(),
+          createdAt: safeCreatedAt,
           updatedAt: new Date().toISOString(),
           lastAccessedAt: Date.now(),
           decryptionFailed: true,

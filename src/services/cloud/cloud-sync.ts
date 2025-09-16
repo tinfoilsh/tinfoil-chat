@@ -1,4 +1,5 @@
 import { PAGINATION } from '@/config'
+import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
@@ -297,12 +298,20 @@ export class CloudSyncService {
                 decryptError.message.includes('DATA_CORRUPTED')
 
               // If decryption fails, store the encrypted data for later retry
+              const safeCreatedAt = ensureValidISODate(
+                remoteChat.createdAt,
+                remoteChat.id,
+              )
+              const safeUpdatedAt = ensureValidISODate(
+                remoteChat.updatedAt ?? remoteChat.createdAt,
+                remoteChat.id,
+              )
               downloadedChat = {
                 id: remoteChat.id,
                 title: 'Encrypted',
                 messages: [],
-                createdAt: remoteChat.createdAt,
-                updatedAt: remoteChat.updatedAt,
+                createdAt: safeCreatedAt,
+                updatedAt: safeUpdatedAt,
                 lastAccessedAt: Date.now(),
                 decryptionFailed: true,
                 dataCorrupted: isCorrupted,
@@ -314,6 +323,14 @@ export class CloudSyncService {
             }
 
             if (downloadedChat) {
+              downloadedChat.createdAt = ensureValidISODate(
+                downloadedChat.createdAt,
+                downloadedChat.id,
+              )
+              downloadedChat.updatedAt = ensureValidISODate(
+                downloadedChat.updatedAt ?? downloadedChat.createdAt,
+                downloadedChat.id,
+              )
               // Save all downloaded chats (including encrypted ones)
               // The isBlankChat check in IndexedDB will prevent blank chats from being saved
               await indexedDBStorage.saveChat(downloadedChat)
@@ -349,9 +366,34 @@ export class CloudSyncService {
         PAGINATION.CHATS_PER_PAGE,
       )
 
+      const hasNextPage = !!remoteList.nextContinuationToken
+      const remoteCreatedTimes = remoteConversations
+        .map((conversation) => Date.parse(conversation.createdAt))
+        .filter((time) => !Number.isNaN(time))
+      const remoteOldestTimestamp =
+        remoteCreatedTimes.length > 0
+          ? Math.min(...remoteCreatedTimes)
+          : undefined
+
       for (const localChat of localChatsInFirstPage) {
         // Preserve chats that failed to decrypt locally so we can retry once the user provides a key.
         if ((localChat as any).decryptionFailed) {
+          continue
+        }
+
+        // If we only fetched the first page and this chat was loaded via pagination,
+        // defer deletion until we've paginated again.
+        const localCreatedTime = Date.parse(localChat.createdAt)
+        const isOlderThanRemoteFirstPage =
+          remoteOldestTimestamp !== undefined &&
+          !Number.isNaN(localCreatedTime) &&
+          localCreatedTime < remoteOldestTimestamp
+
+        if (
+          hasNextPage &&
+          (localChat as any).loadedAt &&
+          isOlderThanRemoteFirstPage
+        ) {
           continue
         }
 
