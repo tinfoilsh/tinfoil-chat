@@ -645,7 +645,7 @@ export function ChatSidebar({
         throw new Error('No authentication token available')
       }
 
-      const returnUrl = encodeURIComponent('https://chat.tinfoil.sh')
+      const returnUrl = encodeURIComponent(window.location.origin)
       const response = await fetch(
         `${API_BASE_URL}/api/billing/chat-checkout-link?returnUrl=${returnUrl}`,
         {
