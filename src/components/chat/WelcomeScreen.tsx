@@ -1,7 +1,7 @@
 'use client'
 
 import { type BaseModel } from '@/app/config/models'
-import { useUser } from '@clerk/nextjs'
+import { useClerk, useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import React, { memo, useEffect, useRef, useState } from 'react'
 import { ChatInput } from './chat-input'
@@ -60,7 +60,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   expandedLabel,
   handleLabelClick,
 }: WelcomeScreenProps) {
-  const { user } = useUser()
+  const { user, isSignedIn } = useUser()
+  const { openSignIn } = useClerk()
   const [nickname, setNickname] = useState<string>('')
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -255,6 +256,13 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                         models={models}
                         preferredPosition="below"
                         onPremiumModelClick={() => {
+                          if (!isSignedIn) {
+                            if (handleLabelClick) {
+                              handleLabelClick('model', () => {})
+                            }
+                            void openSignIn()
+                            return
+                          }
                           if (setIsSidebarOpen) {
                             setIsSidebarOpen(true)
                             // Dispatch event to highlight the appropriate box

@@ -1,4 +1,5 @@
 import { type BaseModel } from '@/app/config/models'
+import { useAuth, useClerk } from '@clerk/nextjs'
 import {
   DocumentDuplicateIcon,
   ExclamationTriangleIcon,
@@ -46,6 +47,8 @@ export function ChatLabels({
   isCompactMode = false,
   contextUsagePercentage,
 }: ChatLabelsProps) {
+  const { isSignedIn } = useAuth()
+  const { openSignIn } = useClerk()
   // Model selection handler - enforces handleModelSelect is defined
   const onModelSelect = useCallback(
     (model: AIModel) => {
@@ -121,6 +124,11 @@ export function ChatLabels({
               isPremium={isPremium}
               models={models}
               onPremiumModelClick={() => {
+                if (!isSignedIn) {
+                  handleLabelClick('model', () => {})
+                  void openSignIn()
+                  return
+                }
                 if (setIsSidebarOpen) {
                   setIsSidebarOpen(true)
                   // Dispatch event to highlight the appropriate box
