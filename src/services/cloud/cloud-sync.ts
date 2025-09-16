@@ -350,6 +350,11 @@ export class CloudSyncService {
       )
 
       for (const localChat of localChatsInFirstPage) {
+        // Preserve chats that failed to decrypt locally so we can retry once the user provides a key.
+        if ((localChat as any).decryptionFailed) {
+          continue
+        }
+
         if (!remoteChatMap.has(localChat.id)) {
           // This chat should be in the first page but isn't in remote - it was deleted
           try {

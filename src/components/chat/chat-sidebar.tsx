@@ -443,9 +443,9 @@ export function ChatSidebar({
         // to ensure a clean state that matches what cloud sync expects
         if (sortedSyncedChats.length > PAGINATION.CHATS_PER_PAGE) {
           let deletedAny = false
-          const chatsToDelete = sortedSyncedChats.slice(
-            PAGINATION.CHATS_PER_PAGE,
-          )
+          const chatsToDelete = sortedSyncedChats
+            .slice(PAGINATION.CHATS_PER_PAGE)
+            .filter((chat) => !(chat as any).decryptionFailed)
 
           for (const chat of chatsToDelete) {
             // Delete all chats beyond the first page on refresh
