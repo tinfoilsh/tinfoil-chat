@@ -19,6 +19,7 @@ const LOCAL_STORAGE_KEYS = [
   'clerk-db-jwt',
   '__clerk_db_jwt',
   'tinfoil-encryption-key',
+  'tinfoil-encryption-key-history',
 ] as const
 
 export async function performSignoutCleanup(): Promise<void> {

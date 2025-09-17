@@ -203,11 +203,10 @@ export function useCloudSync() {
 
   // Retry decryption for failed chats
   const retryDecryptionWithNewKey = useCallback(
-    async (options?: { runInBackground?: boolean }) => {
+    (options?: { runInBackground?: boolean }) => {
       const { runInBackground = false } = options || {}
 
       if (runInBackground) {
-        // Set initial progress state
         if (isMountedRef.current) {
           setState((prev) => ({
             ...prev,
@@ -215,10 +214,8 @@ export function useCloudSync() {
           }))
         }
 
-        // Run decryption in background
         const promise = cloudSync.retryDecryptionWithNewKey({
           onProgress: (current, total) => {
-            // Only update state if component is still mounted
             if (isMountedRef.current) {
               setState((prev) => ({
                 ...prev,
@@ -228,15 +225,12 @@ export function useCloudSync() {
           },
         })
 
-        // Clean up progress state when done
         promise.finally(() => {
-          // Only update state if component is still mounted
           if (isMountedRef.current) {
             setState((prev) => ({ ...prev, decryptionProgress: null }))
           }
         })
 
-        // Return immediately, don't wait
         promise.catch((error) => {
           logError('Background decryption failed', error, {
             component: 'useCloudSync',
@@ -244,11 +238,10 @@ export function useCloudSync() {
           })
         })
 
-        return 0 // Return immediately for background mode
+        return promise
       }
 
-      // Run synchronously for non-background mode
-      return await cloudSync.retryDecryptionWithNewKey()
+      return cloudSync.retryDecryptionWithNewKey()
     },
     [],
   )
@@ -268,12 +261,12 @@ export function useCloudSync() {
         // If the key changed OR this is the first time setting a key, retry decryption and sync
         if (!oldKey || oldKey !== key) {
           // Run decryption in background to avoid UI hang
-          retryDecryptionWithNewKey({ runInBackground: true })
+          const decryptionPromise = retryDecryptionWithNewKey({
+            runInBackground: true,
+          })
 
-          // Re-encrypt and sync can also run in background
-          Promise.resolve().then(async () => {
+          void decryptionPromise.finally(async () => {
             try {
-              // Re-encrypt all local chats with the new key and upload them
               const reencryptResult = await cloudSync.reencryptAndUploadChats()
 
               logInfo('Re-encrypted chats after key change', {
@@ -286,7 +279,6 @@ export function useCloudSync() {
                 },
               })
 
-              // Then trigger a full sync to ensure everything is up to date
               await syncChats()
             } catch (error) {
               logError('Failed to re-encrypt chats', error, {
