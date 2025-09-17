@@ -274,13 +274,26 @@ export class EncryptionService {
   }
 
   // Remove encryption key
-  clearKey(): void {
+  clearKey(options: { persist?: boolean } = {}): void {
+    const { persist = true } = options
     this.encryptionKey = null
     this.currentKeyString = null
     this.fallbackKeyCache.clear()
     this.fallbackKeyStrings = []
-    localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
-    localStorage.removeItem(ENCRYPTION_KEY_HISTORY_STORAGE_KEY)
+    if (persist) {
+      try {
+        localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
+        localStorage.removeItem(ENCRYPTION_KEY_HISTORY_STORAGE_KEY)
+      } catch (error) {
+        logInfo('Failed to remove encryption keys from storage', {
+          component: 'EncryptionService',
+          action: 'clearKeyPersist',
+          metadata: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    }
   }
 
   // Encrypt data

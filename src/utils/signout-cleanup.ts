@@ -115,8 +115,8 @@ export async function performSignoutCleanup(): Promise<void> {
       }
     }
 
-    // Clear encryption keys from memory after storage cleanup
-    encryptionService.clearKey()
+    // Clear encryption key state without touching storage again
+    encryptionService.clearKey({ persist: false })
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',
