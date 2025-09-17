@@ -3,6 +3,7 @@
 import { logInfo } from '@/utils/error-handling'
 
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
+const ENCRYPTION_KEY_HISTORY_STORAGE_KEY = 'tinfoil-encryption-key-history'
 
 export interface EncryptedData {
   iv: string // Base64 encoded initialization vector
@@ -11,6 +12,9 @@ export interface EncryptedData {
 
 export class EncryptionService {
   private encryptionKey: CryptoKey | null = null
+  private currentKeyString: string | null = null
+  private fallbackKeyStrings: string[] = []
+  private fallbackKeyCache: Map<string, CryptoKey> = new Map()
 
   // Helper to convert bytes to alphanumeric string (a-z, 0-9)
   // Always produces even-length strings (2 characters per byte)
@@ -52,6 +56,105 @@ export class EncryptionService {
     return bytes
   }
 
+  private getKeyBytes(keyString: string): Uint8Array {
+    if (!keyString.startsWith('key_')) {
+      throw new Error('Key must start with "key_" prefix')
+    }
+
+    const processedKey = keyString.substring(4)
+
+    if (!/^[a-z0-9]+$/.test(processedKey)) {
+      throw new Error(
+        'Key must only contain lowercase letters and numbers after the prefix',
+      )
+    }
+
+    return this.alphanumericToBytes(processedKey)
+  }
+
+  private async importCryptoKey(keyString: string): Promise<CryptoKey> {
+    const keyData = this.getKeyBytes(keyString)
+
+    return await crypto.subtle.importKey(
+      'raw',
+      keyData.buffer.slice(
+        keyData.byteOffset,
+        keyData.byteOffset + keyData.byteLength,
+      ) as ArrayBuffer,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt', 'decrypt'],
+    )
+  }
+
+  private loadKeyHistoryFromStorage(): string[] {
+    const rawHistory = localStorage.getItem(ENCRYPTION_KEY_HISTORY_STORAGE_KEY)
+
+    if (!rawHistory) {
+      return []
+    }
+
+    try {
+      const parsed = JSON.parse(rawHistory)
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+
+      return parsed.filter(
+        (value: unknown): value is string =>
+          typeof value === 'string' && value.startsWith('key_'),
+      )
+    } catch (error) {
+      logInfo('Failed to parse encryption key history', {
+        component: 'EncryptionService',
+        action: 'loadKeyHistory',
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      return []
+    }
+  }
+
+  private saveKeyHistoryToStorage(history: string[]): void {
+    localStorage.setItem(
+      ENCRYPTION_KEY_HISTORY_STORAGE_KEY,
+      JSON.stringify(history),
+    )
+  }
+
+  private pruneFallbackCache(validKeys: string[]): void {
+    for (const key of Array.from(this.fallbackKeyCache.keys())) {
+      if (!validKeys.includes(key)) {
+        this.fallbackKeyCache.delete(key)
+      }
+    }
+  }
+
+  private async getFallbackCryptoKey(
+    keyString: string,
+  ): Promise<CryptoKey | null> {
+    const cached = this.fallbackKeyCache.get(keyString)
+    if (cached) {
+      return cached
+    }
+
+    try {
+      const cryptoKey = await this.importCryptoKey(keyString)
+      this.fallbackKeyCache.set(keyString, cryptoKey)
+      return cryptoKey
+    } catch (error) {
+      logInfo('Failed to import fallback encryption key', {
+        component: 'EncryptionService',
+        action: 'getFallbackCryptoKey',
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      return null
+    }
+  }
+
   // Generate a new encryption key
   async generateKey(): Promise<string> {
     const key = await crypto.subtle.generateKey(
@@ -74,6 +177,8 @@ export class EncryptionService {
   async initialize(): Promise<string> {
     // Check if we have a stored key
     const storedKey = localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
+    this.fallbackKeyStrings = this.loadKeyHistoryFromStorage()
+    this.pruneFallbackCache(this.fallbackKeyStrings)
 
     if (storedKey) {
       await this.setKey(storedKey)
@@ -81,7 +186,6 @@ export class EncryptionService {
     } else {
       // Generate new key
       const newKey = await this.generateKey()
-      localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, newKey)
       await this.setKey(newKey)
       return newKey
     }
@@ -90,40 +194,76 @@ export class EncryptionService {
   // Set encryption key from alphanumeric string
   async setKey(keyString: string): Promise<void> {
     try {
-      let processedKey = keyString
+      const previousKey =
+        this.currentKeyString ??
+        localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
 
-      // Check if the key has the prefix
-      if (keyString.startsWith('key_')) {
-        processedKey = keyString.substring(4)
-      } else {
-        throw new Error('Key must start with "key_" prefix')
+      const previousHistory = this.loadKeyHistoryFromStorage()
+
+      // Import as CryptoKey - ensure we have a proper ArrayBuffer
+      const importedKey = await this.importCryptoKey(keyString)
+
+      // Prepare new history (excluding the key we are setting)
+      let history = previousHistory.filter(
+        (storedKey) => storedKey !== keyString,
+      )
+
+      if (previousKey && previousKey !== keyString) {
+        history = [
+          previousKey,
+          ...history.filter((storedKey) => storedKey !== previousKey),
+        ]
       }
 
-      // Validate that the key only contains allowed characters after prefix
-      if (!/^[a-z0-9]+$/.test(processedKey)) {
+      try {
+        localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
+        this.saveKeyHistoryToStorage(history)
+      } catch (persistError) {
+        try {
+          if (previousKey) {
+            localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, previousKey)
+          } else {
+            localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
+          }
+          this.saveKeyHistoryToStorage(previousHistory)
+        } catch (rollbackError) {
+          logInfo('Failed to rollback encryption key persistence', {
+            component: 'EncryptionService',
+            action: 'setKeyRollback',
+            metadata: {
+              persistError:
+                persistError instanceof Error
+                  ? persistError.message
+                  : String(persistError),
+              rollbackError:
+                rollbackError instanceof Error
+                  ? rollbackError.message
+                  : String(rollbackError),
+            },
+          })
+        }
+
         throw new Error(
-          'Key must only contain lowercase letters and numbers after the prefix',
+          `Failed to persist encryption key: ${
+            persistError instanceof Error
+              ? persistError.message
+              : String(persistError)
+          }`,
         )
       }
 
-      // Convert alphanumeric to bytes
-      const keyData = this.alphanumericToBytes(processedKey)
-
-      // Import as CryptoKey - ensure we have a proper ArrayBuffer
-      this.encryptionKey = await crypto.subtle.importKey(
-        'raw',
-        keyData.buffer.slice(
-          keyData.byteOffset,
-          keyData.byteOffset + keyData.byteLength,
-        ) as ArrayBuffer,
-        { name: 'AES-GCM' },
-        false,
-        ['encrypt', 'decrypt'],
-      )
-
-      // Store the key in localStorage with prefix
-      localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
+      this.encryptionKey = importedKey
+      this.currentKeyString = keyString
+      this.fallbackKeyStrings = history
+      this.fallbackKeyCache.delete(keyString)
+      this.pruneFallbackCache(history)
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith('Failed to persist encryption key')
+      ) {
+        throw error
+      }
       throw new Error(`Invalid encryption key: ${error}`)
     }
   }
@@ -134,9 +274,26 @@ export class EncryptionService {
   }
 
   // Remove encryption key
-  clearKey(): void {
+  clearKey(options: { persist?: boolean } = {}): void {
+    const { persist = true } = options
     this.encryptionKey = null
-    localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
+    this.currentKeyString = null
+    this.fallbackKeyCache.clear()
+    this.fallbackKeyStrings = []
+    if (persist) {
+      try {
+        localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
+        localStorage.removeItem(ENCRYPTION_KEY_HISTORY_STORAGE_KEY)
+      } catch (error) {
+        logInfo('Failed to remove encryption keys from storage', {
+          component: 'EncryptionService',
+          action: 'clearKeyPersist',
+          metadata: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    }
   }
 
   // Encrypt data
@@ -200,61 +357,95 @@ export class EncryptionService {
       } catch (error) {
         throw new Error(`Invalid base64 encoding: ${error}`)
       }
+      try {
+        return await this.decryptWithKey(this.encryptionKey, iv, data)
+      } catch (primaryError) {
+        let lastError: unknown = primaryError
 
-      // Decrypt - use the existing buffers directly with proper typing
-      const decryptedData = await crypto.subtle.decrypt(
-        {
-          name: 'AES-GCM',
-          iv: iv.buffer.slice(
-            iv.byteOffset,
-            iv.byteOffset + iv.byteLength,
-          ) as ArrayBuffer,
-        },
-        this.encryptionKey,
-        data.buffer.slice(
-          data.byteOffset,
-          data.byteOffset + data.byteLength,
-        ) as ArrayBuffer,
-      )
-
-      // Convert decrypted data to string
-      const decoder = new TextDecoder()
-      const decryptedString = decoder.decode(decryptedData)
-
-      // Check if the decrypted data is compressed (starts with gzip header "H4sI")
-      if (decryptedString.startsWith('H4sI')) {
-        // Dynamically import compression utilities only when needed
-        const { isGzippedData, safeDecompress } = await import(
-          '@/utils/compression'
-        )
-
-        if (isGzippedData(decryptedString)) {
-          logInfo('Decompressing gzipped data', {
-            component: 'EncryptionService',
-            action: 'decrypt',
-            metadata: { dataLength: decryptedString.length },
-          })
-
-          // Attempt safe decompression with timeout and validation
-          const decompressedString = safeDecompress(decryptedString)
-
-          if (!decompressedString) {
-            // Decompression failed - data is likely corrupted
-            throw new Error(
-              'DATA_CORRUPTED: Failed to decompress data - may be corrupted or malformed',
-            )
+        for (const [index, keyString] of this.fallbackKeyStrings.entries()) {
+          const fallbackKey = await this.getFallbackCryptoKey(keyString)
+          if (!fallbackKey) {
+            continue
           }
 
-          // Parse the decompressed JSON
-          return JSON.parse(decompressedString)
+          try {
+            const result = await this.decryptWithKey(fallbackKey, iv, data)
+            logInfo('Decryption succeeded with fallback key', {
+              component: 'EncryptionService',
+              action: 'decrypt',
+              metadata: { fallbackIndex: index },
+            })
+            return result
+          } catch (fallbackError) {
+            lastError = fallbackError
+          }
         }
-      }
 
-      // Parse JSON directly for uncompressed data
-      return JSON.parse(decryptedString)
+        if (lastError instanceof Error) {
+          throw lastError
+        }
+
+        throw new Error(String(lastError ?? 'No valid encryption keys'))
+      }
     } catch (error) {
       throw new Error(`Decryption failed: ${error}`)
     }
+  }
+
+  private async decryptWithKey(
+    cryptoKey: CryptoKey,
+    iv: Uint8Array,
+    data: Uint8Array,
+  ): Promise<any> {
+    const decryptedData = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv.buffer.slice(
+          iv.byteOffset,
+          iv.byteOffset + iv.byteLength,
+        ) as ArrayBuffer,
+      },
+      cryptoKey,
+      data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength,
+      ) as ArrayBuffer,
+    )
+
+    return await this.parseDecryptedPayload(decryptedData)
+  }
+
+  private async parseDecryptedPayload(
+    decryptedData: ArrayBuffer,
+  ): Promise<any> {
+    const decoder = new TextDecoder()
+    const decryptedString = decoder.decode(decryptedData)
+
+    if (decryptedString.startsWith('H4sI')) {
+      const { isGzippedData, safeDecompress } = await import(
+        '@/utils/compression'
+      )
+
+      if (isGzippedData(decryptedString)) {
+        logInfo('Decompressing gzipped data', {
+          component: 'EncryptionService',
+          action: 'decrypt',
+          metadata: { dataLength: decryptedString.length },
+        })
+
+        const decompressedString = safeDecompress(decryptedString)
+
+        if (!decompressedString) {
+          throw new Error(
+            'DATA_CORRUPTED: Failed to decompress data - may be corrupted or malformed',
+          )
+        }
+
+        return JSON.parse(decompressedString)
+      }
+    }
+
+    return JSON.parse(decryptedString)
   }
 
   // Helper method to convert Uint8Array to base64 safely for large data

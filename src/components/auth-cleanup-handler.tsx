@@ -2,6 +2,7 @@
 
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import { logInfo } from '@/utils/error-handling'
 import {
   getEncryptionKey,
@@ -31,6 +32,7 @@ export function AuthCleanupHandler() {
     ) {
       // User switched - reset renderer registry to prevent state leakage
       resetRendererRegistry()
+      encryptionService.clearKey()
       logInfo('Reset renderer registry due to user switch', {
         component: 'AuthCleanupHandler',
         action: 'userSwitch',

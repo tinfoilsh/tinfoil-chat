@@ -1,5 +1,6 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import { profileSync } from '@/services/cloud/profile-sync'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { logError, logInfo } from '@/utils/error-handling'
@@ -19,6 +20,7 @@ const LOCAL_STORAGE_KEYS = [
   'clerk-db-jwt',
   '__clerk_db_jwt',
   'tinfoil-encryption-key',
+  'tinfoil-encryption-key-history',
 ] as const
 
 export async function performSignoutCleanup(): Promise<void> {
@@ -112,6 +114,9 @@ export async function performSignoutCleanup(): Promise<void> {
         })
       }
     }
+
+    // Clear encryption key state without touching storage again
+    encryptionService.clearKey({ persist: false })
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',
