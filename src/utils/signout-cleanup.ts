@@ -1,5 +1,6 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import { profileSync } from '@/services/cloud/profile-sync'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { logError, logInfo } from '@/utils/error-handling'
@@ -113,6 +114,9 @@ export async function performSignoutCleanup(): Promise<void> {
         })
       }
     }
+
+    // Clear encryption keys from memory after storage cleanup
+    encryptionService.clearKey()
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',
