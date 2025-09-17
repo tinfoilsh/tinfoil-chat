@@ -20,7 +20,7 @@ function validateConfig() {
 
 // Pagination settings
 export const PAGINATION = {
-  CHATS_PER_PAGE: 10,
+  CHATS_PER_PAGE: 20,
 } as const
 
 // Cloud sync settings
