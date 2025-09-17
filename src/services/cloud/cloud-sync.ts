@@ -231,7 +231,6 @@ export class CloudSyncService {
       // Then, get list of remote chats with content
       let remoteList
       try {
-        // Only fetch first page of chats during initial sync to match pagination
         remoteList = await r2Storage.listChats({
           includeContent: true,
           limit: PAGINATION.CHATS_PER_PAGE,
@@ -246,6 +245,70 @@ export class CloudSyncService {
         return result
       }
 
+      const remoteConversations = [...(remoteList.conversations || [])]
+      let continuationToken = remoteList.nextContinuationToken
+      let fetchedAllRemotePages = true
+      let pageSafetyCounter = 0
+
+      while (continuationToken && pageSafetyCounter < 100) {
+        pageSafetyCounter++
+        try {
+          const nextPage = await r2Storage.listChats({
+            limit: PAGINATION.CHATS_PER_PAGE,
+            continuationToken,
+            includeContent: false,
+          })
+
+          if (nextPage.conversations?.length) {
+            remoteConversations.push(...nextPage.conversations)
+          }
+
+          if (!nextPage.nextContinuationToken) {
+            continuationToken = undefined
+            break
+          }
+
+          if (nextPage.nextContinuationToken === continuationToken) {
+            fetchedAllRemotePages = false
+            logError(
+              'Detected repeating continuation token while fetching remote chats',
+              new Error('repeating_continuation_token'),
+              {
+                component: 'CloudSync',
+                action: 'syncAllChats',
+              },
+            )
+            break
+          }
+
+          continuationToken = nextPage.nextContinuationToken
+        } catch (error) {
+          logError('Failed to fetch additional pages of remote chats', error, {
+            component: 'CloudSync',
+            action: 'syncAllChats',
+          })
+          result.errors.push(
+            `Failed to fetch additional pages of remote chats: ${error instanceof Error ? error.message : String(error)}`,
+          )
+          fetchedAllRemotePages = false
+          break
+        }
+      }
+
+      if (continuationToken) {
+        fetchedAllRemotePages = false
+        if (pageSafetyCounter >= 100) {
+          logError(
+            'Stopped fetching remote chats due to safety guard',
+            new Error('pagination_safety_limit_reached'),
+            {
+              component: 'CloudSync',
+              action: 'syncAllChats',
+            },
+          )
+        }
+      }
+
       const localChats = await indexedDBStorage.getAllChats()
 
       // Initialize encryption service once before processing
@@ -253,8 +316,6 @@ export class CloudSyncService {
 
       // Create maps for easy lookup
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
-      // Handle null conversations array
-      const remoteConversations = remoteList.conversations || []
       const remoteChatMap = new Map(remoteConversations.map((c) => [c.id, c]))
 
       // Process remote chats
@@ -282,44 +343,64 @@ export class CloudSyncService {
             remoteTimestamp > (localChat.syncedAt || 0)) ||
           (localChat as any).decryptionFailed === true
 
-        if (shouldProcess && remoteChat.content) {
+        if (shouldProcess) {
           try {
-            const encrypted = JSON.parse(remoteChat.content)
-
-            // Try to decrypt the chat data
             let downloadedChat: StoredChat | null = null
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              downloadedChat = decrypted
-            } catch (decryptError) {
-              // Check if this is corrupted data (compressed)
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
 
-              // If decryption fails, store the encrypted data for later retry
-              const safeCreatedAt = ensureValidISODate(
-                remoteChat.createdAt,
-                remoteChat.id,
-              )
-              const safeUpdatedAt = ensureValidISODate(
-                remoteChat.updatedAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              downloadedChat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: safeCreatedAt,
-                updatedAt: safeUpdatedAt,
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-              } as StoredChat
+            if (remoteChat.content) {
+              const encrypted = JSON.parse(remoteChat.content)
+
+              try {
+                const decrypted = await encryptionService.decrypt(encrypted)
+                downloadedChat = decrypted
+              } catch (decryptError) {
+                const isCorrupted =
+                  decryptError instanceof Error &&
+                  decryptError.message.includes('DATA_CORRUPTED')
+
+                const safeCreatedAt = ensureValidISODate(
+                  remoteChat.createdAt,
+                  remoteChat.id,
+                )
+                const safeUpdatedAt = ensureValidISODate(
+                  remoteChat.updatedAt ?? remoteChat.createdAt,
+                  remoteChat.id,
+                )
+                downloadedChat = {
+                  id: remoteChat.id,
+                  title: 'Encrypted',
+                  messages: [],
+                  createdAt: safeCreatedAt,
+                  updatedAt: safeUpdatedAt,
+                  lastAccessedAt: Date.now(),
+                  decryptionFailed: true,
+                  dataCorrupted: isCorrupted,
+                  encryptedData: remoteChat.content,
+                  syncedAt: Date.now(),
+                  locallyModified: false,
+                  syncVersion: 1,
+                } as StoredChat
+              }
+            } else {
+              downloadedChat = await r2Storage.downloadChat(remoteChat.id)
+              if (downloadedChat) {
+                const safeCreatedAt = ensureValidISODate(
+                  downloadedChat.createdAt ?? remoteChat.createdAt,
+                  remoteChat.id,
+                )
+                const safeUpdatedAt = ensureValidISODate(
+                  downloadedChat.updatedAt ??
+                    remoteChat.updatedAt ??
+                    remoteChat.createdAt,
+                  remoteChat.id,
+                )
+                downloadedChat.createdAt = safeCreatedAt
+                downloadedChat.updatedAt = safeUpdatedAt
+                downloadedChat.lastAccessedAt = Date.now()
+                downloadedChat.syncedAt = Date.now()
+                downloadedChat.locallyModified = false
+                downloadedChat.syncVersion = downloadedChat.syncVersion || 1
+              }
             }
 
             if (downloadedChat) {
@@ -331,8 +412,6 @@ export class CloudSyncService {
                 downloadedChat.updatedAt ?? downloadedChat.createdAt,
                 downloadedChat.id,
               )
-              // Save all downloaded chats (including encrypted ones)
-              // The isBlankChat check in IndexedDB will prevent blank chats from being saved
               await indexedDBStorage.saveChat(downloadedChat)
               await indexedDBStorage.markAsSynced(
                 downloadedChat.id,
@@ -360,53 +439,34 @@ export class CloudSyncService {
           return timeB - timeA // Descending (newest first)
         })
 
-      // Only consider chats in the first page for deletion check
-      const localChatsInFirstPage = sortedSyncedLocalChats.slice(
-        0,
-        PAGINATION.CHATS_PER_PAGE,
-      )
+      if (fetchedAllRemotePages) {
+        for (const localChat of sortedSyncedLocalChats) {
+          if ((localChat as any).decryptionFailed) {
+            continue
+          }
 
-      const hasNextPage = !!remoteList.nextContinuationToken
-      const remoteCreatedTimes = remoteConversations
-        .map((conversation) => Date.parse(conversation.createdAt))
-        .filter((time) => !Number.isNaN(time))
-      const remoteOldestTimestamp =
-        remoteCreatedTimes.length > 0
-          ? Math.min(...remoteCreatedTimes)
-          : undefined
-
-      for (const localChat of localChatsInFirstPage) {
-        // Preserve chats that failed to decrypt locally so we can retry once the user provides a key.
-        if ((localChat as any).decryptionFailed) {
-          continue
-        }
-
-        // If we only fetched the first page and this chat was loaded via pagination,
-        // defer deletion until we've paginated again.
-        const localCreatedTime = Date.parse(localChat.createdAt)
-        const isOlderThanRemoteFirstPage =
-          remoteOldestTimestamp !== undefined &&
-          !Number.isNaN(localCreatedTime) &&
-          localCreatedTime < remoteOldestTimestamp
-
-        if (
-          hasNextPage &&
-          (localChat as any).loadedAt &&
-          isOlderThanRemoteFirstPage
-        ) {
-          continue
-        }
-
-        if (!remoteChatMap.has(localChat.id)) {
-          // This chat should be in the first page but isn't in remote - it was deleted
-          try {
-            await indexedDBStorage.deleteChat(localChat.id)
-          } catch (error) {
-            result.errors.push(
-              `Failed to delete local chat ${localChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-            )
+          if (!remoteChatMap.has(localChat.id)) {
+            try {
+              await indexedDBStorage.deleteChat(localChat.id)
+            } catch (error) {
+              result.errors.push(
+                `Failed to delete local chat ${localChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+              )
+            }
           }
         }
+      } else {
+        logInfo(
+          'Skipping deletion check because remote chat list is incomplete',
+          {
+            component: 'CloudSync',
+            action: 'syncAllChats',
+            metadata: {
+              fetchedAllRemotePages,
+              remotePageCount: pageSafetyCounter + 1,
+            },
+          },
+        )
       }
     } catch (error) {
       result.errors.push(
