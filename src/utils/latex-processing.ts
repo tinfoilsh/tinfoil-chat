@@ -96,20 +96,37 @@ export function processLatexTags(text: string): string {
 
 function transformMathDelimiters(content: string): string {
   let result = ''
-  const displayMathPattern = /\\\[([\s\S]*?)\\\]/g
+  let index = 0
   let lastIndex = 0
-  let match: RegExpExecArray | null
 
-  while ((match = displayMathPattern.exec(content)) !== null) {
-    const before = content.slice(lastIndex, match.index)
+  while (index < content.length) {
+    const isDisplayOpen =
+      content[index] === '\\' &&
+      content[index + 1] === '[' &&
+      !isEscapedDelimiter(content, index)
+
+    if (!isDisplayOpen) {
+      index += 1
+      continue
+    }
+
+    const closeIndex = findMatchingDisplayClose(content, index + 2)
+
+    if (closeIndex === -1) {
+      index += 2
+      continue
+    }
+
+    const before = content.slice(lastIndex, index)
     if (before) {
       result += convertInlineMath(before)
     }
 
-    const inner = match[1].trim()
+    const inner = content.slice(index + 2, closeIndex).trim()
     result += `\n\n$$\n${inner}\n$$\n\n`
 
-    lastIndex = match.index + match[0].length
+    index = closeIndex + 2
+    lastIndex = index
   }
 
   const remaining = content.slice(lastIndex)
@@ -118,6 +135,24 @@ function transformMathDelimiters(content: string): string {
   }
 
   return result
+}
+
+function findMatchingDisplayClose(segment: string, startIndex: number): number {
+  let index = startIndex
+
+  while (index < segment.length) {
+    if (
+      segment[index] === '\\' &&
+      segment[index + 1] === ']' &&
+      !isEscapedDelimiter(segment, index)
+    ) {
+      return index
+    }
+
+    index += 1
+  }
+
+  return -1
 }
 
 function convertInlineMath(segment: string): string {
