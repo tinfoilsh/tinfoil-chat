@@ -77,9 +77,8 @@ export function isUnsupportedLatex(content: string): boolean {
 }
 
 // Process LaTeX content for proper rendering
-// Convert \(...\) and \[...\] to $$ delimiters that remark-math understands
+// Convert \[...\] to $$ blocks and \(...\) outside of those blocks to inline $$ delimiters
 export function processLatexTags(text: string): string {
-  // Preserve code blocks as-is
   const parts = text.split(CODE_BLOCK_SPLITTER)
 
   return parts
@@ -90,28 +89,118 @@ export function processLatexTags(text: string): string {
         (part.startsWith('`') && part.endsWith('`'))
       if (isCodeBlock) return part
 
-      let transformed = part
-
-      // Convert \[...\] to $$...$$ on its own line (display math)
-      // Display math needs $$ on separate lines
-      transformed = transformed.replace(
-        /\\\[([\s\S]*?)\\\]/g,
-        (match, inner) => {
-          const trimmed = inner.trim()
-          return `\n\n$$\n${trimmed}\n$$\n\n`
-        },
-      )
-
-      // Convert \(...\) to $$...$$ on same line (inline math)
-      // When singleDollarTextMath is false, $$ on same line = inline math
-      transformed = transformed.replace(
-        /\\\(([\s\S]*?)\\\)/g,
-        (match, inner) => `$$${inner}$$`,
-      )
-
-      return transformed
+      return transformMathDelimiters(part)
     })
     .join('')
+}
+
+function transformMathDelimiters(content: string): string {
+  let result = ''
+  const displayMathPattern = /\\\[([\s\S]*?)\\\]/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = displayMathPattern.exec(content)) !== null) {
+    const before = content.slice(lastIndex, match.index)
+    if (before) {
+      result += convertInlineMath(before)
+    }
+
+    const inner = match[1].trim()
+    result += `\n\n$$\n${inner}\n$$\n\n`
+
+    lastIndex = match.index + match[0].length
+  }
+
+  const remaining = content.slice(lastIndex)
+  if (remaining) {
+    result += convertInlineMath(remaining)
+  }
+
+  return result
+}
+
+function convertInlineMath(segment: string): string {
+  let output = ''
+  let index = 0
+
+  while (index < segment.length) {
+    const isPotentialOpen =
+      segment[index] === '\\' &&
+      segment[index + 1] === '(' &&
+      !isEscapedDelimiter(segment, index)
+
+    if (!isPotentialOpen) {
+      output += segment[index]
+      index += 1
+      continue
+    }
+
+    const start = index + 2
+    const closeIndex = findMatchingInlineClose(segment, start)
+
+    if (closeIndex === -1) {
+      output += segment[index]
+      index += 1
+      continue
+    }
+
+    const inner = segment.slice(start, closeIndex)
+    output += `$$${inner}$$`
+    index = closeIndex + 2
+  }
+
+  return output
+}
+
+function findMatchingInlineClose(segment: string, startIndex: number): number {
+  let depth = 0
+  let index = startIndex
+
+  while (index < segment.length) {
+    const isBackslash = segment[index] === '\\'
+    const nextChar = isBackslash ? segment[index + 1] : undefined
+
+    if (
+      isBackslash &&
+      nextChar === '(' &&
+      !isEscapedDelimiter(segment, index)
+    ) {
+      depth += 1
+      index += 2
+      continue
+    }
+
+    if (
+      isBackslash &&
+      nextChar === ')' &&
+      !isEscapedDelimiter(segment, index)
+    ) {
+      if (depth === 0) {
+        return index
+      }
+
+      depth -= 1
+      index += 2
+      continue
+    }
+
+    index += 1
+  }
+
+  return -1
+}
+
+function isEscapedDelimiter(segment: string, delimiterIndex: number): boolean {
+  let backslashCount = 0
+  let index = delimiterIndex - 1
+
+  while (index >= 0 && segment[index] === '\\') {
+    backslashCount += 1
+    index -= 1
+  }
+
+  return backslashCount % 2 === 1
 }
 
 // Convert LaTeX content for copying
