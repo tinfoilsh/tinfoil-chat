@@ -198,15 +198,13 @@ export class EncryptionService {
         this.currentKeyString ??
         localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
 
+      const previousHistory = this.loadKeyHistoryFromStorage()
+
       // Import as CryptoKey - ensure we have a proper ArrayBuffer
-      this.encryptionKey = await this.importCryptoKey(keyString)
-      this.currentKeyString = keyString
+      const importedKey = await this.importCryptoKey(keyString)
 
-      // Store the key in localStorage with prefix
-      localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
-
-      // Update key history
-      let history = this.loadKeyHistoryFromStorage().filter(
+      // Prepare new history (excluding the key we are setting)
+      let history = previousHistory.filter(
         (storedKey) => storedKey !== keyString,
       )
 
@@ -217,11 +215,55 @@ export class EncryptionService {
         ]
       }
 
-      this.saveKeyHistoryToStorage(history)
+      try {
+        localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
+        this.saveKeyHistoryToStorage(history)
+      } catch (persistError) {
+        try {
+          if (previousKey) {
+            localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, previousKey)
+          } else {
+            localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
+          }
+          this.saveKeyHistoryToStorage(previousHistory)
+        } catch (rollbackError) {
+          logInfo('Failed to rollback encryption key persistence', {
+            component: 'EncryptionService',
+            action: 'setKeyRollback',
+            metadata: {
+              persistError:
+                persistError instanceof Error
+                  ? persistError.message
+                  : String(persistError),
+              rollbackError:
+                rollbackError instanceof Error
+                  ? rollbackError.message
+                  : String(rollbackError),
+            },
+          })
+        }
+
+        throw new Error(
+          `Failed to persist encryption key: ${
+            persistError instanceof Error
+              ? persistError.message
+              : String(persistError)
+          }`,
+        )
+      }
+
+      this.encryptionKey = importedKey
+      this.currentKeyString = keyString
       this.fallbackKeyStrings = history
       this.fallbackKeyCache.delete(keyString)
       this.pruneFallbackCache(history)
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith('Failed to persist encryption key')
+      ) {
+        throw error
+      }
       throw new Error(`Invalid encryption key: ${error}`)
     }
   }
