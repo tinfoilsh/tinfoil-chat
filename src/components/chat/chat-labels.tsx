@@ -1,4 +1,5 @@
 import { type BaseModel } from '@/app/config/models'
+import { cn } from '@/components/ui/utils'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import {
   DocumentDuplicateIcon,
@@ -87,11 +88,11 @@ export function ChatLabels({
               e.stopPropagation()
               handleLabelClick('model', () => {})
             }}
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-            } ${
-              expandedLabel === 'model' ? 'bg-opacity-80' : ''
-            } transition-colors hover:bg-opacity-80`}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border border-border-subtle px-2 py-1 transition-colors',
+              'bg-surface-chat-background hover:bg-surface-chat',
+              expandedLabel === 'model' && 'bg-surface-chat',
+            )}
           >
             <img
               src={
@@ -106,11 +107,7 @@ export function ChatLabels({
               className="h-5 w-5"
             />
             {!isCompactMode && (
-              <span
-                className={`text-xs ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-600'
-                }`}
-              >
+              <span className="text-xs text-content-secondary">
                 {model.name}
               </span>
             )}
@@ -147,13 +144,11 @@ export function ChatLabels({
         <button
           type="button"
           onClick={openAndExpandVerifier}
-          className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-          }`}
+          className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
         >
           {!verificationComplete ? (
             <svg
-              className={`h-5 w-5 animate-spin ${isDarkMode ? 'text-white' : 'text-black'}`}
+              className="h-5 w-5 animate-spin text-content-primary"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -178,11 +173,7 @@ export function ChatLabels({
             <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
           )}
           {!isCompactMode && (
-            <span
-              className={`text-xs ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-600'
-              }`}
-            >
+            <span className="text-xs text-content-secondary">
               {!verificationComplete
                 ? 'Verifying...'
                 : verificationSuccess
@@ -197,24 +188,12 @@ export function ChatLabels({
           <button
             type="button"
             onClick={onShareClick}
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1 ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-            } transition-colors hover:bg-opacity-80`}
+            className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
             title="Copy"
           >
-            <DocumentDuplicateIcon
-              className={`h-5 w-5 ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-600'
-              }`}
-            />
+            <DocumentDuplicateIcon className="h-5 w-5 text-content-secondary" />
             {!isCompactMode && (
-              <span
-                className={`text-xs ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-600'
-                }`}
-              >
-                Copy
-              </span>
+              <span className="text-xs text-content-secondary">Copy</span>
             )}
           </button>
         )}
@@ -230,7 +209,8 @@ export function ChatLabels({
                 cx="12"
                 cy="12"
                 r="10"
-                stroke={isDarkMode ? '#374151' : '#E5E7EB'}
+                className="text-border-subtle"
+                stroke="currentColor"
                 strokeWidth="2"
                 fill="none"
               />
@@ -239,21 +219,17 @@ export function ChatLabels({
                 cx="12"
                 cy="12"
                 r="10"
-                stroke={isDarkMode ? 'white' : '#111827'}
+                className="text-content-primary transition-all duration-300"
+                stroke="currentColor"
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray={`${2 * Math.PI * 10}`}
                 strokeDashoffset={`${2 * Math.PI * 10 * (1 - contextUsagePercentage / 100)}`}
-                className="transition-all duration-300"
               />
             </svg>
           </div>
           {!isCompactMode && (
-            <span
-              className={`text-xs ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-              }`}
-            >
+            <span className="text-xs text-content-muted">
               {contextUsagePercentage.toFixed(0)}% of context used
             </span>
           )}

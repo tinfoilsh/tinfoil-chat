@@ -113,9 +113,7 @@ export function ProcessStep({
     title.includes('Source Code Verified') || digestType === 'SOURCE'
 
   return (
-    <div
-      className={`w-full rounded-lg border ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} @container`}
-    >
+    <div className="w-full rounded-lg border border-border-subtle bg-surface-card @container">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full p-4 text-left"
@@ -126,9 +124,7 @@ export function ProcessStep({
           </div>
 
           <div className="flex-1 text-center @[400px]:text-left">
-            <h3
-              className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-            >
+            <h3 className="text-sm font-medium text-content-primary">
               {title}
             </h3>
             <p
@@ -171,7 +167,7 @@ export function ProcessStep({
             {measurements && (
               <div>
                 <h4
-                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                 >
                   {digestType === 'SOURCE'
                     ? 'Source Measurement'
@@ -209,7 +205,7 @@ export function ProcessStep({
                   <div className="mt-2 flex items-center justify-end gap-2">
                     {digestType === 'SOURCE' ? (
                       <IoCodeSlashOutline
-                        className={`${isDarkMode ? 'text-gray-200' : 'text-gray-700'} opacity-50`}
+                        className={`${isDarkMode ? 'text-white' : 'text-gray-700'} opacity-50`}
                         size={24}
                       />
                     ) : (
@@ -243,7 +239,7 @@ export function ProcessStep({
             {isRemoteAttestation && (
               <div className="mt-3">
                 <h4
-                  className={`mb-2 text-center text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-2 text-center text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                 >
                   Runtime attested by
                 </h4>
@@ -309,7 +305,7 @@ export function ProcessStep({
             {measurements && extractCertificate(measurements) && (
               <div>
                 <h4
-                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                 >
                   TLS Public Key Fingerprint
                   <span
@@ -339,7 +335,7 @@ export function ProcessStep({
             {isSourceCodeVerified && (
               <div className="mt-3">
                 <h4
-                  className={`mb-2 text-center text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-2 text-center text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                 >
                   Code integrity attested by
                 </h4>
@@ -403,7 +399,7 @@ export function ProcessStep({
             {technicalDetails && (
               <div>
                 <h4
-                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
+                  className={`mb-2 text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                 >
                   Technical Details
                 </h4>

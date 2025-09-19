@@ -18,6 +18,8 @@ export function SignoutConfirmationModal({
   encryptionKey,
   isDarkMode,
 }: SignoutConfirmationModalProps) {
+  // Theme now derives from global CSS variables; keep prop for compatibility.
+  void isDarkMode
   const [hasDownloadedKey, setHasDownloadedKey] = useState(false)
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -91,32 +93,18 @@ ${encryptionKey.replace('key_', '')}
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel
-                className={`w-full max-w-md transform overflow-hidden rounded-2xl ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-white'
-                } p-6 text-left align-middle shadow-xl transition-all`}
-              >
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl border border-border-subtle bg-surface-card p-6 text-left align-middle shadow-xl transition-all">
                 <Dialog.Title
                   as="h3"
-                  className={`font-aeonik text-lg font-medium leading-6 ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
+                  className="font-aeonik text-lg font-medium leading-6 text-content-primary"
                 >
                   Complete Sign Out
                 </Dialog.Title>
 
                 <div className="mt-6 space-y-5">
                   {/* Info Box */}
-                  <div
-                    className={`rounded-lg p-4 ${
-                      isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'
-                    }`}
-                  >
-                    <p
-                      className={`text-sm ${
-                        isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                      }`}
-                    >
+                  <div className="rounded-lg border border-border-subtle bg-surface-chat p-4">
+                    <p className="text-sm text-content-secondary">
                       You&apos;ve been signed out. Your encryption key and local
                       data are still on this device.
                     </p>
@@ -131,42 +119,28 @@ ${encryptionKey.replace('key_', '')}
                             className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
                               hasDownloadedKey
                                 ? 'bg-emerald-500'
-                                : isDarkMode
-                                  ? 'bg-gray-700'
-                                  : 'bg-gray-200'
+                                : 'bg-surface-chat'
                             }`}
                           >
                             {hasDownloadedKey ? (
                               <CheckIcon className="h-3.5 w-3.5 text-white" />
                             ) : (
-                              <span
-                                className={`text-xs font-medium ${
-                                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                                }`}
-                              >
+                              <span className="text-xs font-medium text-content-secondary">
                                 1
                               </span>
                             )}
                           </div>
-                          <p
-                            className={`font-aeonik text-sm ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                            }`}
-                          >
+                          <p className="font-aeonik text-sm text-content-secondary">
                             Download your encryption key for future access
                           </p>
                         </div>
                         <button
                           onClick={downloadKeyAsPEM}
                           disabled={hasDownloadedKey}
-                          className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
+                          className={`flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
                             hasDownloadedKey
-                              ? isDarkMode
-                                ? 'cursor-not-allowed bg-gray-700 text-gray-400'
-                                : 'cursor-not-allowed bg-gray-100 text-gray-400'
-                              : isDarkMode
-                                ? 'bg-white text-gray-900 hover:bg-gray-100'
-                                : 'bg-gray-900 text-white hover:bg-gray-800'
+                              ? 'cursor-not-allowed border-border-subtle bg-surface-chat text-content-muted'
+                              : 'border-brand-accent-dark/40 bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
                           }`}
                         >
                           {!hasDownloadedKey && (
@@ -181,35 +155,17 @@ ${encryptionKey.replace('key_', '')}
                       {/* Step 2: Data Options */}
                       <div>
                         <div className="mb-3 flex items-center gap-3">
-                          <div
-                            className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
-                              isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-                            }`}
-                          >
-                            <span
-                              className={`text-xs font-medium ${
-                                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                              }`}
-                            >
+                          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-surface-chat">
+                            <span className="text-xs font-medium text-content-secondary">
                               2
                             </span>
                           </div>
-                          <p
-                            className={`font-aeonik text-sm ${
-                              isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                            }`}
-                          >
+                          <p className="font-aeonik text-sm text-content-secondary">
                             Choose what to do with your local data
                           </p>
                         </div>
                         {error && (
-                          <div
-                            className={`mb-3 rounded-lg p-3 text-sm ${
-                              isDarkMode
-                                ? 'border border-red-800 bg-red-900/20 text-red-400'
-                                : 'border border-red-200 bg-red-50 text-red-600'
-                            }`}
-                          >
+                          <div className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
                             {error}
                           </div>
                         )}
@@ -217,31 +173,19 @@ ${encryptionKey.replace('key_', '')}
                           <button
                             onClick={onClose}
                             disabled={isConfirming}
-                            className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
-                              isDarkMode
-                                ? 'bg-[#005050] text-white hover:bg-[#004040] disabled:opacity-50'
-                                : 'bg-[#005050] text-white hover:bg-[#004040] disabled:opacity-50'
-                            }`}
+                            className="flex-1 rounded-lg border border-brand-accent-dark/40 bg-brand-accent-dark px-4 py-3 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90 disabled:opacity-50"
                           >
                             Keep Local Data
                           </button>
                           <button
                             onClick={handleConfirm}
                             disabled={isConfirming}
-                            className={`flex-1 rounded-lg px-4 py-3 text-sm font-medium transition-all ${
-                              isDarkMode
-                                ? 'bg-red-600 text-white hover:bg-red-700 disabled:opacity-50'
-                                : 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-50'
-                            }`}
+                            className="flex-1 rounded-lg border border-destructive/50 bg-destructive px-4 py-3 text-sm font-medium text-destructive-foreground transition-all hover:bg-destructive/90 disabled:opacity-50"
                           >
                             {isConfirming ? 'Deleting...' : 'Delete All Data'}
                           </button>
                         </div>
-                        <p
-                          className={`mt-3 text-center text-xs ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}
-                        >
+                        <p className="mt-3 text-center text-xs text-content-muted">
                           Keep data to continue where you left off, or delete to
                           remove everything
                         </p>

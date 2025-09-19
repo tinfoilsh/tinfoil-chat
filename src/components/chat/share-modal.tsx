@@ -152,33 +152,19 @@ export function ShareModal({
 
       {/* Modal */}
       <div
-        className={`relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col rounded-xl shadow-xl ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}
+        className="relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col rounded-xl border border-border-subtle bg-surface-card shadow-xl"
         style={{
           maxWidth: `min(896px, calc(90vw - ${leftOffset + rightOffset}px))`,
         }}
       >
         {/* Header */}
-        <div
-          className={`flex items-center justify-between border-b px-6 py-4 ${
-            isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}
-        >
-          <h2
-            className={`text-lg font-semibold ${
-              isDarkMode ? 'text-gray-100' : 'text-gray-900'
-            }`}
-          >
+        <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
+          <h2 className="text-lg font-semibold text-content-primary">
             Copy Conversation
           </h2>
           <button
             onClick={onClose}
-            className={`rounded-lg p-1.5 transition-colors ${
-              isDarkMode
-                ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-200'
-                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-            }`}
+            className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>
@@ -188,27 +174,17 @@ export function ShareModal({
         <div className="flex-1 overflow-auto p-6">
           <pre
             ref={contentRef}
-            className={`whitespace-pre-wrap font-mono text-sm ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}
+            className="whitespace-pre-wrap font-mono text-sm text-content-primary"
           >
             {markdown}
           </pre>
         </div>
 
         {/* Footer */}
-        <div
-          className={`flex items-center justify-end gap-3 border-t px-6 py-4 ${
-            isDarkMode ? 'border-gray-700' : 'border-gray-200'
-          }`}
-        >
+        <div className="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
           <button
             onClick={onClose}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              isDarkMode
-                ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+            className="rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
           >
             Close
           </button>
@@ -216,8 +192,8 @@ export function ShareModal({
             onClick={handleCopy}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               isDarkMode
-                ? 'bg-[#005050] text-white hover:bg-[#004040]'
-                : 'bg-[#005050] text-white hover:bg-[#004040]'
+                ? 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
+                : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
             }`}
           >
             {isCopied ? (

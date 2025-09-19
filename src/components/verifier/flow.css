@@ -39,7 +39,7 @@
   position: absolute;
   border-radius: var(--node-border-radius);
   padding: 2px;
-  background: rgba(255, 255, 255, 0.7);
+  background: hsl(var(--surface-card) / 0.7);
   border: 1px solid rgba(16, 185, 129, 0.3);
   box-shadow: var(--node-box-shadow);
   z-index: -1;
@@ -60,7 +60,7 @@
   font-family: var(--font-sans);
   font-weight: 500;
   letter-spacing: -0.2px;
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: hsl(var(--surface-card) / 0.7);
   margin: -2px;
   border-top-left-radius: var(--node-border-radius);
   border-top-right-radius: var(--node-border-radius);
@@ -89,7 +89,7 @@
   border: 1px solid var(--node-border-color);
   box-shadow: var(--node-box-shadow);
   cursor: default;
-  background-color: white;
+  background-color: hsl(var(--surface-card));
   overflow: hidden;
   transition:
     box-shadow 0.2s ease,
@@ -98,7 +98,7 @@
 
 /* Dark mode node styling */
 .dark .react-flow__node-turbo {
-  background-color: #4b5563;
+  background-color: hsl(var(--gray-700));
   border: 1px solid rgba(156, 163, 175, 0.3);
 }
 
@@ -132,7 +132,7 @@
 }
 
 .react-flow__node-turbo .inner {
-  background: white;
+  background: hsl(var(--surface-card));
   padding: 16px 20px;
   border-radius: calc(var(--node-border-radius) - 4px);
   display: flex;
@@ -145,7 +145,7 @@
 
 /* Dark mode inner styling */
 .dark .react-flow__node-turbo .inner {
-  background: #4b5563;
+  background: hsl(var(--gray-700));
 }
 
 .react-flow__node-turbo .icon {
@@ -169,11 +169,11 @@
 
 /* Dark mode text styling */
 .dark .react-flow__node-turbo .title {
-  color: #e5e7eb;
+  color: hsl(var(--content-primary));
 }
 
 .dark .react-flow__node-turbo .subtitle {
-  color: #9ca3af;
+  color: hsl(var(--content-secondary));
 }
 
 .react-flow__node-turbo .cloud {
@@ -194,7 +194,7 @@
 }
 
 .react-flow__node-turbo .cloud div {
-  background-color: white;
+  background-color: hsl(var(--surface-card));
   flex-grow: 1;
   border-radius: 100%;
   display: flex;
@@ -327,14 +327,14 @@
 }
 
 .react-flow__controls button {
-  background-color: white;
-  color: #333;
+  background-color: hsl(var(--surface-card));
+  color: hsl(var(--content-primary));
   border: 1px solid #95679e;
   border-bottom: none;
 }
 
 .react-flow__controls button:hover {
-  background-color: #f0f0f0;
+  background-color: hsl(var(--surface-card) / 0.9);
 }
 
 .react-flow__controls button:first-child {
@@ -373,7 +373,7 @@
 }
 
 .enclave-node .inner {
-  background-color: white;
+  background-color: hsl(var(--surface-card));
 }
 
 /* Tinfoil Server container styling */
@@ -423,7 +423,7 @@
 
 /* Dark mode: white text for better visibility */
 .dark #secure-hardware-container .container-header {
-  color: white;
+  color: hsl(var(--content-primary));
 }
 
 #secure-hardware-container .container-header .icon {
@@ -432,5 +432,5 @@
 
 /* Dark mode: white icon for consistency */
 .dark #secure-hardware-container .container-header .icon {
-  color: white;
+  color: hsl(var(--content-primary));
 }

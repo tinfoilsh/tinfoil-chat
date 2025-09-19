@@ -139,9 +139,7 @@ export function ModelSelector({
     <div
       ref={menuRef}
       data-model-menu
-      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border font-aeonik-fono shadow-lg ${
-        isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
-      } ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
+      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border border-border-subtle bg-surface-chat font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
       style={{
         maxHeight: dynamicStyles.maxHeight,
         ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
@@ -153,27 +151,36 @@ export function ModelSelector({
         const isSelected = model.modelName === selectedModel
         const isPremiumModel = model.paid === true
 
+        const buttonClasses = [
+          'relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+          'text-content-secondary',
+        ]
+
+        if (isSelected) {
+          buttonClasses.push('bg-surface-card text-content-primary')
+        }
+
+        if (isAvailable) {
+          buttonClasses.push('cursor-pointer')
+          if (!isSelected) {
+            buttonClasses.push('hover:bg-surface-card/70')
+          }
+        } else {
+          if (!isSelected) {
+            buttonClasses.push('text-content-muted')
+          }
+          if (isPremiumModel && !isPremium && onPremiumModelClick) {
+            buttonClasses.push('cursor-pointer hover:bg-surface-card/60')
+          } else {
+            buttonClasses.push('cursor-not-allowed')
+          }
+        }
+
         return (
           <button
             type="button"
             key={model.modelName}
-            className={`relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-              isAvailable
-                ? isDarkMode
-                  ? `text-gray-200 ${
-                      isSelected ? 'bg-gray-600' : 'hover:bg-gray-600/50'
-                    }`
-                  : `text-gray-700 ${
-                      isSelected ? 'bg-gray-100' : 'hover:bg-gray-100'
-                    }`
-                : isPremiumModel && !isPremium && onPremiumModelClick
-                  ? isDarkMode
-                    ? 'cursor-pointer text-gray-400 hover:bg-gray-600/30'
-                    : 'cursor-pointer text-gray-500 hover:bg-gray-100/50'
-                  : isDarkMode
-                    ? 'cursor-not-allowed text-gray-500'
-                    : 'cursor-not-allowed text-gray-400'
-            }`}
+            className={buttonClasses.join(' ')}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -214,16 +221,8 @@ export function ModelSelector({
                 onError={() => handleImageError(model.modelName)}
               />
               {isPremiumModel && !isPremium && (
-                <div
-                  className={`absolute -bottom-0.5 -right-0.5 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-white'
-                  } rounded-full p-0.5`}
-                >
-                  <LockClosedIcon
-                    className={`h-2.5 w-2.5 ${
-                      isDarkMode ? 'text-emerald-400/60' : 'text-emerald-500/60'
-                    }`}
-                  />
+                <div className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface-card p-0.5 shadow-sm">
+                  <LockClosedIcon className="h-2.5 w-2.5 text-brand-accent-dark/70" />
                 </div>
               )}
             </div>
@@ -235,22 +234,14 @@ export function ModelSelector({
                   {model.name}
                 </span>
                 {isPremiumModel && !isPremium && (
-                  <div
-                    className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-xs ${
-                      isDarkMode
-                        ? 'border border-emerald-800/40 bg-emerald-900/30 text-emerald-400/70'
-                        : 'border border-emerald-200/50 bg-emerald-50/70 text-emerald-600/70'
-                    }`}
-                  >
+                  <div className="inline-flex items-center gap-0.5 rounded border border-brand-accent-light/40 bg-brand-accent-light/10 px-1 py-0.5 text-xs text-brand-accent-light">
                     <LockClosedIcon className="h-2 w-2" />
                     <span className="text-xs font-medium">Pro</span>
                   </div>
                 )}
               </div>
               <span
-                className={`text-xs ${
-                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                } ${!isAvailable ? 'opacity-70' : ''}`}
+                className={`text-xs text-content-muted ${!isAvailable ? 'opacity-70' : ''}`}
               >
                 {model.description}
               </span>

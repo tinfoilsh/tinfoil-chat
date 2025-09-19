@@ -1,6 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 
 import { useToast } from '@/hooks/use-toast'
+import { TINFOIL_COLORS } from '@/theme/colors'
 import { Dialog, Transition } from '@headlessui/react'
 import {
   ArrowDownTrayIcon,
@@ -231,27 +232,19 @@ ${encryptionKey.replace('key_', '')}
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel
-                className={`w-full max-w-md transform overflow-hidden rounded-2xl ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-white'
-                } p-4 text-left align-middle shadow-xl transition-all sm:p-6`}
-              >
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-card p-4 text-left align-middle shadow-xl transition-all sm:p-6">
                 <Dialog.Title
                   as="h3"
-                  className={`flex items-center justify-between text-base font-medium leading-6 sm:text-lg ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
+                  className="flex items-center justify-between text-base font-medium leading-6 text-content-primary sm:text-lg"
                 >
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <KeyIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <KeyIcon className="h-4 w-4 text-content-primary sm:h-5 sm:w-5" />
                     <span className="text-sm sm:text-base">Encryption Key</span>
                   </div>
                   <button
                     onClick={onClose}
                     aria-label="Close dialog"
-                    className={`rounded-lg p-1 transition-colors ${
-                      isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                    }`}
+                    className="rounded-lg p-1 text-content-secondary transition-colors hover:bg-surface-chat"
                   >
                     <XMarkIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
@@ -260,32 +253,18 @@ ${encryptionKey.replace('key_', '')}
                 <div className="mt-3 sm:mt-4">
                   {/* Current Key Section */}
                   <div className="mb-4 sm:mb-6">
-                    <h4
-                      className={`mb-1.5 text-xs font-medium sm:mb-2 sm:text-sm ${
-                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}
-                    >
+                    <h4 className="mb-1.5 text-xs font-medium text-content-secondary sm:mb-2 sm:text-sm">
                       Your Current Key
                     </h4>
                     <div
-                      className={`rounded-lg border ${
-                        isDarkMode
-                          ? 'border-gray-700 bg-gray-900'
-                          : 'border-gray-200 bg-gray-50'
-                      } p-2 sm:p-3`}
+                      className="rounded-lg border border-border-subtle bg-surface-chat p-2 sm:p-3"
                       role="region"
                       aria-label="Current encryption key"
                     >
                       {encryptionKey ? (
                         <div>
                           <div className="flex items-center justify-between">
-                            <code
-                              className={`font-mono text-xs ${
-                                isDarkMode
-                                  ? 'text-emerald-400'
-                                  : 'text-emerald-600'
-                              }`}
-                            >
+                            <code className="font-mono text-xs text-brand-accent-light">
                               {encryptionKey.substring(0, 20)}...
                             </code>
                             <div className="flex gap-2">
@@ -293,21 +272,11 @@ ${encryptionKey.replace('key_', '')}
                                 <button
                                   onClick={downloadKeyAsPEM}
                                   aria-label="Download encryption key as PEM file"
-                                  className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all sm:text-sm ${
-                                    isDarkMode
-                                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                  }`}
+                                  className="flex items-center justify-center rounded-lg bg-surface-chat p-2 text-xs text-content-primary transition-all hover:bg-surface-chat/80 sm:text-sm"
                                 >
                                   <ArrowDownTrayIcon className="h-4 w-4" />
                                 </button>
-                                <div
-                                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-                                    isDarkMode
-                                      ? 'bg-gray-900 text-gray-100'
-                                      : 'bg-gray-800 text-white'
-                                  }`}
-                                >
+                                <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded bg-surface-chat px-2 py-1 text-xs text-content-primary opacity-0 transition-opacity group-hover:opacity-100">
                                   Download
                                 </div>
                               </div>
@@ -322,9 +291,7 @@ ${encryptionKey.replace('key_', '')}
                                   className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all sm:text-sm ${
                                     isCopied
                                       ? 'bg-emerald-500 text-white'
-                                      : isDarkMode
-                                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                      : 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
                                   }`}
                                 >
                                   {isCopied ? (
@@ -333,13 +300,7 @@ ${encryptionKey.replace('key_', '')}
                                     <ClipboardDocumentIcon className="h-4 w-4" />
                                   )}
                                 </button>
-                                <div
-                                  className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-                                    isDarkMode
-                                      ? 'bg-gray-900 text-gray-100'
-                                      : 'bg-gray-800 text-white'
-                                  }`}
-                                >
+                                <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded bg-surface-chat px-2 py-1 text-xs text-content-primary opacity-0 transition-opacity group-hover:opacity-100">
                                   {isCopied ? 'Copied!' : 'Copy'}
                                 </div>
                               </div>
@@ -347,20 +308,14 @@ ${encryptionKey.replace('key_', '')}
                           </div>
                         </div>
                       ) : (
-                        <p
-                          className={`text-sm ${
-                            isDarkMode ? 'text-gray-500' : 'text-gray-500'
-                          }`}
-                        >
+                        <p className="text-sm text-content-muted">
                           No encryption key set
                         </p>
                       )}
                     </div>
                     <p
                       id="current-key-description"
-                      className={`mt-1.5 hidden text-xs sm:mt-2 sm:block ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}
+                      className="mt-1.5 hidden text-xs text-content-muted sm:mt-2 sm:block"
                     >
                       Keep this key safe. You'll need it to decrypt your chats
                       on other devices.
@@ -369,27 +324,25 @@ ${encryptionKey.replace('key_', '')}
                     {/* QR Code Section - Desktop Only */}
                     {encryptionKey && (
                       <div className="mt-4 hidden sm:block">
-                        <div
-                          className={`flex flex-col items-center rounded-lg border p-4 ${
-                            isDarkMode
-                              ? 'border-gray-700 bg-gray-900/50'
-                              : 'border-gray-200 bg-gray-50'
-                          }`}
-                        >
-                          <div className="rounded-lg bg-white p-3">
+                        <div className="flex flex-col items-center rounded-lg border border-border-subtle bg-surface-chat p-4">
+                          <div className="rounded-lg bg-surface-card p-3">
                             <QRCode
                               value={encryptionKey}
                               size={180}
                               level="H"
-                              bgColor="#FFFFFF"
-                              fgColor="#000000"
+                              bgColor={
+                                isDarkMode
+                                  ? TINFOIL_COLORS.surface.cardDark
+                                  : TINFOIL_COLORS.surface.cardLight
+                              }
+                              fgColor={
+                                isDarkMode
+                                  ? TINFOIL_COLORS.utility.qrForegroundDark
+                                  : TINFOIL_COLORS.utility.qrForegroundLight
+                              }
                             />
                           </div>
-                          <p
-                            className={`mt-3 text-xs ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}
-                          >
+                          <p className="mt-3 text-xs text-content-muted">
                             Scan to transfer key to another device
                           </p>
                         </div>
@@ -399,18 +352,12 @@ ${encryptionKey.replace('key_', '')}
 
                   {/* Update Key Section */}
                   <div>
-                    <h4
-                      className={`mb-1.5 text-xs font-medium sm:mb-2 sm:text-sm ${
-                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}
-                    >
+                    <h4 className="mb-1.5 text-xs font-medium text-content-secondary sm:mb-2 sm:text-sm">
                       Restore or Sync Encryption Key
                     </h4>
                     <p
                       id="sync-key-description"
-                      className={`mb-2 text-xs sm:mb-3 ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}
+                      className="mb-2 text-xs text-content-muted sm:mb-3"
                     >
                       Restore your key from a backup or sync with another
                       device.
@@ -423,30 +370,22 @@ ${encryptionKey.replace('key_', '')}
                       onDrop={handleDrop}
                       className={`mb-3 rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
                         isDragging
-                          ? isDarkMode
-                            ? 'border-blue-500 bg-blue-950/30'
-                            : 'border-blue-500 bg-blue-50'
-                          : isDarkMode
-                            ? 'border-gray-700 bg-gray-900/50'
-                            : 'border-gray-300 bg-gray-50'
+                          ? 'border-brand-accent-light bg-brand-accent-light/10'
+                          : 'border-border-subtle bg-surface-chat'
                       }`}
                     >
                       <ArrowUpTrayIcon
                         className={`mx-auto h-8 w-8 ${
                           isDragging
-                            ? 'text-blue-500'
-                            : isDarkMode
-                              ? 'text-gray-500'
-                              : 'text-gray-400'
+                            ? 'text-brand-accent-light'
+                            : 'text-content-muted'
                         }`}
                       />
                       <p
                         className={`mt-2 text-xs sm:text-sm ${
                           isDragging
-                            ? 'text-blue-500'
-                            : isDarkMode
-                              ? 'text-gray-400'
-                              : 'text-gray-600'
+                            ? 'text-brand-accent-light'
+                            : 'text-content-muted'
                         }`}
                       >
                         {isDragging
@@ -464,11 +403,7 @@ ${encryptionKey.replace('key_', '')}
                           />
                           <button
                             onClick={() => fileInputRef.current?.click()}
-                            className={`mt-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
-                              isDarkMode
-                                ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                            }`}
+                            className="mt-3 rounded-md border border-border-subtle bg-surface-input px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-input/80 sm:text-sm"
                           >
                             Choose File
                           </button>
@@ -486,11 +421,7 @@ ${encryptionKey.replace('key_', '')}
                         aria-label="Encryption key input"
                         aria-describedby="sync-key-description"
                         aria-invalid={isUpdating ? 'false' : undefined}
-                        className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 sm:flex-1 sm:px-3 sm:py-2 sm:text-sm ${
-                          isDarkMode
-                            ? 'border-gray-700 bg-gray-900 text-white placeholder-gray-500'
-                            : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
-                        }`}
+                        className="w-full rounded-lg border border-border-subtle bg-surface-input px-2 py-1.5 text-xs text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light sm:flex-1 sm:px-3 sm:py-2 sm:text-sm"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             handleUpdateKey()
@@ -504,9 +435,7 @@ ${encryptionKey.replace('key_', '')}
                         aria-busy={isUpdating}
                         className={`w-full rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:px-4 sm:py-2 sm:text-sm ${
                           isUpdating || !inputKey.trim()
-                            ? isDarkMode
-                              ? 'cursor-not-allowed bg-gray-700 text-gray-500'
-                              : 'cursor-not-allowed bg-gray-200 text-gray-400'
+                            ? 'cursor-not-allowed bg-surface-chat text-content-muted'
                             : 'bg-emerald-500 text-white hover:bg-emerald-600'
                         }`}
                       >

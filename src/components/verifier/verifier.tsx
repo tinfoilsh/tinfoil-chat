@@ -433,7 +433,7 @@ export function Verifier({
 
   return (
     <div
-      className={`flex h-full w-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}
+      className={`flex h-full w-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-surface-card'}`}
     >
       {/* Fixed Verification Banner */}
       <div className="flex-none">
@@ -457,34 +457,22 @@ export function Verifier({
           {/* Title - left aligned like process steps */}
           <div className="mb-3 flex items-center gap-3">
             <div className="flex items-center">
-              <FiTool
-                className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
-              />
+              <FiTool className="h-5 w-5 text-content-secondary" />
             </div>
             <div className="flex-1">
-              <h3
-                className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-              >
+              <h3 className="text-sm font-medium text-content-primary">
                 Verification Tool
               </h3>
             </div>
             <div className="flex items-center">
-              <span
-                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] ${
-                  isDarkMode
-                    ? 'bg-gray-800/50 text-gray-400'
-                    : 'bg-gray-100/80 text-gray-600'
-                }`}
-              >
+              <span className="inline-flex items-center rounded-full bg-surface-chat/80 px-2.5 py-0.5 text-[10px] text-content-secondary">
                 In-Browser Verifier {VERIFIER_CONSTANTS.VERSION}
               </span>
             </div>
           </div>
 
           {/* Description */}
-          <p
-            className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
-          >
+          <p className="text-sm text-content-secondary">
             This automated verification tool lets you independently confirm that
             the models are running in secure enclaves, ensuring your
             conversations remain completely private.{' '}
@@ -492,7 +480,7 @@ export function Verifier({
               href="https://docs.tinfoil.sh/verification/attestation-architecture"
               target="_blank"
               rel="noopener noreferrer"
-              className={`${isDarkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-700 hover:text-gray-900'} inline-flex items-center gap-1 hover:underline`}
+              className="inline-flex items-center gap-1 text-accent hover:text-accent/80 hover:underline"
             >
               Attestation architecture
               <LuExternalLink className="h-3.5 w-3.5" />
@@ -510,8 +498,8 @@ export function Verifier({
                 disabled={isVerifying}
                 className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
                   isDarkMode
-                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:hover:bg-gray-800'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:hover:bg-white'
+                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80 disabled:cursor-not-allowed disabled:text-content-muted disabled:hover:bg-surface-chat'
+                    : 'border-border-subtle bg-surface-card text-content-secondary hover:bg-surface-card/80 disabled:cursor-not-allowed disabled:text-content-muted disabled:hover:bg-surface-card'
                 }`}
               >
                 {isVerifying ? (
@@ -532,8 +520,8 @@ export function Verifier({
                 }
                 className={`flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
                   isDarkMode
-                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'
+                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                    : 'border-border-subtle bg-surface-card text-content-secondary hover:bg-surface-card/80'
                 }`}
               >
                 <FaGithub className="h-4 w-4" />

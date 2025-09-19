@@ -1,6 +1,7 @@
 'use client'
 
 import { LoadingDots } from '@/components/loading-dots'
+import { TINFOIL_COLORS } from '@/theme/colors'
 import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
@@ -59,7 +60,7 @@ function useMathPlugins() {
                   throwOnError: false,
                   strict: false,
                   output: 'htmlAndMathml',
-                  errorColor: '#cc0000',
+                  errorColor: TINFOIL_COLORS.utility.destructive,
                   trust: false,
                 },
               ],
@@ -224,18 +225,18 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
   return (
     <div
-      className={`mb-2 mt-2 rounded-lg ${
-        isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100'
+      className={`mb-2 mt-2 rounded-lg border border-border-subtle ${
+        isDarkMode ? 'bg-surface-chat text-content-primary' : 'bg-surface-chat'
       }`}
     >
       <button
         type="button"
         onClick={handleToggle}
-        className={`flex h-10 w-full items-center justify-between px-4 text-left ${
+        className={`flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors ${
           isDarkMode
-            ? 'text-gray-200 hover:bg-gray-600/50'
-            : 'text-gray-700 hover:bg-gray-200'
-        } rounded-lg transition-colors`}
+            ? 'text-content-primary hover:bg-surface-chat/80'
+            : 'text-content-secondary hover:bg-surface-chat/70'
+        }`}
       >
         <div className="flex items-center gap-2">
           <LuBrain className="h-5 w-5 opacity-70" aria-hidden="true" />
@@ -285,9 +286,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       >
         <div
           ref={contentRef}
-          className={`px-4 py-3 font-aeonik-fono text-sm ${
-            isDarkMode ? 'text-gray-300' : 'text-gray-600'
-          }`}
+          className="px-4 py-3 font-aeonik-fono text-sm text-content-primary"
         >
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
@@ -297,7 +296,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 <p className="mb-2 break-words last:mb-0">{children}</p>
               ),
               pre: ({ children }: { children?: React.ReactNode }) => (
-                <pre className="my-2 overflow-x-auto rounded-md bg-black/10 p-3 font-mono text-xs">
+                <pre className="my-2 overflow-x-auto rounded-md border border-border-subtle bg-surface-chat p-3 font-mono text-xs text-content-primary">
                   {children}
                 </pre>
               ),
@@ -309,11 +308,11 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 children?: React.ReactNode
               }) =>
                 inline ? (
-                  <code className="break-words rounded bg-black/10 px-1 py-0.5 font-mono text-xs">
+                  <code className="break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 font-mono text-xs text-content-primary">
                     {children}
                   </code>
                 ) : (
-                  <code className="block break-all font-mono text-xs">
+                  <code className="block break-all font-mono text-xs text-content-primary">
                     {children}
                   </code>
                 ),

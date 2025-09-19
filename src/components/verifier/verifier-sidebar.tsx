@@ -35,39 +35,19 @@ export function VerifierSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : 'translate-x-full'
-        } fixed right-0 z-40 flex h-dvh w-[85vw] flex-col border-l font-aeonik ${
-          isDarkMode
-            ? 'border-gray-700 bg-gray-900'
-            : 'border-gray-200 bg-white'
-        } overflow-hidden transition-all duration-200 ease-in-out`}
+        } fixed right-0 z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-l border-border-subtle bg-surface-card font-aeonik transition-all duration-200 ease-in-out`}
         style={{ maxWidth: `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px` }}
       >
         {/* Header with title and close button */}
-        <div
-          className={`flex h-16 flex-none items-center justify-between border-b ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          } p-4`}
-        >
+        <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-2">
-            <ShieldCheckIcon
-              className={`h-6 w-6 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}
-            />
-            <span
-              className={`font-aeonik text-xl font-medium ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}
-            >
+            <ShieldCheckIcon className="h-6 w-6 text-content-primary" />
+            <span className="font-aeonik text-xl font-medium text-content-primary">
               Verification Center
             </span>
           </div>
           <button
-            className={`rounded-lg p-2 transition-all duration-200 ${
-              isDarkMode
-                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+            className="rounded-lg bg-surface-chat p-2 text-content-primary transition-all duration-200 hover:bg-surface-chat/80"
             onClick={() => setIsOpen(false)}
           >
             <XMarkIcon className="h-5 w-5" />

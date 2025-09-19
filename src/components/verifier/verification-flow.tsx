@@ -304,7 +304,7 @@ function VerificationFlowDiagram({
             variant={BackgroundVariant.Dots}
             gap={26}
             size={1.3}
-            color={isDarkMode ? '#374151' : '#e5e7eb'}
+            color={isDarkMode ? 'hsl(var(--gray-700))' : 'hsl(var(--gray-200))'}
           />
 
           {/* SVG definitions for markers */}

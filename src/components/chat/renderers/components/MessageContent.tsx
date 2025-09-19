@@ -1,6 +1,7 @@
 'use client'
 
 import { CodeBlock } from '@/components/code-block'
+import { TINFOIL_COLORS } from '@/theme/colors'
 import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
@@ -51,7 +52,7 @@ function useMathPlugins() {
                   throwOnError: false,
                   strict: false,
                   output: 'htmlAndMathml',
-                  errorColor: '#cc0000',
+                  errorColor: TINFOIL_COLORS.utility.destructive,
                   trust: false,
                 },
               ],
