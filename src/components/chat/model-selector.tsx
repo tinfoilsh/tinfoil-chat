@@ -152,7 +152,7 @@ export function ModelSelector({
         const isPremiumModel = model.paid === true
 
         const buttonClasses = [
-          'relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+          'relative flex w-full items-start gap-3 rounded-lg border border-border-subtle px-3 py-2 text-left text-sm transition-colors',
           'text-content-secondary',
         ]
 
@@ -204,7 +204,7 @@ export function ModelSelector({
               (!isPremiumModel || isPremium || !onPremiumModelClick)
             }
           >
-            <div className="relative">
+            <div className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center">
               <img
                 src={
                   failedImages[model.modelName]
@@ -220,11 +220,6 @@ export function ModelSelector({
                 className={`h-5 w-5 ${!isAvailable ? 'opacity-70 grayscale' : ''}`}
                 onError={() => handleImageError(model.modelName)}
               />
-              {isPremiumModel && !isPremium && (
-                <div className="absolute -bottom-0.5 -right-0.5 rounded-full bg-surface-card p-0.5 shadow-sm">
-                  <LockClosedIcon className="h-2.5 w-2.5 text-brand-accent-dark/70" />
-                </div>
-              )}
             </div>
             <div className="flex flex-1 flex-col">
               <div className="flex items-center gap-2">
