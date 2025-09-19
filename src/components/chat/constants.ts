@@ -1,6 +1,8 @@
+import { VERIFIER_CONSTANTS } from '../verifier/constants'
 import type { AIModel } from './types'
 
-const VERIFIER_VERSION = 'v0.0.9'
+const { VERSION: VERIFIER_VERSION, WASM_URL: VERIFIER_WASM_URL } =
+  VERIFIER_CONSTANTS
 
 export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
@@ -8,7 +10,7 @@ export const CONSTANTS = {
   SINGLE_SIDEBAR_BREAKPOINT: 1024, // Below this width, only one sidebar can be open at a time
   DEFAULT_MODEL: 'llama3-3-70b-free' as AIModel,
   VERIFIER_VERSION,
-  VERIFIER_WASM_URL: `https://tinfoilsh.github.io/verifier-js/tinfoil-verifier-${VERIFIER_VERSION}.wasm`,
+  VERIFIER_WASM_URL,
   // Inference proxy URL for all model requests
   INFERENCE_PROXY_URL: 'https://inference.tinfoil.sh',
   // Inference proxy repository for verification
