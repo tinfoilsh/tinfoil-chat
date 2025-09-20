@@ -86,7 +86,7 @@ export function MeasurementDiff({
           </h4>
           <div className="max-h-[200px] overflow-auto">
             <pre
-              className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} p-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} border ${isVerified ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+              className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} border p-3 text-sm text-content-primary ${isVerified ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
             >
               {extractMeasurement(sourceMeasurements)}
             </pre>
@@ -106,7 +106,7 @@ export function MeasurementDiff({
           </h4>
           <div className="max-h-[200px] overflow-auto">
             <pre
-              className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} p-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} border ${isVerified ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+              className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} border p-3 text-sm text-content-primary ${isVerified ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
             >
               {extractMeasurement(runtimeMeasurements)}
             </pre>
