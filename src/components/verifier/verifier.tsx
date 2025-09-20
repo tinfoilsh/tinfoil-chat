@@ -79,6 +79,7 @@ declare global {
     verifyEnclave(enclaveHostname: string): Promise<{
       certificate: string
       measurement: string
+      hpke_public_key?: string
     }>
     // Performs source code verification using GitHub Actions and Sigstore
     // Returns the measurement from the verified build process
@@ -100,6 +101,7 @@ type VerificationStatus = 'error' | 'pending' | 'loading' | 'success'
 interface MeasurementData {
   measurement?: string
   certificate?: string
+  hpkePublicKey?: string
 }
 
 type VerificationState = {
@@ -312,12 +314,17 @@ export function Verifier({
 
       // Step 1: Verify runtime attestation using the actual enclave
       try {
-        const { certificate, measurement } = await window.verifyEnclave(enclave)
+        const { certificate, measurement, hpke_public_key } =
+          await window.verifyEnclave(enclave)
         runtimeMeasurement = measurement
         updateStepStatus(
           'runtime',
           'success',
-          { measurement, certificate },
+          {
+            measurement,
+            certificate,
+            hpkePublicKey: hpke_public_key,
+          },
           null,
         )
       } catch (error) {

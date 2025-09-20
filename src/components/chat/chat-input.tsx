@@ -17,6 +17,7 @@ import {
 import { cn } from '@/components/ui/utils'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
+import { ehbpRequest } from '@/utils/ehbp-client'
 import { logError } from '@/utils/error-handling'
 import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
@@ -289,7 +290,7 @@ export function ChatInput({
         // Use the proxy with the audio transcription endpoint
         const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
 
-        const response = await fetch(proxyUrl, {
+        const response = await ehbpRequest(proxyUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,

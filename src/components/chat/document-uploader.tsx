@@ -1,4 +1,5 @@
 import { getAIModels, type BaseModel } from '@/app/config/models'
+import { ehbpRequest } from '@/utils/ehbp-client'
 import { logError } from '@/utils/error-handling'
 import {
   getDocumentFormat,
@@ -169,7 +170,7 @@ export const useDocumentUploader = (
       // Add model parameter to formData
       formData.append('model', modelName)
 
-      const response = await fetch(proxyUrl, {
+      const response = await ehbpRequest(proxyUrl, {
         method: 'POST',
         body: formData,
       })

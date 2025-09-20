@@ -5,6 +5,7 @@ import { r2Storage } from '@/services/cloud/r2-storage'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
+import { ehbpRequest } from '@/utils/ehbp-client'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -460,61 +461,76 @@ export function useChatMessaging({
           headers.Authorization = `Bearer ${await getApiKeyFromHook()}`
         }
 
-        const response = await fetch(proxyUrl, {
+        const serializedMessages = [
+          {
+            role: 'system',
+            content: finalSystemPrompt,
+          },
+          ...updatedMessages.slice(-maxMessages).map((msg) => {
+            if (msg.imageData && msg.imageData.length > 0 && model.multimodal) {
+              const content = [
+                {
+                  type: 'text',
+                  text: msg.documentContent
+                    ? `${msg.content}\n\n${
+                        msg.documents
+                          ?.map(
+                            (doc) =>
+                              `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`,
+                          )
+                          .join('\n\n') ||
+                        `Document contents:\n${msg.documentContent}`
+                      }`
+                    : msg.content,
+                },
+                ...msg.imageData.map((imgData) => ({
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${imgData.mimeType};base64,${imgData.base64}`,
+                  },
+                })),
+              ]
+
+              return {
+                role: msg.role,
+                content,
+              }
+            }
+
+            return {
+              role: msg.role,
+              content: msg.documentContent
+                ? `${msg.content}\n\n${
+                    msg.documents
+                      ?.map(
+                        (doc) =>
+                          `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`,
+                      )
+                      .join('\n\n') ||
+                    `Document contents:\n${msg.documentContent}`
+                  }`
+                : msg.content,
+            }
+          }),
+        ]
+
+        const requestBody = JSON.stringify({
+          model: model.modelName,
+          messages: serializedMessages,
+          stream: true,
+        })
+
+        const requestInit: RequestInit = {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            model: model.modelName,
-            messages: [
-              // System prompt is always included even when messages are cut off
-              {
-                role: 'system',
-                content: finalSystemPrompt,
-              },
-              // Include message history with a limit
-              ...updatedMessages.slice(-maxMessages).map((msg) => {
-                // Check if this message has image data AND the current model supports multimodal
-                if (
-                  msg.imageData &&
-                  msg.imageData.length > 0 &&
-                  model.multimodal
-                ) {
-                  // Create multimodal content array
-                  const content = [
-                    {
-                      type: 'text',
-                      text: msg.documentContent
-                        ? `${msg.content}\n\n${msg.documents?.map((doc) => `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`).join('\n\n') || `Document contents:\n${msg.documentContent}`}`
-                        : msg.content,
-                    },
-                    // Add each image as a separate content item
-                    ...msg.imageData.map((imgData) => ({
-                      type: 'image_url',
-                      image_url: {
-                        url: `data:${imgData.mimeType};base64,${imgData.base64}`,
-                      },
-                    })),
-                  ]
-
-                  return {
-                    role: msg.role,
-                    content,
-                  }
-                } else {
-                  // Standard text message (or image data stripped for non-multimodal models)
-                  return {
-                    role: msg.role,
-                    content: msg.documentContent
-                      ? `${msg.content}\n\n${msg.documents?.map((doc) => `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`).join('\n\n') || `Document contents:\n${msg.documentContent}`}`
-                      : msg.content,
-                  }
-                }
-              }),
-            ],
-            stream: true,
-          }),
+          body: requestBody,
           signal: controller.signal,
-        })
+        }
+
+        const response =
+          model.modelName === 'dev-simulator'
+            ? await fetch(proxyUrl, requestInit)
+            : await ehbpRequest(proxyUrl, requestInit)
 
         if (!response.ok) {
           // Special handling for dev simulator in production

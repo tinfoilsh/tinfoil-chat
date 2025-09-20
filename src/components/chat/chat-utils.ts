@@ -1,3 +1,4 @@
+import { ehbpRequest } from '@/utils/ehbp-client'
 import React from 'react'
 import { CONSTANTS } from './constants'
 import type { Chat } from './types'
@@ -48,7 +49,7 @@ export async function generateTitle(
       headers.Authorization = `Bearer ${apiKey}`
     }
 
-    const response = await fetch(proxyUrl, {
+    const response = await ehbpRequest(proxyUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
