@@ -199,7 +199,7 @@ export function ProcessStep({
                   )}
                 </h4>
                 <pre
-                  className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} p-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} border ${status === 'success' ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+                  className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} border p-4 text-sm text-content-primary ${status === 'success' ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
                 >
                   {extractMeasurement(measurements)}
                   <div className="mt-2 flex items-center justify-end gap-2">
@@ -316,7 +316,7 @@ export function ProcessStep({
                   </span>
                 </h4>
                 <pre
-                  className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} p-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} border ${status === 'success' ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+                  className={`overflow-x-auto whitespace-pre-wrap break-all rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'} border p-4 text-sm text-content-primary ${status === 'success' ? 'border-emerald-500/50' : isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
                 >
                   {extractCertificate(measurements)}
                   <div className="mt-2 flex items-center justify-end gap-2">
