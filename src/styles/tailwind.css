@@ -13,52 +13,146 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    color-scheme: light;
+
+    /* Brand palette */
+    --color-brand-dark: 198 68.4% 7.5%;
+    --color-brand-light: 180 17.2% 94.3%;
+    --color-accent-dark: 180 100% 13.3%;
+    --color-accent-dark-darker: 180 100% 10%;
+    --color-accent-light: 163 45.9% 59.4%;
+    --color-accent-light-darker: 163 37% 53%;
+
+    /* Surface tokens */
+    --surface-background: 0 0% 100%;
+    --surface-chat-background: 0 0% 100%;
+    --surface-chat: 240 23.8% 95.9%;
+    --surface-card: 0 0% 100%;
+    --surface-sidebar: 0 0% 100%;
+    --surface-sidebar-button: 0 0% 100%;
+    --surface-sidebar-button-hover: 218 12% 92%;
+    --surface-settings: 240 23.8% 95.9%;
+    --surface-input: 240 23.8% 95.9%;
+    --surface-thinking: 240 23.8% 95.9%;
+    --surface-message-user: 240 23.8% 95.9%;
+    --surface-message-assistant: 0 0% 100%;
+
+    /* Borders */
+    --border-subtle: 220 13% 91%;
+    --border-strong: 217 19.1% 26.7%;
+
+    /* Content */
+    --content-primary: 221 39.3% 11%;
+    --content-secondary: 221 20% 20%;
+    --content-muted: 221 14% 34%;
+    --content-inverse: 0 0% 100%;
+
+    /* Buttons */
+    --button-send-background: var(--color-brand-dark);
+    --button-send-foreground: 0 0% 100%;
+
+    /* Neutral scale */
+    --gray-950: var(--color-brand-dark);
+    --gray-900: 221 39.3% 11%;
+    --gray-800: 217 19.1% 26.7%;
+    --gray-700: 221 20% 20%;
+    --gray-600: 221 16% 28%;
+    --gray-500: 221 12% 40%;
+    --gray-400: 221 10% 52%;
+    --gray-300: 220 13% 88%;
+    --gray-200: 220 14% 95%;
+    --gray-100: var(--surface-card);
+    --gray-50: var(--surface-settings);
+
+    /* System tokens required by Tailwind theme */
+    --background: var(--surface-chat-background);
+    --foreground: var(--content-primary);
+    --card: var(--surface-card);
+    --card-foreground: var(--content-primary);
+    --popover: var(--surface-card);
+    --popover-foreground: var(--content-primary);
+    --primary: var(--color-brand-dark);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--surface-sidebar-button);
+    --secondary-foreground: var(--content-primary);
+    --muted: var(--surface-chat);
+    --muted-foreground: var(--content-secondary);
+    --accent: var(--color-accent-light);
+    --accent-foreground: var(--color-accent-dark);
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --border: var(--border-subtle);
+    --input: var(--border-subtle);
+    --ring: var(--color-accent-light);
+    --chart-1: 163 45.9% 59.4%;
+    --chart-2: 180 100% 28%;
+    --chart-3: 198 68.4% 40%;
+    --chart-4: 210 34% 18%;
+    --chart-5: 221 39.3% 11%;
     --radius: 0.5rem;
   }
+
+  [data-theme='dark'],
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    color-scheme: dark;
+
+    --surface-background: var(--color-brand-dark);
+    --surface-chat-background: 0 0% 7.1%;
+    --surface-chat: 240 2.2% 17.6%;
+    --surface-card: 240 3.4% 11.4%;
+    --surface-sidebar: 0 0% 7.1%;
+    --surface-sidebar-button: 240 2.2% 17.6%;
+    --surface-sidebar-button-hover: 240 2.2% 22%;
+    --surface-settings: 0 0% 7.1%;
+    --surface-input: 240 2.2% 17.6%;
+    --surface-thinking: 240 2.2% 17.6%;
+    --surface-message-user: 240 2.2% 17.6%;
+    --surface-message-assistant: 0 0% 7.1%;
+
+    --border-subtle: 240 3.7% 26%;
+    --border-strong: 240 3.7% 40%;
+
+    --content-primary: 0 0% 98%;
+    --content-secondary: 218 10.6% 85%;
+    --content-muted: 218 10.6% 72%;
+    --content-inverse: var(--color-brand-dark);
+
+    --button-send-background: 0 0% 100%;
+    --button-send-foreground: var(--color-brand-dark);
+
+    --color-accent-light-darker: 163 37% 53%;
+
+    --gray-950: var(--color-brand-dark);
+    --gray-900: 0 0% 7.1%;
+    --gray-800: 240 2.2% 17.6%;
+    --gray-700: 240 2.2% 24%;
+    --gray-600: 218 10.6% 50%;
+    --gray-500: 218 10.6% 64.9%;
+    --gray-400: 218 10.6% 55%;
+    --gray-300: 240 3.7% 26%;
+    --gray-200: 240 3.7% 20%;
+    --gray-100: var(--surface-card);
+    --gray-50: var(--surface-chat);
+
+    --background: var(--surface-chat-background);
+    --foreground: var(--content-primary);
+    --card: var(--surface-card);
+    --card-foreground: var(--content-primary);
+    --popover: var(--surface-card);
+    --popover-foreground: var(--content-primary);
+    --primary: var(--color-accent-light);
+    --primary-foreground: var(--color-brand-dark);
+    --secondary: var(--surface-sidebar-button);
+    --secondary-foreground: var(--content-primary);
+    --muted: var(--surface-chat);
+    --muted-foreground: var(--content-secondary);
+    --accent: var(--color-accent-light);
+    --accent-foreground: var(--color-brand-dark);
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: var(--border-subtle);
+    --input: var(--border-subtle);
+    --ring: var(--color-accent-light);
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;

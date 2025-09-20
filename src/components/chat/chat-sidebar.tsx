@@ -16,6 +16,7 @@ import {
 import { motion } from 'framer-motion'
 import { CONSTANTS } from './constants'
 
+import { cn } from '@/components/ui/utils'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import {
@@ -752,23 +753,16 @@ export function ChatSidebar({
 
       {/* Sidebar wrapper */}
       <div
-        className={`${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        } fixed z-40 flex h-dvh w-[85vw] flex-col border-r ${
-          isDarkMode
-            ? 'border-gray-800 bg-gray-900'
-            : 'border-gray-200 bg-white'
-        } ${
-          isInitialLoad ? '' : 'transition-all duration-200 ease-in-out'
-        } overflow-hidden`}
+        className={cn(
+          'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-r',
+          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'border-border-subtle bg-surface-sidebar text-content-primary',
+          isInitialLoad ? '' : 'transition-all duration-200 ease-in-out',
+        )}
         style={{ maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px` }}
       >
         {/* Header */}
-        <div
-          className={`flex h-16 flex-none items-center justify-between border-b ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          } p-4`}
-        >
+        <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <Link
             href="https://www.tinfoil.sh"
             title="Home"
@@ -788,11 +782,7 @@ export function ChatSidebar({
               />
             )}
             <button
-              className={`hidden rounded-lg p-2 transition-all duration-200 md:block ${
-                isDarkMode
-                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className="hidden items-center justify-center rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-all duration-200 hover:bg-surface-chat/80 md:flex"
               onClick={() => setIsOpen(!isOpen)}
             >
               {isOpen ? (
@@ -802,11 +792,7 @@ export function ChatSidebar({
               )}
             </button>
             <button
-              className={`rounded-lg p-2 transition-all duration-200 md:hidden ${
-                isDarkMode
-                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-all duration-200 hover:bg-surface-chat/80 md:hidden"
               onClick={() => setIsOpen(false)}
             >
               <XMarkIcon className="h-5 w-5" />
@@ -835,28 +821,14 @@ export function ChatSidebar({
                     : undefined,
               }}
             >
-              <h4
-                className={`mb-1 text-sm font-semibold ${
-                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                }`}
-              >
+              <h4 className="mb-1 text-sm font-semibold text-content-primary">
                 Sign in to unlock full features
               </h4>
-              <p
-                className={`mb-3 text-sm ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                }`}
-              >
+              <p className="mb-3 text-sm text-content-secondary">
                 Access chat history and sync across devices.
               </p>
               <SignInButton mode="modal">
-                <button
-                  className={`w-full rounded-md px-4 py-2 text-sm font-medium transition-all ${
-                    isDarkMode
-                      ? 'bg-[#005050] text-white hover:bg-[#004040]'
-                      : 'bg-[#005050] text-white hover:bg-[#004040]'
-                  }`}
-                >
+                <button className="w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
                   Sign in
                 </button>
               </SignInButton>
@@ -883,23 +855,13 @@ export function ChatSidebar({
               }}
             >
               <div className="flex-1">
-                <h4
-                  className={`mb-3 text-sm font-semibold ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
-                >
+                <h4 className="mb-3 text-sm font-semibold text-content-primary">
                   Get more out of Tinfoil Chat
                 </h4>
                 <div className="space-y-2.5">
-                  <div
-                    className={`flex items-center gap-3 text-xs ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}
-                  >
+                  <div className="flex items-center gap-3 text-xs text-content-secondary">
                     <svg
-                      className={`h-4 w-4 flex-shrink-0 ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                      }`}
+                      className="h-4 w-4 flex-shrink-0 text-content-muted"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -914,15 +876,9 @@ export function ChatSidebar({
                     <span>Speech-to-text voice input</span>
                   </div>
 
-                  <div
-                    className={`flex items-center gap-3 text-xs ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}
-                  >
+                  <div className="flex items-center gap-3 text-xs text-content-secondary">
                     <svg
-                      className={`h-4 w-4 flex-shrink-0 ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                      }`}
+                      className="h-4 w-4 flex-shrink-0 text-content-muted"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -937,15 +893,9 @@ export function ChatSidebar({
                     <span>Premium AI models</span>
                   </div>
 
-                  <div
-                    className={`flex items-center gap-3 text-xs ${
-                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                    }`}
-                  >
+                  <div className="flex items-center gap-3 text-xs text-content-secondary">
                     <svg
-                      className={`h-4 w-4 flex-shrink-0 ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                      }`}
+                      className="h-4 w-4 flex-shrink-0 text-content-muted"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1026,11 +976,11 @@ export function ChatSidebar({
               className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
                 currentChat?.messages?.length === 0
                   ? isDarkMode
-                    ? 'cursor-not-allowed border-gray-700 text-gray-500 opacity-50'
-                    : 'cursor-not-allowed border-gray-300 text-gray-400 opacity-50'
+                    ? 'cursor-not-allowed border-border-strong text-content-muted opacity-50'
+                    : 'cursor-not-allowed border-border-subtle text-content-muted opacity-50'
                   : isDarkMode
-                    ? 'border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                    : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                    ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                    : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
               }`}
               disabled={currentChat?.messages?.length === 0}
             >
@@ -1042,15 +992,13 @@ export function ChatSidebar({
           {/* Chat History Header */}
           <div
             className={`flex-none border-b ${
-              isDarkMode
-                ? 'border-gray-800 bg-gray-900'
-                : 'border-gray-200 bg-white'
+              isDarkMode ? 'border-gray-800' : 'border-gray-200'
             } px-3 py-2 sm:px-4 sm:py-3`}
           >
             <div className="flex items-center justify-between">
               <h3
                 className={`truncate font-aeonik-fono text-sm font-medium ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                  isDarkMode ? 'text-content-secondary' : 'text-content-primary'
                 }`}
               >
                 Chat History
@@ -1061,8 +1009,8 @@ export function ChatSidebar({
                     onClick={onEncryptionKeyClick}
                     className={`rounded-lg p-1.5 transition-all duration-200 ${
                       isDarkMode
-                        ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
+                        : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
                     }`}
                     title="Manage encryption key"
                   >
@@ -1074,8 +1022,8 @@ export function ChatSidebar({
                     onClick={() => downloadChats(chats)}
                     className={`rounded-lg p-1.5 transition-all duration-200 ${
                       isDarkMode
-                        ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                        ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
+                        : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
                     }`}
                     title="Download all chats as ZIP"
                   >
@@ -1086,7 +1034,7 @@ export function ChatSidebar({
             </div>
             <div
               className={`font-base mt-1 font-aeonik-fono text-xs ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                isDarkMode ? 'text-content-muted' : 'text-content-muted'
               }`}
             >
               {isSignedIn ? (
@@ -1128,18 +1076,18 @@ export function ChatSidebar({
                         chat.decryptionFailed
                           ? onEncryptionKeyClick
                             ? isDarkMode
-                              ? 'cursor-pointer border-gray-700 hover:border-gray-600 hover:bg-gray-800'
-                              : 'cursor-pointer border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                              ? 'cursor-pointer border-border-strong hover:border-gray-600 hover:bg-surface-chat'
+                              : 'cursor-pointer border-border-subtle hover:border-gray-400 hover:bg-surface-sidebar'
                             : isDarkMode
-                              ? 'cursor-not-allowed border-gray-700 opacity-60'
-                              : 'cursor-not-allowed border-gray-300 opacity-60'
+                              ? 'cursor-not-allowed border-border-strong opacity-60'
+                              : 'cursor-not-allowed border-border-subtle opacity-60'
                           : currentChat?.id === chat.id
                             ? isDarkMode
-                              ? 'cursor-pointer border-gray-700 bg-gray-800 text-white'
-                              : 'cursor-pointer border-gray-300 bg-gray-100 text-gray-900'
+                              ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
+                              : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
                             : isDarkMode
-                              ? 'cursor-pointer border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800'
-                              : 'cursor-pointer border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                              ? 'cursor-pointer border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                              : 'cursor-pointer border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
                       }`}
                     >
                       {/* Chat item content */}
@@ -1173,10 +1121,10 @@ export function ChatSidebar({
                 <button
                   onClick={() => loadMoreChats()}
                   disabled={isLoadingMore}
-                  className={`w-full rounded-lg p-3 text-center text-sm font-medium transition-colors ${
+                  className={`w-full rounded-lg border border-border-subtle p-3 text-center text-sm font-medium transition-colors ${
                     isDarkMode
-                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:bg-gray-900 disabled:text-gray-600'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400'
+                      ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80 disabled:bg-surface-chat disabled:text-content-muted'
+                      : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar/80 disabled:bg-surface-sidebar disabled:text-content-muted'
                   }`}
                 >
                   {isLoadingMore ? 'Loading...' : 'Load More'}
@@ -1190,7 +1138,7 @@ export function ChatSidebar({
                 hasAttemptedLoadMore && (
                   <div
                     className={`w-full rounded-lg p-3 text-center text-sm ${
-                      isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                      isDarkMode ? 'text-content-muted' : 'text-content-muted'
                     }`}
                   >
                     No more chats
@@ -1208,9 +1156,7 @@ export function ChatSidebar({
             >
               <div className="text-center">
                 <p
-                  className={`mb-2 text-sm font-medium ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
+                  className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
                 >
                   Get the native app
                 </p>
@@ -1233,16 +1179,10 @@ export function ChatSidebar({
           )}
 
           {/* Terms and privacy policy */}
-          <div
-            className={`flex h-[56px] flex-none items-center justify-center border-t ${
-              isDarkMode
-                ? 'border-gray-800 bg-gray-900'
-                : 'border-gray-200 bg-white'
-            } p-3`}
-          >
+          <div className="flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
             <p
               className={`text-center text-xs leading-relaxed ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-800'
+                isDarkMode ? 'text-content-secondary' : 'text-content-primary'
               }`}
             >
               By using this service, you agree to Tinfoil&apos;s{' '}
@@ -1250,8 +1190,8 @@ export function ChatSidebar({
                 href="https://tinfoil.sh/terms"
                 className={
                   isDarkMode
-                    ? 'text-white underline hover:text-gray-200'
-                    : 'text-[#005050] underline hover:text-[#004040]'
+                    ? 'text-white underline hover:text-content-secondary'
+                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
                 }
               >
                 Terms of Service
@@ -1261,8 +1201,8 @@ export function ChatSidebar({
                 href="https://tinfoil.sh/privacy"
                 className={
                   isDarkMode
-                    ? 'text-white underline hover:text-gray-200'
-                    : 'text-[#005050] underline hover:text-[#004040]'
+                    ? 'text-white underline hover:text-content-secondary'
+                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
                 }
               >
                 Privacy Policy
@@ -1452,11 +1392,7 @@ function ChatListItem({
               onClick={(e) => e.stopPropagation()}
             >
               <input
-                className={`w-full rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isDarkMode
-                    ? 'bg-gray-700 text-white'
-                    : 'bg-gray-200 text-gray-900'
-                }`}
+                className={`w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 value={editingTitle}
                 onChange={(e) => setEditingTitle(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -1479,8 +1415,8 @@ function ChatListItem({
                     chat.decryptionFailed
                       ? 'text-orange-500'
                       : isDarkMode
-                        ? 'text-gray-100'
-                        : 'text-gray-900'
+                        ? 'text-content-primary'
+                        : 'text-content-primary'
                   }`}
                 >
                   {chat.decryptionFailed ? (
@@ -1511,8 +1447,8 @@ function ChatListItem({
                     chat.decryptionFailed
                       ? 'text-red-500'
                       : isDarkMode
-                        ? 'text-gray-400'
-                        : 'text-gray-500'
+                        ? 'text-content-muted'
+                        : 'text-content-muted'
                   }`}
                 >
                   {chat.decryptionFailed
@@ -1529,14 +1465,14 @@ function ChatListItem({
                   (isSignedIn ? (
                     <AiOutlineCloudSync
                       className={`h-3 w-3 ${
-                        isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                        isDarkMode ? 'text-content-muted' : 'text-content-muted'
                       }`}
                       title="Not synced to cloud"
                     />
                   ) : (
                     <MdOutlineCloudOff
                       className={`h-3 w-3 ${
-                        isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                        isDarkMode ? 'text-content-muted' : 'text-content-muted'
                       }`}
                       title="Local only - not saved to cloud"
                     />
@@ -1552,8 +1488,8 @@ function ChatListItem({
               <button
                 className={`mr-1 rounded p-1 transition-colors ${
                   isDarkMode
-                    ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                    : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                    ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                    : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
                 }`}
                 onClick={startEditing}
                 title="Rename"
@@ -1564,8 +1500,8 @@ function ChatListItem({
             <button
               className={`rounded p-1 transition-colors ${
                 isDarkMode
-                  ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                  : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                  ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                  : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
               }`}
               onClick={(e) => {
                 e.stopPropagation()
@@ -1611,14 +1547,14 @@ function DeleteConfirmation({
         },
       }}
       className={`absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
+        isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar'
       } p-2 shadow-lg`}
     >
       <button
         className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
           isDarkMode
-            ? 'bg-gray-600 text-white hover:bg-gray-700'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            ? 'bg-surface-sidebar text-content-inverse hover:bg-surface-sidebar/90'
+            : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
         }`}
         onClick={(e) => {
           e.stopPropagation()

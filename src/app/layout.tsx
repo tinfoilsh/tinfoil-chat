@@ -145,6 +145,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-theme="light"
       className={`overflow-x-hidden ${inter.variable} ${aeonikFono.variable} ${aeonik.variable}`}
     >
       <head>
@@ -156,11 +157,9 @@ export default function RootLayout({
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
         />
-        <meta name="theme-color" content="#111827" />
+        <meta name="theme-color" content="#ffffff" />
       </head>
-      <body
-        className={`bg-gray-900 font-aeonik-fono text-gray-100 antialiased`}
-      >
+      <body className="font-aeonik-fono antialiased">
         <Script
           defer
           data-domain="chat.tinfoil.sh"

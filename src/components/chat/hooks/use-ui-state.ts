@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 
 interface UseUIStateReturn {
   isClient: boolean
@@ -11,6 +17,9 @@ interface UseUIStateReturn {
   openAndExpandVerifier: () => void
   handleInputFocus: () => void
 }
+
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 export function useUIState(): UseUIStateReturn {
   const [isClient, setIsClient] = useState(false)
@@ -53,6 +62,14 @@ export function useUIState(): UseUIStateReturn {
       }
     }
   }, [isClient])
+
+  // Sync CSS theme tokens with current theme selection
+  useIsomorphicLayoutEffect(() => {
+    if (!isClient) return
+
+    const theme = isDarkMode ? 'dark' : 'light'
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [isClient, isDarkMode])
 
   // Add effect to prevent body and html scrolling
   useEffect(() => {

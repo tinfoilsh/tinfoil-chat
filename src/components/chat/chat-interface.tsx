@@ -18,6 +18,7 @@ import {
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 
+import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
@@ -861,30 +862,10 @@ export function ChatInterface({
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
     return (
-      <div
-        className={`flex h-screen items-center justify-center ${
-          isClient ? (isDarkMode ? 'bg-gray-900' : 'bg-white') : ''
-        }`}
-      >
+      <div className="flex h-screen items-center justify-center bg-surface-chat-background">
         <div className="relative h-10 w-10">
-          <div
-            className={`absolute inset-0 animate-spin rounded-full border-4 ${
-              isClient
-                ? isDarkMode
-                  ? 'border-gray-700 border-t-gray-100'
-                  : 'border-gray-200 border-t-gray-900'
-                : 'border-gray-700 border-t-gray-100'
-            }`}
-          ></div>
-          <div
-            className={`absolute inset-0 rounded-full border-4 ${
-              isClient
-                ? isDarkMode
-                  ? 'border-gray-700 opacity-30'
-                  : 'border-gray-200 opacity-30'
-                : 'border-gray-700 opacity-30'
-            }`}
-          ></div>
+          <div className="absolute inset-0 animate-spin rounded-full border-4 border-border-strong border-t-primary"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-border-strong/40"></div>
         </div>
       </div>
     )
@@ -893,30 +874,18 @@ export function ChatInterface({
   // Show error state if no models are available (configuration error)
   if (!isLoadingConfig && models.length === 0) {
     return (
-      <div
-        className={`flex h-screen items-center justify-center ${
-          isClient ? (isDarkMode ? 'bg-gray-900' : 'bg-white') : ''
-        }`}
-      >
+      <div className="flex h-screen items-center justify-center bg-surface-chat-background">
         <div className="text-center">
           <div className="mb-2 text-xl text-red-500">⚠️</div>
-          <h2
-            className={`mb-2 text-lg font-semibold ${
-              isClient ? (isDarkMode ? 'text-gray-100' : 'text-gray-900') : ''
-            }`}
-          >
+          <h2 className="mb-2 text-lg font-semibold text-content-primary">
             Configuration Error
           </h2>
-          <p
-            className={`${
-              isClient ? (isDarkMode ? 'text-gray-400' : 'text-gray-600') : ''
-            } mb-4`}
-          >
+          <p className="mb-4 text-content-secondary">
             No models are available. Please check the API configuration.
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="rounded-lg bg-[#005050] px-4 py-2 text-white hover:bg-[#004040]"
+            className="rounded-lg bg-brand-accent-dark px-4 py-2 text-content-inverse hover:bg-brand-accent-dark/90"
           >
             Refresh Page
           </button>
@@ -927,9 +896,7 @@ export function ChatInterface({
 
   return (
     <div
-      className={`flex overflow-hidden ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}
+      className="flex overflow-hidden bg-surface-chat-background"
       style={{
         position: 'fixed',
         top: 0,
@@ -956,11 +923,7 @@ export function ChatInterface({
           (isVerifierSidebarOpen || isSettingsSidebarOpen)
         ) && (
           <button
-            className={`fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-              isDarkMode
-                ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
+            className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
             onClick={() => {
               setIsSidebarOpen(true)
               // If window is narrow, close right sidebars when opening left sidebar
@@ -991,15 +954,13 @@ export function ChatInterface({
           {/* New chat button */}
           <div className="group relative">
             <button
-              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
+                'bg-surface-chat-background text-content-secondary',
                 currentChat?.messages?.length === 0
-                  ? isDarkMode
-                    ? 'cursor-not-allowed bg-gray-900 text-gray-500 opacity-50'
-                    : 'cursor-not-allowed bg-white text-gray-400 opacity-50'
-                  : isDarkMode
-                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
+                  ? 'cursor-not-allowed text-content-muted opacity-50'
+                  : 'hover:bg-surface-chat hover:text-content-primary',
+              )}
               onClick={createNewChat}
               aria-label="Create new chat"
               disabled={currentChat?.messages?.length === 0}
@@ -1007,15 +968,13 @@ export function ChatInterface({
               <PlusIcon className="h-5 w-5" />
             </button>
             <span
-              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity ${
+              className={cn(
+                'pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle px-2 py-1 text-xs opacity-0 transition-opacity',
                 currentChat?.messages?.length === 0
-                  ? ''
-                  : 'group-hover:opacity-100'
-              } ${
-                isDarkMode
-                  ? 'bg-gray-700 text-gray-200'
-                  : 'bg-gray-800 text-white'
-              }`}
+                  ? 'opacity-0'
+                  : 'group-hover:opacity-100',
+                'bg-surface-chat-background text-content-primary shadow-sm',
+              )}
             >
               New chat
             </span>
@@ -1024,15 +983,12 @@ export function ChatInterface({
           {/* Settings toggle button */}
           <div className="group relative">
             <button
-              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-                isSettingsSidebarOpen
-                  ? isDarkMode
-                    ? 'cursor-default bg-gray-700 text-gray-400'
-                    : 'cursor-default bg-gray-200 text-gray-400'
-                  : isDarkMode
-                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
+                'bg-surface-chat-background text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                isSettingsSidebarOpen &&
+                  'cursor-default bg-surface-chat text-content-muted hover:text-content-muted',
+              )}
               onClick={handleOpenSettingsSidebar}
               aria-label={
                 isSettingsSidebarOpen ? 'Close settings' : 'Open settings'
@@ -1041,13 +997,7 @@ export function ChatInterface({
             >
               <Cog6ToothIcon className="h-5 w-5" />
             </button>
-            <span
-              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-                isDarkMode
-                  ? 'bg-gray-700 text-gray-200'
-                  : 'bg-gray-800 text-white'
-              }`}
-            >
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
               {isSettingsSidebarOpen ? 'Close settings' : 'Settings'}
             </span>
           </div>
@@ -1055,15 +1005,12 @@ export function ChatInterface({
           {/* Verifier toggle button */}
           <div className="group relative">
             <button
-              className={`flex items-center justify-center gap-2 rounded-lg p-2.5 transition-all duration-200 ${
-                isVerifierSidebarOpen
-                  ? isDarkMode
-                    ? 'cursor-default bg-gray-700 text-gray-400'
-                    : 'cursor-default bg-gray-200 text-gray-400'
-                  : isDarkMode
-                    ? 'bg-gray-900 text-gray-300 hover:bg-gray-800'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
+              className={cn(
+                'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
+                'bg-surface-chat-background text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                isVerifierSidebarOpen &&
+                  'cursor-default bg-surface-chat text-content-muted hover:text-content-muted',
+              )}
               onClick={handleOpenVerifierSidebar}
               aria-label={
                 isVerifierSidebarOpen
@@ -1074,13 +1021,7 @@ export function ChatInterface({
             >
               <ShieldCheckIcon className="h-5 w-5" />
             </button>
-            <span
-              className={`pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 ${
-                isDarkMode
-                  ? 'bg-gray-700 text-gray-200'
-                  : 'bg-gray-800 text-white'
-              }`}
-            >
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
               {isVerifierSidebarOpen ? 'Close verification' : 'Verification'}
             </span>
           </div>
@@ -1172,18 +1113,10 @@ export function ChatInterface({
           top: 0,
         }}
       >
-        <div
-          className={`relative flex h-full flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}
-        >
+        <div className="relative flex h-full flex-col bg-surface-chat-background">
           {/* Decryption Progress Banner */}
           {decryptionProgress && decryptionProgress.isDecrypting && (
-            <div
-              className={`border-b px-4 py-2 ${
-                isDarkMode
-                  ? 'border-gray-700 bg-gray-900 text-gray-300'
-                  : 'border-gray-200 bg-blue-50 text-gray-700'
-              }`}
-            >
+            <div className="border-b border-border-subtle bg-surface-chat px-4 py-2 text-content-secondary">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <svg
@@ -1224,9 +1157,7 @@ export function ChatInterface({
             ref={scrollContainerRef}
             onScroll={handleScroll}
             data-scroll-container="main"
-            className={`relative flex flex-1 overflow-y-auto ${
-              isDarkMode ? 'bg-gray-900' : 'bg-white'
-            }`}
+            className="relative flex flex-1 overflow-y-auto bg-surface-chat-background"
           >
             <div className="flex min-w-0 flex-1">
               <ChatMessages
@@ -1263,9 +1194,7 @@ export function ChatInterface({
             (windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
               (currentChat?.messages && currentChat.messages.length > 0)) && (
               <div
-                className={`relative flex-shrink-0 ${
-                  isDarkMode ? 'bg-gray-900' : 'bg-white'
-                } p-4`}
+                className="relative flex-shrink-0 bg-surface-chat-background p-4"
                 style={{
                   minHeight: '80px',
                   maxHeight: '50vh',
@@ -1349,17 +1278,11 @@ export function ChatInterface({
                   <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
                     <button
                       onClick={() => scrollToBottom()}
-                      className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                        isDarkMode
-                          ? 'bg-gray-700/80 shadow-lg hover:bg-gray-600'
-                          : 'border border-gray-200 bg-white/90 shadow-md hover:bg-gray-50'
-                      }`}
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle bg-surface-sidebar-button shadow-md transition-colors hover:bg-surface-sidebar-button-hover"
                       aria-label="Scroll to bottom"
                     >
                       <ArrowDownIcon
-                        className={`h-4 w-4 ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                        }`}
+                        className="h-4 w-4 text-content-secondary"
                         strokeWidth={2}
                       />
                     </button>

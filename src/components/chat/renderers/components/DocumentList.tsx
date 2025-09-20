@@ -30,7 +30,7 @@ export const DocumentList = memo(function DocumentList({
   const getFileIcon = (filename: string) => {
     const type = getFileIconType(filename)
     const iconProps = {
-      className: `h-5 w-5 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`,
+      className: 'h-5 w-5 text-content-secondary',
       'aria-hidden': true,
     }
     switch (type) {
@@ -82,15 +82,11 @@ export const DocumentList = memo(function DocumentList({
         return (
           <div
             key={uniqueKey}
-            className={`flex items-center rounded-lg ${
-              isDarkMode
-                ? 'bg-gray-700/50 hover:bg-gray-700/70'
-                : 'bg-gray-100 hover:bg-gray-200'
-            } overflow-hidden transition-colors duration-200`}
+            className="flex items-center gap-2 overflow-hidden rounded-lg border border-border-subtle bg-surface-chat px-2.5 py-1.5 text-content-primary shadow-sm transition-colors duration-200 hover:bg-surface-chat/80"
           >
             {hasImageData ? (
               <div className="flex items-center">
-                <div className="h-10 w-10 overflow-hidden">
+                <div className="h-10 w-10 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
                   <img
                     src={`data:${imageData![index].mimeType};base64,${imageData![index].base64}`}
                     alt={doc.name}
@@ -98,21 +94,19 @@ export const DocumentList = memo(function DocumentList({
                     loading="lazy"
                   />
                 </div>
-                <span
-                  className={`ml-2 mr-3 max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-                >
+                <span className="ml-2 mr-3 max-w-[180px] truncate text-sm">
                   {doc.name}
                 </span>
               </div>
             ) : (
-              <div className="flex items-center px-3 py-1.5">
-                <div className="mr-2">{getFileIcon(doc.name)}</div>
-                <span
-                  className={`max-w-[150px] truncate text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
-                >
+              <>
+                <div className="mr-1.5 text-content-secondary">
+                  {getFileIcon(doc.name)}
+                </div>
+                <span className="max-w-[180px] truncate text-sm">
                   {doc.name}
                 </span>
-              </div>
+              </>
             )}
           </div>
         )

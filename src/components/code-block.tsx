@@ -61,11 +61,7 @@ export const CodeBlock = memo(function CodeBlock({
     <div className="group relative overflow-x-auto overflow-y-visible">
       <button
         onClick={copyToClipboard}
-        className={`absolute right-2 top-2 rounded-lg p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${
-          isDarkMode
-            ? 'bg-gray-800 hover:bg-gray-700'
-            : 'bg-gray-200 hover:bg-gray-300'
-        }`}
+        className="absolute right-2 top-2 rounded-lg bg-surface-input p-2 opacity-0 transition-opacity duration-200 hover:bg-surface-input/80 group-hover:opacity-100"
       >
         {copied ? (
           <svg
@@ -83,7 +79,7 @@ export const CodeBlock = memo(function CodeBlock({
           </svg>
         ) : (
           <svg
-            className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}
+            className="h-5 w-5 text-content-muted"
             fill="none"
             strokeWidth="1.5"
             stroke="currentColor"
@@ -104,7 +100,9 @@ export const CodeBlock = memo(function CodeBlock({
           borderRadius: '0.5rem',
           margin: 0,
           fontSize: '0.875rem',
-          background: isDarkMode ? '#111111' : '#f8f9fa',
+          background: isDarkMode
+            ? `hsl(var(--surface-chat-background))`
+            : `hsl(var(--surface-card))`,
           border: isDarkMode
             ? '1px solid rgb(31 41 55)'
             : '1px solid rgb(229 231 235)',

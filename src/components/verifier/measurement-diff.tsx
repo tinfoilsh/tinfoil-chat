@@ -47,9 +47,7 @@ export function MeasurementDiff({
 }: MeasurementDiffProps) {
   return (
     <div className="mt-4">
-      <h3
-        className={`mb-4 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}
-      >
+      <h3 className="mb-4 text-sm font-medium text-content-primary">
         Measurement Comparison
       </h3>
 

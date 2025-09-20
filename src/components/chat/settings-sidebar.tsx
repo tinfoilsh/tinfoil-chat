@@ -1,4 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
+import { cn } from '@/components/ui/utils'
 import {
   Cog6ToothIcon,
   KeyIcon,
@@ -465,40 +466,23 @@ export function SettingsSidebar({
           damping: 30,
           stiffness: 300,
         }}
-        className={`fixed right-0 top-0 z-50 flex h-full w-[85vw] flex-col border-l font-aeonik ${
-          isDarkMode
-            ? 'border-gray-800 bg-gray-900'
-            : 'border-gray-200 bg-white'
-        } overflow-hidden`}
+        className={cn(
+          'fixed right-0 top-0 z-50 flex h-full w-[85vw] flex-col overflow-hidden border-l font-aeonik',
+          'border-border-subtle bg-surface-sidebar text-content-primary',
+        )}
         style={{ maxWidth: `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px` }}
       >
         {/* Header */}
-        <div
-          className={`flex h-16 flex-none items-center justify-between border-b ${
-            isDarkMode ? 'border-gray-800' : 'border-gray-200'
-          } p-4`}
-        >
+        <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-2">
-            <Cog6ToothIcon
-              className={`h-6 w-6 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}
-            />
-            <h2
-              className={`font-aeonik text-lg font-semibold ${
-                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-              }`}
-            >
+            <Cog6ToothIcon className="h-6 w-6 text-content-primary" />
+            <h2 className="font-aeonik text-lg font-semibold text-content-primary">
               Settings
             </h2>
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className={`rounded-lg p-2 transition-all duration-200 ${
-              isDarkMode
-                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+            className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>
@@ -510,41 +494,27 @@ export function SettingsSidebar({
             {/* Appearance section */}
             <div>
               <h3
-                className={`mb-3 font-aeonik text-sm font-medium ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                }`}
+                className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
               >
                 Appearance
               </h3>
               <div className="space-y-2">
-                <div
-                  className={`flex items-center justify-between rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                  }`}
-                >
+                <div className="flex items-center justify-between rounded-lg border border-border-subtle bg-surface-sidebar p-3">
                   <div>
                     <div
-                      className={`font-aeonik text-sm font-medium ${
-                        isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                      }`}
+                      className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                     >
                       Theme
                     </div>
                     <div
-                      className={`font-aeonik-fono text-xs ${
-                        isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                      }`}
+                      className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                     >
                       Choose between light and dark mode
                     </div>
                   </div>
                   <button
                     onClick={handleThemeToggle}
-                    className={`rounded-lg p-2 transition-all duration-200 ${
-                      isDarkMode
-                        ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                        : 'bg-white text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
                   >
                     {isDarkMode ? (
                       <SunIcon className="h-5 w-5" />
@@ -559,31 +529,21 @@ export function SettingsSidebar({
             {/* Chat Settings */}
             <div>
               <h3
-                className={`mb-3 font-aeonik text-sm font-medium ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                }`}
+                className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
               >
                 Chat Settings
               </h3>
               <div className="space-y-2">
-                <div
-                  className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                  }`}
-                >
+                <div className="rounded-lg border border-border-subtle p-3">
                   <div className="flex items-start justify-between">
                     <div className="mr-3 flex-1">
                       <div
-                        className={`font-aeonik text-sm font-medium ${
-                          isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                        }`}
+                        className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                       >
                         Messages in Context
                       </div>
                       <div
-                        className={`font-aeonik-fono text-xs ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}
+                        className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                       >
                         Maximum number of recent messages sent to the model
                         (1-50). Longer contexts increase network usage and slow
@@ -604,8 +564,8 @@ export function SettingsSidebar({
                         }}
                         className={`w-16 rounded-md border px-2 py-1 text-center text-sm ${
                           isDarkMode
-                            ? 'border-gray-600 bg-gray-700 text-gray-200'
-                            : 'border-gray-300 bg-white text-gray-900'
+                            ? 'border-border-strong bg-surface-chat text-content-secondary'
+                            : 'border-border-subtle bg-surface-sidebar text-content-primary'
                         } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                       />
                     </div>
@@ -613,24 +573,16 @@ export function SettingsSidebar({
                 </div>
 
                 {/* Language Setting */}
-                <div
-                  className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                  }`}
-                >
+                <div className="rounded-lg border border-border-subtle p-3">
                   <div className="space-y-2">
                     <div>
                       <div
-                        className={`font-aeonik text-sm font-medium ${
-                          isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                        }`}
+                        className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                       >
                         Response Language
                       </div>
                       <div
-                        className={`font-aeonik-fono text-xs ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}
+                        className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                       >
                         Language for AI responses
                       </div>
@@ -640,8 +592,8 @@ export function SettingsSidebar({
                       onChange={(e) => handleLanguageChange(e.target.value)}
                       className={`w-full rounded-md border py-2 pl-3 pr-8 text-sm ${
                         isDarkMode
-                          ? 'border-gray-600 bg-gray-700 text-gray-200'
-                          : 'border-gray-300 bg-white text-gray-900'
+                          ? 'border-border-strong bg-surface-chat text-content-secondary'
+                          : 'border-border-subtle bg-surface-sidebar text-content-primary'
                       } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                     >
                       {availableLanguages.map((lang) => (
@@ -654,25 +606,17 @@ export function SettingsSidebar({
                 </div>
 
                 {/* Custom System Prompt Settings */}
-                <div
-                  className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-900' : 'bg-gray-100'
-                  }`}
-                >
+                <div className="rounded-lg border border-border-subtle p-3">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div
-                          className={`font-aeonik text-sm font-medium ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                          }`}
+                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                         >
                           Custom System Prompt
                         </div>
                         <div
-                          className={`font-aeonik-fono text-xs ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}
+                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                         >
                           Override the default system prompt
                         </div>
@@ -687,13 +631,7 @@ export function SettingsSidebar({
                             }
                             className="peer sr-only"
                           />
-                          <div
-                            className={`peer h-5 w-9 rounded-full after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-focus:outline-none ${
-                              isDarkMode
-                                ? 'bg-gray-600 after:border-gray-300 peer-checked:bg-emerald-600'
-                                : 'bg-gray-300 after:border-gray-300 peer-checked:bg-emerald-600'
-                            }`}
-                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
                         </label>
                       </div>
                     </div>
@@ -710,19 +648,13 @@ export function SettingsSidebar({
                           rows={6}
                           className={`w-full resize-none rounded-md border px-3 py-2 font-mono text-sm ${
                             isDarkMode
-                              ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
-                              : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
                           } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                         />
-                        <div
-                          className={`rounded-lg border p-3 ${
-                            isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                          }`}
-                        >
+                        <div className="rounded-lg border border-border-subtle p-3">
                           <div
-                            className={`font-aeonik-fono text-xs ${
-                              isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}
+                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                           >
                             <span
                               className={`font-aeonik font-medium ${
@@ -758,25 +690,17 @@ export function SettingsSidebar({
                 </div>
 
                 {/* Personalization Settings */}
-                <div
-                  className={`rounded-lg p-3 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                  }`}
-                >
+                <div className="rounded-lg border border-border-subtle p-3">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div
-                          className={`font-aeonik text-sm font-medium ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                          }`}
+                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                         >
                           Personalization
                         </div>
                         <div
-                          className={`font-aeonik-fono text-xs ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}
+                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                         >
                           Customize the AI's behavior and responses
                         </div>
@@ -791,13 +715,7 @@ export function SettingsSidebar({
                             }
                             className="peer sr-only"
                           />
-                          <div
-                            className={`peer h-5 w-9 rounded-full after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-focus:outline-none ${
-                              isDarkMode
-                                ? 'bg-gray-600 after:border-gray-300 peer-checked:bg-emerald-600'
-                                : 'bg-gray-300 after:border-gray-300 peer-checked:bg-emerald-600'
-                            }`}
-                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
                         </label>
                       </div>
                     </div>
@@ -807,9 +725,7 @@ export function SettingsSidebar({
                         {/* Nickname Field */}
                         <div>
                           <label
-                            className={`mb-1 block font-aeonik text-xs font-medium ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}
+                            className={`mb-1 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
                           >
                             How should Tin call you?
                           </label>
@@ -822,8 +738,8 @@ export function SettingsSidebar({
                             placeholder="Nickname"
                             className={`w-full rounded-md border px-3 py-2 text-sm ${
                               isDarkMode
-                                ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
-                                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                                ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                                : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
                             } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                           />
                         </div>
@@ -831,9 +747,7 @@ export function SettingsSidebar({
                         {/* Profession Field */}
                         <div>
                           <label
-                            className={`mb-1 block font-aeonik text-xs font-medium ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}
+                            className={`mb-1 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
                           >
                             What do you do?
                           </label>
@@ -846,8 +760,8 @@ export function SettingsSidebar({
                             placeholder={getCurrentPlaceholder()}
                             className={`w-full rounded-md border px-3 py-2 text-sm ${
                               isDarkMode
-                                ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
-                                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                                ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                                : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
                             } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                           />
                         </div>
@@ -855,9 +769,7 @@ export function SettingsSidebar({
                         {/* Traits Selection */}
                         <div>
                           <label
-                            className={`mb-2 block font-aeonik text-xs font-medium ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}
+                            className={`mb-2 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
                           >
                             What conversational traits should Tin have?
                           </label>
@@ -868,10 +780,10 @@ export function SettingsSidebar({
                                 onClick={() => handleTraitToggle(trait)}
                                 className={`rounded-full px-2 py-1 text-xs transition-colors ${
                                   selectedTraits.includes(trait)
-                                    ? 'bg-emerald-600 text-white'
+                                    ? 'bg-brand-accent-light text-brand-accent-dark'
                                     : isDarkMode
-                                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                      ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat'
+                                      : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar'
                                 }`}
                               >
                                 {selectedTraits.includes(trait) ? '✓ ' : '+ '}
@@ -884,9 +796,7 @@ export function SettingsSidebar({
                         {/* Additional Context */}
                         <div>
                           <label
-                            className={`mb-1 block font-aeonik text-xs font-medium ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                            }`}
+                            className={`mb-1 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
                           >
                             Anything else Tin should know about you?
                           </label>
@@ -899,8 +809,8 @@ export function SettingsSidebar({
                             rows={3}
                             className={`w-full resize-none rounded-md border px-3 py-2 text-sm ${
                               isDarkMode
-                                ? 'border-gray-600 bg-gray-700 text-gray-200 placeholder-gray-400'
-                                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                                ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                                : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
                             } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                           />
                         </div>
@@ -909,11 +819,7 @@ export function SettingsSidebar({
                         <div className="flex items-center justify-between">
                           <button
                             onClick={handleResetPersonalization}
-                            className={`rounded px-2 py-1 text-xs ${
-                              isDarkMode
-                                ? 'text-gray-400 hover:text-gray-300'
-                                : 'text-gray-600 hover:text-gray-500'
-                            }`}
+                            className="rounded border border-border-subtle bg-surface-chat px-2 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
                           >
                             Reset all fields
                           </button>
@@ -929,52 +835,32 @@ export function SettingsSidebar({
             {onEncryptionKeyClick && (
               <div>
                 <h3
-                  className={`mb-3 font-aeonik text-sm font-medium ${
-                    isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                  }`}
+                  className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                 >
                   Security
                 </h3>
                 <div className="space-y-2">
                   <button
                     onClick={onEncryptionKeyClick}
-                    className={`flex w-full items-center justify-between rounded-lg p-3 transition-colors ${
-                      isDarkMode
-                        ? 'bg-gray-800 hover:bg-gray-700'
-                        : 'bg-gray-100 hover:bg-gray-50'
-                    }`}
+                    className="flex w-full items-center justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat/80"
                   >
                     <div className="flex items-center gap-3">
-                      <KeyIcon
-                        className={`h-5 w-5 ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}
-                      />
+                      <KeyIcon className={`h-5 w-5 ${'text-content-muted'}`} />
                       <div className="text-left">
                         <div
-                          className={`font-aeonik text-sm font-medium ${
-                            isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                          }`}
+                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
                         >
                           Chat Encryption Key
                         </div>
                         <div
-                          className={`font-aeonik-fono text-xs ${
-                            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}
+                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                         >
                           Manage your chat backup and synchronization encryption
                           key.
                         </div>
                       </div>
                     </div>
-                    <div
-                      className={`text-xs ${
-                        isDarkMode ? 'text-gray-500' : 'text-gray-400'
-                      }`}
-                    >
-                      →
-                    </div>
+                    <div className={`text-xs ${'text-content-muted'}`}>→</div>
                   </button>
                 </div>
               </div>

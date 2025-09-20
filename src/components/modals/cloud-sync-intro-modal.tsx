@@ -13,6 +13,7 @@ export function CloudSyncIntroModal({
   onClose,
   isDarkMode,
 }: CloudSyncIntroModalProps) {
+  void isDarkMode
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
@@ -40,13 +41,13 @@ export function CloudSyncIntroModal({
 
       {/* Modal */}
       <div
-        className={`relative z-10 w-full max-w-md transform rounded-lg shadow-xl transition-all duration-300 ${
-          isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-        } ${isOpen ? 'scale-100' : 'scale-95'} p-4 sm:p-6`}
+        className={`relative z-10 w-full max-w-md transform rounded-lg border border-border-subtle bg-surface-card text-content-primary shadow-xl transition-all duration-300 ${
+          isOpen ? 'scale-100' : 'scale-95'
+        } p-4 sm:p-6`}
       >
         <div className="mb-3 flex items-center justify-center sm:mb-4">
-          <div className="rounded-full bg-blue-100 p-2 dark:bg-blue-900 sm:p-3">
-            <CloudArrowUpIcon className="h-6 w-6 text-blue-600 dark:text-blue-400 sm:h-8 sm:w-8" />
+          <div className="rounded-full bg-brand-accent-light/20 p-2 sm:p-3">
+            <CloudArrowUpIcon className="h-6 w-6 text-brand-accent-light sm:h-8 sm:w-8" />
           </div>
         </div>
 
@@ -55,70 +56,42 @@ export function CloudSyncIntroModal({
         </h2>
 
         <div className="mb-4 space-y-3 sm:mb-6 sm:space-y-4">
-          <p
-            className={`text-center text-xs sm:text-sm ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-700'
-            }`}
-          >
+          <p className="text-center text-xs text-content-secondary sm:text-sm">
             We&apos;ve migrated your existing chats to our secure cloud storage.
             Here&apos;s what this means for you:
           </p>
 
           <div className="space-y-2 sm:space-y-3">
             <div className="flex items-start space-x-2 sm:space-x-3">
-              <ShieldCheckIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-500 sm:h-5 sm:w-5" />
+              <ShieldCheckIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400 sm:h-5 sm:w-5" />
               <div>
-                <p
-                  className={`text-sm font-medium sm:text-base ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
-                >
+                <p className="text-sm font-medium text-content-primary sm:text-base">
                   End-to-End Encrypted
                 </p>
-                <p
-                  className={`text-xs sm:text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}
-                >
+                <p className="text-xs text-content-muted sm:text-sm">
                   All chats are encrypted before leaving your device.
                 </p>
               </div>
             </div>
 
             <div className="flex items-start space-x-2 sm:space-x-3">
-              <FaKey className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-500 sm:h-5 sm:w-5" />
+              <FaKey className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-accent-dark sm:h-5 sm:w-5" />
               <div>
-                <p
-                  className={`text-sm font-medium sm:text-base ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
-                >
+                <p className="text-sm font-medium text-content-primary sm:text-base">
                   Your Encryption Key
                 </p>
-                <p
-                  className={`text-xs sm:text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}
-                >
+                <p className="text-xs text-content-muted sm:text-sm">
                   You can manage your encryption key in the settings.
                 </p>
               </div>
             </div>
             <div className="flex items-start space-x-2 sm:space-x-3">
-              <CloudArrowUpIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-500 sm:h-5 sm:w-5" />
+              <CloudArrowUpIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-accent-light sm:h-5 sm:w-5" />
               <div>
-                <p
-                  className={`text-sm font-medium sm:text-base ${
-                    isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                  }`}
-                >
+                <p className="text-sm font-medium text-content-primary sm:text-base">
                   Automatic Syncing
                 </p>
-                <p
-                  className={`text-xs sm:text-sm ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}
-                >
+                <p className="text-xs text-content-muted sm:text-sm">
                   Your chats are automatically backed up and synced across your
                   devices (just make sure to copy over your encryption key in
                   the settings).
@@ -127,26 +100,14 @@ export function CloudSyncIntroModal({
             </div>
           </div>
 
-          <div
-            className={`hidden rounded-lg p-3 text-sm sm:block ${
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-            }`}
-          >
+          <div className="hidden rounded-lg border border-border-subtle bg-surface-chat p-3 text-sm sm:block">
             <div className="flex items-center space-x-2">
-              <FaLock className="h-4 w-4 text-gray-500" />
-              <p
-                className={`font-medium ${
-                  isDarkMode ? 'text-gray-200' : 'text-gray-800'
-                }`}
-              >
+              <FaLock className="h-4 w-4 text-content-muted" />
+              <p className="font-medium text-content-secondary">
                 Privacy First
               </p>
             </div>
-            <p
-              className={`mt-1 text-xs ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-600'
-              }`}
-            >
+            <p className="mt-1 text-xs text-content-muted">
               We cannot read your chats. Only you have the encryption key.
             </p>
           </div>
@@ -154,11 +115,7 @@ export function CloudSyncIntroModal({
 
         <button
           onClick={onClose}
-          className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:text-base ${
-            isDarkMode
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
+          className="w-full rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-content-inverse transition-colors hover:bg-brand-accent-dark/90 sm:text-base"
         >
           Got it!
         </button>

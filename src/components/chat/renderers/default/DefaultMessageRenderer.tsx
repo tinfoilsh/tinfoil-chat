@@ -1,5 +1,6 @@
 'use client'
 
+import { cn } from '@/components/ui/utils'
 import React, { memo } from 'react'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
@@ -140,20 +141,19 @@ const DefaultMessageComponent = ({
             className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
           >
             <div
-              className={`${isUser ? 'max-w-[95%]' : 'w-full'} ${
-                isUser
-                  ? `${isDarkMode ? 'bg-gray-700/75 backdrop-blur-sm' : 'bg-gray-100'} rounded-lg px-4 py-2`
-                  : ''
-              }`}
+              className={cn(
+                isUser ? 'max-w-[95%]' : 'w-full',
+                isUser &&
+                  'rounded-lg bg-surface-message-user/90 px-4 py-2 shadow-sm backdrop-blur-sm',
+              )}
             >
               <div
-                className={`prose w-full max-w-none overflow-x-auto text-base ${
-                  isDarkMode
-                    ? 'prose-invert text-gray-100 prose-headings:text-gray-100 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-strong:text-gray-100 prose-code:text-gray-100 prose-pre:bg-transparent prose-pre:p-0'
-                    : isUser
-                      ? 'text-gray-900 prose-headings:text-gray-900 prose-a:text-gray-600 hover:prose-a:text-gray-700 prose-strong:text-gray-900 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                      : 'text-gray-900 prose-a:text-gray-500 hover:prose-a:text-gray-400 prose-code:text-gray-800 prose-pre:bg-transparent prose-pre:p-0'
-                }`}
+                className={cn(
+                  'prose w-full max-w-none overflow-x-auto text-base prose-pre:bg-transparent prose-pre:p-0',
+                  'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
+                  'prose-a:text-accent hover:prose-a:text-accent/80',
+                  'dark:prose-invert',
+                )}
               >
                 {!isUser && isStreaming && isLastMessage ? (
                   <StreamingContentWrapper isStreaming={true}>

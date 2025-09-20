@@ -14,6 +14,7 @@ import {
   FaFileWord,
   FiArrowUp,
 } from '@/components/icons/lazy-icons'
+import { cn } from '@/components/ui/utils'
 import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
 import { logError } from '@/utils/error-handling'
@@ -53,11 +54,13 @@ const MacFileIcon = ({
   size = 20,
   isDarkMode = false,
   isUploading = false,
+  compact = false,
 }: {
   filename: string
   size?: number
   isDarkMode?: boolean
   isUploading?: boolean
+  compact?: boolean
 }) => {
   const type = getFileIconType(filename)
 
@@ -73,11 +76,7 @@ const MacFileIcon = ({
   if (isUploading) {
     return (
       <div className="flex flex-col items-center">
-        <div
-          className={`flex items-center justify-center rounded-md p-1 ${
-            isDarkMode ? 'bg-gray-900/40' : 'bg-gray-100'
-          } shadow-sm`}
-        >
+        <div className="flex items-center justify-center rounded-md bg-surface-card/80 p-1 shadow-sm">
           <svg
             className={`${getSpinnerClasses(size)} animate-spin text-emerald-500`}
             xmlns="http://www.w3.org/2000/svg"
@@ -105,9 +104,9 @@ const MacFileIcon = ({
 
   // Get appropriate icon based on file type
   let FileIcon = FaFile
-  let bgColorLight = 'bg-gray-100'
-  let bgColorDark = 'bg-gray-900/40'
-  let iconColor = 'text-gray-500'
+  let bgColorLight = 'bg-surface-card'
+  let bgColorDark = 'bg-surface-chat/60'
+  let iconColor = 'text-content-secondary'
 
   switch (type) {
     case 'pdf':
@@ -182,22 +181,28 @@ const MacFileIcon = ({
       break
     default:
       FileIcon = FaFile
-      bgColorLight = 'bg-gray-50'
-      bgColorDark = 'bg-gray-700/30'
-      iconColor = 'text-gray-500'
+      bgColorLight = 'bg-surface-card'
+      bgColorDark = 'bg-surface-chat/60'
+      iconColor = 'text-content-secondary'
   }
 
   const bgColor = isDarkMode ? bgColorDark : bgColorLight
 
-  return (
-    <div className="flex flex-col items-center">
-      <div
-        className={`flex items-center justify-center rounded-md p-1 ${bgColor} shadow-sm`}
-      >
-        <FileIcon className={`${iconColor}`} style={{ fontSize: size }} />
-      </div>
+  const iconElement = (
+    <div
+      className={`flex items-center justify-center rounded-md ${
+        compact ? '' : 'p-1 shadow-sm'
+      } ${bgColor}`}
+    >
+      <FileIcon className={iconColor} style={{ fontSize: size }} />
     </div>
   )
+
+  if (compact) {
+    return iconElement
+  }
+
+  return <div className="flex flex-col items-center">{iconElement}</div>
 }
 
 export function ChatInput({
@@ -498,91 +503,11 @@ export function ChatInput({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Display processed documents above input area */}
-      {processedDocuments && processedDocuments.length > 0 && (
-        <div
-          className={`mb-2 flex items-center gap-2 overflow-x-auto rounded-lg px-2 py-2 ${
-            isDarkMode
-              ? 'border border-gray-800 bg-gray-900/40'
-              : 'border border-gray-200 bg-gray-100/70'
-          }`}
-        >
-          {processedDocuments.map((doc) => (
-            <div
-              key={doc.id}
-              className="group relative flex flex-col items-center px-2 py-1.5"
-              title={doc.name}
-            >
-              <div className="relative">
-                {doc.imageData ? (
-                  <div className="relative h-12 w-12 overflow-hidden rounded-md">
-                    <img
-                      src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
-                      alt={doc.name}
-                      className="h-full w-full object-cover"
-                    />
-                    {doc.isUploading && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <MacFileIcon
-                    filename={doc.name}
-                    size={20}
-                    isDarkMode={isDarkMode}
-                    isUploading={doc.isUploading}
-                  />
-                )}
-                {removeDocument && !doc.isUploading && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeDocument(doc.id)
-                    }}
-                    className={`absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${
-                      isDarkMode
-                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                    aria-label="Remove document"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-3 w-3"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              <span
-                className={`mt-1 max-w-[60px] truncate text-xs ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}
-              >
-                {doc.name}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div
-        className={`flex flex-col rounded-2xl border shadow-lg transition-colors ${
-          isDragOver
-            ? 'border-emerald-500 bg-emerald-50/10'
-            : isDarkMode
-              ? 'border-gray-600 bg-gray-700'
-              : 'border-gray-300 bg-gray-100'
-        }`}
+        className={cn(
+          'rounded-2xl border border-border-subtle bg-surface-chat p-4 shadow-lg transition-colors',
+          isDragOver && 'ring-2 ring-emerald-400/60',
+        )}
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -596,49 +521,105 @@ export function ChatInput({
           accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
         />
 
-        <div className="px-4 pb-1 pt-3">
-          <textarea
-            ref={inputRef}
-            value={input}
-            autoFocus
-            onFocus={handleInputFocus}
-            onChange={(e) => {
-              setInput(e.target.value)
-              e.target.style.height = inputMinHeight
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
-            }}
-            onPaste={handlePaste}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                if (loadingState === 'idle') {
-                  handleSubmit(e)
-                }
-              }
-            }}
-            placeholder={
-              hasMessages ? 'Reply to Tin...' : "What's on your mind?"
-            }
-            rows={1}
-            className={`w-full resize-none overflow-y-auto bg-transparent text-base leading-relaxed placeholder-gray-400 focus:outline-none ${
-              isDarkMode ? 'text-gray-100' : 'text-gray-900'
-            }`}
-            style={{
-              minHeight: '28px',
-              maxHeight: '240px',
-            }}
-          />
-        </div>
+        {processedDocuments && processedDocuments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {processedDocuments.map((doc) => (
+              <div
+                key={doc.id}
+                className="group relative flex items-center gap-2 rounded-xl border border-border-subtle bg-surface-chat px-2.5 py-1.5 text-content-primary shadow-sm transition-colors hover:bg-surface-chat/80"
+                title={doc.name}
+              >
+                <div className="relative">
+                  {doc.imageData ? (
+                    <div className="relative h-9 w-9 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
+                      <img
+                        src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
+                        alt={doc.name}
+                        className="h-full w-full object-cover"
+                      />
+                      {doc.isUploading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-content-primary border-t-transparent" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <MacFileIcon
+                      filename={doc.name}
+                      size={18}
+                      isDarkMode={isDarkMode}
+                      isUploading={doc.isUploading}
+                      compact
+                    />
+                  )}
+                  {removeDocument && !doc.isUploading && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeDocument(doc.id)
+                      }}
+                      className={cn(
+                        'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100',
+                        'bg-surface-chat-background/90 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                      )}
+                      aria-label="Remove document"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-3 w-3"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <span className="max-w-[180px] truncate text-xs text-content-primary">
+                  {doc.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
-        <div className="flex items-center justify-between px-4 pb-3">
+        <textarea
+          ref={inputRef}
+          value={input}
+          autoFocus
+          onFocus={handleInputFocus}
+          onChange={(e) => {
+            setInput(e.target.value)
+            e.target.style.height = inputMinHeight
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
+          }}
+          onPaste={handlePaste}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              if (loadingState === 'idle') {
+                handleSubmit(e)
+              }
+            }
+          }}
+          placeholder={hasMessages ? 'Reply to Tin...' : "What's on your mind?"}
+          rows={1}
+          className="w-full resize-none overflow-y-auto bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
+          style={{
+            minHeight: '28px',
+            maxHeight: '240px',
+          }}
+        />
+
+        <div className="mt-3 flex items-center justify-between">
           <button
             type="button"
             onClick={triggerFileInput}
-            className={`rounded-lg p-1.5 ${
-              isDarkMode
-                ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
-            }`}
+            className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
             title="Upload document"
           >
             <DocumentIcon className="h-5 w-5" />
@@ -649,13 +630,12 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={isRecording ? stopRecording : startRecording}
-                className={`rounded-lg p-1.5 ${
+                className={cn(
+                  'rounded-lg p-1.5 disabled:opacity-50',
                   isRecording
                     ? 'animate-pulse text-red-500'
-                    : isDarkMode
-                      ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-300'
-                      : 'text-gray-600 hover:bg-gray-200 hover:text-gray-700'
-                } disabled:opacity-50`}
+                    : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
+                )}
                 title={
                   isRecording
                     ? 'Stop recording'
@@ -703,48 +683,24 @@ export function ChatInput({
                   handleSubmit(e)
                 }
               }}
-              className="group flex h-6 w-6 items-center justify-center rounded-full transition-colors disabled:opacity-50"
-              style={{
-                backgroundColor: isDarkMode ? '#ffffff' : '#005050',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = isDarkMode
-                  ? '#f3f4f6'
-                  : '#003a3a'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = isDarkMode
-                  ? '#ffffff'
-                  : '#005050'
-              }}
+              className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
               disabled={
                 loadingState !== 'loading' && (isTranscribing || isConverting)
               }
             >
               {loadingState === 'loading' ? (
-                <div
-                  className={`h-2.5 w-2.5 transition-colors ${
-                    isDarkMode ? 'bg-gray-600' : 'bg-white'
-                  }`}
-                />
+                <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
               ) : (
-                <FiArrowUp
-                  className={`h-4 w-4 transition-colors ${isDarkMode ? 'text-gray-600' : 'text-white'}`}
-                />
+                <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
               )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Disclaimer - only show when there are messages */}
       {hasMessages && (
-        <div className="mt-0 text-center">
-          <p
-            className={`text-xs ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`}
-          >
+        <div className="text-center">
+          <p className="text-xs text-content-muted">
             AI can make mistakes. Verify important information.
           </p>
         </div>

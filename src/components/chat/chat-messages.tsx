@@ -156,11 +156,7 @@ const LoadingMessage = memo(function LoadingMessage({
         <div className="mb-2 w-full">
           {/* EXACT same structure as ThoughtProcess container */}
           <div className={`mb-2 mt-2 rounded-lg bg-transparent`}>
-            <div
-              className={`flex h-10 w-full items-center justify-between px-4 text-left ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-700'
-              } rounded-lg`}
-            >
+            <div className="flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-secondary">
               <div className="flex items-center gap-2">
                 <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
               </div>
@@ -198,12 +194,8 @@ const MessagesSeparator = memo(function MessagesSeparator({
 }) {
   return (
     <div className={`relative my-6 flex items-center justify-center`}>
-      <div
-        className={`absolute w-full border-t ${isDarkMode ? 'border-gray-800' : 'border-gray-300'}`}
-      ></div>
-      <span
-        className={`relative px-4 ${isDarkMode ? 'bg-gray-900 text-gray-400' : 'bg-white text-gray-500'} text-sm font-medium`}
-      >
+      <div className="absolute w-full border-t border-border-subtle"></div>
+      <span className="relative bg-surface-chat-background px-4 text-sm font-medium text-content-secondary">
         Archived Messages
       </span>
     </div>

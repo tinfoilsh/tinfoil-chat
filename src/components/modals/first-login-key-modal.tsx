@@ -22,6 +22,7 @@ export function FirstLoginKeyModal({
   onImportKey,
   isDarkMode,
 }: FirstLoginKeyModalProps) {
+  void isDarkMode
   const [showImportView, setShowImportView] = useState(false)
   const [inputKey, setInputKey] = useState('')
   const [isDragging, setIsDragging] = useState(false)
@@ -148,33 +149,21 @@ export function FirstLoginKeyModal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel
-                className={`w-full max-w-md transform overflow-hidden rounded-2xl ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-white'
-                } p-6 text-left align-middle shadow-xl transition-all`}
-              >
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl border border-border-subtle bg-surface-card p-6 text-left align-middle shadow-xl transition-all">
                 {!showImportView ? (
                   <>
                     <Dialog.Title
                       as="h3"
-                      className={`flex items-center justify-between text-lg font-medium leading-6 ${
-                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                      }`}
+                      className="flex items-center justify-between text-lg font-medium leading-6 text-content-primary"
                     >
                       <div className="flex items-center gap-2">
-                        <KeyIcon
-                          className={`h-6 w-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
-                        />
+                        <KeyIcon className="h-6 w-6 text-content-primary" />
                         <span>Welcome to Tinfoil Chat</span>
                       </div>
                     </Dialog.Title>
 
                     <div className="mt-4">
-                      <p
-                        className={`text-sm ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                        }`}
-                      >
+                      <p className="text-sm text-content-secondary">
                         Your messages are end-to-end encrypted. Choose how
                         you&apos;d like to set up your encryption:
                       </p>
@@ -182,29 +171,15 @@ export function FirstLoginKeyModal({
                       <div className="mt-6 space-y-3">
                         <button
                           onClick={() => setShowImportView(true)}
-                          className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                            isDarkMode
-                              ? 'border-gray-700 bg-gray-900 hover:bg-gray-800'
-                              : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-                          }`}
+                          className="w-full rounded-lg border border-border-subtle bg-surface-chat p-4 text-left transition-colors hover:bg-surface-chat/80"
                         >
                           <div className="flex items-start gap-3">
-                            <ArrowUpTrayIcon
-                              className={`mt-0.5 h-5 w-5 ${isDarkMode ? 'text-white' : 'text-gray-700'}`}
-                            />
+                            <ArrowUpTrayIcon className="mt-0.5 h-5 w-5 text-content-primary" />
                             <div>
-                              <h4
-                                className={`font-medium ${
-                                  isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                                }`}
-                              >
+                              <h4 className="font-medium text-content-primary">
                                 Import Existing Key
                               </h4>
-                              <p
-                                className={`mt-1 text-xs ${
-                                  isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                                }`}
-                              >
+                              <p className="mt-1 text-xs text-content-muted">
                                 Sync with your other devices by importing your
                                 saved key.
                               </p>
@@ -214,29 +189,15 @@ export function FirstLoginKeyModal({
 
                         <button
                           onClick={handleNewKey}
-                          className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                            isDarkMode
-                              ? 'bg-white text-gray-900 hover:bg-gray-100'
-                              : 'bg-gray-900 text-white hover:bg-gray-800'
-                          } shadow-md`}
+                          className="w-full rounded-lg border border-brand-accent-dark/40 bg-brand-accent-dark p-4 text-left text-white shadow-md transition-colors hover:bg-brand-accent-dark/90"
                         >
                           <div className="flex items-start gap-3">
-                            <SparklesIcon
-                              className={`mt-0.5 h-5 w-5 ${isDarkMode ? 'text-gray-900' : 'text-white'}`}
-                            />
+                            <SparklesIcon className="mt-0.5 h-5 w-5 text-white" />
                             <div>
-                              <h4
-                                className={`font-medium ${
-                                  isDarkMode ? 'text-gray-900' : 'text-white'
-                                }`}
-                              >
+                              <h4 className="font-medium text-white">
                                 Create New Encryption Key
                               </h4>
-                              <p
-                                className={`mt-1 text-xs ${
-                                  isDarkMode ? 'text-gray-600' : 'text-gray-300'
-                                }`}
-                              >
+                              <p className="mt-1 text-xs text-white/80">
                                 Start fresh with a new key.
                               </p>
                             </div>
@@ -244,11 +205,7 @@ export function FirstLoginKeyModal({
                         </button>
                       </div>
 
-                      <p
-                        className={`mt-6 text-xs ${
-                          isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                        }`}
-                      >
+                      <p className="mt-6 text-xs text-content-muted">
                         You can always access your encryption key later from
                         Settings.
                       </p>
@@ -258,14 +215,10 @@ export function FirstLoginKeyModal({
                   <>
                     <Dialog.Title
                       as="h3"
-                      className={`flex items-center justify-between text-lg font-medium leading-6 ${
-                        isDarkMode ? 'text-gray-100' : 'text-gray-900'
-                      }`}
+                      className="flex items-center justify-between text-lg font-medium leading-6 text-content-primary"
                     >
                       <div className="flex items-center gap-2">
-                        <ArrowUpTrayIcon
-                          className={`h-6 w-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
-                        />
+                        <ArrowUpTrayIcon className="h-6 w-6 text-content-primary" />
                         <span>Import Encryption Key</span>
                       </div>
                       <button
@@ -275,20 +228,14 @@ export function FirstLoginKeyModal({
                           setError(null)
                         }}
                         aria-label="Back"
-                        className={`rounded-lg p-1 transition-colors ${
-                          isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        }`}
+                        className="rounded-lg p-1 text-content-secondary transition-colors hover:bg-surface-chat"
                       >
                         <XMarkIcon className="h-5 w-5" />
                       </button>
                     </Dialog.Title>
 
                     <div className="mt-4">
-                      <p
-                        className={`text-sm ${
-                          isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                        }`}
-                      >
+                      <p className="text-sm text-content-secondary">
                         Import your encryption key to sync with your existing
                         chats.
                       </p>
@@ -300,30 +247,22 @@ export function FirstLoginKeyModal({
                         onDrop={handleDrop}
                         className={`mt-4 rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
                           isDragging
-                            ? isDarkMode
-                              ? 'border-blue-500 bg-blue-950/30'
-                              : 'border-blue-500 bg-blue-50'
-                            : isDarkMode
-                              ? 'border-gray-700 bg-gray-900/50'
-                              : 'border-gray-300 bg-gray-50'
+                            ? 'border-brand-accent-light bg-brand-accent-light/10'
+                            : 'border-border-subtle bg-surface-chat'
                         }`}
                       >
                         <ArrowUpTrayIcon
                           className={`mx-auto h-8 w-8 ${
                             isDragging
-                              ? 'text-blue-500'
-                              : isDarkMode
-                                ? 'text-gray-500'
-                                : 'text-gray-400'
+                              ? 'text-brand-accent-light'
+                              : 'text-content-muted'
                           }`}
                         />
                         <p
                           className={`mt-2 text-xs sm:text-sm ${
                             isDragging
-                              ? 'text-blue-500'
-                              : isDarkMode
-                                ? 'text-gray-400'
-                                : 'text-gray-600'
+                              ? 'text-brand-accent-light'
+                              : 'text-content-muted'
                           }`}
                         >
                           {isDragging
@@ -341,11 +280,7 @@ export function FirstLoginKeyModal({
                             />
                             <button
                               onClick={() => fileInputRef.current?.click()}
-                              className={`mt-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm ${
-                                isDarkMode
-                                  ? 'border border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700'
-                                  : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                              }`}
+                              className="mt-3 rounded-md border border-border-subtle bg-surface-input px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-input/80 sm:text-sm"
                             >
                               Choose File
                             </button>
@@ -354,11 +289,7 @@ export function FirstLoginKeyModal({
                       </div>
 
                       <div className="mt-4">
-                        <label
-                          className={`block text-xs font-medium ${
-                            isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                          }`}
-                        >
+                        <label className="block text-xs font-medium text-content-secondary">
                           Or paste your key directly:
                         </label>
                         <input
@@ -369,16 +300,12 @@ export function FirstLoginKeyModal({
                             setError(null)
                           }}
                           placeholder="Enter encryption key (e.g., key_abc123...)"
-                          className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            isDarkMode
-                              ? 'border-gray-700 bg-gray-900 text-white placeholder-gray-500'
-                              : 'border-gray-300 bg-white text-gray-900 placeholder-gray-400'
-                          }`}
+                          className="mt-1 w-full rounded-lg border border-border-subtle bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light"
                         />
                       </div>
 
                       {error && (
-                        <p className="mt-2 text-xs text-red-500">{error}</p>
+                        <p className="mt-2 text-xs text-destructive">{error}</p>
                       )}
 
                       <div className="mt-6 flex gap-3">
@@ -388,11 +315,7 @@ export function FirstLoginKeyModal({
                             setInputKey('')
                             setError(null)
                           }}
-                          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                            isDarkMode
-                              ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                          }`}
+                          className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/80"
                         >
                           Back
                         </button>
@@ -401,10 +324,8 @@ export function FirstLoginKeyModal({
                           disabled={isImporting || !inputKey.trim()}
                           className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                             isImporting || !inputKey.trim()
-                              ? isDarkMode
-                                ? 'cursor-not-allowed bg-gray-700 text-gray-500'
-                                : 'cursor-not-allowed bg-gray-200 text-gray-400'
-                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                              ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                              : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
                           }`}
                         >
                           {isImporting ? 'Importing...' : 'Import Key'}

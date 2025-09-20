@@ -126,9 +126,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
       <div className="w-full">
         <div className="grid grid-cols-1 items-start">
           <motion.h1
-            className={`flex items-center gap-3 text-2xl font-medium tracking-tight md:text-3xl ${
-              isDarkMode ? 'text-gray-100' : 'text-gray-800'
-            }`}
+            className="flex items-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:text-3xl"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -142,7 +140,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
           <div className="mt-4 md:mt-8">
             <motion.p
-              className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} font-aeonik text-lg`}
+              className="font-aeonik text-lg text-content-secondary"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -154,7 +152,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
               This conversation is private: nobody can see your messages.
             </motion.p>
             <motion.p
-              className={`${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1 font-aeonik text-lg leading-6`}
+              className="mt-1 font-aeonik text-lg leading-6 text-content-muted"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{
@@ -193,11 +191,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           handleLabelClick('model', () => {})
                         }
                       }}
-                      className={`flex items-center gap-2 rounded-lg px-3 py-2 font-aeonik-fono ${
-                        isDarkMode
-                          ? 'bg-gray-700 hover:bg-gray-600'
-                          : 'bg-gray-100 hover:bg-gray-200'
-                      } transition-colors`}
+                      className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background px-3 py-2 font-aeonik-fono text-content-secondary transition-colors hover:bg-surface-chat"
                     >
                       {(() => {
                         const model = models.find(
@@ -220,17 +214,11 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                               alt={model.name}
                               className="h-5 w-5"
                             />
-                            <span
-                              className={`text-sm font-medium ${
-                                isDarkMode ? 'text-gray-200' : 'text-gray-700'
-                              }`}
-                            >
+                            <span className="text-sm font-medium text-content-primary">
                               {model.name}
                             </span>
                             <svg
-                              className={`h-4 w-4 ${
-                                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                              }`}
+                              className="h-4 w-4 text-content-muted"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
