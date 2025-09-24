@@ -281,9 +281,32 @@ export function useChatMessaging({
       imageData?: Array<{ base64: string; mimeType: string }>,
       systemPromptOverride?: string,
     ) => {
+      const trimmedQuery = query.trim()
+
+      console.log('[useChatMessaging] handleQuery invoked', {
+        trimmedQueryLength: trimmedQuery.length,
+        hasSystemPromptOverride: Boolean(systemPromptOverride),
+        loadingState,
+        currentChatId: currentChat?.id,
+        hasDocuments: Boolean(documents && documents.length > 0),
+        hasImageData: Boolean(imageData && imageData.length > 0),
+      })
+
       // Allow empty query only if systemPromptOverride is provided
-      if ((!query.trim() && !systemPromptOverride) || loadingState !== 'idle')
+      if (!trimmedQuery && !systemPromptOverride) {
+        console.log(
+          '[useChatMessaging] handleQuery aborted: empty input and no system prompt override',
+        )
         return
+      }
+
+      if (loadingState !== 'idle') {
+        console.log(
+          '[useChatMessaging] handleQuery aborted: loading state not idle',
+          { loadingState },
+        )
+        return
+      }
 
       // Safety check - ensure we have a current chat
       if (!currentChat) {
@@ -291,6 +314,7 @@ export function useChatMessaging({
           component: 'useChatMessaging',
           action: 'handleQuery',
         })
+        console.log('[useChatMessaging] handleQuery aborted: no current chat')
         return
       }
 
@@ -309,7 +333,7 @@ export function useChatMessaging({
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
-      const hasUserContent = query.trim() !== ''
+      const hasUserContent = trimmedQuery !== ''
 
       const userMessage: Message | null = hasUserContent
         ? {
@@ -354,6 +378,12 @@ export function useChatMessaging({
         ),
       )
 
+      console.log('[useChatMessaging] user message staged', {
+        chatId: currentChat.id,
+        messageCount: updatedChat.messages.length,
+        isFirstMessage,
+      })
+
       // Handle chat saving based on user status
       if (storeHistory) {
         // For signed-in users
@@ -361,6 +391,10 @@ export function useChatMessaging({
           try {
             // Get server ID synchronously before proceeding
             const result = await r2Storage.generateConversationId()
+            console.log(
+              '[useChatMessaging] generateConversationId result',
+              result,
+            )
             if (result) {
               // Update the chat with the server ID
               const chatWithServerId = {
@@ -403,6 +437,14 @@ export function useChatMessaging({
         // For non-signed-in users, always save to sessionStorage
         sessionChatStorage.saveChat(updatedChat)
       }
+
+      console.log(
+        '[useChatMessaging] chat state persisted prior to streaming',
+        {
+          chatId: currentChatIdRef.current,
+          storeHistory,
+        },
+      )
 
       // Initial scroll after user message is added
       if (scrollToBottom) {
@@ -1200,9 +1242,13 @@ export function useChatMessaging({
     (e: React.FormEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      console.log('[useChatMessaging] handleSubmit triggered', {
+        inputLength: input.length,
+        loadingState,
+      })
       handleQuery(input)
     },
-    [input, handleQuery],
+    [input, handleQuery, loadingState],
   )
 
   // Update currentChatIdRef when currentChat changes
