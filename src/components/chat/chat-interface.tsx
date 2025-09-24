@@ -647,8 +647,17 @@ export function ChatInterface({
   const wrappedHandleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    console.log('[ChatInterface] wrappedHandleSubmit invoked', {
+      hasInput: Boolean(input?.trim()),
+      processedDocCount: processedDocuments.length,
+      loadingState,
+      isWaitingForResponse,
+      currentChatId: currentChat?.id,
+    })
+
     // Don't proceed if there's no input text
     if (!input.trim()) {
+      console.log('[ChatInterface] wrappedHandleSubmit aborted: empty input')
       return
     }
 
@@ -686,6 +695,14 @@ export function ChatInterface({
         : undefined
 
     // Call handleQuery with the input, document content, document names, and image data
+    console.log(
+      '[ChatInterface] calling handleQuery from wrappedHandleSubmit',
+      {
+        docCount: completedDocuments.length,
+        hasDocContent: Boolean(docContent),
+        hasImages: Boolean(imageData && imageData.length > 0),
+      },
+    )
     handleQuery(input, docContent, documentNames, imageData)
 
     // Only remove the completed documents from the state

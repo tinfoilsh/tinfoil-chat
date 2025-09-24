@@ -602,6 +602,10 @@ export function ChatInput({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
+              console.log('[ChatInput] Enter pressed', {
+                loadingState,
+                inputLength: input.length,
+              })
               if (loadingState === 'idle') {
                 handleSubmit(e)
               }
@@ -677,6 +681,12 @@ export function ChatInput({
             <button
               type="button"
               onClick={(e) => {
+                console.log('[ChatInput] send button clicked', {
+                  loadingState,
+                  isTranscribing,
+                  isConverting,
+                  inputLength: input.length,
+                })
                 if (loadingState === 'loading') {
                   e.preventDefault()
                   cancelGeneration()
