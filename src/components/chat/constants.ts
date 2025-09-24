@@ -12,7 +12,7 @@ export const CONSTANTS = {
   VERIFIER_VERSION,
   VERIFIER_WASM_URL,
   // Inference proxy URL for all model requests
-  INFERENCE_PROXY_URL: 'https://inference.tinfoil.sh',
+  INFERENCE_PROXY_URL: 'https://ehbp.model.tinfoil.sh',
   // Inference proxy repository for verification
   INFERENCE_PROXY_REPO: 'tinfoilsh/confidential-inference-proxy',
   MAX_MESSAGES: 100,
