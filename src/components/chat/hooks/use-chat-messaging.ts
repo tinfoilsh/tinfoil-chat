@@ -6,7 +6,7 @@ import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { ehbpRequest } from '@/utils/ehbp-client'
-import { logError, logInfo, logWarning } from '@/utils/error-handling'
+import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatError, generateTitle } from '../chat-utils'
@@ -527,7 +527,7 @@ export function useChatMessaging({
           signal: controller.signal,
         }
 
-        logInfo('Sending chat completion request to inference', {
+        console.log('Sending chat completion request to inference', {
           component: 'useChatMessaging',
           action: 'handleQuery.request',
           metadata: {
@@ -544,7 +544,7 @@ export function useChatMessaging({
             : await ehbpRequest(proxyUrl, requestInit)
 
         if (!response.ok) {
-          logWarning('Inference request returned non-OK status', {
+          console.log('Inference request returned non-OK status', {
             component: 'useChatMessaging',
             action: 'handleQuery.response',
             metadata: {
@@ -566,7 +566,7 @@ export function useChatMessaging({
           )
         }
 
-        logInfo('Inference request succeeded', {
+        console.log('Inference request succeeded', {
           component: 'useChatMessaging',
           action: 'handleQuery.response',
           metadata: {
