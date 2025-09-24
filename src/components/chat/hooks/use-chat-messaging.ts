@@ -6,7 +6,7 @@ import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { ehbpRequest } from '@/utils/ehbp-client'
-import { logError, logWarning } from '@/utils/error-handling'
+import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatError, generateTitle } from '../chat-utils'
@@ -527,12 +527,32 @@ export function useChatMessaging({
           signal: controller.signal,
         }
 
+        logInfo('Sending chat completion request to inference', {
+          component: 'useChatMessaging',
+          action: 'handleQuery.request',
+          metadata: {
+            chatId: updatedChat.id,
+            model: model.modelName,
+            endpoint: proxyUrl,
+            messageCount: serializedMessages.length,
+          },
+        })
+
         const response =
           model.modelName === 'dev-simulator'
             ? await fetch(proxyUrl, requestInit)
             : await ehbpRequest(proxyUrl, requestInit)
 
         if (!response.ok) {
+          logWarning('Inference request returned non-OK status', {
+            component: 'useChatMessaging',
+            action: 'handleQuery.response',
+            metadata: {
+              chatId: updatedChat.id,
+              model: model.modelName,
+              status: response.status,
+            },
+          })
           // Special handling for dev simulator in production
           if (response.status === 404 && model.modelName === 'dev-simulator') {
             throw new ChatError(
@@ -545,6 +565,16 @@ export function useChatMessaging({
             'FETCH_ERROR',
           )
         }
+
+        logInfo('Inference request succeeded', {
+          component: 'useChatMessaging',
+          action: 'handleQuery.response',
+          metadata: {
+            chatId: updatedChat.id,
+            model: model.modelName,
+            status: response.status,
+          },
+        })
 
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()

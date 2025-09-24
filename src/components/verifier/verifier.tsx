@@ -1,3 +1,4 @@
+import type { VerifyEnclaveResult } from '@/utils/ehbp-client'
 import { useCallback, useEffect, useState } from 'react'
 // Import WASM Go runtime - provides the Go WebAssembly runtime needed to execute
 // the enclave verification functions written in Go
@@ -76,11 +77,7 @@ declare global {
   interface Window {
     Go: new () => GoInterface
     // Performs enclave verification - validates attestation and extracts measurement
-    verifyEnclave(enclaveHostname: string): Promise<{
-      certificate: string
-      measurement: string
-      hpke_public_key?: string
-    }>
+    verifyEnclave?: (enclaveHostname: string) => Promise<VerifyEnclaveResult>
     // Performs source code verification using GitHub Actions and Sigstore
     // Returns the measurement from the verified build process
     verifyCode(repo: string, digest: string): Promise<string>
@@ -314,8 +311,13 @@ export function Verifier({
 
       // Step 1: Verify runtime attestation using the actual enclave
       try {
+        const verifyEnclave = window.verifyEnclave
+        if (!verifyEnclave) {
+          throw new Error('Verifier runtime unavailable')
+        }
+
         const { certificate, measurement, hpke_public_key } =
-          await window.verifyEnclave(enclave)
+          await verifyEnclave(enclave)
         runtimeMeasurement = measurement
         updateStepStatus(
           'runtime',

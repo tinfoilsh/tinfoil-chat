@@ -743,18 +743,25 @@ export function ChatInterface({
     }
   }, [checkScrollPosition])
 
+  const currentChatMessageCount = currentChat?.messages?.length ?? 0
+
   // Check scroll position when content or layout changes
   useEffect(() => {
     checkScrollPosition()
     // Scroll to bottom when switching to a chat with messages
-    if (currentChat?.messages && currentChat.messages.length > 0) {
+    if (currentChatMessageCount > 0) {
       // Small delay to ensure DOM is ready
       const timer = setTimeout(() => {
         scrollToBottom(false)
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [checkScrollPosition, currentChat?.id, scrollToBottom])
+  }, [
+    checkScrollPosition,
+    currentChat?.id,
+    currentChatMessageCount,
+    scrollToBottom,
+  ])
 
   // Re-check button visibility when content size changes (no scrolling)
   useEffect(() => {

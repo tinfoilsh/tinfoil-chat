@@ -12,7 +12,7 @@ type GoInterface = {
   importObject: WebAssembly.Imports
 }
 
-type VerifyEnclaveResult = {
+export type VerifyEnclaveResult = {
   certificate: string
   measurement: string
   hpke_public_key?: string
@@ -37,7 +37,14 @@ async function ensureVerifierLoaded(): Promise<void> {
   if (!verifierLoadPromise) {
     verifierLoadPromise = (async () => {
       try {
-        await import('@/components/verifier/wasm_exec.js')
+        if (typeof window === 'undefined') {
+          throw new Error(
+            'Verifier can only be loaded in the browser environment',
+          )
+        }
+        if (typeof window.Go === 'undefined') {
+          await import('../components/verifier/wasm_exec.js')
+        }
         const go = new window.Go()
         const response = await fetch(VERIFIER_CONSTANTS.WASM_URL)
         if (!response.ok) {
@@ -97,9 +104,13 @@ async function getServerPublicKeyFromAttestation(
         }
 
         const keyBytes = hexToUint8Array(hpkeKeyHex)
+        const keyBuffer = keyBytes.buffer.slice(
+          keyBytes.byteOffset,
+          keyBytes.byteOffset + keyBytes.byteLength,
+        ) as ArrayBuffer
         return crypto.subtle.importKey(
           'raw',
-          keyBytes,
+          keyBuffer,
           { name: 'X25519' },
           false,
           [],
