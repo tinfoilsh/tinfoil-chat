@@ -1,6 +1,6 @@
 import type { BaseModel } from '@/app/config/models'
-import { CONSTANTS } from '../constants'
-import type { Message } from '../types'
+import { CONSTANTS } from '@/components/chat/constants'
+import type { Message } from '@/components/chat/types'
 
 export interface BuildChatRequestParams {
   model: BaseModel

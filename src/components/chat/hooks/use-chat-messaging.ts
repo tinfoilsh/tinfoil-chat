@@ -1,16 +1,16 @@
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { r2Storage } from '@/services/cloud/r2-storage'
+import { sendChatStream } from '@/services/inference/inference-client'
+import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChatError, generateTitle } from '../chat-utils'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import { createUpdateChatWithHistoryCheck } from './chat-persistence'
-import { buildChatRequest } from './chat-request'
 import { processStreamingResponse } from './streaming-processor'
 import { useMaxMessages } from './use-max-messages'
 
@@ -358,7 +358,7 @@ export function useChatMessaging({
         }
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
-        const { proxyUrl, requestInit } = await buildChatRequest({
+        const response = await sendChatStream({
           model,
           systemPrompt: baseSystemPrompt,
           rules,
@@ -367,20 +367,6 @@ export function useChatMessaging({
           getApiKey: getApiKeyFromHook,
           signal: controller.signal,
         })
-
-        const response = await fetch(proxyUrl, requestInit)
-        if (!response.ok) {
-          if (response.status === 404 && model.modelName === 'dev-simulator') {
-            throw new ChatError(
-              'Dev simulator is only available in development environment',
-              'FETCH_ERROR',
-            )
-          }
-          throw new ChatError(
-            `Server returned ${response.status}: ${response.statusText}`,
-            'FETCH_ERROR',
-          )
-        }
 
         const assistantMessage = await processStreamingResponse(response, {
           updatedChat,
