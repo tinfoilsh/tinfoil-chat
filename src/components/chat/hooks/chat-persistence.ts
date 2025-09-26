@@ -4,6 +4,14 @@ import { logError } from '@/utils/error-handling'
 import type React from 'react'
 import type { Chat, Message } from '../types'
 
+/**
+ * Persistence helper for chat state.
+ *
+ * Guarantees:
+ * - Writes to IndexedDB (or session storage for guests) on each incremental update.
+ * - Defers cloud sync while streaming unless immediate=true to reduce churn.
+ * - If the backend assigns a new id, rewrites ids consistently across state.
+ */
 interface CreateUpdateChatWithHistoryCheckParams {
   storeHistory: boolean
   isStreamingRef: React.MutableRefObject<boolean>

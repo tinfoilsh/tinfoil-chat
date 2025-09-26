@@ -3,6 +3,10 @@ import { ChatError } from '@/components/chat/chat-utils'
 import type { Message } from '@/components/chat/types'
 import { buildChatRequest } from './request-builder'
 
+/**
+ * Thin network client for chat streaming.
+ * Centralizes fetch + error mapping to ChatError for consistent handling.
+ */
 export interface SendChatStreamParams {
   model: BaseModel
   systemPrompt: string

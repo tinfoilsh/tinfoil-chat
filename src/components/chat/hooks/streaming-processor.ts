@@ -1,3 +1,14 @@
+/**
+ * Streaming processor
+ *
+ * Consumes SSE-style responses from OpenAI-compatible APIs and drives a single
+ * assistant turn. Supports two thinking formats:
+ * - <think>...</think> tags
+ * - reasoning_content deltas
+ *
+ * Batches UI writes via rAF/setTimeout to avoid layout thrash and never writes
+ * to storage directly. All persistence goes through updateChatWithHistoryCheck.
+ */
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { logError } from '@/utils/error-handling'
@@ -45,6 +56,8 @@ export function getThinkingDuration(
   return duration
 }
 
+// Drives one assistant response from a streaming endpoint.
+// Returns the final assistant message (content and/or thoughts) or null.
 export async function processStreamingResponse(
   response: Response,
   ctx: StreamingContext,
@@ -71,6 +84,7 @@ export async function processStreamingResponse(
     let sseBuffer = ''
     let isUsingReasoningFormat = false
 
+    // Batch incremental saves to avoid saving on every token
     const scheduleStreamingUpdate = (isThinkingFlag: boolean) => {
       if (rafId !== null) return
       rafId =

@@ -1,3 +1,18 @@
+/**
+ * Chat messaging hook
+ *
+ * Responsibilities:
+ * - Orchestrates user input → persistence, network streaming, and UI state
+ * - Delegates heavy-lift to:
+ *   - persistence: hooks/chat-persistence.ts (local/IndexedDB + cloud sync gating)
+ *   - network: services/inference (request builder + fetch in inference-client)
+ *   - streaming: hooks/streaming-processor.ts (SSE parsing and thinking mode)
+ *
+ * State invariants:
+ * - currentChatIdRef always mirrors the canonical chat id (temporary → server id swaps)
+ * - isStreamingRef is true only while processing an assistant response (used to defer cloud sync)
+ * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
+ */
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
 import { r2Storage } from '@/services/cloud/r2-storage'
@@ -94,6 +109,7 @@ export function useChatMessaging({
   }
 
   // For users without storeHistory (free/non-signed-in), validate the selected model
+  // Ensures we only hit free chat models; always allow 'dev-simulator' for local testing
   const effectiveModel = !storeHistory
     ? (() => {
         // Allow Dev Simulator for testing even when not signed in
@@ -131,6 +147,8 @@ export function useChatMessaging({
     : selectedModel
 
   // A modified version of updateChat that respects the storeHistory flag
+  // During streaming, we persist to IndexedDB but defer cloud backup unless immediate=true
+  // When the backend assigns a new id, we atomically rewrite ids in both currentChat and chats
   const updateChatWithHistoryCheck = useMemo(
     () =>
       createUpdateChatWithHistoryCheck({
@@ -215,6 +233,13 @@ export function useChatMessaging({
   }, [abortController, storeHistory, setChats, setCurrentChat])
 
   // Handle chat query
+  // Lifecycle overview:
+  // 1) Early exits + input reset
+  // 2) Optimistic state update with the user message (and server id acquisition if needed)
+  // 3) Persist initial state (session or IndexedDB)
+  // 4) Start streaming via inference client
+  // 5) streaming-processor applies batched updates until completion
+  // 6) Finalize: optional title generation, final save
   const handleQuery = useCallback(
     async (
       query: string,

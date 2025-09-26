@@ -2,6 +2,12 @@ import type { BaseModel } from '@/app/config/models'
 import { CONSTANTS } from '@/components/chat/constants'
 import type { Message } from '@/components/chat/types'
 
+/**
+ * Builds a streaming chat completion request for the selected model.
+ * Composes system prompt + rules and serializes messages (including multimodal).
+ * Notes:
+ * - Dev simulator routes to /api/dev/simulator and bypasses Authorization.
+ */
 export interface BuildChatRequestParams {
   model: BaseModel
   systemPrompt: string
