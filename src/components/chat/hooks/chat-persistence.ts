@@ -54,8 +54,12 @@ export function createUpdateChatWithHistoryCheck({
           .saveChat(updatedChatForSaving, skipCloudSync)
           .then((savedChat) => {
             if (savedChat.id !== updatedChatForSaving.id) {
-              currentChatIdRef.current = savedChat.id
-              if (isCurrentChat) {
+              // Only switch currentChatIdRef if this chat is still the current chat
+              if (
+                isCurrentChat &&
+                currentChatIdRef.current === updatedChatForSaving.id
+              ) {
+                currentChatIdRef.current = savedChat.id
                 setCurrentChat(savedChat)
               }
               setChats((prevChats) =>
