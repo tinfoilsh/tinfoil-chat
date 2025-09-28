@@ -496,7 +496,12 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
+        // Ensure UI loading flags are reset on pre-stream errors
         setIsWaitingForResponse(false)
+        setLoadingState('idle')
+        setIsThinking(false)
+        isStreamingRef.current = false
+        thinkingStartTimeRef.current = null
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           logError('Chat query failed', error, {
             component: 'useChatMessaging',
