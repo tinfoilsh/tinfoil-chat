@@ -604,6 +604,9 @@ export function ChatInput({
               if (loadingState === 'idle') {
                 handleSubmit(e)
               }
+            } else if (e.key === 'Escape' && loadingState === 'loading') {
+              e.preventDefault()
+              cancelGeneration()
             }
           }}
           placeholder={hasMessages ? 'Reply to Tin...' : "What's on your mind?"}
