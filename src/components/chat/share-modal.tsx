@@ -34,6 +34,13 @@ export function ShareModal({
     if (!isOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Handle Escape key to close modal
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+        return
+      }
+
       // Intercept Cmd+A (Mac) or Ctrl+A (Windows/Linux)
       if (
         (e.metaKey || e.ctrlKey) &&
