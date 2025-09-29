@@ -91,9 +91,14 @@
   white-space: pre;
 }
 
-/* Ensure inline code wraps */
+/* Ensure inline code wraps and has consistent color */
 .prose code {
   word-break: break-word;
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose code {
+  color: hsl(var(--content-primary)) !important;
 }
 
 /* Tables should scroll horizontally when needed */
@@ -114,15 +119,149 @@
   height: auto;
 }
 
-/* Fix blockquotes */
-.prose blockquote {
-  word-wrap: break-word;
+/* Comprehensive prose color overrides for consistent text colors */
+.prose {
   color: hsl(var(--content-primary)) !important;
 }
 
-/* Override prose-invert for blockquotes to ensure consistent text color */
+.prose blockquote {
+  word-wrap: break-word;
+  color: hsl(var(--content-primary)) !important;
+  border-left-color: hsl(var(--border-subtle)) !important;
+}
+
+.prose blockquote p {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose p {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose ul,
+.prose ol {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose li {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose li::marker {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose strong {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose em {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose table {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose thead {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose tbody {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose th {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose td {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.prose hr {
+  border-color: hsl(var(--border-subtle)) !important;
+}
+
+/* Dark mode specific overrides to prevent any prose-invert remnants */
+.dark .prose {
+  color: hsl(var(--content-primary)) !important;
+}
+
 .dark .prose blockquote {
   color: hsl(var(--content-primary)) !important;
+  border-left-color: hsl(var(--border-subtle)) !important;
+}
+
+.dark .prose blockquote p {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4,
+.dark .prose h5,
+.dark .prose h6 {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose p {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose ul,
+.dark .prose ol {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose li {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose li::marker {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose strong {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose em {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose table {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose thead {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose tbody {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose th {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose td {
+  color: hsl(var(--content-primary)) !important;
+}
+
+.dark .prose hr {
+  border-color: hsl(var(--border-subtle)) !important;
 }
 
 /* Responsive adjustments for narrow screens */

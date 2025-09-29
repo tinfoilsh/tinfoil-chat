@@ -703,11 +703,7 @@ export function ChatSidebar({
                     )}
                   </button>
                   {upgradeError && (
-                    <p
-                      className={`mt-2 text-xs ${
-                        isDarkMode ? 'text-red-400' : 'text-red-600'
-                      }`}
-                    >
+                    <p className="mt-2 text-xs text-destructive">
                       {upgradeError}
                     </p>
                   )}
@@ -718,11 +714,7 @@ export function ChatSidebar({
 
           {/* Divider after boxes */}
           {(!isSignedIn || (isSignedIn && !isPremium)) && (
-            <div
-              className={`border-b ${
-                isDarkMode ? 'border-gray-800' : 'border-gray-200'
-              }`}
-            />
+            <div className="border-b border-border-subtle" />
           )}
 
           {/* New Chat button */}
@@ -752,17 +744,9 @@ export function ChatSidebar({
           </div>
 
           {/* Chat History Header */}
-          <div
-            className={`flex-none border-b ${
-              isDarkMode ? 'border-gray-800' : 'border-gray-200'
-            } px-3 py-2 sm:px-4 sm:py-3`}
-          >
+          <div className="flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
             <div className="flex items-center justify-between">
-              <h3
-                className={`truncate font-aeonik-fono text-sm font-medium ${
-                  isDarkMode ? 'text-content-secondary' : 'text-content-primary'
-                }`}
-              >
+              <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
                 Chat History
               </h3>
               <div className="flex items-center gap-1">
@@ -794,11 +778,7 @@ export function ChatSidebar({
                 )}
               </div>
             </div>
-            <div
-              className={`font-base mt-1 font-aeonik-fono text-xs ${
-                isDarkMode ? 'text-content-muted' : 'text-content-muted'
-              }`}
-            >
+            <div className="font-base mt-1 font-aeonik-fono text-xs text-content-muted">
               {isSignedIn ? (
                 <>
                   Your chats are encrypted and synced to the cloud. The
@@ -898,11 +878,7 @@ export function ChatSidebar({
                 !shouldShowLoadMore &&
                 !hasMoreRemote &&
                 hasAttemptedLoadMore && (
-                  <div
-                    className={`w-full rounded-lg p-3 text-center text-sm ${
-                      isDarkMode ? 'text-content-muted' : 'text-content-muted'
-                    }`}
-                  >
+                  <div className="w-full rounded-lg p-3 text-center text-sm text-content-muted">
                     No more chats
                   </div>
                 )}
@@ -911,11 +887,7 @@ export function ChatSidebar({
 
           {/* App Store button for iOS users */}
           {isClient && isIOS && (
-            <div
-              className={`flex-none border-t ${
-                isDarkMode ? 'border-gray-800' : 'border-gray-200'
-              } p-3`}
-            >
+            <div className="flex-none border-t border-border-subtle p-3">
               <div className="text-center">
                 <p
                   className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
@@ -942,11 +914,7 @@ export function ChatSidebar({
 
           {/* Terms and privacy policy */}
           <div className="flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
-            <p
-              className={`text-center text-xs leading-relaxed ${
-                isDarkMode ? 'text-content-secondary' : 'text-content-primary'
-              }`}
-            >
+            <p className="text-center text-xs leading-relaxed text-content-secondary">
               By using this service, you agree to Tinfoil&apos;s{' '}
               <Link
                 href="https://tinfoil.sh/terms"
@@ -1052,9 +1020,7 @@ function TypingAnimation({
     <span className="inline-flex items-baseline">
       <span>{currentText}</span>
       <span
-        className={`ml-0.5 inline-block w-0.5 ${
-          isDarkMode ? 'bg-gray-300' : 'bg-gray-700'
-        } ${showCursor ? 'opacity-100' : 'opacity-0'}`}
+        className={`ml-0.5 inline-block w-0.5 bg-content-primary ${showCursor ? 'opacity-100' : 'opacity-0'}`}
         style={{ height: '1.1em', transform: 'translateY(0.05em)' }}
       />
     </span>
@@ -1308,9 +1274,7 @@ function DeleteConfirmation({
           duration: 0.15,
         },
       }}
-      className={`absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md ${
-        isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar'
-      } p-2 shadow-lg`}
+      className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg"
     >
       <button
         className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
