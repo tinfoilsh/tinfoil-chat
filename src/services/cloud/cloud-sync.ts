@@ -2,6 +2,7 @@ import { CLOUD_SYNC, PAGINATION } from '@/config'
 import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
+import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { r2Storage } from './r2-storage'
@@ -23,6 +24,10 @@ export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
+  private missingRemoteSince: Map<
+    string,
+    { firstSeen: number; count: number }
+  > = new Map()
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
@@ -134,6 +139,8 @@ export class CloudSyncService {
       // Mark as synced with incremented version
       const newVersion = (chat.syncVersion || 0) + 1
       await indexedDBStorage.markAsSynced(chatId, newVersion)
+      // Clear any pending missing tracking for this chat
+      this.missingRemoteSince.delete(chatId)
     } catch (error) {
       // Silently fail if no auth token set
       if (
@@ -192,6 +199,8 @@ export class CloudSyncService {
           const newVersion = (chat.syncVersion || 0) + 1
           await indexedDBStorage.markAsSynced(chat.id, newVersion)
           result.uploaded++
+          // Clear missing tracking since it now exists remotely (or will shortly)
+          this.missingRemoteSince.delete(chat.id)
         } catch (error) {
           result.errors.push(
             `Failed to backup chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -319,6 +328,7 @@ export class CloudSyncService {
       const remoteChatMap = new Map(remoteConversations.map((c) => [c.id, c]))
 
       // Process remote chats
+      const savedIds: string[] = []
       for (const remoteChat of remoteConversations) {
         // Skip if this chat was recently deleted
         if (deletedChatsTracker.isDeleted(remoteChat.id)) {
@@ -417,6 +427,7 @@ export class CloudSyncService {
                 downloadedChat.id,
                 downloadedChat.syncVersion || 0,
               )
+              savedIds.push(downloadedChat.id)
               result.downloaded++
             }
           } catch (error) {
@@ -440,6 +451,7 @@ export class CloudSyncService {
         })
 
       if (fetchedAllRemotePages) {
+        const deletedIds: string[] = []
         for (const localChat of sortedSyncedLocalChats) {
           if ((localChat as any).decryptionFailed) {
             continue
@@ -453,18 +465,42 @@ export class CloudSyncService {
             typeof localChat.syncedAt === 'number' &&
             Date.now() - localChat.syncedAt < CLOUD_SYNC.DELETION_GRACE_MS
           if (recentlySynced) {
+            this.missingRemoteSince.delete(localChat.id)
             continue
           }
 
           if (!remoteChatMap.has(localChat.id)) {
-            try {
-              await indexedDBStorage.deleteChat(localChat.id)
-            } catch (error) {
-              result.errors.push(
-                `Failed to delete local chat ${localChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-              )
+            // Track missing across sync cycles; only delete if missing twice or beyond TTL
+            const now = Date.now()
+            const entry = this.missingRemoteSince.get(localChat.id)
+            const updatedEntry = entry
+              ? { firstSeen: entry.firstSeen, count: entry.count + 1 }
+              : { firstSeen: now, count: 1 }
+
+            this.missingRemoteSince.set(localChat.id, updatedEntry)
+
+            const age = now - updatedEntry.firstSeen
+            const missingTwice = updatedEntry.count >= 2
+            const beyondTtl = age >= CLOUD_SYNC.DELETION_TTL_MS
+
+            if (missingTwice || beyondTtl) {
+              try {
+                await indexedDBStorage.deleteChat(localChat.id)
+                this.missingRemoteSince.delete(localChat.id)
+                deletedIds.push(localChat.id)
+              } catch (error) {
+                result.errors.push(
+                  `Failed to delete local chat ${localChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+                )
+              }
             }
+          } else {
+            // Present remotely; clear any missing tracking
+            this.missingRemoteSince.delete(localChat.id)
           }
+        }
+        if (savedIds.length > 0 || deletedIds.length > 0) {
+          chatEvents.emit({ reason: 'sync', ids: [...savedIds, ...deletedIds] })
         }
       } else {
         logInfo(
@@ -478,6 +514,9 @@ export class CloudSyncService {
             },
           },
         )
+        if (savedIds.length > 0) {
+          chatEvents.emit({ reason: 'sync', ids: savedIds })
+        }
       }
     } catch (error) {
       result.errors.push(
@@ -875,6 +914,132 @@ export class CloudSyncService {
     }
 
     return result
+  }
+
+  // Fetch a page of remote chats, decrypt, persist to IndexedDB, and return pagination info
+  async fetchAndStorePage(options: {
+    limit: number
+    continuationToken?: string
+  }): Promise<{ hasMore: boolean; nextToken?: string; saved: number }> {
+    const { limit, continuationToken } = options
+
+    // Only operate when authenticated
+    if (!(await r2Storage.isAuthenticated())) {
+      return { hasMore: false, saved: 0 }
+    }
+
+    try {
+      // Initialize encryption service before processing
+      await encryptionService.initialize()
+
+      // Request a page with content for decryption
+      const remoteList = await r2Storage.listChats({
+        limit,
+        continuationToken,
+        includeContent: true,
+      })
+
+      const conversations = remoteList.conversations || []
+      let saved = 0
+      const savedIds: string[] = []
+
+      // Process chats in parallel for performance
+      const processPromises = conversations.map(async (remoteChat) => {
+        try {
+          let chat: StoredChat | null = null
+          if (remoteChat.content) {
+            try {
+              const encrypted = JSON.parse(remoteChat.content)
+              const decrypted = await encryptionService.decrypt(encrypted)
+              chat = decrypted as StoredChat
+            } catch (decryptError) {
+              // If decryption fails, store placeholder to retry later
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+              chat = {
+                id: remoteChat.id,
+                title: 'Encrypted',
+                messages: [],
+                createdAt: ensureValidISODate(
+                  remoteChat.createdAt,
+                  remoteChat.id,
+                ),
+                updatedAt: ensureValidISODate(
+                  remoteChat.updatedAt ?? remoteChat.createdAt,
+                  remoteChat.id,
+                ),
+                lastAccessedAt: Date.now(),
+                decryptionFailed: true,
+                dataCorrupted: isCorrupted,
+                encryptedData: remoteChat.content,
+                syncedAt: Date.now(),
+                locallyModified: false,
+                syncVersion: 1,
+              } as StoredChat
+            }
+          } else {
+            // Fallback: download content by ID (should be rare when includeContent is true)
+            chat = await r2Storage.downloadChat(remoteChat.id)
+            if (chat) {
+              chat.createdAt = ensureValidISODate(
+                chat.createdAt ?? remoteChat.createdAt,
+                remoteChat.id,
+              )
+              chat.updatedAt = ensureValidISODate(
+                chat.updatedAt ?? remoteChat.updatedAt ?? remoteChat.createdAt,
+                remoteChat.id,
+              )
+              chat.lastAccessedAt = Date.now()
+              chat.syncedAt = Date.now()
+              chat.locallyModified = false
+              chat.syncVersion = chat.syncVersion || 1
+            }
+          }
+
+          if (chat) {
+            chat.createdAt = ensureValidISODate(chat.createdAt, chat.id)
+            chat.updatedAt = ensureValidISODate(
+              chat.updatedAt ?? chat.createdAt,
+              chat.id,
+            )
+            // Mark as loaded via pagination for local sort heuristics
+            chat.loadedAt = Date.now()
+            chat.syncedAt = Date.now()
+            chat.locallyModified = false
+            chat.syncVersion = chat.syncVersion || 1
+
+            await indexedDBStorage.saveChat(chat)
+            await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion || 0)
+            saved += 1
+            savedIds.push(chat.id)
+          }
+        } catch (error) {
+          logError(`Failed to process chat ${remoteChat.id}`, error, {
+            component: 'CloudSync',
+            action: 'fetchAndStorePage',
+          })
+        }
+      })
+
+      await Promise.all(processPromises)
+
+      if (savedIds.length > 0) {
+        chatEvents.emit({ reason: 'pagination', ids: savedIds })
+      }
+
+      return {
+        hasMore: !!remoteList.nextContinuationToken,
+        nextToken: remoteList.nextContinuationToken,
+        saved,
+      }
+    } catch (error) {
+      logError('Failed to fetch and store chat page', error, {
+        component: 'CloudSync',
+        action: 'fetchAndStorePage',
+      })
+      throw error
+    }
   }
 }
 

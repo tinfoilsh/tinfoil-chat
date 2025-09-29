@@ -3,7 +3,7 @@ import {
   FaLock,
   MdOutlineCloudOff,
 } from '@/components/icons/lazy-icons'
-import { API_BASE_URL, CLOUD_SYNC, PAGINATION } from '@/config'
+import { API_BASE_URL, PAGINATION } from '@/config'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -18,15 +18,10 @@ import { CONSTANTS } from './constants'
 
 import { cn } from '@/components/ui/utils'
 import { r2Storage } from '@/services/cloud/r2-storage'
-import { encryptionService } from '@/services/encryption/encryption-service'
-import {
-  indexedDBStorage,
-  type StoredChat,
-} from '@/services/storage/indexed-db'
-import {
-  ensureValidISODate,
-  getConversationTimestampFromId,
-} from '@/utils/chat-timestamps'
+// Cloud pagination handled via hook; no direct cloudSync usage here
+import { useCloudPagination } from '@/hooks/use-cloud-pagination'
+import { type StoredChat } from '@/services/storage/indexed-db'
+import { getConversationTimestampFromId } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
 import { KeyIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -40,31 +35,7 @@ function isIOSDevice() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent)
 }
 
-// User-scoped pagination state to prevent data leaks across users
-// Maps userId to their pagination state to ensure proper isolation
-const userPaginationStates = new Map<
-  string,
-  {
-    nextToken: string | undefined
-    hasInitialized: boolean
-  }
->()
-
-// Helper to get user-specific pagination state
-function getUserPaginationState(userId: string) {
-  if (!userPaginationStates.has(userId)) {
-    userPaginationStates.set(userId, {
-      nextToken: undefined,
-      hasInitialized: false,
-    })
-  }
-  return userPaginationStates.get(userId)!
-}
-
-// Helper to clear pagination state for a user (e.g., on logout)
-function clearUserPaginationState(userId: string) {
-  userPaginationStates.delete(userId)
-}
+// Pagination state is managed by useCloudPagination
 
 // Utility function to format relative timestamps
 function formatRelativeTime(date: Date): string {
@@ -242,7 +213,6 @@ export function ChatSidebar({
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
   const [highlightBox, setHighlightBox] = useState<'signin' | 'premium' | null>(
     null,
@@ -251,26 +221,20 @@ export function ChatSidebar({
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
-  // Start optimistically assuming there might be more chats
-  const [hasMoreRemote, setHasMoreRemote] = useState(false)
-  const [hasAttemptedLoadMore, setHasAttemptedLoadMore] = useState(false)
+  // Cloud pagination state via hook
+  const {
+    hasMore: hasMoreRemote,
+    isLoading: isLoadingMore,
+    hasAttempted: hasAttemptedLoadMore,
+    initialize: initPagination,
+    loadMore: loadMorePage,
+    reset: resetPagination,
+  } = useCloudPagination({
+    isSignedIn: !!isSignedIn,
+    userId: user?.id,
+  })
   const previousChatCount = useRef(chats.length)
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Use global pagination state for persistence across remounts
-  const [, forceUpdate] = useState({})
-
-  // Custom setter that updates user-scoped state and triggers re-render
-  const setNextToken = useCallback(
-    (token: string | undefined) => {
-      if (user?.id) {
-        const userState = getUserPaginationState(user.id)
-        userState.nextToken = token
-        forceUpdate({}) // Trigger re-render
-      }
-    },
-    [user?.id],
-  )
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -360,15 +324,7 @@ export function ChatSidebar({
     }
   }, [isSignedIn, getToken])
 
-  // Reset pagination state when user changes
-  useEffect(() => {
-    const userId = user?.id
-    if (userId) {
-      // Initialize user state if it doesn't exist
-      // This automatically handles user changes since each user has their own state
-      getUserPaginationState(userId)
-    }
-  }, [user?.id])
+  // Pagination initialization handled by hook/useEffect below
 
   // Track if we just loaded more chats via pagination
   const justLoadedMoreRef = useRef(false)
@@ -386,114 +342,35 @@ export function ChatSidebar({
         // This was from pagination, don't reset
         justLoadedMoreRef.current = false
       } else {
-        // This was a new chat, reset pagination
-        const resetPagination = async () => {
-          try {
-            // Get a fresh continuation token from the server
-            const result = await r2Storage.listChats({
-              limit: PAGINATION.CHATS_PER_PAGE,
-              includeContent: false,
-            })
-
-            if (result.nextContinuationToken) {
-              setNextToken(result.nextContinuationToken)
-              setHasMoreRemote(true)
-            } else {
-              setHasMoreRemote(false)
-              setNextToken(undefined)
+        resetPagination()
+          .then((result) => {
+            if (result?.deletedIds.length && onChatsUpdated) {
+              onChatsUpdated()
             }
-          } catch (error) {
+          })
+          .catch((error) => {
             logError('Failed to reset pagination after new chat', error, {
               component: 'ChatSidebar',
-              action: 'resetPagination',
+              action: 'resetPaginationAfterNewChat',
             })
-          }
-        }
-
-        resetPagination()
+          })
       }
     }
 
     // Update the previous count for next comparison
     previousChatCount.current = chats.length
-  }, [chats.length, isSignedIn, setNextToken])
+  }, [chats.length, isSignedIn, onChatsUpdated, resetPagination])
 
-  // Clean up paginated chats on page refresh
+  // Initialize pagination state on page refresh
   useEffect(() => {
     const cleanupAndInitialize = async () => {
       if (!isSignedIn || !user?.id) return
 
-      const userState = getUserPaginationState(user.id)
-      if (userState.hasInitialized) return
-
       try {
-        // On page load, clean up chats loaded via pagination
-        const allChats = await indexedDBStorage.getAllChats()
-
-        // Sort by createdAt to determine which are beyond first page
-        const sortedSyncedChats = allChats
-          .filter(
-            (chat) =>
-              chat.syncedAt &&
-              !(chat as any).isBlankChat &&
-              !(chat as any).hasTemporaryId,
-          )
-          .sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime()
-            const timeB = new Date(b.createdAt).getTime()
-            return timeB - timeA
-          })
-
-        // On page refresh, we want to keep only the first page of chats
-        // to ensure a clean state that matches what cloud sync expects
-        if (sortedSyncedChats.length > PAGINATION.CHATS_PER_PAGE) {
-          let deletedAny = false
-          const chatsToDelete = sortedSyncedChats.slice(
-            PAGINATION.CHATS_PER_PAGE,
-          )
-
-          for (const chat of chatsToDelete) {
-            // Skip deletion for chats that were very recently synced locally.
-            // Remote listings might not include them yet due to eventual consistency.
-            const recentlySynced =
-              typeof chat.syncedAt === 'number' &&
-              Date.now() - chat.syncedAt < CLOUD_SYNC.DELETION_GRACE_MS
-            if (recentlySynced) {
-              continue
-            }
-            // Delete all chats beyond the first page on refresh
-            // They will be re-fetched via pagination if needed
-            await indexedDBStorage.deleteChat(chat.id)
-            deletedAny = true
-          }
-
-          if (deletedAny && onChatsUpdated) {
-            onChatsUpdated()
-          }
+        const result = await initPagination()
+        if (result?.deletedIds.length && onChatsUpdated) {
+          onChatsUpdated()
         }
-
-        // Get the continuation token for page 2 (since page 1 is loaded during initial sync)
-        const result = await r2Storage.listChats({
-          limit: PAGINATION.CHATS_PER_PAGE,
-        })
-
-        if (result.nextContinuationToken) {
-          // Only set the token if we don't already have a different one
-          // (to avoid resetting after pagination has already started)
-          if (
-            !userState.nextToken ||
-            userState.nextToken === result.nextContinuationToken
-          ) {
-            setNextToken(result.nextContinuationToken)
-            setHasMoreRemote(true)
-          }
-        } else {
-          // No more pages available
-          setHasMoreRemote(false)
-        }
-
-        // Mark as initialized to prevent re-running
-        userState.hasInitialized = true
       } catch (error) {
         logError('Failed to cleanup and initialize pagination', error, {
           component: 'ChatSidebar',
@@ -503,147 +380,24 @@ export function ChatSidebar({
     }
 
     cleanupAndInitialize()
-  }, [isSignedIn, user?.id, onChatsUpdated, setNextToken])
+  }, [isSignedIn, user?.id, onChatsUpdated, initPagination])
 
-  // Load more chats from backend
+  // Load more chats from backend (delegated to CloudSync via hook)
   const loadMoreChats = async () => {
-    // Always use the user-scoped state for the most up-to-date token
-    const currentToken = user?.id
-      ? getUserPaginationState(user.id).nextToken
-      : undefined
-
-    if (isLoadingMore || !isSignedIn) return
-
-    // If we don't have a token and have already attempted to load, there are no more pages
-    if (!currentToken && hasAttemptedLoadMore) {
-      setHasMoreRemote(false)
-      return
-    }
-
-    setIsLoadingMore(true)
-    setHasAttemptedLoadMore(true)
-
     try {
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
-      // If we don't have a token yet, try to get the initial one
-      let tokenToUse = currentToken
-
-      if (!tokenToUse && !hasAttemptedLoadMore) {
-        // Get the initial continuation token
-        const initialResult = await r2Storage.listChats({
-          limit: PAGINATION.CHATS_PER_PAGE,
-          includeContent: false,
-        })
-        tokenToUse = initialResult.nextContinuationToken
-      }
-
-      if (!tokenToUse) {
-        setHasMoreRemote(false)
-        setIsLoadingMore(false)
-        return
-      }
-      const result = await r2Storage.listChats({
-        limit: PAGINATION.CHATS_PER_PAGE,
-        continuationToken: tokenToUse,
-        includeContent: true,
-      })
-
-      if (result.conversations && result.conversations.length > 0) {
-        // Process chats in parallel for better performance
-        const processPromises = result.conversations.map(async (conv) => {
-          if (!conv.content) return
-
-          try {
-            const encrypted = JSON.parse(conv.content)
-
-            // Try to decrypt the chat data
-            let fullChat: StoredChat | null = null
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              fullChat = decrypted
-            } catch (decryptError) {
-              // Check if this is corrupted data (compressed)
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-
-              // If decryption fails, store the encrypted data for later retry
-              const safeCreatedAt = ensureValidISODate(conv.createdAt, conv.id)
-              const safeUpdatedAt = ensureValidISODate(
-                conv.updatedAt ?? conv.createdAt,
-                conv.id,
-              )
-              fullChat = {
-                id: conv.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: safeCreatedAt,
-                updatedAt: safeUpdatedAt,
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: conv.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-              } as StoredChat
-            }
-
-            if (fullChat) {
-              fullChat.createdAt = ensureValidISODate(
-                fullChat.createdAt,
-                fullChat.id,
-              )
-              fullChat.updatedAt = ensureValidISODate(
-                fullChat.updatedAt ?? fullChat.createdAt,
-                fullChat.id,
-              )
-              fullChat.loadedAt = Date.now()
-              // Save to IndexedDB - this will trigger a reload of chats
-              await indexedDBStorage.saveChat(fullChat)
-              // Mark as synced since we just downloaded from cloud
-              await indexedDBStorage.markAsSynced(
-                fullChat.id,
-                fullChat.syncVersion || 0,
-              )
-            }
-          } catch (error) {
-            logError(`Failed to process chat ${conv.id}`, error, {
-              component: 'ChatSidebar',
-              action: 'loadMoreChats',
-              metadata: { chatId: conv.id },
-            })
-          }
-        })
-
-        // Wait for all processing to complete
-        await Promise.all(processPromises)
-
-        // Mark that we just loaded more via pagination
-        justLoadedMoreRef.current = true
-
-        // Trigger parent component to reload chats from IndexedDB
-        if (onChatsUpdated) {
-          onChatsUpdated()
-        }
-
-        // Update pagination state
-        setNextToken(result.nextContinuationToken)
-        setHasMoreRemote(!!result.nextContinuationToken)
-      } else {
-        // No conversations returned - we've reached the end
-        setHasMoreRemote(false)
-        setHasAttemptedLoadMore(true)
+      if (isLoadingMore || !isSignedIn) return
+      const result = await loadMorePage()
+      const savedCount = result?.saved ?? 0
+      justLoadedMoreRef.current = savedCount > 0
+      if (savedCount > 0 && onChatsUpdated) {
+        onChatsUpdated()
       }
     } catch (error) {
+      justLoadedMoreRef.current = false
       logError('Failed to load more chats', error, {
         component: 'ChatSidebar',
         action: 'loadMoreChats',
       })
-    } finally {
-      setIsLoadingMore(false)
     }
   }
 

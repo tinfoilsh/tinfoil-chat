@@ -4,6 +4,7 @@ import { cloudSync } from '../cloud/cloud-sync'
 import { r2Storage } from '../cloud/r2-storage'
 import { streamingTracker } from '../cloud/streaming-tracker'
 import { encryptionService } from '../encryption/encryption-service'
+import { chatEvents } from './chat-events'
 import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 import { storageMigration } from './migration'
@@ -153,6 +154,8 @@ export class ChatStorageService {
       updatedAt: new Date().toISOString(),
     }
     await indexedDBStorage.saveChat(storageChat)
+    // Emit change event after local save
+    chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
 
     // Auto-backup to cloud (non-blocking) - only if not temporary, not skipped, and not streaming
     if (
@@ -222,6 +225,7 @@ export class ChatStorageService {
     deletedChatsTracker.markAsDeleted(id)
 
     await indexedDBStorage.deleteChat(id)
+    chatEvents.emit({ reason: 'delete', ids: [id] })
 
     // Also delete from cloud storage (non-blocking)
     cloudSync.deleteFromCloud(id).catch((error: unknown) => {

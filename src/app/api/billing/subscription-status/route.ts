@@ -77,7 +77,10 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const publicMetadata = (user.publicMetadata ?? {}) as Record<string, unknown>
+    const publicMetadata = (user.publicMetadata ?? {}) as Record<
+      string,
+      unknown
+    >
 
     const rawChatStatus = publicMetadata['chat_subscription_status']
     const chatStatus = isValidStatus(rawChatStatus) ? rawChatStatus : null
