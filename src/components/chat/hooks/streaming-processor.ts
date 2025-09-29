@@ -251,9 +251,18 @@ export async function processStreamingResponse(
                 false,
                 true,
               )
-              requestAnimationFrame(() => {
-                ctx.setIsWaitingForResponse(false)
-              })
+              if (
+                typeof window !== 'undefined' &&
+                typeof window.requestAnimationFrame === 'function'
+              ) {
+                window.requestAnimationFrame(() => {
+                  ctx.setIsWaitingForResponse(false)
+                })
+              } else {
+                setTimeout(() => {
+                  ctx.setIsWaitingForResponse(false)
+                }, 16)
+              }
             }
             isFirstChunk = false
             if (reasoningContent) thoughtsBuffer = reasoningContent
@@ -352,9 +361,18 @@ export async function processStreamingResponse(
                     )
                   }
                 }
-                requestAnimationFrame(() => {
-                  ctx.setIsWaitingForResponse(false)
-                })
+                if (
+                  typeof window !== 'undefined' &&
+                  typeof window.requestAnimationFrame === 'function'
+                ) {
+                  window.requestAnimationFrame(() => {
+                    ctx.setIsWaitingForResponse(false)
+                  })
+                } else {
+                  setTimeout(() => {
+                    ctx.setIsWaitingForResponse(false)
+                  }, 16)
+                }
               } else {
                 continue
               }
