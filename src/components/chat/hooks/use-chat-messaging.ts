@@ -1,16 +1,32 @@
+/**
+ * Chat messaging hook
+ *
+ * Responsibilities:
+ * - Orchestrates user input → persistence, network streaming, and UI state
+ * - Delegates heavy-lift to:
+ *   - persistence: hooks/chat-persistence.ts (local/IndexedDB + cloud sync gating)
+ *   - network: services/inference (request builder + fetch in inference-client)
+ *   - streaming: hooks/streaming-processor.ts (SSE parsing and thinking mode)
+ *
+ * State invariants:
+ * - currentChatIdRef always mirrors the canonical chat id (temporary → server id swaps)
+ * - isStreamingRef is true only while processing an assistant response (used to defer cloud sync)
+ * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
+ */
 import { type BaseModel } from '@/app/config/models'
 import { useApiKey } from '@/hooks/use-api-key'
-import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
-import { streamingTracker } from '@/services/cloud/streaming-tracker'
+import { sendChatStream } from '@/services/inference/inference-client'
+import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChatError, generateTitle } from '../chat-utils'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
+import { createUpdateChatWithHistoryCheck } from './chat-persistence'
+import { processStreamingResponse } from './streaming-processor'
 import { useMaxMessages } from './use-max-messages'
 
 interface UseChatMessagingProps {
@@ -93,6 +109,7 @@ export function useChatMessaging({
   }
 
   // For users without storeHistory (free/non-signed-in), validate the selected model
+  // Ensures we only hit free chat models; always allow 'dev-simulator' for local testing
   const effectiveModel = !storeHistory
     ? (() => {
         // Allow Dev Simulator for testing even when not signed in
@@ -130,71 +147,15 @@ export function useChatMessaging({
     : selectedModel
 
   // A modified version of updateChat that respects the storeHistory flag
-  const updateChatWithHistoryCheck = useCallback(
-    (
-      setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
-      chatSnapshot: Chat,
-      setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
-      chatId: string,
-      newMessages: Message[],
-      immediate = false,
-      isThinking = false,
-    ) => {
-      // Compute the updated chat synchronously to avoid relying on deferred state updates
-      const isCurrentChat = currentChatIdRef.current === chatId
-      // Build the updated chat object synchronously based on the provided chat snapshot
-      // Always align the id with the target chatId to avoid re-introducing a stale/temporary id
-      const updatedChatForSaving: Chat = {
-        ...chatSnapshot,
-        id: chatId,
-        messages: newMessages,
-      }
-
-      // Update current chat state if this is the active chat
-      if (isCurrentChat) setCurrentChat(updatedChatForSaving)
-
-      // Always update the chats array
-      setChats((prevChats) =>
-        prevChats.map((c) => {
-          if (c.id === chatId) return updatedChatForSaving
-          return c
-        }),
-      )
-
-      // Save to storage (skip during thinking state unless immediate)
-      if ((!isThinking || immediate) && updatedChatForSaving) {
-        if (storeHistory) {
-          // Skip cloud sync during streaming (unless immediate flag is set for final save)
-          const skipCloudSync = isStreamingRef.current && !immediate
-
-          chatStorage
-            .saveChat(updatedChatForSaving, skipCloudSync)
-            .then((savedChat) => {
-              // Only update if the ID actually changed
-              if (savedChat.id !== updatedChatForSaving!.id) {
-                currentChatIdRef.current = savedChat.id
-                // Only update currentChat if this is the active chat
-                if (isCurrentChat) {
-                  setCurrentChat(savedChat)
-                }
-                setChats((prevChats) =>
-                  prevChats.map((c) =>
-                    c.id === updatedChatForSaving!.id ? savedChat : c,
-                  ),
-                )
-              }
-            })
-            .catch((error) => {
-              logError('Failed to save chat during update', error, {
-                component: 'useChatMessaging',
-              })
-            })
-        } else {
-          // Save to session storage for non-signed-in users
-          sessionChatStorage.saveChat(updatedChatForSaving)
-        }
-      }
-    },
+  // During streaming, we persist to IndexedDB but defer cloud backup unless immediate=true
+  // When the backend assigns a new id, we atomically rewrite ids in both currentChat and chats
+  const updateChatWithHistoryCheck = useMemo(
+    () =>
+      createUpdateChatWithHistoryCheck({
+        storeHistory,
+        isStreamingRef,
+        currentChatIdRef,
+      }),
     [storeHistory],
   )
 
@@ -272,6 +233,13 @@ export function useChatMessaging({
   }, [abortController, storeHistory, setChats, setCurrentChat])
 
   // Handle chat query
+  // Lifecycle overview:
+  // 1) Early exits + input reset
+  // 2) Optimistic state update with the user message (and server id acquisition if needed)
+  // 3) Persist initial state (session or IndexedDB)
+  // 4) Start streaming via inference client
+  // 5) streaming-processor applies batched updates until completion
+  // 6) Finalize: optional title generation, final save
   const handleQuery = useCallback(
     async (
       query: string,
@@ -408,594 +376,63 @@ export function useChatMessaging({
         setTimeout(() => scrollToBottom(), 0)
       }
 
-      let assistantMessage: Message | null = null
-      // Track the initial chat ID for streaming tracker
-      const streamingChatId = updatedChat.id
-      let rafId: number | ReturnType<typeof setTimeout> | null = null
-
       try {
-        isStreamingRef.current = true
-
-        // Track streaming start for the current chat
-        if (streamingChatId) {
-          streamingTracker.startStreaming(streamingChatId)
-        }
-
-        assistantMessage = {
-          role: 'assistant',
-          content: '',
-          timestamp: new Date(),
-        }
-
-        const model = models.find((model) => model.modelName === effectiveModel)
+        const model = models.find((m) => m.modelName === effectiveModel)
         if (!model) {
           throw new Error(`Model ${effectiveModel} not found`)
         }
 
-        // Use dev simulator endpoint for dev model, otherwise use the proxy
-        const proxyUrl =
-          model.modelName === 'dev-simulator'
-            ? '/api/dev/simulator'
-            : `${CONSTANTS.INFERENCE_PROXY_URL}${model.endpoint}`
-
         const baseSystemPrompt = systemPromptOverride || systemPrompt
-        let finalSystemPrompt = baseSystemPrompt.replaceAll(
-          '{MODEL_NAME}',
-          model.name,
-        )
-
-        // Always append rules if they exist
-        if (rules) {
-          // Apply same replacements to rules
-          const processedRules = rules.replaceAll('{MODEL_NAME}', model.name)
-          finalSystemPrompt += '\n' + processedRules
-        }
-
-        // Only require API key for non-dev models
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json',
-        }
-
-        if (model.modelName !== 'dev-simulator') {
-          headers.Authorization = `Bearer ${await getApiKeyFromHook()}`
-        }
-
-        const response = await fetch(proxyUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model: model.modelName,
-            messages: [
-              // System prompt is always included even when messages are cut off
-              {
-                role: 'system',
-                content: finalSystemPrompt,
-              },
-              // Include message history with a limit
-              ...updatedMessages.slice(-maxMessages).map((msg) => {
-                // Check if this message has image data AND the current model supports multimodal
-                if (
-                  msg.imageData &&
-                  msg.imageData.length > 0 &&
-                  model.multimodal
-                ) {
-                  // Create multimodal content array
-                  const content = [
-                    {
-                      type: 'text',
-                      text: msg.documentContent
-                        ? `${msg.content}\n\n${msg.documents?.map((doc) => `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`).join('\n\n') || `Document contents:\n${msg.documentContent}`}`
-                        : msg.content,
-                    },
-                    // Add each image as a separate content item
-                    ...msg.imageData.map((imgData) => ({
-                      type: 'image_url',
-                      image_url: {
-                        url: `data:${imgData.mimeType};base64,${imgData.base64}`,
-                      },
-                    })),
-                  ]
-
-                  return {
-                    role: msg.role,
-                    content,
-                  }
-                } else {
-                  // Standard text message (or image data stripped for non-multimodal models)
-                  return {
-                    role: msg.role,
-                    content: msg.documentContent
-                      ? `${msg.content}\n\n${msg.documents?.map((doc) => `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`).join('\n\n') || `Document contents:\n${msg.documentContent}`}`
-                      : msg.content,
-                  }
-                }
-              }),
-            ],
-            stream: true,
-          }),
+        const response = await sendChatStream({
+          model,
+          systemPrompt: baseSystemPrompt,
+          rules,
+          updatedMessages,
+          maxMessages,
+          getApiKey: getApiKeyFromHook,
           signal: controller.signal,
         })
 
-        if (!response.ok) {
-          // Special handling for dev simulator in production
-          if (response.status === 404 && model.modelName === 'dev-simulator') {
-            throw new ChatError(
-              'Dev simulator is only available in development environment',
-              'FETCH_ERROR',
-            )
-          }
-          throw new ChatError(
-            `Server returned ${response.status}: ${response.statusText}`,
-            'FETCH_ERROR',
-          )
-        }
+        const assistantMessage = await processStreamingResponse(response, {
+          updatedChat,
+          updatedMessages,
+          isFirstMessage,
+          modelsLength: models.length,
+          currentChatIdRef,
+          isStreamingRef,
+          thinkingStartTimeRef,
+          setIsThinking,
+          setIsWaitingForResponse,
+          updateChatWithHistoryCheck,
+          setChats,
+          setCurrentChat,
+          setLoadingState,
+          storeHistory,
+        })
 
-        const reader = response.body?.getReader()
-        const decoder = new TextDecoder()
-        let thoughtsBuffer = ''
-        let isInThinkingMode = false
-        let isFirstChunk = true
-        let initialContentBuffer = '' // Buffer for detecting <think> tag across chunks
-        let sseBuffer = '' // Buffer for potentially incomplete SSE messages
-        let isUsingReasoningFormat = false // Track if we're using reasoning_content format
-
-        // Batch UI updates per animation frame during streaming
-        const scheduleStreamingUpdate = (isThinkingFlag: boolean) => {
-          if (rafId !== null) return
-          rafId =
-            typeof window !== 'undefined' &&
-            typeof window.requestAnimationFrame === 'function'
-              ? window.requestAnimationFrame(() => {
-                  rafId = null
-                  if (currentChatIdRef.current === updatedChat.id) {
-                    const chatId = currentChatIdRef.current
-                    const messageToSave = assistantMessage as Message
-                    const newMessages = [...updatedMessages, messageToSave]
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      isThinkingFlag,
-                    )
-                  }
-                })
-              : setTimeout(() => {
-                  if (currentChatIdRef.current === updatedChat.id) {
-                    const chatId = currentChatIdRef.current
-                    const messageToSave = assistantMessage as Message
-                    const newMessages = [...updatedMessages, messageToSave]
-                    updateChatWithHistoryCheck(
-                      setChats,
-                      updatedChat,
-                      setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      isThinkingFlag,
-                    )
-                  }
-                  rafId = null
-                }, 16)
-        }
-
-        while (true) {
-          const { done, value } = await reader!.read()
-          if (done || currentChatIdRef.current !== updatedChat.id) {
-            // Cancel any pending RAF/timeout before exiting
-            if (rafId !== null) {
-              if (
-                typeof window !== 'undefined' &&
-                typeof window.cancelAnimationFrame === 'function' &&
-                typeof rafId === 'number'
-              ) {
-                window.cancelAnimationFrame(rafId)
-              } else {
-                clearTimeout(rafId as ReturnType<typeof setTimeout>)
-              }
-              rafId = null
-            }
-
-            // Handle any remaining buffered content when stream ends
-            if (isFirstChunk && initialContentBuffer.trim()) {
-              // Process the buffered content even if it's less than 20 characters
-              assistantMessage = {
-                role: 'assistant',
-                content: initialContentBuffer.trim(),
-                timestamp: assistantMessage?.timestamp || new Date(), // Preserve timestamp if it exists
-                isThinking: false,
-              }
-              if (currentChatIdRef.current === updatedChat.id) {
-                const newMessages = [...updatedMessages, assistantMessage]
-                updateChatWithHistoryCheck(
-                  setChats,
-                  updatedChat,
-                  setCurrentChat,
-                  updatedChat.id,
-                  newMessages,
-                  false,
-                  false,
-                )
-              }
-            }
-            // If we're still in thinking mode when the stream ends,
-            // handle based on format
-            else if (isInThinkingMode && thoughtsBuffer.trim()) {
-              isInThinkingMode = false
-              setIsThinking(false)
-              const thinkingDuration = getThinkingDuration()
-
-              if (isUsingReasoningFormat) {
-                // For reasoning_content format, keep thoughts as thoughts
-                assistantMessage = {
-                  role: 'assistant',
-                  content: '', // No regular content was received
-                  thoughts: thoughtsBuffer.trim(),
-                  timestamp: assistantMessage?.timestamp || new Date(), // Preserve timestamp
-                  isThinking: false,
-                  thinkingDuration,
-                }
-              } else {
-                // For <think> format, convert thoughts to content
-                assistantMessage = {
-                  role: 'assistant',
-                  content: thoughtsBuffer.trim(), // Convert thoughts to content
-                  timestamp: assistantMessage?.timestamp || new Date(), // Preserve timestamp
-                  isThinking: false,
-                  thinkingDuration,
-                }
-              }
-              if (currentChatIdRef.current === updatedChat.id) {
-                const chatId = currentChatIdRef.current
-                const newMessages = [...updatedMessages, assistantMessage]
-                // Save to localStorage and update display
-                updateChatWithHistoryCheck(
-                  setChats,
-                  updatedChat,
-                  setCurrentChat,
-                  chatId,
-                  newMessages,
-                  true, // immediate = true for final save
-                  false,
-                )
-              }
-            }
-            controller.abort()
-            break
-          }
-
-          const chunk = decoder.decode(value)
-          // Append new data to existing buffer
-          sseBuffer += chunk
-
-          // Process complete SSE messages
-          const lines = sseBuffer.split('\n')
-          // Keep the last line in the buffer as it might be incomplete
-          sseBuffer = lines.pop() || ''
-
-          for (const line of lines.filter((line) => line.trim() !== '')) {
-            // Skip [DONE] line or other non-data lines
-            if (line === 'data: [DONE]' || !line.startsWith('data: ')) continue
-
-            try {
-              // Extract the JSON data from the SSE format (remove 'data: ' prefix)
-              const jsonData = line.replace(/^data: /, '')
-              const json = JSON.parse(jsonData)
-
-              // Check for reasoning_content format (alternative to <think> tags)
-              // reasoning_content field exists when the key is present, even if empty string
-              const hasReasoningContent =
-                'reasoning_content' in (json.choices?.[0]?.delta || {}) ||
-                'reasoning_content' in (json.choices?.[0]?.message || {})
-              const reasoningContent =
-                json.choices?.[0]?.message?.reasoning_content ||
-                json.choices?.[0]?.delta?.reasoning_content ||
-                ''
-
-              // Extract content from the delta structure in OpenAI format
-              let content = json.choices?.[0]?.delta?.content || ''
-
-              // Detect start of reasoning_content format (when field appears for first time)
-              if (
-                hasReasoningContent &&
-                !isUsingReasoningFormat &&
-                !isInThinkingMode
-              ) {
-                // Start thinking mode for reasoning_content format
-                isUsingReasoningFormat = true
-                isInThinkingMode = true
-                setIsThinking(true)
-                thinkingStartTimeRef.current = Date.now()
-                // Immediately surface the assistant message as thinking to avoid UI gap
-                assistantMessage = {
-                  ...assistantMessage,
-                  thoughts: reasoningContent || '',
-                  isThinking: true,
-                }
-                // Flush the thinking message synchronously so layout doesn't dip
-                if (currentChatIdRef.current === updatedChat.id) {
-                  const chatId = currentChatIdRef.current
-                  const messageToSave = assistantMessage as Message
-                  const newMessages = [...updatedMessages, messageToSave]
-                  updateChatWithHistoryCheck(
-                    setChats,
-                    updatedChat,
-                    setCurrentChat,
-                    chatId,
-                    newMessages,
-                    false,
-                    true,
-                  )
-                  // Hide loading dots on the next frame
-                  requestAnimationFrame(() => {
-                    setIsWaitingForResponse(false)
-                  })
-                }
-                isFirstChunk = false // No need to buffer for reasoning_content
-
-                // Only add non-empty reasoning content to buffer
-                if (reasoningContent) {
-                  thoughtsBuffer = reasoningContent
-                }
-                continue
-              } else if (isUsingReasoningFormat && hasReasoningContent) {
-                // Continue with reasoning format (even if reasoning_content is empty)
-                if (reasoningContent) {
-                  // Only accumulate non-empty reasoning content
-                  thoughtsBuffer += reasoningContent
-                }
-
-                // Check if regular content has appeared - this signals end of thinking
-                if (content && isInThinkingMode) {
-                  isInThinkingMode = false
-                  setIsThinking(false)
-                  const thinkingDuration = getThinkingDuration()
-
-                  // Finalize the thoughts and start regular content
-                  assistantMessage = {
-                    ...assistantMessage,
-                    thoughts: thoughtsBuffer.trim() || undefined,
-                    content: content,
-                    isThinking: false,
-                    thinkingDuration,
-                  }
-                } else if (reasoningContent) {
-                  // Still in thinking mode with new reasoning content
-                  assistantMessage = {
-                    ...assistantMessage,
-                    thoughts: thoughtsBuffer,
-                    isThinking: isInThinkingMode,
-                  }
-                }
-
-                // Update UI if we have changes
-                if (
-                  (reasoningContent || content) &&
-                  currentChatIdRef.current === updatedChat.id
-                ) {
-                  scheduleStreamingUpdate(isInThinkingMode)
-                }
-
-                // Continue processing if we have content to handle below
-                if (!content) {
-                  continue
-                }
-              }
-
-              // For reasoning_content format with content appearing
-              if (isUsingReasoningFormat && content) {
-                // Stop thinking if not already stopped
-                if (isInThinkingMode) {
-                  isInThinkingMode = false
-                  setIsThinking(false)
-                  const thinkingDuration = getThinkingDuration()
-                  // Update the assistant message with the duration
-                  assistantMessage = {
-                    ...assistantMessage,
-                    thinkingDuration,
-                  }
-                }
-
-                // Update with content (thoughts already set above)
-                assistantMessage = {
-                  ...assistantMessage,
-                  content: (assistantMessage.content || '') + content,
-                  isThinking: false,
-                }
-
-                if (currentChatIdRef.current === updatedChat.id) {
-                  scheduleStreamingUpdate(false)
-                }
-                continue
-              }
-
-              // Skip initial buffering if we're using reasoning_content format
-              if (!isUsingReasoningFormat) {
-                // If we're still in the initial phase, buffer the content
-                if (isFirstChunk) {
-                  initialContentBuffer += content
-
-                  // Check if we have enough content to determine if it starts with <think>
-                  if (
-                    initialContentBuffer.includes('<think>') ||
-                    initialContentBuffer.length > 5 // Reduced from 20 to 5 for better responsiveness
-                  ) {
-                    isFirstChunk = false
-                    content = initialContentBuffer
-                    initialContentBuffer = ''
-
-                    // Check for think tag in the complete buffer
-                    if (content.includes('<think>')) {
-                      isInThinkingMode = true
-                      setIsThinking(true)
-                      thinkingStartTimeRef.current = Date.now()
-                      // Remove everything up to and including <think>
-                      content = content.replace(/^[\s\S]*?<think>/, '')
-                      // Immediately surface the assistant message as thinking (even if no tokens yet)
-                      assistantMessage = {
-                        ...assistantMessage,
-                        isThinking: true,
-                        thoughts: '',
-                      }
-                      if (content) {
-                        // Consume initial post-<think> content into thoughts buffer
-                        thoughtsBuffer += content
-                        assistantMessage = {
-                          ...assistantMessage,
-                          thoughts: thoughtsBuffer,
-                        }
-                        content = '' // prevent double-processing below
-                      }
-                      // Flush the initial thinking state synchronously to avoid a frame with no placeholder
-                      if (currentChatIdRef.current === updatedChat.id) {
-                        const chatId = currentChatIdRef.current
-                        const messageToSave = assistantMessage as Message
-                        const newMessages = [...updatedMessages, messageToSave]
-                        updateChatWithHistoryCheck(
-                          setChats,
-                          updatedChat,
-                          setCurrentChat,
-                          chatId,
-                          newMessages,
-                          false,
-                          true,
-                        )
-                      }
-                    }
-
-                    // Remove loading dots only after processing the first chunk
-                    requestAnimationFrame(() => {
-                      setIsWaitingForResponse(false)
-                    })
-                  } else {
-                    continue // Keep buffering
-                  }
-                }
-              }
-
-              // Check for </think> tag anywhere in the content (only for <think> format, not reasoning_content)
-              if (
-                content.includes('</think>') &&
-                isInThinkingMode &&
-                !isUsingReasoningFormat
-              ) {
-                isInThinkingMode = false
-                setIsThinking(false)
-                const thinkingDuration = getThinkingDuration()
-
-                // Split content at </think> tag
-                const parts = content.split('</think>')
-                const finalThoughts = (thoughtsBuffer + (parts[0] || '')).trim()
-
-                // Combine any remaining content after the </think> tag
-                const remainingContent = parts.slice(1).join('')
-
-                assistantMessage = {
-                  ...assistantMessage,
-                  thoughts: finalThoughts || undefined,
-                  isThinking: false,
-                  thinkingDuration,
-                }
-
-                // Add remaining content if it exists
-                if (remainingContent.trim()) {
-                  assistantMessage.content =
-                    (assistantMessage.content || '') + remainingContent
-                }
-
-                if (currentChatIdRef.current === updatedChat.id) {
-                  scheduleStreamingUpdate(false)
-                }
-                continue
-              }
-
-              // If still in thinking mode (for <think> format only, reasoning_content is handled above)
-              if (isInThinkingMode && !isUsingReasoningFormat) {
-                thoughtsBuffer += content
-                assistantMessage = {
-                  ...assistantMessage,
-                  thoughts: thoughtsBuffer,
-                  isThinking: true,
-                }
-                if (currentChatIdRef.current === updatedChat.id) {
-                  scheduleStreamingUpdate(true)
-                }
-              } else if (!isInThinkingMode) {
-                // Not in thinking mode, append to regular content
-                // For reasoning_content format, we've already transitioned out of thinking
-                // For <think> format, we remove any think tags
-                if (!isUsingReasoningFormat) {
-                  content = content.replace(/<think>|<\/think>/g, '') // Remove any think tags
-                }
-
-                if (content) {
-                  assistantMessage = {
-                    ...assistantMessage,
-                    content: (assistantMessage.content || '') + content,
-                    isThinking: false,
-                  }
-                  if (currentChatIdRef.current === updatedChat.id) {
-                    scheduleStreamingUpdate(false)
-                  }
-                }
-              }
-            } catch (error) {
-              logError('Failed to parse SSE line', error, {
-                component: 'useChatMessaging',
-                action: 'handleQuery',
-                metadata: { line },
-              })
-              continue
-            }
-          }
-        }
-
-        // Final save after stream completes successfully
-        if (assistantMessage.content || assistantMessage.thoughts) {
-          // Use currentChatIdRef to get the most recent chat ID
+        if (
+          assistantMessage &&
+          (assistantMessage.content || assistantMessage.thoughts)
+        ) {
           const chatId = currentChatIdRef.current
           if (chatId === updatedChat.id) {
             const finalMessages = [...updatedMessages, assistantMessage]
 
-            // Generate title after first assistant response
             if (
               isFirstMessage &&
               updatedChat.title === 'New Chat' &&
               models.length > 0
             ) {
               try {
-                // Log what models we have for debugging
-                console.log(
-                  'Available models for title generation:',
-                  models.map((m) => ({
-                    name: m.modelName,
-                    type: m.type,
-                    chat: m.chat,
-                    paid: m.paid,
-                  })),
-                )
-
-                // Find a free model for title generation - specifically look for llama-free first
-                let freeModel = models.find(
-                  (model) => model.modelName === 'llama-free',
-                )
-
-                // If llama-free not found, look for any free chat model
+                let freeModel = models.find((m) => m.modelName === 'llama-free')
                 if (!freeModel) {
                   freeModel = models.find(
-                    (model) =>
-                      model.type === 'chat' &&
-                      model.chat === true &&
-                      (model.paid === false || model.paid === undefined),
+                    (m) =>
+                      m.type === 'chat' &&
+                      m.chat === true &&
+                      (m.paid === false || m.paid === undefined),
                   )
                 }
-
-                console.log(
-                  'Selected model for title generation:',
-                  freeModel?.modelName,
-                )
 
                 if (freeModel) {
                   const titleMessages = finalMessages.map((msg) => ({
@@ -1010,7 +447,6 @@ export function useChatMessaging({
                   )
                   if (generatedTitle && generatedTitle !== 'New Chat') {
                     updatedChat = { ...updatedChat, title: generatedTitle }
-                    // Update title in the chats array
                     setChats((prevChats) =>
                       prevChats.map((c) =>
                         c.id === chatId ? { ...c, title: generatedTitle } : c,
@@ -1037,7 +473,7 @@ export function useChatMessaging({
               setCurrentChat,
               chatId,
               finalMessages,
-              true, // immediate = true for final save
+              true,
               false,
             )
           } else {
@@ -1060,22 +496,12 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
-        // Cancel any pending RAF/timeout on error
-        if (rafId !== null) {
-          if (
-            typeof window !== 'undefined' &&
-            typeof window.cancelAnimationFrame === 'function' &&
-            typeof rafId === 'number'
-          ) {
-            window.cancelAnimationFrame(rafId)
-          } else {
-            clearTimeout(rafId as ReturnType<typeof setTimeout>)
-          }
-          rafId = null
-        }
-
-        setIsWaitingForResponse(false) // Make sure to clear waiting state on error
-        // Only log and show error message if it's not an abort error
+        // Ensure UI loading flags are reset on pre-stream errors
+        setIsWaitingForResponse(false)
+        setLoadingState('idle')
+        setIsThinking(false)
+        isStreamingRef.current = false
+        thinkingStartTimeRef.current = null
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           logError('Chat query failed', error, {
             component: 'useChatMessaging',
@@ -1095,41 +521,14 @@ export function useChatMessaging({
             setCurrentChat,
             updatedChat.id,
             [...updatedMessages, errorMessage],
-            true, // immediate = true to ensure error is saved
+            true,
             false,
           )
         }
       } finally {
+        // Ensure loading state is reset regardless of where failure occurs
         setLoadingState('idle')
         setAbortController(null)
-        isStreamingRef.current = false
-
-        // Track streaming end using the initial chat ID
-        if (streamingChatId) {
-          streamingTracker.endStreaming(streamingChatId)
-        }
-
-        setIsThinking(false)
-        thinkingStartTimeRef.current = null
-        setIsWaitingForResponse(false) // Always ensure loading state is cleared
-
-        // Ensure we trigger a final sync if we have content
-        // This handles edge cases where the normal final save might not execute
-        if (
-          storeHistory &&
-          assistantMessage &&
-          (assistantMessage.content || assistantMessage.thoughts) &&
-          currentChatIdRef.current === updatedChat.id
-        ) {
-          // Just trigger a sync without saving again to avoid duplicates
-          // The latest content should already be in IndexedDB from streaming saves
-          cloudSync.backupChat(currentChatIdRef.current).catch((error) => {
-            logError('Failed to sync chat after streaming', error, {
-              component: 'useChatMessaging',
-              action: 'handleQuery.finally',
-            })
-          })
-        }
       }
     },
     [
