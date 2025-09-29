@@ -201,13 +201,18 @@ export async function processStreamingResponse(
 
       const chunk = decoder.decode(value)
       sseBuffer += chunk
-      const lines = sseBuffer.split('\n')
+      // Split on both Unix and Windows newlines
+      const lines = sseBuffer.split(/\r?\n/)
       sseBuffer = lines.pop() || ''
 
-      for (const line of lines.filter((l) => l.trim() !== '')) {
-        if (line === 'data: [DONE]' || !line.startsWith('data: ')) continue
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line) continue
+        // Trim before comparing to handle trailing CRs/whitespace
+        if (line === 'data: [DONE]' || !line.startsWith('data:')) continue
         try {
-          const jsonData = line.replace(/^data: /, '')
+          // Allow arbitrary spaces after the colon: `data:    {...}`
+          const jsonData = line.replace(/^data:\s*/i, '')
           const json = JSON.parse(jsonData)
 
           const hasReasoningContent =
