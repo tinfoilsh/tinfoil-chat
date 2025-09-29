@@ -3,7 +3,7 @@ import {
   FaLock,
   MdOutlineCloudOff,
 } from '@/components/icons/lazy-icons'
-import { API_BASE_URL, PAGINATION } from '@/config'
+import { API_BASE_URL, CLOUD_SYNC, PAGINATION } from '@/config'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -453,6 +453,14 @@ export function ChatSidebar({
           )
 
           for (const chat of chatsToDelete) {
+            // Skip deletion for chats that were very recently synced locally.
+            // Remote listings might not include them yet due to eventual consistency.
+            const recentlySynced =
+              typeof chat.syncedAt === 'number' &&
+              Date.now() - chat.syncedAt < CLOUD_SYNC.DELETION_GRACE_MS
+            if (recentlySynced) {
+              continue
+            }
             // Delete all chats beyond the first page on refresh
             // They will be re-fetched via pagination if needed
             await indexedDBStorage.deleteChat(chat.id)

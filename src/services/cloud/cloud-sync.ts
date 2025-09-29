@@ -1,4 +1,4 @@
-import { PAGINATION } from '@/config'
+import { CLOUD_SYNC, PAGINATION } from '@/config'
 import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
@@ -442,6 +442,17 @@ export class CloudSyncService {
       if (fetchedAllRemotePages) {
         for (const localChat of sortedSyncedLocalChats) {
           if ((localChat as any).decryptionFailed) {
+            continue
+          }
+
+          // Skip deletion for chats that were very recently synced locally.
+          // Remote listings can be eventually consistent and may not include
+          // a just-uploaded chat yet. Give it a grace window before considering
+          // it missing remotely.
+          const recentlySynced =
+            typeof localChat.syncedAt === 'number' &&
+            Date.now() - localChat.syncedAt < CLOUD_SYNC.DELETION_GRACE_MS
+          if (recentlySynced) {
             continue
           }
 
