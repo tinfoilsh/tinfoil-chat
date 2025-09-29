@@ -2,6 +2,64 @@ import { logError } from '@/utils/error-handling'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 
+type StripeSubscriptionStatus =
+  | 'active'
+  | 'canceled'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'past_due'
+  | 'paused'
+  | 'trialing'
+  | 'unpaid'
+
+const SUPPORTED_STATUSES = new Set<StripeSubscriptionStatus>([
+  'active',
+  'canceled',
+  'incomplete',
+  'incomplete_expired',
+  'past_due',
+  'paused',
+  'trialing',
+  'unpaid',
+])
+
+const isValidStatus = (status: unknown): status is StripeSubscriptionStatus =>
+  typeof status === 'string' &&
+  SUPPORTED_STATUSES.has(status as StripeSubscriptionStatus)
+
+const parseExpiration = (expiration: unknown): Date | null => {
+  if (typeof expiration !== 'string' || expiration.trim().length === 0) {
+    return null
+  }
+
+  const parsed = new Date(expiration)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+
+  return parsed
+}
+
+const hasActiveSubscription = (
+  status: StripeSubscriptionStatus | null,
+  expiration: Date | null,
+  now: Date,
+) => {
+  if (!status) {
+    return false
+  }
+
+  if (status === 'active') {
+    return true
+  }
+
+  if (status === 'canceled' && expiration) {
+    return expiration.getTime() > now.getTime()
+  }
+
+  return false
+}
+
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -19,45 +77,20 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const publicMetadata = user.publicMetadata
+    const publicMetadata = (user.publicMetadata ?? {}) as Record<
+      string,
+      unknown
+    >
 
-    // Check if subscription is active or canceled but not yet expired
-    const tokenApiStatus =
-      publicMetadata?.['token_based_api_subscription_status']
-    const chatStatus = publicMetadata?.['chat_subscription_status']
+    const rawChatStatus = publicMetadata['chat_subscription_status']
+    const chatStatus = isValidStatus(rawChatStatus) ? rawChatStatus : null
 
-    // For canceled subscriptions, check if they're still within the paid period
-    const isChatStillActive = () => {
-      if (chatStatus === 'active') return true
-      if (chatStatus === 'canceled') {
-        const expiresAt = publicMetadata?.['chat_subscription_expires_at'] as
-          | string
-          | undefined
-        if (expiresAt) {
-          // Check if expiration date is in the future
-          return new Date(expiresAt) > new Date()
-        }
-      }
-      return false
-    }
+    const chatExpiration = parseExpiration(
+      publicMetadata['chat_subscription_expires_at'],
+    )
 
-    const isApiStillActive = () => {
-      if (tokenApiStatus === 'active') return true
-      if (tokenApiStatus === 'canceled') {
-        // Assuming API subscription uses the same expiration field
-        // Adjust if there's a separate field for API subscription expiration
-        const expiresAt = (publicMetadata?.['api_subscription_expires_at'] ||
-          publicMetadata?.['chat_subscription_expires_at']) as
-          | string
-          | undefined
-        if (expiresAt) {
-          return new Date(expiresAt) > new Date()
-        }
-      }
-      return false
-    }
-
-    const chatActive = isChatStillActive()
+    const now = new Date()
+    const chatActive = hasActiveSubscription(chatStatus, chatExpiration, now)
 
     return NextResponse.json({
       chat_subscription_active: chatActive,

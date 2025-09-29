@@ -26,7 +26,13 @@ export const PAGINATION = {
 // Cloud sync settings
 export const CLOUD_SYNC = {
   RETRY_DELAY: 100, // milliseconds
-  SYNC_INTERVAL: 5000, // 5 seconds - frequency for syncing chats and profile
+  SYNC_INTERVAL: 15000, // 15 seconds - frequency for syncing chats and profile
+  // Grace period to avoid deleting chats that were just uploaded but may not yet
+  // appear in eventually-consistent remote listings
+  DELETION_GRACE_MS: 120000, // 2 minutes
+  // Additional safety: if a chat remains missing from remote listings beyond this TTL
+  // (across sync cycles), it can be considered deleted remotely.
+  DELETION_TTL_MS: 600000, // 10 minutes
 } as const
 
 // UI settings
