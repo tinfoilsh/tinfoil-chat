@@ -526,6 +526,8 @@ export function useChatMessaging({
           )
         }
       } finally {
+        // Ensure loading state is reset regardless of where failure occurs
+        setLoadingState('idle')
         setAbortController(null)
       }
     },

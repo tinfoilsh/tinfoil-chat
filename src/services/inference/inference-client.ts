@@ -21,7 +21,24 @@ export async function sendChatStream(
   params: SendChatStreamParams,
 ): Promise<Response> {
   const { proxyUrl, requestInit } = await buildChatRequest(params)
-  const response = await fetch(proxyUrl, requestInit)
+  let response: Response
+  try {
+    response = await fetch(proxyUrl, requestInit)
+  } catch (err: unknown) {
+    // Preserve abort semantics so callers that special-case AbortError still work
+    const anyErr = err as any
+    if (
+      (typeof DOMException !== 'undefined' &&
+        anyErr instanceof DOMException &&
+        anyErr.name === 'AbortError') ||
+      anyErr?.name === 'AbortError'
+    ) {
+      throw err
+    }
+
+    const msg = anyErr?.message || 'Unknown network error'
+    throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
+  }
   if (!response.ok) {
     if (response.status === 404 && params.model.modelName === 'dev-simulator') {
       throw new ChatError(

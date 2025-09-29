@@ -199,7 +199,7 @@ export async function processStreamingResponse(
         break
       }
 
-      const chunk = decoder.decode(value)
+      const chunk = decoder.decode(value, { stream: true })
       sseBuffer += chunk
       // Split on both Unix and Windows newlines
       const lines = sseBuffer.split(/\r?\n/)
@@ -338,27 +338,79 @@ export async function processStreamingResponse(
                     isThinking: true,
                     thoughts: '',
                   }
-                  if (content) {
+
+                  // Handle same-chunk closing tag to avoid leaking visible text into thoughts
+                  const closeIdx = content.indexOf('</think>')
+                  if (closeIdx !== -1) {
+                    const inner = content.slice(0, closeIdx)
+                    const remaining = content.slice(closeIdx + 8) // 8 = length of '</think>'
+                    if (inner) {
+                      thoughtsBuffer += inner
+                    }
+
+                    // Finalize thinking immediately
+                    isInThinkingMode = false
+                    ctx.setIsThinking(false)
+                    const thinkingDuration = getThinkingDuration(
+                      ctx.thinkingStartTimeRef,
+                    )
+                    assistantMessage = {
+                      ...assistantMessage,
+                      thoughts: thoughtsBuffer.trim() || undefined,
+                      isThinking: false,
+                      thinkingDuration,
+                    }
+                    if (remaining.trim()) {
+                      assistantMessage = {
+                        ...assistantMessage,
+                        content: (assistantMessage.content || '') + remaining,
+                      }
+                    }
+
+                    if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+                      const chatId = ctx.currentChatIdRef.current
+                      const messageToSave = assistantMessage as Message
+                      const newMessages = [
+                        ...ctx.updatedMessages,
+                        messageToSave,
+                      ]
+                      ctx.updateChatWithHistoryCheck(
+                        ctx.setChats,
+                        ctx.updatedChat,
+                        ctx.setCurrentChat,
+                        chatId,
+                        newMessages,
+                        false,
+                        false,
+                      )
+                    }
+                    content = ''
+                  } else if (content) {
+                    // Still inside thinking; buffer thoughts until '</think>' arrives
                     thoughtsBuffer += content
                     assistantMessage = {
                       ...assistantMessage,
                       thoughts: thoughtsBuffer,
                     }
                     content = ''
-                  }
-                  if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
-                    const chatId = ctx.currentChatIdRef.current
-                    const messageToSave = assistantMessage as Message
-                    const newMessages = [...ctx.updatedMessages, messageToSave]
-                    ctx.updateChatWithHistoryCheck(
-                      ctx.setChats,
-                      ctx.updatedChat,
-                      ctx.setCurrentChat,
-                      chatId,
-                      newMessages,
-                      false,
-                      true,
-                    )
+
+                    if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+                      const chatId = ctx.currentChatIdRef.current
+                      const messageToSave = assistantMessage as Message
+                      const newMessages = [
+                        ...ctx.updatedMessages,
+                        messageToSave,
+                      ]
+                      ctx.updateChatWithHistoryCheck(
+                        ctx.setChats,
+                        ctx.updatedChat,
+                        ctx.setCurrentChat,
+                        chatId,
+                        newMessages,
+                        false,
+                        true,
+                      )
+                    }
                   }
                 }
                 if (
