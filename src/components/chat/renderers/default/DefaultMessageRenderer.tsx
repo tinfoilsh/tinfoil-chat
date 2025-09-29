@@ -152,7 +152,6 @@ const DefaultMessageComponent = ({
                   'prose w-full max-w-none overflow-x-auto text-base prose-pre:bg-transparent prose-pre:p-0',
                   'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
                   'prose-a:text-accent hover:prose-a:text-accent/80',
-                  'dark:prose-invert',
                 )}
               >
                 {!isUser && isStreaming && isLastMessage ? (

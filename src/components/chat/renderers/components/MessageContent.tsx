@@ -104,11 +104,7 @@ export const MessageContent = memo(function MessageContent({
           if (props.inline) {
             return (
               <code
-                className={`${className || ''} break-words rounded px-1.5 py-0.5 font-mono text-sm ${
-                  isDarkMode
-                    ? 'bg-gray-700 text-gray-200'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
+                className={`${className || ''} bg-surface-secondary break-words rounded px-1.5 py-0.5 font-mono text-sm text-content-primary`}
                 {...props}
               >
                 {children}
@@ -153,7 +149,7 @@ export const MessageContent = memo(function MessageContent({
             <div className="my-4 w-full overflow-x-auto">
               <table
                 {...props}
-                className={`divide-y ${isDarkMode ? 'divide-gray-600' : 'divide-gray-200'}`}
+                className="divide-y divide-border-subtle"
                 style={{ minWidth: 'max-content' }}
               >
                 {children}
@@ -163,10 +159,7 @@ export const MessageContent = memo(function MessageContent({
         },
         thead({ children, node, ...props }: any) {
           return (
-            <thead
-              {...props}
-              className={isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}
-            >
+            <thead {...props} className="bg-surface-secondary">
               {children}
             </thead>
           )
@@ -175,7 +168,7 @@ export const MessageContent = memo(function MessageContent({
           return (
             <tbody
               {...props}
-              className={`divide-y ${isDarkMode ? 'divide-gray-700 bg-gray-800' : 'divide-gray-200 bg-gray-50'}`}
+              className="bg-surface-primary divide-y divide-border-subtle"
             >
               {children}
             </tbody>
@@ -188,7 +181,7 @@ export const MessageContent = memo(function MessageContent({
           return (
             <th
               {...props}
-              className={`whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
+              className="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-content-primary"
             >
               {children}
             </th>
@@ -198,10 +191,20 @@ export const MessageContent = memo(function MessageContent({
           return (
             <td
               {...props}
-              className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'} whitespace-nowrap`}
+              className="whitespace-nowrap px-4 py-3 text-sm text-content-primary"
             >
               {children}
             </td>
+          )
+        },
+        blockquote({ children, ...props }: any) {
+          return (
+            <blockquote
+              {...props}
+              className="my-4 border-l-4 border-border-subtle pl-4 text-content-primary"
+            >
+              {children}
+            </blockquote>
           )
         },
       }}
