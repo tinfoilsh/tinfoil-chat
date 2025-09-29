@@ -117,6 +117,12 @@
 /* Fix blockquotes */
 .prose blockquote {
   word-wrap: break-word;
+  color: hsl(var(--content-primary)) !important;
+}
+
+/* Override prose-invert for blockquotes to ensure consistent text color */
+.dark .prose blockquote {
+  color: hsl(var(--content-primary)) !important;
 }
 
 /* Responsive adjustments for narrow screens */
