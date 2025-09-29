@@ -1,4 +1,4 @@
-import { CLOUD_SYNC, PAGINATION } from '@/config'
+import { PAGINATION } from '@/config'
 import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
@@ -24,10 +24,6 @@ export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
-  private missingRemoteSince: Map<
-    string,
-    { firstSeen: number; count: number }
-  > = new Map()
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
@@ -139,8 +135,6 @@ export class CloudSyncService {
       // Mark as synced with incremented version
       const newVersion = (chat.syncVersion || 0) + 1
       await indexedDBStorage.markAsSynced(chatId, newVersion)
-      // Clear any pending missing tracking for this chat
-      this.missingRemoteSince.delete(chatId)
     } catch (error) {
       // Silently fail if no auth token set
       if (
@@ -199,8 +193,6 @@ export class CloudSyncService {
           const newVersion = (chat.syncVersion || 0) + 1
           await indexedDBStorage.markAsSynced(chat.id, newVersion)
           result.uploaded++
-          // Clear missing tracking since it now exists remotely (or will shortly)
-          this.missingRemoteSince.delete(chat.id)
         } catch (error) {
           result.errors.push(
             `Failed to backup chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -255,68 +247,13 @@ export class CloudSyncService {
       }
 
       const remoteConversations = [...(remoteList.conversations || [])]
-      let continuationToken = remoteList.nextContinuationToken
-      let fetchedAllRemotePages = true
-      let pageSafetyCounter = 0
 
-      while (continuationToken && pageSafetyCounter < 100) {
-        pageSafetyCounter++
-        try {
-          const nextPage = await r2Storage.listChats({
-            limit: PAGINATION.CHATS_PER_PAGE,
-            continuationToken,
-            includeContent: false,
-          })
-
-          if (nextPage.conversations?.length) {
-            remoteConversations.push(...nextPage.conversations)
-          }
-
-          if (!nextPage.nextContinuationToken) {
-            continuationToken = undefined
-            break
-          }
-
-          if (nextPage.nextContinuationToken === continuationToken) {
-            fetchedAllRemotePages = false
-            logError(
-              'Detected repeating continuation token while fetching remote chats',
-              new Error('repeating_continuation_token'),
-              {
-                component: 'CloudSync',
-                action: 'syncAllChats',
-              },
-            )
-            break
-          }
-
-          continuationToken = nextPage.nextContinuationToken
-        } catch (error) {
-          logError('Failed to fetch additional pages of remote chats', error, {
-            component: 'CloudSync',
-            action: 'syncAllChats',
-          })
-          result.errors.push(
-            `Failed to fetch additional pages of remote chats: ${error instanceof Error ? error.message : String(error)}`,
-          )
-          fetchedAllRemotePages = false
-          break
-        }
-      }
-
-      if (continuationToken) {
-        fetchedAllRemotePages = false
-        if (pageSafetyCounter >= 100) {
-          logError(
-            'Stopped fetching remote chats due to safety guard',
-            new Error('pagination_safety_limit_reached'),
-            {
-              component: 'CloudSync',
-              action: 'syncAllChats',
-            },
-          )
-        }
-      }
+      // Only sync the first page - new chats always appear at the top
+      // No need to fetch older chats every 15 seconds
+      logInfo(`Syncing first page only (${remoteConversations.length} chats)`, {
+        component: 'CloudSync',
+        action: 'syncAllChats',
+      })
 
       const localChats = await indexedDBStorage.getAllChats()
 
@@ -438,85 +375,12 @@ export class CloudSyncService {
         }
       }
 
-      // Delete local chats that were deleted remotely
-      // First, sort all synced local chats by createdAt to determine their position
-      const sortedSyncedLocalChats = localChats
-        .filter(
-          (chat) => chat.syncedAt && !chat.isBlankChat && !chat.hasTemporaryId,
-        )
-        .sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime()
-          const timeB = new Date(b.createdAt).getTime()
-          return timeB - timeA // Descending (newest first)
-        })
+      // Since we're only syncing the first page, we can't determine if chats
+      // were deleted remotely (they might just be on page 2+)
+      // Deletion tracking would require fetching all pages, which we're avoiding for performance
 
-      if (fetchedAllRemotePages) {
-        const deletedIds: string[] = []
-        for (const localChat of sortedSyncedLocalChats) {
-          if ((localChat as any).decryptionFailed) {
-            continue
-          }
-
-          // Skip deletion for chats that were very recently synced locally.
-          // Remote listings can be eventually consistent and may not include
-          // a just-uploaded chat yet. Give it a grace window before considering
-          // it missing remotely.
-          const recentlySynced =
-            typeof localChat.syncedAt === 'number' &&
-            Date.now() - localChat.syncedAt < CLOUD_SYNC.DELETION_GRACE_MS
-          if (recentlySynced) {
-            this.missingRemoteSince.delete(localChat.id)
-            continue
-          }
-
-          if (!remoteChatMap.has(localChat.id)) {
-            // Track missing across sync cycles; only delete if missing twice or beyond TTL
-            const now = Date.now()
-            const entry = this.missingRemoteSince.get(localChat.id)
-            const updatedEntry = entry
-              ? { firstSeen: entry.firstSeen, count: entry.count + 1 }
-              : { firstSeen: now, count: 1 }
-
-            this.missingRemoteSince.set(localChat.id, updatedEntry)
-
-            const age = now - updatedEntry.firstSeen
-            const missingTwice = updatedEntry.count >= 2
-            const beyondTtl = age >= CLOUD_SYNC.DELETION_TTL_MS
-
-            if (missingTwice || beyondTtl) {
-              try {
-                await indexedDBStorage.deleteChat(localChat.id)
-                this.missingRemoteSince.delete(localChat.id)
-                deletedIds.push(localChat.id)
-              } catch (error) {
-                result.errors.push(
-                  `Failed to delete local chat ${localChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-                )
-              }
-            }
-          } else {
-            // Present remotely; clear any missing tracking
-            this.missingRemoteSince.delete(localChat.id)
-          }
-        }
-        if (savedIds.length > 0 || deletedIds.length > 0) {
-          chatEvents.emit({ reason: 'sync', ids: [...savedIds, ...deletedIds] })
-        }
-      } else {
-        logInfo(
-          'Skipping deletion check because remote chat list is incomplete',
-          {
-            component: 'CloudSync',
-            action: 'syncAllChats',
-            metadata: {
-              fetchedAllRemotePages,
-              remotePageCount: pageSafetyCounter + 1,
-            },
-          },
-        )
-        if (savedIds.length > 0) {
-          chatEvents.emit({ reason: 'sync', ids: savedIds })
-        }
+      if (savedIds.length > 0) {
+        chatEvents.emit({ reason: 'sync', ids: savedIds })
       }
     } catch (error) {
       result.errors.push(
