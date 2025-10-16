@@ -1,6 +1,7 @@
 import type { BaseModel } from '@/app/config/models'
 import { ChatError } from '@/components/chat/chat-utils'
 import type { Message } from '@/components/chat/types'
+import { logError } from '@/utils/error-handling'
 import { getTinfoilClient } from './tinfoil-client'
 
 export interface SendChatStreamParams {
@@ -76,17 +77,35 @@ function buildMessages(
 export async function sendChatStream(
   params: SendChatStreamParams,
 ): Promise<Response> {
-  const { model, systemPrompt, rules, updatedMessages, maxMessages, getApiKey, signal } = params
+  const {
+    model,
+    systemPrompt,
+    rules,
+    updatedMessages,
+    maxMessages,
+    getApiKey,
+    signal,
+  } = params
 
   if (model.modelName === 'dev-simulator') {
     const simulatorUrl = '/api/dev/simulator'
-    const messages = buildMessages(model, systemPrompt, rules, updatedMessages, maxMessages)
+    const messages = buildMessages(
+      model,
+      systemPrompt,
+      rules,
+      updatedMessages,
+      maxMessages,
+    )
 
     try {
       const response = await fetch(simulatorUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: model.modelName, messages, stream: true }),
+        body: JSON.stringify({
+          model: model.modelName,
+          messages,
+          stream: true,
+        }),
         signal,
       })
 
@@ -127,7 +146,15 @@ export async function sendChatStream(
   try {
     const apiKey = await getApiKey()
     const client = getTinfoilClient(apiKey)
-    const messages = buildMessages(model, systemPrompt, rules, updatedMessages, maxMessages)
+    const messages = buildMessages(
+      model,
+      systemPrompt,
+      rules,
+      updatedMessages,
+      maxMessages,
+    )
+
+    await client.ready()
 
     const stream = await client.chat.completions.create(
       {
@@ -149,6 +176,10 @@ export async function sendChatStream(
           controller.enqueue(encoder.encode('data: [DONE]\n\n'))
           controller.close()
         } catch (error) {
+          logError('Stream processing error', error, {
+            component: 'inference-client',
+            action: 'sendChatStream',
+          })
           controller.error(error)
         }
       },
@@ -167,6 +198,16 @@ export async function sendChatStream(
     ) {
       throw err
     }
+
+    logError('Chat stream request failed', err, {
+      component: 'inference-client',
+      action: 'sendChatStream',
+      metadata: {
+        model: model.modelName,
+        error: anyErr?.message,
+        stack: anyErr?.stack,
+      },
+    })
 
     const msg = anyErr?.message || 'Unknown network error'
     throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
