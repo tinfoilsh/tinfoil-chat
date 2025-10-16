@@ -8,6 +8,7 @@ import { isImageFile, scaleAndEncodeImage } from '@/utils/preprocessing'
 import { useState } from 'react'
 import { CONSTANTS } from './constants'
 import type { DocumentProcessingResult } from './types'
+import { SecureClient } from 'tinfoil'
 
 /**
  * Re-export getFileIconType for backward compatibility
@@ -163,13 +164,12 @@ export const useDocumentUploader = (
 
       const { endpoint, modelName } = await getDoclingModel()
 
-      // Use the proxy
-      const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${endpoint}`
-
       // Add model parameter to formData
       formData.append('model', modelName)
 
-      const response = await fetch(proxyUrl, {
+      const client = new SecureClient()
+
+      const response = await client.fetch(endpoint, {
         method: 'POST',
         body: formData,
       })
