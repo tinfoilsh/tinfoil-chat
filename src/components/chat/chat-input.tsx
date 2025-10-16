@@ -24,6 +24,7 @@ import {
   MicrophoneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
+import { SecureClient } from 'tinfoil'
 import type { FormEvent, RefObject } from 'react'
 import { useCallback, useRef, useState } from 'react'
 import { CONSTANTS } from './constants'
@@ -280,21 +281,19 @@ export function ChatInput({
         formData.append('model', 'whisper-large-v3-turbo')
         formData.append('response_format', 'text')
 
-        // Get the API key (will use cached value if available)
         const apiKey = await getApiKey()
         if (!apiKey) {
           throw new Error('No API key available for transcription')
         }
 
-        // Use the proxy with the audio transcription endpoint
-        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
+        const client = new SecureClient()
 
-        const response = await fetch(proxyUrl, {
+        const response = await client.fetch('/audio/transcriptions', {
           method: 'POST',
+          body: formData,
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
-          body: formData,
         })
 
         if (!response.ok) {
