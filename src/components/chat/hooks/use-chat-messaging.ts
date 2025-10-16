@@ -508,9 +508,12 @@ export function useChatMessaging({
             action: 'handleQuery',
           })
 
+          const errorMsg =
+            error instanceof Error ? error.message : 'Unknown error occurred'
+
           const errorMessage: Message = {
             role: 'assistant',
-            content: 'Sorry, I encountered an error. Please try again.',
+            content: `Error: ${errorMsg}`,
             timestamp: new Date(),
             isError: true,
           }
