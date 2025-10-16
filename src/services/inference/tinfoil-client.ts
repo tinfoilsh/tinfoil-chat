@@ -8,7 +8,10 @@ export function getTinfoilClient(apiKey: string): TinfoilAI {
   if (!clientInstance || lastApiKey !== apiKey) {
     try {
       clientInstance = new TinfoilAI({
-        apiKey,
+        baseURL: 'https://ehbp.inf6.tinfoil.sh/v1',
+        enclaveURL: 'https://ehbp.inf6.tinfoil.sh/v1/',
+        configRepo: 'tinfoilsh/confidential-inference-proxy-hpke',
+        apiKey: apiKey as string,
         dangerouslyAllowBrowser: true,
       })
       lastApiKey = apiKey
