@@ -1,4 +1,5 @@
 import { CONSTANTS } from '@/components/chat/constants'
+import { getTinfoilClient } from './tinfoil-client'
 
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
@@ -7,7 +8,7 @@ export async function generateTitle(
   freeModelEndpoint?: string,
 ): Promise<string> {
   if (!messages || messages.length === 0) return 'New Chat'
-  if (!freeModelName || !freeModelEndpoint) return 'New Chat'
+  if (!freeModelName || !apiKey) return 'New Chat'
 
   try {
     const conversationForTitle = messages
@@ -15,32 +16,22 @@ export async function generateTitle(
       .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
       .join('\n\n')
 
-    const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}${freeModelEndpoint}`
+    const client = getTinfoilClient(apiKey)
 
-    const headers: HeadersInit = { 'Content-Type': 'application/json' }
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-
-    const response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: freeModelName,
-        messages: [
-          { role: 'system', content: CONSTANTS.TITLE_GENERATION_PROMPT },
-          {
-            role: 'user',
-            content: `Generate a title for this conversation:\n\n${conversationForTitle}`,
-          },
-        ],
-        stream: false,
-        max_tokens: 30,
-      }),
+    const completion = await client.chat.completions.create({
+      model: freeModelName,
+      messages: [
+        { role: 'system', content: CONSTANTS.TITLE_GENERATION_PROMPT },
+        {
+          role: 'user',
+          content: `Generate a title for this conversation:\n\n${conversationForTitle}`,
+        },
+      ],
+      stream: false,
+      max_tokens: 30,
     })
 
-    if (!response.ok) return 'New Chat'
-
-    const data = await response.json()
-    const title = data.choices?.[0]?.message?.content?.trim() || ''
+    const title = completion.choices?.[0]?.message?.content?.trim() || ''
     const cleanTitle = title.replace(/^["']|["']$/g, '').trim()
     if (cleanTitle && cleanTitle.length > 0 && cleanTitle.length <= 50) {
       return cleanTitle
