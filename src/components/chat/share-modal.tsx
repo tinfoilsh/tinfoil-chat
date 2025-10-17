@@ -72,7 +72,7 @@ export function ShareModal({
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen])
+  }, [isOpen, onClose])
 
   if (!isOpen) return null
 

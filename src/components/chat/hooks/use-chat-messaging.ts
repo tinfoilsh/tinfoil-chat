@@ -14,9 +14,9 @@
  * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
  */
 import { type BaseModel } from '@/app/config/models'
-import { useApiKey } from '@/hooks/use-api-key'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
+import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -50,7 +50,6 @@ interface UseChatMessagingReturn {
   inputRef: React.RefObject<HTMLTextAreaElement>
   isThinking: boolean
   isWaitingForResponse: boolean
-  apiKey: string | null
   setInput: (input: string) => void
   handleSubmit: (e: React.FormEvent) => void
   handleQuery: (
@@ -61,7 +60,6 @@ interface UseChatMessagingReturn {
     systemPromptOverride?: string,
   ) => void
   cancelGeneration: () => Promise<void>
-  getApiKey: () => Promise<string>
 }
 
 export function useChatMessaging({
@@ -79,12 +77,12 @@ export function useChatMessaging({
   scrollToBottom,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
-  const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const maxMessages = useMaxMessages()
 
-  // Initialize r2Storage with token getter
+  // Initialize r2Storage and tinfoil client with token getter
   useEffect(() => {
     r2Storage.setTokenGetter(getToken)
+    setAuthTokenGetter(getToken)
   }, [getToken])
 
   const [input, setInput] = useState('')
@@ -389,7 +387,6 @@ export function useChatMessaging({
           rules,
           updatedMessages,
           maxMessages,
-          getApiKey: getApiKeyFromHook,
           signal: controller.signal,
         })
 
@@ -441,9 +438,7 @@ export function useChatMessaging({
                   }))
                   const generatedTitle = await generateTitle(
                     titleMessages,
-                    apiKey,
                     freeModel.modelName,
-                    freeModel.endpoint,
                   )
                   if (generatedTitle && generatedTitle !== 'New Chat') {
                     updatedChat = { ...updatedChat, title: generatedTitle }
@@ -543,8 +538,6 @@ export function useChatMessaging({
       models,
       effectiveModel,
       systemPrompt,
-      getApiKeyFromHook,
-      apiKey,
       maxMessages,
       rules,
       updateChatWithHistoryCheck,
@@ -566,20 +559,15 @@ export function useChatMessaging({
     currentChatIdRef.current = currentChat?.id || ''
   }, [currentChat])
 
-  // Use the abstracted API key hook
-  const getApiKey = getApiKeyFromHook
-
   return {
     input,
     loadingState,
     inputRef,
     isThinking,
     isWaitingForResponse,
-    apiKey,
     setInput,
     handleSubmit,
     handleQuery,
     cancelGeneration,
-    getApiKey,
   }
 }

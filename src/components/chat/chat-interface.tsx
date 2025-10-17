@@ -1,5 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
-
 'use client'
 
 import {
@@ -339,7 +337,6 @@ export function ChatInterface({
     selectedModel,
     expandedLabel,
     windowWidth,
-    apiKey,
 
     // Setters
     setInput,
@@ -361,7 +358,6 @@ export function ChatInterface({
     handleModelSelect,
     cancelGeneration,
     updateChatTitle,
-    getApiKey,
     reloadChats,
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
@@ -754,7 +750,12 @@ export function ChatInterface({
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [checkScrollPosition, currentChat?.id, scrollToBottom])
+  }, [
+    checkScrollPosition,
+    currentChat?.id,
+    currentChat?.messages,
+    scrollToBottom,
+  ])
 
   // Re-check button visibility when content size changes (no scrolling)
   useEffect(() => {
@@ -1269,6 +1270,9 @@ export function ChatInterface({
                     isPremium={isPremium}
                     hasMessages={
                       currentChat?.messages && currentChat.messages.length > 0
+                    }
+                    audioModel={
+                      models.find((m) => m.type === 'audio')?.modelName
                     }
                   />
                 </form>

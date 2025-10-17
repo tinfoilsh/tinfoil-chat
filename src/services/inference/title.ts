@@ -3,12 +3,10 @@ import { getTinfoilClient } from './tinfoil-client'
 
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
-  apiKey?: string | null,
   freeModelName?: string,
-  freeModelEndpoint?: string,
 ): Promise<string> {
   if (!messages || messages.length === 0) return 'New Chat'
-  if (!freeModelName || !apiKey) return 'New Chat'
+  if (!freeModelName) return 'New Chat'
 
   try {
     const conversationForTitle = messages
@@ -16,7 +14,7 @@ export async function generateTitle(
       .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
       .join('\n\n')
 
-    const client = getTinfoilClient(apiKey)
+    const client = await getTinfoilClient()
 
     const completion = await client.chat.completions.create({
       model: freeModelName,
