@@ -1,4 +1,5 @@
 import { CONSTANTS } from '@/components/chat/constants'
+import { logError } from '@/utils/error-handling'
 import { getTinfoilClient } from './tinfoil-client'
 
 export async function generateTitle(
@@ -35,7 +36,14 @@ export async function generateTitle(
       return cleanTitle
     }
     return 'New Chat'
-  } catch {
+  } catch (error) {
+    logError('Failed to generate title', error, {
+      component: 'title',
+      action: 'generateTitle',
+      metadata: {
+        modelName: freeModelName,
+      },
+    })
     return 'New Chat'
   }
 }
