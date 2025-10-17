@@ -1,4 +1,4 @@
-export const VERIFIER_VERSION = 'v0.1.0'
+export const VERIFIER_VERSION = 'v0.10.1'
 
 export const VERIFIER_CONSTANTS = {
   VERSION: VERIFIER_VERSION,
