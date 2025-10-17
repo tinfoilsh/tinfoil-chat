@@ -22,12 +22,20 @@ async function fetchApiKey(): Promise<string> {
   }
 
   if (!getTokenFn) {
+    logError('No auth token getter available', undefined, {
+      component: 'tinfoil-client',
+      action: 'fetchApiKey',
+    })
     return PLACEHOLDER_API_KEY
   }
 
   try {
     const token = await getTokenFn()
     if (!token) {
+      logError('Auth token is null or undefined', undefined, {
+        component: 'tinfoil-client',
+        action: 'fetchApiKey',
+      })
       return PLACEHOLDER_API_KEY
     }
 
@@ -38,6 +46,16 @@ async function fetchApiKey(): Promise<string> {
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
+      logError('Failed to fetch API key from server', undefined, {
+        component: 'tinfoil-client',
+        action: 'fetchApiKey',
+        metadata: {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+        },
+      })
       throw new Error(`Failed to get API key: ${response.status}`)
     }
 
