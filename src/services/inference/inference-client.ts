@@ -10,7 +10,6 @@ export interface SendChatStreamParams {
   rules?: string
   updatedMessages: Message[]
   maxMessages: number
-  getApiKey: () => Promise<string>
   signal: AbortSignal
 }
 
@@ -77,15 +76,8 @@ function buildMessages(
 export async function sendChatStream(
   params: SendChatStreamParams,
 ): Promise<Response> {
-  const {
-    model,
-    systemPrompt,
-    rules,
-    updatedMessages,
-    maxMessages,
-    getApiKey,
-    signal,
-  } = params
+  const { model, systemPrompt, rules, updatedMessages, maxMessages, signal } =
+    params
 
   if (model.modelName === 'dev-simulator') {
     const simulatorUrl = '/api/dev/simulator'
@@ -144,8 +136,7 @@ export async function sendChatStream(
   }
 
   try {
-    const apiKey = await getApiKey()
-    const client = getTinfoilClient(apiKey)
+    const client = await getTinfoilClient()
     const messages = buildMessages(
       model,
       systemPrompt,
