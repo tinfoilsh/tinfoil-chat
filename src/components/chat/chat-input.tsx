@@ -1,5 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
-
 import {
   FaFile,
   FaFileAlt,
@@ -15,8 +13,8 @@ import {
   FiArrowUp,
 } from '@/components/icons/lazy-icons'
 import { cn } from '@/components/ui/utils'
-import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
+import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
@@ -46,6 +44,7 @@ type ChatInputProps = {
   removeDocument?: (id: string) => void
   isPremium?: boolean
   hasMessages?: boolean
+  audioModel?: string
 }
 
 // Component for Mac-style file icons
@@ -220,12 +219,10 @@ export function ChatInput({
   removeDocument,
   isPremium,
   hasMessages,
+  audioModel,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
-
-  // Use the abstracted API key hook
-  const { getApiKey } = useApiKey()
 
   // --- Speech-to-text state ---
   const [isRecording, setIsRecording] = useState(false)
@@ -275,46 +272,31 @@ export function ChatInput({
       try {
         setIsTranscribing(true)
 
-        const formData = new FormData()
-        formData.append('file', blob, 'audio.wav')
-        formData.append('model', 'whisper-large-v3-turbo')
-        formData.append('response_format', 'text')
-
-        // Get the API key (will use cached value if available)
-        const apiKey = await getApiKey()
-        if (!apiKey) {
-          throw new Error('No API key available for transcription')
+        if (!audioModel) {
+          throw new Error('No audio model available for transcription')
         }
 
-        // Use the proxy with the audio transcription endpoint
-        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
+        const client = await getTinfoilClient()
+        const file = new File([blob], 'audio.wav', { type: 'audio/wav' })
 
-        const response = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: formData,
+        const transcription = await client.audio.transcriptions.create({
+          file,
+          model: audioModel,
+          response_format: 'text',
         })
 
-        if (!response.ok) {
-          throw new Error(
-            `Transcription failed: ${response.status} ${response.statusText}`,
-          )
-        }
-
-        const data = await response.json()
-        const text = data.text || data.transcription || ''
+        const text =
+          typeof transcription === 'string'
+            ? transcription
+            : (transcription as any).text
 
         if (text) {
           const currentInput = input.trim()
           const newText = text.trim()
 
           if (currentInput) {
-            // There's existing text, append the new transcription
             setInput(currentInput + ' ' + newText)
           } else {
-            // No existing text, set the transcription
             setInput(newText)
           }
         } else {
@@ -332,7 +314,7 @@ export function ChatInput({
         setIsTranscribing(false)
       }
     },
-    [setInput, toast, getApiKey, input],
+    [setInput, toast, input, audioModel],
   )
 
   const startRecording = useCallback(async () => {
@@ -629,7 +611,7 @@ export function ChatInput({
           </button>
 
           <div className="flex items-center gap-2">
-            {isPremium && (
+            {isPremium && audioModel && (
               <button
                 type="button"
                 onClick={isRecording ? stopRecording : startRecording}
