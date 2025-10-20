@@ -2,6 +2,7 @@ import type { BaseModel } from '@/app/config/models'
 import { ChatError } from '@/components/chat/chat-utils'
 import type { Message } from '@/components/chat/types'
 import { logError } from '@/utils/error-handling'
+import { ChatQueryBuilder } from './chat-query-builder'
 import { getTinfoilClient } from './tinfoil-client'
 
 export interface SendChatStreamParams {
@@ -13,66 +14,6 @@ export interface SendChatStreamParams {
   signal: AbortSignal
 }
 
-function buildMessages(
-  model: BaseModel,
-  systemPrompt: string,
-  rules: string | undefined,
-  updatedMessages: Message[],
-  maxMessages: number,
-): Array<any> {
-  let finalSystemPrompt = systemPrompt.replaceAll('{MODEL_NAME}', model.name)
-  if (rules) {
-    const processedRules = rules.replaceAll('{MODEL_NAME}', model.name)
-    finalSystemPrompt += '\n' + processedRules
-  }
-
-  return [
-    { role: 'system', content: finalSystemPrompt },
-    ...updatedMessages.slice(-maxMessages).map((msg) => {
-      if (msg.imageData && msg.imageData.length > 0 && model.multimodal) {
-        const content = [
-          {
-            type: 'text',
-            text: msg.documentContent
-              ? `${msg.content}\n\n${
-                  msg.documents
-                    ?.map(
-                      (doc) =>
-                        `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`,
-                    )
-                    .join('\n\n') ||
-                  `Document contents:\n${msg.documentContent}`
-                }`
-              : msg.content,
-          },
-          ...msg.imageData.map((imgData) => ({
-            type: 'image_url',
-            image_url: {
-              url: `data:${imgData.mimeType};base64,${imgData.base64}`,
-            },
-          })),
-        ]
-
-        return { role: msg.role, content }
-      }
-
-      return {
-        role: msg.role,
-        content: msg.documentContent
-          ? `${msg.content}\n\n${
-              msg.documents
-                ?.map(
-                  (doc) =>
-                    `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`,
-                )
-                .join('\n\n') || `Document contents:\n${msg.documentContent}`
-            }`
-          : msg.content,
-      }
-    }),
-  ]
-}
-
 export async function sendChatStream(
   params: SendChatStreamParams,
 ): Promise<Response> {
@@ -81,13 +22,13 @@ export async function sendChatStream(
 
   if (model.modelName === 'dev-simulator') {
     const simulatorUrl = '/api/dev/simulator'
-    const messages = buildMessages(
+    const messages = ChatQueryBuilder.buildMessages({
       model,
       systemPrompt,
       rules,
-      updatedMessages,
+      messages: updatedMessages,
       maxMessages,
-    )
+    })
 
     try {
       const response = await fetch(simulatorUrl, {
@@ -137,13 +78,13 @@ export async function sendChatStream(
 
   try {
     const client = await getTinfoilClient()
-    const messages = buildMessages(
+    const messages = ChatQueryBuilder.buildMessages({
       model,
       systemPrompt,
       rules,
-      updatedMessages,
+      messages: updatedMessages,
       maxMessages,
-    )
+    })
 
     await client.ready()
 
