@@ -94,6 +94,7 @@ export const MessageContent = memo(function MessageContent({
       remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
       components={{
+        hr: () => null, // Don't render horizontal rules
         code({
           node,
           className,
