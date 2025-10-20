@@ -9,19 +9,23 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { memo, useEffect, useState } from 'react'
 
 type VerificationStep = {
-  id: 'runtime' | 'code' | 'security'
+  id: string
   label: string
   description: string
-  status: 'pending' | 'loading' | 'success' | 'error'
+  status: 'pending' | 'loading' | 'success' | 'failed' | 'error'
 }
 
 type VerificationStatusDisplayProps = {
   isDarkMode: boolean
   onOpenVerifier: () => void
-  verificationState?: {
-    code: { status: string }
-    runtime: { status: string }
-    security: { status: string }
+  verificationDocument?: {
+    securityVerified?: boolean
+    steps?: {
+      [key: string]: {
+        status: 'pending' | 'running' | 'success' | 'failed' | 'error'
+        error?: string
+      }
+    }
   }
   isCompact?: boolean
 }
@@ -30,40 +34,77 @@ export const VerificationStatusDisplay = memo(
   function VerificationStatusDisplay({
     isDarkMode,
     onOpenVerifier,
-    verificationState,
+    verificationDocument,
     isCompact = false,
   }: VerificationStatusDisplayProps) {
     const [isAnimating, setIsAnimating] = useState(false)
 
-    // Convert verification state to steps
-    const steps: VerificationStep[] = [
-      {
-        id: 'runtime',
-        label: 'Hardware Attestation',
-        description: 'Verifying secure hardware enclave',
-        status: (verificationState?.runtime?.status ||
-          'pending') as VerificationStep['status'],
-      },
-      {
-        id: 'code',
-        label: 'Code Integrity',
-        description: 'Verifying code integrity',
-        status: (verificationState?.code?.status ||
-          'pending') as VerificationStep['status'],
-      },
-      {
-        id: 'security',
-        label: 'Chat Security',
-        description: 'Matching measurements',
-        status: (verificationState?.security?.status ||
-          'pending') as VerificationStep['status'],
-      },
-    ]
+    // Convert verification document to steps
+    const steps: VerificationStep[] = []
+
+    // Map verification document steps to display steps
+    if (verificationDocument?.steps) {
+      const stepMapping = {
+        verifyEnclave: {
+          label: 'Hardware Attestation',
+          description: 'Verifying secure hardware enclave',
+        },
+        verifyCode: {
+          label: 'Code Integrity',
+          description: 'Verifying code integrity',
+        },
+        compareMeasurements: {
+          label: 'Chat Security',
+          description: 'Matching measurements',
+        },
+      }
+
+      Object.entries(stepMapping).forEach(([stepId, config]) => {
+        if (verificationDocument.steps?.[stepId]) {
+          const step = verificationDocument.steps[stepId]
+          steps.push({
+            id: stepId,
+            label: config.label,
+            description: config.description,
+            status:
+              step.status === 'running'
+                ? 'loading'
+                : step.status === 'failed'
+                  ? 'error'
+                  : (step.status as VerificationStep['status']),
+          })
+        }
+      })
+    }
+
+    // If no steps, show default pending state
+    if (steps.length === 0) {
+      steps.push(
+        {
+          id: 'verifyEnclave',
+          label: 'Hardware Attestation',
+          description: 'Verifying secure hardware enclave',
+          status: 'pending',
+        },
+        {
+          id: 'verifyCode',
+          label: 'Code Integrity',
+          description: 'Verifying code integrity',
+          status: 'pending',
+        },
+        {
+          id: 'compareMeasurements',
+          label: 'Chat Security',
+          description: 'Matching measurements',
+          status: 'pending',
+        },
+      )
+    }
 
     // Check overall status
     const isLoading = steps.some((step) => step.status === 'loading')
-    const isComplete = steps.every((step) => step.status === 'success')
-    const hasError = steps.some((step) => step.status === 'error')
+    const isComplete = verificationDocument?.securityVerified === true
+    const hasError = verificationDocument?.securityVerified === false
 
     // Control animation based on loading state
     useEffect(() => {

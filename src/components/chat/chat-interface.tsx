@@ -35,7 +35,6 @@ import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
-import type { VerificationState } from './types'
 // Lazy-load modals that aren't shown on initial load
 const CloudSyncIntroModal = dynamic(
   () =>
@@ -56,7 +55,7 @@ const FirstLoginKeyModal = dynamic(
 )
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
 const VerifierSidebarLazy = dynamic(
-  () => import('../verifier/verifier-sidebar').then((m) => m.VerifierSidebar),
+  () => import('../verification-sidebar').then((m) => m.VerifierSidebar),
   { ssr: false },
 )
 const SettingsSidebarLazy = dynamic(
@@ -69,7 +68,7 @@ const ShareModalLazy = dynamic(
 )
 
 type ChatInterfaceProps = {
-  verificationState?: VerificationState
+  verificationState?: any
   showVerifyButton?: boolean
   minHeight?: string
   inputMinHeight?: string
@@ -153,9 +152,8 @@ export function ChatInterface({
     ProcessedDocument[]
   >([])
 
-  // State for tracking verification status
-  const [currentVerificationState, setCurrentVerificationState] =
-    useState<any>(null)
+  // State for tracking verification document
+  const [verificationDocument, setVerificationDocument] = useState<any>(null)
 
   // Get the user's email
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
@@ -369,6 +367,38 @@ export function ChatInterface({
     // Scroll on user send to keep view anchored when thinking placeholder appears
     scrollToBottom: scrollToBottom,
   })
+
+  // Initialize tinfoil client once when page loads
+  // This runs only once on mount, not on every auth change
+  useEffect(() => {
+    const initTinfoil = async () => {
+      try {
+        const { initializeTinfoilClient, getTinfoilClient } = await import(
+          '@/services/inference/tinfoil-client'
+        )
+        // Initialize in background - will use placeholder key if not signed in
+        await initializeTinfoilClient()
+
+        // Fetch the verification document after initialization
+        const client = await getTinfoilClient()
+        const doc = await (client as any).getVerificationDocument?.()
+        if (doc) {
+          setVerificationDocument(doc)
+          // Set verification status based on document
+          if (doc.securityVerified !== undefined) {
+            setVerificationComplete(true)
+            setVerificationSuccess(doc.securityVerified)
+          }
+        }
+      } catch (error) {
+        logError('Failed to initialize tinfoil client', error, {
+          component: 'ChatInterface',
+          action: 'initTinfoil',
+        })
+      }
+    }
+    initTinfoil()
+  }, [setVerificationComplete, setVerificationSuccess])
 
   // Effect to handle window resize and enforce single sidebar rule
   useEffect(() => {
@@ -1064,7 +1094,7 @@ export function ChatInterface({
           setVerificationComplete(true)
           setVerificationSuccess(success)
         }}
-        onVerificationUpdate={setCurrentVerificationState}
+        onVerificationUpdate={setVerificationDocument}
         isDarkMode={isDarkMode}
         isClient={isClient}
       />
@@ -1171,7 +1201,7 @@ export function ChatInterface({
                 isPremium={isPremium}
                 models={models}
                 subscriptionLoading={subscriptionLoading}
-                verificationState={currentVerificationState}
+                verificationState={verificationDocument}
                 onSubmit={wrappedHandleSubmit}
                 input={input}
                 setInput={setInput}

@@ -40,30 +40,6 @@ export type ModelInfo = {
 
 export type LabelType = 'verify' | 'model' | 'info' | null
 
-export type VerificationStatus = 'error' | 'pending' | 'loading' | 'success'
-
-export interface MeasurementData {
-  measurement?: string
-  certificate?: string
-}
-
-export type VerificationState = {
-  code: {
-    status: VerificationStatus
-    measurements?: MeasurementData
-    error?: string
-  }
-  runtime: {
-    status: VerificationStatus
-    measurements?: string
-    error?: string
-  }
-  security: {
-    status: VerificationStatus
-    error?: string
-  }
-}
-
 // Document processing types
 export type DocumentProcessingStatus =
   | 'idle'
