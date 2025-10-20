@@ -101,14 +101,12 @@ export async function getTinfoilClient(): Promise<TinfoilAI> {
   return clientInstance!
 }
 
-// Initialize the client early and ensure it's ready
 export async function initializeTinfoilClient(): Promise<void> {
+  const client = await getTinfoilClient()
   try {
-    const client = await getTinfoilClient()
-    // Call ready() to initialize the client's verification
     await (client as any).ready?.()
   } catch (error) {
-    logError('Failed to initialize tinfoil client', error, {
+    logError('Tinfoil client verification failed', error, {
       component: 'tinfoil-client',
       action: 'initializeTinfoilClient',
     })

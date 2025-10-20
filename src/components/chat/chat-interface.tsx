@@ -369,7 +369,6 @@ export function ChatInterface({
   })
 
   // Initialize tinfoil client once when page loads
-  // This runs only once on mount, not on every auth change
   useEffect(() => {
     const initTinfoil = async () => {
       try {

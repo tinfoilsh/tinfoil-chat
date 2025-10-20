@@ -28,17 +28,22 @@ export function VerifierSidebar({
   const [isReady, setIsReady] = useState(false)
   const [verificationDocument, setVerificationDocument] = useState<any>(null)
 
-  // Fetch verification document from tinfoil client
   const fetchVerificationDocument = useCallback(async () => {
     try {
       const client = await getTinfoilClient()
-      // Ensure client is ready
       await (client as any).ready?.()
-      // Access the verification document from the client
+    } catch (error) {
+      logError('Tinfoil client verification failed', error, {
+        component: 'VerifierSidebar',
+        action: 'fetchVerificationDocument',
+      })
+    }
+
+    try {
+      const client = await getTinfoilClient()
       const doc = await (client as any).getVerificationDocument?.()
       if (doc) {
         setVerificationDocument(doc)
-        // Send to iframe if ready
         if (isReady && iframeRef.current) {
           iframeRef.current.contentWindow?.postMessage(
             {
@@ -48,7 +53,6 @@ export function VerifierSidebar({
             '*',
           )
         }
-        // Update verification status based on document
         if (onVerificationUpdate) {
           onVerificationUpdate(doc)
         }
