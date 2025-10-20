@@ -422,7 +422,10 @@ export function useChatMessaging({
               try {
                 const freeModel = models.find(
                   (m) =>
-                    m.type === 'chat' && m.chat === true && m.paid === false,
+                    m.type === 'chat' &&
+                    m.chat === true &&
+                    m.paid === false &&
+                    m.modelName !== 'dev-simulator',
                 )
 
                 if (freeModel) {
