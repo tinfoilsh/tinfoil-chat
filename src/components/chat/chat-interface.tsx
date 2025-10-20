@@ -689,9 +689,12 @@ export function ChatInterface({
     const docContent =
       completedDocuments.length > 0
         ? completedDocuments
-            .map((doc) => doc.content)
+            .map(
+              (doc) =>
+                `Document title: ${doc.name}\nDocument contents:\n${doc.content}`,
+            )
             .filter((content) => content)
-            .join('\n')
+            .join('\n\n')
         : undefined
 
     const documentNames =

@@ -187,15 +187,7 @@ export class ChatQueryBuilder {
     let textContent = msg.content
 
     if (msg.documentContent) {
-      const documentText =
-        msg.documents
-          ?.map(
-            (doc) =>
-              `Document title: ${doc.name}\nDocument contents:\n${msg.documentContent}`,
-          )
-          .join('\n\n') || `Document contents:\n${msg.documentContent}`
-
-      textContent = `${msg.content}\n\n${documentText}`
+      textContent = `${msg.content}\n\n${msg.documentContent}`
     }
 
     // Handle multimodal content (images)
