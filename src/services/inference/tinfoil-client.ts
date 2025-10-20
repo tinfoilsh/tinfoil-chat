@@ -32,10 +32,7 @@ async function fetchApiKey(): Promise<string> {
   try {
     const token = await getTokenFn()
     if (!token) {
-      logError('Auth token is null or undefined', undefined, {
-        component: 'tinfoil-client',
-        action: 'fetchApiKey',
-      })
+      // This is expected when user is not signed in - just use placeholder
       return PLACEHOLDER_API_KEY
     }
 
