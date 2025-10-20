@@ -780,12 +780,8 @@ export function ChatInterface({
       }, 50)
       return () => clearTimeout(timer)
     }
-  }, [
-    checkScrollPosition,
-    currentChat?.id,
-    currentChat?.messages,
-    scrollToBottom,
-  ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkScrollPosition, currentChat?.id, scrollToBottom])
 
   // Re-check button visibility when content size changes (no scrolling)
   useEffect(() => {
