@@ -4,7 +4,7 @@ export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
   MOBILE_BREAKPOINT: 768,
   SINGLE_SIDEBAR_BREAKPOINT: 1024, // Below this width, only one sidebar can be open at a time
-  DEFAULT_MODEL: 'llama3-3-70b-free' as AIModel,
+  DEFAULT_MODEL: 'llama-free' as AIModel,
   MAX_MESSAGES: 100,
   MAX_MESSAGE_LENGTH: 4000,
   MAX_DOCUMENT_SIZE_MB: 10,
