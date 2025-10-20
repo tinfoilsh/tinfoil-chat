@@ -25,8 +25,8 @@ import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
+import { ChatControls } from './chat-controls'
 import { ChatInput } from './chat-input'
-import { ChatLabels } from './chat-labels'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
@@ -1259,7 +1259,7 @@ export function ChatInterface({
                   className="mx-auto max-w-3xl px-3 md:px-8"
                 >
                   {/* Labels - Model selection only for premium users */}
-                  <ChatLabels
+                  <ChatControls
                     verificationComplete={verificationComplete}
                     verificationSuccess={verificationSuccess}
                     openAndExpandVerifier={modifiedOpenAndExpandVerifier}

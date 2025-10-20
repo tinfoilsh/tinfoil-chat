@@ -5,10 +5,6 @@ export const CONSTANTS = {
   MOBILE_BREAKPOINT: 768,
   SINGLE_SIDEBAR_BREAKPOINT: 1024, // Below this width, only one sidebar can be open at a time
   DEFAULT_MODEL: 'llama3-3-70b-free' as AIModel,
-  // Inference proxy URL for all model requests
-  INFERENCE_PROXY_URL: 'https://inference.tinfoil.sh',
-  // Inference proxy repository for verification
-  INFERENCE_PROXY_REPO: 'tinfoilsh/confidential-inference-proxy',
   MAX_MESSAGES: 100,
   MAX_MESSAGE_LENGTH: 4000,
   MAX_DOCUMENT_SIZE_MB: 10,
