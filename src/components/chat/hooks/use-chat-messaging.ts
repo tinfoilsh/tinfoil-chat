@@ -125,8 +125,7 @@ export function useChatMessaging({
           selectedModelData &&
           selectedModelData.type === 'chat' &&
           selectedModelData.chat === true &&
-          (selectedModelData.paid === undefined ||
-            selectedModelData.paid === false)
+          selectedModelData.paid === false
         ) {
           return selectedModel
         }
@@ -136,7 +135,7 @@ export function useChatMessaging({
           (model) =>
             model.type === 'chat' &&
             model.chat === true &&
-            (model.paid === undefined || model.paid === false),
+            model.paid === false,
         )
 
         // Use first free model if found, otherwise fallback to default
@@ -421,15 +420,10 @@ export function useChatMessaging({
               models.length > 0
             ) {
               try {
-                let freeModel = models.find((m) => m.modelName === 'llama-free')
-                if (!freeModel) {
-                  freeModel = models.find(
-                    (m) =>
-                      m.type === 'chat' &&
-                      m.chat === true &&
-                      (m.paid === false || m.paid === undefined),
-                  )
-                }
+                const freeModel = models.find(
+                  (m) =>
+                    m.type === 'chat' && m.chat === true && m.paid === false,
+                )
 
                 if (freeModel) {
                   const titleMessages = finalMessages.map((msg) => ({
