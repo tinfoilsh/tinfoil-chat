@@ -73,6 +73,7 @@ export class ChatQueryBuilder {
 
     // Add conversation history
     const recentMessages = conversationMessages.slice(-maxMessages)
+    let addedSystemInstructions = useSystemRole
 
     for (let index = 0; index < recentMessages.length; index++) {
       const msg = recentMessages[index]
@@ -81,7 +82,7 @@ export class ChatQueryBuilder {
         let userContent = this.buildUserContent(msg, model.multimodal)
 
         // For models that don't use system role: prepend system instructions to the FIRST user message only
-        if (!useSystemRole && index === 0) {
+        if (!addedSystemInstructions) {
           const instructions = processedRules
             ? `${processedSystemPrompt}\n\n${processedRules}`
             : processedSystemPrompt
@@ -96,6 +97,7 @@ export class ChatQueryBuilder {
             // String content
             userContent = `${instructions}\n\n${userContent}`
           }
+          addedSystemInstructions = true
         }
 
         result.push({
