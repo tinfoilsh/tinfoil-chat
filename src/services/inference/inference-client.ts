@@ -102,6 +102,10 @@ export async function sendChatStream(
       async start(controller) {
         try {
           for await (const chunk of stream) {
+            if (signal.aborted) {
+              controller.close()
+              return
+            }
             const sseData = `data: ${JSON.stringify(chunk)}\n\n`
             controller.enqueue(encoder.encode(sseData))
           }
