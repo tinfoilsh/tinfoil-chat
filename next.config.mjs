@@ -41,7 +41,7 @@ const nextConfig = {
               "font-src 'self' https://api.fontshare.com data:",
               "img-src 'self' data: blob: https:",
               "connect-src 'self' https://*.tinfoil.sh https://tinfoilsh.github.io https://plausible.io https://clerk.accounts.dev https://*.clerk.accounts.dev wss://*.clerk.accounts.dev",
-              "frame-src 'self' https://vercel.live https://challenges.cloudflare.com https://clerk.accounts.dev https://*.clerk.accounts.dev",
+              "frame-src 'self' https://vercel.live https://challenges.cloudflare.com https://clerk.accounts.dev https://*.clerk.accounts.dev https://verification-center.tinfoil.sh",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -62,7 +62,7 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
+            value: 'camera=(), microphone=(self), geolocation=()',
           },
           {
             key: 'Strict-Transport-Security',

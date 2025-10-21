@@ -26,7 +26,6 @@ interface UseChatStateReturn {
   selectedModel: AIModel
   expandedLabel: LabelType
   windowWidth: number
-  apiKey: string | null
 
   // Setters
   setInput: (input: string) => void
@@ -57,7 +56,6 @@ interface UseChatStateReturn {
   handleModelSelect: (modelName: AIModel) => void
   cancelGeneration: () => Promise<void>
   updateChatTitle: (chatId: string, newTitle: string) => void
-  getApiKey: () => Promise<string>
   reloadChats: () => Promise<void>
 }
 
@@ -134,12 +132,10 @@ export function useChatState({
     inputRef,
     isThinking,
     isWaitingForResponse,
-    apiKey,
     setInput,
     handleSubmit,
     handleQuery,
     cancelGeneration,
-    getApiKey,
   } = useChatMessaging({
     systemPrompt,
     rules,
@@ -224,7 +220,6 @@ export function useChatState({
     selectedModel,
     expandedLabel,
     windowWidth,
-    apiKey,
 
     // Setters
     setInput,
@@ -246,7 +241,6 @@ export function useChatState({
     handleModelSelect,
     cancelGeneration,
     updateChatTitle,
-    getApiKey,
     reloadChats,
   }
 }

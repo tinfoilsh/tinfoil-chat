@@ -84,11 +84,17 @@ export const MessageContent = memo(function MessageContent({
   const processedContent = processLatexTags(content)
   const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
 
+  // For user messages, render as plain text without markdown processing
+  if (isUser) {
+    return <div className="whitespace-pre-wrap break-words">{content}</div>
+  }
+
   return (
     <ReactMarkdown
       remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
       components={{
+        hr: () => null, // Don't render horizontal rules
         code({
           node,
           className,

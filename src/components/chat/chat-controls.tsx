@@ -10,7 +10,7 @@ import { useCallback } from 'react'
 import { ModelSelector } from './model-selector'
 import type { AIModel } from './types'
 
-type ChatLabelsProps = {
+type ChatControlsProps = {
   verificationComplete: boolean
   verificationSuccess?: boolean
   openAndExpandVerifier: () => void
@@ -31,7 +31,7 @@ type ChatLabelsProps = {
   contextUsagePercentage?: number
 }
 
-export function ChatLabels({
+export function ChatControls({
   verificationComplete,
   verificationSuccess,
   openAndExpandVerifier,
@@ -47,7 +47,7 @@ export function ChatLabels({
   hasMessages = false,
   isCompactMode = false,
   contextUsagePercentage,
-}: ChatLabelsProps) {
+}: ChatControlsProps) {
   const { isSignedIn } = useAuth()
   const { openSignIn } = useClerk()
   // Model selection handler - enforces handleModelSelect is defined

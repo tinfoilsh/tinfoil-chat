@@ -14,9 +14,9 @@
  * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
  */
 import { type BaseModel } from '@/app/config/models'
-import { useApiKey } from '@/hooks/use-api-key'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
+import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -50,7 +50,6 @@ interface UseChatMessagingReturn {
   inputRef: React.RefObject<HTMLTextAreaElement>
   isThinking: boolean
   isWaitingForResponse: boolean
-  apiKey: string | null
   setInput: (input: string) => void
   handleSubmit: (e: React.FormEvent) => void
   handleQuery: (
@@ -61,7 +60,6 @@ interface UseChatMessagingReturn {
     systemPromptOverride?: string,
   ) => void
   cancelGeneration: () => Promise<void>
-  getApiKey: () => Promise<string>
 }
 
 export function useChatMessaging({
@@ -79,12 +77,12 @@ export function useChatMessaging({
   scrollToBottom,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
-  const { apiKey, getApiKey: getApiKeyFromHook } = useApiKey()
   const maxMessages = useMaxMessages()
 
-  // Initialize r2Storage with token getter
+  // Initialize r2Storage and tinfoil client with token getter
   useEffect(() => {
     r2Storage.setTokenGetter(getToken)
+    setAuthTokenGetter(getToken)
   }, [getToken])
 
   const [input, setInput] = useState('')
@@ -127,8 +125,7 @@ export function useChatMessaging({
           selectedModelData &&
           selectedModelData.type === 'chat' &&
           selectedModelData.chat === true &&
-          (selectedModelData.paid === undefined ||
-            selectedModelData.paid === false)
+          selectedModelData.paid === false
         ) {
           return selectedModel
         }
@@ -138,7 +135,7 @@ export function useChatMessaging({
           (model) =>
             model.type === 'chat' &&
             model.chat === true &&
-            (model.paid === undefined || model.paid === false),
+            model.paid === false,
         )
 
         // Use first free model if found, otherwise fallback to default
@@ -389,7 +386,6 @@ export function useChatMessaging({
           rules,
           updatedMessages,
           maxMessages,
-          getApiKey: getApiKeyFromHook,
           signal: controller.signal,
         })
 
@@ -424,15 +420,13 @@ export function useChatMessaging({
               models.length > 0
             ) {
               try {
-                let freeModel = models.find((m) => m.modelName === 'llama-free')
-                if (!freeModel) {
-                  freeModel = models.find(
-                    (m) =>
-                      m.type === 'chat' &&
-                      m.chat === true &&
-                      (m.paid === false || m.paid === undefined),
-                  )
-                }
+                const freeModel = models.find(
+                  (m) =>
+                    m.type === 'chat' &&
+                    m.chat === true &&
+                    m.paid === false &&
+                    m.modelName !== 'dev-simulator',
+                )
 
                 if (freeModel) {
                   const titleMessages = finalMessages.map((msg) => ({
@@ -441,9 +435,7 @@ export function useChatMessaging({
                   }))
                   const generatedTitle = await generateTitle(
                     titleMessages,
-                    apiKey,
                     freeModel.modelName,
-                    freeModel.endpoint,
                   )
                   if (generatedTitle && generatedTitle !== 'New Chat') {
                     updatedChat = { ...updatedChat, title: generatedTitle }
@@ -508,9 +500,12 @@ export function useChatMessaging({
             action: 'handleQuery',
           })
 
+          const errorMsg =
+            error instanceof Error ? error.message : 'Unknown error occurred'
+
           const errorMessage: Message = {
             role: 'assistant',
-            content: 'Sorry, I encountered an error. Please try again.',
+            content: `Error: ${errorMsg}`,
             timestamp: new Date(),
             isError: true,
           }
@@ -540,8 +535,6 @@ export function useChatMessaging({
       models,
       effectiveModel,
       systemPrompt,
-      getApiKeyFromHook,
-      apiKey,
       maxMessages,
       rules,
       updateChatWithHistoryCheck,
@@ -563,20 +556,15 @@ export function useChatMessaging({
     currentChatIdRef.current = currentChat?.id || ''
   }, [currentChat])
 
-  // Use the abstracted API key hook
-  const getApiKey = getApiKeyFromHook
-
   return {
     input,
     loadingState,
     inputRef,
     isThinking,
     isWaitingForResponse,
-    apiKey,
     setInput,
     handleSubmit,
     handleQuery,
     cancelGeneration,
-    getApiKey,
   }
 }

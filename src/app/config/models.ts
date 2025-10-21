@@ -26,8 +26,8 @@ export const isModelAvailable = (
   model: BaseModel,
   isPremium: boolean,
 ): boolean => {
-  // If paid is undefined or false, it's a free model - always available
-  if (model.paid === undefined || model.paid === false) {
+  // If paid is explicitly false, it's a free model - always available
+  if (model.paid === false) {
     return true
   }
 

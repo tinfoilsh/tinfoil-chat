@@ -1,22 +1,7 @@
-/* eslint-disable react/no-unescaped-entities */
-
-import {
-  FaFile,
-  FaFileAlt,
-  FaFileArchive,
-  FaFileAudio,
-  FaFileCode,
-  FaFileExcel,
-  FaFileImage,
-  FaFilePdf,
-  FaFilePowerpoint,
-  FaFileVideo,
-  FaFileWord,
-  FiArrowUp,
-} from '@/components/icons/lazy-icons'
+import { FiArrowUp } from '@/components/icons/lazy-icons'
 import { cn } from '@/components/ui/utils'
-import { useApiKey } from '@/hooks/use-api-key'
 import { useToast } from '@/hooks/use-toast'
+import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
@@ -26,8 +11,8 @@ import {
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
 import { useCallback, useRef, useState } from 'react'
+import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
-import { getFileIconType } from './document-uploader'
 import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
 
@@ -46,163 +31,7 @@ type ChatInputProps = {
   removeDocument?: (id: string) => void
   isPremium?: boolean
   hasMessages?: boolean
-}
-
-// Component for Mac-style file icons
-const MacFileIcon = ({
-  filename,
-  size = 20,
-  isDarkMode = false,
-  isUploading = false,
-  compact = false,
-}: {
-  filename: string
-  size?: number
-  isDarkMode?: boolean
-  isUploading?: boolean
-  compact?: boolean
-}) => {
-  const type = getFileIconType(filename)
-
-  // Get spinner size based on file icon size - using proper Tailwind classes
-  const getSpinnerClasses = (iconSize: number) => {
-    if (iconSize <= 16) return 'h-4 w-4'
-    if (iconSize <= 24) return 'h-5 w-5'
-    if (iconSize <= 32) return 'h-6 w-6'
-    return 'h-8 w-8'
-  }
-
-  // If uploading, show spinner instead of file icon
-  if (isUploading) {
-    return (
-      <div className="flex flex-col items-center">
-        <div className="flex items-center justify-center rounded-md bg-surface-card/80 p-1 shadow-sm">
-          <svg
-            className={`${getSpinnerClasses(size)} animate-spin text-emerald-500`}
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            ></circle>
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
-        </div>
-      </div>
-    )
-  }
-
-  // Get appropriate icon based on file type
-  let FileIcon = FaFile
-  let bgColorLight = 'bg-surface-card'
-  let bgColorDark = 'bg-surface-chat/60'
-  let iconColor = 'text-content-secondary'
-
-  switch (type) {
-    case 'pdf':
-      FileIcon = FaFilePdf
-      bgColorLight = 'bg-red-50'
-      bgColorDark = 'bg-red-900/20'
-      iconColor = 'text-red-500'
-      break
-    case 'docx':
-      FileIcon = FaFileWord
-      bgColorLight = 'bg-blue-50'
-      bgColorDark = 'bg-blue-900/20'
-      iconColor = 'text-blue-500'
-      break
-    case 'xlsx':
-    case 'csv':
-      FileIcon = FaFileExcel
-      bgColorLight = 'bg-green-50'
-      bgColorDark = 'bg-green-900/20'
-      iconColor = 'text-green-500'
-      break
-    case 'pptx':
-      FileIcon = FaFilePowerpoint
-      bgColorLight = 'bg-orange-50'
-      bgColorDark = 'bg-orange-900/20'
-      iconColor = 'text-orange-500'
-      break
-    case 'image':
-      FileIcon = FaFileImage
-      bgColorLight = 'bg-indigo-50'
-      bgColorDark = 'bg-indigo-900/20'
-      iconColor = 'text-indigo-500'
-      break
-    case 'audio':
-      FileIcon = FaFileAudio
-      bgColorLight = 'bg-purple-50'
-      bgColorDark = 'bg-purple-900/20'
-      iconColor = 'text-purple-500'
-      break
-    case 'video':
-      FileIcon = FaFileVideo
-      bgColorLight = 'bg-yellow-50'
-      bgColorDark = 'bg-yellow-900/20'
-      iconColor = 'text-yellow-500'
-      break
-    case 'zip':
-      FileIcon = FaFileArchive
-      bgColorLight = 'bg-amber-50'
-      bgColorDark = 'bg-amber-900/20'
-      iconColor = 'text-amber-500'
-      break
-    case 'html':
-    case 'js':
-    case 'ts':
-    case 'css':
-      FileIcon = FaFileCode
-      bgColorLight = 'bg-cyan-50'
-      bgColorDark = 'bg-cyan-900/20'
-      iconColor = 'text-cyan-500'
-      break
-    case 'txt':
-      FileIcon = FaFileAlt
-      bgColorLight = 'bg-slate-50'
-      bgColorDark = 'bg-slate-700/30'
-      iconColor = 'text-slate-500'
-      break
-    case 'md':
-      FileIcon = FaFileAlt
-      bgColorLight = 'bg-emerald-50'
-      bgColorDark = 'bg-emerald-900/20'
-      iconColor = 'text-emerald-500'
-      break
-    default:
-      FileIcon = FaFile
-      bgColorLight = 'bg-surface-card'
-      bgColorDark = 'bg-surface-chat/60'
-      iconColor = 'text-content-secondary'
-  }
-
-  const bgColor = isDarkMode ? bgColorDark : bgColorLight
-
-  const iconElement = (
-    <div
-      className={`flex items-center justify-center rounded-md ${
-        compact ? '' : 'p-1 shadow-sm'
-      } ${bgColor}`}
-    >
-      <FileIcon className={iconColor} style={{ fontSize: size }} />
-    </div>
-  )
-
-  if (compact) {
-    return iconElement
-  }
-
-  return <div className="flex flex-col items-center">{iconElement}</div>
+  audioModel?: string
 }
 
 export function ChatInput({
@@ -220,12 +49,10 @@ export function ChatInput({
   removeDocument,
   isPremium,
   hasMessages,
+  audioModel,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
-
-  // Use the abstracted API key hook
-  const { getApiKey } = useApiKey()
 
   // --- Speech-to-text state ---
   const [isRecording, setIsRecording] = useState(false)
@@ -275,46 +102,31 @@ export function ChatInput({
       try {
         setIsTranscribing(true)
 
-        const formData = new FormData()
-        formData.append('file', blob, 'audio.wav')
-        formData.append('model', 'whisper-large-v3-turbo')
-        formData.append('response_format', 'text')
-
-        // Get the API key (will use cached value if available)
-        const apiKey = await getApiKey()
-        if (!apiKey) {
-          throw new Error('No API key available for transcription')
+        if (!audioModel) {
+          throw new Error('No audio model available for transcription')
         }
 
-        // Use the proxy with the audio transcription endpoint
-        const proxyUrl = `${CONSTANTS.INFERENCE_PROXY_URL}/v1/audio/transcriptions`
+        const client = await getTinfoilClient()
+        const file = new File([blob], 'audio.wav', { type: 'audio/wav' })
 
-        const response = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: formData,
+        const transcription = await client.audio.transcriptions.create({
+          file,
+          model: audioModel,
+          response_format: 'text',
         })
 
-        if (!response.ok) {
-          throw new Error(
-            `Transcription failed: ${response.status} ${response.statusText}`,
-          )
-        }
-
-        const data = await response.json()
-        const text = data.text || data.transcription || ''
+        const text =
+          typeof transcription === 'string'
+            ? transcription
+            : (transcription as any).text
 
         if (text) {
           const currentInput = input.trim()
           const newText = text.trim()
 
           if (currentInput) {
-            // There's existing text, append the new transcription
             setInput(currentInput + ' ' + newText)
           } else {
-            // No existing text, set the transcription
             setInput(newText)
           }
         } else {
@@ -332,7 +144,7 @@ export function ChatInput({
         setIsTranscribing(false)
       }
     },
-    [setInput, toast, getApiKey, input],
+    [setInput, toast, input, audioModel],
   )
 
   const startRecording = useCallback(async () => {
@@ -629,7 +441,7 @@ export function ChatInput({
           </button>
 
           <div className="flex items-center gap-2">
-            {isPremium && (
+            {isPremium && audioModel && (
               <button
                 type="button"
                 onClick={isRecording ? stopRecording : startRecording}
