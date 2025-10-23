@@ -49,7 +49,7 @@ const hasActiveSubscription = (
     return false
   }
 
-  if (status === 'active') {
+  if (status === 'active' || status === 'trialing') {
     return true
   }
 
