@@ -141,6 +141,9 @@ export function ChatInterface({
   // State for share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
+  // Track if user has sent their first message (for cloud sync modal)
+  const [hasSentFirstMessage, setHasSentFirstMessage] = useState(false)
+
   // State for encryption key modal
   const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
     useState(false)
@@ -677,6 +680,11 @@ export function ChatInterface({
     // Don't proceed if there's no input text
     if (!input.trim()) {
       return
+    }
+
+    // Mark that user has sent their first message (for cloud sync modal)
+    if (!hasSentFirstMessage) {
+      setHasSentFirstMessage(true)
     }
 
     // Don't auto-scroll here - let the message append handler do it
@@ -1358,8 +1366,8 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
-      {/* Cloud Sync Setup Modal for first-time users */}
-      {isFirstTimeUser && isSignedIn && (
+      {/* Cloud Sync Setup Modal for first-time users - show after first message */}
+      {isFirstTimeUser && isSignedIn && hasSentFirstMessage && (
         <CloudSyncSetupModal
           isOpen={true}
           onClose={() => clearFirstTimeUser()}
