@@ -2,6 +2,7 @@ import { CLOUD_SYNC } from '@/config'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -51,11 +52,14 @@ export function useCloudSync() {
         cloudSync.setTokenGetter(getToken)
         r2Storage.setTokenGetter(getToken)
 
+        // Check if cloud sync is enabled
+        const cloudSyncEnabled = isCloudSyncEnabled()
+
         // Check if user already has a key before initializing
         const existingKey = localStorage.getItem('tinfoil-encryption-key')
         const isFirstTime = !existingKey
 
-        // Initialize encryption
+        // Initialize encryption (does not auto-generate keys)
         const key = await encryptionService.initialize()
 
         if (isMountedRef.current) {
@@ -64,6 +68,15 @@ export function useCloudSync() {
             encryptionKey: key,
             isFirstTimeUser: isFirstTime,
           }))
+        }
+
+        // Only perform sync operations if cloud sync is enabled
+        if (!cloudSyncEnabled) {
+          logInfo('Cloud sync is disabled, skipping sync operations', {
+            component: 'useCloudSync',
+            action: 'initializeSync',
+          })
+          return
         }
 
         // Check if there's a pending migration sync
@@ -151,8 +164,16 @@ export function useCloudSync() {
 
   // Sync chats
   const syncChats = useCallback(async () => {
+    // Check if cloud sync is enabled
+    if (!isCloudSyncEnabled()) {
+      logInfo('Cloud sync is disabled, skipping sync', {
+        component: 'useCloudSync',
+        action: 'syncChats',
+      })
+      return false
+    }
+
     if (syncingRef.current) {
-      // Log when sync is blocked
       logInfo('Sync request blocked - sync already in progress', {
         component: 'useCloudSync',
         action: 'syncChats',

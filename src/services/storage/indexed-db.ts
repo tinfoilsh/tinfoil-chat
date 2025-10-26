@@ -17,6 +17,7 @@ export interface StoredChat extends Chat {
   encryptedData?: string
   version?: number // Storage format version
   loadedAt?: number // Timestamp when chat was loaded from pagination
+  isLocalOnly?: boolean // True if chat should never be synced to cloud (created when sync was disabled)
 }
 
 const DB_NAME = 'tinfoil-chat'
