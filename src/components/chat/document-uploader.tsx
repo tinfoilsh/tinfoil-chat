@@ -6,9 +6,9 @@ import {
 } from '@/utils/file-types'
 import { isImageFile, scaleAndEncodeImage } from '@/utils/preprocessing'
 import { useState } from 'react'
+import { SecureClient } from 'tinfoil'
 import { CONSTANTS } from './constants'
 import type { DocumentProcessingResult } from './types'
-import { SecureClient } from 'tinfoil'
 
 /**
  * Re-export getFileIconType for backward compatibility
@@ -174,6 +174,12 @@ export const useDocumentUploader = (
         body: formData,
       })
 
+      // Handle 204 No Content response
+      if (response.status === 204) {
+        onSuccess('NO TEXT CONTENT', documentId, imageData)
+        return
+      }
+
       // Check if submission successful
       if (!response.ok) {
         const errorText = await response.text()
@@ -197,14 +203,9 @@ export const useDocumentUploader = (
         (await response.json()) as DocumentProcessingResult
 
       if (processingResult.document && processingResult.document.md_content) {
-        // Pass the content and image data if it's an image
         onSuccess(processingResult.document.md_content, documentId, imageData)
-      } else if (isImage) {
-        // For images with no text content, still pass the image data with empty content
-        // (imageData might be undefined if the model doesn't support multimodal)
-        onSuccess('', documentId, imageData)
       } else {
-        throw new Error('No document content received')
+        onSuccess('NO TEXT CONTENT', documentId, imageData)
       }
     } catch (error) {
       logError('Document processing failed', error, {
