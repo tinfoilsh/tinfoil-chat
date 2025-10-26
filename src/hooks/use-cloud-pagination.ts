@@ -2,6 +2,7 @@ import { CLOUD_SYNC, PAGINATION } from '@/config'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -53,7 +54,7 @@ export function useCloudPagination(
   const initializedRef = useRef(false)
 
   const initialize = useCallback(async () => {
-    if (!isSignedIn || !userId) return
+    if (!isSignedIn || !userId || !isCloudSyncEnabled()) return
 
     try {
       const allChats = await indexedDBStorage.getAllChats()
@@ -116,7 +117,7 @@ export function useCloudPagination(
   }, [isSignedIn, userId, pageSize])
 
   const loadMore = useCallback(async () => {
-    if (!isSignedIn || !userId || isLoading) return
+    if (!isSignedIn || !userId || isLoading || !isCloudSyncEnabled()) return
 
     // Save current state in case we need to rollback
     const previousToken = nextToken
@@ -176,9 +177,9 @@ export function useCloudPagination(
     return initialize()
   }, [initialize])
 
-  // Initialize when user changes
+  // Initialize when user changes (only if cloud sync is enabled)
   useEffect(() => {
-    if (isSignedIn && userId) {
+    if (isSignedIn && userId && isCloudSyncEnabled()) {
       void initialize()
     } else {
       setNextToken(undefined)

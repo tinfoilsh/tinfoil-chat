@@ -1187,8 +1187,16 @@ function ChatListItem({
                       ? '\u00A0' // Non-breaking space for consistent height
                       : formatRelativeTime(chat.createdAt)}
                 </div>
-                {/* Cloud sync indicator */}
-                {chat.messages.length > 0 &&
+                {/* Local-only chat indicator or cloud sync indicator */}
+                {(chat as any).isLocalOnly ? (
+                  <span
+                    className="font-aeonik-fono text-[10px] font-medium text-content-muted"
+                    title="This chat is stored locally and won't sync to cloud"
+                  >
+                    local
+                  </span>
+                ) : (
+                  chat.messages.length > 0 &&
                   !chat.syncedAt &&
                   (isSignedIn ? (
                     <AiOutlineCloudSync
@@ -1204,7 +1212,8 @@ function ChatListItem({
                       }`}
                       title="Local only - not saved to cloud"
                     />
-                  ))}
+                  ))
+                )}
               </div>
             </>
           )}

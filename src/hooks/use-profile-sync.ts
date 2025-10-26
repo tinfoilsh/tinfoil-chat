@@ -1,5 +1,6 @@
 import { CLOUD_SYNC } from '@/config'
 import { profileSync, type ProfileData } from '@/services/cloud/profile-sync'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef } from 'react'
@@ -235,7 +236,7 @@ export function useProfileSync() {
 
   // Sync profile from cloud to local
   const syncFromCloud = useCallback(async () => {
-    if (!isSignedIn) return
+    if (!isSignedIn || !isCloudSyncEnabled()) return
 
     // Skip sync if we have pending local changes
     if (hasPendingChanges.current) {
@@ -291,7 +292,7 @@ export function useProfileSync() {
 
   // Sync profile from local to cloud (debounced)
   const syncToCloud = useCallback(async () => {
-    if (!isSignedIn) return
+    if (!isSignedIn || !isCloudSyncEnabled()) return
 
     // Clear any existing debounce timer
     if (syncDebounceTimer.current) {
@@ -356,9 +357,9 @@ export function useProfileSync() {
     }, 2000) // 2 second debounce
   }, [isSignedIn, loadLocalSettings, hasProfileChanged])
 
-  // Initial sync when authenticated and periodic sync
+  // Initial sync when authenticated and periodic sync (only if cloud sync is enabled)
   useEffect(() => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !isCloudSyncEnabled()) {
       hasInitialized.current = false
       hasPendingChanges.current = false
       lastSyncedVersion.current = 0

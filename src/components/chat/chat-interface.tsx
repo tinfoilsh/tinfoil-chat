@@ -48,9 +48,11 @@ const EncryptionKeyModal = dynamic(
     import('../modals/encryption-key-modal').then((m) => m.EncryptionKeyModal),
   { ssr: false },
 )
-const FirstLoginKeyModal = dynamic(
+const CloudSyncSetupModal = dynamic(
   () =>
-    import('../modals/first-login-key-modal').then((m) => m.FirstLoginKeyModal),
+    import('../modals/cloud-sync-setup-modal').then(
+      (m) => m.CloudSyncSetupModal,
+    ),
   { ssr: false },
 )
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
@@ -1349,18 +1351,13 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
-      {/* First Login Key Modal */}
+      {/* Cloud Sync Setup Modal for first-time users */}
       {isFirstTimeUser && isSignedIn && (
-        <FirstLoginKeyModal
+        <CloudSyncSetupModal
           isOpen={true}
           onClose={() => clearFirstTimeUser()}
-          onNewKey={() => {
-            clearFirstTimeUser()
-            // Key is already generated, just close the modal
-          }}
-          onImportKey={async (key: string) => {
+          onSetupComplete={async (key: string) => {
             const syncResult = await setEncryptionKey(key)
-            // If sync happened (key changed), reload chats
             if (syncResult) {
               await retryProfileDecryption()
               await reloadChats()

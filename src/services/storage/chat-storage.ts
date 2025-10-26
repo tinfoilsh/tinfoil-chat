@@ -1,4 +1,5 @@
 import type { Chat } from '@/components/chat/types'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
 import { r2Storage } from '../cloud/r2-storage'
@@ -91,8 +92,8 @@ export class ChatStorageService {
 
     let chatToSave = chat
 
-    // If this is the first save (has temporary ID), try to get server ID
-    if (chat.hasTemporaryId) {
+    // If this is the first save (has temporary ID), try to get server ID (only if cloud sync is enabled)
+    if (chat.hasTemporaryId && isCloudSyncEnabled()) {
       // Check if we already have a server ID for this temp ID
       const cachedServerId = this.serverIdCache.get(chat.id)
 
@@ -144,6 +145,11 @@ export class ChatStorageService {
       }
     }
 
+    // Check if this is a new chat (first time saving) and mark as local if sync is disabled
+    const existingChat = await indexedDBStorage.getChat(chatToSave.id)
+    const isNewChat = !existingChat
+    const shouldMarkAsLocal = isNewChat && !isCloudSyncEnabled()
+
     // Save the chat
     const storageChat: StorageChat = {
       ...chatToSave,
@@ -152,6 +158,7 @@ export class ChatStorageService {
           ? chatToSave.createdAt.toISOString()
           : chatToSave.createdAt,
       updatedAt: new Date().toISOString(),
+      isLocalOnly: shouldMarkAsLocal || (existingChat?.isLocalOnly ?? false),
     }
     await indexedDBStorage.saveChat(storageChat)
     // Emit change event after local save
