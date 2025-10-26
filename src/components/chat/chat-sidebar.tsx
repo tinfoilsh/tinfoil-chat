@@ -1190,7 +1190,7 @@ function ChatListItem({
                 {/* Local-only chat indicator or cloud sync indicator */}
                 {(chat as any).isLocalOnly ? (
                   <span
-                    className="font-aeonik-fono text-[10px] font-medium text-content-muted"
+                    className="rounded bg-content-muted/20 px-1.5 py-0.5 font-aeonik-fono text-[10px] font-medium text-content-muted"
                     title="This chat is stored locally and won't sync to cloud"
                   >
                     local
