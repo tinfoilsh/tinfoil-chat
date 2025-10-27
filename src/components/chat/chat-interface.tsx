@@ -1360,21 +1360,24 @@ export function ChatInterface({
       />
 
       {/* Cloud Sync Setup Modal for first-time users - show after first message */}
-      {isFirstTimeUser && isSignedIn && hasSentFirstMessage && (
-        <CloudSyncSetupModal
-          isOpen={true}
-          onClose={() => clearFirstTimeUser()}
-          onSetupComplete={async (key: string) => {
-            const syncResult = await setEncryptionKey(key)
-            if (syncResult) {
-              await retryProfileDecryption()
-              await reloadChats()
-            }
-            clearFirstTimeUser()
-          }}
-          isDarkMode={isDarkMode}
-        />
-      )}
+      {isFirstTimeUser &&
+        isSignedIn &&
+        hasSentFirstMessage &&
+        !localStorage.getItem('hasSeenCloudSyncModal') && (
+          <CloudSyncSetupModal
+            isOpen={true}
+            onClose={() => clearFirstTimeUser()}
+            onSetupComplete={async (key: string) => {
+              const syncResult = await setEncryptionKey(key)
+              if (syncResult) {
+                await retryProfileDecryption()
+                await reloadChats()
+              }
+              clearFirstTimeUser()
+            }}
+            isDarkMode={isDarkMode}
+          />
+        )}
     </div>
   )
 }

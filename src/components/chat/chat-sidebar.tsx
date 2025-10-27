@@ -1,8 +1,4 @@
-import {
-  AiOutlineCloudSync,
-  FaLock,
-  MdOutlineCloudOff,
-} from '@/components/icons/lazy-icons'
+import { AiOutlineCloudSync, FaLock } from '@/components/icons/lazy-icons'
 import { API_BASE_URL, PAGINATION } from '@/config'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
@@ -1188,7 +1184,7 @@ function ChatListItem({
                       : formatRelativeTime(chat.createdAt)}
                 </div>
                 {/* Local-only chat indicator or cloud sync indicator */}
-                {(chat as any).isLocalOnly ? (
+                {(chat as any).isLocalOnly || !isSignedIn ? (
                   <span
                     className="rounded bg-content-muted/20 px-1.5 py-0.5 font-aeonik-fono text-[10px] font-medium text-content-muted"
                     title="This chat is stored locally and won't sync to cloud"
@@ -1197,22 +1193,14 @@ function ChatListItem({
                   </span>
                 ) : (
                   chat.messages.length > 0 &&
-                  !chat.syncedAt &&
-                  (isSignedIn ? (
+                  !chat.syncedAt && (
                     <AiOutlineCloudSync
                       className={`h-3 w-3 ${
                         isDarkMode ? 'text-content-muted' : 'text-content-muted'
                       }`}
                       title="Not synced to cloud"
                     />
-                  ) : (
-                    <MdOutlineCloudOff
-                      className={`h-3 w-3 ${
-                        isDarkMode ? 'text-content-muted' : 'text-content-muted'
-                      }`}
-                      title="Local only - not saved to cloud"
-                    />
-                  ))
+                  )
                 )}
               </div>
             </>
