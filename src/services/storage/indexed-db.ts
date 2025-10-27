@@ -217,6 +217,34 @@ export class IndexedDBStorage {
     })
   }
 
+  async deleteAllNonLocalChats(): Promise<number> {
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([CHATS_STORE], 'readwrite')
+      const store = transaction.objectStore(CHATS_STORE)
+      const request = store.openCursor()
+      let deletedCount = 0
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
+        if (cursor) {
+          const chat = cursor.value as StoredChat
+          if (!chat.isLocalOnly) {
+            cursor.delete()
+            deletedCount++
+          }
+          cursor.continue()
+        } else {
+          resolve(deletedCount)
+        }
+      }
+
+      request.onerror = () =>
+        reject(new Error('Failed to delete non-local chats'))
+    })
+  }
+
   async getAllChats(): Promise<StoredChat[]> {
     const db = await this.ensureDB()
 
