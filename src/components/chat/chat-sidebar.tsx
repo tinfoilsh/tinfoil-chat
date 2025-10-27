@@ -1164,43 +1164,43 @@ function ChatListItem({
                   />
                 )}
               </div>
-              {/* Show decryption error with red text */}
               <div className="flex items-center gap-1.5">
-                <div
-                  className={`text-xs ${
-                    chat.decryptionFailed
-                      ? 'text-red-500'
-                      : isDarkMode
-                        ? 'text-content-muted'
-                        : 'text-content-muted'
-                  }`}
-                >
-                  {chat.decryptionFailed
-                    ? (chat as any).dataCorrupted
+                {chat.decryptionFailed ? (
+                  <div className="text-xs text-red-500">
+                    {(chat as any).dataCorrupted
                       ? 'Failed to decrypt: corrupted data'
-                      : 'Failed to decrypt: wrong key'
-                    : chat.messages.length === 0
-                      ? '\u00A0' // Non-breaking space for consistent height
-                      : formatRelativeTime(chat.createdAt)}
-                </div>
-                {/* Local-only chat indicator or cloud sync indicator */}
-                {(chat as any).isLocalOnly || !isSignedIn ? (
-                  <span
-                    className="rounded bg-content-muted/20 px-1.5 py-0.5 font-aeonik-fono text-[10px] font-medium text-content-muted"
-                    title="This chat is stored locally and won't sync to cloud"
-                  >
-                    local
-                  </span>
+                      : 'Failed to decrypt: wrong key'}
+                  </div>
+                ) : chat.messages.length === 0 ? (
+                  (chat as any).isLocalOnly || !isSignedIn ? (
+                    <span
+                      className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                      title="This chat is stored locally and won't sync to cloud"
+                    >
+                      local
+                    </span>
+                  ) : null
                 ) : (
-                  chat.messages.length > 0 &&
-                  !chat.syncedAt && (
-                    <AiOutlineCloudSync
-                      className={`h-3 w-3 ${
-                        isDarkMode ? 'text-content-muted' : 'text-content-muted'
-                      }`}
-                      title="Not synced to cloud"
-                    />
-                  )
+                  <>
+                    <div className="text-xs text-content-muted">
+                      {formatRelativeTime(chat.createdAt)}
+                    </div>
+                    {(chat as any).isLocalOnly || !isSignedIn ? (
+                      <span
+                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        title="This chat is stored locally and won't sync to cloud"
+                      >
+                        local
+                      </span>
+                    ) : (
+                      !chat.syncedAt && (
+                        <AiOutlineCloudSync
+                          className="h-3 w-3 text-content-muted"
+                          title="Not synced to cloud"
+                        />
+                      )
+                    )}
+                  </>
                 )}
               </div>
             </>
