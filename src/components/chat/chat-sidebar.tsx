@@ -1,5 +1,6 @@
 import { AiOutlineCloudSync, FaLock } from '@/components/icons/lazy-icons'
 import { API_BASE_URL, PAGINATION } from '@/config'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -1172,20 +1173,20 @@ function ChatListItem({
                       : 'Failed to decrypt: wrong key'}
                   </div>
                 ) : chat.messages.length === 0 ? (
-                  (chat as any).isLocalOnly || !isSignedIn ? (
-                    <span
-                      className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
-                      title="This chat is stored locally and won't sync to cloud"
-                    >
-                      local
-                    </span>
-                  ) : null
+                  <span
+                    className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                    title="This chat is stored locally and won't sync to cloud"
+                  >
+                    local
+                  </span>
                 ) : (
                   <>
                     <div className="text-xs text-content-muted">
                       {formatRelativeTime(chat.createdAt)}
                     </div>
-                    {(chat as any).isLocalOnly || !isSignedIn ? (
+                    {(chat as any).isLocalOnly ||
+                    !isSignedIn ||
+                    !isCloudSyncEnabled() ? (
                       <span
                         className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
                         title="This chat is stored locally and won't sync to cloud"
