@@ -24,6 +24,8 @@ export type Chat = {
   hasTemporaryId?: boolean
   // Blank chat flag - true for new chats that haven't been used yet
   isBlankChat?: boolean
+  // Local-only flag - true for chats that should never sync to cloud
+  isLocalOnly?: boolean
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming'
