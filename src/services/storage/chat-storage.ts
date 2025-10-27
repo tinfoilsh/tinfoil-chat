@@ -244,6 +244,22 @@ export class ChatStorageService {
     })
   }
 
+  async deleteAllNonLocalChats(): Promise<number> {
+    await this.initialize()
+
+    const deletedCount = await indexedDBStorage.deleteAllNonLocalChats()
+
+    if (deletedCount > 0) {
+      chatEvents.emit({ reason: 'delete', ids: [] })
+      logInfo(`Deleted ${deletedCount} non-local chats`, {
+        component: 'ChatStorageService',
+        action: 'deleteAllNonLocalChats',
+      })
+    }
+
+    return deletedCount
+  }
+
   async getAllChats(): Promise<Chat[]> {
     await this.initialize()
 

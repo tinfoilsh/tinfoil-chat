@@ -1,9 +1,11 @@
 /* eslint-disable react/no-unescaped-entities */
 import { cn } from '@/components/ui/utils'
+import { chatStorage } from '@/services/storage/chat-storage'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
+import { logInfo } from '@/utils/error-handling'
 import {
   CloudArrowUpIcon,
   Cog6ToothIcon,
@@ -462,9 +464,28 @@ export function SettingsSidebar({
     }
   }
 
-  const handleCloudSyncToggle = (enabled: boolean) => {
+  const handleCloudSyncToggle = async (enabled: boolean) => {
     setCloudSyncEnabledState(enabled)
     setCloudSyncEnabled(enabled)
+
+    if (!enabled) {
+      try {
+        const deletedCount = await chatStorage.deleteAllNonLocalChats()
+        logInfo(
+          `Deleted ${deletedCount} synced chats when disabling cloud sync`,
+          {
+            component: 'SettingsSidebar',
+            action: 'handleCloudSyncToggle',
+          },
+        )
+      } catch (error) {
+        logInfo('Failed to delete synced chats', {
+          component: 'SettingsSidebar',
+          action: 'handleCloudSyncToggle',
+          metadata: { error },
+        })
+      }
+    }
 
     if (isClient) {
       window.dispatchEvent(
