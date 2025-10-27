@@ -59,6 +59,7 @@ export function CloudSyncSetupModal({
 
   const handleMaybeLater = () => {
     localStorage.setItem('cloudSyncEnabled', 'false')
+    localStorage.setItem('hasSeenCloudSyncModal', 'true')
     onClose()
   }
 
@@ -112,6 +113,7 @@ export function CloudSyncSetupModal({
     try {
       await encryptionService.setKey(inputKey)
       localStorage.setItem('cloudSyncEnabled', 'true')
+      localStorage.setItem('hasSeenCloudSyncModal', 'true')
 
       logInfo('Restored encryption key for cloud sync', {
         component: 'CloudSyncSetupModal',
@@ -266,6 +268,7 @@ ${generatedKey.replace('key_', '')}
   }
 
   const handleComplete = () => {
+    localStorage.setItem('hasSeenCloudSyncModal', 'true')
     if (generatedKey) {
       onSetupComplete(generatedKey)
     }
