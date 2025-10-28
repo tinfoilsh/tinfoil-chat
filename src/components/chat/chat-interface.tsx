@@ -973,10 +973,12 @@ export function ChatInterface({
       ) && (
         <div
           className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
-            isVerifierSidebarOpen || isSettingsSidebarOpen
-              ? windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? 'right-[369px]'
-                : 'right-4'
+            windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+              ? isVerifierSidebarOpen
+                ? 'right-[444px]'
+                : isSettingsSidebarOpen
+                  ? 'right-[369px]'
+                  : 'right-4'
               : 'right-4'
           }`}
         >
@@ -1130,9 +1132,12 @@ export function ChatInterface({
         className="fixed inset-0 overflow-hidden transition-all duration-200"
         style={{
           right:
-            (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px`
+              ? isVerifierSidebarOpen
+                ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
+                : isSettingsSidebarOpen
+                  ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px`
+                  : '0'
               : '0',
           bottom: 0,
           left:
