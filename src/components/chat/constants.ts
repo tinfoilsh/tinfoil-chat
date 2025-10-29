@@ -22,7 +22,7 @@ export const CONSTANTS = {
   // Sidebar widths
   CHAT_SIDEBAR_WIDTH_PX: 300,
   SETTINGS_SIDEBAR_WIDTH_PX: 345,
-  VERIFIER_SIDEBAR_WIDTH_PX: 420,
+  VERIFIER_SIDEBAR_WIDTH_PX: 345,
   // Long text paste threshold (characters) - texts longer than this will be converted to .txt file
   LONG_PASTE_THRESHOLD: 3000,
   // System prompt for AI title generation
