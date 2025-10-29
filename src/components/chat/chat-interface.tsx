@@ -972,15 +972,17 @@ export function ChatInterface({
         (isSidebarOpen || isVerifierSidebarOpen || isSettingsSidebarOpen)
       ) && (
         <div
-          className={`fixed top-4 z-50 flex gap-2 transition-all duration-300 ${
-            windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? isVerifierSidebarOpen
-                ? 'right-[444px]'
-                : isSettingsSidebarOpen
-                  ? 'right-[369px]'
-                  : 'right-4'
-              : 'right-4'
-          }`}
+          className="fixed top-4 z-50 flex gap-2 transition-all duration-300"
+          style={{
+            right:
+              windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+                ? isVerifierSidebarOpen
+                  ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
+                  : isSettingsSidebarOpen
+                    ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX + 24}px`
+                    : '16px'
+                : '16px',
+          }}
         >
           {/* New chat button */}
           <div className="group relative">
