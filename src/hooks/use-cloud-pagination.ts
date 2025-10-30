@@ -52,9 +52,24 @@ export function useCloudPagination(
   const [isLoading, setIsLoading] = useState(false)
   const [hasAttempted, setHasAttempted] = useState(false)
   const initializedRef = useRef(false)
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
+
+  useEffect(() => {
+    const checkCloudSyncStatus = () => {
+      setCloudSyncEnabled(isCloudSyncEnabled())
+    }
+
+    window.addEventListener('storage', checkCloudSyncStatus)
+    const interval = setInterval(checkCloudSyncStatus, 1000)
+
+    return () => {
+      window.removeEventListener('storage', checkCloudSyncStatus)
+      clearInterval(interval)
+    }
+  }, [])
 
   const initialize = useCallback(async () => {
-    if (!isSignedIn || !userId || !isCloudSyncEnabled()) return
+    if (!isSignedIn || !userId || !cloudSyncEnabled) return
 
     try {
       const allChats = await indexedDBStorage.getAllChats()
@@ -114,10 +129,10 @@ export function useCloudPagination(
       })
       return undefined
     }
-  }, [isSignedIn, userId, pageSize])
+  }, [isSignedIn, userId, pageSize, cloudSyncEnabled])
 
   const loadMore = useCallback(async () => {
-    if (!isSignedIn || !userId || isLoading || !isCloudSyncEnabled()) return
+    if (!isSignedIn || !userId || isLoading || !cloudSyncEnabled) return
 
     // Save current state in case we need to rollback
     const previousToken = nextToken
@@ -169,7 +184,15 @@ export function useCloudPagination(
     } finally {
       setIsLoading(false)
     }
-  }, [isSignedIn, userId, isLoading, nextToken, pageSize, hasMore])
+  }, [
+    isSignedIn,
+    userId,
+    isLoading,
+    nextToken,
+    pageSize,
+    hasMore,
+    cloudSyncEnabled,
+  ])
 
   const reset = useCallback(async () => {
     setHasAttempted(false)
@@ -179,7 +202,7 @@ export function useCloudPagination(
 
   // Initialize when user changes (only if cloud sync is enabled)
   useEffect(() => {
-    if (isSignedIn && userId && isCloudSyncEnabled()) {
+    if (isSignedIn && userId && cloudSyncEnabled) {
       void initialize()
     } else {
       setNextToken(undefined)
@@ -187,7 +210,7 @@ export function useCloudPagination(
       setHasAttempted(false)
       initializedRef.current = false
     }
-  }, [isSignedIn, userId, initialize])
+  }, [isSignedIn, userId, cloudSyncEnabled, initialize])
 
   return { hasMore, isLoading, hasAttempted, initialize, loadMore, reset }
 }
