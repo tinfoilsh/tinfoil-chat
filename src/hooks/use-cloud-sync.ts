@@ -52,12 +52,24 @@ export function useCloudSync() {
         cloudSync.setTokenGetter(getToken)
         r2Storage.setTokenGetter(getToken)
 
-        // Check if cloud sync is enabled
-        const cloudSyncEnabled = isCloudSyncEnabled()
-
         // Check if user already has a key before initializing
         const existingKey = localStorage.getItem('tinfoil-encryption-key')
         const isFirstTime = !existingKey
+
+        // Backwards compatibility: if an encryption key exists but cloud sync is not enabled,
+        // automatically enable it (existing users should have sync enabled by default)
+        let cloudSyncEnabled = isCloudSyncEnabled()
+        if (existingKey && !cloudSyncEnabled) {
+          const { setCloudSyncEnabled } = await import(
+            '@/utils/cloud-sync-settings'
+          )
+          setCloudSyncEnabled(true)
+          cloudSyncEnabled = true
+          logInfo('Automatically enabled cloud sync for existing user', {
+            component: 'useCloudSync',
+            action: 'initializeSync',
+          })
+        }
 
         // Initialize encryption (does not auto-generate keys)
         const key = await encryptionService.initialize()
