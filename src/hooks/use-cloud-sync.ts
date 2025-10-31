@@ -58,8 +58,12 @@ export function useCloudSync() {
 
         // Backwards compatibility: if an encryption key exists but cloud sync is not enabled,
         // automatically enable it (existing users should have sync enabled by default)
+        // BUT respect if user explicitly disabled it
         let cloudSyncEnabled = isCloudSyncEnabled()
-        if (existingKey && !cloudSyncEnabled) {
+        const explicitlyDisabled =
+          localStorage.getItem('cloudSyncExplicitlyDisabled') === 'true'
+
+        if (existingKey && !cloudSyncEnabled && !explicitlyDisabled) {
           const { setCloudSyncEnabled } = await import(
             '@/utils/cloud-sync-settings'
           )
