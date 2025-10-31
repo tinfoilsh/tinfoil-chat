@@ -69,7 +69,13 @@ export function useCloudPagination(
   }, [])
 
   const initialize = useCallback(async () => {
-    if (!isSignedIn || !userId || !cloudSyncEnabled) return
+    if (!isSignedIn || !userId || !cloudSyncEnabled) {
+      setNextToken(undefined)
+      setHasMore(false)
+      setHasAttempted(false)
+      initializedRef.current = false
+      return
+    }
 
     try {
       const allChats = await indexedDBStorage.getAllChats()

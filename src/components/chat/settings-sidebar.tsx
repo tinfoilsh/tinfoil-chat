@@ -26,6 +26,7 @@ type SettingsSidebarProps = {
   isClient: boolean
   defaultSystemPrompt?: string
   onEncryptionKeyClick?: () => void
+  onChatsUpdated?: () => void
 }
 
 export function SettingsSidebar({
@@ -36,6 +37,7 @@ export function SettingsSidebar({
   isClient,
   defaultSystemPrompt = '',
   onEncryptionKeyClick,
+  onChatsUpdated,
 }: SettingsSidebarProps) {
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
@@ -478,6 +480,9 @@ export function SettingsSidebar({
             action: 'handleCloudSyncToggle',
           },
         )
+        if (deletedCount > 0 && onChatsUpdated) {
+          onChatsUpdated()
+        }
       } catch (error) {
         logInfo('Failed to delete synced chats', {
           component: 'SettingsSidebar',
