@@ -216,6 +216,8 @@ export function ChatSidebar({
   )
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'cloud' | 'local'>('cloud')
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
   // Cloud pagination state via hook
@@ -238,6 +240,25 @@ export function ChatSidebar({
 
   // Apply zoom prevention for mobile
   usePreventZoom()
+
+  // Listen for cloud sync setting changes
+  useEffect(() => {
+    const handleCloudSyncChange = () => {
+      setCloudSyncEnabled(isCloudSyncEnabled())
+    }
+
+    // Listen for both storage events and custom events
+    window.addEventListener('storage', handleCloudSyncChange)
+    window.addEventListener('cloudSyncSettingChanged', handleCloudSyncChange)
+
+    return () => {
+      window.removeEventListener('storage', handleCloudSyncChange)
+      window.removeEventListener(
+        'cloudSyncSettingChanged',
+        handleCloudSyncChange,
+      )
+    }
+  }, [])
 
   // Listen for highlight events
   useEffect(() => {
@@ -282,9 +303,11 @@ export function ChatSidebar({
   const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
   // Show load more if:
   // 1. User is signed in
-  // 2. Either: we have more remote chats, OR we haven't tried loading yet and have enough chats to suggest pagination
+  // 2. On cloud tab
+  // 3. Either: we have more remote chats, OR we haven't tried loading yet and have enough chats to suggest pagination
   const shouldShowLoadMore =
     isSignedIn &&
+    activeTab === 'cloud' &&
     (hasMoreRemote ||
       (!hasAttemptedLoadMore && syncedChatsCount >= PAGINATION.CHATS_PER_PAGE))
 
@@ -439,7 +462,15 @@ export function ChatSidebar({
   }, [])
 
   const sortedChats = useMemo(() => {
-    return [...chats].sort((a, b) => {
+    // Filter chats based on active tab (only when cloud sync is enabled)
+    const filteredChats =
+      isSignedIn && cloudSyncEnabled
+        ? activeTab === 'cloud'
+          ? chats.filter((chat) => !(chat as any).isLocalOnly)
+          : chats.filter((chat) => (chat as any).isLocalOnly)
+        : chats // Show all chats when not signed in or cloud sync is disabled
+
+    return [...filteredChats].sort((a, b) => {
       // Blank chats should always be at the top
       const aIsBlank = a.isBlankChat === true
       const bIsBlank = b.isBlankChat === true
@@ -451,7 +482,7 @@ export function ChatSidebar({
       const timeB = getChatSortTimestamp(b)
       return timeB - timeA
     })
-  }, [chats, getChatSortTimestamp])
+  }, [chats, getChatSortTimestamp, activeTab, isSignedIn, cloudSyncEnabled])
 
   const handleUpgradeToPro = useCallback(async () => {
     if (!getToken) {
@@ -775,15 +806,50 @@ export function ChatSidebar({
                 )}
               </div>
             </div>
+
+            {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
+            {isSignedIn && cloudSyncEnabled && (
+              <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat/50 p-1">
+                <button
+                  onClick={() => setActiveTab('cloud')}
+                  className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                    activeTab === 'cloud'
+                      ? isDarkMode
+                        ? 'bg-surface-chat text-content-primary shadow-sm'
+                        : 'bg-white text-content-primary shadow-sm'
+                      : 'text-content-muted hover:text-content-secondary'
+                  }`}
+                >
+                  Cloud (
+                  {chats.filter((chat) => !(chat as any).isLocalOnly).length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('local')}
+                  className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                    activeTab === 'local'
+                      ? isDarkMode
+                        ? 'bg-surface-chat text-content-primary shadow-sm'
+                        : 'bg-white text-content-primary shadow-sm'
+                      : 'text-content-muted hover:text-content-secondary'
+                  }`}
+                >
+                  Local (
+                  {chats.filter((chat) => (chat as any).isLocalOnly).length})
+                </button>
+              </div>
+            )}
+
             <div className="font-base mt-1 font-aeonik-fono text-xs text-content-muted">
-              {isSignedIn ? (
+              {!isSignedIn ? (
+                'Your chats are stored temporarily in this browser tab.'
+              ) : activeTab === 'cloud' ? (
                 <>
                   Your chats are encrypted and synced to the cloud. The
                   encryption key is only stored on this browser and never sent
                   to Tinfoil.
                 </>
               ) : (
-                'Your chats are stored temporarily in this browser tab.'
+                "Local chats are stored only on this device and won't sync."
               )}
             </div>
           </div>
@@ -791,6 +857,18 @@ export function ChatSidebar({
           {/* Scrollable Chat List */}
           <div className="flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
+              {isClient &&
+                sortedChats.length === 0 &&
+                activeTab === 'local' && (
+                  <div className="rounded-lg border border-border-subtle p-4 text-center">
+                    <p className="text-sm text-content-muted">
+                      No local chats yet
+                    </p>
+                    <p className="mt-1 text-xs text-content-muted">
+                      Disable cloud sync in settings to create local-only chats
+                    </p>
+                  </div>
+                )}
               {isClient &&
                 sortedChats.map((chat) => (
                   <div key={chat.id} className="relative">
@@ -841,6 +919,7 @@ export function ChatSidebar({
                         isPremium={isPremium}
                         isDarkMode={isDarkMode}
                         isSignedIn={isSignedIn ?? false}
+                        cloudSyncEnabled={cloudSyncEnabled}
                       />
                     </div>
                     {/* Delete confirmation */}
@@ -1036,6 +1115,7 @@ function ChatListItem({
   isPremium = true,
   isDarkMode,
   isSignedIn,
+  cloudSyncEnabled,
 }: {
   chat: Chat
   isEditing: boolean
@@ -1047,6 +1127,7 @@ function ChatListItem({
   isPremium?: boolean
   isDarkMode: boolean
   isSignedIn: boolean
+  cloudSyncEnabled: boolean
 }) {
   // Track previous title for animation
   const [displayTitle, setDisplayTitle] = useState(chat.title)
@@ -1173,27 +1254,44 @@ function ChatListItem({
                       : 'Failed to decrypt: wrong key'}
                   </div>
                 ) : chat.messages.length === 0 ? (
-                  <span
-                    className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
-                    title="This chat is stored locally and won't sync to cloud"
-                  >
-                    local
-                  </span>
+                  // For empty chats, show "local" only if truly local-only
+                  (chat as any).isLocalOnly ? (
+                    <span
+                      className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                      title="This chat is stored locally and won't sync to cloud"
+                    >
+                      local
+                    </span>
+                  ) : (
+                    // Empty chat that will sync when content is added
+                    <div className="text-xs text-content-muted">
+                      {'\u00A0'}{' '}
+                      {/* Non-breaking space for consistent height */}
+                    </div>
+                  )
                 ) : (
                   <>
                     <div className="text-xs text-content-muted">
                       {formatRelativeTime(chat.createdAt)}
                     </div>
-                    {(chat as any).isLocalOnly ||
-                    !isSignedIn ||
-                    !isCloudSyncEnabled() ? (
+                    {/* Show "local" ONLY for truly local-only chats */}
+                    {(chat as any).isLocalOnly ? (
                       <span
                         className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
                         title="This chat is stored locally and won't sync to cloud"
                       >
                         local
                       </span>
+                    ) : !isSignedIn ? null : !cloudSyncEnabled ? ( // Not signed in - show nothing (chats are temporary)
+                      // Cloud sync disabled but chat not marked as local-only
+                      <span
+                        className="rounded bg-amber-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                        title="Cloud sync is disabled - chat won't sync"
+                      >
+                        unsynced
+                      </span>
                     ) : (
+                      // Cloud sync enabled, show sync status
                       !chat.syncedAt && (
                         <AiOutlineCloudSync
                           className="h-3 w-3 text-content-muted"

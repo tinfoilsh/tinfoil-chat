@@ -471,6 +471,12 @@ export function SettingsSidebar({
     setCloudSyncEnabled(enabled)
 
     if (!enabled) {
+      // Clear encryption key to prevent auto-enable on refresh
+      localStorage.removeItem('tinfoil-encryption-key')
+
+      // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
+      localStorage.setItem('cloudSyncExplicitlyDisabled', 'true')
+
       try {
         const deletedCount = await chatStorage.deleteAllNonLocalChats()
         logInfo(
@@ -490,6 +496,9 @@ export function SettingsSidebar({
           metadata: { error },
         })
       }
+    } else {
+      // Clear the explicit disable flag when re-enabling
+      localStorage.removeItem('cloudSyncExplicitlyDisabled')
     }
 
     if (isClient) {
