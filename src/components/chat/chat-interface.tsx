@@ -1137,6 +1137,7 @@ export function ChatInterface({
         onEncryptionKeyClick={
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
         }
+        onChatsUpdated={reloadChats}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
