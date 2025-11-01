@@ -1234,7 +1234,7 @@ function ChatListItem({
 
   return (
     <>
-      <div className="flex w-full items-start justify-between">
+      <div className="flex w-full items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {isEditing && isPremium ? (
             <form
@@ -1291,7 +1291,7 @@ function ChatListItem({
                   />
                 )}
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex w-full items-center justify-between gap-2">
                 {chat.decryptionFailed ? (
                   <div className="text-xs text-red-500">
                     {(chat as any).dataCorrupted
@@ -1299,21 +1299,19 @@ function ChatListItem({
                       : 'Failed to decrypt: wrong key'}
                   </div>
                 ) : chat.messages.length === 0 ? (
-                  // For empty chats, show "local" only if truly local-only
-                  (chat as any).isLocalOnly ? (
-                    <span
-                      className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
-                      title="This chat is stored locally and won't sync to cloud"
-                    >
-                      local
-                    </span>
-                  ) : (
-                    // Empty chat that will sync when content is added
-                    <div className="text-xs text-content-muted">
-                      {'\u00A0'}{' '}
-                      {/* Non-breaking space for consistent height */}
-                    </div>
-                  )
+                  <>
+                    {/* Empty space for timestamp area */}
+                    <div className="text-xs text-content-muted">{'\u00A0'}</div>
+                    {/* For empty chats, show "local" only if truly local-only */}
+                    {(chat as any).isLocalOnly && (
+                      <span
+                        className="ml-auto rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        title="This chat is stored locally and won't sync to cloud"
+                      >
+                        local
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <>
                     <div className="text-xs text-content-muted">
@@ -1322,7 +1320,7 @@ function ChatListItem({
                     {/* Show "local" ONLY for truly local-only chats */}
                     {(chat as any).isLocalOnly ? (
                       <span
-                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        className="ml-auto rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
                         title="This chat is stored locally and won't sync to cloud"
                       >
                         local
@@ -1330,7 +1328,7 @@ function ChatListItem({
                     ) : !isSignedIn ? null : !cloudSyncEnabled ? ( // Not signed in - show nothing (chats are temporary)
                       // Cloud sync disabled but chat not marked as local-only
                       <span
-                        className="rounded bg-amber-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                        className="ml-auto rounded bg-amber-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-amber-600 dark:text-amber-400"
                         title="Cloud sync is disabled - chat won't sync"
                       >
                         unsynced
@@ -1339,7 +1337,7 @@ function ChatListItem({
                       // Cloud sync enabled, show sync status
                       !chat.syncedAt && (
                         <AiOutlineCloudSync
-                          className="h-3 w-3 text-content-muted"
+                          className="ml-auto h-3 w-3 text-content-muted"
                           title="Not synced to cloud"
                         />
                       )
