@@ -34,17 +34,28 @@ export function createUpdateChatWithHistoryCheck({
   ) {
     const isCurrentChat = currentChatIdRef.current === chatId
 
-    const updatedChatForSaving: Chat = {
-      ...chatSnapshot,
-      id: chatId,
-      messages: newMessages,
+    // Update chats and get the current chat state
+    let updatedChatForSaving: Chat | null = null
+
+    setChats((prevChats) => {
+      const currentChatFromState = prevChats.find((c) => c.id === chatId)
+
+      // Use the current chat from state if available, otherwise fall back to snapshot
+      // This ensures we preserve any updates that happened during streaming (like title changes)
+      const baseChat = currentChatFromState || chatSnapshot
+
+      updatedChatForSaving = {
+        ...baseChat,
+        id: chatId,
+        messages: newMessages,
+      }
+
+      return prevChats.map((c) => (c.id === chatId ? updatedChatForSaving! : c))
+    })
+
+    if (isCurrentChat && updatedChatForSaving) {
+      setCurrentChat(updatedChatForSaving)
     }
-
-    if (isCurrentChat) setCurrentChat(updatedChatForSaving)
-
-    setChats((prevChats) =>
-      prevChats.map((c) => (c.id === chatId ? updatedChatForSaving : c)),
-    )
 
     if ((!isThinking || immediate) && updatedChatForSaving) {
       if (storeHistory) {

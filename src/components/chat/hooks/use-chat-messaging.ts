@@ -321,7 +321,11 @@ export function useChatMessaging({
       // Handle chat saving based on user status
       if (storeHistory) {
         // For signed-in users
-        if (currentChat.hasTemporaryId) {
+        // Only get server ID for cloud chats (not local-only chats)
+        if (
+          currentChat.hasTemporaryId &&
+          !(updatedChat as any).intendedLocalOnly
+        ) {
           try {
             // Get server ID synchronously before proceeding
             const result = await r2Storage.generateConversationId()
@@ -356,7 +360,7 @@ export function useChatMessaging({
             // Continue with temporary ID if server ID fetch fails
           }
         } else {
-          // For existing chats, just save normally
+          // For existing chats or local-only chats, just save normally
           chatStorage.saveChatAndSync(updatedChat).catch((error) => {
             logError('Failed to save chat', error, {
               component: 'useChatMessaging',
