@@ -153,9 +153,17 @@ export class ChatStorageService {
     // Check if this is a new chat (first time saving) and mark as local if intended or sync is disabled
     const existingChat = await indexedDBStorage.getChat(chatToSave.id)
     const isNewChat = !existingChat
+
+    // Check if chat should be local-only
+    // 1. If it's already marked as local (from intendedLocalOnly or isLocalOnly)
+    // 2. If cloud sync is disabled globally
+    // 3. If the existing chat is already local
     const shouldMarkAsLocal =
-      isNewChat &&
-      ((chatToSave as any).intendedLocalOnly || !isCloudSyncEnabled())
+      (chatToSave as any).isLocalOnly ||
+      (chatToSave as any).intendedLocalOnly ||
+      !isCloudSyncEnabled() ||
+      existingChat?.isLocalOnly ||
+      false
 
     // For local-only chats, clear the temporary ID flag since they don't need a server ID
     if (shouldMarkAsLocal && chatToSave.hasTemporaryId) {
@@ -179,11 +187,12 @@ export class ChatStorageService {
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
 
-    // Auto-backup to cloud (non-blocking) - only if not temporary, not skipped, and not streaming
+    // Auto-backup to cloud (non-blocking) - only if not temporary, not skipped, not streaming, and not local-only
     if (
       !chatToSave.hasTemporaryId &&
       !skipCloudSync &&
-      !streamingTracker.isStreaming(chatToSave.id)
+      !streamingTracker.isStreaming(chatToSave.id) &&
+      !storageChat.isLocalOnly
     ) {
       cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
@@ -200,9 +209,10 @@ export class ChatStorageService {
       })
     }
 
-    // Return the potentially updated chat
+    // Return the potentially updated chat with isLocalOnly flag
     return {
       ...chatToSave,
+      isLocalOnly: storageChat.isLocalOnly,
       createdAt:
         chatToSave.createdAt instanceof Date
           ? chatToSave.createdAt
