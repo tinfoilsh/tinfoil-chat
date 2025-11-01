@@ -1234,8 +1234,8 @@ function ChatListItem({
 
   return (
     <>
-      <div className="flex w-full items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex w-full items-start justify-between">
+        <div className="min-w-0 flex-1 pr-2">
           {isEditing && isPremium ? (
             <form
               onSubmit={handleSubmit}
@@ -1305,7 +1305,7 @@ function ChatListItem({
                     {/* For empty chats, show "local" only if truly local-only */}
                     {(chat as any).isLocalOnly && (
                       <span
-                        className="ml-auto rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
                         title="This chat is stored locally and won't sync to cloud"
                       >
                         local
@@ -1320,14 +1320,14 @@ function ChatListItem({
                     {/* Show "local" ONLY for truly local-only chats */}
                     {(chat as any).isLocalOnly ? (
                       <span
-                        className="ml-auto rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
                         title="This chat is stored locally and won't sync to cloud"
                       >
                         local
                       </span>
                     ) : isSignedIn && cloudSyncEnabled && !chat.syncedAt ? (
                       <AiOutlineCloudSync
-                        className="ml-auto h-3 w-3 text-content-muted"
+                        className="h-3 w-3 text-content-muted"
                         title="Not synced to cloud"
                       />
                     ) : null}
@@ -1339,7 +1339,7 @@ function ChatListItem({
         </div>
 
         {!isEditing && (
-          <div className="ml-2 flex opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+          <div className="flex flex-shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
             {!chat.decryptionFailed && isPremium && (
               <button
                 className={`mr-1 rounded p-1 transition-colors ${
