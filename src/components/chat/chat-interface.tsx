@@ -21,6 +21,7 @@ import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { migrationEvents } from '@/services/storage/migration-events'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -1371,7 +1372,8 @@ export function ChatInterface({
       {isFirstTimeUser &&
         isSignedIn &&
         hasSentFirstMessage &&
-        !localStorage.getItem('hasSeenCloudSyncModal') && (
+        !localStorage.getItem('hasSeenCloudSyncModal') &&
+        !isCloudSyncEnabled() && (
           <CloudSyncSetupModal
             isOpen={true}
             onClose={() => clearFirstTimeUser()}
