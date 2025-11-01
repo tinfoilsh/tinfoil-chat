@@ -507,6 +507,21 @@ export async function processStreamingResponse(
       (assistantMessage.content || assistantMessage.thoughts) &&
       ctx.currentChatIdRef.current === ctx.updatedChat.id
     ) {
+      // Ensure final save happens for both cloud and local-only chats
+      // The updateChatWithHistoryCheck function will save to IndexedDB
+      // and cloudSync.backupChat will handle cloud sync if applicable
+      const finalMessages = [...ctx.updatedMessages, assistantMessage]
+      ctx.updateChatWithHistoryCheck(
+        ctx.setChats,
+        ctx.updatedChat,
+        ctx.setCurrentChat,
+        ctx.currentChatIdRef.current,
+        finalMessages,
+        true, // immediate = true to ensure save happens
+        false,
+      )
+
+      // Also trigger cloud sync for non-local chats
       cloudSync.backupChat(ctx.currentChatIdRef.current).catch((error) => {
         logError('Failed to sync chat after streaming', error, {
           component: 'streaming-processor',
