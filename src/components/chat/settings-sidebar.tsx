@@ -1,5 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 import { cn } from '@/components/ui/utils'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
   isCloudSyncEnabled,
@@ -26,6 +27,7 @@ type SettingsSidebarProps = {
   isClient: boolean
   defaultSystemPrompt?: string
   onEncryptionKeyClick?: () => void
+  onCloudSyncSetupClick?: () => void
   onChatsUpdated?: () => void
 }
 
@@ -37,6 +39,7 @@ export function SettingsSidebar({
   isClient,
   defaultSystemPrompt = '',
   onEncryptionKeyClick,
+  onCloudSyncSetupClick,
   onChatsUpdated,
 }: SettingsSidebarProps) {
   const [maxMessages, setMaxMessages] = useState<number>(
@@ -467,10 +470,31 @@ export function SettingsSidebar({
   }
 
   const handleCloudSyncToggle = async (enabled: boolean) => {
-    setCloudSyncEnabledState(enabled)
-    setCloudSyncEnabled(enabled)
+    if (enabled) {
+      // Check if encryption key exists
+      if (!encryptionService.getKey()) {
+        // Turn on the toggle visually
+        setCloudSyncEnabledState(true)
+        setCloudSyncEnabled(true)
 
-    if (!enabled) {
+        // Show the cloud sync setup modal
+        if (onCloudSyncSetupClick) {
+          onCloudSyncSetupClick()
+        }
+        return
+      }
+
+      // If key exists, proceed with enabling
+      setCloudSyncEnabledState(true)
+      setCloudSyncEnabled(true)
+
+      // Clear the explicit disable flag when re-enabling
+      localStorage.removeItem('cloudSyncExplicitlyDisabled')
+    } else {
+      // Disabling cloud sync
+      setCloudSyncEnabledState(false)
+      setCloudSyncEnabled(false)
+
       // Clear encryption key to prevent auto-enable on refresh
       localStorage.removeItem('tinfoil-encryption-key')
 
@@ -496,9 +520,6 @@ export function SettingsSidebar({
           metadata: { error },
         })
       }
-    } else {
-      // Clear the explicit disable flag when re-enabling
-      localStorage.removeItem('cloudSyncExplicitlyDisabled')
     }
 
     if (isClient) {

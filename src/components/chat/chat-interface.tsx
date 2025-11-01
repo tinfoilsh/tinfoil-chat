@@ -20,8 +20,12 @@ import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import { migrationEvents } from '@/services/storage/migration-events'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import {
+  isCloudSyncEnabled,
+  setCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -152,6 +156,9 @@ export function ChatInterface({
   // State for cloud sync intro modal
   const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
     useState(false)
+
+  // State for cloud sync setup modal
+  const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -535,6 +542,11 @@ export function ChatInterface({
   // Handler for encryption key button
   const handleOpenEncryptionKeyModal = () => {
     setIsEncryptionKeyModalOpen(true)
+  }
+
+  // Handler for cloud sync setup
+  const handleOpenCloudSyncSetup = () => {
+    setShowCloudSyncSetupModal(true)
   }
 
   // Don't automatically create new chats - let the chat state handle initialization
@@ -1138,6 +1150,9 @@ export function ChatInterface({
         onEncryptionKeyClick={
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
         }
+        onCloudSyncSetupClick={
+          isSignedIn ? handleOpenCloudSyncSetup : undefined
+        }
         onChatsUpdated={reloadChats}
       />
 
@@ -1388,6 +1403,29 @@ export function ChatInterface({
             isDarkMode={isDarkMode}
           />
         )}
+
+      {/* Cloud Sync Setup Modal - manually triggered from settings */}
+      {showCloudSyncSetupModal && (
+        <CloudSyncSetupModal
+          isOpen={showCloudSyncSetupModal}
+          onClose={() => {
+            setShowCloudSyncSetupModal(false)
+            // If no key was set, turn off cloud sync
+            if (!encryptionService.getKey()) {
+              setCloudSyncEnabled(false)
+            }
+          }}
+          onSetupComplete={async (key: string) => {
+            const syncResult = await setEncryptionKey(key)
+            if (syncResult) {
+              await retryProfileDecryption()
+              await reloadChats()
+            }
+            setShowCloudSyncSetupModal(false)
+          }}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   )
 }
