@@ -1325,23 +1325,12 @@ function ChatListItem({
                       >
                         local
                       </span>
-                    ) : !isSignedIn ? null : !cloudSyncEnabled ? ( // Not signed in - show nothing (chats are temporary)
-                      // Cloud sync disabled but chat not marked as local-only
-                      <span
-                        className="ml-auto rounded bg-amber-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-amber-600 dark:text-amber-400"
-                        title="Cloud sync is disabled - chat won't sync"
-                      >
-                        unsynced
-                      </span>
-                    ) : (
-                      // Cloud sync enabled, show sync status
-                      !chat.syncedAt && (
-                        <AiOutlineCloudSync
-                          className="ml-auto h-3 w-3 text-content-muted"
-                          title="Not synced to cloud"
-                        />
-                      )
-                    )}
+                    ) : isSignedIn && cloudSyncEnabled && !chat.syncedAt ? (
+                      <AiOutlineCloudSync
+                        className="ml-auto h-3 w-3 text-content-muted"
+                        title="Not synced to cloud"
+                      />
+                    ) : null}
                   </>
                 )}
               </div>
