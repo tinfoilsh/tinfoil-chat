@@ -260,6 +260,20 @@ export function ChatSidebar({
     }
   }, [])
 
+  // Update blank chat's intendedLocalOnly when active tab changes
+  useEffect(() => {
+    if (!isSignedIn || !cloudSyncEnabled) return
+
+    const shouldBeLocal = activeTab === 'local'
+    const blankChat = chats.find((chat) => chat.isBlankChat === true)
+
+    // If there's a blank chat and its intendedLocalOnly doesn't match the active tab,
+    // call createNewChat to update it
+    if (blankChat && blankChat.intendedLocalOnly !== shouldBeLocal) {
+      createNewChat(shouldBeLocal)
+    }
+  }, [activeTab, isSignedIn, cloudSyncEnabled, chats, createNewChat])
+
   // Listen for highlight events
   useEffect(() => {
     const handleHighlightEvent = (event: CustomEvent) => {
@@ -466,8 +480,20 @@ export function ChatSidebar({
     const filteredChats =
       isSignedIn && cloudSyncEnabled
         ? activeTab === 'cloud'
-          ? chats.filter((chat) => !(chat as any).isLocalOnly)
-          : chats.filter((chat) => (chat as any).isLocalOnly)
+          ? chats.filter((chat) => {
+              // For blank chats, use intendedLocalOnly flag since they haven't been saved yet
+              if (chat.isBlankChat) {
+                return !(chat as any).intendedLocalOnly
+              }
+              return !(chat as any).isLocalOnly
+            })
+          : chats.filter((chat) => {
+              // For blank chats, use intendedLocalOnly flag since they haven't been saved yet
+              if (chat.isBlankChat) {
+                return (chat as any).intendedLocalOnly
+              }
+              return (chat as any).isLocalOnly
+            })
         : chats // Show all chats when not signed in or cloud sync is disabled
 
     return [...filteredChats].sort((a, b) => {
@@ -824,7 +850,15 @@ export function ChatSidebar({
                   }`}
                 >
                   Cloud (
-                  {chats.filter((chat) => !(chat as any).isLocalOnly).length})
+                  {
+                    chats.filter((chat) => {
+                      if (chat.isBlankChat) {
+                        return !(chat as any).intendedLocalOnly
+                      }
+                      return !(chat as any).isLocalOnly
+                    }).length
+                  }
+                  )
                 </button>
                 <button
                   onClick={() => setActiveTab('local')}
@@ -837,7 +871,15 @@ export function ChatSidebar({
                   }`}
                 >
                   Local (
-                  {chats.filter((chat) => (chat as any).isLocalOnly).length})
+                  {
+                    chats.filter((chat) => {
+                      if (chat.isBlankChat) {
+                        return (chat as any).intendedLocalOnly
+                      }
+                      return (chat as any).isLocalOnly
+                    }).length
+                  }
+                  )
                 </button>
               </div>
             )}
