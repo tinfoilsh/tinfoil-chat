@@ -858,9 +858,7 @@ export function ChatSidebar({
                   Cloud (
                   {
                     chats.filter((chat) => {
-                      if (chat.isBlankChat) {
-                        return !(chat as any).intendedLocalOnly
-                      }
+                      if (chat.isBlankChat) return false
                       return !(chat as any).isLocalOnly
                     }).length
                   }
@@ -879,9 +877,7 @@ export function ChatSidebar({
                   Local (
                   {
                     chats.filter((chat) => {
-                      if (chat.isBlankChat) {
-                        return (chat as any).intendedLocalOnly
-                      }
+                      if (chat.isBlankChat) return false
                       return (chat as any).isLocalOnly
                     }).length
                   }
