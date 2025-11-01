@@ -34,34 +34,55 @@ export function createUpdateChatWithHistoryCheck({
   ) {
     const isCurrentChat = currentChatIdRef.current === chatId
 
-    // Prepare the updated chat by getting current state
-    let updatedChatForSaving: Chat
+    // Don't include isBlankChat from snapshot as it may be stale
+    const { isBlankChat: snapshotBlank, ...snapshotWithoutBlank } =
+      chatSnapshot as any
 
-    // First, determine the base chat to use
-    let baseChat = chatSnapshot
+    let updatedChatForSaving: Chat = {
+      ...snapshotWithoutBlank,
+      id: chatId,
+      messages: newMessages,
+      intendedLocalOnly: (chatSnapshot as any).intendedLocalOnly,
+      isLocalOnly: (chatSnapshot as any).isLocalOnly,
+      // Determine isBlankChat based on messages, not snapshot
+      isBlankChat: newMessages.length === 0,
+    } as Chat
+
     setChats((prevChats) => {
       const currentChatFromState = prevChats.find((c) => c.id === chatId)
-      // Use the current chat from state if available, otherwise fall back to snapshot
-      // This ensures we preserve any updates that happened during streaming (like title changes)
-      if (currentChatFromState) {
-        baseChat = currentChatFromState
-      }
 
-      updatedChatForSaving = {
-        ...baseChat,
-        id: chatId,
-        messages: newMessages,
+      // Merge current state with snapshot to preserve properties that may have been updated
+      // (like title generation) while also applying new updates (like messages)
+      if (currentChatFromState) {
+        // Don't spread chatSnapshot directly as it may contain stale isBlankChat flag
+        const { isBlankChat: snapshotBlankFlag, ...chatSnapshotWithoutBlank } =
+          chatSnapshot as any
+
+        updatedChatForSaving = {
+          ...currentChatFromState,
+          ...chatSnapshotWithoutBlank,
+          // Ensure we always use the canonical chatId (may have changed during streaming)
+          id: chatId,
+          messages: newMessages,
+          // Only update title if it's not "Untitled" (preserve generated titles)
+          title:
+            chatSnapshot.title !== 'Untitled'
+              ? chatSnapshot.title
+              : currentChatFromState.title,
+          // Explicitly preserve flags
+          intendedLocalOnly:
+            (chatSnapshot as any).intendedLocalOnly ??
+            (currentChatFromState as any).intendedLocalOnly,
+          isLocalOnly:
+            (chatSnapshot as any).isLocalOnly ??
+            currentChatFromState.isLocalOnly,
+          // NEVER take isBlankChat from snapshot - determine based on messages
+          isBlankChat: newMessages.length === 0,
+        }
       }
 
       return prevChats.map((c) => (c.id === chatId ? updatedChatForSaving : c))
     })
-
-    // At this point updatedChatForSaving is definitely assigned
-    updatedChatForSaving = {
-      ...baseChat,
-      id: chatId,
-      messages: newMessages,
-    }
 
     if (isCurrentChat) {
       setCurrentChat(updatedChatForSaving)
@@ -70,19 +91,23 @@ export function createUpdateChatWithHistoryCheck({
     if (!isThinking || immediate) {
       if (storeHistory) {
         const skipCloudSync = isStreamingRef.current && !immediate
-        const chatToSave = updatedChatForSaving
 
         chatStorage
-          .saveChat(chatToSave, skipCloudSync)
+          .saveChat(updatedChatForSaving, skipCloudSync)
           .then((savedChat) => {
-            if (savedChat.id !== chatToSave.id) {
-              // Only switch currentChatIdRef if this chat is still the current chat
-              if (isCurrentChat && currentChatIdRef.current === chatToSave.id) {
+            // Only update refs if ID changed (for new chats getting server ID)
+            if (savedChat.id !== updatedChatForSaving.id) {
+              if (
+                isCurrentChat &&
+                currentChatIdRef.current === updatedChatForSaving.id
+              ) {
                 currentChatIdRef.current = savedChat.id
                 setCurrentChat(savedChat)
               }
               setChats((prevChats) =>
-                prevChats.map((c) => (c.id === chatToSave.id ? savedChat : c)),
+                prevChats.map((c) =>
+                  c.id === updatedChatForSaving.id ? savedChat : c,
+                ),
               )
             }
           })

@@ -517,7 +517,7 @@ export async function processStreamingResponse(
         ctx.setCurrentChat,
         ctx.currentChatIdRef.current, // Use the current ID, not the stale one
         finalMessages,
-        false, // immediate = false, skip cloud sync here
+        true, // immediate = true to force final persistence to IndexedDB
         false,
       )
     }
