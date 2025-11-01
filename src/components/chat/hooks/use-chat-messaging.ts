@@ -463,6 +463,20 @@ export function useChatMessaging({
               true,
               false,
             )
+
+            // Trigger cloud sync for non-local chats after saving
+            // This ensures the complete chat (with title) is synced
+            if (!updatedChat.isLocalOnly && !updatedChat.intendedLocalOnly) {
+              import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
+                cloudSync.backupChat(chatId).catch((error) => {
+                  logError('Failed to sync chat after completion', error, {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery',
+                    metadata: { chatId },
+                  })
+                })
+              })
+            }
           } else {
             logWarning(
               'Chat ID changed during streaming, skipping final save',
