@@ -295,7 +295,7 @@ export function useChatMessaging({
         // Real title will be generated after assistant response
         updatedChat = {
           ...currentChat,
-          title: 'New Chat',
+          title: 'Untitled',
           isBlankChat: false,
           createdAt: new Date(), // Set creation time to when first message is sent
         }
@@ -416,7 +416,7 @@ export function useChatMessaging({
 
             if (
               isFirstMessage &&
-              updatedChat.title === 'New Chat' &&
+              updatedChat.title === 'Untitled' &&
               models.length > 0
             ) {
               try {
@@ -437,13 +437,8 @@ export function useChatMessaging({
                     titleMessages,
                     freeModel.modelName,
                   )
-                  if (generatedTitle && generatedTitle !== 'New Chat') {
+                  if (generatedTitle && generatedTitle !== 'Untitled') {
                     updatedChat = { ...updatedChat, title: generatedTitle }
-                    setChats((prevChats) =>
-                      prevChats.map((c) =>
-                        c.id === chatId ? { ...c, title: generatedTitle } : c,
-                      ),
-                    )
                   }
                 } else {
                   logWarning('No free model found for title generation', {

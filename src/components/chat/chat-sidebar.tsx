@@ -1191,7 +1191,7 @@ function ChatListItem({
   useEffect(() => {
     if (
       prevTitleRef.current !== chat.title &&
-      chat.title !== 'New Chat' &&
+      chat.title !== 'Untitled' &&
       prevTitleRef.current !== ''
     ) {
       // Title changed - trigger typing animation
@@ -1199,7 +1199,7 @@ function ChatListItem({
       setAnimationToTitle(chat.title)
       setIsAnimating(true)
     } else {
-      // Instant update for "New Chat" title or initial load
+      // Instant update for "Untitled" title or initial load
       setDisplayTitle(chat.title)
       prevTitleRef.current = chat.title
     }
