@@ -9,7 +9,6 @@
  * Batches UI writes via rAF/setTimeout to avoid layout thrash and never writes
  * to storage directly. All persistence goes through updateChatWithHistoryCheck.
  */
-import { cloudSync } from '@/services/cloud/cloud-sync'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { logError } from '@/utils/error-handling'
 import type { Chat, Message } from '../types'
@@ -501,15 +500,14 @@ export async function processStreamingResponse(
     ctx.setIsThinking(false)
     ctx.thinkingStartTimeRef.current = null
     ctx.setIsWaitingForResponse(false)
+    // Note: Title generation and final cloud sync happens in use-chat-messaging.ts
+    // This save is just to ensure the assistant message is persisted immediately
     if (
       ctx.storeHistory &&
       assistantMessage &&
       (assistantMessage.content || assistantMessage.thoughts) &&
       ctx.currentChatIdRef.current === ctx.updatedChat.id
     ) {
-      // Ensure final save happens for both cloud and local-only chats
-      // The updateChatWithHistoryCheck function will save to IndexedDB
-      // and cloudSync.backupChat will handle cloud sync if applicable
       const finalMessages = [...ctx.updatedMessages, assistantMessage]
       ctx.updateChatWithHistoryCheck(
         ctx.setChats,
@@ -517,17 +515,9 @@ export async function processStreamingResponse(
         ctx.setCurrentChat,
         ctx.currentChatIdRef.current,
         finalMessages,
-        true, // immediate = true to ensure save happens
+        false, // immediate = false, skip cloud sync here
         false,
       )
-
-      // Also trigger cloud sync for non-local chats
-      cloudSync.backupChat(ctx.currentChatIdRef.current).catch((error) => {
-        logError('Failed to sync chat after streaming', error, {
-          component: 'streaming-processor',
-          action: 'finally',
-        })
-      })
     }
   }
 
