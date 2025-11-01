@@ -476,7 +476,7 @@ export function ChatSidebar({
   }, [])
 
   const sortedChats = useMemo(() => {
-    // Filter chats based on active tab (only when cloud sync is enabled)
+    // Filter chats based on active tab and cloud sync status
     const filteredChats =
       isSignedIn && cloudSyncEnabled
         ? activeTab === 'cloud'
@@ -494,7 +494,13 @@ export function ChatSidebar({
               }
               return (chat as any).isLocalOnly
             })
-        : chats // Show all chats when not signed in or cloud sync is disabled
+        : chats.filter((chat) => {
+            // When cloud sync is disabled, only show local chats
+            if (chat.isBlankChat) {
+              return true // Show blank chats
+            }
+            return (chat as any).isLocalOnly
+          })
 
     return [...filteredChats].sort((a, b) => {
       // Blank chats should always be at the top
