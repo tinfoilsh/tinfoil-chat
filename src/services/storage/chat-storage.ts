@@ -92,8 +92,13 @@ export class ChatStorageService {
 
     let chatToSave = chat
 
-    // If this is the first save (has temporary ID), try to get server ID (only if cloud sync is enabled)
-    if (chat.hasTemporaryId && isCloudSyncEnabled()) {
+    // If this is the first save (has temporary ID), try to get server ID
+    // Only for cloud chats (not local-only) and when cloud sync is enabled globally
+    if (
+      chat.hasTemporaryId &&
+      isCloudSyncEnabled() &&
+      !(chat as any).intendedLocalOnly
+    ) {
       // Check if we already have a server ID for this temp ID
       const cachedServerId = this.serverIdCache.get(chat.id)
 
@@ -151,6 +156,14 @@ export class ChatStorageService {
     const shouldMarkAsLocal =
       isNewChat &&
       ((chatToSave as any).intendedLocalOnly || !isCloudSyncEnabled())
+
+    // For local-only chats, clear the temporary ID flag since they don't need a server ID
+    if (shouldMarkAsLocal && chatToSave.hasTemporaryId) {
+      chatToSave = {
+        ...chatToSave,
+        hasTemporaryId: false,
+      }
+    }
 
     // Save the chat
     const storageChat: StorageChat = {
