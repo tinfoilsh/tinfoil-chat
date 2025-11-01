@@ -24,6 +24,10 @@ export type Chat = {
   hasTemporaryId?: boolean
   // Blank chat flag - true for new chats that haven't been used yet
   isBlankChat?: boolean
+  // Local-only flag - true for chats that should never sync to cloud
+  isLocalOnly?: boolean
+  // Intended local-only - set when creating in local tab (before first save)
+  intendedLocalOnly?: boolean
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming'

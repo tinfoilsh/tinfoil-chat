@@ -1,8 +1,9 @@
 import { CLOUD_SYNC } from '@/config'
 import { profileSync, type ProfileData } from '@/services/cloud/profile-sync'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export function useProfileSync() {
   const { getToken, isSignedIn } = useAuth()
@@ -11,11 +12,27 @@ export function useProfileSync() {
   const lastSyncedVersion = useRef<number>(0)
   const hasPendingChanges = useRef(false)
   const lastSyncedProfile = useRef<ProfileData | null>(null)
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
 
   // Set token getter when auth changes
   useEffect(() => {
     profileSync.setTokenGetter(getToken)
   }, [getToken])
+
+  // Listen for cloud sync setting changes
+  useEffect(() => {
+    const checkCloudSyncStatus = () => {
+      setCloudSyncEnabled(isCloudSyncEnabled())
+    }
+
+    window.addEventListener('storage', checkCloudSyncStatus)
+    const interval = setInterval(checkCloudSyncStatus, 1000)
+
+    return () => {
+      window.removeEventListener('storage', checkCloudSyncStatus)
+      clearInterval(interval)
+    }
+  }, [])
 
   // Helper to check if profile content has changed (excluding metadata)
   const hasProfileChanged = useCallback(
@@ -235,7 +252,7 @@ export function useProfileSync() {
 
   // Sync profile from cloud to local
   const syncFromCloud = useCallback(async () => {
-    if (!isSignedIn) return
+    if (!isSignedIn || !isCloudSyncEnabled()) return
 
     // Skip sync if we have pending local changes
     if (hasPendingChanges.current) {
@@ -291,7 +308,7 @@ export function useProfileSync() {
 
   // Sync profile from local to cloud (debounced)
   const syncToCloud = useCallback(async () => {
-    if (!isSignedIn) return
+    if (!isSignedIn || !isCloudSyncEnabled()) return
 
     // Clear any existing debounce timer
     if (syncDebounceTimer.current) {
@@ -356,9 +373,9 @@ export function useProfileSync() {
     }, 2000) // 2 second debounce
   }, [isSignedIn, loadLocalSettings, hasProfileChanged])
 
-  // Initial sync when authenticated and periodic sync
+  // Initial sync when authenticated and periodic sync (only if cloud sync is enabled)
   useEffect(() => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !cloudSyncEnabled) {
       hasInitialized.current = false
       hasPendingChanges.current = false
       lastSyncedVersion.current = 0
@@ -392,7 +409,7 @@ export function useProfileSync() {
     }, CLOUD_SYNC.SYNC_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [isSignedIn, syncFromCloud])
+  }, [isSignedIn, cloudSyncEnabled, syncFromCloud])
 
   // Listen for settings changes and sync to cloud
   useEffect(() => {

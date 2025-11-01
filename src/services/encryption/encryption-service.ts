@@ -173,9 +173,8 @@ export class EncryptionService {
     return 'key_' + this.bytesToAlphanumeric(new Uint8Array(rawKey))
   }
 
-  // Initialize with existing key or generate new one
-  async initialize(): Promise<string> {
-    // Check if we have a stored key
+  // Initialize with existing key - does NOT generate a new key automatically
+  async initialize(): Promise<string | null> {
     const storedKey = localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
     this.fallbackKeyStrings = this.loadKeyHistoryFromStorage()
     this.pruneFallbackCache(this.fallbackKeyStrings)
@@ -183,12 +182,9 @@ export class EncryptionService {
     if (storedKey) {
       await this.setKey(storedKey)
       return storedKey
-    } else {
-      // Generate new key
-      const newKey = await this.generateKey()
-      await this.setKey(newKey)
-      return newKey
     }
+
+    return null
   }
 
   // Set encryption key from alphanumeric string

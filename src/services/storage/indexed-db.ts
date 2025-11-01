@@ -17,6 +17,7 @@ export interface StoredChat extends Chat {
   encryptedData?: string
   version?: number // Storage format version
   loadedAt?: number // Timestamp when chat was loaded from pagination
+  isLocalOnly?: boolean // True if chat should never be synced to cloud (created when sync was disabled)
 }
 
 const DB_NAME = 'tinfoil-chat'
@@ -154,6 +155,9 @@ export class IndexedDBStorage {
             (chat as StoredChat).loadedAt ??
             existingChat?.loadedAt ??
             undefined,
+          // Explicitly preserve local-only flag
+          isLocalOnly:
+            (chat as any).isLocalOnly ?? existingChat?.isLocalOnly ?? false,
         }
 
         const putRequest = store.put(storedChat)
@@ -213,6 +217,34 @@ export class IndexedDBStorage {
 
       request.onsuccess = () => resolve()
       request.onerror = () => reject(new Error('Failed to delete chat'))
+    })
+  }
+
+  async deleteAllNonLocalChats(): Promise<number> {
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([CHATS_STORE], 'readwrite')
+      const store = transaction.objectStore(CHATS_STORE)
+      const request = store.openCursor()
+      let deletedCount = 0
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
+        if (cursor) {
+          const chat = cursor.value as StoredChat
+          if (!chat.isLocalOnly) {
+            cursor.delete()
+            deletedCount++
+          }
+          cursor.continue()
+        } else {
+          resolve(deletedCount)
+        }
+      }
+
+      request.onerror = () =>
+        reject(new Error('Failed to delete non-local chats'))
     })
   }
 

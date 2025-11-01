@@ -34,27 +34,50 @@ export function createUpdateChatWithHistoryCheck({
   ) {
     const isCurrentChat = currentChatIdRef.current === chatId
 
-    const updatedChatForSaving: Chat = {
+    let updatedChatForSaving: Chat = {
       ...chatSnapshot,
       id: chatId,
       messages: newMessages,
+      intendedLocalOnly: (chatSnapshot as any).intendedLocalOnly,
+      isLocalOnly: (chatSnapshot as any).isLocalOnly,
+    } as Chat
+
+    setChats((prevChats) => {
+      const currentChatFromState = prevChats.find((c) => c.id === chatId)
+
+      // Merge current state with snapshot to preserve properties that may have been updated
+      // (like title generation) while also applying new updates (like messages)
+      if (currentChatFromState) {
+        updatedChatForSaving = {
+          ...currentChatFromState,
+          ...chatSnapshot,
+          messages: newMessages,
+          // Explicitly preserve flags
+          intendedLocalOnly:
+            (chatSnapshot as any).intendedLocalOnly ??
+            (currentChatFromState as any).intendedLocalOnly,
+          isLocalOnly:
+            (chatSnapshot as any).isLocalOnly ??
+            currentChatFromState.isLocalOnly,
+        }
+      }
+
+      return prevChats.map((c) => (c.id === chatId ? updatedChatForSaving : c))
+    })
+
+    if (isCurrentChat) {
+      setCurrentChat(updatedChatForSaving)
     }
 
-    if (isCurrentChat) setCurrentChat(updatedChatForSaving)
-
-    setChats((prevChats) =>
-      prevChats.map((c) => (c.id === chatId ? updatedChatForSaving : c)),
-    )
-
-    if ((!isThinking || immediate) && updatedChatForSaving) {
+    if (!isThinking || immediate) {
       if (storeHistory) {
         const skipCloudSync = isStreamingRef.current && !immediate
 
         chatStorage
           .saveChat(updatedChatForSaving, skipCloudSync)
           .then((savedChat) => {
+            // Only update refs if ID changed (for new chats getting server ID)
             if (savedChat.id !== updatedChatForSaving.id) {
-              // Only switch currentChatIdRef if this chat is still the current chat
               if (
                 isCurrentChat &&
                 currentChatIdRef.current === updatedChatForSaving.id

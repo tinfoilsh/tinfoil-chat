@@ -1,6 +1,14 @@
 /* eslint-disable react/no-unescaped-entities */
 import { cn } from '@/components/ui/utils'
+import { encryptionService } from '@/services/encryption/encryption-service'
+import { chatStorage } from '@/services/storage/chat-storage'
 import {
+  isCloudSyncEnabled,
+  setCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
+import { logInfo } from '@/utils/error-handling'
+import {
+  CloudArrowUpIcon,
   Cog6ToothIcon,
   KeyIcon,
   MoonIcon,
@@ -19,6 +27,8 @@ type SettingsSidebarProps = {
   isClient: boolean
   defaultSystemPrompt?: string
   onEncryptionKeyClick?: () => void
+  onCloudSyncSetupClick?: () => void
+  onChatsUpdated?: () => void
 }
 
 export function SettingsSidebar({
@@ -29,6 +39,8 @@ export function SettingsSidebar({
   isClient,
   defaultSystemPrompt = '',
   onEncryptionKeyClick,
+  onCloudSyncSetupClick,
+  onChatsUpdated,
 }: SettingsSidebarProps) {
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
@@ -48,6 +60,9 @@ export function SettingsSidebar({
   // Custom system prompt settings
   const [isUsingCustomPrompt, setIsUsingCustomPrompt] = useState<boolean>(false)
   const [customSystemPrompt, setCustomSystemPrompt] = useState<string>('')
+
+  // Cloud sync setting
+  const [cloudSyncEnabled, setCloudSyncEnabledState] = useState<boolean>(false)
 
   // Available personality traits
   const availableTraits = [
@@ -158,12 +173,13 @@ export function SettingsSidebar({
       setIsUsingCustomPrompt(savedUsingCustomPrompt === 'true')
     }
     if (savedCustomPrompt !== null) {
-      // Store the full prompt with system tags
       setCustomSystemPrompt(savedCustomPrompt)
     } else if (defaultSystemPrompt) {
-      // Initialize with default system prompt if no saved value
       setCustomSystemPrompt(defaultSystemPrompt)
     }
+
+    // Load cloud sync setting
+    setCloudSyncEnabledState(isCloudSyncEnabled())
   }, [defaultSystemPrompt])
 
   // Initial load settings from localStorage
@@ -453,6 +469,68 @@ export function SettingsSidebar({
     }
   }
 
+  const handleCloudSyncToggle = async (enabled: boolean) => {
+    if (enabled) {
+      // Check if encryption key exists
+      if (!encryptionService.getKey()) {
+        // Turn on the toggle visually
+        setCloudSyncEnabledState(true)
+        setCloudSyncEnabled(true)
+
+        // Show the cloud sync setup modal
+        if (onCloudSyncSetupClick) {
+          onCloudSyncSetupClick()
+        }
+        return
+      }
+
+      // If key exists, proceed with enabling
+      setCloudSyncEnabledState(true)
+      setCloudSyncEnabled(true)
+
+      // Clear the explicit disable flag when re-enabling
+      localStorage.removeItem('cloudSyncExplicitlyDisabled')
+    } else {
+      // Disabling cloud sync
+      setCloudSyncEnabledState(false)
+      setCloudSyncEnabled(false)
+
+      // Clear encryption key to prevent auto-enable on refresh
+      localStorage.removeItem('tinfoil-encryption-key')
+
+      // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
+      localStorage.setItem('cloudSyncExplicitlyDisabled', 'true')
+
+      try {
+        const deletedCount = await chatStorage.deleteAllNonLocalChats()
+        logInfo(
+          `Deleted ${deletedCount} synced chats when disabling cloud sync`,
+          {
+            component: 'SettingsSidebar',
+            action: 'handleCloudSyncToggle',
+          },
+        )
+        if (deletedCount > 0 && onChatsUpdated) {
+          onChatsUpdated()
+        }
+      } catch (error) {
+        logInfo('Failed to delete synced chats', {
+          component: 'SettingsSidebar',
+          action: 'handleCloudSyncToggle',
+          metadata: { error },
+        })
+      }
+    }
+
+    if (isClient) {
+      window.dispatchEvent(
+        new CustomEvent('cloudSyncSettingChanged', {
+          detail: { enabled },
+        }),
+      )
+    }
+  }
+
   return (
     <>
       {/* Settings sidebar */}
@@ -491,6 +569,92 @@ export function SettingsSidebar({
         {/* Settings content */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-6">
+            {/* Warning when cloud sync is disabled */}
+            {!cloudSyncEnabled && (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  <strong>Note:</strong> Cloud sync is disabled. Your chats,
+                  settings, and personalization are stored locally and won't
+                  sync across devices.
+                </p>
+              </div>
+            )}
+
+            {/* Encrypted Cloud Sync section - moved to top */}
+            {onEncryptionKeyClick && (
+              <div>
+                <h3
+                  className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                >
+                  Encrypted Cloud Sync
+                </h3>
+                <div className="space-y-2">
+                  {/* Cloud Sync Toggle */}
+                  <div className="rounded-lg border border-border-subtle p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <CloudArrowUpIcon
+                          className={`h-5 w-5 ${'text-content-muted'}`}
+                        />
+                        <div className="text-left">
+                          <div
+                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                          >
+                            Cloud Sync
+                          </div>
+                          <div
+                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                          >
+                            {cloudSyncEnabled
+                              ? 'Chats are synced to cloud'
+                              : 'Chats are stored locally only'}
+                          </div>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex cursor-pointer items-center">
+                        <input
+                          type="checkbox"
+                          checked={cloudSyncEnabled}
+                          onChange={(e) =>
+                            handleCloudSyncToggle(e.target.checked)
+                          }
+                          className="peer sr-only"
+                        />
+                        <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Encryption Key Management - only show when cloud sync is enabled */}
+                  {cloudSyncEnabled && (
+                    <button
+                      onClick={onEncryptionKeyClick}
+                      className="flex w-full items-center justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat/80"
+                    >
+                      <div className="flex items-center gap-3">
+                        <KeyIcon
+                          className={`h-5 w-5 ${'text-content-muted'}`}
+                        />
+                        <div className="text-left">
+                          <div
+                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                          >
+                            Encryption Key
+                          </div>
+                          <div
+                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                          >
+                            Manage your chat encryption key
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`text-xs ${'text-content-muted'}`}>→</div>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Appearance section */}
             <div>
               <h3
@@ -830,41 +994,6 @@ export function SettingsSidebar({
                 </div>
               </div>
             </div>
-
-            {/* Security section */}
-            {onEncryptionKeyClick && (
-              <div>
-                <h3
-                  className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                >
-                  Security
-                </h3>
-                <div className="space-y-2">
-                  <button
-                    onClick={onEncryptionKeyClick}
-                    className="flex w-full items-center justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat/80"
-                  >
-                    <div className="flex items-center gap-3">
-                      <KeyIcon className={`h-5 w-5 ${'text-content-muted'}`} />
-                      <div className="text-left">
-                        <div
-                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                        >
-                          Chat Encryption Key
-                        </div>
-                        <div
-                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                        >
-                          Manage your chat backup and synchronization encryption
-                          key.
-                        </div>
-                      </div>
-                    </div>
-                    <div className={`text-xs ${'text-content-muted'}`}>→</div>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </motion.div>

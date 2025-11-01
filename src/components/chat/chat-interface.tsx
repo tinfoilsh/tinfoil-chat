@@ -20,7 +20,12 @@ import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
+import { encryptionService } from '@/services/encryption/encryption-service'
 import { migrationEvents } from '@/services/storage/migration-events'
+import {
+  isCloudSyncEnabled,
+  setCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -48,9 +53,11 @@ const EncryptionKeyModal = dynamic(
     import('../modals/encryption-key-modal').then((m) => m.EncryptionKeyModal),
   { ssr: false },
 )
-const FirstLoginKeyModal = dynamic(
+const CloudSyncSetupModal = dynamic(
   () =>
-    import('../modals/first-login-key-modal').then((m) => m.FirstLoginKeyModal),
+    import('../modals/cloud-sync-setup-modal').then(
+      (m) => m.CloudSyncSetupModal,
+    ),
   { ssr: false },
 )
 // Lazy-load heavy, non-critical UI to reduce initial bundle and speed up FCP
@@ -139,6 +146,9 @@ export function ChatInterface({
   // State for share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
+  // Track if user has sent their first message (for cloud sync modal)
+  const [hasSentFirstMessage, setHasSentFirstMessage] = useState(false)
+
   // State for encryption key modal
   const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
     useState(false)
@@ -146,6 +156,9 @@ export function ChatInterface({
   // State for cloud sync intro modal
   const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
     useState(false)
+
+  // State for cloud sync setup modal
+  const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -531,6 +544,11 @@ export function ChatInterface({
     setIsEncryptionKeyModalOpen(true)
   }
 
+  // Handler for cloud sync setup
+  const handleOpenCloudSyncSetup = () => {
+    setShowCloudSyncSetupModal(true)
+  }
+
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
 
@@ -675,6 +693,11 @@ export function ChatInterface({
     // Don't proceed if there's no input text
     if (!input.trim()) {
       return
+    }
+
+    // Mark that user has sent their first message (for cloud sync modal)
+    if (!hasSentFirstMessage) {
+      setHasSentFirstMessage(true)
     }
 
     // Don't auto-scroll here - let the message append handler do it
@@ -994,7 +1017,7 @@ export function ChatInterface({
                   ? 'cursor-not-allowed text-content-muted opacity-50'
                   : 'hover:bg-surface-chat hover:text-content-primary',
               )}
-              onClick={createNewChat}
+              onClick={() => createNewChat()}
               aria-label="Create new chat"
               disabled={currentChat?.messages?.length === 0}
             >
@@ -1127,6 +1150,10 @@ export function ChatInterface({
         onEncryptionKeyClick={
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
         }
+        onCloudSyncSetupClick={
+          isSignedIn ? handleOpenCloudSyncSetup : undefined
+        }
+        onChatsUpdated={reloadChats}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
@@ -1356,23 +1383,45 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
-      {/* First Login Key Modal */}
-      {isFirstTimeUser && isSignedIn && (
-        <FirstLoginKeyModal
-          isOpen={true}
-          onClose={() => clearFirstTimeUser()}
-          onNewKey={() => {
-            clearFirstTimeUser()
-            // Key is already generated, just close the modal
+      {/* Cloud Sync Setup Modal for first-time users - show after first message */}
+      {isFirstTimeUser &&
+        isSignedIn &&
+        hasSentFirstMessage &&
+        !localStorage.getItem('hasSeenCloudSyncModal') &&
+        !isCloudSyncEnabled() && (
+          <CloudSyncSetupModal
+            isOpen={true}
+            onClose={() => clearFirstTimeUser()}
+            onSetupComplete={async (key: string) => {
+              const syncResult = await setEncryptionKey(key)
+              if (syncResult) {
+                await retryProfileDecryption()
+                await reloadChats()
+              }
+              clearFirstTimeUser()
+            }}
+            isDarkMode={isDarkMode}
+          />
+        )}
+
+      {/* Cloud Sync Setup Modal - manually triggered from settings */}
+      {showCloudSyncSetupModal && (
+        <CloudSyncSetupModal
+          isOpen={showCloudSyncSetupModal}
+          onClose={() => {
+            setShowCloudSyncSetupModal(false)
+            // If no key was set, turn off cloud sync
+            if (!encryptionService.getKey()) {
+              setCloudSyncEnabled(false)
+            }
           }}
-          onImportKey={async (key: string) => {
+          onSetupComplete={async (key: string) => {
             const syncResult = await setEncryptionKey(key)
-            // If sync happened (key changed), reload chats
             if (syncResult) {
               await retryProfileDecryption()
               await reloadChats()
             }
-            clearFirstTimeUser()
+            setShowCloudSyncSetupModal(false)
           }}
           isDarkMode={isDarkMode}
         />

@@ -1,9 +1,6 @@
-import {
-  AiOutlineCloudSync,
-  FaLock,
-  MdOutlineCloudOff,
-} from '@/components/icons/lazy-icons'
+import { AiOutlineCloudSync, FaLock } from '@/components/icons/lazy-icons'
 import { API_BASE_URL, PAGINATION } from '@/config'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -81,7 +78,7 @@ type ChatSidebarProps = {
   chats: Chat[]
   currentChat: Chat
   isDarkMode: boolean
-  createNewChat: () => void
+  createNewChat: (intendedLocalOnly?: boolean) => void
   handleChatSelect: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   deleteChat: (chatId: string) => void
@@ -219,6 +216,8 @@ export function ChatSidebar({
   )
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'cloud' | 'local'>('cloud')
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
   // Cloud pagination state via hook
@@ -241,6 +240,39 @@ export function ChatSidebar({
 
   // Apply zoom prevention for mobile
   usePreventZoom()
+
+  // Listen for cloud sync setting changes
+  useEffect(() => {
+    const handleCloudSyncChange = () => {
+      setCloudSyncEnabled(isCloudSyncEnabled())
+    }
+
+    // Listen for both storage events and custom events
+    window.addEventListener('storage', handleCloudSyncChange)
+    window.addEventListener('cloudSyncSettingChanged', handleCloudSyncChange)
+
+    return () => {
+      window.removeEventListener('storage', handleCloudSyncChange)
+      window.removeEventListener(
+        'cloudSyncSettingChanged',
+        handleCloudSyncChange,
+      )
+    }
+  }, [])
+
+  // Update blank chat's intendedLocalOnly when active tab changes
+  useEffect(() => {
+    if (!isSignedIn || !cloudSyncEnabled) return
+
+    const shouldBeLocal = activeTab === 'local'
+    const blankChat = chats.find((chat) => chat.isBlankChat === true)
+
+    // If there's a blank chat and its intendedLocalOnly doesn't match the active tab,
+    // call createNewChat to update it
+    if (blankChat && blankChat.intendedLocalOnly !== shouldBeLocal) {
+      createNewChat(shouldBeLocal)
+    }
+  }, [activeTab, isSignedIn, cloudSyncEnabled, chats, createNewChat])
 
   // Listen for highlight events
   useEffect(() => {
@@ -285,9 +317,11 @@ export function ChatSidebar({
   const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
   // Show load more if:
   // 1. User is signed in
-  // 2. Either: we have more remote chats, OR we haven't tried loading yet and have enough chats to suggest pagination
+  // 2. On cloud tab
+  // 3. Either: we have more remote chats, OR we haven't tried loading yet and have enough chats to suggest pagination
   const shouldShowLoadMore =
     isSignedIn &&
+    activeTab === 'cloud' &&
     (hasMoreRemote ||
       (!hasAttemptedLoadMore && syncedChatsCount >= PAGINATION.CHATS_PER_PAGE))
 
@@ -442,7 +476,33 @@ export function ChatSidebar({
   }, [])
 
   const sortedChats = useMemo(() => {
-    return [...chats].sort((a, b) => {
+    // Filter chats based on active tab and cloud sync status
+    const filteredChats =
+      isSignedIn && cloudSyncEnabled
+        ? activeTab === 'cloud'
+          ? chats.filter((chat) => {
+              // For blank chats, use intendedLocalOnly flag since they haven't been saved yet
+              if (chat.isBlankChat) {
+                return !(chat as any).intendedLocalOnly
+              }
+              return !(chat as any).isLocalOnly
+            })
+          : chats.filter((chat) => {
+              // For blank chats, use intendedLocalOnly flag since they haven't been saved yet
+              if (chat.isBlankChat) {
+                return (chat as any).intendedLocalOnly
+              }
+              return (chat as any).isLocalOnly
+            })
+        : chats.filter((chat) => {
+            // When cloud sync is disabled, only show local chats
+            if (chat.isBlankChat) {
+              return true // Show blank chats
+            }
+            return (chat as any).isLocalOnly
+          })
+
+    return [...filteredChats].sort((a, b) => {
       // Blank chats should always be at the top
       const aIsBlank = a.isBlankChat === true
       const bIsBlank = b.isBlankChat === true
@@ -454,7 +514,7 @@ export function ChatSidebar({
       const timeB = getChatSortTimestamp(b)
       return timeB - timeA
     })
-  }, [chats, getChatSortTimestamp])
+  }, [chats, getChatSortTimestamp, activeTab, isSignedIn, cloudSyncEnabled])
 
   const handleUpgradeToPro = useCallback(async () => {
     if (!getToken) {
@@ -721,7 +781,10 @@ export function ChatSidebar({
           <div className="flex-none">
             <button
               onClick={() => {
-                createNewChat()
+                // Create local-only chat if on local tab, cloud chat otherwise
+                const shouldBeLocal =
+                  isSignedIn && cloudSyncEnabled && activeTab === 'local'
+                createNewChat(shouldBeLocal)
                 // Only close sidebar on mobile
                 if (windowWidth < MOBILE_BREAKPOINT) {
                   setIsOpen(false)
@@ -778,15 +841,62 @@ export function ChatSidebar({
                 )}
               </div>
             </div>
+
+            {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
+            {isSignedIn && cloudSyncEnabled && (
+              <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat/50 p-1">
+                <button
+                  onClick={() => setActiveTab('cloud')}
+                  className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                    activeTab === 'cloud'
+                      ? isDarkMode
+                        ? 'bg-surface-chat text-content-primary shadow-sm'
+                        : 'bg-white text-content-primary shadow-sm'
+                      : 'text-content-muted hover:text-content-secondary'
+                  }`}
+                >
+                  Cloud (
+                  {
+                    chats.filter((chat) => {
+                      if (chat.isBlankChat) return false
+                      return !(chat as any).isLocalOnly
+                    }).length
+                  }
+                  )
+                </button>
+                <button
+                  onClick={() => setActiveTab('local')}
+                  className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                    activeTab === 'local'
+                      ? isDarkMode
+                        ? 'bg-surface-chat text-content-primary shadow-sm'
+                        : 'bg-white text-content-primary shadow-sm'
+                      : 'text-content-muted hover:text-content-secondary'
+                  }`}
+                >
+                  Local (
+                  {
+                    chats.filter((chat) => {
+                      if (chat.isBlankChat) return false
+                      return (chat as any).isLocalOnly
+                    }).length
+                  }
+                  )
+                </button>
+              </div>
+            )}
+
             <div className="font-base mt-1 font-aeonik-fono text-xs text-content-muted">
-              {isSignedIn ? (
+              {!isSignedIn ? (
+                'Your chats are stored temporarily in this browser tab.'
+              ) : activeTab === 'cloud' ? (
                 <>
                   Your chats are encrypted and synced to the cloud. The
                   encryption key is only stored on this browser and never sent
                   to Tinfoil.
                 </>
               ) : (
-                'Your chats are stored temporarily in this browser tab.'
+                "Local chats are stored only on this device and won't sync."
               )}
             </div>
           </div>
@@ -794,6 +904,18 @@ export function ChatSidebar({
           {/* Scrollable Chat List */}
           <div className="flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
+              {isClient &&
+                sortedChats.length === 0 &&
+                activeTab === 'local' && (
+                  <div className="rounded-lg border border-border-subtle p-4 text-center">
+                    <p className="text-sm text-content-muted">
+                      No local chats yet
+                    </p>
+                    <p className="mt-1 text-xs text-content-muted">
+                      Disable cloud sync in settings to create local-only chats
+                    </p>
+                  </div>
+                )}
               {isClient &&
                 sortedChats.map((chat) => (
                   <div key={chat.id} className="relative">
@@ -844,6 +966,7 @@ export function ChatSidebar({
                         isPremium={isPremium}
                         isDarkMode={isDarkMode}
                         isSignedIn={isSignedIn ?? false}
+                        cloudSyncEnabled={cloudSyncEnabled}
                       />
                     </div>
                     {/* Delete confirmation */}
@@ -1039,6 +1162,7 @@ function ChatListItem({
   isPremium = true,
   isDarkMode,
   isSignedIn,
+  cloudSyncEnabled,
 }: {
   chat: Chat
   isEditing: boolean
@@ -1050,6 +1174,7 @@ function ChatListItem({
   isPremium?: boolean
   isDarkMode: boolean
   isSignedIn: boolean
+  cloudSyncEnabled: boolean
 }) {
   // Track previous title for animation
   const [displayTitle, setDisplayTitle] = useState(chat.title)
@@ -1062,7 +1187,7 @@ function ChatListItem({
   useEffect(() => {
     if (
       prevTitleRef.current !== chat.title &&
-      chat.title !== 'New Chat' &&
+      chat.title !== 'Untitled' &&
       prevTitleRef.current !== ''
     ) {
       // Title changed - trigger typing animation
@@ -1070,7 +1195,7 @@ function ChatListItem({
       setAnimationToTitle(chat.title)
       setIsAnimating(true)
     } else {
-      // Instant update for "New Chat" title or initial load
+      // Instant update for "Untitled" title or initial load
       setDisplayTitle(chat.title)
       prevTitleRef.current = chat.title
     }
@@ -1112,7 +1237,7 @@ function ChatListItem({
   return (
     <>
       <div className="flex w-full items-start justify-between">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-2">
           {isEditing && isPremium ? (
             <form
               onSubmit={handleSubmit}
@@ -1168,50 +1293,55 @@ function ChatListItem({
                   />
                 )}
               </div>
-              {/* Show decryption error with red text */}
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`text-xs ${
-                    chat.decryptionFailed
-                      ? 'text-red-500'
-                      : isDarkMode
-                        ? 'text-content-muted'
-                        : 'text-content-muted'
-                  }`}
-                >
-                  {chat.decryptionFailed
-                    ? (chat as any).dataCorrupted
+              <div className="flex w-full items-center justify-between gap-2">
+                {chat.decryptionFailed ? (
+                  <div className="text-xs text-red-500">
+                    {(chat as any).dataCorrupted
                       ? 'Failed to decrypt: corrupted data'
-                      : 'Failed to decrypt: wrong key'
-                    : chat.messages.length === 0
-                      ? '\u00A0' // Non-breaking space for consistent height
-                      : formatRelativeTime(chat.createdAt)}
-                </div>
-                {/* Cloud sync indicator */}
-                {chat.messages.length > 0 &&
-                  !chat.syncedAt &&
-                  (isSignedIn ? (
-                    <AiOutlineCloudSync
-                      className={`h-3 w-3 ${
-                        isDarkMode ? 'text-content-muted' : 'text-content-muted'
-                      }`}
-                      title="Not synced to cloud"
-                    />
-                  ) : (
-                    <MdOutlineCloudOff
-                      className={`h-3 w-3 ${
-                        isDarkMode ? 'text-content-muted' : 'text-content-muted'
-                      }`}
-                      title="Local only - not saved to cloud"
-                    />
-                  ))}
+                      : 'Failed to decrypt: wrong key'}
+                  </div>
+                ) : chat.messages.length === 0 ? (
+                  <>
+                    {/* Empty space for timestamp area */}
+                    <div className="text-xs text-content-muted">{'\u00A0'}</div>
+                    {/* For empty chats, show "local" only if truly local-only */}
+                    {(chat as any).isLocalOnly && (
+                      <span
+                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        title="This chat is stored locally and won't sync to cloud"
+                      >
+                        local
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xs text-content-muted">
+                      {formatRelativeTime(chat.createdAt)}
+                    </div>
+                    {/* Show "local" ONLY for truly local-only chats */}
+                    {(chat as any).isLocalOnly ? (
+                      <span
+                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                        title="This chat is stored locally and won't sync to cloud"
+                      >
+                        local
+                      </span>
+                    ) : isSignedIn && cloudSyncEnabled && !chat.syncedAt ? (
+                      <AiOutlineCloudSync
+                        className="h-3 w-3 text-content-muted"
+                        title="Not synced to cloud"
+                      />
+                    ) : null}
+                  </>
+                )}
               </div>
             </>
           )}
         </div>
 
         {!isEditing && (
-          <div className="ml-2 flex opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+          <div className="flex flex-shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
             {!chat.decryptionFailed && isPremium && (
               <button
                 className={`mr-1 rounded p-1 transition-colors ${

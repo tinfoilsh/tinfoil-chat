@@ -6,8 +6,8 @@ export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
   freeModelName?: string,
 ): Promise<string> {
-  if (!messages || messages.length === 0) return 'New Chat'
-  if (!freeModelName) return 'New Chat'
+  if (!messages || messages.length === 0) return 'Untitled'
+  if (!freeModelName) return 'Untitled'
 
   try {
     const conversationForTitle = messages
@@ -35,7 +35,7 @@ export async function generateTitle(
     if (cleanTitle && cleanTitle.length > 0 && cleanTitle.length <= 50) {
       return cleanTitle
     }
-    return 'New Chat'
+    return 'Untitled'
   } catch (error) {
     logError('Failed to generate title', error, {
       component: 'title',
@@ -44,6 +44,6 @@ export async function generateTitle(
         modelName: freeModelName,
       },
     })
-    return 'New Chat'
+    return 'Untitled'
   }
 }

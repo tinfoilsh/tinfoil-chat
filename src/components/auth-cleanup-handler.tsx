@@ -6,7 +6,6 @@ import { encryptionService } from '@/services/encryption/encryption-service'
 import { logInfo } from '@/utils/error-handling'
 import {
   getEncryptionKey,
-  hasEncryptionKey,
   performSignoutCleanup,
 } from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
@@ -43,13 +42,12 @@ export function AuthCleanupHandler() {
       })
     }
 
+    // Update the previous user ID BEFORE checking signout
+    const wasSignedIn = previousUserIdRef.current !== null
+    previousUserIdRef.current = user?.id || null
+
     // Check if user just signed out (was signed in before, now not signed in)
-    if (
-      !isSignedIn &&
-      previousUserIdRef.current &&
-      hasEncryptionKey() &&
-      !hasCheckedRef.current
-    ) {
+    if (!isSignedIn && wasSignedIn && !hasCheckedRef.current) {
       hasCheckedRef.current = true
 
       // Check theme - follow browser preference if no saved theme
@@ -63,9 +61,6 @@ export function AuthCleanupHandler() {
 
       setShowModal(true)
     }
-
-    // Update the previous user ID
-    previousUserIdRef.current = user?.id || null
 
     // Reset the check flag when user signs in
     if (isSignedIn) {
