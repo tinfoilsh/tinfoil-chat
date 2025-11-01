@@ -11,7 +11,7 @@ import type { Chat } from '../types'
 function createNewChatObjectSync(intendedLocalOnly = false): Chat {
   return {
     id: 'new-chat-' + Date.now(), // Temporary placeholder ID
-    title: 'New Chat',
+    title: 'Untitled',
     messages: [],
     createdAt: new Date(),
     hasTemporaryId: true, // Flag to indicate this needs a server ID
