@@ -78,7 +78,7 @@ type ChatSidebarProps = {
   chats: Chat[]
   currentChat: Chat
   isDarkMode: boolean
-  createNewChat: () => void
+  createNewChat: (intendedLocalOnly?: boolean) => void
   handleChatSelect: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   deleteChat: (chatId: string) => void
@@ -749,7 +749,10 @@ export function ChatSidebar({
           <div className="flex-none">
             <button
               onClick={() => {
-                createNewChat()
+                // Create local-only chat if on local tab, cloud chat otherwise
+                const shouldBeLocal =
+                  isSignedIn && cloudSyncEnabled && activeTab === 'local'
+                createNewChat(shouldBeLocal)
                 // Only close sidebar on mobile
                 if (windowWidth < MOBILE_BREAKPOINT) {
                   setIsOpen(false)

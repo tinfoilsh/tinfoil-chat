@@ -8,7 +8,7 @@ import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 
 // Create a new chat object with placeholder ID (will be replaced when first message is sent)
-function createNewChatObjectSync(): Chat {
+function createNewChatObjectSync(intendedLocalOnly = false): Chat {
   return {
     id: 'new-chat-' + Date.now(), // Temporary placeholder ID
     title: 'New Chat',
@@ -16,6 +16,7 @@ function createNewChatObjectSync(): Chat {
     createdAt: new Date(),
     hasTemporaryId: true, // Flag to indicate this needs a server ID
     isBlankChat: true,
+    intendedLocalOnly, // Track if this should be a local-only chat
   }
 }
 
@@ -29,7 +30,7 @@ interface UseChatStorageReturn {
   currentChat: Chat
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
-  createNewChat: () => void
+  createNewChat: (intendedLocalOnly?: boolean) => void
   deleteChat: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   switchChat: (chat: Chat) => Promise<void>
@@ -267,28 +268,40 @@ export function useChatStorage({
   }, [storeHistory, isSignedIn])
 
   // Create a new chat
-  const createNewChat = useCallback(() => {
-    // Check if any chat in the list is blank (not just current chat)
-    const hasBlankChat = chats.some((chat) => chat.isBlankChat === true)
+  const createNewChat = useCallback(
+    (intendedLocalOnly = false) => {
+      // Check if any chat in the list is blank (not just current chat)
+      const hasBlankChat = chats.some((chat) => chat.isBlankChat === true)
 
-    if (hasBlankChat) {
-      // Find the blank chat and switch to it
-      const blankChat = chats.find((chat) => chat.isBlankChat === true)
-      if (blankChat) {
-        setCurrentChat(blankChat)
+      if (hasBlankChat) {
+        // Find the blank chat and switch to it
+        const blankChat = chats.find((chat) => chat.isBlankChat === true)
+        if (blankChat) {
+          // Update the intended type if different
+          if (blankChat.intendedLocalOnly !== intendedLocalOnly) {
+            const updatedChat = { ...blankChat, intendedLocalOnly }
+            setCurrentChat(updatedChat)
+            setChats((prevChats) =>
+              prevChats.map((c) => (c.id === blankChat.id ? updatedChat : c)),
+            )
+          } else {
+            setCurrentChat(blankChat)
+          }
+        }
+        return
       }
-      return
-    }
 
-    // Create new chat instantly with temporary ID
-    const tempChat = createNewChatObjectSync()
+      // Create new chat instantly with temporary ID
+      const tempChat = createNewChatObjectSync(intendedLocalOnly)
 
-    setCurrentChat(tempChat)
-    setChats((prev) => [tempChat, ...prev])
+      setCurrentChat(tempChat)
+      setChats((prev) => [tempChat, ...prev])
 
-    // Don't request server ID here - wait until first message is sent
-    // This ensures createdAt reflects when the chat actually has content
-  }, [chats])
+      // Don't request server ID here - wait until first message is sent
+      // This ensures createdAt reflects when the chat actually has content
+    },
+    [chats],
+  )
 
   // Delete a chat
   const deleteChat = useCallback(

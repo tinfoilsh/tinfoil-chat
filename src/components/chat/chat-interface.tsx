@@ -1000,7 +1000,7 @@ export function ChatInterface({
                   ? 'cursor-not-allowed text-content-muted opacity-50'
                   : 'hover:bg-surface-chat hover:text-content-primary',
               )}
-              onClick={createNewChat}
+              onClick={() => createNewChat()}
               aria-label="Create new chat"
               disabled={currentChat?.messages?.length === 0}
             >
