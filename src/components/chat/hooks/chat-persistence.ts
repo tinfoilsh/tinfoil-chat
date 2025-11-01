@@ -34,15 +34,18 @@ export function createUpdateChatWithHistoryCheck({
   ) {
     const isCurrentChat = currentChatIdRef.current === chatId
 
-    // Update chats and get the current chat state
-    let updatedChatForSaving: Chat | null = null
+    // Prepare the updated chat by getting current state
+    let updatedChatForSaving: Chat
 
+    // First, determine the base chat to use
+    let baseChat = chatSnapshot
     setChats((prevChats) => {
       const currentChatFromState = prevChats.find((c) => c.id === chatId)
-
       // Use the current chat from state if available, otherwise fall back to snapshot
       // This ensures we preserve any updates that happened during streaming (like title changes)
-      const baseChat = currentChatFromState || chatSnapshot
+      if (currentChatFromState) {
+        baseChat = currentChatFromState
+      }
 
       updatedChatForSaving = {
         ...baseChat,
@@ -50,33 +53,36 @@ export function createUpdateChatWithHistoryCheck({
         messages: newMessages,
       }
 
-      return prevChats.map((c) => (c.id === chatId ? updatedChatForSaving! : c))
+      return prevChats.map((c) => (c.id === chatId ? updatedChatForSaving : c))
     })
 
-    if (isCurrentChat && updatedChatForSaving) {
+    // At this point updatedChatForSaving is definitely assigned
+    updatedChatForSaving = {
+      ...baseChat,
+      id: chatId,
+      messages: newMessages,
+    }
+
+    if (isCurrentChat) {
       setCurrentChat(updatedChatForSaving)
     }
 
-    if ((!isThinking || immediate) && updatedChatForSaving) {
+    if (!isThinking || immediate) {
       if (storeHistory) {
         const skipCloudSync = isStreamingRef.current && !immediate
+        const chatToSave = updatedChatForSaving
 
         chatStorage
-          .saveChat(updatedChatForSaving, skipCloudSync)
+          .saveChat(chatToSave, skipCloudSync)
           .then((savedChat) => {
-            if (savedChat.id !== updatedChatForSaving.id) {
+            if (savedChat.id !== chatToSave.id) {
               // Only switch currentChatIdRef if this chat is still the current chat
-              if (
-                isCurrentChat &&
-                currentChatIdRef.current === updatedChatForSaving.id
-              ) {
+              if (isCurrentChat && currentChatIdRef.current === chatToSave.id) {
                 currentChatIdRef.current = savedChat.id
                 setCurrentChat(savedChat)
               }
               setChats((prevChats) =>
-                prevChats.map((c) =>
-                  c.id === updatedChatForSaving.id ? savedChat : c,
-                ),
+                prevChats.map((c) => (c.id === chatToSave.id ? savedChat : c)),
               )
             }
           })
