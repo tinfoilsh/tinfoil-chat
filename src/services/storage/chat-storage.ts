@@ -145,10 +145,12 @@ export class ChatStorageService {
       }
     }
 
-    // Check if this is a new chat (first time saving) and mark as local if sync is disabled
+    // Check if this is a new chat (first time saving) and mark as local if intended or sync is disabled
     const existingChat = await indexedDBStorage.getChat(chatToSave.id)
     const isNewChat = !existingChat
-    const shouldMarkAsLocal = isNewChat && !isCloudSyncEnabled()
+    const shouldMarkAsLocal =
+      isNewChat &&
+      ((chatToSave as any).intendedLocalOnly || !isCloudSyncEnabled())
 
     // Save the chat
     const storageChat: StorageChat = {
