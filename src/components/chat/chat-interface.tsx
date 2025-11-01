@@ -373,7 +373,7 @@ export function ChatInterface({
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
     rules: processedRules,
-    storeHistory: isSignedIn, // Enable storage for all signed-in users
+    storeHistory: isSignedIn || !isCloudSyncEnabled(), // Enable storage for signed-in users OR local-only mode
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,

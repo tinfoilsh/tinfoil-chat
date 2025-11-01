@@ -20,6 +20,7 @@ import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -308,6 +309,11 @@ export function useChatMessaging({
         ...updatedChat,
         messages: updatedMessages,
         isBlankChat: false, // Clear blank chat flag when first message is sent
+        // Preserve the intendedLocalOnly flag from the original chat
+        intendedLocalOnly: (currentChat as any).intendedLocalOnly,
+        // Mark as local immediately if cloud sync is disabled or intended to be local
+        isLocalOnly:
+          (currentChat as any).intendedLocalOnly || !isCloudSyncEnabled(),
       }
 
       // Update the current chat and chats array immediately
@@ -360,12 +366,22 @@ export function useChatMessaging({
             // Continue with temporary ID if server ID fetch fails
           }
         } else {
-          // For existing chats or local-only chats, just save normally
-          chatStorage.saveChatAndSync(updatedChat).catch((error) => {
+          // For existing chats or local-only chats, save and wait for the result
+          // This ensures we have the latest chat state with all flags properly set
+          try {
+            const savedChat = await chatStorage.saveChatAndSync(updatedChat)
+            // Update our local state with the saved chat to ensure flags are preserved
+            updatedChat = savedChat
+            currentChatIdRef.current = savedChat.id
+            setCurrentChat(savedChat)
+            setChats((prevChats) =>
+              prevChats.map((c) => (c.id === currentChat.id ? savedChat : c)),
+            )
+          } catch (error) {
             logError('Failed to save chat', error, {
               component: 'useChatMessaging',
             })
-          })
+          }
         }
       } else {
         // For non-signed-in users, always save to sessionStorage

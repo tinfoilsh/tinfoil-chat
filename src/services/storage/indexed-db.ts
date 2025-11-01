@@ -155,6 +155,9 @@ export class IndexedDBStorage {
             (chat as StoredChat).loadedAt ??
             existingChat?.loadedAt ??
             undefined,
+          // Explicitly preserve local-only flag
+          isLocalOnly:
+            (chat as any).isLocalOnly ?? existingChat?.isLocalOnly ?? false,
         }
 
         const putRequest = store.put(storedChat)
