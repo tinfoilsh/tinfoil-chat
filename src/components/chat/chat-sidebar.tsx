@@ -266,10 +266,18 @@ export function ChatSidebar({
 
     const shouldBeLocal = activeTab === 'local'
 
-    // Create or update blank chat for the current tab (not a user action)
-    // This will find or create a blank chat with the right isLocalOnly flag
-    createNewChat(shouldBeLocal, false)
-  }, [activeTab, isSignedIn, cloudSyncEnabled, createNewChat])
+    // Only switch to blank chat if we're already on a blank chat
+    // This ensures we don't interrupt the user when they've selected a real chat
+    if (currentChat?.isBlankChat) {
+      createNewChat(shouldBeLocal, false)
+    }
+  }, [
+    activeTab,
+    isSignedIn,
+    cloudSyncEnabled,
+    createNewChat,
+    currentChat?.isBlankChat,
+  ])
 
   // Listen for highlight events
   useEffect(() => {
