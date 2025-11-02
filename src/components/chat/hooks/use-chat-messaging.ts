@@ -309,11 +309,8 @@ export function useChatMessaging({
         ...updatedChat,
         messages: updatedMessages,
         isBlankChat: false, // Clear blank chat flag when first message is sent
-        // Preserve the intendedLocalOnly flag from the original chat
-        intendedLocalOnly: (currentChat as any).intendedLocalOnly,
-        // Mark as local immediately if cloud sync is disabled or intended to be local
-        isLocalOnly:
-          (currentChat as any).intendedLocalOnly || !isCloudSyncEnabled(),
+        // Mark as local immediately if cloud sync is disabled or already marked as local
+        isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
       }
 
       // Update the current chat and chats array immediately
@@ -328,10 +325,7 @@ export function useChatMessaging({
       if (storeHistory) {
         // For signed-in users
         // Only get server ID for cloud chats (not local-only chats)
-        if (
-          currentChat.hasTemporaryId &&
-          !(updatedChat as any).intendedLocalOnly
-        ) {
+        if (currentChat.hasTemporaryId && !updatedChat.isLocalOnly) {
           try {
             // Get server ID synchronously before proceeding
             const result = await r2Storage.generateConversationId()
@@ -366,22 +360,9 @@ export function useChatMessaging({
             // Continue with temporary ID if server ID fetch fails
           }
         } else {
-          // For existing chats or local-only chats, save and wait for the result
-          // This ensures we have the latest chat state with all flags properly set
-          try {
-            const savedChat = await chatStorage.saveChatAndSync(updatedChat)
-            // Update our local state with the saved chat to ensure flags are preserved
-            updatedChat = savedChat
-            currentChatIdRef.current = savedChat.id
-            setCurrentChat(savedChat)
-            setChats((prevChats) =>
-              prevChats.map((c) => (c.id === currentChat.id ? savedChat : c)),
-            )
-          } catch (error) {
-            logError('Failed to save chat', error, {
-              component: 'useChatMessaging',
-            })
-          }
+          // For existing chats or local-only chats, just update the ID ref
+          // The chat will be saved after the assistant responds via updateChatWithHistoryCheck
+          currentChatIdRef.current = updatedChat.id
         }
       } else {
         // For non-signed-in users, always save to sessionStorage
@@ -431,84 +412,78 @@ export function useChatMessaging({
           (assistantMessage.content || assistantMessage.thoughts)
         ) {
           const chatId = currentChatIdRef.current
-          if (chatId === updatedChat.id) {
-            const finalMessages = [...updatedMessages, assistantMessage]
+          // Always save the response, using the current chat ID from the ref
+          // which has been updated to the server ID if one was generated
+          const finalMessages = [...updatedMessages, assistantMessage]
 
-            if (
-              isFirstMessage &&
-              updatedChat.title === 'Untitled' &&
-              models.length > 0
-            ) {
-              try {
-                const freeModel = models.find(
-                  (m) =>
-                    m.type === 'chat' &&
-                    m.chat === true &&
-                    m.paid === false &&
-                    m.modelName !== 'dev-simulator',
+          if (
+            isFirstMessage &&
+            updatedChat.title === 'Untitled' &&
+            models.length > 0
+          ) {
+            try {
+              const freeModel = models.find(
+                (m) =>
+                  m.type === 'chat' &&
+                  m.chat === true &&
+                  m.paid === false &&
+                  m.modelName !== 'dev-simulator',
+              )
+
+              if (freeModel) {
+                const titleMessages = finalMessages.map((msg) => ({
+                  role: msg.role,
+                  content: msg.content || '',
+                }))
+                const generatedTitle = await generateTitle(
+                  titleMessages,
+                  freeModel.modelName,
                 )
-
-                if (freeModel) {
-                  const titleMessages = finalMessages.map((msg) => ({
-                    role: msg.role,
-                    content: msg.content || '',
-                  }))
-                  const generatedTitle = await generateTitle(
-                    titleMessages,
-                    freeModel.modelName,
-                  )
-                  if (generatedTitle && generatedTitle !== 'Untitled') {
-                    updatedChat = { ...updatedChat, title: generatedTitle }
+                if (generatedTitle && generatedTitle !== 'Untitled') {
+                  updatedChat = {
+                    ...updatedChat,
+                    title: generatedTitle,
+                    id: chatId,
                   }
-                } else {
-                  logWarning('No free model found for title generation', {
-                    component: 'useChatMessaging',
-                    action: 'generateTitle',
-                  })
                 }
-              } catch (error) {
-                logError('Title generation error', error, {
+              } else {
+                logWarning('No free model found for title generation', {
                   component: 'useChatMessaging',
                   action: 'generateTitle',
                 })
               }
-            }
-
-            updateChatWithHistoryCheck(
-              setChats,
-              updatedChat,
-              setCurrentChat,
-              chatId,
-              finalMessages,
-              true,
-              false,
-            )
-
-            // Trigger cloud sync for non-local chats after saving
-            // This ensures the complete chat (with title) is synced
-            if (!updatedChat.isLocalOnly && !updatedChat.intendedLocalOnly) {
-              import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
-                cloudSync.backupChat(chatId).catch((error) => {
-                  logError('Failed to sync chat after completion', error, {
-                    component: 'useChatMessaging',
-                    action: 'handleQuery',
-                    metadata: { chatId },
-                  })
-                })
+            } catch (error) {
+              logError('Title generation error', error, {
+                component: 'useChatMessaging',
+                action: 'generateTitle',
               })
             }
-          } else {
-            logWarning(
-              'Chat ID changed during streaming, skipping final save',
-              {
-                component: 'useChatMessaging',
-                action: 'handleQuery',
-                metadata: {
-                  originalChatId: updatedChat.id,
-                  currentChatId: chatId,
-                },
-              },
-            )
+          }
+
+          // Update the chat object with the correct ID before saving
+          const chatToSave = { ...updatedChat, id: chatId }
+
+          updateChatWithHistoryCheck(
+            setChats,
+            chatToSave,
+            setCurrentChat,
+            chatId,
+            finalMessages,
+            false,
+          )
+
+          // Trigger cloud sync for non-local chats after saving
+          // This ensures the complete chat (with title) is synced
+          if (!chatToSave.isLocalOnly) {
+            import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
+              cloudSync.backupChat(chatId).catch((error) => {
+                logError('Failed to sync chat after completion', error, {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery',
+                  metadata: { chatId },
+                })
+              })
+            })
           }
         } else {
           logWarning('No assistant content to save after streaming', {
@@ -539,13 +514,14 @@ export function useChatMessaging({
             isError: true,
           }
 
+          // Use the current chat ID from ref which has the correct (possibly server) ID
+          const currentId = currentChatIdRef.current || updatedChat.id
           updateChatWithHistoryCheck(
             setChats,
-            updatedChat,
+            { ...updatedChat, id: currentId },
             setCurrentChat,
-            updatedChat.id,
+            currentId,
             [...updatedMessages, errorMessage],
-            true,
             false,
           )
         }

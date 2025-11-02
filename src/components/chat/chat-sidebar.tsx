@@ -78,7 +78,7 @@ type ChatSidebarProps = {
   chats: Chat[]
   currentChat: Chat
   isDarkMode: boolean
-  createNewChat: (intendedLocalOnly?: boolean) => void
+  createNewChat: (isLocalOnly?: boolean) => void
   handleChatSelect: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   deleteChat: (chatId: string) => void
@@ -260,16 +260,16 @@ export function ChatSidebar({
     }
   }, [])
 
-  // Update blank chat's intendedLocalOnly when active tab changes
+  // Update blank chat's isLocalOnly when active tab changes
   useEffect(() => {
     if (!isSignedIn || !cloudSyncEnabled) return
 
     const shouldBeLocal = activeTab === 'local'
     const blankChat = chats.find((chat) => chat.isBlankChat === true)
 
-    // If there's a blank chat and its intendedLocalOnly doesn't match the active tab,
+    // If there's a blank chat and its isLocalOnly doesn't match the active tab,
     // call createNewChat to update it
-    if (blankChat && blankChat.intendedLocalOnly !== shouldBeLocal) {
+    if (blankChat && blankChat.isLocalOnly !== shouldBeLocal) {
       createNewChat(shouldBeLocal)
     }
   }, [activeTab, isSignedIn, cloudSyncEnabled, chats, createNewChat])
@@ -481,18 +481,12 @@ export function ChatSidebar({
       isSignedIn && cloudSyncEnabled
         ? activeTab === 'cloud'
           ? chats.filter((chat) => {
-              // For blank chats, use intendedLocalOnly flag since they haven't been saved yet
-              if (chat.isBlankChat) {
-                return !(chat as any).intendedLocalOnly
-              }
-              return !(chat as any).isLocalOnly
+              // Filter for cloud chats (not local-only)
+              return !chat.isLocalOnly
             })
           : chats.filter((chat) => {
-              // For blank chats, use intendedLocalOnly flag since they haven't been saved yet
-              if (chat.isBlankChat) {
-                return (chat as any).intendedLocalOnly
-              }
-              return (chat as any).isLocalOnly
+              // Filter for local-only chats
+              return chat.isLocalOnly
             })
         : chats.filter((chat) => {
             // When cloud sync is disabled, only show local chats
