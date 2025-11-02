@@ -357,7 +357,6 @@ export function ChatInterface({
     setVerificationSuccess,
 
     // Actions
-    handleSubmit,
     handleQuery,
     createNewChat,
     deleteChat,
@@ -686,8 +685,7 @@ export function ChatInterface({
     selectedModelDetails?.contextWindow,
   ])
 
-  // Wrap handleSubmit to include document content
-  const wrappedHandleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
     // Don't proceed if there's no input text
@@ -1227,7 +1225,7 @@ export function ChatInterface({
                 models={models}
                 subscriptionLoading={subscriptionLoading}
                 verificationState={verificationDocument}
-                onSubmit={wrappedHandleSubmit}
+                onSubmit={handleSubmit}
                 input={input}
                 setInput={setInput}
                 loadingState={loadingState}
@@ -1280,7 +1278,7 @@ export function ChatInterface({
                 }}
               >
                 <form
-                  onSubmit={wrappedHandleSubmit}
+                  onSubmit={handleSubmit}
                   className="mx-auto max-w-3xl px-3 md:px-8"
                 >
                   {/* Labels - Model selection only for premium users */}
@@ -1312,7 +1310,7 @@ export function ChatInterface({
                   <ChatInput
                     input={input}
                     setInput={setInput}
-                    handleSubmit={wrappedHandleSubmit}
+                    handleSubmit={handleSubmit}
                     loadingState={loadingState}
                     cancelGeneration={cancelGeneration}
                     inputRef={inputRef}

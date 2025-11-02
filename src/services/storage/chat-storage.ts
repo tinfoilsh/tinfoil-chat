@@ -14,7 +14,6 @@ import { migrationEvents } from './migration-events'
 export class ChatStorageService {
   private initialized = false
   private initializePromise: Promise<void> | null = null
-  private serverIdCache = new Map<string, string>() // Cache temp ID -> server ID mappings
 
   async initialize(): Promise<void> {
     if (this.initialized) return
@@ -93,56 +92,33 @@ export class ChatStorageService {
     let chatToSave = chat
 
     // If this is the first save (has temporary ID), try to get server ID
-    // Only for cloud chats (not local-only) and when cloud sync is enabled globally
-    if (chat.hasTemporaryId && isCloudSyncEnabled() && !chat.isLocalOnly) {
-      // Check if we already have a server ID for this temp ID
-      const cachedServerId = this.serverIdCache.get(chat.id)
-
-      if (cachedServerId) {
-        // Use the cached server ID
-        chatToSave = {
-          ...chat,
-          id: cachedServerId,
-          hasTemporaryId: false,
-        }
-      } else {
-        // Try to get a new server ID
-        try {
-          const result = await r2Storage.generateConversationId()
-          if (result) {
-            // Cache the mapping
-            this.serverIdCache.set(chat.id, result.conversationId)
-
-            // Update the chat with server ID
-            chatToSave = {
-              ...chat,
-              id: result.conversationId,
-              hasTemporaryId: false,
-            }
-
-            // Delete any existing chat with the temporary ID
-            try {
-              await indexedDBStorage.deleteChat(chat.id)
-            } catch (error) {
-              // Ignore - chat might not exist yet
-            }
-
-            logInfo('Replaced temporary ID with server ID on first save', {
-              component: 'ChatStorageService',
-              action: 'saveChat',
-              metadata: {
-                oldId: chat.id,
-                newId: result.conversationId,
-              },
-            })
+    if (chat.hasTemporaryId) {
+      // Try to get a new server ID
+      try {
+        const result = await r2Storage.generateConversationId()
+        if (result) {
+          // Update the chat with server ID
+          chatToSave = {
+            ...chat,
+            id: result.conversationId,
+            hasTemporaryId: false,
           }
-        } catch (error) {
-          logInfo('Failed to get server ID, keeping temporary ID', {
+
+          logInfo('Replaced temporary ID with server ID on first save', {
             component: 'ChatStorageService',
             action: 'saveChat',
-            metadata: { error, chatId: chat.id },
+            metadata: {
+              oldId: chat.id,
+              newId: result.conversationId,
+            },
           })
         }
+      } catch (error) {
+        logInfo('Failed to get server ID, keeping temporary ID', {
+          component: 'ChatStorageService',
+          action: 'saveChat',
+          metadata: { error, chatId: chat.id },
+        })
       }
     }
 
@@ -156,16 +132,7 @@ export class ChatStorageService {
     const shouldMarkAsLocal =
       chatToSave.isLocalOnly ||
       !isCloudSyncEnabled() ||
-      existingChat?.isLocalOnly ||
-      false
-
-    // For local-only chats, clear the temporary ID flag since they don't need a server ID
-    if (shouldMarkAsLocal && chatToSave.hasTemporaryId) {
-      chatToSave = {
-        ...chatToSave,
-        hasTemporaryId: false,
-      }
-    }
+      existingChat?.isLocalOnly
 
     // Save the chat
     const storageChat: StorageChat = {
@@ -181,7 +148,12 @@ export class ChatStorageService {
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
 
-    // Auto-backup to cloud (non-blocking) - only if not temporary, not skipped, not streaming, and not local-only
+    // Auto-backup to cloud (non-blocking)
+    // only if:
+    // - not temporary
+    // - not skipped
+    // - not streaming
+    // - not local-only
     if (
       !chatToSave.hasTemporaryId &&
       !skipCloudSync &&
@@ -203,7 +175,6 @@ export class ChatStorageService {
       })
     }
 
-    // Return the potentially updated chat with isLocalOnly flag
     return {
       ...chatToSave,
       isLocalOnly: storageChat.isLocalOnly,

@@ -324,8 +324,8 @@ export function useChatMessaging({
       // Handle chat saving based on user status
       if (storeHistory) {
         // For signed-in users
-        // Only get server ID for cloud chats (not local-only chats)
-        if (currentChat.hasTemporaryId && !updatedChat.isLocalOnly) {
+        // Get server ID for all chats (both cloud and local-only)
+        if (currentChat.hasTemporaryId) {
           try {
             // Get server ID synchronously before proceeding
             const result = await r2Storage.generateConversationId()
@@ -357,12 +357,7 @@ export function useChatMessaging({
               component: 'useChatMessaging',
               action: 'handleQuery',
             })
-            // Continue with temporary ID if server ID fetch fails
           }
-        } else {
-          // For existing chats or local-only chats, just update the ID ref
-          // The chat will be saved after the assistant responds via updateChatWithHistoryCheck
-          currentChatIdRef.current = updatedChat.id
         }
       } else {
         // For non-signed-in users, always save to sessionStorage

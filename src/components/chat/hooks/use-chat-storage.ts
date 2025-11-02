@@ -24,7 +24,7 @@ interface UseChatStorageReturn {
   currentChat: Chat
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
-  createNewChat: (isLocalOnly?: boolean) => void
+  createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   deleteChat: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   switchChat: (chat: Chat) => Promise<void>
@@ -76,50 +76,66 @@ export function useChatStorage({
       const loadedChats = await loadChats(storeHistory && !!isSignedIn)
 
       setChats((prevChats) => {
+        // Preserve blank chats from previous state
+        const prevBlankChats = prevChats.filter((c) => c.isBlankChat === true)
+
+        // Merge loaded chats with state, preserving in-memory changes
         const mergedChats = mergeChatsWithState(loadedChats, prevChats)
 
-        // If current chat was deleted, switch to first available chat
-        const currentChatExists = mergedChats.some(
+        // Add back any blank chats that weren't in the loaded data
+        const finalChats = [
+          ...prevBlankChats,
+          ...mergedChats.filter((c) => !c.isBlankChat),
+        ]
+
+        // If current chat was deleted and it's not a blank chat, switch to first available chat
+        const currentChatExists = finalChats.some(
           (c) => c.id === currentChat.id,
         )
-        if (!currentChatExists && mergedChats.length > 0) {
-          setCurrentChat(mergedChats[0])
+        if (
+          !currentChatExists &&
+          finalChats.length > 0 &&
+          !currentChat.isBlankChat
+        ) {
+          setCurrentChat(finalChats[0])
         }
 
-        return mergedChats
+        return finalChats
       })
 
-      // Update current chat if it was modified
-      const updatedCurrentChat = loadedChats.find(
-        (c) => c.id === currentChat.id,
-      )
-      if (updatedCurrentChat) {
-        setCurrentChat((prev) => {
-          // Don't update if actively streaming
-          const lastMessage = prev.messages[prev.messages.length - 1]
-          const isStreaming =
-            lastMessage?.role === 'assistant' &&
-            (lastMessage.isThinking || !lastMessage.content)
+      // Update current chat if it was modified and is not a blank chat
+      if (!currentChat.isBlankChat) {
+        const updatedCurrentChat = loadedChats.find(
+          (c) => c.id === currentChat.id,
+        )
+        if (updatedCurrentChat) {
+          setCurrentChat((prev) => {
+            // Don't update if actively streaming
+            const lastMessage = prev.messages[prev.messages.length - 1]
+            const isStreaming =
+              lastMessage?.role === 'assistant' &&
+              (lastMessage.isThinking || !lastMessage.content)
 
-          if (isStreaming) return prev
+            if (isStreaming) return prev
 
-          // Only update if actually changed
-          if (
-            prev.messages.length !== updatedCurrentChat.messages.length ||
-            prev.syncedAt !== updatedCurrentChat.syncedAt ||
-            prev.title !== updatedCurrentChat.title
-          ) {
-            return updatedCurrentChat
-          }
-          return prev
-        })
+            // Only update if actually changed
+            if (
+              prev.messages.length !== updatedCurrentChat.messages.length ||
+              prev.syncedAt !== updatedCurrentChat.syncedAt ||
+              prev.title !== updatedCurrentChat.title
+            ) {
+              return updatedCurrentChat
+            }
+            return prev
+          })
+        }
       }
     } catch (error) {
       logError('Failed to reload chats', error, {
         component: 'useChatStorage',
       })
     }
-  }, [storeHistory, isSignedIn, currentChat.id])
+  }, [storeHistory, isSignedIn, currentChat.id, currentChat.isBlankChat])
 
   // Listen for chat events (cloud sync, pagination, etc.)
   useEffect(() => {
@@ -184,16 +200,20 @@ export function useChatStorage({
 
   // Create new chat
   const createNewChat = useCallback(
-    (isLocalOnly = false) => {
+    (isLocalOnly = false, fromUserAction = true) => {
       const { chat, isNew } = findOrCreateBlankChat(chats, isLocalOnly)
 
-      setCurrentChat(chat)
+      // Always switch to the blank chat if it's a user action (clicking New Chat button)
+      // Only switch automatically if it's actually new or if we're already on a blank chat
+      if (fromUserAction || isNew || currentChat.isBlankChat) {
+        setCurrentChat(chat)
+      }
 
       if (isNew) {
         setChats((prev) => [chat, ...prev])
       }
     },
-    [chats],
+    [chats, currentChat.isBlankChat],
   )
 
   // Delete chat

@@ -78,7 +78,7 @@ type ChatSidebarProps = {
   chats: Chat[]
   currentChat: Chat
   isDarkMode: boolean
-  createNewChat: (isLocalOnly?: boolean) => void
+  createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   handleChatSelect: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   deleteChat: (chatId: string) => void
@@ -265,14 +265,11 @@ export function ChatSidebar({
     if (!isSignedIn || !cloudSyncEnabled) return
 
     const shouldBeLocal = activeTab === 'local'
-    const blankChat = chats.find((chat) => chat.isBlankChat === true)
 
-    // If there's a blank chat and its isLocalOnly doesn't match the active tab,
-    // call createNewChat to update it
-    if (blankChat && blankChat.isLocalOnly !== shouldBeLocal) {
-      createNewChat(shouldBeLocal)
-    }
-  }, [activeTab, isSignedIn, cloudSyncEnabled, chats, createNewChat])
+    // Create or update blank chat for the current tab (not a user action)
+    // This will find or create a blank chat with the right isLocalOnly flag
+    createNewChat(shouldBeLocal, false)
+  }, [activeTab, isSignedIn, cloudSyncEnabled, createNewChat])
 
   // Listen for highlight events
   useEffect(() => {
