@@ -933,7 +933,15 @@ export function ChatSidebar({
                           return
                         }
 
-                        handleChatSelect(chat.id)
+                        // For blank chats, we need to pass a special identifier
+                        // that includes the isLocalOnly flag since they have empty IDs
+                        if (chat.isBlankChat) {
+                          handleChatSelect(
+                            chat.isLocalOnly ? 'blank-local' : 'blank-cloud',
+                          )
+                        } else {
+                          handleChatSelect(chat.id)
+                        }
 
                         // Only close sidebar on mobile
                         if (windowWidth < MOBILE_BREAKPOINT) {
