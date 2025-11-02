@@ -88,36 +88,44 @@ export function useChatStorage({
         // Combine blank chats with loaded chats and sort
         const finalChats = sortChats([cloudBlank, localBlank, ...nonBlankChats])
 
-        // If current chat was deleted and it's not a blank chat, switch to first available chat
-        const currentChatExists = finalChats.some(
-          (c) =>
-            c.id === currentChat.id ||
-            (c.isBlankChat &&
-              currentChat.isBlankChat &&
-              c.isLocalOnly === currentChat.isLocalOnly),
-        )
-        if (!currentChatExists && finalChats.length > 0) {
-          setCurrentChat(finalChats[0])
-        }
-
         return finalChats
       })
 
-      // Update current chat if it was modified and is not a blank chat
-      if (!currentChat.isBlankChat) {
-        const updatedCurrentChat = loadedChats.find(
-          (c) => c.id === currentChat.id,
+      // Update current chat if needed
+      setCurrentChat((prev) => {
+        // Check if current chat still exists
+        const currentChatExists = loadedChats.some(
+          (c) =>
+            c.id === prev.id ||
+            (c.isBlankChat &&
+              prev.isBlankChat &&
+              c.isLocalOnly === prev.isLocalOnly),
         )
-        if (updatedCurrentChat) {
-          setCurrentChat((prev) => {
-            // Don't update if actively streaming
-            const lastMessage = prev.messages[prev.messages.length - 1]
-            const isStreaming =
-              lastMessage?.role === 'assistant' &&
-              (lastMessage.isThinking || !lastMessage.content)
 
-            if (isStreaming) return prev
+        // If current chat was deleted, switch to first available chat
+        if (!currentChatExists) {
+          const cloudBlank = createBlankChat(false)
+          const localBlank = createBlankChat(true)
+          const finalChats = sortChats([
+            cloudBlank,
+            localBlank,
+            ...loadedChats.filter((c) => !c.isBlankChat),
+          ])
+          return finalChats.length > 0 ? finalChats[0] : prev
+        }
 
+        // Don't update if actively streaming
+        const lastMessage = prev.messages[prev.messages.length - 1]
+        const isStreaming =
+          lastMessage?.role === 'assistant' &&
+          (lastMessage.isThinking || !lastMessage.content)
+
+        if (isStreaming) return prev
+
+        // Update current chat if it was modified and is not a blank chat
+        if (!prev.isBlankChat) {
+          const updatedCurrentChat = loadedChats.find((c) => c.id === prev.id)
+          if (updatedCurrentChat) {
             // Only update if actually changed
             if (
               prev.messages.length !== updatedCurrentChat.messages.length ||
@@ -126,22 +134,17 @@ export function useChatStorage({
             ) {
               return updatedCurrentChat
             }
-            return prev
-          })
+          }
         }
-      }
+
+        return prev
+      })
     } catch (error) {
       logError('Failed to reload chats', error, {
         component: 'useChatStorage',
       })
     }
-  }, [
-    storeHistory,
-    isSignedIn,
-    currentChat.id,
-    currentChat.isBlankChat,
-    currentChat.isLocalOnly,
-  ])
+  }, [storeHistory, isSignedIn])
 
   // Listen for chat events (cloud sync, pagination, etc.)
   useEffect(() => {
@@ -287,20 +290,25 @@ export function useChatStorage({
   // Handle chat selection
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      // For blank chats, we need to find them by their blank status and local mode
-      // since they don't have IDs
-      const selectedChat = chats.find((chat) => {
-        if (chat.isBlankChat && chatId === '') {
-          // For blank chat selection, match by the current chat's local mode
-          return chat.isLocalOnly === currentChat.isLocalOnly
+      // Handle special blank chat identifiers
+      if (chatId === 'blank-local' || chatId === 'blank-cloud') {
+        const isLocal = chatId === 'blank-local'
+        const selectedChat = chats.find(
+          (chat) => chat.isBlankChat && chat.isLocalOnly === isLocal,
+        )
+        if (selectedChat) {
+          switchChat(selectedChat)
         }
-        return chat.id === chatId
-      })
+        return
+      }
+
+      // For regular chats, find by ID
+      const selectedChat = chats.find((chat) => chat.id === chatId)
       if (selectedChat) {
         switchChat(selectedChat)
       }
     },
-    [chats, currentChat.isLocalOnly, switchChat],
+    [chats, switchChat],
   )
 
   return {
