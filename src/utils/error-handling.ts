@@ -53,8 +53,16 @@ export function logError(
  * Log a warning - replace console.warn calls with this
  */
 export function logWarning(message: string, context?: ErrorContext): void {
-  if (process.env.NODE_ENV === 'development') {
-    console.warn(`[${context?.component || 'Unknown'}] ${message}`)
+  const debugEnabled =
+    typeof window !== 'undefined' &&
+    localStorage.getItem('enableDebugLogs') === 'true'
+
+  if (process.env.NODE_ENV === 'development' || debugEnabled) {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0]
+    console.warn(
+      `[${timestamp}] [${context?.component || 'Unknown'}] ${message}`,
+      context?.metadata || '',
+    )
     return
   }
 
@@ -63,10 +71,24 @@ export function logWarning(message: string, context?: ErrorContext): void {
 
 /**
  * Log info - replace console.log calls with this
+ *
+ * To enable in production, run in browser console:
+ * localStorage.setItem('enableDebugLogs', 'true')
+ *
+ * To disable:
+ * localStorage.removeItem('enableDebugLogs')
  */
 export function logInfo(message: string, context?: ErrorContext): void {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[${context?.component || 'Unknown'}] ${message}`)
+  const debugEnabled =
+    typeof window !== 'undefined' &&
+    localStorage.getItem('enableDebugLogs') === 'true'
+
+  if (process.env.NODE_ENV === 'development' || debugEnabled) {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0]
+    console.log(
+      `[${timestamp}] [${context?.component || 'Unknown'}] ${message}`,
+      context?.metadata || '',
+    )
     return
   }
 
