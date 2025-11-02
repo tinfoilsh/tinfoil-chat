@@ -2,7 +2,6 @@ import type { Chat } from '@/components/chat/types'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
-import { r2Storage } from '../cloud/r2-storage'
 import { streamingTracker } from '../cloud/streaming-tracker'
 import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from './chat-events'
@@ -89,38 +88,12 @@ export class ChatStorageService {
   async saveChat(chat: Chat, skipCloudSync = false): Promise<Chat> {
     await this.initialize()
 
-    let chatToSave = chat
-
-    // If this is the first save (has temporary ID), try to get server ID
-    if (chat.hasTemporaryId) {
-      // Try to get a new server ID
-      try {
-        const result = await r2Storage.generateConversationId()
-        if (result) {
-          // Update the chat with server ID
-          chatToSave = {
-            ...chat,
-            id: result.conversationId,
-            hasTemporaryId: false,
-          }
-
-          logInfo('Replaced temporary ID with server ID on first save', {
-            component: 'ChatStorageService',
-            action: 'saveChat',
-            metadata: {
-              oldId: chat.id,
-              newId: result.conversationId,
-            },
-          })
-        }
-      } catch (error) {
-        logInfo('Failed to get server ID, keeping temporary ID', {
-          component: 'ChatStorageService',
-          action: 'saveChat',
-          metadata: { error, chatId: chat.id },
-        })
-      }
+    // Never save blank chats to storage
+    if (chat.isBlankChat) {
+      return chat
     }
+
+    const chatToSave = chat
 
     // Check if this is a new chat (first time saving) and mark as local if intended or sync is disabled
     const existingChat = await indexedDBStorage.getChat(chatToSave.id)
@@ -150,12 +123,10 @@ export class ChatStorageService {
 
     // Auto-backup to cloud (non-blocking)
     // only if:
-    // - not temporary
     // - not skipped
     // - not streaming
     // - not local-only
     if (
-      !chatToSave.hasTemporaryId &&
       !skipCloudSync &&
       !streamingTracker.isStreaming(chatToSave.id) &&
       !storageChat.isLocalOnly

@@ -26,6 +26,7 @@ import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
+import { createBlankChat, sortChats } from './chat-operations'
 import { createUpdateChatWithHistoryCheck } from './chat-persistence'
 import { processStreamingResponse } from './streaming-processor'
 import { useMaxMessages } from './use-max-messages'
@@ -287,81 +288,117 @@ export function useChatMessaging({
           }
         : null
 
-      // Track if this is the first message for title generation
+      // Track if this is the first message for a blank chat
       let updatedChat = { ...currentChat }
+      const isBlankChat = currentChat.isBlankChat === true
       const isFirstMessage = currentChat.messages.length === 0
+      let updatedMessages: Message[] = []
 
-      if (isFirstMessage) {
-        // For first message, just use a temporary title
-        // Real title will be generated after assistant response
+      // Handle blank chat conversion: get a server ID and create a real chat
+      if (isBlankChat && storeHistory) {
+        try {
+          // Get server ID before proceeding
+          const result = await r2Storage.generateConversationId()
+          if (result) {
+            // Create a new chat with the server ID
+            updatedMessages = userMessage ? [userMessage] : []
+            updatedChat = {
+              ...currentChat,
+              id: result.conversationId,
+              title: 'Untitled',
+              messages: updatedMessages,
+              isBlankChat: false,
+              createdAt: new Date(),
+              isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
+            }
+
+            // Update refs and state with new chat
+            currentChatIdRef.current = result.conversationId
+            setCurrentChat(updatedChat)
+
+            // Replace the blank chat with the new real chat
+            setChats((prevChats) => {
+              // Filter out the current blank chat that we're converting
+              const otherBlankChats = prevChats.filter(
+                (c) =>
+                  c.isBlankChat && c.isLocalOnly !== currentChat.isLocalOnly,
+              )
+              const nonBlankChats = prevChats.filter((c) => !c.isBlankChat)
+
+              // Re-create the blank chat for this mode
+              const newBlankChat = createBlankChat(currentChat.isLocalOnly)
+
+              // Sort with blank chats first, then the new chat, then other chats
+              return sortChats([
+                ...otherBlankChats,
+                newBlankChat,
+                updatedChat,
+                ...nonBlankChats,
+              ])
+            })
+
+            // Save the new chat
+            await chatStorage.saveChatAndSync(updatedChat)
+          } else {
+            throw new Error('Failed to generate conversation ID')
+          }
+        } catch (error) {
+          logError('Failed to convert blank chat', error, {
+            component: 'useChatMessaging',
+            action: 'handleQuery',
+          })
+          // Stop execution if we can't get a server ID
+          setLoadingState('idle')
+          setIsWaitingForResponse(false)
+          setAbortController(null)
+          return
+        }
+      } else if (isBlankChat && !storeHistory) {
+        // For non-signed-in users, create a session chat with a temporary ID
+        updatedMessages = userMessage ? [userMessage] : []
         updatedChat = {
           ...currentChat,
+          id: `session-${Date.now()}`,
           title: 'Untitled',
+          messages: updatedMessages,
           isBlankChat: false,
-          createdAt: new Date(), // Set creation time to when first message is sent
+          createdAt: new Date(),
         }
-      }
 
-      const updatedMessages = userMessage
-        ? [...currentChat.messages, userMessage]
-        : [...currentChat.messages]
-      updatedChat = {
-        ...updatedChat,
-        messages: updatedMessages,
-        isBlankChat: false, // Clear blank chat flag when first message is sent
-        // Mark as local immediately if cloud sync is disabled or already marked as local
-        isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
-      }
+        currentChatIdRef.current = updatedChat.id
+        setCurrentChat(updatedChat)
 
-      // Update the current chat and chats array immediately
-      setCurrentChat(updatedChat)
-      setChats((prevChats) =>
-        prevChats.map((chat) =>
-          chat.id === currentChat.id ? updatedChat : chat,
-        ),
-      )
+        // Replace blank chat with the new chat
+        setChats((prevChats) => {
+          const otherChats = prevChats.filter((c) => c !== currentChat)
+          return [updatedChat, ...otherChats]
+        })
 
-      // Handle chat saving based on user status
-      if (storeHistory) {
-        // For signed-in users
-        // Get server ID for all chats (both cloud and local-only)
-        if (currentChat.hasTemporaryId) {
-          try {
-            // Get server ID synchronously before proceeding
-            const result = await r2Storage.generateConversationId()
-            if (result) {
-              // Update the chat with the server ID
-              const chatWithServerId = {
-                ...updatedChat,
-                id: result.conversationId,
-                hasTemporaryId: false,
-              }
-
-              // Update refs and state with new ID
-              currentChatIdRef.current = result.conversationId
-              setCurrentChat(chatWithServerId)
-              setChats((prevChats) =>
-                prevChats.map((c) =>
-                  c.id === currentChat.id ? chatWithServerId : c,
-                ),
-              )
-
-              // Save the chat with server ID
-              await chatStorage.saveChatAndSync(chatWithServerId)
-
-              // Use the updated chat for the rest of the function
-              updatedChat = chatWithServerId
-            }
-          } catch (error) {
-            logError('Failed to get server ID for new chat', error, {
-              component: 'useChatMessaging',
-              action: 'handleQuery',
-            })
-          }
-        }
-      } else {
-        // For non-signed-in users, always save to sessionStorage
         sessionChatStorage.saveChat(updatedChat)
+      } else {
+        // Not a blank chat, just update messages
+        updatedMessages = userMessage
+          ? [...currentChat.messages, userMessage]
+          : [...currentChat.messages]
+
+        updatedChat = {
+          ...updatedChat,
+          messages: updatedMessages,
+        }
+
+        setCurrentChat(updatedChat)
+        setChats((prevChats) =>
+          prevChats.map((chat) =>
+            chat.id === currentChat.id ? updatedChat : chat,
+          ),
+        )
+
+        // Save the updated chat
+        if (storeHistory) {
+          await chatStorage.saveChatAndSync(updatedChat)
+        } else {
+          sessionChatStorage.saveChat(updatedChat)
+        }
       }
 
       // Initial scroll after user message is added
@@ -455,8 +492,12 @@ export function useChatMessaging({
             }
           }
 
-          // Update the chat object with the correct ID before saving
-          const chatToSave = { ...updatedChat, id: chatId }
+          // Update the chat object with the correct ID and messages before saving
+          const chatToSave = {
+            ...updatedChat,
+            id: chatId,
+            messages: finalMessages,
+          }
 
           updateChatWithHistoryCheck(
             setChats,

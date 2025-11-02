@@ -10,15 +10,14 @@ import type { Chat, Message } from '../types'
  */
 
 /**
- * Creates a new blank chat object
+ * Creates a new blank chat object without an ID
  */
 export function createBlankChat(isLocalOnly = false): Chat {
   return {
-    id: `new-chat-${Date.now()}`,
-    title: 'Untitled',
+    id: '', // Blank chats have no ID
+    title: 'New Chat',
     messages: [],
     createdAt: new Date(),
-    hasTemporaryId: true,
     isBlankChat: true,
     isLocalOnly,
   }
@@ -109,22 +108,16 @@ export function updateChatMessages(chat: Chat, messages: Message[]): Chat {
 }
 
 /**
- * Finds or creates a blank chat
+ * Gets the blank chat for the given mode (cloud or local-only)
+ * There should only be one blank chat per mode
  */
-export function findOrCreateBlankChat(
+export function getBlankChat(
   chats: Chat[],
   isLocalOnly = false,
-): { chat: Chat; isNew: boolean } {
-  // Look for a blank chat with the matching local-only flag
-  const existingBlank = chats.find(
+): Chat | undefined {
+  return chats.find(
     (c) => c.isBlankChat === true && c.isLocalOnly === isLocalOnly,
   )
-
-  if (existingBlank) {
-    return { chat: existingBlank, isNew: false }
-  }
-
-  return { chat: createBlankChat(isLocalOnly), isNew: true }
 }
 
 /**
@@ -138,13 +131,23 @@ export function ensureAtLeastOneChat(chats: Chat[]): Chat[] {
 }
 
 /**
- * Sorts chats by creation date with blank chats first
+ * Sorts chats with blank chats first, then by creation date
+ * Blank chats are always at the top (cloud blank first, then local-only blank)
  */
 export function sortChats(chats: Chat[]): Chat[] {
   return [...chats].sort((a, b) => {
+    // Both blank chats - cloud blank comes before local-only blank
+    if (a.isBlankChat && b.isBlankChat) {
+      if (!a.isLocalOnly && b.isLocalOnly) return -1
+      if (a.isLocalOnly && !b.isLocalOnly) return 1
+      return 0
+    }
+
+    // Blank chats always come first
     if (a.isBlankChat && !b.isBlankChat) return -1
     if (!a.isBlankChat && b.isBlankChat) return 1
 
+    // Regular chats sorted by creation date (newest first)
     const timeA = new Date(a.createdAt).getTime()
     const timeB = new Date(b.createdAt).getTime()
     return timeB - timeA

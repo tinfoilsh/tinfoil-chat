@@ -8,9 +8,9 @@ import {
   createBlankChat,
   deleteChat as deleteChatFromStorage,
   ensureAtLeastOneChat,
-  findOrCreateBlankChat,
+  getBlankChat,
   loadChats,
-  mergeChatsWithState,
+  sortChats,
 } from './chat-operations'
 import { ChatPersistenceManager } from './chat-persistence-manager'
 
@@ -40,12 +40,12 @@ export function useChatStorage({
   const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
 
-  // Initialize with a blank chat
+  // Initialize with blank chats for both modes
   const [chats, setChats] = useState<Chat[]>(() => {
     if (typeof window === 'undefined') {
-      return [createBlankChat()]
+      return [createBlankChat(false), createBlankChat(true)]
     }
-    return [createBlankChat()]
+    return [createBlankChat(false), createBlankChat(true)]
   })
 
   const [currentChat, setCurrentChat] = useState<Chat>(chats[0])
@@ -76,27 +76,27 @@ export function useChatStorage({
       const loadedChats = await loadChats(storeHistory && !!isSignedIn)
 
       setChats((prevChats) => {
-        // Preserve blank chats from previous state
-        const prevBlankChats = prevChats.filter((c) => c.isBlankChat === true)
+        // Always ensure we have blank chats for both modes
+        const cloudBlank =
+          getBlankChat(prevChats, false) || createBlankChat(false)
+        const localBlank =
+          getBlankChat(prevChats, true) || createBlankChat(true)
 
-        // Merge loaded chats with state, preserving in-memory changes
-        const mergedChats = mergeChatsWithState(loadedChats, prevChats)
+        // Merge loaded chats with state (excluding blank chats)
+        const nonBlankChats = loadedChats.filter((c) => !c.isBlankChat)
 
-        // Add back any blank chats that weren't in the loaded data
-        const finalChats = [
-          ...prevBlankChats,
-          ...mergedChats.filter((c) => !c.isBlankChat),
-        ]
+        // Combine blank chats with loaded chats and sort
+        const finalChats = sortChats([cloudBlank, localBlank, ...nonBlankChats])
 
         // If current chat was deleted and it's not a blank chat, switch to first available chat
         const currentChatExists = finalChats.some(
-          (c) => c.id === currentChat.id,
+          (c) =>
+            c.id === currentChat.id ||
+            (c.isBlankChat &&
+              currentChat.isBlankChat &&
+              c.isLocalOnly === currentChat.isLocalOnly),
         )
-        if (
-          !currentChatExists &&
-          finalChats.length > 0 &&
-          !currentChat.isBlankChat
-        ) {
+        if (!currentChatExists && finalChats.length > 0) {
           setCurrentChat(finalChats[0])
         }
 
@@ -135,7 +135,13 @@ export function useChatStorage({
         component: 'useChatStorage',
       })
     }
-  }, [storeHistory, isSignedIn, currentChat.id, currentChat.isBlankChat])
+  }, [
+    storeHistory,
+    isSignedIn,
+    currentChat.id,
+    currentChat.isBlankChat,
+    currentChat.isLocalOnly,
+  ])
 
   // Listen for chat events (cloud sync, pagination, etc.)
   useEffect(() => {
@@ -160,26 +166,18 @@ export function useChatStorage({
 
         if (!mounted) return
 
-        if (loadedChats.length > 0) {
-          // Ensure we have blank chats for both cloud and local-only tabs
-          const hasCloudBlank = loadedChats.some(
-            (c) => c.isBlankChat && !c.isLocalOnly,
-          )
-          const hasLocalBlank = loadedChats.some(
-            (c) => c.isBlankChat && c.isLocalOnly,
-          )
+        // Always have blank chats for both modes
+        const cloudBlank = createBlankChat(false)
+        const localBlank = createBlankChat(true)
 
-          let finalChats = [...loadedChats]
-          if (!hasCloudBlank) {
-            finalChats = [createBlankChat(false), ...finalChats]
-          }
-          if (!hasLocalBlank) {
-            finalChats = [createBlankChat(true), ...finalChats]
-          }
+        // Filter out any blank chats from loaded data (they shouldn't be persisted)
+        const nonBlankChats = loadedChats.filter((c) => !c.isBlankChat)
 
-          setChats(finalChats)
-          setCurrentChat(finalChats[0])
-        }
+        // Combine and sort
+        const finalChats = sortChats([cloudBlank, localBlank, ...nonBlankChats])
+
+        setChats(finalChats)
+        setCurrentChat(finalChats[0]) // Start with the cloud blank chat
       } catch (error) {
         logError('Failed to load initial chats', error, {
           component: 'useChatStorage',
@@ -198,22 +196,27 @@ export function useChatStorage({
     }
   }, [storeHistory, isSignedIn])
 
-  // Create new chat
+  // Create new chat (switch to the appropriate blank chat)
   const createNewChat = useCallback(
     (isLocalOnly = false, fromUserAction = true) => {
-      const { chat, isNew } = findOrCreateBlankChat(chats, isLocalOnly)
+      // Find the blank chat for this mode
+      const blankChat = chats.find(
+        (c) => c.isBlankChat === true && c.isLocalOnly === isLocalOnly,
+      )
 
-      // Always switch to the blank chat if it's a user action (clicking New Chat button)
-      // Only switch automatically if it's actually new or if we're already on a blank chat
-      if (fromUserAction || isNew || currentChat.isBlankChat) {
-        setCurrentChat(chat)
-      }
-
-      if (isNew) {
-        setChats((prev) => [chat, ...prev])
+      // If blank chat exists, just switch to it
+      if (blankChat) {
+        if (fromUserAction || currentChat.id !== '') {
+          setCurrentChat(blankChat)
+        }
+      } else {
+        // Create a new blank chat if it doesn't exist (shouldn't normally happen)
+        const newBlankChat = createBlankChat(isLocalOnly)
+        setChats((prev) => sortChats([newBlankChat, ...prev]))
+        setCurrentChat(newBlankChat)
       }
     },
-    [chats, currentChat.isBlankChat],
+    [chats, currentChat.id],
   )
 
   // Delete chat
@@ -281,15 +284,23 @@ export function useChatStorage({
     }, CONSTANTS.CHAT_INIT_DELAY_MS)
   }, [])
 
-  // Handle chat selection by ID
+  // Handle chat selection
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      const selectedChat = chats.find((chat) => chat.id === chatId)
+      // For blank chats, we need to find them by their blank status and local mode
+      // since they don't have IDs
+      const selectedChat = chats.find((chat) => {
+        if (chat.isBlankChat && chatId === '') {
+          // For blank chat selection, match by the current chat's local mode
+          return chat.isLocalOnly === currentChat.isLocalOnly
+        }
+        return chat.id === chatId
+      })
       if (selectedChat) {
         switchChat(selectedChat)
       }
     },
-    [chats, switchChat],
+    [chats, currentChat.isLocalOnly, switchChat],
   )
 
   return {

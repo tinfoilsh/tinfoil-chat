@@ -27,7 +27,6 @@ function convertStoredChatToChat(storedChat: StoredChat): Chat {
     syncedAt: storedChat.syncedAt,
     locallyModified: storedChat.locallyModified,
     decryptionFailed: storedChat.decryptionFailed,
-    hasTemporaryId: storedChat.hasTemporaryId,
     isBlankChat: storedChat.isBlankChat,
   }
 }

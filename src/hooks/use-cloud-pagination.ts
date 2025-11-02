@@ -82,12 +82,7 @@ export function useCloudPagination(
     try {
       const allChats = await indexedDBStorage.getAllChats()
       const syncedChats = allChats
-        .filter(
-          (chat) =>
-            chat.syncedAt &&
-            !(chat as any).isBlankChat &&
-            !(chat as any).hasTemporaryId,
-        )
+        .filter((chat) => chat.syncedAt && !(chat as any).isBlankChat)
         .sort((a, b) => {
           const timeA = new Date(a.createdAt).getTime()
           const timeB = new Date(b.createdAt).getTime()

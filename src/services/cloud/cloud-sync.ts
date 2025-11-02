@@ -106,19 +106,14 @@ export class CloudSyncService {
         return // Chat might have been deleted
       }
 
-      // Don't sync blank chats, chats with temporary IDs, or local-only chats
-      if (
-        (chat as any).isBlankChat ||
-        (chat as any).hasTemporaryId ||
-        chat.isLocalOnly
-      ) {
-        logInfo('Skipping sync for blank, temporary, or local-only chat', {
+      // Don't sync blank chats or local-only chats
+      if ((chat as any).isBlankChat || chat.isLocalOnly) {
+        logInfo('Skipping sync for blank or local-only chat', {
           component: 'CloudSync',
           action: 'backupChat',
           metadata: {
             chatId,
             isBlankChat: (chat as any).isBlankChat,
-            hasTemporaryId: (chat as any).hasTemporaryId,
             isLocalOnly: chat.isLocalOnly,
           },
         })
@@ -173,7 +168,6 @@ export class CloudSyncService {
       const chatsToSync = unsyncedChats.filter(
         (chat) =>
           !(chat as any).isBlankChat &&
-          !(chat as any).hasTemporaryId &&
           !streamingTracker.isStreaming(chat.id) &&
           !chat.isLocalOnly,
       )
