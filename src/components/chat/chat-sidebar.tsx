@@ -268,7 +268,7 @@ export function ChatSidebar({
 
     // Only switch to blank chat if we're already on a blank chat
     // This ensures we don't interrupt the user when they've selected a real chat
-    if (currentChat?.isBlankChat) {
+    if (currentChat?.isBlankChat && currentChat.isLocalOnly !== shouldBeLocal) {
       createNewChat(shouldBeLocal, false)
     }
   }, [
@@ -277,6 +277,7 @@ export function ChatSidebar({
     cloudSyncEnabled,
     createNewChat,
     currentChat?.isBlankChat,
+    currentChat?.isLocalOnly,
   ])
 
   // Listen for highlight events

@@ -209,7 +209,8 @@ export function useChatStorage({
 
       // If blank chat exists, just switch to it
       if (blankChat) {
-        if (fromUserAction || currentChat.id !== '') {
+        // Always switch when from user action, or when we're on a different blank chat
+        if (fromUserAction || currentChat.isBlankChat) {
           setCurrentChat(blankChat)
         }
       } else {
@@ -219,7 +220,7 @@ export function useChatStorage({
         setCurrentChat(newBlankChat)
       }
     },
-    [chats, currentChat.id],
+    [chats, currentChat.isBlankChat],
   )
 
   // Delete chat
