@@ -43,7 +43,7 @@ interface UseChatStateReturn {
     imageData?: Array<{ base64: string; mimeType: string }>,
     systemPromptOverride?: string,
   ) => void
-  createNewChat: (isLocalOnly?: boolean) => void
+  createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   deleteChat: (chatId: string) => void
   handleChatSelect: (chatId: string) => void
   toggleTheme: () => void

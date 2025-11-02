@@ -59,12 +59,14 @@ export function useCloudPagination(
       setCloudSyncEnabled(isCloudSyncEnabled())
     }
 
+    // Initial check
+    checkCloudSyncStatus()
+
+    // Listen for storage changes (when settings are changed in another tab or component)
     window.addEventListener('storage', checkCloudSyncStatus)
-    const interval = setInterval(checkCloudSyncStatus, 1000)
 
     return () => {
       window.removeEventListener('storage', checkCloudSyncStatus)
-      clearInterval(interval)
     }
   }, [])
 
