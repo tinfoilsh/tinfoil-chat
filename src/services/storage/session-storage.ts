@@ -49,6 +49,11 @@ export const sessionChatStorage = {
         return
       }
 
+      // Never save blank chats to storage
+      if (chat.isBlankChat) {
+        return
+      }
+
       if (!chat.id) {
         logError('Cannot save chat: chat.id is undefined or null', undefined, {
           component: 'sessionChatStorage',

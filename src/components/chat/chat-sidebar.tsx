@@ -909,7 +909,12 @@ export function ChatSidebar({
                 )}
               {isClient &&
                 sortedChats.map((chat) => (
-                  <div key={chat.id} className="relative">
+                  <div
+                    key={
+                      chat.id || `blank-${chat.isLocalOnly ? 'local' : 'cloud'}`
+                    }
+                    className="relative"
+                  >
                     <div
                       onClick={() => {
                         // Open encryption key modal for encrypted chats
@@ -936,7 +941,10 @@ export function ChatSidebar({
                             : isDarkMode
                               ? 'cursor-not-allowed border-border-strong opacity-60'
                               : 'cursor-not-allowed border-border-subtle opacity-60'
-                          : currentChat?.id === chat.id
+                          : (chat.isBlankChat &&
+                                currentChat?.isBlankChat &&
+                                chat.isLocalOnly === currentChat.isLocalOnly) ||
+                              currentChat?.id === chat.id
                             ? isDarkMode
                               ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
                               : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
