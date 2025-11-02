@@ -26,6 +26,7 @@ const CHATS_STORE = 'chats'
 
 export class IndexedDBStorage {
   private db: IDBDatabase | null = null
+  private saveQueue: Promise<void> = Promise.resolve()
 
   async initialize(): Promise<void> {
     // Check if IndexedDB is available
@@ -97,6 +98,12 @@ export class IndexedDBStorage {
   }
 
   async saveChat(chat: Chat): Promise<void> {
+    // Queue saves to prevent concurrent writes from racing
+    this.saveQueue = this.saveQueue.then(() => this.saveChatInternal(chat))
+    return this.saveQueue
+  }
+
+  private async saveChatInternal(chat: Chat): Promise<void> {
     const db = await this.ensureDB()
 
     // Don't save blank chats to IndexedDB
@@ -161,8 +168,19 @@ export class IndexedDBStorage {
         }
 
         const putRequest = store.put(storedChat)
-        putRequest.onsuccess = () => resolve()
-        putRequest.onerror = () => reject(new Error('Failed to save chat'))
+
+        // Wait for transaction to complete, not just the put operation
+        transaction.oncomplete = () => {
+          resolve()
+        }
+
+        transaction.onerror = () => {
+          reject(new Error('Failed to save chat'))
+        }
+
+        putRequest.onerror = () => {
+          reject(new Error('Failed to save chat'))
+        }
       }
 
       getRequest.onerror = () =>

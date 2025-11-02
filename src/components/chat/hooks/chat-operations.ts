@@ -1,0 +1,178 @@
+import { chatStorage } from '@/services/storage/chat-storage'
+import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
+import { sessionChatStorage } from '@/services/storage/session-storage'
+import { logError } from '@/utils/error-handling'
+import type { Chat, Message } from '../types'
+
+/**
+ * Chat Operations - Pure functions for managing chat data
+ * Handles CRUD operations without React state concerns
+ */
+
+/**
+ * Creates a new blank chat object
+ */
+export function createBlankChat(isLocalOnly = false): Chat {
+  return {
+    id: `new-chat-${Date.now()}`,
+    title: 'Untitled',
+    messages: [],
+    createdAt: new Date(),
+    hasTemporaryId: true,
+    isBlankChat: true,
+    isLocalOnly,
+  }
+}
+
+/**
+ * Loads all chats from storage
+ */
+export async function loadChats(isSignedIn: boolean): Promise<Chat[]> {
+  try {
+    const chats = isSignedIn
+      ? await chatStorage.getAllChatsWithSyncStatus()
+      : sessionChatStorage.getAllChats()
+
+    return chats
+      .filter((chat) => !deletedChatsTracker.isDeleted(chat.id))
+      .map((chat) => ({
+        ...chat,
+        createdAt: new Date(chat.createdAt),
+      }))
+  } catch (error) {
+    logError('Failed to load chats', error, {
+      component: 'chat-operations',
+      action: 'loadChats',
+    })
+    return []
+  }
+}
+
+/**
+ * Saves a chat to storage
+ */
+export async function saveChat(
+  chat: Chat,
+  isSignedIn: boolean,
+  skipCloudSync = false,
+): Promise<Chat> {
+  try {
+    if (isSignedIn) {
+      return await chatStorage.saveChat(chat, skipCloudSync)
+    } else {
+      sessionChatStorage.saveChat(chat)
+      return chat
+    }
+  } catch (error) {
+    logError('Failed to save chat', error, {
+      component: 'chat-operations',
+      action: 'saveChat',
+      metadata: { chatId: chat.id },
+    })
+    throw error
+  }
+}
+
+/**
+ * Deletes a chat from storage
+ */
+export async function deleteChat(
+  chatId: string,
+  isSignedIn: boolean,
+): Promise<void> {
+  deletedChatsTracker.markAsDeleted(chatId)
+
+  try {
+    if (isSignedIn) {
+      await chatStorage.deleteChat(chatId)
+    } else {
+      sessionChatStorage.deleteChat(chatId)
+    }
+  } catch (error) {
+    logError('Failed to delete chat', error, {
+      component: 'chat-operations',
+      action: 'deleteChat',
+      metadata: { chatId },
+    })
+  }
+}
+
+/**
+ * Updates a chat with new messages
+ */
+export function updateChatMessages(chat: Chat, messages: Message[]): Chat {
+  return {
+    ...chat,
+    messages,
+    isBlankChat: messages.length === 0,
+  }
+}
+
+/**
+ * Finds or creates a blank chat
+ */
+export function findOrCreateBlankChat(
+  chats: Chat[],
+  isLocalOnly = false,
+): { chat: Chat; isNew: boolean } {
+  // Look for a blank chat with the matching local-only flag
+  const existingBlank = chats.find(
+    (c) => c.isBlankChat === true && c.isLocalOnly === isLocalOnly,
+  )
+
+  if (existingBlank) {
+    return { chat: existingBlank, isNew: false }
+  }
+
+  return { chat: createBlankChat(isLocalOnly), isNew: true }
+}
+
+/**
+ * Ensures at least one chat exists
+ */
+export function ensureAtLeastOneChat(chats: Chat[]): Chat[] {
+  if (chats.length === 0) {
+    return [createBlankChat()]
+  }
+  return chats
+}
+
+/**
+ * Sorts chats by creation date with blank chats first
+ */
+export function sortChats(chats: Chat[]): Chat[] {
+  return [...chats].sort((a, b) => {
+    if (a.isBlankChat && !b.isBlankChat) return -1
+    if (!a.isBlankChat && b.isBlankChat) return 1
+
+    const timeA = new Date(a.createdAt).getTime()
+    const timeB = new Date(b.createdAt).getTime()
+    return timeB - timeA
+  })
+}
+
+/**
+ * Merges loaded chats with current state
+ * IndexedDB is the source of truth - state chats are only preserved if they don't exist in IndexedDB
+ */
+export function mergeChatsWithState(
+  loadedChats: Chat[],
+  currentChats: Chat[],
+): Chat[] {
+  const chatMap = new Map<string, Chat>()
+
+  // Add loaded chats from IndexedDB (source of truth)
+  loadedChats.forEach((chat) => {
+    chatMap.set(chat.id, chat)
+  })
+
+  // Only preserve state chats if they don't exist in IndexedDB yet
+  // (blank chats, unsaved chats, etc.)
+  currentChats.forEach((chat) => {
+    if (!chatMap.has(chat.id)) {
+      chatMap.set(chat.id, chat)
+    }
+  })
+
+  return sortChats(Array.from(chatMap.values()))
+}

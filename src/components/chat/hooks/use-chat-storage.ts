@@ -1,24 +1,18 @@
-import { chatStorage } from '@/services/storage/chat-storage'
-import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
-import { sessionChatStorage } from '@/services/storage/session-storage'
+import { chatEvents } from '@/services/storage/chat-events'
 import { logError } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
-
-// Create a new chat object with placeholder ID (will be replaced when first message is sent)
-function createNewChatObjectSync(intendedLocalOnly = false): Chat {
-  return {
-    id: 'new-chat-' + Date.now(), // Temporary placeholder ID
-    title: 'Untitled',
-    messages: [],
-    createdAt: new Date(),
-    hasTemporaryId: true, // Flag to indicate this needs a server ID
-    isBlankChat: true,
-    intendedLocalOnly, // Track if this should be a local-only chat
-  }
-}
+import {
+  createBlankChat,
+  deleteChat as deleteChatFromStorage,
+  ensureAtLeastOneChat,
+  findOrCreateBlankChat,
+  loadChats,
+  mergeChatsWithState,
+} from './chat-operations'
+import { ChatPersistenceManager } from './chat-persistence-manager'
 
 interface UseChatStorageProps {
   storeHistory: boolean
@@ -30,7 +24,7 @@ interface UseChatStorageReturn {
   currentChat: Chat
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
-  createNewChat: (intendedLocalOnly?: boolean) => void
+  createNewChat: (isLocalOnly?: boolean) => void
   deleteChat: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   switchChat: (chat: Chat) => Promise<void>
@@ -42,325 +36,190 @@ interface UseChatStorageReturn {
 
 export function useChatStorage({
   storeHistory,
-  scrollToBottom,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
 
+  // Initialize with a blank chat
   const [chats, setChats] = useState<Chat[]>(() => {
-    const defaultChat = createNewChatObjectSync()
-
-    // Return default chat for server-side rendering
     if (typeof window === 'undefined') {
-      return [defaultChat]
+      return [createBlankChat()]
     }
-
-    // Return default chat initially, then load from storage asynchronously
-    return [defaultChat]
+    return [createBlankChat()]
   })
 
-  // Initialize currentChat with the first chat
   const [currentChat, setCurrentChat] = useState<Chat>(chats[0])
 
-  // Keep a ref to currentChat for stable callbacks
-  const currentChatRef = useRef(currentChat)
-  useEffect(() => {
-    currentChatRef.current = currentChat
-  }, [currentChat])
+  // Create persistence manager
+  const persistenceManager = useMemo(
+    () => new ChatPersistenceManager(!!isSignedIn),
+    [isSignedIn],
+  )
 
-  // Reload chats from storage
+  // Update persistence manager when auth changes
+  useEffect(() => {
+    persistenceManager.setSignedIn(!!isSignedIn)
+  }, [isSignedIn, persistenceManager])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      persistenceManager.cleanup()
+    }
+  }, [persistenceManager])
+
+  // Load chats from storage
   const reloadChats = useCallback(async () => {
     if (typeof window === 'undefined') return
 
     try {
-      // Use sessionStorage for non-signed-in users, IndexedDB for signed-in
-      const savedChats =
-        storeHistory && isSignedIn
-          ? await chatStorage.getAllChatsWithSyncStatus()
-          : sessionChatStorage.getAllChats()
+      const loadedChats = await loadChats(storeHistory && !!isSignedIn)
 
-      // Get current chats state to preserve blank chats
       setChats((prevChats) => {
-        // Create a map to track chats by ID for deduplication
-        const chatMap = new Map<string, Chat>()
+        const mergedChats = mergeChatsWithState(loadedChats, prevChats)
 
-        // First add saved chats (filtering out recently deleted ones)
-        savedChats.forEach((chat: Chat) => {
-          // Skip if this chat was recently deleted
-          if (!deletedChatsTracker.isDeleted(chat.id)) {
-            chatMap.set(chat.id, {
-              ...chat,
-              createdAt: new Date(chat.createdAt),
-            })
-          }
-        })
-
-        // Then add blank chats and recently created chats that aren't saved yet
-        prevChats.forEach((chat) => {
-          // Preserve blank chats OR chats that don't have syncedAt (not yet synced)
-          if ((chat.isBlankChat || !chat.syncedAt) && !chatMap.has(chat.id)) {
-            chatMap.set(chat.id, chat)
-          }
-        })
-
-        // Convert map to array and sort
-        const finalChats = Array.from(chatMap.values()).sort((a, b) => {
-          // Blank chats first
-          if (a.isBlankChat && !b.isBlankChat) return -1
-          if (!a.isBlankChat && b.isBlankChat) return 1
-
-          // Then by creation date
-          const timeA = new Date(a.createdAt).getTime()
-          const timeB = new Date(b.createdAt).getTime()
-          return timeB - timeA
-        })
-
-        // Determine which chat should be current
-        const currentChatStillExists = finalChats.some(
-          (chat) => chat.id === currentChatRef.current?.id,
+        // If current chat was deleted, switch to first available chat
+        const currentChatExists = mergedChats.some(
+          (c) => c.id === currentChat.id,
         )
-
-        const currentChatIsUsable =
-          currentChatStillExists &&
-          !(currentChatRef.current as any)?.decryptionFailed
-
-        if (!currentChatIsUsable) {
-          // Need to find a new current chat
-          // Find all usable (non-encrypted) chats
-          const usableChats = finalChats.filter(
-            (chat) => !(chat as any).decryptionFailed,
-          )
-
-          // Find the best usable chat
-          const emptyUsableChat = usableChats.find(
-            (chat) => !chat.messages || chat.messages.length === 0,
-          )
-          setCurrentChat(emptyUsableChat || usableChats[0] || finalChats[0])
+        if (!currentChatExists && mergedChats.length > 0) {
+          setCurrentChat(mergedChats[0])
         }
-        // Otherwise keep the current chat as is
 
-        return finalChats
+        return mergedChats
       })
 
-      // Update current chat if it was modified remotely
-      const currentChatId = currentChatRef.current?.id
-      if (currentChatId) {
-        const updatedChat = savedChats.find((chat) => chat.id === currentChatId)
-        if (updatedChat) {
-          setCurrentChat((prevChat) => {
-            // Skip update if we're actively streaming (assistant is thinking or generating)
-            const lastMessage = prevChat.messages[prevChat.messages.length - 1]
-            const isActivelyStreaming =
-              lastMessage &&
-              lastMessage.role === 'assistant' &&
-              (lastMessage.isThinking ||
-                (lastMessage.thoughts && !lastMessage.content) ||
-                (!lastMessage.thoughts && !lastMessage.content))
+      // Update current chat if it was modified
+      const updatedCurrentChat = loadedChats.find(
+        (c) => c.id === currentChat.id,
+      )
+      if (updatedCurrentChat) {
+        setCurrentChat((prev) => {
+          // Don't update if actively streaming
+          const lastMessage = prev.messages[prev.messages.length - 1]
+          const isStreaming =
+            lastMessage?.role === 'assistant' &&
+            (lastMessage.isThinking || !lastMessage.content)
 
-            if (isActivelyStreaming) {
-              return prevChat // Don't update during active streaming
-            }
+          if (isStreaming) return prev
 
-            // Only update if the chat has actually changed
-            if (
-              prevChat.id === updatedChat.id &&
-              (prevChat.messages.length !== updatedChat.messages.length ||
-                prevChat.syncedAt !== updatedChat.syncedAt)
-            ) {
-              return {
-                ...updatedChat,
-                createdAt: new Date(updatedChat.createdAt),
-              }
-            }
-            return prevChat
-          })
-        }
+          // Only update if actually changed
+          if (
+            prev.messages.length !== updatedCurrentChat.messages.length ||
+            prev.syncedAt !== updatedCurrentChat.syncedAt ||
+            prev.title !== updatedCurrentChat.title
+          ) {
+            return updatedCurrentChat
+          }
+          return prev
+        })
       }
     } catch (error) {
-      logError('Failed to reload chats from storage', error, {
+      logError('Failed to reload chats', error, {
         component: 'useChatStorage',
       })
     }
-  }, [storeHistory, isSignedIn]) // Don't depend on currentChat.id to prevent recreating on every render
+  }, [storeHistory, isSignedIn, currentChat.id])
 
-  // Load chats from storage asynchronously
+  // Listen for chat events (cloud sync, pagination, etc.)
   useEffect(() => {
-    let isMounted = true
+    const cleanup = chatEvents.on((event) => {
+      if (event.reason === 'sync' || event.reason === 'pagination') {
+        reloadChats()
+      }
+    })
 
-    if (typeof window !== 'undefined') {
-      const loadChats = async () => {
-        try {
-          const savedChats =
-            storeHistory && isSignedIn
-              ? await chatStorage.getAllChatsWithSyncStatus()
-              : sessionChatStorage.getAllChats()
+    return cleanup
+  }, [reloadChats])
 
-          // Check if component is still mounted before updating state
-          if (!isMounted) return
+  // Initial load
+  useEffect(() => {
+    let mounted = true
 
-          if (savedChats.length > 0) {
-            const parsedChats = savedChats
-              .filter((chat) => !deletedChatsTracker.isDeleted(chat.id))
-              .map((chat) => ({
-                ...chat,
-                createdAt: new Date(chat.createdAt),
-              }))
-            // Find all usable (non-encrypted) chats
-            const usableChats = parsedChats.filter(
-              (chat) => !(chat as any).decryptionFailed,
-            )
+    const loadInitialChats = async () => {
+      if (typeof window === 'undefined') return
 
-            // Check if we need to add a new blank chat (only on initial load)
-            const hasBlankUsableChat = usableChats.some(
-              (chat) => chat.isBlankChat === true,
-            )
+      try {
+        const loadedChats = await loadChats(storeHistory && !!isSignedIn)
 
-            let finalChats = parsedChats
-            let newChat = null
+        if (!mounted) return
 
-            if (!hasBlankUsableChat) {
-              // No blank usable chat exists, create one for initial load
-              newChat = createNewChatObjectSync()
-              finalChats = [newChat, ...parsedChats]
-            }
+        if (loadedChats.length > 0) {
+          // Ensure we have blank chats for both cloud and local-only tabs
+          const hasCloudBlank = loadedChats.some(
+            (c) => c.isBlankChat && !c.isLocalOnly,
+          )
+          const hasLocalBlank = loadedChats.some(
+            (c) => c.isBlankChat && c.isLocalOnly,
+          )
 
-            setChats(finalChats)
-
-            // Set initial current chat
-            if (newChat) {
-              setCurrentChat(newChat)
-            } else {
-              // Find the best usable chat to start with
-              const blankUsableChat = usableChats.find(
-                (chat) => chat.isBlankChat === true,
-              )
-              setCurrentChat(
-                blankUsableChat || usableChats[0] || parsedChats[0],
-              )
-            }
+          let finalChats = [...loadedChats]
+          if (!hasCloudBlank) {
+            finalChats = [createBlankChat(false), ...finalChats]
           }
-          // Clear initial load state after loading chats
-          if (isMounted) {
-            setIsInitialLoad(false)
+          if (!hasLocalBlank) {
+            finalChats = [createBlankChat(true), ...finalChats]
           }
-        } catch (error) {
-          logError('Failed to load chats from storage', error, {
-            component: 'useChatStorage',
-          })
-          if (isMounted) {
-            setIsInitialLoad(false)
-          }
+
+          setChats(finalChats)
+          setCurrentChat(finalChats[0])
+        }
+      } catch (error) {
+        logError('Failed to load initial chats', error, {
+          component: 'useChatStorage',
+        })
+      } finally {
+        if (mounted) {
+          setIsInitialLoad(false)
         }
       }
-
-      loadChats()
     }
 
-    // Clear initial load if we're not storing or on server
-    if (!storeHistory || typeof window === 'undefined') {
-      setIsInitialLoad(false)
-    }
+    loadInitialChats()
 
-    // Cleanup function to set isMounted to false
     return () => {
-      isMounted = false
+      mounted = false
     }
   }, [storeHistory, isSignedIn])
 
-  // Create a new chat
+  // Create new chat
   const createNewChat = useCallback(
-    (intendedLocalOnly = false) => {
-      // Check if any chat in the list is blank (not just current chat)
-      const hasBlankChat = chats.some((chat) => chat.isBlankChat === true)
+    (isLocalOnly = false) => {
+      const { chat, isNew } = findOrCreateBlankChat(chats, isLocalOnly)
 
-      if (hasBlankChat) {
-        // Find the blank chat and switch to it
-        const blankChat = chats.find((chat) => chat.isBlankChat === true)
-        if (blankChat) {
-          // Update the intended type if different
-          if (blankChat.intendedLocalOnly !== intendedLocalOnly) {
-            const updatedChat = { ...blankChat, intendedLocalOnly }
-            setCurrentChat(updatedChat)
-            setChats((prevChats) =>
-              prevChats.map((c) => (c.id === blankChat.id ? updatedChat : c)),
-            )
-          } else {
-            setCurrentChat(blankChat)
-          }
-        }
-        return
+      setCurrentChat(chat)
+
+      if (isNew) {
+        setChats((prev) => [chat, ...prev])
       }
-
-      // Create new chat instantly with temporary ID
-      const tempChat = createNewChatObjectSync(intendedLocalOnly)
-
-      setCurrentChat(tempChat)
-      setChats((prev) => [tempChat, ...prev])
-
-      // Don't request server ID here - wait until first message is sent
-      // This ensures createdAt reflects when the chat actually has content
     },
     [chats],
   )
 
-  // Delete a chat
+  // Delete chat
   const deleteChat = useCallback(
     (chatId: string) => {
-      // Mark as deleted immediately to prevent re-sync
-      deletedChatsTracker.markAsDeleted(chatId)
-
       setChats((prevChats) => {
-        const newChats = prevChats.filter((chat) => chat.id !== chatId)
+        const filtered = prevChats.filter((c) => c.id !== chatId)
+        const newChats = ensureAtLeastOneChat(filtered)
 
-        // Always ensure there's at least one chat
-        if (newChats.length === 0) {
-          const newChat = createNewChatObjectSync()
-          setCurrentChat(newChat)
-          // Don't save empty chats - they'll be saved when the first message is added
-          return [newChat]
-        }
-
-        // If we deleted the current chat, switch to the first remaining chat
-        if (currentChat?.id === chatId) {
+        // Switch to another chat if we deleted the current one
+        if (currentChat?.id === chatId && newChats.length > 0) {
           setCurrentChat(newChats[0])
         }
 
-        // Delete from storage
-        if (isSignedIn) {
-          chatStorage.deleteChat(chatId).catch((error) => {
-            logError('Failed to delete chat from storage', error, {
-              component: 'useChatStorage',
-              action: 'deleteChat',
-              metadata: { chatId },
-            })
-          })
-        } else {
-          sessionChatStorage.deleteChat(chatId)
-        }
         return newChats
+      })
+
+      // Delete from storage
+      deleteChatFromStorage(chatId, !!isSignedIn).catch((error) => {
+        logError('Failed to delete chat', error, {
+          component: 'useChatStorage',
+          metadata: { chatId },
+        })
       })
     },
     [currentChat?.id, isSignedIn],
-  )
-
-  // Switch to a different chat
-  const switchChat = useCallback(async (chat: Chat) => {
-    setCurrentChat(chat)
-    setIsInitialLoad(true)
-
-    // Set isInitialLoad back to false after a brief delay to show the chat
-    setTimeout(() => {
-      setIsInitialLoad(false)
-    }, CONSTANTS.CHAT_INIT_DELAY_MS)
-  }, [])
-
-  // Handle chat selection
-  const handleChatSelect = useCallback(
-    (chatId: string) => {
-      const selectedChat = chats.find((chat) => chat.id === chatId) || chats[0]
-      switchChat(selectedChat)
-    },
-    [chats, switchChat],
   )
 
   // Update chat title
@@ -371,36 +230,46 @@ export function useChatStorage({
           chat.id === chatId ? { ...chat, title: newTitle } : chat,
         )
 
-        // Update in storage
         const chatToUpdate = updatedChats.find((c) => c.id === chatId)
-        if (chatToUpdate) {
-          if (storeHistory && isSignedIn) {
-            chatStorage
-              .saveChatAndSync(chatToUpdate)
-              .then(() => {
-                // Reload after sync to update syncedAt
-                reloadChats()
-              })
-              .catch((error) => {
-                logError('Failed to update chat title in storage', error, {
-                  component: 'useChatStorage',
-                })
-              })
-          } else {
-            // Save to session storage for non-signed-in users
-            sessionChatStorage.saveChat(chatToUpdate)
-          }
+        if (chatToUpdate && storeHistory) {
+          persistenceManager.save(chatToUpdate).catch((error) => {
+            logError('Failed to save chat title update', error, {
+              component: 'useChatStorage',
+              metadata: { chatId },
+            })
+          })
         }
 
         return updatedChats
       })
 
-      // Also update current chat if it's the one being edited
       if (currentChat?.id === chatId) {
         setCurrentChat((prev) => ({ ...prev, title: newTitle }))
       }
     },
-    [storeHistory, isSignedIn, currentChat?.id, reloadChats],
+    [storeHistory, currentChat?.id, persistenceManager],
+  )
+
+  // Switch to a different chat
+  const switchChat = useCallback(async (chat: Chat) => {
+    setCurrentChat(chat)
+    setIsInitialLoad(true)
+
+    // Brief delay to show loading state
+    setTimeout(() => {
+      setIsInitialLoad(false)
+    }, CONSTANTS.CHAT_INIT_DELAY_MS)
+  }, [])
+
+  // Handle chat selection by ID
+  const handleChatSelect = useCallback(
+    (chatId: string) => {
+      const selectedChat = chats.find((chat) => chat.id === chatId)
+      if (selectedChat) {
+        switchChat(selectedChat)
+      }
+    },
+    [chats, switchChat],
   )
 
   return {

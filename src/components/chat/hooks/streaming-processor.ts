@@ -29,8 +29,7 @@ export interface StreamingContext {
     setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
     chatId: string,
     newMessages: Message[],
-    immediate?: boolean,
-    isThinking?: boolean,
+    skipCloudSync?: boolean,
   ) => void
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
@@ -83,8 +82,7 @@ export async function processStreamingResponse(
     let sseBuffer = ''
     let isUsingReasoningFormat = false
 
-    // Batch incremental saves to avoid saving on every token
-    const scheduleStreamingUpdate = (isThinkingFlag: boolean) => {
+    const scheduleStreamingUpdate = () => {
       if (rafId !== null) return
       rafId =
         typeof window !== 'undefined' &&
@@ -102,7 +100,6 @@ export async function processStreamingResponse(
                   chatId,
                   newMessages,
                   false,
-                  isThinkingFlag,
                 )
               }
             })
@@ -118,7 +115,6 @@ export async function processStreamingResponse(
                   chatId,
                   newMessages,
                   false,
-                  isThinkingFlag,
                 )
               }
               rafId = null
@@ -157,7 +153,6 @@ export async function processStreamingResponse(
               ctx.updatedChat.id,
               newMessages,
               false,
-              false,
             )
           }
         } else if (isInThinkingMode && thoughtsBuffer.trim()) {
@@ -190,7 +185,6 @@ export async function processStreamingResponse(
               ctx.setCurrentChat,
               chatId,
               newMessages,
-              true,
               false,
             )
           }
@@ -248,7 +242,6 @@ export async function processStreamingResponse(
                 chatId,
                 newMessages,
                 false,
-                true,
               )
               if (
                 typeof window !== 'undefined' &&
@@ -292,7 +285,7 @@ export async function processStreamingResponse(
               (reasoningContent || content) &&
               ctx.currentChatIdRef.current === ctx.updatedChat.id
             ) {
-              scheduleStreamingUpdate(isInThinkingMode)
+              scheduleStreamingUpdate()
             }
             if (!content) continue
           }
@@ -312,7 +305,7 @@ export async function processStreamingResponse(
               isThinking: false,
             }
             if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
-              scheduleStreamingUpdate(false)
+              scheduleStreamingUpdate()
             }
             continue
           }
@@ -380,7 +373,6 @@ export async function processStreamingResponse(
                         chatId,
                         newMessages,
                         false,
-                        false,
                       )
                     }
                     content = ''
@@ -407,7 +399,6 @@ export async function processStreamingResponse(
                         chatId,
                         newMessages,
                         false,
-                        true,
                       )
                     }
                   }
@@ -454,7 +445,7 @@ export async function processStreamingResponse(
                 (assistantMessage.content || '') + remainingContent
             }
             if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
-              scheduleStreamingUpdate(false)
+              scheduleStreamingUpdate()
             }
             continue
           }
@@ -467,7 +458,7 @@ export async function processStreamingResponse(
               isThinking: true,
             }
             if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
-              scheduleStreamingUpdate(true)
+              scheduleStreamingUpdate()
             }
           } else if (!isInThinkingMode) {
             if (!isUsingReasoningFormat) {
@@ -480,7 +471,7 @@ export async function processStreamingResponse(
                 isThinking: false,
               }
               if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
-                scheduleStreamingUpdate(false)
+                scheduleStreamingUpdate()
               }
             }
           }
@@ -496,31 +487,18 @@ export async function processStreamingResponse(
   } finally {
     ctx.setLoadingState('idle')
     ctx.isStreamingRef.current = false
-    if (ctx.updatedChat.id) streamingTracker.endStreaming(ctx.updatedChat.id)
+    // End streaming for both the original ID and current ID (in case ID changed)
+    if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
+    if (
+      ctx.currentChatIdRef.current &&
+      ctx.currentChatIdRef.current !== streamingChatId
+    ) {
+      streamingTracker.endStreaming(ctx.currentChatIdRef.current)
+    }
     ctx.setIsThinking(false)
     ctx.thinkingStartTimeRef.current = null
     ctx.setIsWaitingForResponse(false)
-    // Note: Title generation and final cloud sync happens in use-chat-messaging.ts
-    // This save is just to ensure the assistant message is persisted immediately
-    if (
-      ctx.storeHistory &&
-      assistantMessage &&
-      (assistantMessage.content || assistantMessage.thoughts) &&
-      ctx.currentChatIdRef.current
-    ) {
-      const finalMessages = [...ctx.updatedMessages, assistantMessage]
-      // Use the current chat ID from the ref, which may have been updated during streaming
-      // The updateChatWithHistoryCheck will properly handle getting the current chat state
-      ctx.updateChatWithHistoryCheck(
-        ctx.setChats,
-        ctx.updatedChat, // This is passed but the function will use the current state via setChats
-        ctx.setCurrentChat,
-        ctx.currentChatIdRef.current, // Use the current ID, not the stale one
-        finalMessages,
-        true, // immediate = true to force final persistence to IndexedDB
-        false,
-      )
-    }
+    // Note: Save with title generation happens in use-chat-messaging.ts immediately after this
   }
 
   return assistantMessage
