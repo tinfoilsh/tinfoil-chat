@@ -90,8 +90,28 @@ export class ChatStorageService {
 
     // Never save blank chats to storage
     if (chat.isBlankChat) {
+      logInfo('[storage] Skipping save for blank chat', {
+        component: 'ChatStorageService',
+        action: 'saveChat',
+        metadata: {
+          chatId: chat.id,
+          isLocalOnly: chat.isLocalOnly,
+        },
+      })
       return chat
     }
+
+    logInfo('[storage] Starting chat save', {
+      component: 'ChatStorageService',
+      action: 'saveChat.start',
+      metadata: {
+        chatId: chat.id,
+        isLocalOnly: chat.isLocalOnly,
+        skipCloudSync,
+        messageCount: chat.messages.length,
+        title: chat.title,
+      },
+    })
 
     const chatToSave = chat
 
@@ -118,6 +138,18 @@ export class ChatStorageService {
       isLocalOnly: shouldMarkAsLocal || (existingChat?.isLocalOnly ?? false),
     }
     await indexedDBStorage.saveChat(storageChat)
+
+    logInfo('[storage] Chat saved to IndexedDB', {
+      component: 'ChatStorageService',
+      action: 'saveChat.indexedDBSaved',
+      metadata: {
+        chatId: chatToSave.id,
+        isLocalOnly: storageChat.isLocalOnly,
+        messageCount: chatToSave.messages.length,
+        title: chatToSave.title,
+      },
+    })
+
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
 
@@ -131,6 +163,13 @@ export class ChatStorageService {
       !streamingTracker.isStreaming(chatToSave.id) &&
       !storageChat.isLocalOnly
     ) {
+      logInfo('[storage] Triggering cloud backup', {
+        component: 'ChatStorageService',
+        action: 'saveChat.cloudBackup',
+        metadata: {
+          chatId: chatToSave.id,
+        },
+      })
       cloudSync.backupChat(chatToSave.id).catch((error) => {
         logError('Failed to backup chat to cloud', error, {
           component: 'ChatStorageService',
@@ -139,10 +178,19 @@ export class ChatStorageService {
         })
       })
     } else if (streamingTracker.isStreaming(chatToSave.id)) {
-      logInfo('Skipping cloud sync for streaming chat', {
+      logInfo('[storage] Skipping cloud sync for streaming chat', {
         component: 'ChatStorageService',
         action: 'saveChat',
         metadata: { chatId: chatToSave.id },
+      })
+    } else if (storageChat.isLocalOnly) {
+      logInfo('[storage] Skipping cloud sync for local-only chat', {
+        component: 'ChatStorageService',
+        action: 'saveChat.skipCloudSync',
+        metadata: {
+          chatId: chatToSave.id,
+          isLocalOnly: storageChat.isLocalOnly,
+        },
       })
     }
 
