@@ -1,6 +1,6 @@
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import type React from 'react'
 import type { Chat, Message } from '../types'
 
@@ -56,9 +56,31 @@ export function createUpdateChatWithHistoryCheck({
       const shouldSkipCloudSync =
         skipCloudSync || updatedChat.isLocalOnly || isStreamingRef.current
 
+      logInfo('[persistence] Saving chat to storage', {
+        component: 'chat-persistence',
+        action: 'updateChatWithHistoryCheck',
+        metadata: {
+          chatId,
+          isLocalOnly: updatedChat.isLocalOnly,
+          shouldSkipCloudSync,
+          isStreaming: isStreamingRef.current,
+          messageCount: newMessages.length,
+          title: updatedChat.title,
+        },
+      })
+
       chatStorage
         .saveChat(updatedChat, shouldSkipCloudSync)
         .then((savedChat) => {
+          logInfo('[persistence] Chat saved successfully', {
+            component: 'chat-persistence',
+            action: 'updateChatWithHistoryCheck.saved',
+            metadata: {
+              chatId: savedChat.id,
+              originalId: updatedChat.id,
+              idChanged: savedChat.id !== updatedChat.id,
+            },
+          })
           if (savedChat.id !== updatedChat.id) {
             // ID changed (server assigned new ID)
             if (isCurrentChat && currentChatIdRef.current === updatedChat.id) {

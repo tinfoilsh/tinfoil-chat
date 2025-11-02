@@ -21,7 +21,7 @@ import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
-import { logError, logWarning } from '@/utils/error-handling'
+import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CONSTANTS } from '../constants'
@@ -260,6 +260,19 @@ export function useChatMessaging({
         return
       }
 
+      logInfo('[handleQuery] Starting query processing', {
+        component: 'useChatMessaging',
+        action: 'handleQuery.start',
+        metadata: {
+          chatId: currentChat.id,
+          isBlankChat: currentChat.isBlankChat,
+          isLocalOnly: currentChat.isLocalOnly,
+          messageCount: currentChat.messages.length,
+          storeHistory,
+          queryLength: query.length,
+        },
+      })
+
       // Clear input immediately when send button is pressed
       setInput('')
 
@@ -296,6 +309,14 @@ export function useChatMessaging({
 
       // Handle blank chat conversion: get a server ID and create a real chat
       if (isBlankChat && storeHistory) {
+        logInfo('[handleQuery] Converting blank chat to real chat', {
+          component: 'useChatMessaging',
+          action: 'handleQuery.blankChatConversion',
+          metadata: {
+            isLocalOnly: currentChat.isLocalOnly,
+            cloudSyncEnabled: isCloudSyncEnabled(),
+          },
+        })
         try {
           // Get server ID before proceeding
           const result = await r2Storage.generateConversationId()
@@ -311,6 +332,16 @@ export function useChatMessaging({
               createdAt: new Date(),
               isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
             }
+
+            logInfo('[handleQuery] Created new chat from blank', {
+              component: 'useChatMessaging',
+              action: 'handleQuery.chatCreated',
+              metadata: {
+                newId: result.conversationId,
+                isLocalOnly: updatedChat.isLocalOnly,
+                messageCount: updatedMessages.length,
+              },
+            })
 
             // Update refs and state with new chat
             currentChatIdRef.current = result.conversationId
@@ -338,7 +369,22 @@ export function useChatMessaging({
             })
 
             // Save the new chat
+            logInfo('[handleQuery] Saving new chat to storage', {
+              component: 'useChatMessaging',
+              action: 'handleQuery.savingNewChat',
+              metadata: {
+                id: updatedChat.id,
+                isLocalOnly: updatedChat.isLocalOnly,
+              },
+            })
             await chatStorage.saveChatAndSync(updatedChat)
+            logInfo('[handleQuery] New chat saved successfully', {
+              component: 'useChatMessaging',
+              action: 'handleQuery.newChatSaved',
+              metadata: {
+                id: updatedChat.id,
+              },
+            })
           } else {
             throw new Error('Failed to generate conversation ID')
           }
@@ -412,6 +458,17 @@ export function useChatMessaging({
           throw new Error(`Model ${effectiveModel} not found`)
         }
 
+        logInfo('[handleQuery] Starting streaming with model', {
+          component: 'useChatMessaging',
+          action: 'handleQuery.startStreaming',
+          metadata: {
+            model: effectiveModel,
+            chatId: currentChatIdRef.current,
+            isLocalOnly: updatedChat.isLocalOnly,
+            messageCount: updatedMessages.length,
+          },
+        })
+
         const baseSystemPrompt = systemPromptOverride || systemPrompt
         const response = await sendChatStream({
           model,
@@ -444,6 +501,19 @@ export function useChatMessaging({
           (assistantMessage.content || assistantMessage.thoughts)
         ) {
           const chatId = currentChatIdRef.current
+
+          logInfo('[handleQuery] Streaming completed, processing response', {
+            component: 'useChatMessaging',
+            action: 'handleQuery.streamingComplete',
+            metadata: {
+              chatId,
+              isLocalOnly: updatedChat.isLocalOnly,
+              hasContent: !!assistantMessage.content,
+              hasThoughts: !!assistantMessage.thoughts,
+              isFirstMessage,
+            },
+          })
+
           // Always save the response, using the current chat ID from the ref
           // which has been updated to the server ID if one was generated
           const finalMessages = [...updatedMessages, assistantMessage]
@@ -453,6 +523,13 @@ export function useChatMessaging({
             updatedChat.title === 'Untitled' &&
             models.length > 0
           ) {
+            logInfo('[handleQuery] Generating title for new chat', {
+              component: 'useChatMessaging',
+              action: 'handleQuery.titleGenStart',
+              metadata: {
+                chatId,
+              },
+            })
             try {
               const freeModel = models.find(
                 (m) =>
@@ -472,6 +549,14 @@ export function useChatMessaging({
                   freeModel.modelName,
                 )
                 if (generatedTitle && generatedTitle !== 'Untitled') {
+                  logInfo('[handleQuery] Title generated successfully', {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery.titleGenComplete',
+                    metadata: {
+                      chatId,
+                      title: generatedTitle,
+                    },
+                  })
                   updatedChat = {
                     ...updatedChat,
                     title: generatedTitle,
@@ -499,6 +584,18 @@ export function useChatMessaging({
             messages: finalMessages,
           }
 
+          logInfo('[handleQuery] Saving final chat state', {
+            component: 'useChatMessaging',
+            action: 'handleQuery.finalSave',
+            metadata: {
+              chatId,
+              isLocalOnly: chatToSave.isLocalOnly,
+              title: chatToSave.title,
+              messageCount: finalMessages.length,
+              storeHistory,
+            },
+          })
+
           updateChatWithHistoryCheck(
             setChats,
             chatToSave,
@@ -511,6 +608,13 @@ export function useChatMessaging({
           // Trigger cloud sync for non-local chats after saving
           // This ensures the complete chat (with title) is synced
           if (!chatToSave.isLocalOnly) {
+            logInfo('[handleQuery] Triggering cloud sync', {
+              component: 'useChatMessaging',
+              action: 'handleQuery.cloudSync',
+              metadata: {
+                chatId,
+              },
+            })
             import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
               cloudSync.backupChat(chatId).catch((error) => {
                 logError('Failed to sync chat after completion', error, {
@@ -519,6 +623,15 @@ export function useChatMessaging({
                   metadata: { chatId },
                 })
               })
+            })
+          } else {
+            logInfo('[handleQuery] Skipping cloud sync for local-only chat', {
+              component: 'useChatMessaging',
+              action: 'handleQuery.skipCloudSync',
+              metadata: {
+                chatId,
+                isLocalOnly: chatToSave.isLocalOnly,
+              },
             })
           }
         } else {
