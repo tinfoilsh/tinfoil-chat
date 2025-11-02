@@ -147,8 +147,24 @@ export class ChatStorageService {
         isLocalOnly: storageChat.isLocalOnly,
         messageCount: chatToSave.messages.length,
         title: chatToSave.title,
+        messagesPreview: chatToSave.messages.map((m, i) => `${i}: ${m.role}`),
       },
     })
+
+    // Verify the save by reading it back
+    const verifyChat = await indexedDBStorage.getChat(chatToSave.id)
+    if (verifyChat) {
+      logInfo('[storage] Verified chat in IndexedDB', {
+        component: 'ChatStorageService',
+        action: 'saveChat.verify',
+        metadata: {
+          chatId: verifyChat.id,
+          messageCount: verifyChat.messages.length,
+          title: verifyChat.title,
+          isLocalOnly: verifyChat.isLocalOnly,
+        },
+      })
+    }
 
     // Emit change event after local save
     chatEvents.emit({ reason: 'save', ids: [chatToSave.id] })
