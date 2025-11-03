@@ -72,6 +72,13 @@ export async function processStreamingResponse(
   const streamingChatId = ctx.updatedChat.id
   let rafId: number | ReturnType<typeof setTimeout> | null = null
 
+  // Helper to check if we're still in the same chat (accounting for temp ID swaps)
+  const isSameChat = () => {
+    const currentId = ctx.currentChatIdRef.current
+    const originalId = ctx.updatedChat.id
+    return currentId === originalId || originalId.startsWith('temp-')
+  }
+
   try {
     ctx.isStreamingRef.current = true
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
@@ -90,7 +97,7 @@ export async function processStreamingResponse(
         typeof window.requestAnimationFrame === 'function'
           ? window.requestAnimationFrame(() => {
               rafId = null
-              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+              if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
                 const messageToSave = assistantMessage as Message
                 const newMessages = [...ctx.updatedMessages, messageToSave]
@@ -106,7 +113,7 @@ export async function processStreamingResponse(
               }
             })
           : setTimeout(() => {
-              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+              if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
                 const messageToSave = assistantMessage as Message
                 const newMessages = [...ctx.updatedMessages, messageToSave]
@@ -126,7 +133,7 @@ export async function processStreamingResponse(
 
     while (true) {
       const { done, value } = await reader!.read()
-      if (done || ctx.currentChatIdRef.current !== ctx.updatedChat.id) {
+      if (done || !isSameChat()) {
         if (rafId !== null) {
           if (
             typeof window !== 'undefined' &&

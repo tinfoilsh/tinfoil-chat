@@ -307,7 +307,7 @@ export function useChatMessaging({
       const isFirstMessage = currentChat.messages.length === 0
       let updatedMessages: Message[] = []
 
-      // Handle blank chat conversion: get a server ID and create a real chat
+      // Handle blank chat conversion: create chat immediately with temp ID, get server ID async
       if (isBlankChat && storeHistory) {
         logInfo('[handleQuery] Converting blank chat to real chat', {
           component: 'useChatMessaging',
@@ -317,127 +317,143 @@ export function useChatMessaging({
             cloudSyncEnabled: isCloudSyncEnabled(),
           },
         })
-        try {
-          // Get server ID before proceeding
-          const result = await r2Storage.generateConversationId()
-          if (result) {
-            // Create a new chat with the server ID
-            updatedMessages = userMessage ? [userMessage] : []
-            updatedChat = {
-              ...currentChat,
-              id: result.conversationId,
-              title: 'Untitled',
-              messages: updatedMessages,
-              isBlankChat: false,
-              createdAt: new Date(),
-              isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
-              pendingSave: true,
-            }
 
-            logInfo('[handleQuery] Created new chat from blank', {
-              component: 'useChatMessaging',
-              action: 'handleQuery.chatCreated',
-              metadata: {
-                newId: result.conversationId,
-                isLocalOnly: updatedChat.isLocalOnly,
-                messageCount: updatedMessages.length,
-              },
-            })
-
-            // Update refs and state with new chat
-            currentChatIdRef.current = result.conversationId
-            setCurrentChat(updatedChat)
-
-            // Replace the blank chat with the new real chat
-            setChats((prevChats) => {
-              // Filter out the current blank chat that we're converting
-              const otherBlankChats = prevChats.filter(
-                (c) =>
-                  c.isBlankChat && c.isLocalOnly !== currentChat.isLocalOnly,
-              )
-              const nonBlankChats = prevChats.filter((c) => !c.isBlankChat)
-
-              // Re-create the blank chat for this mode
-              const newBlankChat = createBlankChat(currentChat.isLocalOnly)
-
-              // Sort with blank chats first, then the new chat, then other chats
-              return sortChats([
-                ...otherBlankChats,
-                newBlankChat,
-                updatedChat,
-                ...nonBlankChats,
-              ])
-            })
-
-            // Save the new chat (non-blocking)
-            logInfo('[handleQuery] Saving new chat to storage', {
-              component: 'useChatMessaging',
-              action: 'handleQuery.savingNewChat',
-              metadata: {
-                id: updatedChat.id,
-                isLocalOnly: updatedChat.isLocalOnly,
-              },
-            })
-            chatStorage
-              .saveChatAndSync(updatedChat)
-              .then(() => {
-                logInfo('[handleQuery] New chat saved successfully', {
-                  component: 'useChatMessaging',
-                  action: 'handleQuery.newChatSaved',
-                  metadata: {
-                    id: updatedChat.id,
-                  },
-                })
-                // Clear pendingSave flag after successful save
-                setChats((prevChats) =>
-                  prevChats.map((c) =>
-                    c.id === result.conversationId
-                      ? { ...c, pendingSave: false }
-                      : c,
-                  ),
-                )
-                setCurrentChat((prev) =>
-                  prev.id === result.conversationId
-                    ? { ...prev, pendingSave: false }
-                    : prev,
-                )
-              })
-              .catch((error) => {
-                logError('[handleQuery] Failed to save new chat', error, {
-                  component: 'useChatMessaging',
-                  action: 'handleQuery.saveNewChatError',
-                  metadata: {
-                    id: updatedChat.id,
-                  },
-                })
-                // Clear pendingSave flag even on error
-                setChats((prevChats) =>
-                  prevChats.map((c) =>
-                    c.id === result.conversationId
-                      ? { ...c, pendingSave: false }
-                      : c,
-                  ),
-                )
-                setCurrentChat((prev) =>
-                  prev.id === result.conversationId
-                    ? { ...prev, pendingSave: false }
-                    : prev,
-                )
-              })
-          } else {
-            throw new Error('Failed to generate conversation ID')
-          }
-        } catch (error) {
-          logError('Failed to convert blank chat', error, {
-            component: 'useChatMessaging',
-            action: 'handleQuery',
-          })
-          // Stop execution if we can't get a server ID
-          setLoadingState('idle')
-          setIsWaitingForResponse(false)
-          setAbortController(null)
-          return
+        // Create chat immediately with temporary ID for instant UI update
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        updatedMessages = userMessage ? [userMessage] : []
+        updatedChat = {
+          ...currentChat,
+          id: tempId,
+          title: 'Untitled',
+          messages: updatedMessages,
+          isBlankChat: false,
+          createdAt: new Date(),
+          isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
+          pendingSave: true,
         }
+
+        // Update state immediately for instant UI feedback
+        currentChatIdRef.current = tempId
+        setCurrentChat(updatedChat)
+
+        // Replace the blank chat with the new real chat
+        setChats((prevChats) => {
+          // Filter out the current blank chat that we're converting
+          const otherBlankChats = prevChats.filter(
+            (c) => c.isBlankChat && c.isLocalOnly !== currentChat.isLocalOnly,
+          )
+          const nonBlankChats = prevChats.filter((c) => !c.isBlankChat)
+
+          // Re-create the blank chat for this mode
+          const newBlankChat = createBlankChat(currentChat.isLocalOnly)
+
+          // Sort with blank chats first, then the new chat, then other chats
+          return sortChats([
+            ...otherBlankChats,
+            newBlankChat,
+            updatedChat,
+            ...nonBlankChats,
+          ])
+        })
+
+        // Scroll immediately after state update
+        if (scrollToBottom) {
+          setTimeout(() => scrollToBottom(), 0)
+        }
+
+        // Get server ID in background and update when ready
+        r2Storage
+          .generateConversationId()
+          .then((result) => {
+            if (result) {
+              const serverChatId = result.conversationId
+              logInfo('[handleQuery] Got server ID, updating chat', {
+                component: 'useChatMessaging',
+                action: 'handleQuery.serverIdReceived',
+                metadata: {
+                  tempId,
+                  serverId: serverChatId,
+                  isLocalOnly: updatedChat.isLocalOnly,
+                },
+              })
+
+              // Update the chat with server ID
+              const chatWithServerId = { ...updatedChat, id: serverChatId }
+
+              // Update refs
+              currentChatIdRef.current = serverChatId
+
+              // Update state
+              setCurrentChat((prev) =>
+                prev.id === tempId ? chatWithServerId : prev,
+              )
+              setChats((prevChats) =>
+                prevChats.map((c) => (c.id === tempId ? chatWithServerId : c)),
+              )
+
+              // Save with server ID
+              logInfo('[handleQuery] Saving chat with server ID', {
+                component: 'useChatMessaging',
+                action: 'handleQuery.savingWithServerId',
+                metadata: {
+                  id: serverChatId,
+                  isLocalOnly: chatWithServerId.isLocalOnly,
+                },
+              })
+
+              chatStorage
+                .saveChatAndSync(chatWithServerId)
+                .then(() => {
+                  logInfo('[handleQuery] Chat saved successfully', {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery.chatSaved',
+                    metadata: {
+                      id: serverChatId,
+                    },
+                  })
+                  // Clear pendingSave flag
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === serverChatId ? { ...c, pendingSave: false } : c,
+                    ),
+                  )
+                  setCurrentChat((prev) =>
+                    prev.id === serverChatId
+                      ? { ...prev, pendingSave: false }
+                      : prev,
+                  )
+                })
+                .catch((error) => {
+                  logError('[handleQuery] Failed to save chat', error, {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery.saveChatError',
+                    metadata: {
+                      id: serverChatId,
+                    },
+                  })
+                  // Clear pendingSave flag even on error
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === serverChatId ? { ...c, pendingSave: false } : c,
+                    ),
+                  )
+                  setCurrentChat((prev) =>
+                    prev.id === serverChatId
+                      ? { ...prev, pendingSave: false }
+                      : prev,
+                  )
+                })
+            }
+          })
+          .catch((error) => {
+            logError('Failed to get server ID for blank chat', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery.serverIdError',
+              metadata: {
+                tempId,
+              },
+            })
+          })
       } else if (isBlankChat && !storeHistory) {
         // For non-signed-in users, create a session chat with a temporary ID
         updatedMessages = userMessage ? [userMessage] : []
@@ -459,6 +475,11 @@ export function useChatMessaging({
           const otherChats = prevChats.filter((c) => c !== currentChat)
           return [updatedChat, ...otherChats]
         })
+
+        // Scroll immediately after state update
+        if (scrollToBottom) {
+          setTimeout(() => scrollToBottom(), 0)
+        }
 
         sessionChatStorage.saveChat(updatedChat)
 
@@ -491,17 +512,17 @@ export function useChatMessaging({
           ),
         )
 
+        // Scroll immediately after state update
+        if (scrollToBottom) {
+          setTimeout(() => scrollToBottom(), 0)
+        }
+
         // Save the updated chat
         if (storeHistory) {
           await chatStorage.saveChatAndSync(updatedChat)
         } else {
           sessionChatStorage.saveChat(updatedChat)
         }
-      }
-
-      // Initial scroll after user message is added
-      if (scrollToBottom) {
-        setTimeout(() => scrollToBottom(), 0)
       }
 
       try {
@@ -555,14 +576,19 @@ export function useChatMessaging({
           const chatId = currentChatIdRef.current
 
           // If user navigated away during streaming, don't save to the new chat
-          if (chatId !== updatedChat.id) {
+          // Note: chatId might have changed from temp ID to server ID, which is expected
+          const originalChatId = updatedChat.id
+          const isSameChat =
+            chatId === originalChatId || originalChatId.startsWith('temp-')
+
+          if (!isSameChat) {
             logInfo(
               '[handleQuery] User navigated away during streaming, skipping save',
               {
                 component: 'useChatMessaging',
                 action: 'handleQuery.navigationDuringStream',
                 metadata: {
-                  originalChatId: updatedChat.id,
+                  originalChatId,
                   currentChatId: chatId,
                 },
               },
