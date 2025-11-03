@@ -331,6 +331,7 @@ export function useChatMessaging({
               isBlankChat: false,
               createdAt: new Date(),
               isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
+              pendingSave: true,
             }
 
             logInfo('[handleQuery] Created new chat from blank', {
@@ -387,6 +388,19 @@ export function useChatMessaging({
                     id: updatedChat.id,
                   },
                 })
+                // Clear pendingSave flag after successful save
+                setChats((prevChats) =>
+                  prevChats.map((c) =>
+                    c.id === result.conversationId
+                      ? { ...c, pendingSave: false }
+                      : c,
+                  ),
+                )
+                setCurrentChat((prev) =>
+                  prev.id === result.conversationId
+                    ? { ...prev, pendingSave: false }
+                    : prev,
+                )
               })
               .catch((error) => {
                 logError('[handleQuery] Failed to save new chat', error, {
@@ -396,6 +410,19 @@ export function useChatMessaging({
                     id: updatedChat.id,
                   },
                 })
+                // Clear pendingSave flag even on error
+                setChats((prevChats) =>
+                  prevChats.map((c) =>
+                    c.id === result.conversationId
+                      ? { ...c, pendingSave: false }
+                      : c,
+                  ),
+                )
+                setCurrentChat((prev) =>
+                  prev.id === result.conversationId
+                    ? { ...prev, pendingSave: false }
+                    : prev,
+                )
               })
           } else {
             throw new Error('Failed to generate conversation ID')
@@ -421,6 +448,7 @@ export function useChatMessaging({
           messages: updatedMessages,
           isBlankChat: false,
           createdAt: new Date(),
+          pendingSave: true,
         }
 
         currentChatIdRef.current = updatedChat.id
@@ -433,6 +461,18 @@ export function useChatMessaging({
         })
 
         sessionChatStorage.saveChat(updatedChat)
+
+        // Clear pendingSave flag immediately for session storage (it's synchronous)
+        setTimeout(() => {
+          setChats((prevChats) =>
+            prevChats.map((c) =>
+              c.id === updatedChat.id ? { ...c, pendingSave: false } : c,
+            ),
+          )
+          setCurrentChat((prev) =>
+            prev.id === updatedChat.id ? { ...prev, pendingSave: false } : prev,
+          )
+        }, 0)
       } else {
         // Not a blank chat, just update messages
         updatedMessages = userMessage
