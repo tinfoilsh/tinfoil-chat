@@ -955,16 +955,22 @@ export function ChatSidebar({
                             : isDarkMode
                               ? 'cursor-not-allowed border-border-strong opacity-60'
                               : 'cursor-not-allowed border-border-subtle opacity-60'
-                          : (chat.isBlankChat &&
-                                currentChat?.isBlankChat &&
-                                chat.isLocalOnly === currentChat.isLocalOnly) ||
-                              currentChat?.id === chat.id
-                            ? isDarkMode
-                              ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
-                              : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
-                            : isDarkMode
-                              ? 'cursor-pointer border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                              : 'cursor-pointer border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                          : chat.isBlankChat
+                            ? currentChat?.isBlankChat &&
+                              chat.isLocalOnly === currentChat.isLocalOnly
+                              ? isDarkMode
+                                ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
+                                : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
+                              : isDarkMode
+                                ? 'cursor-pointer border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                                : 'cursor-pointer border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                            : currentChat?.id === chat.id
+                              ? isDarkMode
+                                ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
+                                : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
+                              : isDarkMode
+                                ? 'cursor-pointer border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                                : 'cursor-pointer border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
                       }`}
                     >
                       {/* Chat item content */}
