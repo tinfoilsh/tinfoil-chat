@@ -525,6 +525,9 @@ export function useChatMessaging({
         }
       }
 
+      // Capture the starting chat ID before any async operations that might change it
+      const startingChatId = currentChatIdRef.current
+
       try {
         const model = models.find((m) => m.modelName === effectiveModel)
         if (!model) {
@@ -537,6 +540,7 @@ export function useChatMessaging({
           metadata: {
             model: effectiveModel,
             chatId: currentChatIdRef.current,
+            startingChatId,
             isLocalOnly: updatedChat.isLocalOnly,
             messageCount: updatedMessages.length,
           },
@@ -567,6 +571,7 @@ export function useChatMessaging({
           setCurrentChat,
           setLoadingState,
           storeHistory,
+          startingChatId,
         })
 
         if (
@@ -801,8 +806,11 @@ export function useChatMessaging({
   )
 
   // Update currentChatIdRef when currentChat changes
+  // But don't overwrite during streaming to preserve ID swaps
   useEffect(() => {
-    currentChatIdRef.current = currentChat?.id || ''
+    if (!isStreamingRef.current) {
+      currentChatIdRef.current = currentChat?.id || ''
+    }
   }, [currentChat])
 
   return {
