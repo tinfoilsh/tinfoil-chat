@@ -57,6 +57,7 @@ export function CloudSyncSetupModal({
     setCloudSyncEnabled(enabled)
     if (!enabled) {
       localStorage.setItem('cloudSyncEnabled', 'false')
+      window.dispatchEvent(new Event('cloudSyncSettingChanged'))
       onClose()
     }
   }
@@ -64,6 +65,7 @@ export function CloudSyncSetupModal({
   const handleMaybeLater = () => {
     localStorage.setItem('cloudSyncEnabled', 'false')
     localStorage.setItem('hasSeenCloudSyncModal', 'true')
+    window.dispatchEvent(new Event('cloudSyncSettingChanged'))
     onClose()
   }
 

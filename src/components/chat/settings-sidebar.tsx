@@ -214,6 +214,11 @@ export function SettingsSidebar({
       loadSettingsFromStorage()
     }
 
+    // Listen for cloud sync setting changes (e.g., from modal or other sources)
+    const handleCloudSyncUpdate = () => {
+      setCloudSyncEnabledState(isCloudSyncEnabled())
+    }
+
     // These events are fired by the profile sync when it updates localStorage
     window.addEventListener('maxPromptMessagesChanged', handleProfileSyncUpdate)
     window.addEventListener('personalizationChanged', handleProfileSyncUpdate)
@@ -222,6 +227,7 @@ export function SettingsSidebar({
       'customSystemPromptChanged',
       handleProfileSyncUpdate,
     )
+    window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
 
     return () => {
       window.removeEventListener('storage', loadSettingsFromStorage)
@@ -237,6 +243,10 @@ export function SettingsSidebar({
       window.removeEventListener(
         'customSystemPromptChanged',
         handleProfileSyncUpdate,
+      )
+      window.removeEventListener(
+        'cloudSyncSettingChanged',
+        handleCloudSyncUpdate,
       )
     }
   }, [isClient, loadSettingsFromStorage])
