@@ -579,17 +579,6 @@ export function SettingsSidebar({
         {/* Settings content */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-6">
-            {/* Warning when cloud sync is disabled */}
-            {!cloudSyncEnabled && (
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  <strong>Note:</strong> Cloud sync is disabled. Your chats,
-                  settings, and personalization preferences are stored locally
-                  on this browser and won't sync across devices.
-                </p>
-              </div>
-            )}
-
             {/* Encrypted Cloud Sync section - moved to top */}
             {onEncryptionKeyClick && (
               <div>
@@ -634,6 +623,18 @@ export function SettingsSidebar({
                       </label>
                     </div>
                   </div>
+
+                  {/* Warning when cloud sync is disabled */}
+                  {!cloudSyncEnabled && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        <strong>Note:</strong> Cloud sync is disabled. Your
+                        chats, settings, and personalization preferences are
+                        stored locally on this browser and won't sync across
+                        devices.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Encryption Key Management - only show when cloud sync is enabled */}
                   {cloudSyncEnabled && (
