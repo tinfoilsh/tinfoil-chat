@@ -10,7 +10,7 @@ export const CONSTANTS = {
   MAX_DOCUMENT_SIZE_MB: 10,
   MAX_DOCUMENT_SIZE_BYTES: 10 * 1024 * 1024, // 10MB in bytes
   // Maximum number of messages to include in the context window (default, user can override in settings)
-  MAX_PROMPT_MESSAGES: 15,
+  MAX_PROMPT_MESSAGES: 50,
   // Voice recording timeout in milliseconds (30 seconds)
   RECORDING_TIMEOUT_MS: 30000,
   // Copy button timeout in milliseconds (2 seconds)
