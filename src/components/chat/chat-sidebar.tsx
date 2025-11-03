@@ -1363,6 +1363,13 @@ function ChatListItem({
               >
                 local
               </span>
+            ) : (chat as any).pendingSave ? (
+              <span
+                className="rounded bg-blue-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-blue-500"
+                title="Saving chat"
+              >
+                saving
+              </span>
             ) : isSignedIn &&
               cloudSyncEnabled &&
               !chat.syncedAt &&
