@@ -99,7 +99,11 @@ export class IndexedDBStorage {
 
   async saveChat(chat: Chat): Promise<void> {
     // Queue saves to prevent concurrent writes from racing
-    this.saveQueue = this.saveQueue.then(() => this.saveChatInternal(chat))
+    // Clone the chat to prevent issues with object references being mutated
+    const chatSnapshot = JSON.parse(JSON.stringify(chat))
+    this.saveQueue = this.saveQueue.then(() =>
+      this.saveChatInternal(chatSnapshot),
+    )
     return this.saveQueue
   }
 
@@ -162,9 +166,7 @@ export class IndexedDBStorage {
             (chat as StoredChat).loadedAt ??
             existingChat?.loadedAt ??
             undefined,
-          // Explicitly preserve local-only flag
-          isLocalOnly:
-            (chat as any).isLocalOnly ?? existingChat?.isLocalOnly ?? false,
+          isLocalOnly: (chat as any).isLocalOnly ?? false,
         }
 
         const putRequest = store.put(storedChat)
