@@ -72,11 +72,25 @@ export async function processStreamingResponse(
   const streamingChatId = ctx.updatedChat.id
   let rafId: number | ReturnType<typeof setTimeout> | null = null
 
+  // Track the original chat ID to detect navigation vs. ID swap
+  const startingChatId = ctx.currentChatIdRef.current
+
   // Helper to check if we're still in the same chat (accounting for temp ID swaps)
   const isSameChat = () => {
     const currentId = ctx.currentChatIdRef.current
     const originalId = ctx.updatedChat.id
-    return currentId === originalId || originalId.startsWith('temp-')
+
+    // If IDs match exactly, we're in the same chat
+    if (currentId === originalId) return true
+
+    // If original was a temp ID and current ID changed, check if it's an ID swap
+    // (not navigation) by verifying we started with the temp ID
+    if (originalId.startsWith('temp-') && currentId !== originalId) {
+      // If current ID is different but we started with the temp ID, it's an ID swap
+      return startingChatId === originalId
+    }
+
+    return false
   }
 
   try {
