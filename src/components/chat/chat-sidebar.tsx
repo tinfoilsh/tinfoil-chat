@@ -496,9 +496,6 @@ export function ChatSidebar({
             })
         : chats.filter((chat) => {
             // When cloud sync is disabled, only show local chats
-            if (chat.isBlankChat) {
-              return true // Show blank chats
-            }
             return (chat as any).isLocalOnly
           })
 
