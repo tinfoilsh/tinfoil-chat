@@ -676,6 +676,7 @@ export function useChatMessaging({
             ...updatedChat,
             id: chatId,
             messages: finalMessages,
+            pendingSave: false, // Clear pendingSave flag in final save
           }
 
           logInfo('[handleQuery] Saving final chat state', {
