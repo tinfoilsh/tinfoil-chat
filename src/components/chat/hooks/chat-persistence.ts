@@ -46,7 +46,15 @@ export function createUpdateChatWithHistoryCheck({
     }
 
     setChats((prevChats) => {
-      return prevChats.map((c) => (c.id === chatId ? updatedChat : c))
+      const result = prevChats.map((c) => {
+        // Match by chatId, OR if chatSnapshot has temp ID and chat also has temp ID
+        const isMatch =
+          c.id === chatId ||
+          (chatSnapshot.id.startsWith('temp-') && c.id === chatSnapshot.id)
+
+        return isMatch ? updatedChat : c
+      })
+      return result
     })
 
     if (isCurrentChat) {

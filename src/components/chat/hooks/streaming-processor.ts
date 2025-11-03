@@ -36,6 +36,7 @@ export interface StreamingContext {
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
   setLoadingState: (s: 'idle' | 'loading') => void
   storeHistory: boolean
+  startingChatId: string // Capture the chat ID at the start of the query
 }
 
 export interface StreamingHandlers {
@@ -72,8 +73,8 @@ export async function processStreamingResponse(
   const streamingChatId = ctx.updatedChat.id
   let rafId: number | ReturnType<typeof setTimeout> | null = null
 
-  // Track the original chat ID to detect navigation vs. ID swap
-  const startingChatId = ctx.currentChatIdRef.current
+  // Use the starting chat ID passed from context (captured before async operations)
+  const startingChatId = ctx.startingChatId
 
   // Helper to check if we're still in the same chat (accounting for temp ID swaps)
   const isSameChat = () => {
@@ -81,16 +82,25 @@ export async function processStreamingResponse(
     const originalId = ctx.updatedChat.id
 
     // If IDs match exactly, we're in the same chat
-    if (currentId === originalId) return true
-
-    // If original was a temp ID and current ID changed, check if it's an ID swap
-    // (not navigation) by verifying we started with the temp ID
-    if (originalId.startsWith('temp-') && currentId !== originalId) {
-      // If current ID is different but we started with the temp ID, it's an ID swap
-      return startingChatId === originalId
+    if (currentId === originalId) {
+      return true
     }
 
-    return false
+    // Handle temp ID transitions:
+    // - startingChatId is captured at the beginning of streaming
+    // - originalId is from ctx.updatedChat.id (may not update during streaming)
+    // - currentId is from currentChatIdRef (gets updated when server ID arrives)
+    //
+    // Allow updates if:
+    // 1. We started with the original temp ID (originalId === startingChatId)
+    // 2. OR currentId matches startingChatId (no ID change yet)
+    // This ensures streaming continues even after currentId changes to server ID
+    if (startingChatId.startsWith('temp-')) {
+      return originalId === startingChatId || currentId === startingChatId
+    }
+
+    // For non-temp starting IDs, require exact match
+    return currentId === startingChatId
   }
 
   try {
@@ -114,10 +124,17 @@ export async function processStreamingResponse(
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
                 const messageToSave = assistantMessage as Message
-                const newMessages = [...ctx.updatedMessages, messageToSave]
+
+                // Use only user messages from the original context, not assistant messages
+                // This avoids duplicates when the ID changes mid-stream
+                const userMessages = ctx.updatedMessages.filter(
+                  (m) => m.role === 'user',
+                )
+                const newMessages = [...userMessages, messageToSave]
+
                 ctx.updateChatWithHistoryCheck(
                   ctx.setChats,
-                  ctx.updatedChat,
+                  { ...ctx.updatedChat, id: chatId }, // Update the chat ID to match current
                   ctx.setCurrentChat,
                   chatId,
                   newMessages,
@@ -130,10 +147,17 @@ export async function processStreamingResponse(
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
                 const messageToSave = assistantMessage as Message
-                const newMessages = [...ctx.updatedMessages, messageToSave]
+
+                // Use only user messages from the original context, not assistant messages
+                // This avoids duplicates when the ID changes mid-stream
+                const userMessages = ctx.updatedMessages.filter(
+                  (m) => m.role === 'user',
+                )
+                const newMessages = [...userMessages, messageToSave]
+
                 ctx.updateChatWithHistoryCheck(
                   ctx.setChats,
-                  ctx.updatedChat,
+                  { ...ctx.updatedChat, id: chatId }, // Update the chat ID to match current
                   ctx.setCurrentChat,
                   chatId,
                   newMessages,
@@ -331,7 +355,7 @@ export async function processStreamingResponse(
               content: (assistantMessage.content || '') + content,
               isThinking: false,
             }
-            if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+            if (isSameChat()) {
               scheduleStreamingUpdate()
             }
             continue
@@ -473,7 +497,7 @@ export async function processStreamingResponse(
               assistantMessage.content =
                 (assistantMessage.content || '') + remainingContent
             }
-            if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+            if (isSameChat()) {
               scheduleStreamingUpdate()
             }
             continue
@@ -486,7 +510,7 @@ export async function processStreamingResponse(
               thoughts: thoughtsBuffer,
               isThinking: true,
             }
-            if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+            if (isSameChat()) {
               scheduleStreamingUpdate()
             }
           } else if (!isInThinkingMode) {
@@ -499,7 +523,7 @@ export async function processStreamingResponse(
                 content: (assistantMessage.content || '') + content,
                 isThinking: false,
               }
-              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+              if (isSameChat()) {
                 scheduleStreamingUpdate()
               }
             }
