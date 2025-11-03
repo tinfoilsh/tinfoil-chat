@@ -20,6 +20,7 @@ interface CloudSyncSetupModalProps {
   onClose: () => void
   onSetupComplete: (encryptionKey: string) => void
   isDarkMode: boolean
+  initialCloudSyncEnabled?: boolean
 }
 
 type SetupStep = 'intro' | 'generate-or-restore' | 'key-display' | 'restore-key'
@@ -29,9 +30,12 @@ export function CloudSyncSetupModal({
   onClose,
   onSetupComplete,
   isDarkMode,
+  initialCloudSyncEnabled = false,
 }: CloudSyncSetupModalProps) {
   const [currentStep, setCurrentStep] = useState<SetupStep>('intro')
-  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false)
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(
+    initialCloudSyncEnabled,
+  )
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [inputKey, setInputKey] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)

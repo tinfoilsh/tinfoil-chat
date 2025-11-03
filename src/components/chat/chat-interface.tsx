@@ -1415,6 +1415,7 @@ export function ChatInterface({
             setShowCloudSyncSetupModal(false)
           }}
           isDarkMode={isDarkMode}
+          initialCloudSyncEnabled={true}
         />
       )}
     </div>
