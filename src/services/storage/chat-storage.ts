@@ -137,6 +137,7 @@ export class ChatStorageService {
       updatedAt: new Date().toISOString(),
       isLocalOnly: shouldMarkAsLocal || (existingChat?.isLocalOnly ?? false),
     }
+
     await indexedDBStorage.saveChat(storageChat)
 
     logInfo('[storage] Chat saved to IndexedDB', {
@@ -151,7 +152,6 @@ export class ChatStorageService {
       },
     })
 
-    // Verify the save by reading it back
     const verifyChat = await indexedDBStorage.getChat(chatToSave.id)
     if (verifyChat) {
       logInfo('[storage] Verified chat in IndexedDB', {
