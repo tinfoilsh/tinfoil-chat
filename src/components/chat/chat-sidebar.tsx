@@ -810,7 +810,7 @@ export function ChatSidebar({
                 Chat History
               </h3>
               <div className="flex items-center gap-1">
-                {onEncryptionKeyClick && isSignedIn && (
+                {onEncryptionKeyClick && isSignedIn && cloudSyncEnabled && (
                   <button
                     onClick={onEncryptionKeyClick}
                     className={`rounded-lg p-1.5 transition-all duration-200 ${
