@@ -101,6 +101,21 @@ export class IndexedDBStorage {
     // Queue saves to prevent concurrent writes from racing
     // Clone the chat to prevent issues with object references being mutated
     const chatSnapshot = JSON.parse(JSON.stringify(chat))
+
+    // Log what we're about to save
+    import('@/utils/error-handling').then(({ logInfo }) => {
+      logInfo('[IndexedDB] Queuing save', {
+        component: 'IndexedDBStorage',
+        action: 'saveChat',
+        metadata: {
+          chatId: chatSnapshot.id,
+          messageCount: chatSnapshot.messages?.length ?? 0,
+          title: chatSnapshot.title,
+          isLocalOnly: chatSnapshot.isLocalOnly,
+        },
+      })
+    })
+
     this.saveQueue = this.saveQueue.then(() =>
       this.saveChatInternal(chatSnapshot),
     )
@@ -109,6 +124,20 @@ export class IndexedDBStorage {
 
   private async saveChatInternal(chat: Chat): Promise<void> {
     const db = await this.ensureDB()
+
+    // Log when we're actually executing the save
+    import('@/utils/error-handling').then(({ logInfo }) => {
+      logInfo('[IndexedDB] Executing save', {
+        component: 'IndexedDBStorage',
+        action: 'saveChatInternal',
+        metadata: {
+          chatId: chat.id,
+          messageCount: chat.messages?.length ?? 0,
+          title: chat.title,
+          isLocalOnly: chat.isLocalOnly,
+        },
+      })
+    })
 
     // Don't save blank chats to IndexedDB
     // Blank chats are new chats that haven't been used yet
@@ -168,6 +197,20 @@ export class IndexedDBStorage {
             undefined,
           isLocalOnly: (chat as any).isLocalOnly ?? false,
         }
+
+        // Log what we're actually writing to IndexedDB
+        import('@/utils/error-handling').then(({ logInfo }) => {
+          logInfo('[IndexedDB] Writing to database', {
+            component: 'IndexedDBStorage',
+            action: 'saveChatInternal',
+            metadata: {
+              chatId: storedChat.id,
+              messageCount: storedChat.messages?.length ?? 0,
+              title: storedChat.title,
+              isLocalOnly: storedChat.isLocalOnly,
+            },
+          })
+        })
 
         const putRequest = store.put(storedChat)
 
