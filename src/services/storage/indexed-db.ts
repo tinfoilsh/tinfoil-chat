@@ -281,9 +281,35 @@ export class IndexedDBStorage {
   }
 
   async getChat(id: string): Promise<StoredChat | null> {
+    import('@/utils/error-handling').then(({ logInfo }) => {
+      logInfo('[IndexedDB] getChat waiting for save queue', {
+        component: 'IndexedDBStorage',
+        action: 'getChat',
+        metadata: { chatId: id },
+      })
+    })
+    await this.saveQueue
+    import('@/utils/error-handling').then(({ logInfo }) => {
+      logInfo('[IndexedDB] getChat save queue complete, reading', {
+        component: 'IndexedDBStorage',
+        action: 'getChat',
+        metadata: { chatId: id },
+      })
+    })
     const chat = await this.getChatInternal(id)
+    import('@/utils/error-handling').then(({ logInfo }) => {
+      logInfo('[IndexedDB] getChat read complete', {
+        component: 'IndexedDBStorage',
+        action: 'getChat',
+        metadata: {
+          chatId: id,
+          found: !!chat,
+          messageCount: chat?.messages?.length ?? 0,
+          title: chat?.title,
+        },
+      })
+    })
     if (chat) {
-      // Update last accessed time
       this.updateLastAccessed(id).catch((error) =>
         logError('Failed to update last accessed time', error, {
           component: 'IndexedDBStorage',
@@ -336,6 +362,7 @@ export class IndexedDBStorage {
   }
 
   async getAllChats(): Promise<StoredChat[]> {
+    await this.saveQueue
     const db = await this.ensureDB()
 
     return new Promise((resolve, reject) => {
@@ -380,22 +407,28 @@ export class IndexedDBStorage {
   }
 
   private async updateLastAccessed(id: string): Promise<void> {
-    const db = await this.ensureDB()
-    const chat = await this.getChatInternal(id)
+    this.saveQueue = this.saveQueue.then(async () => {
+      const db = await this.ensureDB()
+      const chat = await this.getChatInternal(id)
 
-    if (chat) {
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
-        const store = transaction.objectStore(CHATS_STORE)
+      if (chat) {
+        return new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction([CHATS_STORE], 'readwrite')
+          const store = transaction.objectStore(CHATS_STORE)
 
-        chat.lastAccessedAt = Date.now()
-        const request = store.put(chat)
+          transaction.oncomplete = () => resolve()
+          transaction.onerror = () =>
+            reject(new Error('Failed to update last accessed'))
 
-        request.onsuccess = () => resolve()
-        request.onerror = () =>
-          reject(new Error('Failed to update last accessed'))
-      })
-    }
+          chat.lastAccessedAt = Date.now()
+          const request = store.put(chat)
+
+          request.onerror = () =>
+            reject(new Error('Failed to update last accessed'))
+        })
+      }
+    })
+    return this.saveQueue
   }
 
   async getUnsyncedChats(): Promise<StoredChat[]> {
@@ -414,24 +447,30 @@ export class IndexedDBStorage {
   }
 
   async markAsSynced(id: string, syncVersion: number): Promise<void> {
-    const db = await this.ensureDB()
-    const chat = await this.getChatInternal(id)
+    this.saveQueue = this.saveQueue.then(async () => {
+      const db = await this.ensureDB()
+      const chat = await this.getChatInternal(id)
 
-    if (chat) {
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
-        const store = transaction.objectStore(CHATS_STORE)
+      if (chat) {
+        return new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction([CHATS_STORE], 'readwrite')
+          const store = transaction.objectStore(CHATS_STORE)
 
-        chat.syncedAt = Date.now()
-        chat.locallyModified = false
-        chat.syncVersion = syncVersion
+          transaction.oncomplete = () => resolve()
+          transaction.onerror = () =>
+            reject(new Error('Failed to mark as synced'))
 
-        const request = store.put(chat)
+          chat.syncedAt = Date.now()
+          chat.locallyModified = false
+          chat.syncVersion = syncVersion
 
-        request.onsuccess = () => resolve()
-        request.onerror = () => reject(new Error('Failed to mark as synced'))
-      })
-    }
+          const request = store.put(chat)
+
+          request.onerror = () => reject(new Error('Failed to mark as synced'))
+        })
+      }
+    })
+    return this.saveQueue
   }
 
   async getChatsWithEncryptedData(): Promise<StoredChat[]> {
