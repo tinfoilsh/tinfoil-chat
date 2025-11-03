@@ -368,7 +368,7 @@ export function useChatMessaging({
               ])
             })
 
-            // Save the new chat
+            // Save the new chat (non-blocking)
             logInfo('[handleQuery] Saving new chat to storage', {
               component: 'useChatMessaging',
               action: 'handleQuery.savingNewChat',
@@ -377,14 +377,26 @@ export function useChatMessaging({
                 isLocalOnly: updatedChat.isLocalOnly,
               },
             })
-            await chatStorage.saveChatAndSync(updatedChat)
-            logInfo('[handleQuery] New chat saved successfully', {
-              component: 'useChatMessaging',
-              action: 'handleQuery.newChatSaved',
-              metadata: {
-                id: updatedChat.id,
-              },
-            })
+            chatStorage
+              .saveChatAndSync(updatedChat)
+              .then(() => {
+                logInfo('[handleQuery] New chat saved successfully', {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.newChatSaved',
+                  metadata: {
+                    id: updatedChat.id,
+                  },
+                })
+              })
+              .catch((error) => {
+                logError('[handleQuery] Failed to save new chat', error, {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.saveNewChatError',
+                  metadata: {
+                    id: updatedChat.id,
+                  },
+                })
+              })
           } else {
             throw new Error('Failed to generate conversation ID')
           }
