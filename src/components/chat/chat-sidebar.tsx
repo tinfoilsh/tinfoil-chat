@@ -1,4 +1,4 @@
-import { AiOutlineCloudSync, FaLock } from '@/components/icons/lazy-icons'
+import { FaLock } from '@/components/icons/lazy-icons'
 import { API_BASE_URL, PAGINATION } from '@/config'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
@@ -1317,39 +1317,11 @@ function ChatListItem({
                       : 'Failed to decrypt: wrong key'}
                   </div>
                 ) : chat.messages.length === 0 ? (
-                  <>
-                    {/* Empty space for timestamp area */}
-                    <div className="text-xs text-content-muted">{'\u00A0'}</div>
-                    {/* For empty chats, show "local" only if truly local-only */}
-                    {(chat as any).isLocalOnly && (
-                      <span
-                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
-                        title="This chat is stored locally and won't sync to cloud"
-                      >
-                        local
-                      </span>
-                    )}
-                  </>
+                  <div className="text-xs text-content-muted">{'\u00A0'}</div>
                 ) : (
-                  <>
-                    <div className="text-xs text-content-muted">
-                      {formatRelativeTime(chat.createdAt)}
-                    </div>
-                    {/* Show "local" ONLY for truly local-only chats */}
-                    {(chat as any).isLocalOnly ? (
-                      <span
-                        className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
-                        title="This chat is stored locally and won't sync to cloud"
-                      >
-                        local
-                      </span>
-                    ) : isSignedIn && cloudSyncEnabled && !chat.syncedAt ? (
-                      <AiOutlineCloudSync
-                        className="h-3 w-3 text-content-muted"
-                        title="Not synced to cloud"
-                      />
-                    ) : null}
-                  </>
+                  <div className="text-xs text-content-muted">
+                    {formatRelativeTime(chat.createdAt)}
+                  </div>
                 )}
               </div>
             </>
@@ -1357,34 +1329,54 @@ function ChatListItem({
         </div>
 
         {!isEditing && (
-          <div className="flex flex-shrink-0 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            {!chat.decryptionFailed && isPremium && (
+          <div className="flex flex-shrink-0 items-center gap-1.5">
+            <div className="flex opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+              {!chat.decryptionFailed && isPremium && (
+                <button
+                  className={`mr-1 rounded p-1 transition-colors ${
+                    isDarkMode
+                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
+                  }`}
+                  onClick={startEditing}
+                  title="Rename"
+                >
+                  <PencilSquareIcon className="h-4 w-4" />
+                </button>
+              )}
               <button
-                className={`mr-1 rounded p-1 transition-colors ${
+                className={`rounded p-1 transition-colors ${
                   isDarkMode
                     ? 'text-content-muted hover:bg-surface-chat hover:text-white'
                     : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
                 }`}
-                onClick={startEditing}
-                title="Rename"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDeletingChatId(chat.id)
+                }}
+                title="Delete"
               >
-                <PencilSquareIcon className="h-4 w-4" />
+                <TrashIcon className="h-4 w-4" />
               </button>
-            )}
-            <button
-              className={`rounded p-1 transition-colors ${
-                isDarkMode
-                  ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                  : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-              }`}
-              onClick={(e) => {
-                e.stopPropagation()
-                setDeletingChatId(chat.id)
-              }}
-              title="Delete"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
+            </div>
+            {(chat as any).isLocalOnly ? (
+              <span
+                className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                title="This chat is stored locally and won't sync to cloud"
+              >
+                local
+              </span>
+            ) : isSignedIn &&
+              cloudSyncEnabled &&
+              !chat.syncedAt &&
+              !chat.decryptionFailed ? (
+              <span
+                className="rounded bg-orange-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-orange-500"
+                title="Syncing to cloud"
+              >
+                syncing
+              </span>
+            ) : null}
           </div>
         )}
       </div>
