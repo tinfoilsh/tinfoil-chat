@@ -30,6 +30,7 @@ export interface StreamingContext {
     chatId: string,
     newMessages: Message[],
     skipCloudSync?: boolean,
+    skipIndexedDBSave?: boolean,
   ) => void
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
@@ -100,6 +101,7 @@ export async function processStreamingResponse(
                   chatId,
                   newMessages,
                   false,
+                  true, // Skip IndexedDB save during streaming
                 )
               }
             })
@@ -115,6 +117,7 @@ export async function processStreamingResponse(
                   chatId,
                   newMessages,
                   false,
+                  true, // Skip IndexedDB save during streaming
                 )
               }
               rafId = null
@@ -153,6 +156,7 @@ export async function processStreamingResponse(
               ctx.updatedChat.id,
               newMessages,
               false,
+              false, // Save to IndexedDB when stream completes
             )
           }
         } else if (isInThinkingMode && thoughtsBuffer.trim()) {
@@ -186,6 +190,7 @@ export async function processStreamingResponse(
               chatId,
               newMessages,
               false,
+              false, // Save to IndexedDB when stream completes
             )
           }
         }
@@ -242,6 +247,7 @@ export async function processStreamingResponse(
                 chatId,
                 newMessages,
                 false,
+                true, // Skip IndexedDB save during streaming
               )
               if (
                 typeof window !== 'undefined' &&
@@ -373,6 +379,7 @@ export async function processStreamingResponse(
                         chatId,
                         newMessages,
                         false,
+                        true, // Skip IndexedDB save during streaming
                       )
                     }
                     content = ''
@@ -399,6 +406,7 @@ export async function processStreamingResponse(
                         chatId,
                         newMessages,
                         false,
+                        true, // Skip IndexedDB save during streaming
                       )
                     }
                   }

@@ -32,6 +32,7 @@ export function createUpdateChatWithHistoryCheck({
     chatId: string,
     newMessages: Message[],
     skipCloudSync = false,
+    skipIndexedDBSave = false,
   ) {
     const isCurrentChat = currentChatIdRef.current === chatId
 
@@ -55,6 +56,11 @@ export function createUpdateChatWithHistoryCheck({
     if (storeHistory) {
       const shouldSkipCloudSync =
         skipCloudSync || updatedChat.isLocalOnly || isStreamingRef.current
+
+      // Skip IndexedDB save if explicitly requested (during streaming chunks)
+      if (skipIndexedDBSave) {
+        return
+      }
 
       logInfo('[persistence] Saving chat to storage', {
         component: 'chat-persistence',
