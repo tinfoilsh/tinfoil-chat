@@ -98,11 +98,8 @@ export class IndexedDBStorage {
   }
 
   async saveChat(chat: Chat): Promise<void> {
-    // Queue saves to prevent concurrent writes from racing
-    // Clone the chat to prevent issues with object references being mutated
     const chatSnapshot = JSON.parse(JSON.stringify(chat))
 
-    // Log what we're about to save
     import('@/utils/error-handling').then(({ logInfo }) => {
       logInfo('[IndexedDB] Queuing save', {
         component: 'IndexedDBStorage',
@@ -153,13 +150,55 @@ export class IndexedDBStorage {
       const transaction = db.transaction([CHATS_STORE], 'readwrite')
       const store = transaction.objectStore(CHATS_STORE)
 
-      // First, get the existing chat if it exists
+      transaction.oncomplete = () => {
+        import('@/utils/error-handling').then(({ logInfo }) => {
+          logInfo('[IndexedDB] Transaction committed', {
+            component: 'IndexedDBStorage',
+            action: 'saveChatInternal',
+            metadata: {
+              chatId: chat.id,
+              messageCount: chat.messages?.length ?? 0,
+              title: chat.title,
+            },
+          })
+        })
+        resolve()
+      }
+
+      transaction.onerror = (event) => {
+        import('@/utils/error-handling').then(({ logError }) => {
+          logError(
+            '[IndexedDB] Transaction error',
+            (event.target as any).error,
+            {
+              component: 'IndexedDBStorage',
+              action: 'saveChatInternal',
+            },
+          )
+        })
+        reject(new Error('Failed to save chat'))
+      }
+
+      transaction.onabort = (event) => {
+        import('@/utils/error-handling').then(({ logError }) => {
+          logError(
+            '[IndexedDB] Transaction aborted',
+            (event.target as any).error,
+            {
+              component: 'IndexedDBStorage',
+              action: 'saveChatInternal',
+              metadata: { chatId: chat.id },
+            },
+          )
+        })
+        reject(new Error('Transaction aborted'))
+      }
+
       const getRequest = store.get(chat.id)
 
       getRequest.onsuccess = () => {
         const existingChat = getRequest.result as StoredChat | undefined
 
-        // Convert Date timestamps to strings for storage
         const messagesForStorage = chat.messages.map((msg) => ({
           ...msg,
           timestamp:
@@ -170,14 +209,9 @@ export class IndexedDBStorage {
 
         const storedChat: StoredChat = {
           ...chat,
-          messages: messagesForStorage as any, // Type assertion needed due to timestamp conversion
+          messages: messagesForStorage as any,
           lastAccessedAt: Date.now(),
-          // Preserve sync metadata if it exists
           syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
-          // Mark as locally modified if:
-          // 1. It's explicitly set in the incoming chat
-          // 2. OR it was already locally modified and not being updated from sync
-          // 3. OR the content has changed (different message count or updated timestamp)
           locallyModified:
             (chat as StoredChat).locallyModified !== undefined
               ? (chat as StoredChat).locallyModified
@@ -190,7 +224,7 @@ export class IndexedDBStorage {
           decryptionFailed: (chat as StoredChat).decryptionFailed,
           dataCorrupted: (chat as StoredChat).dataCorrupted,
           encryptedData: (chat as StoredChat).encryptedData,
-          version: 1, // Current storage format version
+          version: 1,
           loadedAt:
             (chat as StoredChat).loadedAt ??
             existingChat?.loadedAt ??
@@ -198,7 +232,6 @@ export class IndexedDBStorage {
           isLocalOnly: (chat as any).isLocalOnly ?? false,
         }
 
-        // Log what we're actually writing to IndexedDB
         import('@/utils/error-handling').then(({ logInfo }) => {
           logInfo('[IndexedDB] Writing to database', {
             component: 'IndexedDBStorage',
@@ -213,15 +246,6 @@ export class IndexedDBStorage {
         })
 
         const putRequest = store.put(storedChat)
-
-        // Wait for transaction to complete, not just the put operation
-        transaction.oncomplete = () => {
-          resolve()
-        }
-
-        transaction.onerror = () => {
-          reject(new Error('Failed to save chat'))
-        }
 
         putRequest.onerror = () => {
           reject(new Error('Failed to save chat'))
