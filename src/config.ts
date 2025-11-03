@@ -26,7 +26,7 @@ export const PAGINATION = {
 // Cloud sync settings
 export const CLOUD_SYNC = {
   RETRY_DELAY: 100, // milliseconds
-  SYNC_INTERVAL: 15000, // 15 seconds - frequency for syncing chats and profile
+  SYNC_INTERVAL: 60000, // 60 seconds (1 minute) - frequency for syncing chats and profile
   // Grace period to avoid deleting chats that were just uploaded but may not yet
   // appear in eventually-consistent remote listings
   DELETION_GRACE_MS: 120000, // 2 minutes
