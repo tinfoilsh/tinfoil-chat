@@ -227,7 +227,12 @@ export const MessageContent = memo(function MessageContent({
           return (
             <th
               {...props}
-              className="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-content-primary"
+              className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-content-primary"
+              style={{
+                maxWidth: '300px',
+                wordWrap: 'break-word',
+                whiteSpace: 'normal',
+              }}
             >
               {children}
             </th>
@@ -237,7 +242,12 @@ export const MessageContent = memo(function MessageContent({
           return (
             <td
               {...props}
-              className="whitespace-nowrap px-4 py-3 text-sm text-content-primary"
+              className="px-4 py-3 text-sm text-content-primary"
+              style={{
+                maxWidth: '300px',
+                wordWrap: 'break-word',
+                whiteSpace: 'normal',
+              }}
             >
               {children}
             </td>
