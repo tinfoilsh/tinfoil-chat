@@ -364,72 +364,84 @@ export function useChatMessaging({
                 },
               })
 
-              // Update the chat with server ID
-              const chatWithServerId = { ...updatedChat, id: serverChatId }
-
               // Update refs
               currentChatIdRef.current = serverChatId
 
-              // Update state
-              setCurrentChat((prev) =>
-                prev.id === tempId ? chatWithServerId : prev,
-              )
-              setChats((prevChats) =>
-                prevChats.map((c) => (c.id === tempId ? chatWithServerId : c)),
-              )
-
-              // Save with server ID
-              logInfo('[handleQuery] Saving chat with server ID', {
-                component: 'useChatMessaging',
-                action: 'handleQuery.savingWithServerId',
-                metadata: {
-                  id: serverChatId,
-                  isLocalOnly: chatWithServerId.isLocalOnly,
-                },
+              // Update state - derive from current state to preserve streaming updates
+              let savedChatWithServerId: Chat | undefined
+              setCurrentChat((prev) => {
+                if (prev.id === tempId) {
+                  const updated = { ...prev, id: serverChatId }
+                  savedChatWithServerId = updated
+                  return updated
+                }
+                return prev
               })
+              setChats((prevChats) =>
+                prevChats.map((c) =>
+                  c.id === tempId ? { ...c, id: serverChatId } : c,
+                ),
+              )
 
-              chatStorage
-                .saveChatAndSync(chatWithServerId)
-                .then(() => {
-                  logInfo('[handleQuery] Chat saved successfully', {
-                    component: 'useChatMessaging',
-                    action: 'handleQuery.chatSaved',
-                    metadata: {
-                      id: serverChatId,
-                    },
-                  })
-                  // Clear pendingSave flag
-                  setChats((prevChats) =>
-                    prevChats.map((c) =>
-                      c.id === serverChatId ? { ...c, pendingSave: false } : c,
-                    ),
-                  )
-                  setCurrentChat((prev) =>
-                    prev.id === serverChatId
-                      ? { ...prev, pendingSave: false }
-                      : prev,
-                  )
+              // Save with server ID - savedChatWithServerId is guaranteed to be set by now
+              if (savedChatWithServerId) {
+                const chatToSave = savedChatWithServerId
+                logInfo('[handleQuery] Saving chat with server ID', {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.savingWithServerId',
+                  metadata: {
+                    id: serverChatId,
+                    isLocalOnly: chatToSave.isLocalOnly,
+                  },
                 })
-                .catch((error) => {
-                  logError('[handleQuery] Failed to save chat', error, {
-                    component: 'useChatMessaging',
-                    action: 'handleQuery.saveChatError',
-                    metadata: {
-                      id: serverChatId,
-                    },
+
+                chatStorage
+                  .saveChatAndSync(chatToSave)
+                  .then(() => {
+                    logInfo('[handleQuery] Chat saved successfully', {
+                      component: 'useChatMessaging',
+                      action: 'handleQuery.chatSaved',
+                      metadata: {
+                        id: serverChatId,
+                      },
+                    })
+                    // Clear pendingSave flag
+                    setChats((prevChats) =>
+                      prevChats.map((c) =>
+                        c.id === serverChatId
+                          ? { ...c, pendingSave: false }
+                          : c,
+                      ),
+                    )
+                    setCurrentChat((prev) =>
+                      prev.id === serverChatId
+                        ? { ...prev, pendingSave: false }
+                        : prev,
+                    )
                   })
-                  // Clear pendingSave flag even on error
-                  setChats((prevChats) =>
-                    prevChats.map((c) =>
-                      c.id === serverChatId ? { ...c, pendingSave: false } : c,
-                    ),
-                  )
-                  setCurrentChat((prev) =>
-                    prev.id === serverChatId
-                      ? { ...prev, pendingSave: false }
-                      : prev,
-                  )
-                })
+                  .catch((error) => {
+                    logError('[handleQuery] Failed to save chat', error, {
+                      component: 'useChatMessaging',
+                      action: 'handleQuery.saveChatError',
+                      metadata: {
+                        id: serverChatId,
+                      },
+                    })
+                    // Clear pendingSave flag even on error
+                    setChats((prevChats) =>
+                      prevChats.map((c) =>
+                        c.id === serverChatId
+                          ? { ...c, pendingSave: false }
+                          : c,
+                      ),
+                    )
+                    setCurrentChat((prev) =>
+                      prev.id === serverChatId
+                        ? { ...prev, pendingSave: false }
+                        : prev,
+                    )
+                  })
+              }
             }
           })
           .catch((error) => {
