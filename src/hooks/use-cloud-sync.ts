@@ -298,7 +298,15 @@ export function useCloudSync() {
         // If the key changed OR this is the first time setting a key, retry decryption and sync
         if (!oldKey || oldKey !== key) {
           // Sync immediately to fetch encrypted chats from cloud
-          await syncChats()
+          // Don't let sync failures block key updates
+          try {
+            await syncChats()
+          } catch (syncError) {
+            logError('Failed to sync after setting encryption key', syncError, {
+              component: 'useCloudSync',
+              action: 'setEncryptionKey.initialSync',
+            })
+          }
 
           // Run decryption in background to avoid UI hang
           const decryptionPromise = retryDecryptionWithNewKey({
