@@ -25,14 +25,17 @@ export function useProfileSync() {
       setCloudSyncEnabled(isCloudSyncEnabled())
     }
 
-    // Initial check
     checkCloudSyncStatus()
 
-    // Listen for storage changes (when settings are changed in another tab or component)
     window.addEventListener('storage', checkCloudSyncStatus)
+    window.addEventListener('cloudSyncSettingChanged', checkCloudSyncStatus)
 
     return () => {
       window.removeEventListener('storage', checkCloudSyncStatus)
+      window.removeEventListener(
+        'cloudSyncSettingChanged',
+        checkCloudSyncStatus,
+      )
     }
   }, [])
 
