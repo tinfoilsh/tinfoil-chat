@@ -32,14 +32,30 @@ export class CloudSyncService {
 
   // Backup a single chat to the cloud with rate limiting
   async backupChat(chatId: string): Promise<void> {
+    logInfo('[CloudSync] backupChat called', {
+      component: 'CloudSync',
+      action: 'backupChat.start',
+      metadata: { chatId },
+    })
+
     // Don't attempt backup if not authenticated
     if (!(await r2Storage.isAuthenticated())) {
+      logInfo('[CloudSync] Not authenticated, skipping backup', {
+        component: 'CloudSync',
+        action: 'backupChat.notAuthenticated',
+        metadata: { chatId },
+      })
       return
     }
 
     // Check if there's already an upload in progress for this chat
     const existingUpload = this.uploadQueue.get(chatId)
     if (existingUpload) {
+      logInfo('[CloudSync] Upload already in progress for chat', {
+        component: 'CloudSync',
+        action: 'backupChat.existingUpload',
+        metadata: { chatId },
+      })
       return existingUpload
     }
 
@@ -58,7 +74,18 @@ export class CloudSyncService {
   private async doBackupChat(chatId: string): Promise<void> {
     try {
       // Check if chat is currently streaming
-      if (streamingTracker.isStreaming(chatId)) {
+      const isStreaming = streamingTracker.isStreaming(chatId)
+      logInfo('[CloudSync] Checking streaming status', {
+        component: 'CloudSync',
+        action: 'doBackupChat.streamingCheck',
+        metadata: {
+          chatId,
+          isStreaming,
+          streamingChats: streamingTracker.getStreamingChats(),
+        },
+      })
+
+      if (isStreaming) {
         // Check if we already have a callback registered for this chat
         if (this.streamingCallbacks.has(chatId)) {
           logInfo('Streaming callback already registered for chat', {

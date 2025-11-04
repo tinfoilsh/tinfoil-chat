@@ -10,7 +10,7 @@
  * to storage directly. All persistence goes through updateChatWithHistoryCheck.
  */
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import type { Chat, Message } from '../types'
 
 export interface StreamingContext {
@@ -538,14 +538,36 @@ export async function processStreamingResponse(
       }
     }
   } finally {
+    logInfo('[streaming-processor] Ending streaming', {
+      component: 'streaming-processor',
+      action: 'finally',
+      metadata: {
+        streamingChatId,
+        currentChatId: ctx.currentChatIdRef.current,
+        idsMatch: streamingChatId === ctx.currentChatIdRef.current,
+      },
+    })
+
     ctx.setLoadingState('idle')
     ctx.isStreamingRef.current = false
     // End streaming for both the original ID and current ID (in case ID changed)
-    if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
+    if (streamingChatId) {
+      logInfo('[streaming-processor] Ending streaming for original ID', {
+        component: 'streaming-processor',
+        action: 'endStreaming.original',
+        metadata: { chatId: streamingChatId },
+      })
+      streamingTracker.endStreaming(streamingChatId)
+    }
     if (
       ctx.currentChatIdRef.current &&
       ctx.currentChatIdRef.current !== streamingChatId
     ) {
+      logInfo('[streaming-processor] Ending streaming for current ID', {
+        component: 'streaming-processor',
+        action: 'endStreaming.current',
+        metadata: { chatId: ctx.currentChatIdRef.current },
+      })
       streamingTracker.endStreaming(ctx.currentChatIdRef.current)
     }
     ctx.setIsThinking(false)

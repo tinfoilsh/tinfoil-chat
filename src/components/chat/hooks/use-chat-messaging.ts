@@ -708,21 +708,43 @@ export function useChatMessaging({
           // Trigger cloud sync for non-local chats after saving
           // This ensures the complete chat (with title) is synced
           if (!chatToSave.isLocalOnly) {
-            logInfo('[handleQuery] Triggering cloud sync', {
-              component: 'useChatMessaging',
-              action: 'handleQuery.cloudSync',
-              metadata: {
-                chatId,
+            logInfo(
+              '[handleQuery] Triggering cloud sync after stream complete',
+              {
+                component: 'useChatMessaging',
+                action: 'handleQuery.cloudSync',
+                metadata: {
+                  chatId,
+                  isLocalOnly: chatToSave.isLocalOnly,
+                  title: chatToSave.title,
+                },
               },
-            })
+            )
             import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
-              cloudSync.backupChat(chatId).catch((error) => {
-                logError('Failed to sync chat after completion', error, {
+              logInfo(
+                '[handleQuery] Cloud sync module loaded, calling backupChat',
+                {
                   component: 'useChatMessaging',
-                  action: 'handleQuery',
+                  action: 'handleQuery.cloudSyncLoaded',
                   metadata: { chatId },
+                },
+              )
+              cloudSync
+                .backupChat(chatId)
+                .then(() => {
+                  logInfo('[handleQuery] Cloud sync completed successfully', {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery.cloudSyncSuccess',
+                    metadata: { chatId },
+                  })
                 })
-              })
+                .catch((error) => {
+                  logError('Failed to sync chat after completion', error, {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery.cloudSyncError',
+                    metadata: { chatId },
+                  })
+                })
             })
           } else {
             logInfo('[handleQuery] Skipping cloud sync for local-only chat', {
