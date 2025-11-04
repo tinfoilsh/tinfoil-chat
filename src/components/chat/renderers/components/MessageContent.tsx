@@ -11,6 +11,37 @@ import { memo, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
+/**
+ * Converts HTML tags to markdown equivalents for better rendering
+ * Note: We keep some HTML tags (like <b>, <a>) as-is since rehype-raw handles them,
+ * but we convert them to markdown for consistency and better processing
+ */
+function preprocessHtmlToMarkdown(content: string): string {
+  let processed = content
+
+  // Convert <a href="url">text</a> to [text](url)
+  // This handles various formats: href="url", href='url', and additional attributes
+  processed = processed.replace(
+    /<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["'][^>]*>([^<]*)<\/a>/gi,
+    (match, url, text) => {
+      // If text is empty, use the URL as text
+      const linkText = text.trim() || url
+      return `[${linkText}](${url})`
+    },
+  )
+
+  // Convert <b>text</b> and <strong>text</strong> to **text**
+  processed = processed.replace(/<b>([^<]*)<\/b>/gi, '**$1**')
+  processed = processed.replace(/<strong>([^<]*)<\/strong>/gi, '**$1**')
+
+  // Convert <br>, <br/>, and </br> to markdown line breaks
+  // Using double space + newline for proper markdown rendering
+  processed = processed.replace(/<br\s*\/?>/gi, '  \n')
+  processed = processed.replace(/<\/br>/gi, '  \n')
+
+  return processed
+}
+
 interface MessageContentProps {
   content: string
   isDarkMode: boolean
@@ -32,42 +63,50 @@ function useMathPlugins() {
         import('remark-math'),
         import('rehype-katex'),
         import('remark-breaks'),
+        import('rehype-raw'),
       ])
-        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
-          setPlugins({
-            remarkPlugins: [
-              [
-                remarkMathMod.default,
-                {
-                  singleDollarTextMath: false, // Disable $ delimiter
-                },
-              ],
-              remarkGfm,
-              remarkBreaksMod.default,
-            ] as any[],
-            rehypePlugins: [
-              [
-                rehypeKatexMod.default,
-                {
-                  throwOnError: false,
-                  strict: false,
-                  output: 'htmlAndMathml',
-                  errorColor: TINFOIL_COLORS.utility.destructive,
-                  trust: false,
-                },
-              ],
-            ] as any[],
-          })
-        })
+        .then(
+          ([remarkMathMod, rehypeKatexMod, remarkBreaksMod, rehypeRawMod]) => {
+            setPlugins({
+              remarkPlugins: [
+                [
+                  remarkMathMod.default,
+                  {
+                    singleDollarTextMath: false,
+                  },
+                ],
+                remarkGfm,
+                remarkBreaksMod.default,
+              ] as any[],
+              rehypePlugins: [
+                rehypeRawMod.default,
+                [
+                  rehypeKatexMod.default,
+                  {
+                    throwOnError: false,
+                    strict: false,
+                    output: 'htmlAndMathml',
+                    errorColor: TINFOIL_COLORS.utility.destructive,
+                    trust: false,
+                  },
+                ],
+              ] as any[],
+            })
+          },
+        )
         .catch((error) => {
           logError('Failed to load markdown plugins', error, {
             component: 'MessageContent',
             action: 'loadPlugins',
             metadata: {
-              plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
+              plugins: [
+                'remark-math',
+                'rehype-katex',
+                'remark-breaks',
+                'rehype-raw',
+              ],
             },
           })
-          // Keep default plugins as fallback
         })
     }
   }, [])
@@ -81,7 +120,8 @@ export const MessageContent = memo(function MessageContent({
   isUser = false,
 }: MessageContentProps) {
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
-  const processedContent = processLatexTags(content)
+  const htmlToMarkdown = preprocessHtmlToMarkdown(content)
+  const processedContent = processLatexTags(htmlToMarkdown)
   const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
 
   // For user messages, render as plain text without markdown processing
@@ -212,6 +252,36 @@ export const MessageContent = memo(function MessageContent({
               {children}
             </blockquote>
           )
+        },
+        a({ children, href, ...props }: any) {
+          return (
+            <a
+              {...props}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 underline hover:text-blue-600"
+            >
+              {children}
+            </a>
+          )
+        },
+        strong({ children, ...props }: any) {
+          return (
+            <strong {...props} className="font-semibold">
+              {children}
+            </strong>
+          )
+        },
+        b({ children, ...props }: any) {
+          return (
+            <b {...props} className="font-semibold">
+              {children}
+            </b>
+          )
+        },
+        br({ ...props }: any) {
+          return <br {...props} />
         },
       }}
     >
