@@ -23,6 +23,7 @@ export interface PaginatedChatsResult {
 export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
+  private pendingUploads: Map<string, () => Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
 
   // Set token getter for API calls
@@ -51,12 +52,29 @@ export class CloudSyncService {
     // Check if there's already an upload in progress for this chat
     const existingUpload = this.uploadQueue.get(chatId)
     if (existingUpload) {
-      logInfo('[CloudSync] Upload already in progress for chat', {
-        component: 'CloudSync',
-        action: 'backupChat.existingUpload',
-        metadata: { chatId },
+      logInfo(
+        '[CloudSync] Upload already in progress, queueing for after completion',
+        {
+          component: 'CloudSync',
+          action: 'backupChat.queueing',
+          metadata: { chatId },
+        },
+      )
+
+      // Queue this upload to run after the current one completes
+      // This ensures we upload the latest version of the chat
+      return existingUpload.then(() => {
+        logInfo(
+          '[CloudSync] Previous upload completed, starting queued upload',
+          {
+            component: 'CloudSync',
+            action: 'backupChat.runningQueued',
+            metadata: { chatId },
+          },
+        )
+        // Run the upload again with the latest data
+        return this.backupChat(chatId)
       })
-      return existingUpload
     }
 
     // Create the upload promise
