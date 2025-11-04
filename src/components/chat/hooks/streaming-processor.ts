@@ -124,17 +124,11 @@ export async function processStreamingResponse(
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
                 const messageToSave = assistantMessage as Message
-
-                // Use only user messages from the original context, not assistant messages
-                // This avoids duplicates when the ID changes mid-stream
-                const userMessages = ctx.updatedMessages.filter(
-                  (m) => m.role === 'user',
-                )
-                const newMessages = [...userMessages, messageToSave]
+                const newMessages = [...ctx.updatedMessages, messageToSave]
 
                 ctx.updateChatWithHistoryCheck(
                   ctx.setChats,
-                  { ...ctx.updatedChat, id: chatId }, // Update the chat ID to match current
+                  { ...ctx.updatedChat, id: chatId },
                   ctx.setCurrentChat,
                   chatId,
                   newMessages,
@@ -147,17 +141,11 @@ export async function processStreamingResponse(
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
                 const messageToSave = assistantMessage as Message
-
-                // Use only user messages from the original context, not assistant messages
-                // This avoids duplicates when the ID changes mid-stream
-                const userMessages = ctx.updatedMessages.filter(
-                  (m) => m.role === 'user',
-                )
-                const newMessages = [...userMessages, messageToSave]
+                const newMessages = [...ctx.updatedMessages, messageToSave]
 
                 ctx.updateChatWithHistoryCheck(
                   ctx.setChats,
-                  { ...ctx.updatedChat, id: chatId }, // Update the chat ID to match current
+                  { ...ctx.updatedChat, id: chatId },
                   ctx.setCurrentChat,
                   chatId,
                   newMessages,
