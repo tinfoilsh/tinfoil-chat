@@ -24,6 +24,9 @@ const MdOutlineCloudOffLazy = lazy(() =>
 const FiArrowUpLazy = lazy(() =>
   import('react-icons/fi').then((m) => ({ default: m.FiArrowUp })),
 )
+const PiSpinnerThinLazy = lazy(() =>
+  import('react-icons/pi').then((m) => ({ default: m.PiSpinnerThin })),
+)
 
 // File icons from react-icons/fa
 const FaFileLazy = lazy(() =>
@@ -93,6 +96,9 @@ export const MdOutlineCloudOff = (props: IconBaseProps) => (
 )
 export const FiArrowUp = (props: IconBaseProps) => (
   <IconWrapper Icon={FiArrowUpLazy} {...props} />
+)
+export const PiSpinnerThin = (props: IconBaseProps) => (
+  <IconWrapper Icon={PiSpinnerThinLazy} {...props} />
 )
 export const FaFile = (props: IconBaseProps) => (
   <IconWrapper Icon={FaFileLazy} {...props} />
