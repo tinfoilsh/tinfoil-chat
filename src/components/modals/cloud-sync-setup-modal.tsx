@@ -351,7 +351,7 @@ ${generatedKey.replace('key_', '')}
         </button>
         <button
           onClick={handleContinue}
-          className="flex-1 rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-content-inverse transition-colors hover:bg-brand-accent-dark/90"
+          className="flex-1 rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
         >
           Continue
         </button>
@@ -489,7 +489,7 @@ ${generatedKey.replace('key_', '')}
 
       <button
         onClick={handleComplete}
-        className="w-full rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-content-inverse transition-colors hover:bg-brand-accent-dark/90"
+        className="w-full rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
       >
         Done
       </button>
