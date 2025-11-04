@@ -164,16 +164,25 @@ export function mergeChatsWithState(
 ): Chat[] {
   const chatMap = new Map<string, Chat>()
 
+  // Helper to get unique key for a chat (includes isLocalOnly for blank chats)
+  const getChatKey = (chat: Chat) => {
+    if (chat.id === '' && chat.isBlankChat) {
+      return `blank-${chat.isLocalOnly ? 'local' : 'cloud'}`
+    }
+    return chat.id
+  }
+
   // Add loaded chats from IndexedDB (source of truth)
   loadedChats.forEach((chat) => {
-    chatMap.set(chat.id, chat)
+    chatMap.set(getChatKey(chat), chat)
   })
 
   // Only preserve state chats if they don't exist in IndexedDB yet
   // (blank chats, unsaved chats, etc.)
   currentChats.forEach((chat) => {
-    if (!chatMap.has(chat.id)) {
-      chatMap.set(chat.id, chat)
+    const key = getChatKey(chat)
+    if (!chatMap.has(key)) {
+      chatMap.set(key, chat)
     }
   })
 
