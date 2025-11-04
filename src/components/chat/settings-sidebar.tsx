@@ -483,9 +483,8 @@ export function SettingsSidebar({
     if (enabled) {
       // Check if encryption key exists
       if (!encryptionService.getKey()) {
-        // Turn on the toggle visually
+        // Turn on the toggle visually (but don't persist yet)
         setCloudSyncEnabledState(true)
-        setCloudSyncEnabled(true)
 
         // Show the cloud sync setup modal
         if (onCloudSyncSetupClick) {
