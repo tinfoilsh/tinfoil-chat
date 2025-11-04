@@ -70,20 +70,11 @@ export class ProfileSyncService {
         return null
       }
 
-      logInfo('Fetching profile from cloud', {
-        component: 'ProfileSync',
-        action: 'fetchProfile',
-      })
-
       const response = await fetch(`${API_BASE_URL}/api/profile/`, {
         headers: await this.getHeaders(),
       })
 
       if (response.status === 404) {
-        logInfo('No profile exists in cloud yet', {
-          component: 'ProfileSync',
-          action: 'fetchProfile',
-        })
         return null
       }
 
@@ -93,36 +84,12 @@ export class ProfileSyncService {
 
       const data = await response.json()
 
-      logInfo('Profile data received from cloud', {
-        component: 'ProfileSync',
-        action: 'fetchProfile',
-        metadata: {
-          version: data.version,
-          created: data.created,
-          updated: data.updated,
-          dataLength: data.data?.length || 0,
-        },
-      })
-
       // Initialize encryption service
       await encryptionService.initialize()
 
       // Try to decrypt the profile data
       try {
-        // Backend now returns data wrapped in JSON like { data: "...", version: "..." }
         const encrypted = JSON.parse(data.data)
-
-        logInfo('Parsed encrypted profile data', {
-          component: 'ProfileSync',
-          action: 'fetchProfile',
-          metadata: {
-            hasIv: !!encrypted.iv,
-            hasData: !!encrypted.data,
-            ivLength: encrypted.iv?.length || 0,
-            dataLength: encrypted.data?.length || 0,
-          },
-        })
-
         const decrypted = await encryptionService.decrypt(encrypted)
 
         // Cache the decrypted profile

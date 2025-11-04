@@ -33,45 +33,17 @@ export class CloudSyncService {
 
   // Backup a single chat to the cloud with rate limiting
   async backupChat(chatId: string): Promise<void> {
-    logInfo('[CloudSync] backupChat called', {
-      component: 'CloudSync',
-      action: 'backupChat.start',
-      metadata: { chatId },
-    })
-
     // Don't attempt backup if not authenticated
     if (!(await r2Storage.isAuthenticated())) {
-      logInfo('[CloudSync] Not authenticated, skipping backup', {
-        component: 'CloudSync',
-        action: 'backupChat.notAuthenticated',
-        metadata: { chatId },
-      })
       return
     }
 
     // Check if there's already an upload in progress for this chat
     const existingUpload = this.uploadQueue.get(chatId)
     if (existingUpload) {
-      logInfo(
-        '[CloudSync] Upload already in progress, queueing for after completion',
-        {
-          component: 'CloudSync',
-          action: 'backupChat.queueing',
-          metadata: { chatId },
-        },
-      )
-
       // Queue this upload to run after the current one completes
       // This ensures we upload the latest version of the chat
       return existingUpload.then(() => {
-        logInfo(
-          '[CloudSync] Previous upload completed, starting queued upload',
-          {
-            component: 'CloudSync',
-            action: 'backupChat.runningQueued',
-            metadata: { chatId },
-          },
-        )
         // Run the upload again with the latest data
         return this.backupChat(chatId)
       })
@@ -92,18 +64,7 @@ export class CloudSyncService {
   private async doBackupChat(chatId: string): Promise<void> {
     try {
       // Check if chat is currently streaming
-      const isStreaming = streamingTracker.isStreaming(chatId)
-      logInfo('[CloudSync] Checking streaming status', {
-        component: 'CloudSync',
-        action: 'doBackupChat.streamingCheck',
-        metadata: {
-          chatId,
-          isStreaming,
-          streamingChats: streamingTracker.getStreamingChats(),
-        },
-      })
-
-      if (isStreaming) {
+      if (streamingTracker.isStreaming(chatId)) {
         // Check if we already have a callback registered for this chat
         if (this.streamingCallbacks.has(chatId)) {
           logInfo('Streaming callback already registered for chat', {

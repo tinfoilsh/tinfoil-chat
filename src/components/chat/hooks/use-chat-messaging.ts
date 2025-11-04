@@ -260,19 +260,6 @@ export function useChatMessaging({
         return
       }
 
-      logInfo('[handleQuery] Starting query processing', {
-        component: 'useChatMessaging',
-        action: 'handleQuery.start',
-        metadata: {
-          chatId: currentChat.id,
-          isBlankChat: currentChat.isBlankChat,
-          isLocalOnly: currentChat.isLocalOnly,
-          messageCount: currentChat.messages.length,
-          storeHistory,
-          queryLength: query.length,
-        },
-      })
-
       // Clear input immediately when send button is pressed
       setInput('')
 
@@ -708,43 +695,14 @@ export function useChatMessaging({
           // Trigger cloud sync for non-local chats after saving
           // This ensures the complete chat (with title) is synced
           if (!chatToSave.isLocalOnly) {
-            logInfo(
-              '[handleQuery] Triggering cloud sync after stream complete',
-              {
-                component: 'useChatMessaging',
-                action: 'handleQuery.cloudSync',
-                metadata: {
-                  chatId,
-                  isLocalOnly: chatToSave.isLocalOnly,
-                  title: chatToSave.title,
-                },
-              },
-            )
             import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
-              logInfo(
-                '[handleQuery] Cloud sync module loaded, calling backupChat',
-                {
+              cloudSync.backupChat(chatId).catch((error) => {
+                logError('Failed to sync chat after completion', error, {
                   component: 'useChatMessaging',
-                  action: 'handleQuery.cloudSyncLoaded',
+                  action: 'handleQuery',
                   metadata: { chatId },
-                },
-              )
-              cloudSync
-                .backupChat(chatId)
-                .then(() => {
-                  logInfo('[handleQuery] Cloud sync completed successfully', {
-                    component: 'useChatMessaging',
-                    action: 'handleQuery.cloudSyncSuccess',
-                    metadata: { chatId },
-                  })
                 })
-                .catch((error) => {
-                  logError('Failed to sync chat after completion', error, {
-                    component: 'useChatMessaging',
-                    action: 'handleQuery.cloudSyncError',
-                    metadata: { chatId },
-                  })
-                })
+              })
             })
           } else {
             logInfo('[handleQuery] Skipping cloud sync for local-only chat', {

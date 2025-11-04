@@ -99,20 +99,6 @@ export class IndexedDBStorage {
 
   async saveChat(chat: Chat): Promise<void> {
     const chatSnapshot = JSON.parse(JSON.stringify(chat))
-
-    import('@/utils/error-handling').then(({ logInfo }) => {
-      logInfo('[IndexedDB] Queuing save', {
-        component: 'IndexedDBStorage',
-        action: 'saveChat',
-        metadata: {
-          chatId: chatSnapshot.id,
-          messageCount: chatSnapshot.messages?.length ?? 0,
-          title: chatSnapshot.title,
-          isLocalOnly: chatSnapshot.isLocalOnly,
-        },
-      })
-    })
-
     this.saveQueue = this.saveQueue.then(() =>
       this.saveChatInternal(chatSnapshot),
     )
@@ -122,27 +108,8 @@ export class IndexedDBStorage {
   private async saveChatInternal(chat: Chat): Promise<void> {
     const db = await this.ensureDB()
 
-    // Log when we're actually executing the save
-    import('@/utils/error-handling').then(({ logInfo }) => {
-      logInfo('[IndexedDB] Executing save', {
-        component: 'IndexedDBStorage',
-        action: 'saveChatInternal',
-        metadata: {
-          chatId: chat.id,
-          messageCount: chat.messages?.length ?? 0,
-          title: chat.title,
-          isLocalOnly: chat.isLocalOnly,
-        },
-      })
-    })
-
     // Don't save blank chats to IndexedDB
-    // Blank chats are new chats that haven't been used yet
     if ((chat as any).isBlankChat === true) {
-      logWarning('Attempted to save blank chat to IndexedDB, skipping', {
-        component: 'IndexedDBStorage',
-        metadata: { chatId: chat.id },
-      })
       return
     }
 
@@ -151,17 +118,6 @@ export class IndexedDBStorage {
       const store = transaction.objectStore(CHATS_STORE)
 
       transaction.oncomplete = () => {
-        import('@/utils/error-handling').then(({ logInfo }) => {
-          logInfo('[IndexedDB] Transaction committed', {
-            component: 'IndexedDBStorage',
-            action: 'saveChatInternal',
-            metadata: {
-              chatId: chat.id,
-              messageCount: chat.messages?.length ?? 0,
-              title: chat.title,
-            },
-          })
-        })
         resolve()
       }
 
@@ -232,19 +188,6 @@ export class IndexedDBStorage {
           isLocalOnly: (chat as any).isLocalOnly ?? false,
         }
 
-        import('@/utils/error-handling').then(({ logInfo }) => {
-          logInfo('[IndexedDB] Writing to database', {
-            component: 'IndexedDBStorage',
-            action: 'saveChatInternal',
-            metadata: {
-              chatId: storedChat.id,
-              messageCount: storedChat.messages?.length ?? 0,
-              title: storedChat.title,
-              isLocalOnly: storedChat.isLocalOnly,
-            },
-          })
-        })
-
         const putRequest = store.put(storedChat)
 
         putRequest.onerror = () => {
@@ -281,34 +224,8 @@ export class IndexedDBStorage {
   }
 
   async getChat(id: string): Promise<StoredChat | null> {
-    import('@/utils/error-handling').then(({ logInfo }) => {
-      logInfo('[IndexedDB] getChat waiting for save queue', {
-        component: 'IndexedDBStorage',
-        action: 'getChat',
-        metadata: { chatId: id },
-      })
-    })
     await this.saveQueue
-    import('@/utils/error-handling').then(({ logInfo }) => {
-      logInfo('[IndexedDB] getChat save queue complete, reading', {
-        component: 'IndexedDBStorage',
-        action: 'getChat',
-        metadata: { chatId: id },
-      })
-    })
     const chat = await this.getChatInternal(id)
-    import('@/utils/error-handling').then(({ logInfo }) => {
-      logInfo('[IndexedDB] getChat read complete', {
-        component: 'IndexedDBStorage',
-        action: 'getChat',
-        metadata: {
-          chatId: id,
-          found: !!chat,
-          messageCount: chat?.messages?.length ?? 0,
-          title: chat?.title,
-        },
-      })
-    })
     if (chat) {
       this.updateLastAccessed(id).catch((error) =>
         logError('Failed to update last accessed time', error, {
