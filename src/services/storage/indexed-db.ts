@@ -99,9 +99,14 @@ export class IndexedDBStorage {
 
   async saveChat(chat: Chat): Promise<void> {
     const chatSnapshot = JSON.parse(JSON.stringify(chat))
-    this.saveQueue = this.saveQueue.then(() =>
-      this.saveChatInternal(chatSnapshot),
-    )
+    this.saveQueue = this.saveQueue
+      .catch((error) => {
+        logError('Previous save operation failed, recovering queue', error, {
+          component: 'IndexedDBStorage',
+          action: 'saveChat.queueRecovery',
+        })
+      })
+      .then(() => this.saveChatInternal(chatSnapshot))
     return this.saveQueue
   }
 
@@ -324,27 +329,34 @@ export class IndexedDBStorage {
   }
 
   private async updateLastAccessed(id: string): Promise<void> {
-    this.saveQueue = this.saveQueue.then(async () => {
-      const db = await this.ensureDB()
-      const chat = await this.getChatInternal(id)
-
-      if (chat) {
-        return new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction([CHATS_STORE], 'readwrite')
-          const store = transaction.objectStore(CHATS_STORE)
-
-          transaction.oncomplete = () => resolve()
-          transaction.onerror = () =>
-            reject(new Error('Failed to update last accessed'))
-
-          chat.lastAccessedAt = Date.now()
-          const request = store.put(chat)
-
-          request.onerror = () =>
-            reject(new Error('Failed to update last accessed'))
+    this.saveQueue = this.saveQueue
+      .catch((error) => {
+        logError('Previous save operation failed, recovering queue', error, {
+          component: 'IndexedDBStorage',
+          action: 'updateLastAccessed.queueRecovery',
         })
-      }
-    })
+      })
+      .then(async () => {
+        const db = await this.ensureDB()
+        const chat = await this.getChatInternal(id)
+
+        if (chat) {
+          return new Promise<void>((resolve, reject) => {
+            const transaction = db.transaction([CHATS_STORE], 'readwrite')
+            const store = transaction.objectStore(CHATS_STORE)
+
+            transaction.oncomplete = () => resolve()
+            transaction.onerror = () =>
+              reject(new Error('Failed to update last accessed'))
+
+            chat.lastAccessedAt = Date.now()
+            const request = store.put(chat)
+
+            request.onerror = () =>
+              reject(new Error('Failed to update last accessed'))
+          })
+        }
+      })
     return this.saveQueue
   }
 
@@ -364,29 +376,37 @@ export class IndexedDBStorage {
   }
 
   async markAsSynced(id: string, syncVersion: number): Promise<void> {
-    this.saveQueue = this.saveQueue.then(async () => {
-      const db = await this.ensureDB()
-      const chat = await this.getChatInternal(id)
-
-      if (chat) {
-        return new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction([CHATS_STORE], 'readwrite')
-          const store = transaction.objectStore(CHATS_STORE)
-
-          transaction.oncomplete = () => resolve()
-          transaction.onerror = () =>
-            reject(new Error('Failed to mark as synced'))
-
-          chat.syncedAt = Date.now()
-          chat.locallyModified = false
-          chat.syncVersion = syncVersion
-
-          const request = store.put(chat)
-
-          request.onerror = () => reject(new Error('Failed to mark as synced'))
+    this.saveQueue = this.saveQueue
+      .catch((error) => {
+        logError('Previous save operation failed, recovering queue', error, {
+          component: 'IndexedDBStorage',
+          action: 'markAsSynced.queueRecovery',
         })
-      }
-    })
+      })
+      .then(async () => {
+        const db = await this.ensureDB()
+        const chat = await this.getChatInternal(id)
+
+        if (chat) {
+          return new Promise<void>((resolve, reject) => {
+            const transaction = db.transaction([CHATS_STORE], 'readwrite')
+            const store = transaction.objectStore(CHATS_STORE)
+
+            transaction.oncomplete = () => resolve()
+            transaction.onerror = () =>
+              reject(new Error('Failed to mark as synced'))
+
+            chat.syncedAt = Date.now()
+            chat.locallyModified = false
+            chat.syncVersion = syncVersion
+
+            const request = store.put(chat)
+
+            request.onerror = () =>
+              reject(new Error('Failed to mark as synced'))
+          })
+        }
+      })
     return this.saveQueue
   }
 
