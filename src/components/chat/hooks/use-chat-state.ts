@@ -104,7 +104,19 @@ export function useChatState({
     setIsInitialLoad,
     isInitialLoad,
     reloadChats,
-  } = useChatStorage({ storeHistory, scrollToBottom })
+  } = useChatStorage({
+    storeHistory,
+    scrollToBottom,
+    beforeSwitchChat: async () => {
+      // Cancel generation will be defined after useChatMessaging hook
+      if (cancelGenerationRef.current) {
+        await cancelGenerationRef.current()
+      }
+    },
+  })
+
+  // Create ref to store cancelGeneration function
+  const cancelGenerationRef = useRef<(() => Promise<void>) | null>(null)
 
   // Model Management
   const {
@@ -150,6 +162,9 @@ export function useChatState({
     messagesEndRef,
     scrollToBottom,
   })
+
+  // Update ref with cancelGeneration function
+  cancelGenerationRef.current = cancelGeneration
 
   // Add effect to handle clicks outside the model selector
   useEffect(() => {
