@@ -82,7 +82,7 @@ export function CloudSyncSetupModal({
       const newKey = await encryptionService.generateKey()
       await encryptionService.setKey(newKey)
       setGeneratedKey(newKey)
-      localStorage.setItem('cloudSyncEnabled', 'true')
+      setCloudSyncEnabled(true)
 
       logInfo('Generated new encryption key for cloud sync', {
         component: 'CloudSyncSetupModal',
@@ -118,7 +118,7 @@ export function CloudSyncSetupModal({
     setIsProcessing(true)
     try {
       await encryptionService.setKey(inputKey)
-      localStorage.setItem('cloudSyncEnabled', 'true')
+      setCloudSyncEnabled(true)
       localStorage.setItem('hasSeenCloudSyncModal', 'true')
 
       logInfo('Restored encryption key for cloud sync', {
