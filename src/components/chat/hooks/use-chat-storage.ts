@@ -17,6 +17,7 @@ import { ChatPersistenceManager } from './chat-persistence-manager'
 interface UseChatStorageProps {
   storeHistory: boolean
   scrollToBottom?: () => void
+  beforeSwitchChat?: () => Promise<void>
 }
 
 interface UseChatStorageReturn {
@@ -36,6 +37,7 @@ interface UseChatStorageReturn {
 
 export function useChatStorage({
   storeHistory,
+  beforeSwitchChat,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -277,15 +279,23 @@ export function useChatStorage({
   )
 
   // Switch to a different chat
-  const switchChat = useCallback(async (chat: Chat) => {
-    setCurrentChat(chat)
-    setIsInitialLoad(true)
+  const switchChat = useCallback(
+    async (chat: Chat) => {
+      // Cancel any ongoing stream before switching
+      if (beforeSwitchChat) {
+        await beforeSwitchChat()
+      }
 
-    // Brief delay to show loading state
-    setTimeout(() => {
-      setIsInitialLoad(false)
-    }, CONSTANTS.CHAT_INIT_DELAY_MS)
-  }, [])
+      setCurrentChat(chat)
+      setIsInitialLoad(true)
+
+      // Brief delay to show loading state
+      setTimeout(() => {
+        setIsInitialLoad(false)
+      }, CONSTANTS.CHAT_INIT_DELAY_MS)
+    },
+    [beforeSwitchChat],
+  )
 
   // Handle chat selection
   const handleChatSelect = useCallback(
