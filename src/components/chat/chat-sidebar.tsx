@@ -847,8 +847,8 @@ export function ChatSidebar({
                   className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'cloud'
                       ? isDarkMode
-                        ? 'bg-surface-chat text-content-primary shadow-sm'
-                        : 'bg-white text-content-primary shadow-sm'
+                        ? 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-white shadow-sm'
+                        : 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary shadow-sm'
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
@@ -866,8 +866,8 @@ export function ChatSidebar({
                   className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'local'
                       ? isDarkMode
-                        ? 'bg-surface-chat text-content-primary shadow-sm'
-                        : 'bg-white text-content-primary shadow-sm'
+                        ? 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-white shadow-sm'
+                        : 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary shadow-sm'
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
