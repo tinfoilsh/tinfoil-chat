@@ -229,7 +229,7 @@ export class IndexedDBStorage {
   }
 
   async getChat(id: string): Promise<StoredChat | null> {
-    await this.saveQueue
+    await this.saveQueue.catch(() => {})
     const chat = await this.getChatInternal(id)
     if (chat) {
       this.updateLastAccessed(id).catch((error) =>
@@ -284,7 +284,7 @@ export class IndexedDBStorage {
   }
 
   async getAllChats(): Promise<StoredChat[]> {
-    await this.saveQueue
+    await this.saveQueue.catch(() => {})
     const db = await this.ensureDB()
 
     return new Promise((resolve, reject) => {

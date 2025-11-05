@@ -322,6 +322,8 @@ export function useProfileSync() {
 
     // Debounce the sync to avoid too many API calls
     syncDebounceTimer.current = setTimeout(async () => {
+      if (!isCloudSyncEnabled()) return
+
       try {
         const localSettings = loadLocalSettings()
 
