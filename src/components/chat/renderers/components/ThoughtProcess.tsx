@@ -224,19 +224,11 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   }
 
   return (
-    <div
-      className={`mb-2 mt-2 rounded-lg border border-border-subtle ${
-        isDarkMode ? 'bg-surface-chat text-content-primary' : 'bg-surface-chat'
-      }`}
-    >
+    <div className="mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent">
       <button
         type="button"
         onClick={handleToggle}
-        className={`flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors ${
-          isDarkMode
-            ? 'text-content-primary hover:bg-surface-chat/80'
-            : 'text-content-secondary hover:bg-surface-chat/70'
-        }`}
+        className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
       >
         <div className="flex items-center gap-2">
           <LuBrain className="h-5 w-5 opacity-70" aria-hidden="true" />

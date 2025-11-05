@@ -13,16 +13,30 @@ import remarkGfm from 'remark-gfm'
 
 /**
  * Converts HTML tags to markdown equivalents for safe rendering
+ * Preserves code blocks and inline code to avoid breaking HTML examples
  */
 function preprocessHtmlToMarkdown(content: string): string {
-  let processed = content
+  // Extract code blocks and inline code to protect them
+  const codeBlocks: string[] = []
+  const inlineCode: string[] = []
 
+  // Protect fenced code blocks (```...```)
+  let processed = content.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlocks.push(match)
+    return `__CODE_BLOCK_${codeBlocks.length - 1}__`
+  })
+
+  // Protect inline code (`...`)
+  processed = processed.replace(/`[^`]+`/g, (match) => {
+    inlineCode.push(match)
+    return `__INLINE_CODE_${inlineCode.length - 1}__`
+  })
+
+  // Now safely convert HTML to markdown in non-code content
   // Convert <a href="url">text</a> to [text](url)
-  // This handles various formats: href="url", href='url', and additional attributes
   processed = processed.replace(
     /<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["'][^>]*>([^<]*)<\/a>/gi,
     (match, url, text) => {
-      // If text is empty, use the URL as text
       const linkText = text.trim() || url
       return `[${linkText}](${url})`
     },
@@ -33,9 +47,20 @@ function preprocessHtmlToMarkdown(content: string): string {
   processed = processed.replace(/<strong>([^<]*)<\/strong>/gi, '**$1**')
 
   // Convert <br>, <br/>, and </br> to markdown line breaks
-  // Using double space + newline for proper markdown rendering
   processed = processed.replace(/<br\s*\/?>/gi, '  \n')
   processed = processed.replace(/<\/br>/gi, '  \n')
+
+  // Restore inline code first (they might be inside code blocks)
+  processed = processed.replace(
+    /__INLINE_CODE_(\d+)__/g,
+    (_, index) => inlineCode[parseInt(index)],
+  )
+
+  // Restore code blocks
+  processed = processed.replace(
+    /__CODE_BLOCK_(\d+)__/g,
+    (_, index) => codeBlocks[parseInt(index)],
+  )
 
   return processed
 }
