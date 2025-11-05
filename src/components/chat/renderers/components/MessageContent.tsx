@@ -12,9 +12,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 /**
- * Converts HTML tags to markdown equivalents for better rendering
- * Note: We keep some HTML tags (like <b>, <a>) as-is since rehype-raw handles them,
- * but we convert them to markdown for consistency and better processing
+ * Converts HTML tags to markdown equivalents for safe rendering
  */
 function preprocessHtmlToMarkdown(content: string): string {
   let processed = content
@@ -63,48 +61,39 @@ function useMathPlugins() {
         import('remark-math'),
         import('rehype-katex'),
         import('remark-breaks'),
-        import('rehype-raw'),
       ])
-        .then(
-          ([remarkMathMod, rehypeKatexMod, remarkBreaksMod, rehypeRawMod]) => {
-            setPlugins({
-              remarkPlugins: [
-                [
-                  remarkMathMod.default,
-                  {
-                    singleDollarTextMath: false,
-                  },
-                ],
-                remarkGfm,
-                remarkBreaksMod.default,
-              ] as any[],
-              rehypePlugins: [
-                rehypeRawMod.default,
-                [
-                  rehypeKatexMod.default,
-                  {
-                    throwOnError: false,
-                    strict: false,
-                    output: 'htmlAndMathml',
-                    errorColor: TINFOIL_COLORS.utility.destructive,
-                    trust: false,
-                  },
-                ],
-              ] as any[],
-            })
-          },
-        )
+        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
+          setPlugins({
+            remarkPlugins: [
+              [
+                remarkMathMod.default,
+                {
+                  singleDollarTextMath: false,
+                },
+              ],
+              remarkGfm,
+              remarkBreaksMod.default,
+            ] as any[],
+            rehypePlugins: [
+              [
+                rehypeKatexMod.default,
+                {
+                  throwOnError: false,
+                  strict: false,
+                  output: 'htmlAndMathml',
+                  errorColor: TINFOIL_COLORS.utility.destructive,
+                  trust: false,
+                },
+              ],
+            ] as any[],
+          })
+        })
         .catch((error) => {
           logError('Failed to load markdown plugins', error, {
             component: 'MessageContent',
             action: 'loadPlugins',
             metadata: {
-              plugins: [
-                'remark-math',
-                'rehype-katex',
-                'remark-breaks',
-                'rehype-raw',
-              ],
+              plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
             },
           })
         })
