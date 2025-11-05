@@ -76,31 +76,47 @@ export async function processStreamingResponse(
   // Use the starting chat ID passed from context (captured before async operations)
   const startingChatId = ctx.startingChatId
 
+  // Track whether the server ID has been assigned during this stream
+  let serverIdAssigned = false
+  let expectedServerId: string | null = null
+
   // Helper to check if we're still in the same chat (accounting for temp ID swaps)
   const isSameChat = () => {
     const currentId = ctx.currentChatIdRef.current
-    const originalId = ctx.updatedChat.id
 
-    // If IDs match exactly, we're in the same chat
-    if (currentId === originalId) {
+    // If current ID matches starting ID exactly, we're in the same chat
+    if (currentId === startingChatId) {
       return true
     }
 
-    // Handle temp ID transitions:
-    // - startingChatId is captured at the beginning of streaming
-    // - originalId is from ctx.updatedChat.id (may not update during streaming)
-    // - currentId is from currentChatIdRef (gets updated when server ID arrives)
-    //
-    // Allow updates if:
-    // 1. We started with the original temp ID (originalId === startingChatId)
-    // 2. OR currentId matches startingChatId (no ID change yet)
-    // This ensures streaming continues even after currentId changes to server ID
+    // Handle temp ID transitions to server ID:
+    // When a temp chat gets a server ID, currentId changes from temp-xxx to the server ID
+    // We need to detect this transition and track the new server ID
     if (startingChatId.startsWith('temp-')) {
-      return originalId === startingChatId || currentId === startingChatId
+      // First time seeing a non-temp ID, record it as the expected server ID
+      if (!serverIdAssigned && !currentId.startsWith('temp-') && currentId) {
+        serverIdAssigned = true
+        expectedServerId = currentId
+      }
+
+      // If we've recorded a server ID, only accept that specific ID
+      if (serverIdAssigned && expectedServerId) {
+        return currentId === expectedServerId
+      }
+
+      // If current ID is a different temp chat or empty, user navigated away
+      if (currentId.startsWith('temp-') || !currentId) {
+        return false
+      }
+
+      // Haven't assigned server ID yet, but current is a server ID - this might be the transition
+      // However, we can't be sure, so we need to be conservative
+      // Only accept if it's the first non-temp ID we're seeing
+      return !serverIdAssigned
     }
 
-    // For non-temp starting IDs, require exact match
-    return currentId === startingChatId
+    // For non-temp starting IDs, we've already checked exact match above
+    return false
   }
 
   try {
