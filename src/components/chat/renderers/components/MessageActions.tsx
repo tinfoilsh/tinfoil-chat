@@ -58,7 +58,7 @@ export const MessageActions = memo(function MessageActions({
   }
 
   return (
-    <div className="mt-1 px-4">
+    <div className="mb-2 mt-1 px-4">
       <button
         type="button"
         onClick={handleCopy}
