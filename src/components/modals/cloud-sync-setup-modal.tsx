@@ -1,6 +1,7 @@
 import { useToast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { TINFOIL_COLORS } from '@/theme/colors'
+import { setCloudSyncEnabled as persistCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { Dialog, Transition } from '@headlessui/react'
 import {
@@ -56,16 +57,14 @@ export function CloudSyncSetupModal({
   const handleEnableToggle = (enabled: boolean) => {
     setCloudSyncEnabled(enabled)
     if (!enabled) {
-      localStorage.setItem('cloudSyncEnabled', 'false')
-      window.dispatchEvent(new Event('cloudSyncSettingChanged'))
+      persistCloudSyncEnabled(false)
       onClose()
     }
   }
 
   const handleMaybeLater = () => {
-    localStorage.setItem('cloudSyncEnabled', 'false')
+    persistCloudSyncEnabled(false)
     localStorage.setItem('hasSeenCloudSyncModal', 'true')
-    window.dispatchEvent(new Event('cloudSyncSettingChanged'))
     onClose()
   }
 
@@ -83,6 +82,7 @@ export function CloudSyncSetupModal({
       await encryptionService.setKey(newKey)
       setGeneratedKey(newKey)
       setCloudSyncEnabled(true)
+      persistCloudSyncEnabled(true)
 
       logInfo('Generated new encryption key for cloud sync', {
         component: 'CloudSyncSetupModal',
@@ -119,6 +119,7 @@ export function CloudSyncSetupModal({
     try {
       await encryptionService.setKey(inputKey)
       setCloudSyncEnabled(true)
+      persistCloudSyncEnabled(true)
       localStorage.setItem('hasSeenCloudSyncModal', 'true')
 
       logInfo('Restored encryption key for cloud sync', {
