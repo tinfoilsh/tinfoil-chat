@@ -51,7 +51,7 @@
     "remark-math": "^6.0.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "tinfoil": "^0.10.0",
+    "tinfoil": "^0.10.9",
     "uuid": "^11.0.3"
   },
   "devDependencies": {

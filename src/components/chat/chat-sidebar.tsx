@@ -848,8 +848,8 @@ export function ChatSidebar({
                   className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'cloud'
                       ? isDarkMode
-                        ? 'bg-surface-chat text-content-primary shadow-sm'
-                        : 'bg-white text-content-primary shadow-sm'
+                        ? 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-white shadow-sm'
+                        : 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary shadow-sm'
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
@@ -867,8 +867,8 @@ export function ChatSidebar({
                   className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'local'
                       ? isDarkMode
-                        ? 'bg-surface-chat text-content-primary shadow-sm'
-                        : 'bg-white text-content-primary shadow-sm'
+                        ? 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-white shadow-sm'
+                        : 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary shadow-sm'
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
@@ -1414,12 +1414,12 @@ function DeleteConfirmation({
           duration: 0.15,
         },
       }}
-      className="absolute inset-0 z-50 flex gap-2 rounded-lg bg-surface-sidebar p-2 shadow-lg"
+      className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg"
     >
       <button
         className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
           isDarkMode
-            ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+            ? 'bg-surface-sidebar text-content-inverse hover:bg-surface-sidebar/90'
             : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
         }`}
         onClick={(e) => {

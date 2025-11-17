@@ -45,19 +45,21 @@ export class ChatPersistenceManager {
   async save(chat: Chat, skipCloudSync = false): Promise<Chat> {
     const existingQueue = this.saveQueues.get(chat.id) || Promise.resolve(chat)
 
-    const savePromise = existingQueue.then(async () => {
-      try {
-        const savedChat = await saveChat(chat, this.isSignedIn, skipCloudSync)
-        return savedChat
-      } catch (error) {
-        logError('Failed to save chat', error, {
-          component: 'ChatPersistenceManager',
-          action: 'save',
-          metadata: { chatId: chat.id },
-        })
-        throw error
-      }
-    })
+    const savePromise = existingQueue
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const savedChat = await saveChat(chat, this.isSignedIn, skipCloudSync)
+          return savedChat
+        } catch (error) {
+          logError('Failed to save chat', error, {
+            component: 'ChatPersistenceManager',
+            action: 'save',
+            metadata: { chatId: chat.id },
+          })
+          throw error
+        }
+      })
 
     this.saveQueues.set(chat.id, savePromise)
 
