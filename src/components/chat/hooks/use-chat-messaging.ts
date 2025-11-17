@@ -660,6 +660,18 @@ export function useChatMessaging({
                     title: generatedTitle,
                     id: chatId,
                   }
+
+                  // Update state immediately with the new title
+                  setCurrentChat((prev) =>
+                    prev.id === chatId
+                      ? { ...prev, title: generatedTitle }
+                      : prev,
+                  )
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === chatId ? { ...c, title: generatedTitle } : c,
+                    ),
+                  )
                 }
               } else {
                 logWarning('No free model found for title generation', {
