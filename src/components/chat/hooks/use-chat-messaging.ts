@@ -140,8 +140,8 @@ export function useChatMessaging({
             model.paid === false,
         )
 
-        // Use first free model if found, otherwise fallback to default
-        return firstFreeModel?.modelName || CONSTANTS.DEFAULT_MODEL
+        // Use first free model if found, otherwise fallback to selected model as last resort
+        return firstFreeModel?.modelName || selectedModel
       })()
     : selectedModel
 

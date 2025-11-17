@@ -2,7 +2,6 @@ import { isModelNameAvailable, type BaseModel } from '@/app/config/models'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
-import { CONSTANTS } from '../constants'
 import type { AIModel, LabelType } from '../types'
 
 interface UseModelManagementProps {
@@ -35,7 +34,7 @@ export function useModelManagement({
   storeHistory,
   subscriptionLoading = false,
 }: UseModelManagementProps): UseModelManagementReturn {
-  // Model state - initialize with saved model or temporary default
+  // Model state - initialize with saved model or empty string as placeholder
   const [selectedModel, setSelectedModel] = useState<AIModel>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('selectedModel')
@@ -43,9 +42,8 @@ export function useModelManagement({
         return saved as AIModel
       }
     }
-    // Use DEFAULT_MODEL only as a temporary placeholder
-    // It will be replaced with the first available model from config
-    return CONSTANTS.DEFAULT_MODEL
+    // Empty string will be replaced with first available model from config
+    return ''
   })
 
   // Track if we've validated against the loaded models
@@ -95,7 +93,8 @@ export function useModelManagement({
       }
 
       // Determine the best model for this user
-      let targetModel: AIModel = selectedModel
+      let targetModel: AIModel =
+        selectedModel || (availableChatModels[0].modelName as AIModel)
 
       // For premium users, always prefer premium models
       if (isPremium) {
@@ -138,7 +137,10 @@ export function useModelManagement({
         }
       } else {
         // For free users, validate current model or use first available
-        if (!isModelNameAvailable(selectedModel, models, isPremium)) {
+        if (
+          !selectedModel ||
+          !isModelNameAvailable(selectedModel, models, isPremium)
+        ) {
           targetModel = availableChatModels[0].modelName as AIModel
         }
       }
