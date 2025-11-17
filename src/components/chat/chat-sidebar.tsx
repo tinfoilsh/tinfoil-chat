@@ -11,6 +11,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import { CiFloppyDisk } from 'react-icons/ci'
 import { CONSTANTS } from './constants'
 
 import { cn } from '@/components/ui/utils'
@@ -1364,9 +1365,10 @@ function ChatListItem({
             </div>
             {(chat as any).isLocalOnly ? (
               <span
-                className="rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
+                className="flex items-center gap-1 rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
                 title="This chat is stored locally and won't sync to cloud"
               >
+                <CiFloppyDisk className="h-3 w-3 flex-shrink-0" />
                 local
               </span>
             ) : !chat.isBlankChat && (chat as any).pendingSave ? (

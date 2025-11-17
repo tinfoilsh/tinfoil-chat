@@ -294,6 +294,9 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   removeDocument={removeDocument}
                   isPremium={isPremium}
                   hasMessages={false}
+                  audioModel={
+                    models?.find((m) => m.type === 'audio')?.modelName
+                  }
                 />
               </motion.div>
             )}
