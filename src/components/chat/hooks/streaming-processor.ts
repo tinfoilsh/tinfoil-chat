@@ -329,20 +329,23 @@ export async function processStreamingResponse(
                 isThinking: false,
                 thinkingDuration,
               }
+              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+                scheduleStreamingUpdate()
+              }
+              continue
             } else if (reasoningContent) {
               assistantMessage = {
                 ...assistantMessage,
                 thoughts: thoughtsBuffer,
                 isThinking: isInThinkingMode,
               }
+              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+                scheduleStreamingUpdate()
+              }
+              continue
             }
-            if (
-              (reasoningContent || content) &&
-              ctx.currentChatIdRef.current === ctx.updatedChat.id
-            ) {
-              scheduleStreamingUpdate()
-            }
-            if (!content) continue
+            // If we have content but no reasoningContent and not in thinking mode,
+            // fall through to the content handling block below
           }
 
           if (isUsingReasoningFormat && content) {
@@ -459,18 +462,6 @@ export async function processStreamingResponse(
                       )
                     }
                   }
-                } else {
-                  // Non-thinking content in first chunk - add it to the message
-                  if (content) {
-                    assistantMessage = {
-                      ...assistantMessage,
-                      content: (assistantMessage.content || '') + content,
-                      isThinking: false,
-                    }
-                    if (isSameChat()) {
-                      scheduleStreamingUpdate()
-                    }
-                  }
                 }
                 if (
                   typeof window !== 'undefined' &&
@@ -484,7 +475,6 @@ export async function processStreamingResponse(
                     ctx.setIsWaitingForResponse(false)
                   }, 16)
                 }
-                continue // Prevent falling through to duplicate content processing
               } else {
                 continue
               }
