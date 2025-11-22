@@ -111,10 +111,6 @@ export const getAIModels = async (
       component: 'getAIModels',
       metadata: { isPremiumUser },
     })
-    // Return empty array as fallback (with Dev model in development)
-    if (isLocalDev) {
-      return [DEV_SIMULATOR_MODEL]
-    }
     return []
   }
 }

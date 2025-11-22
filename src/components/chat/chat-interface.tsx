@@ -916,20 +916,21 @@ export function ChatInterface({
   // Show error state if no models are available (configuration error)
   if (!isLoadingConfig && models.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface-chat-background">
-        <div className="text-center">
-          <div className="mb-2 text-xl text-red-500">⚠️</div>
-          <h2 className="mb-2 text-lg font-semibold text-content-primary">
-            Configuration Error
+      <div className="flex h-screen items-center justify-center bg-surface-chat-background px-4 font-aeonik">
+        <div className="max-w-md text-center">
+          <div className="mb-6 text-7xl">:(</div>
+          <h2 className="mb-3 text-xl font-semibold text-content-primary">
+            Something went wrong
           </h2>
-          <p className="mb-4 text-content-secondary">
-            No models are available. Please check the API configuration.
+          <p className="mb-6 text-content-secondary">
+            Tinfoil Chat is experiencing some technical difficulties. We&apos;re
+            working on resolving it. Please try again later.
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="rounded-lg bg-brand-accent-dark px-4 py-2 text-content-inverse hover:bg-brand-accent-dark/90"
+            className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-content-inverse transition-colors hover:bg-brand-accent-dark/90"
           >
-            Refresh Page
+            Try Again
           </button>
         </div>
       </div>
