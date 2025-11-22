@@ -459,6 +459,18 @@ export async function processStreamingResponse(
                       )
                     }
                   }
+                } else {
+                  // Non-thinking content in first chunk - add it to the message
+                  if (content) {
+                    assistantMessage = {
+                      ...assistantMessage,
+                      content: (assistantMessage.content || '') + content,
+                      isThinking: false,
+                    }
+                    if (isSameChat()) {
+                      scheduleStreamingUpdate()
+                    }
+                  }
                 }
                 if (
                   typeof window !== 'undefined' &&
@@ -472,6 +484,7 @@ export async function processStreamingResponse(
                     ctx.setIsWaitingForResponse(false)
                   }, 16)
                 }
+                continue // Prevent falling through to duplicate content processing
               } else {
                 continue
               }
