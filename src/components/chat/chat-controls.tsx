@@ -101,7 +101,7 @@ export function ChatControls({
                   ? isDarkMode
                     ? '/model-icons/openai-dark.png'
                     : '/model-icons/openai-light.png'
-                  : model.image
+                  : `/model-icons/${model.image}`
               }
               alt={model.name}
               className="h-5 w-5"
