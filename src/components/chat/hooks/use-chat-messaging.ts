@@ -629,22 +629,16 @@ export function useChatMessaging({
               },
             })
             try {
-              const freeModel = models.find(
-                (m) =>
-                  m.type === 'chat' &&
-                  m.chat === true &&
-                  m.paid === false &&
-                  m.modelName !== 'dev-simulator',
-              )
+              const titleModel = models.find((m) => m.type === 'title')
 
-              if (freeModel) {
+              if (titleModel) {
                 const titleMessages = finalMessages.map((msg) => ({
                   role: msg.role,
                   content: msg.content || '',
                 }))
                 const generatedTitle = await generateTitle(
                   titleMessages,
-                  freeModel.modelName,
+                  titleModel.modelName,
                 )
                 if (generatedTitle && generatedTitle !== 'Untitled') {
                   logInfo('[handleQuery] Title generated successfully', {
@@ -674,7 +668,7 @@ export function useChatMessaging({
                   )
                 }
               } else {
-                logWarning('No free model found for title generation', {
+                logWarning('No title model found for title generation', {
                   component: 'useChatMessaging',
                   action: 'generateTitle',
                 })

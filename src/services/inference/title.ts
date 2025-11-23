@@ -4,10 +4,10 @@ import { getTinfoilClient } from './tinfoil-client'
 
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
-  freeModelName?: string,
+  titleModelName?: string,
 ): Promise<string> {
   if (!messages || messages.length === 0) return 'Untitled'
-  if (!freeModelName) return 'Untitled'
+  if (!titleModelName) return 'Untitled'
 
   try {
     const conversationForTitle = messages
@@ -18,7 +18,7 @@ export async function generateTitle(
     const client = await getTinfoilClient()
 
     const completion = await client.chat.completions.create({
-      model: freeModelName,
+      model: titleModelName,
       messages: [
         { role: 'system', content: CONSTANTS.TITLE_GENERATION_PROMPT },
         {
@@ -41,7 +41,7 @@ export async function generateTitle(
       component: 'title',
       action: 'generateTitle',
       metadata: {
-        modelName: freeModelName,
+        modelName: titleModelName,
       },
     })
     return 'Untitled'
