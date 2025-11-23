@@ -1119,8 +1119,7 @@ function TypingAnimation({
     // Cursor blinking effect
     const cursorInterval = setInterval(() => {
       setShowCursor((prev) => !prev)
-    }, 530)
-
+    }, 424)
     if (phase === 'deleting') {
       // Delete characters one by one
       if (currentText.length > 0) {
@@ -1128,8 +1127,8 @@ function TypingAnimation({
           () => {
             setCurrentText((prev) => prev.slice(0, -1))
           },
-          50 + Math.random() * 30,
-        ) // Vary speed slightly for realism
+          40 + Math.random() * 24,
+        )
       } else {
         // Start typing phase
         setPhase('typing')
@@ -1141,14 +1140,14 @@ function TypingAnimation({
           () => {
             setCurrentText(toText.slice(0, currentText.length + 1))
           },
-          80 + Math.random() * 40,
-        ) // Vary speed slightly for realism
+          64 + Math.random() * 32,
+        )
       } else {
         // Animation complete
         clearInterval(cursorInterval)
         completionTimeoutId = setTimeout(() => {
           onComplete()
-        }, 500) // Show final result for a moment before completing
+        }, 400)
       }
     }
 
