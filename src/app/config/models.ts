@@ -14,7 +14,7 @@ export type BaseModel = {
   contextWindow?: string
   recommendedUse?: string
   supportedLanguages?: string
-  type: 'chat' | 'embedding' | 'audio' | 'tts' | 'document'
+  type: 'chat' | 'embedding' | 'audio' | 'tts' | 'document' | 'title'
   chat?: boolean
   paid?: boolean
   multimodal?: boolean
