@@ -8,11 +8,14 @@ let clientInstance: TinfoilAI | null = null
 let lastApiKey: string | null = null
 let cachedApiKey: string | null = null
 let getTokenFn: (() => Promise<string | null>) | null = null
+let hasSubscriptionFn: (() => boolean) | null = null
 
 export function setAuthTokenGetter(
   getToken: () => Promise<string | null>,
+  hasSubscription?: () => boolean,
 ): void {
   getTokenFn = getToken
+  hasSubscriptionFn = hasSubscription ?? null
   resetTinfoilClient()
 }
 
@@ -32,7 +35,10 @@ async function fetchApiKey(): Promise<string> {
   try {
     const token = await getTokenFn()
     if (!token) {
-      // This is expected when user is not signed in - just use placeholder
+      return PLACEHOLDER_API_KEY
+    }
+
+    if (hasSubscriptionFn && !hasSubscriptionFn()) {
       return PLACEHOLDER_API_KEY
     }
 
