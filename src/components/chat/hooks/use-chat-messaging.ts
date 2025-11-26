@@ -81,10 +81,16 @@ export function useChatMessaging({
   const { getToken, isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
 
+  // Track isPremium in a ref so the subscription checker always has current value
+  const isPremiumRef = useRef(isPremium)
+  useEffect(() => {
+    isPremiumRef.current = isPremium
+  }, [isPremium])
+
   // Initialize r2Storage and tinfoil client with token getter
   useEffect(() => {
     r2Storage.setTokenGetter(getToken)
-    setAuthTokenGetter(getToken)
+    setAuthTokenGetter(getToken, () => isPremiumRef.current)
   }, [getToken])
 
   const [input, setInput] = useState('')
