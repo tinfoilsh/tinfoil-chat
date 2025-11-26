@@ -74,7 +74,7 @@ export class ProfileSyncService {
         headers: await this.getHeaders(),
       })
 
-      if (response.status === 404) {
+      if (response.status === 401 || response.status === 404) {
         return null
       }
 
@@ -203,6 +203,10 @@ export class ProfileSyncService {
           data: JSON.stringify(encrypted),
         }),
       })
+
+      if (response.status === 401) {
+        return { success: false }
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to save profile: ${response.statusText}`)
