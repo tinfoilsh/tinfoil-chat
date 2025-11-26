@@ -20,6 +20,11 @@ export function setAuthTokenGetter(
 }
 
 async function fetchApiKey(): Promise<string> {
+  if (hasSubscriptionFn && !hasSubscriptionFn()) {
+    cachedApiKey = null
+    return PLACEHOLDER_API_KEY
+  }
+
   if (cachedApiKey) {
     return cachedApiKey
   }
@@ -35,10 +40,6 @@ async function fetchApiKey(): Promise<string> {
   try {
     const token = await getTokenFn()
     if (!token) {
-      return PLACEHOLDER_API_KEY
-    }
-
-    if (hasSubscriptionFn && !hasSubscriptionFn()) {
       return PLACEHOLDER_API_KEY
     }
 
