@@ -64,7 +64,6 @@ export function UrlHashMessageHandler({
           })
 
           hasProcessed.current = true
-
           onMessageReady(decodedMessage)
 
           window.history.replaceState(
