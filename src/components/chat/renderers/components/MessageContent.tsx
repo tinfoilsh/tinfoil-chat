@@ -7,6 +7,7 @@ import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
+import { sanitizeUrl } from '@braintree/sanitize-url'
 import { memo, useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -278,10 +279,11 @@ export const MessageContent = memo(function MessageContent({
           )
         },
         a({ children, href, ...props }: any) {
+          const sanitizedHref = sanitizeUrl(href)
           return (
             <a
               {...props}
-              href={href}
+              href={sanitizedHref}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-500 underline hover:text-blue-600"
