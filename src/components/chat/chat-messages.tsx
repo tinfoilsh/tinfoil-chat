@@ -269,7 +269,7 @@ export function ChatMessages({
     return <div className="h-full"></div>
   }
 
-  if (messages.length === 0) {
+  if (messages.length === 0 && !isWaitingForResponse) {
     return (
       <div className="flex w-full flex-1 items-center justify-center">
         <div className="w-full max-w-4xl px-8">
