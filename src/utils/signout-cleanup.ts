@@ -131,16 +131,7 @@ export async function performSignoutCleanup(): Promise<void> {
   }
 }
 
-export function hasEncryptionKey(): boolean {
-  if (typeof window === 'undefined') return false
-  return !!localStorage.getItem('tinfoil-encryption-key')
-}
-
 export function getEncryptionKey(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('tinfoil-encryption-key')
-}
-
-export function redirectToHome(): void {
-  window.location.href = '/'
 }
