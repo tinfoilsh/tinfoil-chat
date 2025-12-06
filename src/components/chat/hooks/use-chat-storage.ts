@@ -103,12 +103,24 @@ export function useChatStorage({
         // Check if current non-blank chat still exists in loaded chats
         const currentChatExists = loadedChats.some((c) => c.id === prev.id)
 
-        // If current chat was deleted, switch to first available chat
-        // BUT: Don't switch if the chat is pending save or has a temp ID (still being created)
+        // Don't switch away from current chat if:
+        // 1. Chat doesn't exist in loaded chats (was deleted or not yet saved)
+        // 2. BUT it has a temp ID (still being created/saved)
+        // 3. OR it's marked as pending save
+        // 4. OR it's actively streaming
         const isTempChat = prev.id.startsWith('temp-')
         const isPendingSave = prev.pendingSave === true
+        const lastMessage = prev.messages[prev.messages.length - 1]
+        const isStreaming =
+          lastMessage?.role === 'assistant' &&
+          (lastMessage.isThinking || !lastMessage.content)
 
-        if (!currentChatExists && !isTempChat && !isPendingSave) {
+        if (
+          !currentChatExists &&
+          !isTempChat &&
+          !isPendingSave &&
+          !isStreaming
+        ) {
           const cloudBlank = createBlankChat(false)
           const localBlank = createBlankChat(true)
           const finalChats = sortChats([
@@ -118,14 +130,6 @@ export function useChatStorage({
           ])
           return finalChats.length > 0 ? finalChats[0] : prev
         }
-
-        // Don't update if actively streaming
-        const lastMessage = prev.messages[prev.messages.length - 1]
-        const isStreaming =
-          lastMessage?.role === 'assistant' &&
-          (lastMessage.isThinking || !lastMessage.content)
-
-        if (isStreaming) return prev
 
         // Update current chat if it was modified and is not a blank chat
         if (!prev.isBlankChat) {
