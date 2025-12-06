@@ -32,22 +32,46 @@ export function UrlHashMessageHandler({
         try {
           const decodedMessage = atob(encodedMessage)
 
-          if (decodedMessage) {
-            logInfo('Processing message from URL hash', {
-              component: 'UrlHashMessageHandler',
-              metadata: { messageLength: decodedMessage.length },
-            })
-
-            hasProcessed.current = true
-
-            onMessageReady(decodedMessage)
-
-            window.history.replaceState(
-              null,
-              '',
-              window.location.pathname + window.location.search,
-            )
+          if (!decodedMessage) {
+            return
           }
+
+          const maxMessageLength = 50000
+          if (decodedMessage.length > maxMessageLength) {
+            logWarning('URL hash message exceeds maximum length', {
+              component: 'UrlHashMessageHandler',
+              metadata: {
+                messageLength: decodedMessage.length,
+                maxLength: maxMessageLength,
+              },
+            })
+            return
+          }
+
+          const hasControlChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(
+            decodedMessage,
+          )
+          if (hasControlChars) {
+            logWarning('URL hash message contains invalid control characters', {
+              component: 'UrlHashMessageHandler',
+            })
+            return
+          }
+
+          logInfo('Processing message from URL hash', {
+            component: 'UrlHashMessageHandler',
+            metadata: { messageLength: decodedMessage.length },
+          })
+
+          hasProcessed.current = true
+
+          onMessageReady(decodedMessage)
+
+          window.history.replaceState(
+            null,
+            '',
+            window.location.pathname + window.location.search,
+          )
         } catch (decodeError) {
           logWarning('Invalid base64 encoding in URL hash', {
             component: 'UrlHashMessageHandler',

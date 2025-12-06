@@ -11,6 +11,7 @@
     "find-unused": "ts-unused-exports tsconfig.json"
   },
   "dependencies": {
+    "@braintree/sanitize-url": "^7.1.1",
     "@clerk/nextjs": "^6.21.0",
     "@headlessui/react": "^2.1.1",
     "@heroicons/react": "^2.1.4",
