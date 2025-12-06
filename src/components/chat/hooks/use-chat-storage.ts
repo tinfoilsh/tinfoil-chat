@@ -104,7 +104,11 @@ export function useChatStorage({
         const currentChatExists = loadedChats.some((c) => c.id === prev.id)
 
         // If current chat was deleted, switch to first available chat
-        if (!currentChatExists) {
+        // BUT: Don't switch if the chat is pending save or has a temp ID (still being created)
+        const isTempChat = prev.id.startsWith('temp-')
+        const isPendingSave = prev.pendingSave === true
+
+        if (!currentChatExists && !isTempChat && !isPendingSave) {
           const cloudBlank = createBlankChat(false)
           const localBlank = createBlankChat(true)
           const finalChats = sortChats([
