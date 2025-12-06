@@ -95,32 +95,22 @@ export function useChatStorage({
 
       // Update current chat if needed
       setCurrentChat((prev) => {
-        // If current chat is a blank chat, keep it as is
+        // Preserve blank chats as-is
         if (prev.isBlankChat) {
           return prev
         }
 
-        // Check if current non-blank chat still exists in loaded chats
+        // Preserve current chat if it has messages (handles session/temp/URL hash chats)
+        const hasMessages = prev.messages.length > 0
+        if (hasMessages) {
+          return prev
+        }
+
+        // Check if current chat exists in loaded chats
         const currentChatExists = loadedChats.some((c) => c.id === prev.id)
 
-        // Don't switch away from current chat if:
-        // 1. Chat doesn't exist in loaded chats (was deleted or not yet saved)
-        // 2. BUT it has a temp ID (still being created/saved)
-        // 3. OR it's marked as pending save
-        // 4. OR it's actively streaming
-        const isTempChat = prev.id.startsWith('temp-')
-        const isPendingSave = prev.pendingSave === true
-        const lastMessage = prev.messages[prev.messages.length - 1]
-        const isStreaming =
-          lastMessage?.role === 'assistant' &&
-          (lastMessage.isThinking || !lastMessage.content)
-
-        if (
-          !currentChatExists &&
-          !isTempChat &&
-          !isPendingSave &&
-          !isStreaming
-        ) {
+        // Only reset to a different chat if it doesn't exist AND has no messages
+        if (!currentChatExists) {
           const cloudBlank = createBlankChat(false)
           const localBlank = createBlankChat(true)
           const finalChats = sortChats([
@@ -189,7 +179,11 @@ export function useChatStorage({
         const finalChats = sortChats([cloudBlank, localBlank, ...nonBlankChats])
 
         setChats(finalChats)
-        setCurrentChat(finalChats[0]) // Start with the cloud blank chat
+
+        // Preserve current chat if it has messages (e.g., from URL hash)
+        setCurrentChat((prev) =>
+          prev.messages.length > 0 ? prev : finalChats[0],
+        )
       } catch (error) {
         logError('Failed to load initial chats', error, {
           component: 'useChatStorage',
