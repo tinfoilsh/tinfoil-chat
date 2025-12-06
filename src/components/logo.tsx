@@ -21,24 +21,3 @@ export function Logo({
     />
   )
 }
-
-export function Mark({
-  className,
-  dark,
-}: {
-  className?: string
-  dark?: boolean
-}) {
-  return (
-    <Image
-      src="/icon.png"
-      alt="Tinfoil Icon"
-      width={34}
-      height={34}
-      className={clsx(className, {
-        'brightness-0 invert': dark,
-      })}
-      priority
-    />
-  )
-}
