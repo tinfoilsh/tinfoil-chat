@@ -300,7 +300,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 children?: React.ReactNode
               }) =>
                 inline ? (
-                  <code className="break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 font-mono text-xs text-content-primary">
+                  <code className="inline break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 align-baseline font-mono text-xs text-content-primary">
                     {children}
                   </code>
                 ) : (
