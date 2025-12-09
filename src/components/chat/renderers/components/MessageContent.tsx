@@ -165,7 +165,7 @@ export const MessageContent = memo(function MessageContent({
           if (props.inline) {
             return (
               <code
-                className={`${className || ''} bg-surface-secondary break-words rounded px-1.5 py-0.5 font-mono text-sm text-content-primary`}
+                className={`${className || ''} bg-surface-secondary inline break-words rounded px-1.5 py-0.5 align-baseline font-mono text-sm text-content-primary`}
                 {...props}
               >
                 {children}
@@ -286,7 +286,7 @@ export const MessageContent = memo(function MessageContent({
               href={sanitizedHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-500 underline hover:text-blue-600"
+              className="inline align-baseline text-blue-500 underline hover:text-blue-600"
             >
               {children}
             </a>
@@ -294,14 +294,14 @@ export const MessageContent = memo(function MessageContent({
         },
         strong({ children, ...props }: any) {
           return (
-            <strong {...props} className="font-semibold">
+            <strong {...props} className="inline align-baseline font-semibold">
               {children}
             </strong>
           )
         },
         b({ children, ...props }: any) {
           return (
-            <b {...props} className="font-semibold">
+            <b {...props} className="inline align-baseline font-semibold">
               {children}
             </b>
           )
