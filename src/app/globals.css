@@ -95,10 +95,12 @@
 .prose code {
   word-break: break-word;
   color: hsl(var(--content-primary)) !important;
+  vertical-align: baseline !important;
 }
 
 .dark .prose code {
   color: hsl(var(--content-primary)) !important;
+  vertical-align: baseline !important;
 }
 
 /* Tables should scroll horizontally when needed */
@@ -162,10 +164,16 @@
 
 .prose strong {
   color: hsl(var(--content-primary)) !important;
+  vertical-align: baseline !important;
 }
 
 .prose em {
   color: hsl(var(--content-primary)) !important;
+  vertical-align: baseline !important;
+}
+
+.prose a {
+  vertical-align: baseline !important;
 }
 
 .prose table {
@@ -234,10 +242,16 @@
 
 .dark .prose strong {
   color: hsl(var(--content-primary)) !important;
+  vertical-align: baseline !important;
 }
 
 .dark .prose em {
   color: hsl(var(--content-primary)) !important;
+  vertical-align: baseline !important;
+}
+
+.dark .prose a {
+  vertical-align: baseline !important;
 }
 
 .dark .prose table {
