@@ -33,7 +33,7 @@
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "ehbp": "^0.0.6",
+    "ehbp": "^0.0.7",
     "framer-motion": "^11.18.2",
     "jszip": "^3.10.1",
     "katex": "^0.16.22",
