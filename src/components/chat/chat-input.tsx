@@ -631,7 +631,7 @@ export function ChatInput({
           }}
           placeholder={hasMessages ? 'Reply to Tin...' : "What's on your mind?"}
           rows={1}
-          className="w-full resize-none overflow-y-auto bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
+          className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
           style={{
             minHeight: '28px',
             maxHeight: '240px',
