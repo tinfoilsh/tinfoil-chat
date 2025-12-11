@@ -317,7 +317,7 @@ export function ChatInput({
     <div className="flex flex-col gap-2">
       <div
         className={cn(
-          'rounded-2xl border border-border-subtle bg-surface-chat p-4 shadow-lg transition-colors',
+          'rounded-xl border border-border-subtle bg-surface-chat p-4 shadow-md transition-colors',
           isDragOver && 'ring-2 ring-emerald-400/60',
         )}
         onDragOver={handleDragOver}
