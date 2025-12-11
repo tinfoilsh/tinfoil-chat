@@ -1,3 +1,4 @@
+import '@/app/globals.css'
 import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/tailwind.css'

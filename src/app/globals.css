@@ -1,18 +1,16 @@
-@layer base {
-  /* Use dynamic viewport units for better mobile handling */
-  .h-dvh {
-    height: 100dvh;
-  }
+/* Use dynamic viewport units for better mobile handling */
+.h-dvh {
+  height: 100dvh;
+}
 
-  /* Safe area padding for mobile browsers */
+/* Safe area padding for mobile browsers */
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+}
+
+@media (min-width: 768px) {
   .pb-safe {
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
-  }
-
-  @media (min-width: 768px) {
-    .pb-safe {
-      padding-bottom: 0;
-    }
+    padding-bottom: 0;
   }
 }
 
@@ -91,16 +89,44 @@
   white-space: pre;
 }
 
-/* Ensure inline code wraps and has consistent color */
-.prose code {
+/* Inline code styling - override typography plugin defaults */
+/* Only target inline code, not code blocks (which are inside <pre>) */
+.prose :not(pre) > code {
   word-break: break-word;
   color: hsl(var(--content-primary)) !important;
   vertical-align: baseline !important;
+  background-color: hsl(var(--muted)) !important;
+  padding: 0.25rem 0.375rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.875rem !important;
+  font-family:
+    'Aeonik Fono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace !important;
 }
 
-.dark .prose code {
+/* Remove decorative backticks added by typography plugin */
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after {
+  content: '' !important;
+  display: none !important;
+}
+
+.dark .prose :not(pre) > code {
   color: hsl(var(--content-primary)) !important;
   vertical-align: baseline !important;
+  background-color: hsl(var(--muted)) !important;
+  padding: 0.25rem 0.375rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.875rem !important;
+  font-family:
+    'Aeonik Fono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace !important;
+}
+
+.dark .prose :not(pre) > code::before,
+.dark .prose :not(pre) > code::after {
+  content: '' !important;
+  display: none !important;
 }
 
 /* Tables should scroll horizontally when needed */
