@@ -38,6 +38,7 @@ export const VerificationStatusDisplay = memo(
     isCompact = false,
   }: VerificationStatusDisplayProps) {
     const [isAnimating, setIsAnimating] = useState(false)
+    const [isExpanded, setIsExpanded] = useState(false)
 
     // Convert verification document to steps
     const steps: VerificationStep[] = []
@@ -158,19 +159,25 @@ export const VerificationStatusDisplay = memo(
 
     // Compact mode for inline display
     if (isCompact) {
+      const handleToggle = () => {
+        if (isComplete) {
+          setIsExpanded(!isExpanded)
+        } else {
+          onOpenVerifier()
+        }
+      }
+
       return (
         <motion.div
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent"
         >
           <button
-            onClick={onOpenVerifier}
-            className={`group transition-opacity hover:opacity-100 ${
-              isLoading ? 'opacity-100' : 'opacity-70'
-            }`}
+            onClick={handleToggle}
+            className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors"
           >
-            {/* Compact Header Only */}
             <div className="flex items-center gap-2">
               {hasError ? (
                 <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
@@ -190,7 +197,7 @@ export const VerificationStatusDisplay = memo(
                   }}
                 >
                   <ShieldCheckIcon
-                    className={`h-4 w-4 ${
+                    className={`h-5 w-5 ${
                       isComplete
                         ? 'text-emerald-500'
                         : isDarkMode
@@ -201,7 +208,7 @@ export const VerificationStatusDisplay = memo(
                 </motion.div>
               )}
               <span
-                className={`text-xs font-medium ${
+                className={`font-aeonik-fono ${
                   isComplete
                     ? 'text-emerald-500'
                     : hasError
@@ -214,13 +221,64 @@ export const VerificationStatusDisplay = memo(
                 {hasError
                   ? 'Security verification failed'
                   : isComplete
-                    ? 'Security verification succeeded'
+                    ? 'Privacy Verified'
                     : isLoading
-                      ? 'Verifying security...'
+                      ? 'Verifying Security'
                       : 'Verify security →'}
               </span>
             </div>
+            {isComplete && (
+              <svg
+                className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            )}
           </button>
+
+          {isComplete && (
+            <div
+              className="overflow-hidden rounded-b-lg transition-all duration-300 ease-out"
+              style={{
+                maxHeight: isExpanded ? '600px' : '0px',
+              }}
+            >
+              <div className="text-sm text-content-primary">
+                <div className="px-4 pt-3">
+                  <p className="mb-2">
+                    This conversation is private: nobody can see your messages.
+                  </p>
+                  <p className="mb-4">
+                    Each message is end‑to‑end encrypted directly to a secure
+                    hardware enclave where it is processed, and never exposed to
+                    third parties.
+                  </p>
+                </div>
+                <div className="border-t border-border-subtle" />
+                <div className="px-4 pb-4 pt-4">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenVerifier()
+                    }}
+                    className="w-full rounded-lg border border-border-subtle bg-surface-chat-background px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat"
+                  >
+                    See verification proof
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
       )
     }
