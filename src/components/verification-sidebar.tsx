@@ -1,5 +1,6 @@
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
+import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CONSTANTS } from './chat/constants'
 
@@ -121,10 +122,10 @@ export function VerifierSidebar({
       <div
         className={`${
           isOpen ? 'translate-x-0' : 'translate-x-full'
-        } fixed right-0 z-40 flex h-dvh w-[85vw] overflow-hidden border-l border-border-subtle bg-surface-card font-aeonik transition-all duration-200 ease-in-out`}
+        } fixed right-0 top-0 z-40 flex h-full w-[85vw] overflow-hidden border-l border-border-subtle bg-surface-sidebar font-aeonik transition-all duration-200 ease-in-out`}
         style={{ maxWidth: `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px` }}
       >
-        {/* Verification Center iframe - takes full sidebar height */}
+        {/* Verification Center iframe */}
         {isClient && (
           <iframe
             ref={iframeRef}
@@ -134,6 +135,16 @@ export function VerifierSidebar({
             title="Tinfoil Verification Center"
           />
         )}
+
+        {/* Close button overlay */}
+        <div className="absolute right-0 top-0 flex items-center justify-end p-4">
+          <button
+            onClick={() => setIsOpen(false)}
+            className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary shadow-sm transition-all duration-200 hover:bg-surface-chat/80"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Mobile overlay */}
