@@ -178,6 +178,7 @@ export const VerificationStatusDisplay = memo(
           <button
             onClick={handleToggle}
             className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors"
+            aria-expanded={isExpanded}
           >
             <div className="flex items-center gap-2">
               {hasError ? (
