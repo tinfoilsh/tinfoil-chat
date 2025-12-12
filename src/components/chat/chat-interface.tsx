@@ -15,6 +15,7 @@ import {
   PlusIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
+import { PiSpinner } from 'react-icons/pi'
 
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
@@ -905,10 +906,7 @@ export function ChatInterface({
   if (isLoadingConfig) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-chat-background">
-        <div className="relative h-10 w-10">
-          <div className="absolute inset-0 animate-spin rounded-full border-4 border-border-strong border-t-primary"></div>
-          <div className="absolute inset-0 rounded-full border-4 border-border-strong/40"></div>
-        </div>
+        <PiSpinner className="h-10 w-10 animate-spin text-content-secondary" />
       </div>
     )
   }
@@ -1173,26 +1171,7 @@ export function ChatInterface({
             <div className="border-b border-border-subtle bg-surface-chat px-4 py-2 text-content-secondary">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <svg
-                    className="h-4 w-4 animate-spin"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
+                  <PiSpinner className="h-4 w-4 animate-spin text-content-secondary" />
                   <span className="text-sm">
                     Decrypting chats with new key...
                   </span>

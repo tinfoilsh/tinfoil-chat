@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
 import { memo, useEffect, useState } from 'react'
+import { PiSpinner } from 'react-icons/pi'
 
 type VerificationStep = {
   id: string
@@ -180,8 +181,8 @@ export const VerificationStatusDisplay = memo(
           >
             <div className="flex items-center gap-2">
               {hasError ? (
-                <ExclamationTriangleIcon className="h-4 w-4 text-red-500" />
-              ) : (
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+              ) : isComplete ? (
                 <motion.div
                   animate={
                     isAnimating
@@ -196,16 +197,10 @@ export const VerificationStatusDisplay = memo(
                     repeatDelay: 1,
                   }}
                 >
-                  <ShieldCheckIcon
-                    className={`h-5 w-5 ${
-                      isComplete
-                        ? 'text-emerald-500'
-                        : isDarkMode
-                          ? 'text-gray-400'
-                          : 'text-gray-500'
-                    }`}
-                  />
+                  <ShieldCheckIcon className="h-5 w-5 text-emerald-500" />
                 </motion.div>
+              ) : (
+                <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
               )}
               <span
                 className={`font-aeonik-fono ${
@@ -213,18 +208,14 @@ export const VerificationStatusDisplay = memo(
                     ? 'text-emerald-500'
                     : hasError
                       ? 'text-red-500'
-                      : isDarkMode
-                        ? 'text-gray-300'
-                        : 'text-gray-600'
+                      : 'text-content-secondary'
                 }`}
               >
                 {hasError
                   ? 'Security verification failed'
                   : isComplete
                     ? 'Privacy Verified'
-                    : isLoading
-                      ? 'Verifying Security'
-                      : 'Verify security →'}
+                    : 'Verifying security...'}
               </span>
             </div>
             {isComplete && (
