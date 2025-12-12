@@ -32,6 +32,7 @@ type ChatInputProps = {
   isPremium?: boolean
   hasMessages?: boolean
   audioModel?: string
+  modelSelectorButton?: React.ReactNode
 }
 
 export function ChatInput({
@@ -50,6 +51,7 @@ export function ChatInput({
   isPremium,
   hasMessages,
   audioModel,
+  modelSelectorButton,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
@@ -633,7 +635,7 @@ export function ChatInput({
           rows={1}
           className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
           style={{
-            minHeight: '28px',
+            minHeight: inputMinHeight,
             maxHeight: '240px',
           }}
         />
@@ -649,6 +651,7 @@ export function ChatInput({
           </button>
 
           <div className="flex items-center gap-2">
+            {modelSelectorButton && <div>{modelSelectorButton}</div>}
             {isPremium && audioModel && (
               <button
                 type="button"

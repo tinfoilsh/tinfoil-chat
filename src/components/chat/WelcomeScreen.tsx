@@ -123,8 +123,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
         delay: 0.1,
       }}
     >
-      <div className="w-full">
-        <div className="grid grid-cols-1 items-start">
+      <div className="flex w-full justify-center">
+        <div className="w-full max-w-2xl">
           <motion.h1
             className="flex items-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:text-3xl"
             initial={{ opacity: 0, y: 10 }}
@@ -138,135 +138,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
             {getGreeting()}
           </motion.h1>
 
-          <div className="mt-4 md:mt-8">
-            <motion.p
-              className="font-aeonik text-lg text-content-secondary"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{
-                duration: 0.5,
-                ease: 'easeOut',
-                delay: 0.3,
-              }}
-            >
-              This conversation is private: nobody can see your messages.
-            </motion.p>
-            <motion.p
-              className="mt-1 font-aeonik text-lg leading-6 text-content-muted"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{
-                duration: 0.5,
-                ease: 'easeOut',
-                delay: 0.3,
-              }}
-            >
-              Each message is end‑to‑end encrypted directly to a secure hardware
-              enclave where it is processed, and never exposed to third parties.
-            </motion.p>
-
-            {/* Model Selector */}
-            {models &&
-              selectedModel &&
-              handleModelSelect &&
-              handleLabelClick && (
-                <motion.div
-                  className="mt-8"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{
-                    duration: 0.5,
-                    ease: 'easeOut',
-                    delay: 0.35,
-                  }}
-                >
-                  <div className="relative">
-                    <button
-                      type="button"
-                      data-model-selector
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (handleLabelClick) {
-                          handleLabelClick('model', () => {})
-                        }
-                      }}
-                      className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background px-3 py-2 font-aeonik-fono text-content-secondary transition-colors hover:bg-surface-chat"
-                    >
-                      {(() => {
-                        const model = models.find(
-                          (m) => m.modelName === selectedModel,
-                        )
-                        if (!model) return null
-                        return (
-                          <>
-                            <img
-                              src={
-                                model.modelName
-                                  .toLowerCase()
-                                  .includes('openai') ||
-                                model.modelName.toLowerCase().includes('gpt')
-                                  ? isDarkMode
-                                    ? '/model-icons/openai-dark.png'
-                                    : '/model-icons/openai-light.png'
-                                  : `/model-icons/${model.image}`
-                              }
-                              alt={model.name}
-                              className="h-5 w-5"
-                            />
-                            <span className="text-sm font-medium text-content-primary">
-                              {model.name}
-                            </span>
-                            <svg
-                              className="h-4 w-4 text-content-muted"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 9l-7 7-7-7"
-                              />
-                            </svg>
-                          </>
-                        )
-                      })()}
-                    </button>
-
-                    {expandedLabel === 'model' && handleModelSelect && (
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        onSelect={handleModelSelect}
-                        isDarkMode={isDarkMode}
-                        isPremium={isPremium ?? false}
-                        models={models}
-                        preferredPosition="below"
-                        onPremiumModelClick={() => {
-                          if (!isSignedIn) {
-                            if (handleLabelClick) {
-                              handleLabelClick('model', () => {})
-                            }
-                            void openSignIn()
-                            return
-                          }
-                          if (setIsSidebarOpen) {
-                            setIsSidebarOpen(true)
-                            // Dispatch event to highlight the appropriate box
-                            window.dispatchEvent(
-                              new CustomEvent('highlightSidebarBox', {
-                                detail: { isPremium },
-                              }),
-                            )
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
+          <div className="mt-8">
             {/* Centered Chat Input - Desktop only */}
             {onSubmit && input !== undefined && setInput && (
               <motion.div
@@ -287,7 +159,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   cancelGeneration={cancelGeneration ?? (() => {})}
                   inputRef={inputRef ?? fallbackInputRef}
                   handleInputFocus={handleInputFocus ?? (() => {})}
-                  inputMinHeight="28px"
+                  inputMinHeight="60px"
                   isDarkMode={isDarkMode}
                   handleDocumentUpload={handleDocumentUpload}
                   processedDocuments={processedDocuments}
@@ -297,19 +169,120 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   audioModel={
                     models?.find((m) => m.type === 'audio')?.modelName
                   }
+                  modelSelectorButton={
+                    models &&
+                    selectedModel &&
+                    handleModelSelect &&
+                    handleLabelClick ? (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          data-model-selector
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (handleLabelClick) {
+                              handleLabelClick('model', () => {})
+                            }
+                          }}
+                          className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-secondary transition-colors hover:bg-surface-chat"
+                        >
+                          {(() => {
+                            const model = models.find(
+                              (m) => m.modelName === selectedModel,
+                            )
+                            if (!model) return null
+                            return (
+                              <>
+                                <img
+                                  src={
+                                    model.modelName
+                                      .toLowerCase()
+                                      .includes('openai') ||
+                                    model.modelName
+                                      .toLowerCase()
+                                      .includes('gpt')
+                                      ? isDarkMode
+                                        ? '/model-icons/openai-dark.png'
+                                        : '/model-icons/openai-light.png'
+                                      : `/model-icons/${model.image}`
+                                  }
+                                  alt={model.name}
+                                  className="h-4 w-4"
+                                />
+                                <span className="text-xs font-medium text-content-primary">
+                                  {model.name}
+                                </span>
+                                <svg
+                                  className="h-3 w-3 text-content-muted"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                  />
+                                </svg>
+                              </>
+                            )
+                          })()}
+                        </button>
+
+                        {expandedLabel === 'model' && handleModelSelect && (
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onSelect={handleModelSelect}
+                            isDarkMode={isDarkMode}
+                            isPremium={isPremium ?? false}
+                            models={models}
+                            preferredPosition="below"
+                            onPremiumModelClick={() => {
+                              if (!isSignedIn) {
+                                if (handleLabelClick) {
+                                  handleLabelClick('model', () => {})
+                                }
+                                void openSignIn()
+                                return
+                              }
+                              if (setIsSidebarOpen) {
+                                setIsSidebarOpen(true)
+                                window.dispatchEvent(
+                                  new CustomEvent('highlightSidebarBox', {
+                                    detail: { isPremium },
+                                  }),
+                                )
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                    ) : undefined
+                  }
                 />
               </motion.div>
             )}
 
-            {/* Verification Status Display - Compact mode on all screen sizes */}
-            <div className="mt-4 font-aeonik-fono md:mt-8">
+            {/* Verification Status Display */}
+            <motion.div
+              className="no-scroll-anchoring mt-8"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{
+                duration: 0.5,
+                ease: 'easeOut',
+                delay: 0.5,
+              }}
+            >
               <VerificationStatusDisplay
                 isDarkMode={isDarkMode}
                 onOpenVerifier={openAndExpandVerifier}
                 verificationDocument={verificationState}
                 isCompact={true}
               />
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>
