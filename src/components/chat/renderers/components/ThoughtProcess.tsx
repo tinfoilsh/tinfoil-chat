@@ -108,6 +108,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const [thoughtSummary, setThoughtSummary] = useState<string>('')
   const summaryGenerationRef = useRef<Promise<void> | null>(null)
   const lastThoughtsRef = useRef<string>('')
+  const isMountedRef = useRef<boolean>(true)
 
   const handleToggle = () => {
     if (messageId && setExpandedThoughtsState) {
@@ -190,7 +191,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     if (summaryGenerationRef.current) return
 
-    const isMountedRef = { current: true }
     lastThoughtsRef.current = thoughts
 
     summaryGenerationRef.current = generateSummary(
@@ -199,11 +199,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
     ).finally(() => {
       summaryGenerationRef.current = null
     })
+  }, [thoughts, isThinking, generateSummary])
 
+  useEffect(() => {
     return () => {
       isMountedRef.current = false
     }
-  }, [thoughts, isThinking, generateSummary])
+  }, [])
 
   // Fix main scroll container when thoughts collapse
   useEffect(() => {
