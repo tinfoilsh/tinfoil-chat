@@ -25,6 +25,22 @@ interface ThoughtProcessProps {
   >
 }
 
+function getFirstSentenceFromLastParagraph(text: string): string {
+  if (!text.trim()) return ''
+
+  const paragraphs = text
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+
+  if (paragraphs.length === 0) return ''
+
+  const lastParagraph = paragraphs[paragraphs.length - 1]
+  const sentenceMatch = lastParagraph.match(/^[^.!?]+[.!?]/)
+
+  return sentenceMatch ? sentenceMatch[0].trim() : lastParagraph
+}
+
 function useMathPlugins() {
   const [plugins, setPlugins] = useState<{
     remarkPlugins: any[]
@@ -230,13 +246,21 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         onClick={handleToggle}
         className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
       >
-        <div className="flex items-center gap-2">
-          <TfTin className="h-5 w-5" aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <TfTin className="h-5 w-5 shrink-0" aria-hidden="true" />
           {isThinking ? (
-            <>
-              <span className="text-sm font-medium">Thinking</span>
-              <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
-            </>
+            <div className="min-w-0 flex-1">
+              {thoughts.trim() ? (
+                <span className="block animate-shimmer truncate text-sm font-medium">
+                  {getFirstSentenceFromLastParagraph(thoughts)}
+                </span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Thinking</span>
+                  <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex items-center gap-1.5">
               <span className="text-sm">
@@ -253,7 +277,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           )}
         </div>
         <svg
-          className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          className={`h-5 w-5 shrink-0 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
