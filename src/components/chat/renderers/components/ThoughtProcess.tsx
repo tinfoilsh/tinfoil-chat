@@ -139,15 +139,15 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             {
               role: 'system',
               content:
-                'Summarize the following thought process in a very brief phrase (max 8 words). Output ONLY the summary, nothing else.',
+                'Summarize the following thought process in a brief phrase that captures the main idea.',
             },
             {
               role: 'user',
-              content: thoughtText.slice(-500),
+              content: thoughtText,
             },
           ],
           stream: false,
-          max_tokens: 20,
+          max_tokens: 150,
         })
 
         const summary = completion.choices?.[0]?.message?.content?.trim() || ''
