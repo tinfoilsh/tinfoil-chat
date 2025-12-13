@@ -150,9 +150,7 @@ export default function RootLayout({
       className={`overflow-x-hidden ${inter.variable} ${aeonikFono.variable} ${aeonik.variable}`}
     >
       <head>
-        <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://clerk.accounts.dev" />
-        <link rel="dns-prefetch" href="https://plausible.io" />
         <link rel="manifest" href="/site.webmanifest" />
         <meta
           name="viewport"
@@ -164,14 +162,17 @@ export default function RootLayout({
         <Script
           defer
           data-domain="chat.tinfoil.sh"
-          src="https://plausible.io/js/script.js"
+          data-api="https://plausible.io/api/event"
+          src="/js/plausible.js"
+          integrity="sha384-2koU+A5hG/EjBLH1x5k5ThN+dPO7wtgAfkwcsSgQq3kNc0ouUd56j17YOJ0aE0yv"
+          crossOrigin="anonymous"
           strategy="afterInteractive"
         />
+        <SpeedInsights />
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
           {children}
           <Toaster />
-          <SpeedInsights />
         </ClerkProvider>
       </body>
     </html>
