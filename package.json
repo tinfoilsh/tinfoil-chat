@@ -27,7 +27,7 @@
     "@types/jszip": "^3.4.1",
     "@types/pako": "^2.0.3",
     "@types/uuid": "^10.0.0",
-    "@vercel/speed-insights": "^1.2.0",
+    "@vercel/speed-insights": "^1.3.1",
     "@xyflow/react": "^12.6.0",
     "audiobuffer-to-wav": "^1.0.0",
     "autoprefixer": "^10.4.21",
