@@ -24,6 +24,7 @@
     "@radix-ui/react-toast": "^1.2.7",
     "@radix-ui/react-tooltip": "^1.2.0",
     "@tailwindcss/typography": "^0.5.16",
+    "@tinfoilsh/tinfoil-icons": "^1.0.8",
     "@types/jszip": "^3.4.1",
     "@types/pako": "^2.0.3",
     "@types/uuid": "^10.0.0",
