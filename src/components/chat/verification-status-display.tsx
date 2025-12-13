@@ -3,8 +3,8 @@
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
+import { TfShieldCheck } from '@tinfoilsh/tinfoil-icons'
 import { AnimatePresence, motion } from 'framer-motion'
 import { memo, useEffect, useState } from 'react'
 import { PiSpinner } from 'react-icons/pi'
@@ -198,7 +198,7 @@ export const VerificationStatusDisplay = memo(
                     repeatDelay: 1,
                   }}
                 >
-                  <ShieldCheckIcon className="h-5 w-5 text-emerald-500" />
+                  <TfShieldCheck className="h-5 w-5 text-emerald-500" />
                 </motion.div>
               ) : (
                 <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
@@ -307,7 +307,7 @@ export const VerificationStatusDisplay = memo(
                   repeatDelay: 1,
                 }}
               >
-                <ShieldCheckIcon
+                <TfShieldCheck
                   className={`h-5 w-5 ${
                     isComplete
                       ? 'text-emerald-500'

@@ -7,8 +7,8 @@ import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
+import { TfTin } from '@tinfoilsh/tinfoil-icons'
 import { memo, useEffect, useRef, useState } from 'react'
-import { LuBrain } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -231,7 +231,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
       >
         <div className="flex items-center gap-2">
-          <LuBrain className="h-5 w-5 opacity-70" aria-hidden="true" />
+          <TfTin className="h-5 w-5" aria-hidden="true" />
           {isThinking ? (
             <>
               <span className="text-sm font-medium">Thinking</span>
