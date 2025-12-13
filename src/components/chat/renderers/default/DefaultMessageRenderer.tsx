@@ -16,6 +16,7 @@ const DefaultMessageComponent = ({
   isStreaming,
   expandedThoughtsState,
   setExpandedThoughtsState,
+  titleModelName,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
 
@@ -128,6 +129,7 @@ const DefaultMessageComponent = ({
                   messageId={messageUniqueId}
                   expandedThoughtsState={expandedThoughtsState}
                   setExpandedThoughtsState={setExpandedThoughtsState}
+                  titleModelName={titleModelName}
                 />
               </StreamingContentWrapper>
             </div>
