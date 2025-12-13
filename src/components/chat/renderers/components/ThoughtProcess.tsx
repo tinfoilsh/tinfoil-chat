@@ -1,6 +1,7 @@
 'use client'
 
 import { LoadingDots } from '@/components/loading-dots'
+import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { TINFOIL_COLORS } from '@/theme/colors'
 import { logError } from '@/utils/error-handling'
 import {
@@ -8,7 +9,7 @@ import {
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
 import { TfTin } from '@tinfoilsh/tinfoil-icons'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -23,22 +24,7 @@ interface ThoughtProcessProps {
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
-}
-
-function getFirstSentenceFromLastParagraph(text: string): string {
-  if (!text.trim()) return ''
-
-  const paragraphs = text
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-
-  if (paragraphs.length === 0) return ''
-
-  const lastParagraph = paragraphs[paragraphs.length - 1]
-  const sentenceMatch = lastParagraph.match(/^[^.!?]+[.!?]/)
-
-  return sentenceMatch ? sentenceMatch[0].trim() : lastParagraph
+  titleModelName?: string
 }
 
 function useMathPlugins() {
@@ -107,6 +93,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   messageId,
   expandedThoughtsState,
   setExpandedThoughtsState,
+  titleModelName,
 }: ThoughtProcessProps) {
   const isExpanded =
     messageId && expandedThoughtsState
@@ -118,6 +105,9 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const [contentHeight, setContentHeight] = useState<number>(0)
   const lastScrollPositionRef = useRef<number>(0)
   const isUserScrollingRef = useRef<boolean>(false)
+  const [thoughtSummary, setThoughtSummary] = useState<string>('')
+  const summaryGenerationRef = useRef<Promise<void> | null>(null)
+  const lastThoughtsRef = useRef<string>('')
 
   const handleToggle = () => {
     if (messageId && setExpandedThoughtsState) {
@@ -127,6 +117,93 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       }))
     }
   }
+
+  const generateSummary = useCallback(
+    async (
+      thoughtText: string,
+      isMountedRef: React.MutableRefObject<boolean>,
+    ) => {
+      if (!titleModelName || !thoughtText.trim()) {
+        if (isMountedRef.current) {
+          setThoughtSummary('')
+        }
+        return
+      }
+
+      try {
+        const client = await getTinfoilClient()
+        const completion = await client.chat.completions.create({
+          model: titleModelName,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Summarize the following thought process in a very brief phrase (max 8 words). Output ONLY the summary, nothing else.',
+            },
+            {
+              role: 'user',
+              content: thoughtText.slice(-500),
+            },
+          ],
+          stream: false,
+          max_tokens: 20,
+        })
+
+        const summary = completion.choices?.[0]?.message?.content?.trim() || ''
+        if (isMountedRef.current) {
+          setThoughtSummary(summary)
+        }
+      } catch (error) {
+        logError('Failed to generate thought summary', error, {
+          component: 'ThoughtProcess',
+          action: 'generateSummary',
+        })
+        if (isMountedRef.current) {
+          setThoughtSummary('')
+        }
+      }
+    },
+    [titleModelName],
+  )
+
+  useEffect(() => {
+    if (!isThinking) {
+      lastThoughtsRef.current = ''
+      setThoughtSummary('')
+      return
+    }
+
+    if (!thoughts.trim()) return
+
+    const MIN_CONTENT_LENGTH = 100
+    const MIN_NEW_CONTENT = 50
+
+    if (thoughts.length < MIN_CONTENT_LENGTH) return
+
+    const newContentLength = thoughts.length - lastThoughtsRef.current.length
+    if (
+      newContentLength < MIN_NEW_CONTENT &&
+      lastThoughtsRef.current.length > 0
+    ) {
+      return
+    }
+
+    if (summaryGenerationRef.current) return
+
+    const isMountedRef = { current: true }
+    lastThoughtsRef.current = thoughts
+
+    summaryGenerationRef.current = generateSummary(
+      thoughts,
+      isMountedRef,
+    ).finally(() => {
+      summaryGenerationRef.current = null
+    })
+
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [thoughts, isThinking, generateSummary])
 
   // Fix main scroll container when thoughts collapse
   useEffect(() => {
@@ -250,9 +327,9 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           <TfTin className="h-5 w-5 shrink-0" aria-hidden="true" />
           {isThinking ? (
             <div className="min-w-0 flex-1">
-              {thoughts.trim() ? (
+              {thoughtSummary ? (
                 <span className="block animate-shimmer truncate text-sm font-medium">
-                  {getFirstSentenceFromLastParagraph(thoughts)}
+                  {thoughtSummary}
                 </span>
               ) : (
                 <div className="flex items-center gap-2">

@@ -50,6 +50,7 @@ const ChatMessage = memo(
     isStreaming = false,
     expandedThoughtsState,
     setExpandedThoughtsState,
+    titleModelName,
   }: {
     message: Message
     model: BaseModel
@@ -60,6 +61,7 @@ const ChatMessage = memo(
     setExpandedThoughtsState: React.Dispatch<
       React.SetStateAction<Record<string, boolean>>
     >
+    titleModelName?: string
   }) {
     // Get renderer from registry
     const renderer = getRendererRegistry().getMessageRenderer(message, model)
@@ -75,6 +77,7 @@ const ChatMessage = memo(
         isStreaming={isStreaming}
         expandedThoughtsState={expandedThoughtsState}
         setExpandedThoughtsState={setExpandedThoughtsState}
+        titleModelName={titleModelName}
       />
     )
   },
@@ -102,7 +105,8 @@ const ChatMessage = memo(
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
-        prevExpanded === nextExpanded
+        prevExpanded === nextExpanded &&
+        prevProps.titleModelName === nextProps.titleModelName
       )
     }
 
@@ -121,7 +125,8 @@ const ChatMessage = memo(
         prevProps.isDarkMode === nextProps.isDarkMode &&
         prevProps.isLastMessage === nextProps.isLastMessage &&
         prevProps.isStreaming === nextProps.isStreaming &&
-        prevExpanded === nextExpanded
+        prevExpanded === nextExpanded &&
+        prevProps.titleModelName === nextProps.titleModelName
       )
     }
 
@@ -139,7 +144,9 @@ const ChatMessage = memo(
       prevProps.isLastMessage === nextProps.isLastMessage &&
       prevProps.isStreaming === nextProps.isStreaming &&
       prevExpanded === nextExpanded &&
-      prevProps.setExpandedThoughtsState === nextProps.setExpandedThoughtsState
+      prevProps.setExpandedThoughtsState ===
+        nextProps.setExpandedThoughtsState &&
+      prevProps.titleModelName === nextProps.titleModelName
     )
   },
 )
@@ -252,6 +259,11 @@ export function ChatMessages({
     return models.find((m) => m.modelName === selectedModel) || models[0]
   }, [models, selectedModel])
 
+  const titleModelName = useMemo(() => {
+    const titleModel = models?.find((m) => m.type === 'title')
+    return titleModel?.modelName
+  }, [models])
+
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
@@ -332,6 +344,7 @@ export function ChatMessages({
                 isStreaming={false}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
+                titleModelName={titleModelName}
               />
             ))}
           </div>
@@ -352,6 +365,7 @@ export function ChatMessages({
           isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
+          titleModelName={titleModelName}
         />
       ))}
       {showLoadingPlaceholder && <LoadingMessage isDarkMode={isDarkMode} />}

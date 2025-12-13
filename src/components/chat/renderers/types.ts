@@ -21,6 +21,7 @@ export interface MessageRenderProps {
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
+  titleModelName?: string
 }
 
 export interface InputRenderProps {
