@@ -132,9 +132,14 @@ module.exports = {
           '0%': { transform: 'translateX(0)' },
           '100%': { transform: 'translateX(-50%)' },
         },
+        shimmer: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' },
+        },
       },
       animation: {
         scroll: 'scroll 12s linear infinite',
+        shimmer: 'shimmer 2s ease-in-out infinite',
       },
     },
   },
