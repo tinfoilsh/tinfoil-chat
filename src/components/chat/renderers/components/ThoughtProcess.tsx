@@ -341,18 +341,16 @@ export const ThoughtProcess = memo(function ThoughtProcess({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">
-                <span className="font-bold">Thought</span>
-                {thinkingDuration && (
-                  <span className="font-normal opacity-70">
-                    {thinkingDuration < 60
-                      ? ` for ${thinkingDuration.toFixed(1)} seconds`
-                      : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
-                  </span>
-                )}
-              </span>
-            </div>
+            <span className="text-sm leading-5">
+              <span className="font-bold">Thought</span>
+              {thinkingDuration && (
+                <span className="font-normal opacity-70">
+                  {thinkingDuration < 60
+                    ? ` for ${thinkingDuration.toFixed(1)} seconds`
+                    : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
+                </span>
+              )}
+            </span>
           )}
         </div>
         <svg
