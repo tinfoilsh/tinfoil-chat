@@ -155,7 +155,18 @@
 .prose blockquote {
   word-wrap: break-word;
   color: hsl(var(--content-primary)) !important;
-  border-left-color: hsl(var(--border-subtle)) !important;
+  border-left: none !important;
+  padding-left: 1.5rem !important;
+  font-style: normal !important;
+  quotes: none !important;
+}
+
+.prose blockquote::before,
+.prose blockquote::after,
+.prose blockquote p::before,
+.prose blockquote p::after {
+  content: '' !important;
+  display: none !important;
 }
 
 .prose blockquote p {
@@ -233,7 +244,18 @@
 
 .dark .prose blockquote {
   color: hsl(var(--content-primary)) !important;
-  border-left-color: hsl(var(--border-subtle)) !important;
+  border-left: none !important;
+  padding-left: 1.5rem !important;
+  font-style: normal !important;
+  quotes: none !important;
+}
+
+.dark .prose blockquote::before,
+.dark .prose blockquote::after,
+.dark .prose blockquote p::before,
+.dark .prose blockquote p::after {
+  content: '' !important;
+  display: none !important;
 }
 
 .dark .prose blockquote p {
