@@ -176,7 +176,7 @@ export const VerificationStatusDisplay = memo(
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="relative mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent"
         >
-          <TextureGrid className="opacity-50" />
+          <TextureGrid />
           <button
             onClick={handleToggle}
             className="hover:bg-surface-secondary/50 relative flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors"

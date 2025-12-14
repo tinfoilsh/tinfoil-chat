@@ -623,7 +623,7 @@ export function ChatSidebar({
 
         {/* Main sidebar content */}
         <div className="relative flex h-full flex-col overflow-hidden">
-          <TextureGrid className="opacity-50" />
+          <TextureGrid />
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
@@ -790,7 +790,7 @@ export function ChatSidebar({
                   setIsOpen(false)
                 }
               }}
-              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
+              className={`m-2 flex items-center gap-2 rounded-lg border bg-surface-sidebar p-3 text-sm ${
                 currentChat?.messages?.length === 0
                   ? isDarkMode
                     ? 'cursor-not-allowed border-border-strong text-content-muted opacity-50'
@@ -953,11 +953,11 @@ export function ChatSidebar({
                         chat.decryptionFailed
                           ? onEncryptionKeyClick
                             ? isDarkMode
-                              ? 'cursor-pointer border-border-strong hover:border-gray-600 hover:bg-surface-chat'
-                              : 'cursor-pointer border-border-subtle hover:border-gray-400 hover:bg-surface-sidebar'
+                              ? 'cursor-pointer border-border-strong bg-surface-sidebar hover:border-gray-600 hover:bg-surface-chat'
+                              : 'cursor-pointer border-border-subtle bg-surface-sidebar hover:border-gray-400 hover:bg-surface-sidebar'
                             : isDarkMode
-                              ? 'cursor-not-allowed border-border-strong opacity-60'
-                              : 'cursor-not-allowed border-border-subtle opacity-60'
+                              ? 'cursor-not-allowed border-border-strong bg-surface-sidebar opacity-60'
+                              : 'cursor-not-allowed border-border-subtle bg-surface-sidebar opacity-60'
                           : chat.isBlankChat
                             ? currentChat?.isBlankChat &&
                               chat.isLocalOnly === currentChat.isLocalOnly
@@ -965,15 +965,15 @@ export function ChatSidebar({
                                 ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
                                 : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
                               : isDarkMode
-                                ? 'cursor-pointer border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                                : 'cursor-pointer border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                                ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                                : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
                             : currentChat?.id === chat.id
                               ? isDarkMode
                                 ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
                                 : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
                               : isDarkMode
-                                ? 'cursor-pointer border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                                : 'cursor-pointer border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                                ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                                : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
                       }`}
                     >
                       {/* Chat item content */}
