@@ -1,4 +1,32 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+
 export function TextureGrid({ className = '' }: { className?: string }) {
+  const [isDarkMode, setIsDarkMode] = useState(false)
+
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const theme = localStorage.getItem('theme')
+      if (theme) {
+        setIsDarkMode(theme === 'dark')
+      } else {
+        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
+      }
+    }
+
+    checkDarkMode()
+
+    const handleStorageChange = () => checkDarkMode()
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('themeChanged', handleStorageChange)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('themeChanged', handleStorageChange)
+    }
+  }, [])
+
   const columnWidth = 2
   const cellHeight = 2
   const columnGap = 5
@@ -33,6 +61,7 @@ export function TextureGrid({ className = '' }: { className?: string }) {
       style={{
         backgroundImage: `url("${encodedSvg}")`,
         backgroundRepeat: 'repeat',
+        opacity: isDarkMode ? 0.5 : 1,
       }}
     />
   )

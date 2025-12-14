@@ -578,7 +578,7 @@ export function SettingsSidebar({
 
         {/* Settings content */}
         <div className="relative flex-1 overflow-y-auto p-4">
-          <TextureGrid className="opacity-50" />
+          <TextureGrid />
           <div className="space-y-6">
             {/* Encrypted Cloud Sync section - moved to top */}
             {onEncryptionKeyClick && (
