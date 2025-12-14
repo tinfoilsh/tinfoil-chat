@@ -14,6 +14,7 @@ import { motion } from 'framer-motion'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { CONSTANTS } from './constants'
 
+import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { r2Storage } from '@/services/cloud/r2-storage'
 // Cloud pagination handled via hook; no direct cloudSync usage here
@@ -621,7 +622,8 @@ export function ChatSidebar({
         </div>
 
         {/* Main sidebar content */}
-        <div className="flex h-full flex-col overflow-hidden">
+        <div className="relative flex h-full flex-col overflow-hidden">
+          <TextureGrid className="opacity-50" />
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
@@ -799,8 +801,8 @@ export function ChatSidebar({
               }`}
               disabled={currentChat?.messages?.length === 0}
             >
-              <PlusIcon className="h-5 w-5" />
-              New chat
+              <PlusIcon className="h-5 w-5 shrink-0" />
+              <span className="leading-5">New Chat</span>
             </button>
           </div>
 

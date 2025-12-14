@@ -1,4 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
+import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
@@ -576,7 +577,8 @@ export function SettingsSidebar({
         </div>
 
         {/* Settings content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="relative flex-1 overflow-y-auto p-4">
+          <TextureGrid className="opacity-50" />
           <div className="space-y-6">
             {/* Encrypted Cloud Sync section - moved to top */}
             {onEncryptionKeyClick && (

@@ -1,5 +1,6 @@
 'use client'
 
+import { TextureGrid } from '@/components/texture-grid'
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -173,11 +174,12 @@ export const VerificationStatusDisplay = memo(
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent"
+          className="relative mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent"
         >
+          <TextureGrid className="opacity-50" />
           <button
             onClick={handleToggle}
-            className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors"
+            className="hover:bg-surface-secondary/50 relative flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors"
             aria-expanded={isExpanded}
           >
             <div className="flex items-center gap-2">
@@ -245,7 +247,7 @@ export const VerificationStatusDisplay = memo(
                 maxHeight: isExpanded ? '600px' : '0px',
               }}
             >
-              <div className="text-sm text-content-primary">
+              <div className="relative text-sm text-content-primary">
                 <div className="px-4 pt-3">
                   <p className="mb-2">
                     This conversation is private: nobody can see your messages.
