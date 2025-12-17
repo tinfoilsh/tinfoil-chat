@@ -89,7 +89,7 @@ export const getAIModels = async (
   try {
     // Always fetch ALL models regardless of user status
     // We'll filter client-side based on what the user can access
-    const endpoint = '/api/app/models?paid=true'
+    const endpoint = '/api/config/models?paid=true&chat=true'
     const url = `${API_BASE_URL}${endpoint}`
     const response = await fetch(url)
 
@@ -121,7 +121,7 @@ export const getSystemPromptAndRules = async (): Promise<{
   rules: string
 }> => {
   try {
-    const url = `${API_BASE_URL}/api/app/system-prompt`
+    const url = `${API_BASE_URL}/api/config/system-prompt`
     const response = await fetch(url)
 
     if (!response.ok) {
