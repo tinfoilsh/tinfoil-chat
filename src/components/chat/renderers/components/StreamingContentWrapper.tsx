@@ -1,5 +1,3 @@
-'use client'
-
 import { memo, useEffect, useRef, useState } from 'react'
 
 interface StreamingContentWrapperProps {

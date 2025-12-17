@@ -1,5 +1,3 @@
-'use client'
-
 import { type BaseModel } from '@/config/models'
 import 'katex/dist/katex.min.css'
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'

@@ -1,9 +1,9 @@
 import { cn } from '@/components/ui/utils'
 import { type BaseModel } from '@/config/models'
 import { useAuth, useClerk } from '@clerk/nextjs'
-import { DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import {
   TfBrain,
+  TfCopy,
   TfShieldCheck,
   TfWarning,
 } from '@tinfoilsh/tinfoil-icons'
@@ -262,7 +262,7 @@ export function ChatControls({
             className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
             title="Copy"
           >
-            <DocumentDuplicateIcon className="h-5 w-5 text-content-secondary" />
+            <TfCopy className="h-5 w-5 text-content-secondary" />
             {!isCompactMode && (
               <span className="text-xs text-content-secondary">Copy</span>
             )}

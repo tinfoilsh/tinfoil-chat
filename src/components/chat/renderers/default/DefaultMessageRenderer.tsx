@@ -1,5 +1,3 @@
-'use client'
-
 import { cn } from '@/components/ui/utils'
 import React, { memo } from 'react'
 import { DocumentList } from '../components/DocumentList'

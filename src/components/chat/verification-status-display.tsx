@@ -1,5 +1,3 @@
-'use client'
-
 import { TextureGrid } from '@/components/texture-grid'
 import {
   CheckCircleIcon,

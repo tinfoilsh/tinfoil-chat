@@ -1,5 +1,3 @@
-'use client'
-
 import { getFileIconType } from '@/components/chat/document-uploader'
 import { memo } from 'react'
 import {

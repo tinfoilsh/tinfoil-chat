@@ -1,5 +1,3 @@
-'use client'
-
 import { CodeBlock } from '@/components/code-block'
 import { TINFOIL_COLORS } from '@/theme/colors'
 import { logError } from '@/utils/error-handling'

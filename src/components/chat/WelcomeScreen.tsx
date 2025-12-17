@@ -1,5 +1,3 @@
-'use client'
-
 import { type BaseModel } from '@/config/models'
 import { useClerk, useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
