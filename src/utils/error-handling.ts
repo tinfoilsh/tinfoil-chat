@@ -21,7 +21,19 @@ export function logError(
 ): void {
   // In development, still log to console for debugging
   if (process.env.NODE_ENV === 'development') {
-    console.error(`[${context?.component || 'Unknown'}] ${message}`, error)
+    // Extract error message without passing Error object to avoid triggering Next.js error overlay
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.warn(
+      `[${context?.component || 'Unknown'}] ${message}: ${errorMessage}`,
+    )
+    // Only log stack trace if debug logs are enabled
+    if (
+      typeof window !== 'undefined' &&
+      localStorage.getItem('enableDebugLogs') === 'true' &&
+      error instanceof Error
+    ) {
+      console.log('Stack trace:', error.stack)
+    }
     return
   }
 
