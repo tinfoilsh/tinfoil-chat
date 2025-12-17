@@ -3,7 +3,7 @@
 import { type BaseModel } from '@/config/models'
 import { useClerk, useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
-import React, { memo, useEffect, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { ChatInput } from './chat-input'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
@@ -63,7 +63,12 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   const { user, isSignedIn } = useUser()
   const { openSignIn } = useClerk()
   const [nickname, setNickname] = useState<string>('')
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleImageError = useCallback((modelName: string) => {
+    setFailedImages((prev) => ({ ...prev, [modelName]: true }))
+  }, [])
 
   // Load nickname from localStorage and listen for changes
   useEffect(() => {
@@ -196,14 +201,19 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                               <>
                                 <img
                                   src={
-                                    model.image === 'openai.png'
-                                      ? `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
-                                      : model.image === 'moonshot.png'
-                                        ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
-                                        : `/model-icons/${model.image}`
+                                    failedImages[model.modelName]
+                                      ? '/icon.png'
+                                      : model.image === 'openai.png'
+                                        ? `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
+                                        : model.image === 'moonshot.png'
+                                          ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
+                                          : `/model-icons/${model.image}`
                                   }
                                   alt={model.name}
                                   className="h-4 w-4"
+                                  onError={() =>
+                                    handleImageError(model.modelName)
+                                  }
                                 />
                                 <span className="text-xs font-medium text-content-primary">
                                   {model.name}
