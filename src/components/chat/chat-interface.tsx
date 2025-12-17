@@ -4,7 +4,7 @@ import {
   getAIModels,
   getSystemPromptAndRules,
   type BaseModel,
-} from '@/app/config/models'
+} from '@/config/models'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth, useUser } from '@clerk/nextjs'

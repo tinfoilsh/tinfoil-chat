@@ -1,4 +1,4 @@
-import type { BaseModel } from '@/app/config/models'
+import type { BaseModel } from '@/config/models'
 import { useEffect, useRef } from 'react'
 import type { AIModel, Chat, LabelType, LoadingState } from '../types'
 import { useChatMessaging } from './use-chat-messaging'

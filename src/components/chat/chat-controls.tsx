@@ -1,5 +1,5 @@
-import { type BaseModel } from '@/app/config/models'
 import { cn } from '@/components/ui/utils'
+import { type BaseModel } from '@/config/models'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import {
   TfBrain,

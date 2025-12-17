@@ -1,5 +1,5 @@
-import type { BaseModel } from '@/app/config/models'
 import type { LoadingState, Message } from '@/components/chat/types'
+import type { BaseModel } from '@/config/models'
 
 // ProcessedDocument type for chat input documents
 export type ProcessedDocument = {

@@ -1,6 +1,6 @@
 'use client'
 
-import { type BaseModel } from '@/app/config/models'
+import { type BaseModel } from '@/config/models'
 import { useClerk, useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import React, { memo, useEffect, useRef, useState } from 'react'

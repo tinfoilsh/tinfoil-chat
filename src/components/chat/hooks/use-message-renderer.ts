@@ -1,5 +1,5 @@
-import type { BaseModel } from '@/app/config/models'
 import type { Message } from '@/components/chat/types'
+import type { BaseModel } from '@/config/models'
 import { useMemo } from 'react'
 import { getRegistryVersion, getRendererRegistry } from '../renderers/client'
 

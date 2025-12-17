@@ -1,0 +1,117 @@
+import { Head, Html, Main, NextScript } from 'next/document'
+import Script from 'next/script'
+
+export default function Document() {
+  return (
+    <Html lang="en" data-theme="light" className="overflow-x-hidden">
+      <Head>
+        {/* Preconnect to external domains */}
+        <link rel="preconnect" href="https://clerk.accounts.dev" />
+
+        {/* PWA Manifest */}
+        <link rel="manifest" href="/site.webmanifest" />
+
+        {/* Theme color */}
+        <meta name="theme-color" content="#ffffff" />
+
+        {/* Meta tags */}
+        <meta
+          name="description"
+          content="Verifiably Private AI chat application supporting open source models through Tinfoil"
+        />
+        <meta
+          name="keywords"
+          content="AI chat, private AI, privacy, confidential computing, open source, secure AI, private chat"
+        />
+        <meta name="author" content="Tinfoil" />
+
+        {/* Open Graph */}
+        <meta property="og:title" content="Tinfoil Private Chat" />
+        <meta
+          property="og:description"
+          content="Private AI chat application supporting open source models through Tinfoil"
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content="en_US" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Tinfoil Private Chat" />
+        <meta
+          name="twitter:description"
+          content="Private AI chat application supporting open source models through Tinfoil"
+        />
+
+        {/* Robots */}
+        <meta name="robots" content="index, follow" />
+
+        {/* Favicons */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link
+          rel="icon"
+          href="/favicon-16x16.png"
+          sizes="16x16"
+          type="image/png"
+        />
+        <link
+          rel="icon"
+          href="/favicon-32x32.png"
+          sizes="32x32"
+          type="image/png"
+        />
+        <link
+          rel="icon"
+          href="/icon-light.png"
+          media="(prefers-color-scheme: light)"
+          sizes="192x192"
+          type="image/png"
+        />
+        <link
+          rel="icon"
+          href="/icon-dark.png"
+          media="(prefers-color-scheme: dark)"
+          sizes="192x192"
+          type="image/png"
+        />
+
+        {/* Apple Touch Icons */}
+        <link
+          rel="apple-touch-icon"
+          href="/apple-touch-icon-light.png"
+          sizes="180x180"
+          media="(prefers-color-scheme: light)"
+        />
+        <link
+          rel="apple-touch-icon"
+          href="/apple-touch-icon-dark.png"
+          sizes="180x180"
+          media="(prefers-color-scheme: dark)"
+        />
+        <link
+          rel="apple-touch-icon"
+          href="/apple-touch-icon.png"
+          sizes="180x180"
+        />
+
+        {/* Android Chrome Icons */}
+        <link rel="icon" href="/android-chrome-192x192.png" sizes="192x192" />
+        <link rel="icon" href="/android-chrome-512x512.png" sizes="512x512" />
+
+        {/* Plausible Analytics */}
+        <Script
+          defer
+          data-domain="chat.tinfoil.sh"
+          data-api="https://plausible.io/api/event"
+          src="/js/plausible.js"
+          integrity="sha384-2koU+A5hG/EjBLH1x5k5ThN+dPO7wtgAfkwcsSgQq3kNc0ouUd56j17YOJ0aE0yv"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+      </Head>
+      <body className="font-aeonik-fono antialiased">
+        <Main />
+        <NextScript />
+      </body>
+    </Html>
+  )
+}

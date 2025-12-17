@@ -13,7 +13,7 @@
  * - isStreamingRef is true only while processing an assistant response (used to defer cloud sync)
  * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
  */
-import { type BaseModel } from '@/app/config/models'
+import { type BaseModel } from '@/config/models'
 import { r2Storage } from '@/services/cloud/r2-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
 import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'

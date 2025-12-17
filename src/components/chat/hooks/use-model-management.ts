@@ -1,4 +1,4 @@
-import { isModelNameAvailable, type BaseModel } from '@/app/config/models'
+import { isModelNameAvailable, type BaseModel } from '@/config/models'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
