@@ -1,6 +1,13 @@
 import { simulateStream } from '@/utils/dev-simulator'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
+// Disable body size limit and automatic body parsing for streaming
+export const config = {
+  api: {
+    responseLimit: false,
+  },
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -34,8 +41,19 @@ export default async function handler(
 
     // Set up streaming response headers
     res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
     res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // Disable nginx buffering
+    res.setHeader('Content-Encoding', 'none') // Prevent compression
+
+    // Disable Nagle's algorithm to send packets immediately
+    if (req.socket) {
+      req.socket.setNoDelay(true)
+    }
+
+    // Set status and flush headers immediately
+    res.status(200)
+    res.flushHeaders()
 
     // Handle client disconnect
     req.on('close', () => {
@@ -50,6 +68,10 @@ export default async function handler(
           break
         }
         res.write(chunk)
+        // Flush immediately to ensure chunks are sent without buffering
+        if (typeof (res as any).flush === 'function') {
+          ;(res as any).flush()
+        }
       }
       res.end()
     } catch (error) {
