@@ -76,11 +76,8 @@ export function useModelManagement({
       setLastKnownPremiumStatus(isPremium)
 
       // Get all available chat models for this user
-      const availableChatModels = models.filter(
-        (model) =>
-          model.type === 'chat' &&
-          model.chat === true &&
-          isModelNameAvailable(model.modelName as AIModel, models, isPremium),
+      const availableChatModels = models.filter((model) =>
+        isModelNameAvailable(model.modelName as AIModel, models, isPremium),
       )
 
       if (availableChatModels.length === 0) {

@@ -129,22 +129,12 @@ export function useChatMessaging({
         )
 
         // If selected model is free and available, use it
-        if (
-          selectedModelData &&
-          selectedModelData.type === 'chat' &&
-          selectedModelData.chat === true &&
-          selectedModelData.paid === false
-        ) {
+        if (selectedModelData && selectedModelData.paid === false) {
           return selectedModel
         }
 
         // Otherwise fall back to first free chat model
-        const firstFreeModel = models.find(
-          (model) =>
-            model.type === 'chat' &&
-            model.chat === true &&
-            model.paid === false,
-        )
+        const firstFreeModel = models.find((model) => model.paid === false)
 
         // Use first free model if found, otherwise fallback to selected model as last resort
         return firstFreeModel?.modelName || selectedModel
