@@ -40,14 +40,7 @@ export const getAvailableChatModels = (
   models: BaseModel[],
   isPremium: boolean,
 ): BaseModel[] => {
-  return models.filter(
-    (model) =>
-      // Must be a chat model
-      model.type === 'chat' &&
-      model.chat === true &&
-      // Show models that are available for the user's subscription level
-      isModelAvailable(model, isPremium),
-  )
+  return models.filter((model) => isModelAvailable(model, isPremium))
 }
 
 // Helper function to validate if a specific model name is available for a user
@@ -60,13 +53,7 @@ export const isModelNameAvailable = (
   if (!model) {
     return false
   }
-
-  return (
-    model.type === 'chat' &&
-    model.chat === true &&
-    // Use the standard availability check
-    isModelAvailable(model, isPremium)
-  )
+  return isModelAvailable(model, isPremium)
 }
 
 // Helper function to check if running in local development
