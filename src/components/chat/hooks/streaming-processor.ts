@@ -196,13 +196,13 @@ export async function processStreamingResponse(
             timestamp: assistantMessage?.timestamp || new Date(),
             isThinking: false,
           }
-          if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+          if (isSameChat()) {
             const newMessages = [...ctx.updatedMessages, assistantMessage]
             ctx.updateChatWithHistoryCheck(
               ctx.setChats,
               ctx.updatedChat,
               ctx.setCurrentChat,
-              ctx.updatedChat.id,
+              ctx.currentChatIdRef.current,
               newMessages,
               false,
               false, // Save to IndexedDB when stream completes
@@ -229,7 +229,7 @@ export async function processStreamingResponse(
                 isThinking: false,
                 thinkingDuration,
               }
-          if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+          if (isSameChat()) {
             const chatId = ctx.currentChatIdRef.current
             const newMessages = [...ctx.updatedMessages, assistantMessage]
             ctx.updateChatWithHistoryCheck(
@@ -262,9 +262,15 @@ export async function processStreamingResponse(
           const jsonData = line.replace(/^data:\s*/i, '')
           const json = JSON.parse(jsonData)
 
+          const deltaReasoningContent =
+            json.choices?.[0]?.delta?.reasoning_content
+          const messageReasoningContent =
+            json.choices?.[0]?.message?.reasoning_content
           const hasReasoningContent =
-            'reasoning_content' in (json.choices?.[0]?.delta || {}) ||
-            'reasoning_content' in (json.choices?.[0]?.message || {})
+            (deltaReasoningContent !== undefined &&
+              deltaReasoningContent !== null) ||
+            (messageReasoningContent !== undefined &&
+              messageReasoningContent !== null)
           const reasoningContent =
             json.choices?.[0]?.message?.reasoning_content ||
             json.choices?.[0]?.delta?.reasoning_content ||
@@ -285,7 +291,7 @@ export async function processStreamingResponse(
               thoughts: reasoningContent || '',
               isThinking: true,
             }
-            if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+            if (isSameChat()) {
               const chatId = ctx.currentChatIdRef.current
               const messageToSave = assistantMessage as Message
               const newMessages = [...ctx.updatedMessages, messageToSave]
@@ -329,7 +335,7 @@ export async function processStreamingResponse(
                 isThinking: false,
                 thinkingDuration,
               }
-              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+              if (isSameChat()) {
                 scheduleStreamingUpdate()
               }
               continue
@@ -339,7 +345,7 @@ export async function processStreamingResponse(
                 thoughts: thoughtsBuffer,
                 isThinking: isInThinkingMode,
               }
-              if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+              if (isSameChat()) {
                 scheduleStreamingUpdate()
               }
               continue
@@ -417,7 +423,7 @@ export async function processStreamingResponse(
                       }
                     }
 
-                    if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+                    if (isSameChat()) {
                       const chatId = ctx.currentChatIdRef.current
                       const messageToSave = assistantMessage as Message
                       const newMessages = [
@@ -444,7 +450,7 @@ export async function processStreamingResponse(
                     }
                     content = ''
 
-                    if (ctx.currentChatIdRef.current === ctx.updatedChat.id) {
+                    if (isSameChat()) {
                       const chatId = ctx.currentChatIdRef.current
                       const messageToSave = assistantMessage as Message
                       const newMessages = [
