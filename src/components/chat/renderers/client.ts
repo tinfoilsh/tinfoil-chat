@@ -1,5 +1,3 @@
-'use client'
-
 // Client-only exports for React components
 // Import from this file when using these components in client components
 

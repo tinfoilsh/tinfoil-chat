@@ -1,5 +1,3 @@
-'use client'
-
 import { ChatInput } from '../../chat-input'
 import type { InputRenderer, InputRenderProps } from '../types'
 

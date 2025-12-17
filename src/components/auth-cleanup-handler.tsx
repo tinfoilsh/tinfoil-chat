@@ -1,5 +1,3 @@
-'use client'
-
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
 import { encryptionService } from '@/services/encryption/encryption-service'

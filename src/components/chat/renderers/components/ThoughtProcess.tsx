@@ -1,5 +1,3 @@
-'use client'
-
 import { LoadingDots } from '@/components/loading-dots'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { TINFOIL_COLORS } from '@/theme/colors'

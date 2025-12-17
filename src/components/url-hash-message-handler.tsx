@@ -1,5 +1,3 @@
-'use client'
-
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { useEffect, useRef } from 'react'
 
