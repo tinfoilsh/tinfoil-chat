@@ -1,4 +1,4 @@
-import type { BaseModel } from '@/app/config/models'
+import type { BaseModel } from '@/config/models'
 
 // Dev simulator model configuration
 export const DEV_SIMULATOR_MODEL: BaseModel = {

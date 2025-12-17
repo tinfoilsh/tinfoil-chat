@@ -1,4 +1,4 @@
-import { getAIModels, type BaseModel } from '@/app/config/models'
+import { getAIModels, type BaseModel } from '@/config/models'
 import { logError } from '@/utils/error-handling'
 import {
   getDocumentFormat,

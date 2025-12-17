@@ -1,6 +1,6 @@
 import { logError } from '@/utils/error-handling'
-import { auth, currentUser } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
+import { clerkClient, getAuth } from '@clerk/nextjs/server'
+import type { NextApiRequest, NextApiResponse } from 'next'
 
 type StripeSubscriptionStatus =
   | 'active'
@@ -60,21 +60,26 @@ const hasActiveSubscription = (
   return false
 }
 
-export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
 
-export async function GET() {
   try {
-    const { userId } = await auth()
+    const { userId } = getAuth(req)
 
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const user = await currentUser()
+    const client = await clerkClient()
+    const user = await client.users.getUser(userId)
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return res.status(404).json({ error: 'User not found' })
     }
 
     const publicMetadata = (user.publicMetadata ?? {}) as Record<
@@ -92,16 +97,13 @@ export async function GET() {
     const now = new Date()
     const chatActive = hasActiveSubscription(chatStatus, chatExpiration, now)
 
-    return NextResponse.json({
+    return res.status(200).json({
       chat_subscription_active: chatActive,
     })
   } catch (error) {
     logError('Failed to check subscription status', error, {
       component: 'subscription-status-api',
     })
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    )
+    return res.status(500).json({ error: 'Internal server error' })
   }
 }
