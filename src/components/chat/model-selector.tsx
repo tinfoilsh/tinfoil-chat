@@ -209,12 +209,11 @@ export function ModelSelector({
                 src={
                   failedImages[model.modelName]
                     ? '/icon.png'
-                    : model.modelName.toLowerCase().includes('openai') ||
-                        model.modelName.toLowerCase().includes('gpt')
-                      ? isDarkMode
-                        ? '/model-icons/openai-dark.png'
-                        : '/model-icons/openai-light.png'
-                      : `/model-icons/${model.image}`
+                    : model.image === 'openai.png'
+                      ? `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
+                      : model.image === 'moonshot.png'
+                        ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
+                        : `/model-icons/${model.image}`
                 }
                 alt={model.name}
                 className={`h-5 w-5 ${!isAvailable ? 'opacity-70 grayscale' : ''}`}
