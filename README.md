@@ -4,13 +4,6 @@
 
 ## Quick Start
 
-### Prerequisites
-
-- Node.js 18+
-- npm
-
-### Setup
-
 1. **Clone and install**
 
    ```bash
@@ -77,7 +70,7 @@ The chat interface shows real-time verification status for:
 
 Learn more about the security model:
 
-- [Tinfoil Node SDK Documentation](https://docs.tinfoil.sh/sdk/node-sdk)
+- [Tinfoil JavaScript SDK Documentation](https://docs.tinfoil.sh/sdk/javascript-sdk)
 - [EHBP Protocol Details](https://docs.tinfoil.sh/resources/ehbp)
 
 ## Reporting Vulnerabilities
