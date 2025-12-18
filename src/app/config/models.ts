@@ -74,11 +74,7 @@ export const getAIModels = async (
   const isLocalDev = isLocalDevelopment()
 
   try {
-    // Always fetch ALL models regardless of user status
-    // We'll filter client-side based on what the user can access
-    const endpoint = '/api/config/models?paid=true&chat=true'
-    const url = `${API_BASE_URL}${endpoint}`
-    const response = await fetch(url)
+    const response = await fetch(`${API_BASE_URL}/api/config/models`)
 
     if (!response.ok) {
       throw new Error(`Failed to fetch models: ${response.status}`)
@@ -88,7 +84,6 @@ export const getAIModels = async (
 
     // Add Dev Simulator model when running locally
     if (isLocalDev) {
-      console.log('🧪 Dev Simulator enabled for local development')
       models.unshift(DEV_SIMULATOR_MODEL)
     }
 
