@@ -40,7 +40,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
               "img-src 'self' data: blob: https:",
-              "connect-src 'self' data: https://*.tinfoil.sh https://tinfoilsh.github.io https://tuf-repo-cdn.sigstore.dev https://plausible.io https://vitals.vercel-insights.com https://clerk.accounts.dev https://*.clerk.accounts.dev wss://*.clerk.accounts.dev",
+              "connect-src 'self' data: https://*.tinfoil.sh https://tinfoilsh.github.io https://plausible.io https://vitals.vercel-insights.com https://clerk.accounts.dev https://*.clerk.accounts.dev wss://*.clerk.accounts.dev",
               "frame-src 'self' https://vercel.live https://clerk.accounts.dev https://*.clerk.accounts.dev https://verification-center.tinfoil.sh",
               "frame-ancestors 'none'",
               "base-uri 'self'",
