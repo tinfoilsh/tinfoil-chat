@@ -35,7 +35,7 @@ type ChatMessagesProps = {
   handleModelSelect?: (model: string) => void
   expandedLabel?: LabelType
   handleLabelClick?: (
-    label: 'verify' | 'model' | 'info',
+    label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
 }
