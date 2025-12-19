@@ -4,6 +4,7 @@ import { useAuth, useClerk } from '@clerk/nextjs'
 import {
   DocumentDuplicateIcon,
   ExclamationTriangleIcon,
+  LightBulbIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
@@ -13,16 +14,26 @@ import {
   type ReasoningEffort,
 } from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
-import type { AIModel } from './types'
+import type { AIModel, LabelType } from './types'
+
+const EFFORT_OPTIONS: {
+  value: ReasoningEffort
+  label: string
+  description: string
+}[] = [
+  { value: 'low', label: 'Low', description: 'Quick responses' },
+  { value: 'medium', label: 'Medium', description: 'Balanced reasoning' },
+  { value: 'high', label: 'High', description: 'Deep thinking' },
+]
 
 type ChatControlsProps = {
   verificationComplete: boolean
   verificationSuccess?: boolean
   openAndExpandVerifier: () => void
   setIsSidebarOpen?: (isOpen: boolean) => void
-  expandedLabel: 'verify' | 'model' | 'info' | null
+  expandedLabel: LabelType
   handleLabelClick: (
-    label: 'verify' | 'model' | 'info',
+    label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
   selectedModel: AIModel
@@ -152,23 +163,61 @@ export function ChatControls({
         {isReasoningModel(selectedModel) &&
           reasoningEffort &&
           onReasoningEffortChange && (
-            <div className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-chat-background px-1 py-0.5">
-              {(['low', 'medium', 'high'] as const).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => onReasoningEffortChange(level)}
-                  className={cn(
-                    'rounded-md px-2 py-1 text-xs transition-colors',
-                    reasoningEffort === level
-                      ? 'bg-surface-chat text-content-primary'
-                      : 'text-content-muted hover:text-content-secondary',
-                  )}
-                  title={`${level.charAt(0).toUpperCase() + level.slice(1)} reasoning effort`}
+            <div className="relative">
+              <button
+                type="button"
+                data-reasoning-selector
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleLabelClick('reasoning', () => {})
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg border border-border-subtle px-2 py-1 transition-colors',
+                  'bg-surface-chat-background hover:bg-surface-chat',
+                  expandedLabel === 'reasoning' && 'bg-surface-chat',
+                )}
+                title={`Reasoning effort: ${reasoningEffort}`}
+              >
+                <LightBulbIcon className="h-5 w-5 text-content-secondary" />
+                {!isCompactMode && (
+                  <span className="text-xs text-content-secondary">
+                    {EFFORT_OPTIONS.find((o) => o.value === reasoningEffort)
+                      ?.label || 'Medium'}
+                  </span>
+                )}
+              </button>
+
+              {expandedLabel === 'reasoning' && (
+                <div
+                  data-reasoning-menu
+                  className="absolute bottom-full z-50 mb-2 w-[180px] overflow-hidden rounded-lg border border-border-subtle bg-surface-chat font-aeonik-fono text-content-secondary shadow-lg"
                 >
-                  {level.charAt(0).toUpperCase() + level.slice(1)}
-                </button>
-              ))}
+                  {EFFORT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        'flex w-full flex-col px-3 py-2 text-left text-sm transition-colors',
+                        reasoningEffort === option.value
+                          ? 'bg-surface-card text-content-primary'
+                          : 'hover:bg-surface-card/70',
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onReasoningEffortChange(option.value)
+                        handleLabelClick('reasoning', () => {})
+                      }}
+                    >
+                      <span className="font-medium">{option.label}</span>
+                      <span className="text-xs text-content-muted">
+                        {option.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

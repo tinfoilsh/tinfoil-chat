@@ -22,7 +22,7 @@ interface UseModelManagementReturn {
   verificationSuccess: boolean
   handleModelSelect: (modelName: AIModel) => void
   handleLabelClick: (
-    label: 'verify' | 'model' | 'info',
+    label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
 }
@@ -210,7 +210,7 @@ export function useModelManagement({
 
   // Handle label click
   const handleLabelClick = useCallback(
-    (label: 'verify' | 'model' | 'info', action: () => void) => {
+    (label: Exclude<LabelType, null>, action: () => void) => {
       if (expandedLabel === label) {
         // If already expanded, perform the action
         action()

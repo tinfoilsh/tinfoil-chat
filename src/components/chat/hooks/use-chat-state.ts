@@ -51,7 +51,7 @@ interface UseChatStateReturn {
   openAndExpandVerifier: () => void
   handleInputFocus: () => void
   handleLabelClick: (
-    label: 'verify' | 'model' | 'info',
+    label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
   handleModelSelect: (modelName: AIModel) => void
@@ -170,31 +170,45 @@ export function useChatState({
   // Update ref with cancelGeneration function
   cancelGenerationRef.current = cancelGeneration
 
-  // Add effect to handle clicks outside the model selector
+  // Add effect to handle clicks outside the model/reasoning selectors
   useEffect(() => {
-    if (expandedLabel === 'model') {
+    if (expandedLabel === 'model' || expandedLabel === 'reasoning') {
       const handleClickOutside = (event: MouseEvent) => {
-        // Find the model selector element
-        const modelSelectorButton = document.querySelector(
-          '[data-model-selector]',
-        )
-        const modelSelectorMenu = document.querySelector('[data-model-menu]')
+        if (expandedLabel === 'model') {
+          const modelSelectorButton = document.querySelector(
+            '[data-model-selector]',
+          )
+          const modelSelectorMenu = document.querySelector('[data-model-menu]')
 
-        // If we clicked outside both the button and the menu, close the menu
-        if (
-          modelSelectorButton &&
-          modelSelectorMenu &&
-          !modelSelectorButton.contains(event.target as Node) &&
-          !modelSelectorMenu.contains(event.target as Node)
-        ) {
-          setExpandedLabel(null)
+          if (
+            modelSelectorButton &&
+            modelSelectorMenu &&
+            !modelSelectorButton.contains(event.target as Node) &&
+            !modelSelectorMenu.contains(event.target as Node)
+          ) {
+            setExpandedLabel(null)
+          }
+        } else if (expandedLabel === 'reasoning') {
+          const reasoningSelectorButton = document.querySelector(
+            '[data-reasoning-selector]',
+          )
+          const reasoningSelectorMenu = document.querySelector(
+            '[data-reasoning-menu]',
+          )
+
+          if (
+            reasoningSelectorButton &&
+            reasoningSelectorMenu &&
+            !reasoningSelectorButton.contains(event.target as Node) &&
+            !reasoningSelectorMenu.contains(event.target as Node)
+          ) {
+            setExpandedLabel(null)
+          }
         }
       }
 
-      // Add global event listener
       document.addEventListener('mousedown', handleClickOutside)
 
-      // Cleanup function
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
       }
