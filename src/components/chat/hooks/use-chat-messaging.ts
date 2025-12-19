@@ -30,6 +30,7 @@ import { createBlankChat, sortChats } from './chat-operations'
 import { createUpdateChatWithHistoryCheck } from './chat-persistence'
 import { processStreamingResponse } from './streaming-processor'
 import { useMaxMessages } from './use-max-messages'
+import type { ReasoningEffort } from './use-reasoning-effort'
 
 interface UseChatMessagingProps {
   systemPrompt: string
@@ -44,6 +45,7 @@ interface UseChatMessagingProps {
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
   messagesEndRef: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
+  reasoningEffort?: ReasoningEffort
 }
 
 interface UseChatMessagingReturn {
@@ -77,6 +79,7 @@ export function useChatMessaging({
   setCurrentChat,
   messagesEndRef,
   scrollToBottom,
+  reasoningEffort,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
@@ -549,6 +552,7 @@ export function useChatMessaging({
           updatedMessages,
           maxMessages,
           signal: controller.signal,
+          reasoningEffort,
         })
 
         const assistantMessage = await processStreamingResponse(response, {
@@ -787,6 +791,7 @@ export function useChatMessaging({
       rules,
       updateChatWithHistoryCheck,
       scrollToBottom,
+      reasoningEffort,
     ],
   )
 

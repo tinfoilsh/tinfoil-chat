@@ -8,6 +8,10 @@ import {
 } from '@heroicons/react/24/outline'
 import { useCallback } from 'react'
 import { PiSpinner } from 'react-icons/pi'
+import {
+  isReasoningModel,
+  type ReasoningEffort,
+} from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
 import type { AIModel } from './types'
 
@@ -30,6 +34,8 @@ type ChatControlsProps = {
   hasMessages?: boolean
   isCompactMode?: boolean
   contextUsagePercentage?: number
+  reasoningEffort?: ReasoningEffort
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void
 }
 
 export function ChatControls({
@@ -48,6 +54,8 @@ export function ChatControls({
   hasMessages = false,
   isCompactMode = false,
   contextUsagePercentage,
+  reasoningEffort,
+  onReasoningEffortChange,
 }: ChatControlsProps) {
   const { isSignedIn } = useAuth()
   const { openSignIn } = useClerk()
@@ -139,6 +147,30 @@ export function ChatControls({
             />
           )}
         </div>
+
+        {/* Reasoning effort selector - only show for gpt-oss models */}
+        {isReasoningModel(selectedModel) &&
+          reasoningEffort &&
+          onReasoningEffortChange && (
+            <div className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-chat-background px-1 py-0.5">
+              {(['low', 'medium', 'high'] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => onReasoningEffortChange(level)}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-xs transition-colors',
+                    reasoningEffort === level
+                      ? 'bg-surface-chat text-content-primary'
+                      : 'text-content-muted hover:text-content-secondary',
+                  )}
+                  title={`${level.charAt(0).toUpperCase() + level.slice(1)} reasoning effort`}
+                >
+                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
 
         {/* Verification label */}
         <button
