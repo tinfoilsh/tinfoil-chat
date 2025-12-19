@@ -18,7 +18,7 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run test:run
+      - run: npm run test:unit
 
       - run: npm run build
         env:
@@ -28,7 +28,7 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
-      - run: npm run test:e2e
+      - run: npm run test:ui
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
