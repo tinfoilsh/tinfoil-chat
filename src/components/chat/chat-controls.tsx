@@ -191,17 +191,17 @@ export function ChatControls({
               {expandedLabel === 'reasoning' && (
                 <div
                   data-reasoning-menu
-                  className="absolute bottom-full z-50 mb-2 w-[180px] overflow-hidden rounded-lg border border-border-subtle bg-surface-chat font-aeonik-fono text-content-secondary shadow-lg"
+                  className="absolute bottom-full z-50 mb-2 w-[180px] overflow-hidden rounded-lg border border-border-subtle bg-surface-chat p-1 font-aeonik-fono text-content-secondary shadow-lg"
                 >
                   {EFFORT_OPTIONS.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       className={cn(
-                        'flex w-full flex-col px-3 py-2 text-left text-sm transition-colors',
+                        'flex w-full flex-col rounded-lg border px-3 py-2 text-left text-sm transition-colors',
                         reasoningEffort === option.value
-                          ? 'bg-surface-card text-content-primary'
-                          : 'hover:bg-surface-card/70',
+                          ? 'border-border-subtle bg-surface-card text-content-primary'
+                          : 'border-transparent hover:bg-surface-card/70',
                       )}
                       onClick={(e) => {
                         e.preventDefault()
