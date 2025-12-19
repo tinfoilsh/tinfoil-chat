@@ -262,6 +262,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
             {/* Verification Status Display */}
             <motion.div
+              data-testid="verification-status"
               className="no-scroll-anchoring mt-8"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
