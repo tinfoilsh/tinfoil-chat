@@ -4,9 +4,9 @@ import { useAuth, useClerk } from '@clerk/nextjs'
 import {
   DocumentDuplicateIcon,
   ExclamationTriangleIcon,
-  LightBulbIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
+import { TfBrain } from '@tinfoilsh/tinfoil-icons'
 import { useCallback } from 'react'
 import { PiSpinner } from 'react-icons/pi'
 import {
@@ -179,7 +179,7 @@ export function ChatControls({
                 )}
                 title={`Reasoning effort: ${reasoningEffort}`}
               >
-                <LightBulbIcon className="h-5 w-5 text-content-secondary" />
+                <TfBrain className="h-5 w-5 text-content-secondary" />
                 {!isCompactMode && (
                   <span className="text-xs text-content-secondary">
                     {EFFORT_OPTIONS.find((o) => o.value === reasoningEffort)
