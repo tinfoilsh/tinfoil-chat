@@ -8,7 +8,12 @@
     "lint": "next lint",
     "format": "prettier --write .",
     "prepare": "husky install",
-    "find-unused": "ts-unused-exports tsconfig.json"
+    "find-unused": "ts-unused-exports tsconfig.json",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@braintree/sanitize-url": "^7.1.1",
@@ -60,14 +65,19 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/container-queries": "^0.1.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
     "@types/audiobuffer-to-wav": "^1.0.4",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitest/coverage-v8": "^4.0.16",
     "eslint": "^9.28.0",
     "eslint-config-next": "^15.3.3",
+    "happy-dom": "^20.0.11",
     "husky": "^8.0.3",
     "lint-staged": "^15.2.10",
     "prettier": "^3.3.2",
@@ -75,7 +85,8 @@
     "prettier-plugin-tailwindcss": "^0.6.12",
     "tailwindcss": "^3.4.7",
     "ts-unused-exports": "^11.0.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.16"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

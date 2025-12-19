@@ -47,3 +47,8 @@ next-env.d.ts
 .idea/
 
 CLAUDE.md
+
+# test results
+/coverage
+/playwright-report/
+/test-results/
