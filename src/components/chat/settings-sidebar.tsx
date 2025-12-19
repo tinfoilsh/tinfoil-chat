@@ -689,6 +689,7 @@ export function SettingsSidebar({
                     </div>
                   </div>
                   <button
+                    id="theme-toggle"
                     onClick={handleThemeToggle}
                     className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
                   >

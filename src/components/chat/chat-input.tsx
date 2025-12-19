@@ -403,7 +403,7 @@ export function ChatInput({
         )}
 
         <textarea
-          data-testid="chat-input"
+          id="chat-input"
           ref={inputRef}
           value={input}
           autoFocus
@@ -625,7 +625,7 @@ export function ChatInput({
 
         <div className="mt-3 flex items-center justify-between">
           <button
-            data-testid="upload-document-button"
+            id="upload-button"
             type="button"
             onClick={triggerFileInput}
             className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
@@ -665,7 +665,7 @@ export function ChatInput({
               </button>
             )}
             <button
-              data-testid="send-button"
+              id="send-button"
               type="button"
               onClick={(e) => {
                 if (loadingState === 'loading') {
