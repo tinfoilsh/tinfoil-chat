@@ -171,6 +171,7 @@ export const VerificationStatusDisplay = memo(
 
       return (
         <motion.div
+          id="verification-status"
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
@@ -178,6 +179,7 @@ export const VerificationStatusDisplay = memo(
         >
           <TextureGrid />
           <button
+            id="verification-expand"
             onClick={handleToggle}
             className="hover:bg-surface-secondary/50 relative flex h-10 w-full items-center justify-between rounded-lg px-4 text-left transition-colors"
             aria-expanded={isExpanded}

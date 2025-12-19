@@ -1033,6 +1033,7 @@ export function ChatInterface({
           {/* Settings toggle button */}
           <div className="group relative">
             <button
+              id="settings-button"
               className={cn(
                 'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
                 'bg-surface-chat-background text-content-secondary hover:bg-surface-chat hover:text-content-primary',
