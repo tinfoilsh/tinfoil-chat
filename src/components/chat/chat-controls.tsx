@@ -2,11 +2,11 @@ import { type BaseModel } from '@/app/config/models'
 import { cn } from '@/components/ui/utils'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import {
-  DocumentDuplicateIcon,
-  ExclamationTriangleIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/outline'
-import { TfBrain } from '@tinfoilsh/tinfoil-icons'
+  TfBrain,
+  TfCopy,
+  TfShieldCheck,
+  TfWarning,
+} from '@tinfoilsh/tinfoil-icons'
 import { useCallback } from 'react'
 import { PiSpinner } from 'react-icons/pi'
 import {
@@ -86,7 +86,7 @@ export function ChatControls({
       <div className="mb-2 flex items-center gap-2">
         <div className="flex gap-2">
           <div className="flex items-center gap-1.5 rounded-lg px-2 py-1">
-            <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+            <TfWarning className="h-5 w-5 text-red-500" />
             <span className="text-xs text-red-500">Model not found</span>
           </div>
         </div>
@@ -230,9 +230,9 @@ export function ChatControls({
           {!verificationComplete ? (
             <PiSpinner className="h-5 w-5 animate-spin text-content-primary" />
           ) : verificationSuccess ? (
-            <ShieldCheckIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
+            <TfShieldCheck className="lock-close-animation h-5 w-5 text-emerald-500" />
           ) : (
-            <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+            <TfWarning className="h-5 w-5 text-red-500" />
           )}
           {!isCompactMode && (
             <span className="text-xs text-content-secondary">
@@ -253,7 +253,7 @@ export function ChatControls({
             className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
             title="Copy"
           >
-            <DocumentDuplicateIcon className="h-5 w-5 text-content-secondary" />
+            <TfCopy className="h-5 w-5 text-content-secondary" />
             {!isCompactMode && (
               <span className="text-xs text-content-secondary">Copy</span>
             )}
