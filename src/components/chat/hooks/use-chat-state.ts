@@ -4,6 +4,7 @@ import type { AIModel, Chat, LabelType, LoadingState } from '../types'
 import { useChatMessaging } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
 import { useModelManagement } from './use-model-management'
+import type { ReasoningEffort } from './use-reasoning-effort'
 import { useUIState } from './use-ui-state'
 
 // Return type for useChatState hook
@@ -67,6 +68,7 @@ export function useChatState({
   models = [],
   subscriptionLoading = false,
   scrollToBottom,
+  reasoningEffort,
 }: {
   systemPrompt: string
   rules?: string
@@ -75,6 +77,7 @@ export function useChatState({
   models?: BaseModel[]
   subscriptionLoading?: boolean
   scrollToBottom?: () => void
+  reasoningEffort?: ReasoningEffort
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -161,6 +164,7 @@ export function useChatState({
     setCurrentChat,
     messagesEndRef,
     scrollToBottom,
+    reasoningEffort,
   })
 
   // Update ref with cancelGeneration function

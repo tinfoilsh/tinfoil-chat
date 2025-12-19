@@ -1,5 +1,9 @@
 import type { BaseModel } from '@/app/config/models'
 import { ChatError } from '@/components/chat/chat-utils'
+import {
+  isReasoningModel,
+  type ReasoningEffort,
+} from '@/components/chat/hooks/use-reasoning-effort'
 import type { Message } from '@/components/chat/types'
 import { logError } from '@/utils/error-handling'
 import { ChatQueryBuilder } from './chat-query-builder'
@@ -12,13 +16,21 @@ export interface SendChatStreamParams {
   updatedMessages: Message[]
   maxMessages: number
   signal: AbortSignal
+  reasoningEffort?: ReasoningEffort
 }
 
 export async function sendChatStream(
   params: SendChatStreamParams,
 ): Promise<Response> {
-  const { model, systemPrompt, rules, updatedMessages, maxMessages, signal } =
-    params
+  const {
+    model,
+    systemPrompt,
+    rules,
+    updatedMessages,
+    maxMessages,
+    signal,
+    reasoningEffort,
+  } = params
 
   if (model.modelName === 'dev-simulator') {
     const simulatorUrl = '/api/dev/simulator'
@@ -93,6 +105,9 @@ export async function sendChatStream(
         model: model.modelName,
         messages,
         stream: true,
+        // Only include reasoning_effort for gpt-oss models
+        ...(isReasoningModel(model.modelName) &&
+          reasoningEffort && { reasoning_effort: reasoningEffort }),
       },
       { signal },
     )

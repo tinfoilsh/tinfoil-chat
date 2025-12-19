@@ -39,6 +39,7 @@ import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
+import { useReasoningEffort } from './hooks/use-reasoning-effort'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 // Lazy-load modals that aren't shown on initial load
@@ -171,6 +172,9 @@ export function ChatInterface({
 
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
+
+  // Use reasoning effort hook for gpt-oss models
+  const { reasoningEffort, setReasoningEffort } = useReasoningEffort()
 
   // Use custom system prompt hook
   const { effectiveSystemPrompt, processedRules } = useCustomSystemPrompt(
@@ -376,6 +380,7 @@ export function ChatInterface({
     subscriptionLoading: subscriptionLoading,
     // Scroll on user send to keep view anchored when thinking placeholder appears
     scrollToBottom: scrollToBottom,
+    reasoningEffort,
   })
 
   // Initialize tinfoil client once when page loads
@@ -1283,6 +1288,8 @@ export function ChatInterface({
                         (isVerifierSidebarOpen || isSettingsSidebarOpen))
                     }
                     contextUsagePercentage={contextUsagePercentage}
+                    reasoningEffort={reasoningEffort}
+                    onReasoningEffortChange={setReasoningEffort}
                   />
 
                   {/* Input */}
