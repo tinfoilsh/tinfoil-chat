@@ -14,52 +14,55 @@ test.describe('Smoke Tests', () => {
   })
 
   test('chat input is present and functional', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Chat input is hidden on mobile viewports',
+    )
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Chat input should be visible (on desktop)
-    const textarea = page.locator('textarea')
+    const textarea = page.locator('[data-testid="chat-input"]')
+    await expect(textarea).toBeVisible({ timeout: 10000 })
 
-    // On desktop, the textarea should be visible
-    const viewportSize = page.viewportSize()
-    if (viewportSize && viewportSize.width >= 768) {
-      await expect(textarea).toBeVisible({ timeout: 10000 })
+    // Should have the correct placeholder
+    await expect(textarea).toHaveAttribute(
+      'placeholder',
+      "What's on your mind?",
+    )
 
-      // Should have the correct placeholder
-      await expect(textarea).toHaveAttribute(
-        'placeholder',
-        "What's on your mind?",
-      )
-
-      // Should be able to type in it
-      await textarea.fill('Hello, this is a test message')
-      await expect(textarea).toHaveValue('Hello, this is a test message')
-    }
+    // Should be able to type in it
+    await textarea.fill('Hello, this is a test message')
+    await expect(textarea).toHaveValue('Hello, this is a test message')
   })
 
   test('document upload button exists', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Upload button is hidden on mobile viewports',
+    )
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // On desktop, the upload button should be visible
-    const viewportSize = page.viewportSize()
-    if (viewportSize && viewportSize.width >= 768) {
-      const uploadButton = page.locator('button[title="Upload document"]')
-      await expect(uploadButton).toBeVisible({ timeout: 10000 })
-    }
+    const uploadButton = page.locator('[data-testid="upload-document-button"]')
+    await expect(uploadButton).toBeVisible({ timeout: 10000 })
   })
 
   test('send button is present', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Send button is hidden on mobile viewports',
+    )
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // On desktop, the send button should be visible
-    const viewportSize = page.viewportSize()
-    if (viewportSize && viewportSize.width >= 768) {
-      // The send button has a specific class structure
-      const sendButton = page.locator('button.rounded-full')
-      await expect(sendButton.first()).toBeVisible({ timeout: 10000 })
-    }
+    const sendButton = page.locator('[data-testid="send-button"]')
+    await expect(sendButton).toBeVisible({ timeout: 10000 })
   })
 
   test('page has correct title', async ({ page }) => {
@@ -100,9 +103,9 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // The verification status component should be present
-    // It contains info about Tinfoil's verification system
-    const verificationSection = page.locator('.no-scroll-anchoring')
+    const verificationSection = page.locator(
+      '[data-testid="verification-status"]',
+    )
     await expect(verificationSection).toBeVisible({ timeout: 10000 })
   })
 
@@ -111,8 +114,7 @@ test.describe('Smoke Tests', () => {
   }) => {
     await page.goto('/')
 
-    // Look for the verification status area
-    const verificationArea = page.locator('.no-scroll-anchoring')
+    const verificationArea = page.locator('[data-testid="verification-status"]')
     await expect(verificationArea).toBeVisible({ timeout: 10000 })
 
     // Initially should show "Verifying security..." OR already be verified
@@ -133,7 +135,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('.no-scroll-anchoring')
+    const verificationArea = page.locator('[data-testid="verification-status"]')
     await expect(verificationArea).toBeVisible({ timeout: 10000 })
 
     // Wait for verification to complete
@@ -150,7 +152,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('.no-scroll-anchoring')
+    const verificationArea = page.locator('[data-testid="verification-status"]')
 
     // Wait for verification to complete
     const verifiedText = verificationArea.getByText('Privacy Verified')
@@ -175,7 +177,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('.no-scroll-anchoring')
+    const verificationArea = page.locator('[data-testid="verification-status"]')
 
     // Wait for verification to complete
     const verifiedText = verificationArea.getByText('Privacy Verified')
