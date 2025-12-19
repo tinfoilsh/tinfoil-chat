@@ -2,9 +2,9 @@
   "name": "tinfoil-chat",
   "version": "1.0.0",
   "scripts": {
-    "dev": "next dev",
-    "dev:simulator": "node scripts/dev-simulator.mjs",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:simulator\"",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "next dev",
+    "dev:backend": "node scripts/dev-simulator.mjs",
     "build": "next build",
     "start": "npx serve out",
     "lint": "next lint",
