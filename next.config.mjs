@@ -26,6 +26,16 @@ const nextConfig = {
     }
     return config
   },
+
+  // Proxy dev simulator to standalone server (only works in `next dev`, ignored in static export)
+  async rewrites() {
+    return [
+      {
+        source: '/api/dev/simulator',
+        destination: 'http://localhost:3001/api/dev/simulator',
+      },
+    ]
+  },
 }
 
 export default nextConfig
