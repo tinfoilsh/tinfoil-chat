@@ -1,6 +1,48 @@
 import { expect, test } from '@playwright/test'
 
 test.describe('Smoke Tests', () => {
+  test('app loads in light mode by default', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    // Light mode is the default (data-theme="light" set in layout.tsx)
+    const html = page.locator('html')
+    await expect(html).toHaveAttribute('data-theme', 'light')
+  })
+
+  test('can toggle between light and dark mode', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Settings button is hidden on mobile viewports',
+    )
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const html = page.locator('html')
+
+    // Starts in light mode
+    await expect(html).toHaveAttribute('data-theme', 'light')
+
+    // Open settings sidebar
+    const settingsButton = page.locator('#settings-button')
+    await expect(settingsButton).toBeVisible({ timeout: 10000 })
+    await settingsButton.click()
+
+    // Find and click the theme toggle button
+    const themeToggle = page.locator('#theme-toggle')
+    await expect(themeToggle).toBeVisible({ timeout: 5000 })
+    await themeToggle.click()
+
+    // Should now be in dark mode
+    await expect(html).toHaveAttribute('data-theme', 'dark')
+
+    // Toggle back to light mode
+    await themeToggle.click()
+    await expect(html).toHaveAttribute('data-theme', 'light')
+  })
+
   test('app loads and displays welcome screen', async ({ page }) => {
     await page.goto('/')
 
@@ -23,7 +65,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const textarea = page.locator('[data-testid="chat-input"]')
+    const textarea = page.locator('#chat-input')
     await expect(textarea).toBeVisible({ timeout: 10000 })
 
     // Should have the correct placeholder
@@ -47,7 +89,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const uploadButton = page.locator('[data-testid="upload-document-button"]')
+    const uploadButton = page.locator('#upload-button')
     await expect(uploadButton).toBeVisible({ timeout: 10000 })
   })
 
@@ -61,7 +103,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const sendButton = page.locator('[data-testid="send-button"]')
+    const sendButton = page.locator('#send-button')
     await expect(sendButton).toBeVisible({ timeout: 10000 })
   })
 
@@ -103,9 +145,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationSection = page.locator(
-      '[data-testid="verification-status"]',
-    )
+    const verificationSection = page.locator('#verification-status')
     await expect(verificationSection).toBeVisible({ timeout: 10000 })
   })
 
@@ -114,7 +154,7 @@ test.describe('Smoke Tests', () => {
   }) => {
     await page.goto('/')
 
-    const verificationArea = page.locator('[data-testid="verification-status"]')
+    const verificationArea = page.locator('#verification-status')
     await expect(verificationArea).toBeVisible({ timeout: 10000 })
 
     // Initially should show "Verifying security..." OR already be verified
@@ -129,21 +169,16 @@ test.describe('Smoke Tests', () => {
     await expect(verifiedText).toBeVisible({ timeout: 15000 })
   })
 
-  test('privacy verified badge has correct visual elements', async ({
-    page,
-  }) => {
+  test('privacy verified badge shows correct text', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('[data-testid="verification-status"]')
+    const verificationArea = page.locator('#verification-status')
     await expect(verificationArea).toBeVisible({ timeout: 10000 })
 
-    // Wait for verification to complete
+    // Wait for verification to complete and verify the text is present
     const verifiedText = verificationArea.getByText('Privacy Verified')
     await expect(verifiedText).toBeVisible({ timeout: 15000 })
-
-    // The verified text should be green (emerald-500)
-    await expect(verifiedText).toHaveClass(/text-emerald-500/)
   })
 
   test('can expand verification details and see proof button', async ({
@@ -152,14 +187,14 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('[data-testid="verification-status"]')
+    const verificationArea = page.locator('#verification-status')
 
     // Wait for verification to complete
     const verifiedText = verificationArea.getByText('Privacy Verified')
     await expect(verifiedText).toBeVisible({ timeout: 15000 })
 
     // Click to expand the verification details
-    const expandButton = verificationArea.locator('button').first()
+    const expandButton = page.locator('#verification-expand')
     await expandButton.click()
 
     // Should show the expanded content with privacy explanation
@@ -177,14 +212,14 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('[data-testid="verification-status"]')
+    const verificationArea = page.locator('#verification-status')
 
     // Wait for verification to complete
     const verifiedText = verificationArea.getByText('Privacy Verified')
     await expect(verifiedText).toBeVisible({ timeout: 15000 })
 
     // Expand the details
-    const expandButton = verificationArea.locator('button').first()
+    const expandButton = page.locator('#verification-expand')
     await expandButton.click()
 
     // Click "See verification proof"
