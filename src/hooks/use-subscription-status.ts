@@ -1,126 +1,97 @@
-import { logError } from '@/utils/error-handling'
-import { useAuth } from '@clerk/nextjs'
-import { useEffect, useRef, useState } from 'react'
+import { useUser } from '@clerk/nextjs'
+import { useMemo } from 'react'
 
-const SUBSCRIPTION_CACHE_KEY = 'cached_subscription_status'
+type StripeSubscriptionStatus =
+  | 'active'
+  | 'canceled'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'past_due'
+  | 'paused'
+  | 'trialing'
+  | 'unpaid'
 
-interface CachedSubscription {
-  chat_subscription_active: boolean
-}
+const SUPPORTED_STATUSES = new Set<StripeSubscriptionStatus>([
+  'active',
+  'canceled',
+  'incomplete',
+  'incomplete_expired',
+  'past_due',
+  'paused',
+  'trialing',
+  'unpaid',
+])
 
-export function useSubscriptionStatus() {
-  const { getToken, isSignedIn, isLoaded } = useAuth()
+const isValidStatus = (status: unknown): status is StripeSubscriptionStatus =>
+  typeof status === 'string' &&
+  SUPPORTED_STATUSES.has(status as StripeSubscriptionStatus)
 
-  // Initialize with cached value if available
-  const getCachedStatus = () => {
-    if (typeof window === 'undefined') return null
-    try {
-      const cached = localStorage.getItem(SUBSCRIPTION_CACHE_KEY)
-      if (cached) {
-        return JSON.parse(cached) as CachedSubscription
-      }
-    } catch {
-      // Ignore cache errors
-    }
+const parseExpiration = (expiration: unknown): Date | null => {
+  if (typeof expiration !== 'string' || expiration.trim().length === 0) {
     return null
   }
 
-  const cachedStatus = getCachedStatus()
+  const parsed = new Date(expiration)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
 
-  // Track if we initially had cached data
-  const hadCachedDataRef = useRef(!!cachedStatus)
+  return parsed
+}
 
-  // Only show loading if we don't have cached data
-  const [isLoading, setIsLoading] = useState(!cachedStatus)
-  const [error, setError] = useState<string | null>(null)
-  const [subscriptionStatus, setSubscriptionStatus] = useState(
-    cachedStatus || {
-      chat_subscription_active: false,
-    },
-  )
+const hasActiveSubscription = (
+  status: StripeSubscriptionStatus | null,
+  expiration: Date | null,
+  now: Date,
+) => {
+  if (!status) {
+    return false
+  }
 
-  useEffect(() => {
-    const fetchSubscriptionStatus = async () => {
-      try {
-        // Wait for auth to be loaded before proceeding
-        if (!isLoaded) {
-          return
-        }
+  if (status === 'active' || status === 'trialing') {
+    return true
+  }
 
-        // Don't fetch if user is not signed in
-        if (!isSignedIn) {
-          // Clear cache when signed out
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.removeItem(SUBSCRIPTION_CACHE_KEY)
-            } catch {
-              // Ignore cache errors
-            }
-          }
-          // Only set loading to false if we didn't have cached data initially
-          if (!hadCachedDataRef.current) {
-            setIsLoading(false)
-          }
-          return
-        }
+  if (status === 'canceled' && expiration) {
+    return expiration.getTime() > now.getTime()
+  }
 
-        // Call same-origin Next route to leverage Clerk cookies and avoid CORS
-        const token = await getToken()
-        if (!token) {
-          throw new Error('No authentication token available')
-        }
+  return false
+}
 
-        const response = await fetch(`/api/billing/subscription-status`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store',
-        })
+/**
+ * Hook to get subscription status from Clerk user's public metadata.
+ * This is a fully client-side implementation that reads from useUser().
+ */
+export function useSubscriptionStatus() {
+  const { user, isLoaded } = useUser()
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch subscription status: ${response.status}`,
-          )
-        }
-
-        const data = await response.json()
-        setSubscriptionStatus(data)
-
-        // Cache the subscription status
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify(data))
-          } catch {
-            // Ignore cache errors
-          }
-        }
-      } catch (err) {
-        logError('Failed to fetch subscription status', err, {
-          component: 'useSubscriptionStatus',
-        })
-        setError(err instanceof Error ? err.message : 'An error occurred')
-
-        // Clear cache on error
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.removeItem(SUBSCRIPTION_CACHE_KEY)
-          } catch {
-            // Ignore cache errors
-          }
-        }
-      } finally {
-        // Only set loading to false if we didn't have cached data initially
-        // Otherwise, we're doing a background refresh and shouldn't show loading
-        if (!hadCachedDataRef.current) {
-          setIsLoading(false)
-        }
-      }
+  const subscriptionStatus = useMemo(() => {
+    if (!isLoaded || !user) {
+      return { chat_subscription_active: false }
     }
 
-    fetchSubscriptionStatus()
-  }, [getToken, isSignedIn, isLoaded])
+    const publicMetadata = (user.publicMetadata ?? {}) as Record<
+      string,
+      unknown
+    >
+
+    const rawChatStatus = publicMetadata['chat_subscription_status']
+    const chatStatus = isValidStatus(rawChatStatus) ? rawChatStatus : null
+
+    const chatExpiration = parseExpiration(
+      publicMetadata['chat_subscription_expires_at'],
+    )
+
+    const now = new Date()
+    const chatActive = hasActiveSubscription(chatStatus, chatExpiration, now)
+
+    return { chat_subscription_active: chatActive }
+  }, [user, isLoaded])
 
   return {
-    isLoading,
-    error,
+    isLoading: !isLoaded,
+    error: null,
     ...subscriptionStatus,
   }
 }
