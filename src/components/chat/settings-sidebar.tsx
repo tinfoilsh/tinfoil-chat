@@ -579,7 +579,7 @@ export function SettingsSidebar({
         {/* Settings content */}
         <div className="relative flex-1 overflow-y-auto p-4">
           <TextureGrid />
-          <div className="space-y-6">
+          <div className="relative z-10 space-y-6">
             {/* Encrypted Cloud Sync section - moved to top */}
             {onEncryptionKeyClick && (
               <div>
@@ -590,7 +590,9 @@ export function SettingsSidebar({
                 </h3>
                 <div className="space-y-2">
                   {/* Cloud Sync Toggle */}
-                  <div className="rounded-lg border border-border-subtle p-3">
+                  <div
+                    className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <CloudArrowUpIcon
@@ -641,7 +643,7 @@ export function SettingsSidebar({
                   {cloudSyncEnabled && (
                     <button
                       onClick={onEncryptionKeyClick}
-                      className="flex w-full items-center justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat/80"
+                      className={`flex w-full items-center justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
                     >
                       <div className="flex items-center gap-3">
                         <KeyIcon
@@ -675,7 +677,9 @@ export function SettingsSidebar({
                 Appearance
               </h3>
               <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-lg border border-border-subtle bg-surface-sidebar p-3">
+                <div
+                  className={`flex items-center justify-between rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
                   <div>
                     <div
                       className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
@@ -711,7 +715,9 @@ export function SettingsSidebar({
                 Chat Settings
               </h3>
               <div className="space-y-2">
-                <div className="rounded-lg border border-border-subtle p-3">
+                <div
+                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
                   <div className="flex items-start justify-between">
                     <div className="mr-3 flex-1">
                       <div
@@ -750,7 +756,9 @@ export function SettingsSidebar({
                 </div>
 
                 {/* Language Setting */}
-                <div className="rounded-lg border border-border-subtle p-3">
+                <div
+                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
                   <div className="space-y-2">
                     <div>
                       <div
@@ -783,7 +791,9 @@ export function SettingsSidebar({
                 </div>
 
                 {/* Custom System Prompt Settings */}
-                <div className="rounded-lg border border-border-subtle p-3">
+                <div
+                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -829,7 +839,7 @@ export function SettingsSidebar({
                               : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
                           } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                         />
-                        <div className="rounded-lg border border-border-subtle p-3">
+                        <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
                           <div
                             className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                           >
@@ -867,7 +877,9 @@ export function SettingsSidebar({
                 </div>
 
                 {/* Personalization Settings */}
-                <div className="rounded-lg border border-border-subtle p-3">
+                <div
+                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">

@@ -627,7 +627,7 @@ export function ChatSidebar({
           {/* Message for non-signed-in users */}
           {!isSignedIn && (
             <div
-              className={`m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
+              className={`relative z-10 m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
                 highlightBox === 'signin'
                   ? isDarkMode
                     ? 'border-emerald-400/50 bg-emerald-900/30'
@@ -650,7 +650,7 @@ export function ChatSidebar({
                 Access chat history and sync across devices.
               </p>
               <SignInButton mode="modal">
-                <button className="w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                <button className="relative w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
                   Sign in
                 </button>
               </SignInButton>
@@ -660,7 +660,7 @@ export function ChatSidebar({
           {/* Message for signed-in non-premium users */}
           {isSignedIn && !isPremium && (
             <div
-              className={`m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
+              className={`relative z-10 m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
                 highlightBox === 'premium'
                   ? isDarkMode
                     ? 'border-emerald-400/50 bg-emerald-900/30'
@@ -774,11 +774,11 @@ export function ChatSidebar({
 
           {/* Divider after boxes */}
           {(!isSignedIn || (isSignedIn && !isPremium)) && (
-            <div className="border-b border-border-subtle" />
+            <div className="relative z-10 border-b border-border-subtle" />
           )}
 
           {/* New Chat button */}
-          <div className="flex-none">
+          <div className="relative z-10 flex-none">
             <button
               onClick={() => {
                 // Create local-only chat if on local tab, cloud chat otherwise
@@ -790,14 +790,16 @@ export function ChatSidebar({
                   setIsOpen(false)
                 }
               }}
-              className={`m-2 flex items-center gap-2 rounded-lg border bg-surface-sidebar p-3 text-sm ${
+              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
+                isDarkMode ? 'bg-surface-chat' : 'bg-white'
+              } ${
                 currentChat?.messages?.length === 0
                   ? isDarkMode
                     ? 'cursor-not-allowed border-border-strong text-content-muted opacity-50'
                     : 'cursor-not-allowed border-border-subtle text-content-muted opacity-50'
                   : isDarkMode
                     ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                    : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                    : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white'
               }`}
               disabled={currentChat?.messages?.length === 0}
             >
@@ -807,7 +809,7 @@ export function ChatSidebar({
           </div>
 
           {/* Chat History Header */}
-          <div className="flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
+          <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
             <div className="flex items-center justify-between">
               <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
                 Chat History
@@ -844,14 +846,14 @@ export function ChatSidebar({
 
             {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
             {isSignedIn && cloudSyncEnabled && (
-              <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat/50 p-1">
+              <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
                 <button
                   onClick={() => setActiveTab('cloud')}
                   className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'cloud'
                       ? isDarkMode
-                        ? 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-white shadow-sm'
-                        : 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary shadow-sm'
+                        ? 'border border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                        : 'border border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
@@ -869,8 +871,8 @@ export function ChatSidebar({
                   className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'local'
                       ? isDarkMode
-                        ? 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-white shadow-sm'
-                        : 'border border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary shadow-sm'
+                        ? 'border border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                        : 'border border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
@@ -902,12 +904,12 @@ export function ChatSidebar({
           </div>
 
           {/* Scrollable Chat List */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="relative z-10 flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
               {isClient &&
                 sortedChats.length === 0 &&
                 activeTab === 'local' && (
-                  <div className="rounded-lg border border-border-subtle p-4 text-center">
+                  <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
                     <p className="text-sm text-content-muted">
                       No local chats yet
                     </p>
@@ -962,15 +964,15 @@ export function ChatSidebar({
                             ? currentChat?.isBlankChat &&
                               chat.isLocalOnly === currentChat.isLocalOnly
                               ? isDarkMode
-                                ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
-                                : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
+                                ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
+                                : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
                               : isDarkMode
                                 ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
                                 : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
                             : currentChat?.id === chat.id
                               ? isDarkMode
-                                ? 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-white'
-                                : 'cursor-pointer border-brand-accent-light/60 bg-brand-accent-light/20 text-content-primary'
+                                ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
+                                : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
                               : isDarkMode
                                 ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
                                 : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
@@ -1032,7 +1034,7 @@ export function ChatSidebar({
 
           {/* App Store button for iOS users */}
           {isClient && isIOS && (
-            <div className="flex-none border-t border-border-subtle p-3">
+            <div className="relative z-10 flex-none border-t border-border-subtle p-3">
               <div className="text-center">
                 <p
                   className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
@@ -1058,7 +1060,7 @@ export function ChatSidebar({
           )}
 
           {/* Terms and privacy policy */}
-          <div className="flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
+          <div className="relative z-10 flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
             <p className="text-center text-xs leading-relaxed text-content-secondary">
               By using this service, you agree to Tinfoil&apos;s{' '}
               <Link
