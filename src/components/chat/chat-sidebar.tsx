@@ -218,7 +218,15 @@ export function ChatSidebar({
   )
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'cloud' | 'local'>('cloud')
+  const [activeTab, setActiveTab] = useState<'cloud' | 'local'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('chatSidebarActiveTab')
+      if (stored === 'cloud' || stored === 'local') {
+        return stored
+      }
+    }
+    return 'cloud'
+  })
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
@@ -242,6 +250,11 @@ export function ChatSidebar({
 
   // Apply zoom prevention for mobile
   usePreventZoom()
+
+  // Persist active tab selection to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('chatSidebarActiveTab', activeTab)
+  }, [activeTab])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
