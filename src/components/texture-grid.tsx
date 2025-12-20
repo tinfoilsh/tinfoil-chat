@@ -57,7 +57,7 @@ export function TextureGrid({ className = '' }: { className?: string }) {
 
   return (
     <div
-      className={`pointer-events-none absolute inset-0 ${className}`}
+      className={`pointer-events-none absolute inset-0 z-0 ${className}`}
       style={{
         backgroundImage: `url("${encodedSvg}")`,
         backgroundRepeat: 'repeat',

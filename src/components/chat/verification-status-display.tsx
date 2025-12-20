@@ -175,7 +175,13 @@ export const VerificationStatusDisplay = memo(
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="relative mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent"
+          className={`relative mb-2 mt-2 rounded-lg border ${
+            isComplete
+              ? isDarkMode
+                ? 'border-emerald-500/30 bg-emerald-950/20'
+                : 'border-emerald-500/30 bg-emerald-50/50'
+              : 'border-border-subtle bg-transparent'
+          }`}
         >
           <TextureGrid />
           <button
@@ -267,7 +273,7 @@ export const VerificationStatusDisplay = memo(
                       e.stopPropagation()
                       onOpenVerifier()
                     }}
-                    className="w-full rounded-lg border border-border-subtle bg-surface-chat-background px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat"
+                    className="w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90"
                   >
                     See verification proof
                   </button>
