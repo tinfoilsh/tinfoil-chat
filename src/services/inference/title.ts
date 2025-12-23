@@ -1,6 +1,7 @@
 import { CONSTANTS } from '@/components/chat/constants'
 import { logError } from '@/utils/error-handling'
-import { getTinfoilClient } from './tinfoil-client'
+import { AuthenticationError } from 'openai'
+import { clearCachedApiKey, getTinfoilClient } from './tinfoil-client'
 
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
@@ -9,15 +10,14 @@ export async function generateTitle(
   if (!messages || messages.length === 0) return 'Untitled'
   if (!titleModelName) return 'Untitled'
 
-  try {
-    const conversationForTitle = messages
-      .slice(0, Math.min(4, messages.length))
-      .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
-      .join('\n\n')
+  const conversationForTitle = messages
+    .slice(0, Math.min(4, messages.length))
+    .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
+    .join('\n\n')
 
+  const createCompletion = async () => {
     const client = await getTinfoilClient()
-
-    const completion = await client.chat.completions.create({
+    return client.chat.completions.create({
       model: titleModelName,
       messages: [
         { role: 'system', content: CONSTANTS.TITLE_GENERATION_PROMPT },
@@ -29,6 +29,20 @@ export async function generateTitle(
       stream: false,
       max_tokens: 30,
     })
+  }
+
+  try {
+    let completion
+    try {
+      completion = await createCompletion()
+    } catch (err) {
+      if (err instanceof AuthenticationError) {
+        clearCachedApiKey()
+        completion = await createCompletion()
+      } else {
+        throw err
+      }
+    }
 
     const title = completion.choices?.[0]?.message?.content?.trim() || ''
     const cleanTitle = title.replace(/^["']|["']$/g, '').trim()

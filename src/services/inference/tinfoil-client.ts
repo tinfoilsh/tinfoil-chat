@@ -3,10 +3,12 @@ import { logError } from '@/utils/error-handling'
 import { TinfoilAI } from 'tinfoil'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
+const API_KEY_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
 let clientInstance: TinfoilAI | null = null
 let lastApiKey: string | null = null
 let cachedApiKey: string | null = null
+let cachedApiKeyTimestamp: number | null = null
 let getTokenFn: (() => Promise<string | null>) | null = null
 let hasSubscriptionFn: (() => boolean) | null = null
 
@@ -25,7 +27,12 @@ async function fetchApiKey(): Promise<string> {
     return PLACEHOLDER_API_KEY
   }
 
-  if (cachedApiKey) {
+  const now = Date.now()
+  if (
+    cachedApiKey &&
+    cachedApiKeyTimestamp &&
+    now - cachedApiKeyTimestamp < API_KEY_TTL_MS
+  ) {
     return cachedApiKey
   }
 
@@ -65,6 +72,7 @@ async function fetchApiKey(): Promise<string> {
 
     const data = await response.json()
     cachedApiKey = data.key
+    cachedApiKeyTimestamp = Date.now()
     return data.key
   } catch (error) {
     logError('Failed to fetch API key', error, {
@@ -79,6 +87,12 @@ function resetTinfoilClient(): void {
   clientInstance = null
   lastApiKey = null
   cachedApiKey = null
+  cachedApiKeyTimestamp = null
+}
+
+export function clearCachedApiKey(): void {
+  cachedApiKey = null
+  cachedApiKeyTimestamp = null
 }
 
 async function initClient(apiKey: string): Promise<TinfoilAI> {

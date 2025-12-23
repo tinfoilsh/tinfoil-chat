@@ -6,8 +6,9 @@ import {
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { logError } from '@/utils/error-handling'
+import { AuthenticationError } from 'openai'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { getTinfoilClient } from './tinfoil-client'
+import { clearCachedApiKey, getTinfoilClient } from './tinfoil-client'
 
 export interface SendChatStreamParams {
   model: BaseModel
@@ -88,29 +89,41 @@ export async function sendChatStream(
     }
   }
 
-  try {
+  const messages = ChatQueryBuilder.buildMessages({
+    model,
+    systemPrompt,
+    rules,
+    messages: updatedMessages,
+    maxMessages,
+  })
+
+  const createStream = async () => {
     const client = await getTinfoilClient()
-    const messages = ChatQueryBuilder.buildMessages({
-      model,
-      systemPrompt,
-      rules,
-      messages: updatedMessages,
-      maxMessages,
-    })
-
     await client.ready()
-
-    const stream = await client.chat.completions.create(
+    return client.chat.completions.create(
       {
         model: model.modelName,
         messages,
         stream: true,
-        // Only include reasoning_effort for gpt-oss models
         ...(isReasoningModel(model.modelName) &&
           reasoningEffort && { reasoning_effort: reasoningEffort }),
       },
       { signal },
     )
+  }
+
+  try {
+    let stream
+    try {
+      stream = await createStream()
+    } catch (err) {
+      if (err instanceof AuthenticationError) {
+        clearCachedApiKey()
+        stream = await createStream()
+      } else {
+        throw err
+      }
+    }
 
     const encoder = new TextEncoder()
     const readableStream = new ReadableStream({
