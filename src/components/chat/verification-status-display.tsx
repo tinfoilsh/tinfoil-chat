@@ -200,7 +200,7 @@ export const VerificationStatusDisplay = memo(
                     repeatDelay: 1,
                   }}
                 >
-                  <TfShieldCheck className="h-5 w-5 text-emerald-500" />
+                  <TfShieldCheck className="h-5 w-5" color="#10b981" />
                 </motion.div>
               ) : (
                 <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
