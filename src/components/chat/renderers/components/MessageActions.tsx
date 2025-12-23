@@ -1,8 +1,9 @@
 import { CONSTANTS } from '@/components/chat/constants'
 import { logWarning } from '@/utils/error-handling'
 import { convertLatexForCopy } from '@/utils/latex-processing'
+import { TfCopy } from '@tinfoilsh/tinfoil-icons'
 import { memo, useEffect, useRef, useState } from 'react'
-import { BsCheckLg, BsCopy } from 'react-icons/bs'
+import { BsCheckLg } from 'react-icons/bs'
 
 interface MessageActionsProps {
   content: string
@@ -75,7 +76,7 @@ export const MessageActions = memo(function MessageActions({
             <span aria-live="polite">Copied!</span>
           </>
         ) : (
-          <BsCopy className="h-3.5 w-3.5" />
+          <TfCopy className="h-3.5 w-3.5" />
         )}
       </button>
     </div>
