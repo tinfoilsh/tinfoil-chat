@@ -58,6 +58,8 @@ interface UseChatStateReturn {
   cancelGeneration: () => Promise<void>
   updateChatTitle: (chatId: string, newTitle: string) => void
   reloadChats: () => Promise<void>
+  editMessage: (messageIndex: number, newContent: string) => void
+  regenerateMessage: (messageIndex: number) => void
 }
 
 export function useChatState({
@@ -151,6 +153,8 @@ export function useChatState({
     handleSubmit,
     handleQuery,
     cancelGeneration,
+    editMessage,
+    regenerateMessage,
   } = useChatMessaging({
     systemPrompt,
     rules,
@@ -275,5 +279,7 @@ export function useChatState({
     cancelGeneration,
     updateChatTitle,
     reloadChats,
+    editMessage,
+    regenerateMessage,
   }
 }

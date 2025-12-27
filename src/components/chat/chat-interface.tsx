@@ -369,6 +369,8 @@ export function ChatInterface({
     cancelGeneration,
     updateChatTitle,
     reloadChats,
+    editMessage,
+    regenerateMessage,
   } = useChatState({
     systemPrompt: effectiveSystemPrompt,
     rules: processedRules,
@@ -1222,6 +1224,8 @@ export function ChatInterface({
                 handleModelSelect={handleModelSelect}
                 expandedLabel={expandedLabel}
                 handleLabelClick={handleLabelClick}
+                onEditMessage={editMessage}
+                onRegenerateMessage={regenerateMessage}
               />
             </div>
           </div>
