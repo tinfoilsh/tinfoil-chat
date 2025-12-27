@@ -1,4 +1,5 @@
 import { logError, logInfo } from '@/utils/error-handling'
+import { isTokenValid } from '@/utils/token-validation'
 import { encryptionService } from '../encryption/encryption-service'
 
 const API_BASE_URL =
@@ -47,6 +48,10 @@ export class ProfileSyncService {
       throw new Error('Authentication token not set')
     }
 
+    if (!isTokenValid(token)) {
+      throw new Error('Token is expired')
+    }
+
     return {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -56,7 +61,7 @@ export class ProfileSyncService {
   async isAuthenticated(): Promise<boolean> {
     if (!this.getToken) return false
     const token = await this.getToken()
-    return token !== null && token !== ''
+    return isTokenValid(token)
   }
 
   // Get profile from cloud

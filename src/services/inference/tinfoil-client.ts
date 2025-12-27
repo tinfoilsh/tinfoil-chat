@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
+import { isTokenValid } from '@/utils/token-validation'
 import { TinfoilAI } from 'tinfoil'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
@@ -39,7 +40,7 @@ async function fetchApiKey(): Promise<string> {
 
   try {
     const token = await getTokenFn()
-    if (!token) {
+    if (!token || !isTokenValid(token)) {
       return PLACEHOLDER_API_KEY
     }
 
