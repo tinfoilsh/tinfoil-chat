@@ -521,11 +521,10 @@ export function ChatInput({
                   const [, indent, marker] = numberMatch
                   const textAfterCursor = input.slice(cursorPosition)
 
-                  // Add indentation before the number marker
+                  // Just add a space after the number marker (no extra indentation)
                   const newText =
                     input.slice(0, lastLineStart) +
                     indent +
-                    '  ' +
                     marker +
                     ' ' +
                     textAfterCursor
@@ -534,7 +533,7 @@ export function ChatInput({
 
                   setTimeout(() => {
                     textarea.selectionStart = textarea.selectionEnd =
-                      lastLineStart + indent.length + 2 + marker.length + 1
+                      lastLineStart + indent.length + marker.length + 1
                   }, 0)
                 }
               }
