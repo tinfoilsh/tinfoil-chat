@@ -57,16 +57,14 @@ export const MessageActions = memo(function MessageActions({
   }
 
   return (
-    <div className="mb-2 mt-1 px-4">
+    <div className="group/copy relative">
       <button
         type="button"
         onClick={handleCopy}
         className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-all ${
           isCopied
             ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
-            : isDarkMode
-              ? 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-300'
-              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+            : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary'
         }`}
         aria-label="Copy message"
       >
@@ -79,6 +77,11 @@ export const MessageActions = memo(function MessageActions({
           <TfCopy className="h-3.5 w-3.5" />
         )}
       </button>
+      {!isCopied && (
+        <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
+          Copy
+        </span>
+      )}
     </div>
   )
 })

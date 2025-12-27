@@ -36,12 +36,15 @@ type ChatMessagesProps = {
     label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
+  onEditMessage?: (messageIndex: number, newContent: string) => void
+  onRegenerateMessage?: (messageIndex: number) => void
 }
 
 // Optimized wrapper component that receives expanded state from parent
 const ChatMessage = memo(
   function ChatMessage({
     message,
+    messageIndex,
     model,
     isDarkMode,
     isLastMessage = false,
@@ -49,8 +52,11 @@ const ChatMessage = memo(
     expandedThoughtsState,
     setExpandedThoughtsState,
     titleModelName,
+    onEditMessage,
+    onRegenerateMessage,
   }: {
     message: Message
+    messageIndex: number
     model: BaseModel
     isDarkMode: boolean
     isLastMessage?: boolean
@@ -60,6 +66,8 @@ const ChatMessage = memo(
       React.SetStateAction<Record<string, boolean>>
     >
     titleModelName?: string
+    onEditMessage?: (messageIndex: number, newContent: string) => void
+    onRegenerateMessage?: (messageIndex: number) => void
   }) {
     // Get renderer from registry
     const renderer = getRendererRegistry().getMessageRenderer(message, model)
@@ -69,6 +77,7 @@ const ChatMessage = memo(
     return (
       <RendererComponent
         message={message}
+        messageIndex={messageIndex}
         model={model}
         isDarkMode={isDarkMode}
         isLastMessage={isLastMessage}
@@ -76,6 +85,8 @@ const ChatMessage = memo(
         expandedThoughtsState={expandedThoughtsState}
         setExpandedThoughtsState={setExpandedThoughtsState}
         titleModelName={titleModelName}
+        onEditMessage={onEditMessage}
+        onRegenerateMessage={onRegenerateMessage}
       />
     )
   },
@@ -137,6 +148,7 @@ const ChatMessage = memo(
       prevProps.message.documentContent === nextProps.message.documentContent &&
       prevProps.message.documents === nextProps.message.documents &&
       prevProps.message.imageData === nextProps.message.imageData &&
+      prevProps.messageIndex === nextProps.messageIndex &&
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
@@ -144,7 +156,9 @@ const ChatMessage = memo(
       prevExpanded === nextExpanded &&
       prevProps.setExpandedThoughtsState ===
         nextProps.setExpandedThoughtsState &&
-      prevProps.titleModelName === nextProps.titleModelName
+      prevProps.titleModelName === nextProps.titleModelName &&
+      prevProps.onEditMessage === nextProps.onEditMessage &&
+      prevProps.onRegenerateMessage === nextProps.onRegenerateMessage
     )
   },
 )
@@ -232,6 +246,8 @@ export function ChatMessages({
   handleModelSelect,
   expandedLabel,
   handleLabelClick,
+  onEditMessage,
+  onRegenerateMessage,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const [expandedThoughtsState, setExpandedThoughtsState] = useState<
@@ -336,6 +352,7 @@ export function ChatMessages({
               <ChatMessage
                 key={getMessageKey(`${chatId}-archived`, message, i)}
                 message={message}
+                messageIndex={i}
                 model={currentModel}
                 isDarkMode={isDarkMode}
                 isLastMessage={false}
@@ -343,6 +360,8 @@ export function ChatMessages({
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
                 titleModelName={titleModelName}
+                onEditMessage={onEditMessage}
+                onRegenerateMessage={onRegenerateMessage}
               />
             ))}
           </div>
@@ -357,6 +376,7 @@ export function ChatMessages({
         <ChatMessage
           key={getMessageKey(`${chatId}-live`, message, i)}
           message={message}
+          messageIndex={archivedMessages.length + i}
           model={currentModel}
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
@@ -364,6 +384,8 @@ export function ChatMessages({
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
           titleModelName={titleModelName}
+          onEditMessage={onEditMessage}
+          onRegenerateMessage={onRegenerateMessage}
         />
       ))}
       {showLoadingPlaceholder && <LoadingMessage isDarkMode={isDarkMode} />}

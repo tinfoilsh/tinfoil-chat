@@ -13,6 +13,7 @@ export type ProcessedDocument = {
 
 export interface MessageRenderProps {
   message: Message
+  messageIndex: number
   model: BaseModel
   isDarkMode: boolean
   isLastMessage?: boolean
@@ -22,6 +23,8 @@ export interface MessageRenderProps {
     React.SetStateAction<Record<string, boolean>>
   >
   titleModelName?: string
+  onEditMessage?: (messageIndex: number, newContent: string) => void
+  onRegenerateMessage?: (messageIndex: number) => void
 }
 
 export interface InputRenderProps {

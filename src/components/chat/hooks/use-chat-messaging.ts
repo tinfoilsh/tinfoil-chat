@@ -62,8 +62,11 @@ interface UseChatMessagingReturn {
     documents?: Array<{ name: string }>,
     imageData?: Array<{ base64: string; mimeType: string }>,
     systemPromptOverride?: string,
+    baseMessages?: Message[],
   ) => void
   cancelGeneration: () => Promise<void>
+  editMessage: (messageIndex: number, newContent: string) => void
+  regenerateMessage: (messageIndex: number) => void
 }
 
 export function useChatMessaging({
@@ -245,6 +248,7 @@ export function useChatMessaging({
       documents?: Array<{ name: string }>,
       imageData?: Array<{ base64: string; mimeType: string }>,
       systemPromptOverride?: string,
+      baseMessages?: Message[],
     ) => {
       // Allow empty query only if systemPromptOverride is provided
       if ((!query.trim() && !systemPromptOverride) || loadingState !== 'idle')
@@ -494,9 +498,11 @@ export function useChatMessaging({
         }, 0)
       } else {
         // Not a blank chat, just update messages
+        // Use baseMessages if provided (e.g., from editMessage), otherwise use currentChat.messages
+        const existingMessages = baseMessages ?? currentChat.messages
         updatedMessages = userMessage
-          ? [...currentChat.messages, userMessage]
-          : [...currentChat.messages]
+          ? [...existingMessages, userMessage]
+          : [...existingMessages]
 
         updatedChat = {
           ...updatedChat,
@@ -804,6 +810,45 @@ export function useChatMessaging({
     [input, handleQuery],
   )
 
+  // Edit a message and re-submit - truncates conversation after the edited message
+  const editMessage = useCallback(
+    (messageIndex: number, newContent: string) => {
+      if (loadingState !== 'idle' || !currentChat) return
+
+      const originalMessage = currentChat.messages[messageIndex]
+      if (!originalMessage || originalMessage.role !== 'user') return
+
+      // Truncate messages to just before the edited message
+      const truncatedMessages = currentChat.messages.slice(0, messageIndex)
+
+      // Re-submit with the new content, passing truncated messages as base
+      // handleQuery will handle state updates and persistence
+      handleQuery(
+        newContent,
+        originalMessage.documentContent,
+        originalMessage.documents,
+        originalMessage.imageData,
+        undefined,
+        truncatedMessages,
+      )
+    },
+    [loadingState, currentChat, handleQuery],
+  )
+
+  // Regenerate a message - same as edit but uses the original content
+  const regenerateMessage = useCallback(
+    (messageIndex: number) => {
+      if (loadingState !== 'idle' || !currentChat) return
+
+      const originalMessage = currentChat.messages[messageIndex]
+      if (!originalMessage || originalMessage.role !== 'user') return
+
+      // Re-submit with the same content
+      editMessage(messageIndex, originalMessage.content || '')
+    },
+    [loadingState, currentChat, editMessage],
+  )
+
   // Update currentChatIdRef when currentChat changes
   // But don't overwrite during streaming to preserve ID swaps
   useEffect(() => {
@@ -822,5 +867,7 @@ export function useChatMessaging({
     handleSubmit,
     handleQuery,
     cancelGeneration,
+    editMessage,
+    regenerateMessage,
   }
 }
