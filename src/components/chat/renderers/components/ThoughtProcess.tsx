@@ -6,6 +6,7 @@ import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
+import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { TfTin } from '@tinfoilsh/tinfoil-icons'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -309,7 +310,8 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   }, [thoughts, isThinking])
 
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
-  const processedThoughts = processLatexTags(thoughts)
+  const preprocessed = preprocessMarkdown(thoughts)
+  const processedThoughts = processLatexTags(preprocessed)
   const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
 
   if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
