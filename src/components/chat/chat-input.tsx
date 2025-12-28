@@ -555,7 +555,13 @@ export function ChatInput({
                 /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+/,
               )
 
-              if (listMarkerMatch) {
+              if (!listMarkerMatch) {
+                setTimeout(() => {
+                  textarea.style.height = inputMinHeight
+                  textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
+                  textarea.scrollTop = textarea.scrollHeight
+                }, 0)
+              } else if (listMarkerMatch) {
                 e.preventDefault()
                 const [fullMatch, indent, marker] = listMarkerMatch
 
@@ -606,6 +612,7 @@ export function ChatInput({
                     textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
                     textarea.selectionStart = textarea.selectionEnd =
                       newCursorPos
+                    textarea.scrollTop = textarea.scrollHeight
                   }, 0)
                 }
               }
