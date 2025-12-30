@@ -1,3 +1,4 @@
+import { WEB_SEARCH_ENCLAVE_URL } from '@/components/chat/constants'
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
 import { isTokenValid } from '@/utils/token-validation'
@@ -7,6 +8,7 @@ const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
 
 let clientInstance: TinfoilAI | null = null
 let lastApiKey: string | null = null
+let lastEnclaveURL: string | undefined = undefined
 let cachedApiKey: string | null = null
 let getTokenFn: (() => Promise<string | null>) | null = null
 let hasSubscriptionFn: (() => boolean) | null = null
@@ -79,16 +81,22 @@ async function fetchApiKey(): Promise<string> {
 function resetTinfoilClient(): void {
   clientInstance = null
   lastApiKey = null
+  lastEnclaveURL = undefined
   cachedApiKey = null
 }
 
-async function initClient(apiKey: string): Promise<TinfoilAI> {
+async function initClient(
+  apiKey: string,
+  enclaveURL?: string,
+): Promise<TinfoilAI> {
   try {
     clientInstance = new TinfoilAI({
       apiKey: apiKey,
+      enclaveURL,
       dangerouslyAllowBrowser: true,
     })
     lastApiKey = apiKey
+    lastEnclaveURL = enclaveURL
     return clientInstance
   } catch (error) {
     logError('Failed to initialize TinfoilAI client', error, {
@@ -99,14 +107,24 @@ async function initClient(apiKey: string): Promise<TinfoilAI> {
   }
 }
 
-export async function getTinfoilClient(): Promise<TinfoilAI> {
+export async function getTinfoilClient(
+  enclaveURL?: string,
+): Promise<TinfoilAI> {
   const apiKey = await fetchApiKey()
 
-  if (!clientInstance || lastApiKey !== apiKey) {
-    await initClient(apiKey)
+  if (
+    !clientInstance ||
+    lastApiKey !== apiKey ||
+    lastEnclaveURL !== enclaveURL
+  ) {
+    await initClient(apiKey, enclaveURL)
   }
 
   return clientInstance!
+}
+
+export async function getWebSearchClient(): Promise<TinfoilAI> {
+  return getTinfoilClient(WEB_SEARCH_ENCLAVE_URL)
 }
 
 export async function initializeTinfoilClient(): Promise<void> {

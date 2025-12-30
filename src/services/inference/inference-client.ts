@@ -9,7 +9,7 @@ import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { getTinfoilClient } from './tinfoil-client'
+import { getTinfoilClient, getWebSearchClient } from './tinfoil-client'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -80,6 +80,7 @@ export interface SendChatStreamParams {
   maxMessages: number
   signal: AbortSignal
   reasoningEffort?: ReasoningEffort
+  webSearchEnabled?: boolean
 }
 
 export async function sendChatStream(
@@ -94,6 +95,7 @@ export async function sendChatStream(
     maxMessages,
     signal,
     reasoningEffort,
+    webSearchEnabled,
   } = params
 
   if (model.modelName === 'dev-simulator') {
@@ -239,7 +241,9 @@ export async function sendChatStream(
     }
 
     try {
-      const client = await getTinfoilClient()
+      const client = webSearchEnabled
+        ? await getWebSearchClient()
+        : await getTinfoilClient()
       await client.ready()
 
       const stream = await client.chat.completions.create(

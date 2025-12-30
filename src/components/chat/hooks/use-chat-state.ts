@@ -79,6 +79,7 @@ export function useChatState({
   reasoningEffort,
   initialChatId,
   isLocalChatUrl = false,
+  webSearchEnabled,
 }: {
   systemPrompt: string
   rules?: string
@@ -90,6 +91,7 @@ export function useChatState({
   reasoningEffort?: ReasoningEffort
   initialChatId?: string | null
   isLocalChatUrl?: boolean
+  webSearchEnabled?: boolean
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -187,6 +189,7 @@ export function useChatState({
     messagesEndRef,
     scrollToBottom,
     reasoningEffort,
+    webSearchEnabled,
   })
 
   // Update ref with cancelGeneration function

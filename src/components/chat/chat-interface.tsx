@@ -237,6 +237,9 @@ export function ChatInterface({
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null)
 
+  // State for web search toggle
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -539,6 +542,7 @@ export function ChatInterface({
     reasoningEffort,
     initialChatId,
     isLocalChatUrl,
+    webSearchEnabled,
   })
 
   // Sync URL with current chat state
@@ -1878,6 +1882,8 @@ export function ChatInterface({
                 onEditMessage={editMessage}
                 onRegenerateMessage={regenerateMessage}
                 showScrollButton={showScrollButton}
+                webSearchEnabled={webSearchEnabled}
+                onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
               />
             </div>
           </div>
@@ -1967,6 +1973,10 @@ export function ChatInterface({
                     }
                     audioModel={
                       models.find((m) => m.type === 'audio')?.modelName
+                    }
+                    webSearchEnabled={webSearchEnabled}
+                    onWebSearchToggle={() =>
+                      setWebSearchEnabled((prev) => !prev)
                     }
                   />
                 </form>

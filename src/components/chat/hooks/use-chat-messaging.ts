@@ -48,6 +48,7 @@ interface UseChatMessagingProps {
   messagesEndRef: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
+  webSearchEnabled?: boolean
 }
 
 interface UseChatMessagingReturn {
@@ -87,6 +88,7 @@ export function useChatMessaging({
   messagesEndRef,
   scrollToBottom,
   reasoningEffort,
+  webSearchEnabled,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
@@ -524,6 +526,7 @@ export function useChatMessaging({
           maxMessages,
           signal: controller.signal,
           reasoningEffort,
+          webSearchEnabled,
         })
 
         // Callback for early title generation when word threshold is reached
@@ -923,6 +926,7 @@ export function useChatMessaging({
       reasoningEffort,
       isProjectMode,
       activeProject,
+      webSearchEnabled,
     ],
   )
 

@@ -50,6 +50,8 @@ type ChatMessagesProps = {
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
   showScrollButton?: boolean
+  webSearchEnabled?: boolean
+  onWebSearchToggle?: () => void
 }
 
 // Optimized wrapper component that receives expanded state from parent
@@ -286,6 +288,8 @@ export function ChatMessages({
   onEditMessage,
   onRegenerateMessage,
   showScrollButton,
+  webSearchEnabled,
+  onWebSearchToggle,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const [expandedThoughtsState, setExpandedThoughtsState] = useState<
@@ -403,6 +407,8 @@ export function ChatMessages({
             handleModelSelect={handleModelSelect}
             expandedLabel={expandedLabel as LabelType}
             handleLabelClick={handleLabelClick}
+            webSearchEnabled={webSearchEnabled}
+            onWebSearchToggle={onWebSearchToggle}
           />
         </div>
       </div>

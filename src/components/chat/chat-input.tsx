@@ -8,6 +8,7 @@ import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
   FolderIcon,
+  GlobeAltIcon,
   MicrophoneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
@@ -36,6 +37,8 @@ type ChatInputProps = {
   hasMessages?: boolean
   audioModel?: string
   modelSelectorButton?: React.ReactNode
+  webSearchEnabled?: boolean
+  onWebSearchToggle?: () => void
 }
 
 export function ChatInput({
@@ -55,6 +58,8 @@ export function ChatInput({
   hasMessages,
   audioModel,
   modelSelectorButton,
+  webSearchEnabled,
+  onWebSearchToggle,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const documentsScrollRef = useRef<HTMLDivElement>(null)
@@ -691,15 +696,33 @@ export function ChatInput({
           />
 
           <div className="mt-3 flex items-center justify-between">
-            <button
-              id="upload-button"
-              type="button"
-              onClick={triggerFileInput}
-              className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-              title="Upload document"
-            >
-              <DocumentIcon className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                id="upload-button"
+                type="button"
+                onClick={triggerFileInput}
+                className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                title="Upload document"
+              >
+                <DocumentIcon className="h-5 w-5" />
+              </button>
+              {onWebSearchToggle && (
+                <button
+                  id="web-search-button"
+                  type="button"
+                  onClick={onWebSearchToggle}
+                  className={cn(
+                    'rounded-lg p-1.5 transition-colors',
+                    webSearchEnabled
+                      ? 'bg-blue-500/20 text-blue-500'
+                      : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                  )}
+                  title="Web search"
+                >
+                  <GlobeAltIcon className="h-5 w-5" />
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               {modelSelectorButton && <div>{modelSelectorButton}</div>}
