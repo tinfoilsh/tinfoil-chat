@@ -624,7 +624,7 @@ export function ChatInput({
                     textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
                     textarea.scrollTop = textarea.scrollHeight
                   }, 0)
-                } else if (listMarkerMatch) {
+                } else {
                   e.preventDefault()
                   const [fullMatch, indent, marker] = listMarkerMatch
 
@@ -684,9 +684,7 @@ export function ChatInput({
                 cancelGeneration()
               }
             }}
-            placeholder={
-              hasMessages ? 'Reply to Tin...' : "What's on your mind?"
-            }
+            placeholder={hasMessages ? 'Reply to Tin...' : "What's on your mind?"}
             rows={1}
             className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
             style={{
@@ -697,30 +695,38 @@ export function ChatInput({
 
           <div className="mt-3 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <button
-                id="upload-button"
-                type="button"
-                onClick={triggerFileInput}
-                className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                title="Upload document"
-              >
-                <DocumentIcon className="h-5 w-5" />
-              </button>
-              {onWebSearchToggle && (
+              <div className="group relative">
                 <button
-                  id="web-search-button"
+                  id="upload-button"
                   type="button"
-                  onClick={onWebSearchToggle}
-                  className={cn(
-                    'rounded-lg p-1.5 transition-colors',
-                    webSearchEnabled
-                      ? 'bg-blue-500/20 text-blue-500'
-                      : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                  )}
-                  title="Web search"
+                  onClick={triggerFileInput}
+                  className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
                 >
-                  <GlobeAltIcon className="h-5 w-5" />
+                  <DocumentIcon className="h-5 w-5" />
                 </button>
+                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  Upload document
+                </span>
+              </div>
+              {onWebSearchToggle && (
+                <div className="group relative">
+                  <button
+                    id="web-search-button"
+                    type="button"
+                    onClick={onWebSearchToggle}
+                    className={cn(
+                      'rounded-lg p-1.5 transition-colors',
+                      webSearchEnabled
+                        ? 'bg-blue-500/20 text-blue-500'
+                        : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                    )}
+                  >
+                    <GlobeAltIcon className="h-5 w-5" />
+                  </button>
+                  <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                    {webSearchEnabled ? 'Disable web search' : 'Web search'}
+                  </span>
+                </div>
               )}
             </div>
 
