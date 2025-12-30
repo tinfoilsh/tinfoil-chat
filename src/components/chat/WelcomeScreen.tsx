@@ -33,6 +33,8 @@ interface WelcomeScreenProps {
     label: Exclude<LabelType, null>,
     action: () => void,
   ) => void
+  webSearchEnabled?: boolean
+  onWebSearchToggle?: () => void
 }
 
 export const WelcomeScreen = memo(function WelcomeScreen({
@@ -57,6 +59,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   handleModelSelect,
   expandedLabel,
   handleLabelClick,
+  webSearchEnabled,
+  onWebSearchToggle,
 }: WelcomeScreenProps) {
   const { user, isSignedIn } = useUser()
   const { openSignIn } = useClerk()
@@ -264,6 +268,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                       </div>
                     ) : undefined
                   }
+                  webSearchEnabled={webSearchEnabled}
+                  onWebSearchToggle={onWebSearchToggle}
                 />
               </motion.div>
             )}

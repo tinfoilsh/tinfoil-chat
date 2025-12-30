@@ -47,6 +47,8 @@ export interface InputRenderProps {
   processedDocuments?: ProcessedDocument[]
   removeDocument?: (id: string) => void
   hasMessages?: boolean
+  webSearchEnabled?: boolean
+  onWebSearchToggle?: () => void
 }
 
 export interface MessageRenderer {
