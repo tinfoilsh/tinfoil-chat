@@ -6,9 +6,12 @@ import { TinfoilAI } from 'tinfoil'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
 
+const WEB_SEARCH_CONFIG_REPO = 'tinfoilsh/confidential-websearch'
+
 let clientInstance: TinfoilAI | null = null
 let lastApiKey: string | null = null
 let lastEnclaveURL: string | undefined = undefined
+let lastConfigRepo: string | undefined = undefined
 let cachedApiKey: string | null = null
 let getTokenFn: (() => Promise<string | null>) | null = null
 let hasSubscriptionFn: (() => boolean) | null = null
@@ -82,21 +85,25 @@ function resetTinfoilClient(): void {
   clientInstance = null
   lastApiKey = null
   lastEnclaveURL = undefined
+  lastConfigRepo = undefined
   cachedApiKey = null
 }
 
 async function initClient(
   apiKey: string,
   enclaveURL?: string,
+  configRepo?: string,
 ): Promise<TinfoilAI> {
   try {
     clientInstance = new TinfoilAI({
       apiKey: apiKey,
       enclaveURL,
+      configRepo,
       dangerouslyAllowBrowser: true,
     })
     lastApiKey = apiKey
     lastEnclaveURL = enclaveURL
+    lastConfigRepo = configRepo
     return clientInstance
   } catch (error) {
     logError('Failed to initialize TinfoilAI client', error, {
@@ -109,22 +116,24 @@ async function initClient(
 
 export async function getTinfoilClient(
   enclaveURL?: string,
+  configRepo?: string,
 ): Promise<TinfoilAI> {
   const apiKey = await fetchApiKey()
 
   if (
     !clientInstance ||
     lastApiKey !== apiKey ||
-    lastEnclaveURL !== enclaveURL
+    lastEnclaveURL !== enclaveURL ||
+    lastConfigRepo !== configRepo
   ) {
-    await initClient(apiKey, enclaveURL)
+    await initClient(apiKey, enclaveURL, configRepo)
   }
 
   return clientInstance!
 }
 
 export async function getWebSearchClient(): Promise<TinfoilAI> {
-  return getTinfoilClient(WEB_SEARCH_ENCLAVE_URL)
+  return getTinfoilClient(WEB_SEARCH_ENCLAVE_URL, WEB_SEARCH_CONFIG_REPO)
 }
 
 export async function initializeTinfoilClient(): Promise<void> {
