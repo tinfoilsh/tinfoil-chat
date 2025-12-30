@@ -237,8 +237,11 @@ export function ChatInterface({
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null)
 
-  // State for web search toggle
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  // State for web search toggle (persisted in localStorage)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('webSearchEnabled') === 'true'
+  })
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -660,6 +663,8 @@ export function ChatInterface({
 
   // Update verification document when web search toggle changes
   useEffect(() => {
+    localStorage.setItem('webSearchEnabled', String(webSearchEnabled))
+
     const updateVerification = async () => {
       try {
         const { getTinfoilClient, getWebSearchClient } = await import(
