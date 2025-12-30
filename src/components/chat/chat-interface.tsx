@@ -658,6 +658,35 @@ export function ChatInterface({
     initTinfoil()
   }, [setVerificationComplete, setVerificationSuccess])
 
+  // Update verification document when web search toggle changes
+  useEffect(() => {
+    const updateVerification = async () => {
+      try {
+        const { getTinfoilClient, getWebSearchClient } = await import(
+          '@/services/inference/tinfoil-client'
+        )
+        const client = webSearchEnabled
+          ? await getWebSearchClient()
+          : await getTinfoilClient()
+        await client.ready()
+        const doc = await (client as any).getVerificationDocument?.()
+        if (doc) {
+          setVerificationDocument(doc)
+          if (doc.securityVerified !== undefined) {
+            setVerificationComplete(true)
+            setVerificationSuccess(doc.securityVerified)
+          }
+        }
+      } catch (error) {
+        logError('Failed to update verification for web search toggle', error, {
+          component: 'ChatInterface',
+          action: 'updateVerification',
+        })
+      }
+    }
+    updateVerification()
+  }, [webSearchEnabled, setVerificationComplete, setVerificationSuccess])
+
   // Effect to handle window resize and enforce single sidebar rule
   useEffect(() => {
     // When window becomes narrow and both types of sidebars are open, close the right one
