@@ -1,77 +1,18 @@
 import { CodeBlock } from '@/components/code-block'
-import { TINFOIL_COLORS } from '@/theme/colors'
-import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useEffect, useState } from 'react'
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { useMathPlugins } from './use-math-plugins'
 
 interface MessageContentProps {
   content: string
   isDarkMode: boolean
   isUser?: boolean
-}
-
-function useMathPlugins() {
-  const [plugins, setPlugins] = useState<{
-    remarkPlugins: any[]
-    rehypePlugins: any[]
-  }>({
-    remarkPlugins: [remarkGfm],
-    rehypePlugins: [],
-  })
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      Promise.all([
-        import('remark-math'),
-        import('rehype-katex'),
-        import('remark-breaks'),
-      ])
-        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
-          setPlugins({
-            remarkPlugins: [
-              [
-                remarkMathMod.default,
-                {
-                  singleDollarTextMath: false,
-                },
-              ],
-              remarkGfm,
-              remarkBreaksMod.default,
-            ] as any[],
-            rehypePlugins: [
-              [
-                rehypeKatexMod.default,
-                {
-                  throwOnError: false,
-                  strict: false,
-                  output: 'htmlAndMathml',
-                  errorColor: TINFOIL_COLORS.utility.destructive,
-                  trust: false,
-                },
-              ],
-            ] as any[],
-          })
-        })
-        .catch((error) => {
-          logError('Failed to load markdown plugins', error, {
-            component: 'MessageContent',
-            action: 'loadPlugins',
-            metadata: {
-              plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
-            },
-          })
-        })
-    }
-  }, [])
-
-  return plugins
 }
 
 export const MessageContent = memo(function MessageContent({

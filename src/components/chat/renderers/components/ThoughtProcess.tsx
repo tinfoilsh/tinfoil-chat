@@ -1,6 +1,5 @@
 import { LoadingDots } from '@/components/loading-dots'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
-import { TINFOIL_COLORS } from '@/theme/colors'
 import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
@@ -10,7 +9,7 @@ import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { TfTin } from '@tinfoilsh/tinfoil-icons'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { useMathPlugins } from './use-math-plugins'
 
 interface ThoughtProcessProps {
   thoughts: string
@@ -24,63 +23,6 @@ interface ThoughtProcessProps {
     React.SetStateAction<Record<string, boolean>>
   >
   titleModelName?: string
-}
-
-function useMathPlugins() {
-  const [plugins, setPlugins] = useState<{
-    remarkPlugins: any[]
-    rehypePlugins: any[]
-  }>({
-    remarkPlugins: [remarkGfm],
-    rehypePlugins: [],
-  })
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      Promise.all([
-        import('remark-math'),
-        import('rehype-katex'),
-        import('remark-breaks'),
-      ])
-        .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
-          setPlugins({
-            remarkPlugins: [
-              [
-                remarkMathMod.default,
-                {
-                  singleDollarTextMath: false, // Disable $ delimiter
-                },
-              ],
-              remarkGfm,
-              remarkBreaksMod.default,
-            ] as any[],
-            rehypePlugins: [
-              [
-                rehypeKatexMod.default,
-                {
-                  throwOnError: false,
-                  strict: false,
-                  output: 'htmlAndMathml',
-                  errorColor: TINFOIL_COLORS.utility.destructive,
-                  trust: false,
-                },
-              ],
-            ] as any[],
-          })
-        })
-        .catch((error) => {
-          logError('Failed to load markdown plugins', error, {
-            component: 'ThoughtProcess',
-            action: 'loadPlugins',
-            metadata: {
-              plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
-            },
-          })
-        })
-    }
-  }, [])
-
-  return plugins
 }
 
 export const ThoughtProcess = memo(function ThoughtProcess({

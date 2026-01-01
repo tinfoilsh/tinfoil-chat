@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo } from 'react'
 import { MessageContent } from './MessageContent'
 
 interface StreamingChunkedTextProps {
@@ -12,6 +12,25 @@ interface ContentChunk {
   id: string
   content: string
   isComplete: boolean
+}
+
+// Hash function using cyrb53 algorithm for better distribution and fewer collisions
+// Returns a 53-bit hash as a string, combined with length for additional uniqueness
+function contentHash(str: string): string {
+  // cyrb53 hash - fast and has good distribution
+  let h1 = 0xdeadbeef
+  let h2 = 0x41c6ce57
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507)
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507)
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  const hash = 4294967296 * (2097151 & h2) + (h1 >>> 0)
+  return `${hash.toString(36)}-${str.length}`
 }
 
 function splitIntoChunks(
@@ -43,7 +62,7 @@ function splitIntoChunks(
     // No code blocks or tables, return single chunk
     return [
       {
-        id: 'single-chunk',
+        id: 'main',
         content,
         isComplete: !isStreaming,
       },
@@ -54,7 +73,7 @@ function splitIntoChunks(
   let lastIndex = 0
 
   // Process each complete block (code or table)
-  allMatches.forEach((item) => {
+  allMatches.forEach((item, matchIndex) => {
     const blockStart = item.index
     const blockContent = item.match[0]
     const blockEnd = blockStart + blockContent.length
@@ -68,8 +87,9 @@ function splitIntoChunks(
     if (blockStart > lastIndex) {
       const beforeText = content.substring(lastIndex, blockStart)
       if (beforeText.trim()) {
+        // Include chunk index to ensure uniqueness when identical text appears multiple times
         chunks.push({
-          id: `text-${lastIndex}`,
+          id: `text-${chunks.length}-${contentHash(beforeText)}`,
           content: beforeText,
           isComplete: true,
         })
@@ -77,8 +97,9 @@ function splitIntoChunks(
     }
 
     // Add the complete block (code or table)
+    // Use match index + type for stable ID since complete blocks are immutable
     chunks.push({
-      id: `${item.type}-${blockStart}`,
+      id: `${item.type}-${matchIndex}`,
       content: blockContent,
       isComplete: true,
     })
@@ -108,16 +129,16 @@ function splitIntoChunks(
           const beforeIncomplete = remaining.substring(0, lastTripleBacktick)
           if (beforeIncomplete.trim()) {
             chunks.push({
-              id: `text-${lastIndex}`,
+              id: `text-${chunks.length}-${contentHash(beforeIncomplete)}`,
               content: beforeIncomplete,
               isComplete: true,
             })
           }
         }
 
-        // Add the incomplete part (this will keep updating during stream)
+        // Add the incomplete part with stable streaming ID
         chunks.push({
-          id: `streaming-${lastIndex}`,
+          id: 'streaming',
           content: remaining.substring(
             lastTripleBacktick > 0 ? lastTripleBacktick : 0,
           ),
@@ -135,23 +156,23 @@ function splitIntoChunks(
             const beforeTable = remaining.substring(0, tableStart)
             if (beforeTable.trim()) {
               chunks.push({
-                id: `text-${lastIndex}`,
+                id: `text-${chunks.length}-${contentHash(beforeTable)}`,
                 content: beforeTable,
                 isComplete: true,
               })
             }
           }
 
-          // Add the incomplete table part
+          // Add the incomplete table part with stable streaming ID
           chunks.push({
-            id: `streaming-table-${lastIndex}`,
+            id: 'streaming',
             content: remaining.substring(tableStart),
             isComplete: false,
           })
         } else {
           // Fallback to streaming text
           chunks.push({
-            id: `streaming-${lastIndex}`,
+            id: 'streaming',
             content: remaining,
             isComplete: false,
           })
@@ -159,7 +180,7 @@ function splitIntoChunks(
       } else {
         // No incomplete blocks, add as streaming text
         chunks.push({
-          id: `streaming-${lastIndex}`,
+          id: 'streaming',
           content: remaining,
           isComplete: false,
         })
@@ -168,7 +189,7 @@ function splitIntoChunks(
       // Not streaming, all content is complete
       if (remaining.trim()) {
         chunks.push({
-          id: `text-${lastIndex}`,
+          id: `text-${chunks.length}-${contentHash(remaining)}`,
           content: remaining,
           isComplete: true,
         })
@@ -222,11 +243,8 @@ export const StreamingChunkedText = memo(function StreamingChunkedText({
   isUser = false,
   isStreaming = false,
 }: StreamingChunkedTextProps) {
-  // Split content into chunks
-  const chunks = useMemo(
-    () => splitIntoChunks(content, isStreaming),
-    [content, isStreaming],
-  )
+  // Split content into chunks for interactivity
+  const chunks = splitIntoChunks(content, isStreaming)
 
   // If only one chunk and no code blocks or tables, render directly for efficiency
   if (
