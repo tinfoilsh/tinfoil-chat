@@ -1,3 +1,28 @@
+export type URLCitation = {
+  title: string
+  url: string
+  content?: string
+  published_date?: string
+}
+
+export type Annotation = {
+  type: 'url_citation'
+  url_citation: URLCitation
+}
+
+export type WebSearchSource = {
+  title: string
+  url: string
+  text?: string
+  publishedDate?: string
+}
+
+export type WebSearchState = {
+  query?: string
+  status: 'searching' | 'completed'
+  sources?: WebSearchSource[]
+}
+
 export type Message = {
   role: 'user' | 'assistant'
   content: string
@@ -9,6 +34,10 @@ export type Message = {
   isThinking?: boolean
   thinkingDuration?: number // Duration in seconds
   isError?: boolean
+  webSearch?: WebSearchState
+  webSearchBeforeThinking?: boolean // True if web search started before thinking
+  annotations?: Annotation[] // URL citations from web search
+  searchReasoning?: string // Search agent's reasoning for multi-turn context
 }
 
 export type Chat = {

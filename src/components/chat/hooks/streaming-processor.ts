@@ -12,7 +12,7 @@
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { logError } from '@/utils/error-handling'
 import { CONSTANTS } from '../constants'
-import type { Chat, Message } from '../types'
+import type { Chat, Message, WebSearchSource, WebSearchState } from '../types'
 
 export interface StreamingContext {
   updatedChat: Chat
@@ -93,6 +93,8 @@ export async function processStreamingResponse(
     let sseBuffer = ''
     let isUsingReasoningFormat = false
     let earlyTitleTriggered = false
+    let webSearchState: WebSearchState | undefined = undefined
+    let collectedSources: WebSearchSource[] = []
 
     // Helper to check word count and trigger early title generation
     const checkForEarlyTitleGeneration = (content: string) => {
@@ -243,6 +245,88 @@ export async function processStreamingResponse(
           // Allow arbitrary spaces after the colon: `data:    {...}`
           const jsonData = line.replace(/^data:\s*/i, '')
           const json = JSON.parse(jsonData)
+
+          // Handle web_search_call events
+          if (json.type === 'web_search_call') {
+            const searchQuery = json.action?.query
+            const searchStatus = json.status
+
+            if (searchStatus === 'in_progress' && searchQuery) {
+              webSearchState = {
+                query: searchQuery,
+                status: 'searching',
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+              }
+              if (isSameChat()) {
+                const chatId = ctx.currentChatIdRef.current
+                const messageToSave = assistantMessage as Message
+                const newMessages = [...ctx.updatedMessages, messageToSave]
+                ctx.updateChatWithHistoryCheck(
+                  ctx.setChats,
+                  { ...ctx.updatedChat, id: chatId },
+                  ctx.setCurrentChat,
+                  chatId,
+                  newMessages,
+                  false,
+                  true,
+                )
+                ctx.setIsWaitingForResponse(false)
+              }
+            } else if (searchStatus === 'completed' && webSearchState) {
+              webSearchState = {
+                query: webSearchState.query,
+                status: 'completed',
+                sources: webSearchState.sources,
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+              }
+              if (isSameChat()) {
+                scheduleStreamingUpdate()
+              }
+            }
+            continue
+          }
+
+          // Handle url_citation annotations
+          const annotations = json.choices?.[0]?.delta?.annotations
+          if (annotations && Array.isArray(annotations)) {
+            for (const annotation of annotations) {
+              if (
+                annotation.type === 'url_citation' &&
+                annotation.url_citation
+              ) {
+                const { title, url, content, published_date } =
+                  annotation.url_citation
+                if (
+                  url &&
+                  !collectedSources.some((source) => source.url === url)
+                ) {
+                  collectedSources.push({
+                    title: title || url,
+                    url,
+                    text: content,
+                    publishedDate: published_date,
+                  })
+                }
+              }
+            }
+            if (collectedSources.length > 0 && webSearchState) {
+              webSearchState = {
+                query: webSearchState.query,
+                status: webSearchState.status,
+                sources: [...collectedSources],
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+              }
+            }
+          }
 
           const deltaReasoningContent =
             json.choices?.[0]?.delta?.reasoning_content
