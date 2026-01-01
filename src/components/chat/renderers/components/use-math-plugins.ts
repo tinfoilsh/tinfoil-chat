@@ -6,17 +6,16 @@ import remarkGfm from 'remark-gfm'
 interface PluginState {
   remarkPlugins: any[]
   rehypePlugins: any[]
-  loaded: boolean
 }
 
 // Module-level cache for stable plugin references
-// This ensures all components share the same plugin arrays
 let cachedPlugins: PluginState | null = null
 let loadingPromise: Promise<PluginState> | null = null
 
-// Pre-computed stable arrays for initial state
-const INITIAL_REMARK_PLUGINS: any[] = [remarkGfm]
-const INITIAL_REHYPE_PLUGINS: any[] = []
+const INITIAL_PLUGINS: PluginState = {
+  remarkPlugins: [remarkGfm],
+  rehypePlugins: [],
+}
 
 async function loadPlugins(): Promise<PluginState> {
   if (cachedPlugins) {
@@ -35,12 +34,7 @@ async function loadPlugins(): Promise<PluginState> {
     .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
       cachedPlugins = {
         remarkPlugins: [
-          [
-            remarkMathMod.default,
-            {
-              singleDollarTextMath: false,
-            },
-          ],
+          [remarkMathMod.default, { singleDollarTextMath: false }],
           remarkGfm,
           remarkBreaksMod.default,
         ],
@@ -56,7 +50,6 @@ async function loadPlugins(): Promise<PluginState> {
             },
           ],
         ],
-        loaded: true,
       }
       return cachedPlugins
     })
@@ -64,16 +57,8 @@ async function loadPlugins(): Promise<PluginState> {
       logError('Failed to load markdown plugins', error, {
         component: 'useMathPlugins',
         action: 'loadPlugins',
-        metadata: {
-          plugins: ['remark-math', 'rehype-katex', 'remark-breaks'],
-        },
       })
-      // Return initial plugins on error
-      return {
-        remarkPlugins: INITIAL_REMARK_PLUGINS,
-        rehypePlugins: INITIAL_REHYPE_PLUGINS,
-        loaded: false,
-      }
+      return INITIAL_PLUGINS
     })
 
   return loadingPromise
@@ -85,38 +70,21 @@ if (typeof window !== 'undefined') {
 }
 
 export function useMathPlugins(): PluginState {
-  const [plugins, setPlugins] = useState<PluginState>(() => {
-    // If already loaded, use cached plugins immediately
-    if (cachedPlugins) {
-      return cachedPlugins
-    }
-    // Return initial plugins while loading - this ensures ReactMarkdown
-    // always receives valid plugin arrays, avoiding component type changes
-    return {
-      remarkPlugins: INITIAL_REMARK_PLUGINS,
-      rehypePlugins: INITIAL_REHYPE_PLUGINS,
-      loaded: false,
-    }
-  })
+  const [plugins, setPlugins] = useState<PluginState>(
+    () => cachedPlugins ?? INITIAL_PLUGINS,
+  )
 
   useEffect(() => {
-    // If already loaded (from cache), no need to do anything
-    if (plugins.loaded) {
-      return
-    }
+    if (cachedPlugins) return
 
     let mounted = true
-
-    loadPlugins().then((loadedPlugins) => {
-      if (mounted) {
-        setPlugins(loadedPlugins)
-      }
+    loadPlugins().then((loaded) => {
+      if (mounted) setPlugins(loaded)
     })
-
     return () => {
       mounted = false
     }
-  }, [plugins.loaded])
+  }, [])
 
   return plugins
 }
