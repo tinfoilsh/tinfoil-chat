@@ -95,6 +95,8 @@ export async function processStreamingResponse(
     let earlyTitleTriggered = false
     let webSearchState: WebSearchState | undefined = undefined
     let collectedSources: WebSearchSource[] = []
+    let webSearchStarted = false
+    let thinkingStarted = false
 
     // Helper to check word count and trigger early title generation
     const checkForEarlyTitleGeneration = (content: string) => {
@@ -252,6 +254,9 @@ export async function processStreamingResponse(
             const searchStatus = json.status
 
             if (searchStatus === 'in_progress' && searchQuery) {
+              if (!webSearchStarted) {
+                webSearchStarted = true
+              }
               webSearchState = {
                 query: searchQuery,
                 status: 'searching',
@@ -259,6 +264,7 @@ export async function processStreamingResponse(
               assistantMessage = {
                 ...assistantMessage,
                 webSearch: webSearchState,
+                webSearchBeforeThinking: !thinkingStarted,
               }
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
@@ -350,6 +356,7 @@ export async function processStreamingResponse(
           ) {
             isUsingReasoningFormat = true
             isInThinkingMode = true
+            thinkingStarted = true
             ctx.setIsThinking(true)
             ctx.thinkingStartTimeRef.current = Date.now()
             assistantMessage = {
@@ -453,6 +460,7 @@ export async function processStreamingResponse(
                 initialContentBuffer = ''
                 if (content.includes('<think>')) {
                   isInThinkingMode = true
+                  thinkingStarted = true
                   ctx.setIsThinking(true)
                   ctx.thinkingStartTimeRef.current = Date.now()
                   content = content.replace(/^[\s\S]*?<think>/, '')
