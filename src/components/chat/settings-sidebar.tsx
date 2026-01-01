@@ -133,7 +133,11 @@ export function SettingsSidebar({
     const savedMaxMessages = localStorage.getItem('maxPromptMessages')
     if (savedMaxMessages) {
       const parsedValue = parseInt(savedMaxMessages, 10)
-      if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
+      if (
+        !isNaN(parsedValue) &&
+        parsedValue > 0 &&
+        parsedValue <= CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT
+      ) {
         setMaxMessages(parsedValue)
       }
     }
@@ -254,7 +258,7 @@ export function SettingsSidebar({
 
   // Save max messages setting to localStorage
   const handleMaxMessagesChange = (value: number) => {
-    if (value > 0 && value <= 50) {
+    if (value > 0 && value <= CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT) {
       setMaxMessages(value)
       if (isClient) {
         localStorage.setItem('maxPromptMessages', value.toString())
@@ -728,16 +732,16 @@ export function SettingsSidebar({
                       <div
                         className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                       >
-                        Maximum number of recent messages sent to the model
-                        (1-50). Longer contexts increase network usage and slow
-                        down responses.
+                        Maximum number of recent messages sent to the model (1-
+                        {CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT}). Longer contexts
+                        increase network usage and slow down responses.
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
                         min="1"
-                        max="50"
+                        max={CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT}
                         value={maxMessages}
                         onChange={(e) => {
                           const value = parseInt(e.target.value, 10)
