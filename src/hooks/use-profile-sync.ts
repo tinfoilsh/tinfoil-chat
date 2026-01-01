@@ -536,7 +536,7 @@ export function useProfileSync() {
     // Use smart sync at regular intervals to reduce bandwidth
     const interval = setInterval(() => {
       smartSyncFromCloud()
-    }, CLOUD_SYNC.SYNC_INTERVAL)
+    }, CLOUD_SYNC.PROFILE_SYNC_INTERVAL)
 
     return () => clearInterval(interval)
   }, [isSignedIn, cloudSyncEnabled, syncFromCloud, smartSyncFromCloud])
