@@ -715,17 +715,22 @@ export function ChatInput({
                     type="button"
                     onClick={onWebSearchToggle}
                     className={cn(
-                      'rounded-lg p-1.5 transition-colors',
+                      'flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors',
                       webSearchEnabled
                         ? 'bg-blue-500/20 text-blue-500'
                         : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
                     )}
                   >
                     <GlobeAltIcon className="h-5 w-5" />
+                    {webSearchEnabled && (
+                      <span className="text-sm font-medium">Web Search</span>
+                    )}
                   </button>
-                  <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                    {webSearchEnabled ? 'Disable web search' : 'Web search'}
-                  </span>
+                  {!webSearchEnabled && (
+                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                      Web search
+                    </span>
+                  )}
                 </div>
               )}
             </div>
