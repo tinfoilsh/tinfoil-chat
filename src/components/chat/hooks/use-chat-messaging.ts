@@ -455,6 +455,15 @@ export function useChatMessaging({
                 tempId,
               },
             })
+            // Clear pendingSave flag on error
+            setChats((prevChats) =>
+              prevChats.map((c) =>
+                c.id === tempId ? { ...c, pendingSave: false } : c,
+              ),
+            )
+            setCurrentChat((prev) =>
+              prev.id === tempId ? { ...prev, pendingSave: false } : prev,
+            )
           })
       } else if (isBlankChat && !storeHistory) {
         // For non-signed-in users, create a session chat with a temporary ID
@@ -771,7 +780,7 @@ export function useChatMessaging({
           const currentId = currentChatIdRef.current || updatedChat.id
           updateChatWithHistoryCheck(
             setChats,
-            { ...updatedChat, id: currentId },
+            { ...updatedChat, id: currentId, pendingSave: false },
             setCurrentChat,
             currentId,
             [...updatedMessages, errorMessage],
