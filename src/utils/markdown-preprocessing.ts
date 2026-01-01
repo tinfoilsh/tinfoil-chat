@@ -37,44 +37,35 @@ export function preprocessMarkdown(content: string): string {
   processed = processed.replace(/<br\s*\/?>/gi, '  \n')
   processed = processed.replace(/<\/br>/gi, '  \n')
 
-  // Fix bold markers with internal whitespace: **text ** or ** text** -> **text**
+  // Fix malformed bold/italic markers by moving internal whitespace outside
   // Markdown requires no space immediately after opening ** or before closing **
-  processed = processed.replace(/\*\*(.+?)\*\*/g, (match, content) => {
-    const trimmed = content.trim()
-    return trimmed ? `**${trimmed}**` : match
-  })
+  // e.g., "**text **" -> "**text** " and "** text**" -> " **text**"
+  // This preserves spacing while making the markers valid
+  // Process leading space first, then trailing, to handle "** text **" case
+  // Uses negative lookahead/lookbehind to handle nested formatting correctly
+  // Note: These fixes are primarily needed for Kimi K2 thinking model which outputs malformed markdown
 
-  // Fix underscore bold: __text __ or __ text__ -> __text__
-  processed = processed.replace(/__(.+?)__/g, (match, content) => {
-    const trimmed = content.trim()
-    return trimmed ? `__${trimmed}__` : match
-  })
+  // Bold with asterisks - match ** then content (may include single * but not **) then spaces then **
+  // Leading: ** spaces content ** -> spaces **content**
+  processed = processed.replace(/\*\*( +)((?:(?!\*\*).)+)\*\*/g, '$1**$2**')
+  // Trailing: ** content spaces ** -> **content** spaces
+  processed = processed.replace(/\*\*((?:(?!\*\*).)+?)( +)\*\*/g, '**$1**$2')
 
-  // Fix italic with asterisk: *text * or * text* -> *text*
-  // Use negative lookbehind/lookahead to avoid matching ** markers
-  processed = processed.replace(
-    /(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g,
-    (match, content) => {
-      const trimmed = content.trim()
-      return trimmed ? `*${trimmed}*` : match
-    },
-  )
+  // Bold with underscores - match __ then content (may include single _ but not __) then spaces then __
+  processed = processed.replace(/__( +)((?:(?!__).)+)__/g, '$1__$2__') // leading
+  processed = processed.replace(/__((?:(?!__).)+?)( +)__/g, '__$1__$2') // trailing
 
-  // Fix italic with underscore: _text _ or _ text_ -> _text_
-  // Use negative lookbehind/lookahead to avoid matching __ markers
-  processed = processed.replace(
-    /(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g,
-    (match, content) => {
-      const trimmed = content.trim()
-      return trimmed ? `_${trimmed}_` : match
-    },
-  )
+  // Italic with asterisk (avoid matching **) - content may include _ but not *
+  processed = processed.replace(/(?<!\*)\*( +)([^*]+)\*(?!\*)/g, '$1*$2*') // leading
+  processed = processed.replace(/(?<!\*)\*([^*]+?)( +)\*(?!\*)/g, '*$1*$2') // trailing
 
-  // Fix strikethrough: ~~text ~~ or ~~ text~~ -> ~~text~~
-  processed = processed.replace(/~~(.+?)~~/g, (match, content) => {
-    const trimmed = content.trim()
-    return trimmed ? `~~${trimmed}~~` : match
-  })
+  // Italic with underscore (avoid matching __) - content may include * but not _
+  processed = processed.replace(/(?<!_)_( +)([^_]+)_(?!_)/g, '$1_$2_') // leading
+  processed = processed.replace(/(?<!_)_([^_]+?)( +)_(?!_)/g, '_$1_$2') // trailing
+
+  // Strikethrough - content may include single ~ but not ~~
+  processed = processed.replace(/~~( +)((?:(?!~~).)+)~~/g, '$1~~$2~~') // leading
+  processed = processed.replace(/~~((?:(?!~~).)+?)( +)~~/g, '~~$1~~$2') // trailing
 
   // Restore inline code first (they might be inside code blocks)
   processed = processed.replace(
