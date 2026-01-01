@@ -166,7 +166,7 @@ export class CloudSyncService {
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync (first page only)
         this.isSyncing = false
-        return this.syncAllChats()
+        return await this.syncAllChats()
       }
 
       // Fetch only chats updated since our last sync
@@ -186,7 +186,7 @@ export class CloudSyncService {
           },
         )
         this.isSyncing = false
-        return this.syncAllChats()
+        return await this.syncAllChats()
       }
 
       const remoteConversations = updatedChats.conversations || []
@@ -198,8 +198,15 @@ export class CloudSyncService {
           metadata: { since: cachedStatus.lastUpdated },
         })
         // Update the cached status with current time to track this sync
-        const newStatus = await cloudStorage.getChatSyncStatus()
-        this.saveSyncStatus(newStatus)
+        try {
+          const newStatus = await cloudStorage.getChatSyncStatus()
+          this.saveSyncStatus(newStatus)
+        } catch (statusError) {
+          logError('Failed to update sync status', statusError, {
+            component: 'CloudSync',
+            action: 'syncChangedChats',
+          })
+        }
         this.isSyncing = false
         return result
       }
@@ -300,12 +307,19 @@ export class CloudSyncService {
         }
       }
 
-      // Update cached sync status
-      const newStatus = await cloudStorage.getChatSyncStatus()
-      this.saveSyncStatus(newStatus)
-
       if (savedIds.length > 0) {
         chatEvents.emit({ reason: 'sync', ids: savedIds })
+      }
+
+      // Update cached sync status
+      try {
+        const newStatus = await cloudStorage.getChatSyncStatus()
+        this.saveSyncStatus(newStatus)
+      } catch (statusError) {
+        logError('Failed to update sync status', statusError, {
+          component: 'CloudSync',
+          action: 'syncChangedChats',
+        })
       }
     } catch (error) {
       result.errors.push(
@@ -782,6 +796,10 @@ export class CloudSyncService {
 
   // Smart sync: check status first and only sync if needed
   async smartSync(): Promise<SyncResult> {
+    if (this.isSyncing) {
+      throw new Error('Sync already in progress')
+    }
+
     const status = await this.checkSyncStatus()
 
     if (!status.needsSync) {
