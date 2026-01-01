@@ -20,7 +20,7 @@ export const MessageContent = memo(function MessageContent({
   isDarkMode,
   isUser = false,
 }: MessageContentProps) {
-  const plugins = useMathPlugins()
+  const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const preprocessed = preprocessMarkdown(content)
   const processedContent = processLatexTags(preprocessed)
   const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
@@ -32,10 +32,10 @@ export const MessageContent = memo(function MessageContent({
 
   return (
     <ReactMarkdown
-      remarkPlugins={plugins.remarkPlugins}
-      rehypePlugins={plugins.rehypePlugins}
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
       components={{
-        hr: () => null, // Don't render horizontal rules
+        hr: () => null,
         code({
           node,
           className,

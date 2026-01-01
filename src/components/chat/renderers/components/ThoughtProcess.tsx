@@ -251,7 +251,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
     }
   }, [thoughts, isThinking])
 
-  const plugins = useMathPlugins()
+  const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const preprocessed = preprocessMarkdown(thoughts)
   const processedThoughts = processLatexTags(preprocessed)
   const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
@@ -324,8 +324,8 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           className="px-4 py-3 font-aeonik-fono text-sm text-content-primary"
         >
           <ReactMarkdown
-            remarkPlugins={plugins?.remarkPlugins}
-            rehypePlugins={plugins?.rehypePlugins}
+            remarkPlugins={remarkPlugins}
+            rehypePlugins={rehypePlugins}
             components={{
               p: ({ children }: { children?: React.ReactNode }) => (
                 <p className="mb-2 break-words last:mb-0">{children}</p>
