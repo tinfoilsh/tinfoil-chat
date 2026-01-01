@@ -14,6 +14,8 @@ const LOCAL_STORAGE_KEYS = [
   'userTraits',
   'userAdditionalContext',
   'isUsingPersonalization',
+  'isUsingCustomPrompt',
+  'customSystemPrompt',
   'encryptionKey',
   'encryptionKeySet',
   'hasUnlockedCloud',
@@ -21,6 +23,10 @@ const LOCAL_STORAGE_KEYS = [
   '__clerk_db_jwt',
   'tinfoil-encryption-key',
   'tinfoil-encryption-key-history',
+  'tinfoil-chat-sync-status',
+  'tinfoil-profile-sync-status',
+  'cloudSyncEnabled',
+  'cloudSyncExplicitlyDisabled',
 ] as const
 
 export async function performSignoutCleanup(): Promise<void> {
