@@ -97,10 +97,9 @@ export class CloudSyncService {
 
       // If no cached status, we need a full sync
       if (!cachedStatus) {
-        this.saveSyncStatus(remoteStatus)
         return {
           needsSync: true,
-          reason: 'updated',
+          reason: 'count_changed',
           remoteCount: remoteStatus.count,
           remoteLastUpdated: remoteStatus.lastUpdated,
         }
@@ -108,7 +107,6 @@ export class CloudSyncService {
 
       // Compare count
       if (remoteStatus.count !== cachedStatus.count) {
-        this.saveSyncStatus(remoteStatus)
         return {
           needsSync: true,
           reason: 'count_changed',
@@ -119,7 +117,6 @@ export class CloudSyncService {
 
       // Compare lastUpdated timestamps
       if (remoteStatus.lastUpdated !== cachedStatus.lastUpdated) {
-        this.saveSyncStatus(remoteStatus)
         return {
           needsSync: true,
           reason: 'updated',
