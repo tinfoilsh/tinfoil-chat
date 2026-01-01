@@ -322,6 +322,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         <div
           ref={contentRef}
           className="px-4 py-3 font-aeonik-fono text-sm text-content-primary"
+          translate="no"
         >
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
