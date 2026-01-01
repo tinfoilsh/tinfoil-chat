@@ -5,7 +5,7 @@ import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
-import { r2Storage } from './r2-storage'
+import { r2Storage, type ChatSyncStatus } from './r2-storage'
 import { streamingTracker } from './streaming-tracker'
 
 export interface SyncResult {
@@ -20,15 +20,317 @@ export interface PaginatedChatsResult {
   nextToken?: string
 }
 
+export interface SyncStatusResult {
+  needsSync: boolean
+  reason: 'no_changes' | 'count_changed' | 'updated' | 'local_changes' | 'error'
+  remoteCount?: number
+  remoteLastUpdated?: string | null
+}
+
+const SYNC_STATUS_STORAGE_KEY = 'tinfoil-chat-sync-status'
+
 export class CloudSyncService {
   private isSyncing = false
   private uploadQueue: Map<string, Promise<void>> = new Map()
   private pendingUploads: Map<string, () => Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
+  private lastSyncStatus: ChatSyncStatus | null = null
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
     r2Storage.setTokenGetter(getToken)
+  }
+
+  // Load cached sync status from localStorage
+  private loadCachedSyncStatus(): ChatSyncStatus | null {
+    if (typeof window === 'undefined') return null
+    try {
+      const cached = localStorage.getItem(SYNC_STATUS_STORAGE_KEY)
+      if (cached) {
+        return JSON.parse(cached)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null
+  }
+
+  // Save sync status to localStorage
+  private saveSyncStatus(status: ChatSyncStatus): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(SYNC_STATUS_STORAGE_KEY, JSON.stringify(status))
+      this.lastSyncStatus = status
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  // Check if sync is needed by comparing local and remote sync status
+  async checkSyncStatus(): Promise<SyncStatusResult> {
+    if (!(await r2Storage.isAuthenticated())) {
+      return { needsSync: false, reason: 'no_changes' }
+    }
+
+    try {
+      // First check if we have local unsynced changes
+      const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
+      const chatsNeedingUpload = unsyncedChats.filter(
+        (chat) =>
+          !(chat as any).isBlankChat &&
+          !streamingTracker.isStreaming(chat.id) &&
+          !chat.isLocalOnly,
+      )
+
+      if (chatsNeedingUpload.length > 0) {
+        return {
+          needsSync: true,
+          reason: 'local_changes',
+        }
+      }
+
+      // Fetch remote sync status
+      const remoteStatus = await r2Storage.getChatSyncStatus()
+
+      // Get cached status
+      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+
+      // If no cached status, we need a full sync
+      if (!cachedStatus) {
+        this.saveSyncStatus(remoteStatus)
+        return {
+          needsSync: true,
+          reason: 'updated',
+          remoteCount: remoteStatus.count,
+          remoteLastUpdated: remoteStatus.lastUpdated,
+        }
+      }
+
+      // Compare count
+      if (remoteStatus.count !== cachedStatus.count) {
+        this.saveSyncStatus(remoteStatus)
+        return {
+          needsSync: true,
+          reason: 'count_changed',
+          remoteCount: remoteStatus.count,
+          remoteLastUpdated: remoteStatus.lastUpdated,
+        }
+      }
+
+      // Compare lastUpdated timestamps
+      if (remoteStatus.lastUpdated !== cachedStatus.lastUpdated) {
+        this.saveSyncStatus(remoteStatus)
+        return {
+          needsSync: true,
+          reason: 'updated',
+          remoteCount: remoteStatus.count,
+          remoteLastUpdated: remoteStatus.lastUpdated,
+        }
+      }
+
+      // No changes detected
+      return {
+        needsSync: false,
+        reason: 'no_changes',
+        remoteCount: remoteStatus.count,
+        remoteLastUpdated: remoteStatus.lastUpdated,
+      }
+    } catch (error) {
+      logError('Failed to check sync status', error, {
+        component: 'CloudSync',
+        action: 'checkSyncStatus',
+      })
+      return { needsSync: true, reason: 'error' }
+    }
+  }
+
+  // Perform a delta sync - only fetch chats that changed since last sync
+  async syncChangedChats(): Promise<SyncResult> {
+    if (this.isSyncing) {
+      throw new Error('Sync already in progress')
+    }
+
+    this.isSyncing = true
+    const result: SyncResult = {
+      uploaded: 0,
+      downloaded: 0,
+      errors: [],
+    }
+
+    try {
+      // First, backup any unsynced local changes
+      const backupResult = await this.backupUnsyncedChats()
+      result.uploaded = backupResult.uploaded
+      result.errors.push(...backupResult.errors)
+
+      // Get cached sync status to determine what changed
+      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+
+      if (!cachedStatus?.lastUpdated) {
+        // No cached status, fall back to full sync (first page only)
+        this.isSyncing = false
+        return this.syncAllChats()
+      }
+
+      // Fetch only chats updated since our last sync
+      let updatedChats
+      try {
+        updatedChats = await r2Storage.getChatsUpdatedSince({
+          since: cachedStatus.lastUpdated,
+          includeContent: true,
+        })
+      } catch (error) {
+        logError(
+          'Failed to get updated chats, falling back to full sync',
+          error,
+          {
+            component: 'CloudSync',
+            action: 'syncChangedChats',
+          },
+        )
+        this.isSyncing = false
+        return this.syncAllChats()
+      }
+
+      const remoteConversations = updatedChats.conversations || []
+
+      if (remoteConversations.length === 0) {
+        logInfo('No chats updated since last sync', {
+          component: 'CloudSync',
+          action: 'syncChangedChats',
+          metadata: { since: cachedStatus.lastUpdated },
+        })
+        // Update the cached status with current time to track this sync
+        const newStatus = await r2Storage.getChatSyncStatus()
+        this.saveSyncStatus(newStatus)
+        this.isSyncing = false
+        return result
+      }
+
+      logInfo(`Syncing ${remoteConversations.length} changed chats`, {
+        component: 'CloudSync',
+        action: 'syncChangedChats',
+        metadata: { since: cachedStatus.lastUpdated },
+      })
+
+      // Initialize encryption service once before processing
+      await encryptionService.initialize()
+
+      // Process updated remote chats
+      const savedIds: string[] = []
+      for (const remoteChat of remoteConversations) {
+        // Skip if this chat was recently deleted
+        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
+          continue
+        }
+
+        try {
+          let downloadedChat: StoredChat | null = null
+
+          if (remoteChat.content) {
+            const encrypted = JSON.parse(remoteChat.content)
+
+            try {
+              const decrypted = await encryptionService.decrypt(encrypted)
+              downloadedChat = decrypted
+            } catch (decryptError) {
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+
+              downloadedChat = {
+                id: remoteChat.id,
+                title: 'Encrypted',
+                messages: [],
+                createdAt: ensureValidISODate(
+                  remoteChat.createdAt,
+                  remoteChat.id,
+                ),
+                updatedAt: ensureValidISODate(
+                  remoteChat.updatedAt ?? remoteChat.createdAt,
+                  remoteChat.id,
+                ),
+                lastAccessedAt: Date.now(),
+                decryptionFailed: true,
+                dataCorrupted: isCorrupted,
+                encryptedData: remoteChat.content,
+                syncedAt: Date.now(),
+                locallyModified: false,
+                syncVersion: 1,
+              } as StoredChat
+            }
+          } else {
+            downloadedChat = await r2Storage.downloadChat(remoteChat.id)
+            if (downloadedChat) {
+              downloadedChat.createdAt = ensureValidISODate(
+                downloadedChat.createdAt ?? remoteChat.createdAt,
+                remoteChat.id,
+              )
+              downloadedChat.updatedAt = ensureValidISODate(
+                downloadedChat.updatedAt ??
+                  remoteChat.updatedAt ??
+                  remoteChat.createdAt,
+                remoteChat.id,
+              )
+              downloadedChat.lastAccessedAt = Date.now()
+              downloadedChat.syncedAt = Date.now()
+              downloadedChat.locallyModified = false
+              downloadedChat.syncVersion = downloadedChat.syncVersion || 1
+            }
+          }
+
+          if (downloadedChat) {
+            downloadedChat.createdAt = ensureValidISODate(
+              downloadedChat.createdAt,
+              downloadedChat.id,
+            )
+            downloadedChat.updatedAt = ensureValidISODate(
+              downloadedChat.updatedAt ?? downloadedChat.createdAt,
+              downloadedChat.id,
+            )
+            await indexedDBStorage.saveChat(downloadedChat)
+            await indexedDBStorage.markAsSynced(
+              downloadedChat.id,
+              downloadedChat.syncVersion || 0,
+            )
+            savedIds.push(downloadedChat.id)
+            result.downloaded++
+          }
+        } catch (error) {
+          result.errors.push(
+            `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
+
+      // Update cached sync status
+      const newStatus = await r2Storage.getChatSyncStatus()
+      this.saveSyncStatus(newStatus)
+
+      if (savedIds.length > 0) {
+        chatEvents.emit({ reason: 'sync', ids: savedIds })
+      }
+    } catch (error) {
+      result.errors.push(
+        `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    } finally {
+      this.isSyncing = false
+    }
+
+    return result
+  }
+
+  // Clear cached sync status (useful when logging out or resetting)
+  clearSyncStatus(): void {
+    this.lastSyncStatus = null
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(SYNC_STATUS_STORAGE_KEY)
+      } catch {
+        // Ignore storage errors
+      }
+    }
   }
 
   // Backup a single chat to the cloud with rate limiting
@@ -388,6 +690,18 @@ export class CloudSyncService {
       if (savedIds.length > 0) {
         chatEvents.emit({ reason: 'sync', ids: savedIds })
       }
+
+      // Update cached sync status after successful sync
+      try {
+        const newStatus = await r2Storage.getChatSyncStatus()
+        this.saveSyncStatus(newStatus)
+      } catch (statusError) {
+        // Non-fatal: continue even if we can't update status
+        logError('Failed to update sync status after full sync', statusError, {
+          component: 'CloudSync',
+          action: 'syncAllChats',
+        })
+      }
     } catch (error) {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -397,6 +711,41 @@ export class CloudSyncService {
     }
 
     return result
+  }
+
+  // Smart sync: check status first and only sync if needed
+  async smartSync(): Promise<SyncResult> {
+    const status = await this.checkSyncStatus()
+
+    if (!status.needsSync) {
+      logInfo('Smart sync: no changes detected, skipping sync', {
+        component: 'CloudSync',
+        action: 'smartSync',
+        metadata: {
+          reason: status.reason,
+          remoteCount: status.remoteCount,
+        },
+      })
+      return { uploaded: 0, downloaded: 0, errors: [] }
+    }
+
+    logInfo('Smart sync: changes detected, syncing', {
+      component: 'CloudSync',
+      action: 'smartSync',
+      metadata: {
+        reason: status.reason,
+        remoteCount: status.remoteCount,
+        remoteLastUpdated: status.remoteLastUpdated,
+      },
+    })
+
+    // If we have a cached lastUpdated, use delta sync; otherwise fall back to full sync
+    const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+    if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
+      return this.syncChangedChats()
+    }
+
+    return this.syncAllChats()
   }
 
   // Check if currently syncing

@@ -1,9 +1,12 @@
 import { CLOUD_SYNC } from '@/config'
 import { profileSync, type ProfileData } from '@/services/cloud/profile-sync'
+import type { ProfileSyncStatus } from '@/services/cloud/r2-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
+
+const PROFILE_SYNC_STATUS_KEY = 'tinfoil-profile-sync-status'
 
 export function useProfileSync() {
   const { getToken, isSignedIn } = useAuth()
@@ -12,12 +15,38 @@ export function useProfileSync() {
   const lastSyncedVersion = useRef<number>(0)
   const hasPendingChanges = useRef(false)
   const lastSyncedProfile = useRef<ProfileData | null>(null)
+  const cachedSyncStatus = useRef<ProfileSyncStatus | null>(null)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
 
   // Set token getter when auth changes
   useEffect(() => {
     profileSync.setTokenGetter(getToken)
   }, [getToken])
+
+  // Load cached profile sync status
+  const loadCachedSyncStatus = useCallback((): ProfileSyncStatus | null => {
+    if (typeof window === 'undefined') return null
+    try {
+      const cached = localStorage.getItem(PROFILE_SYNC_STATUS_KEY)
+      if (cached) {
+        return JSON.parse(cached)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null
+  }, [])
+
+  // Save profile sync status
+  const saveSyncStatus = useCallback((status: ProfileSyncStatus): void => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(PROFILE_SYNC_STATUS_KEY, JSON.stringify(status))
+      cachedSyncStatus.current = status
+    } catch {
+      // Ignore storage errors
+    }
+  }, [])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
@@ -311,6 +340,96 @@ export function useProfileSync() {
     }
   }, [isSignedIn, applySettingsToLocal, hasProfileChanged])
 
+  // Smart sync: check sync status first and only fetch profile if changed
+  const smartSyncFromCloud = useCallback(async () => {
+    if (!isSignedIn || !isCloudSyncEnabled()) return
+
+    // Skip sync if we have pending local changes
+    if (hasPendingChanges.current) {
+      return
+    }
+
+    try {
+      // Get remote sync status
+      const remoteStatus = await profileSync.getSyncStatus()
+
+      if (!remoteStatus) {
+        return
+      }
+
+      // If no profile exists on server, nothing to sync
+      if (!remoteStatus.exists) {
+        return
+      }
+
+      // Get cached status
+      const cached = cachedSyncStatus.current || loadCachedSyncStatus()
+
+      // Check if we need to sync
+      const needsSync =
+        !cached ||
+        !cached.exists ||
+        cached.version !== remoteStatus.version ||
+        cached.lastUpdated !== remoteStatus.lastUpdated
+
+      if (!needsSync) {
+        logInfo('Smart profile sync: no changes detected', {
+          component: 'ProfileSync',
+          action: 'smartSyncFromCloud',
+          metadata: { version: remoteStatus.version },
+        })
+        return
+      }
+
+      logInfo('Smart profile sync: changes detected, fetching profile', {
+        component: 'ProfileSync',
+        action: 'smartSyncFromCloud',
+        metadata: {
+          cachedVersion: cached?.version,
+          remoteVersion: remoteStatus.version,
+        },
+      })
+
+      // Fetch the full profile since it changed
+      const cloudProfile = await profileSync.fetchProfile()
+
+      if (cloudProfile) {
+        const cloudVersion = cloudProfile.version || 0
+
+        // Re-check pending changes after fetch
+        if (hasPendingChanges.current) {
+          return
+        }
+
+        // Ignore stale versions
+        if (cloudVersion < lastSyncedVersion.current) {
+          return
+        }
+
+        // Apply if changed
+        if (hasProfileChanged(cloudProfile, lastSyncedProfile.current)) {
+          applySettingsToLocal(cloudProfile)
+          lastSyncedVersion.current = cloudVersion
+          lastSyncedProfile.current = cloudProfile
+        }
+      }
+
+      // Update cached sync status
+      saveSyncStatus(remoteStatus)
+    } catch (error) {
+      logError('Failed smart profile sync', error, {
+        component: 'ProfileSync',
+        action: 'smartSyncFromCloud',
+      })
+    }
+  }, [
+    isSignedIn,
+    loadCachedSyncStatus,
+    saveSyncStatus,
+    applySettingsToLocal,
+    hasProfileChanged,
+  ])
+
   // Sync profile from local to cloud (debounced)
   const syncToCloud = useCallback(async () => {
     if (!isSignedIn || !isCloudSyncEnabled()) return
@@ -410,13 +529,13 @@ export function useProfileSync() {
       })
     }
 
-    // Sync at regular intervals (same as chat sync)
+    // Use smart sync at regular intervals to reduce bandwidth
     const interval = setInterval(() => {
-      syncFromCloud()
+      smartSyncFromCloud()
     }, CLOUD_SYNC.SYNC_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [isSignedIn, cloudSyncEnabled, syncFromCloud])
+  }, [isSignedIn, cloudSyncEnabled, syncFromCloud, smartSyncFromCloud])
 
   // Listen for settings changes and sync to cloud
   useEffect(() => {
@@ -475,6 +594,7 @@ export function useProfileSync() {
 
   return {
     syncFromCloud,
+    smartSyncFromCloud,
     syncToCloud,
     retryDecryption,
   }

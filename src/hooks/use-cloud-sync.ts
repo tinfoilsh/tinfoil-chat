@@ -178,7 +178,7 @@ export function useCloudSync() {
     initializeSync()
   }, [isSignedIn, getToken])
 
-  // Sync chats
+  // Full sync chats (always fetches first page)
   const syncChats = useCallback(async () => {
     // Check if cloud sync is enabled
     if (!isCloudSyncEnabled()) {
@@ -221,6 +221,62 @@ export function useCloudSync() {
           metadata: { result },
         },
       )
+
+      return result
+    } catch (error) {
+      if (isMountedRef.current) {
+        setState((prev) => ({ ...prev, syncing: false }))
+      }
+      throw error
+    } finally {
+      syncingRef.current = false
+    }
+  }, [])
+
+  // Smart sync: checks sync status first and only syncs if changes detected
+  const smartSyncChats = useCallback(async () => {
+    if (!isCloudSyncEnabled()) {
+      logInfo('Cloud sync is disabled, skipping smart sync', {
+        component: 'useCloudSync',
+        action: 'smartSyncChats',
+      })
+      return { uploaded: 0, downloaded: 0, errors: [] }
+    }
+
+    if (syncingRef.current) {
+      logInfo('Smart sync request blocked - sync already in progress', {
+        component: 'useCloudSync',
+        action: 'smartSyncChats',
+      })
+      return { uploaded: 0, downloaded: 0, errors: [] }
+    }
+
+    syncingRef.current = true
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, syncing: true }))
+    }
+
+    try {
+      const result = await cloudSync.smartSync()
+
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          syncing: false,
+          lastSyncTime: Date.now(),
+        }))
+      }
+
+      if (result.uploaded > 0 || result.downloaded > 0) {
+        logInfo(
+          `Smart sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
+          {
+            component: 'useCloudSync',
+            action: 'smartSyncChats',
+            metadata: { result },
+          },
+        )
+      }
 
       return result
     } catch (error) {
@@ -361,6 +417,7 @@ export function useCloudSync() {
   return {
     ...state,
     syncChats,
+    smartSyncChats,
     backupChat,
     setEncryptionKey,
     retryDecryptionWithNewKey,
