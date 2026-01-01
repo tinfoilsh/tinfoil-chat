@@ -412,10 +412,10 @@ export function useProfileSync() {
           lastSyncedVersion.current = cloudVersion
           lastSyncedProfile.current = cloudProfile
         }
-      }
 
-      // Update cached sync status
-      saveSyncStatus(remoteStatus)
+        // Update cached sync status only after successful processing
+        saveSyncStatus(remoteStatus)
+      }
     } catch (error) {
       logError('Failed smart profile sync', error, {
         component: 'ProfileSync',
