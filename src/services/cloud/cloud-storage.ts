@@ -33,7 +33,7 @@ export interface ProfileSyncStatus {
   lastUpdated?: string
 }
 
-export class R2StorageService {
+export class CloudStorageService {
   private getToken: (() => Promise<string | null>) | null = null
 
   setTokenGetter(getToken: () => Promise<string | null>) {
@@ -160,7 +160,7 @@ export class R2StorageService {
       }
     } catch (error) {
       logError(`Failed to download chat ${chatId}`, error, {
-        component: 'R2Storage',
+        component: 'CloudStorage',
         action: 'downloadChat',
         metadata: { chatId },
       })
@@ -279,4 +279,4 @@ export class R2StorageService {
   }
 }
 
-export const r2Storage = new R2StorageService()
+export const cloudStorage = new CloudStorageService()

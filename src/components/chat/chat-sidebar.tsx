@@ -16,7 +16,7 @@ import { CONSTANTS } from './constants'
 
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
-import { r2Storage } from '@/services/cloud/r2-storage'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 // Cloud pagination handled via hook; no direct cloudSync usage here
 import { useCloudPagination } from '@/hooks/use-cloud-pagination'
 import { type StoredChat } from '@/services/storage/indexed-db'
@@ -368,11 +368,11 @@ export function ChatSidebar({
     setIsInitialLoad(false)
   }, [])
 
-  // Initialize r2Storage with token getter when component mounts
+  // Initialize cloudStorage with token getter when component mounts
   useEffect(() => {
     if (isSignedIn && getToken) {
-      // Set up token getter for r2Storage using Clerk token
-      r2Storage.setTokenGetter(async () => {
+      // Set up token getter for cloudStorage using Clerk token
+      cloudStorage.setTokenGetter(async () => {
         const token = await getToken()
         return token
       })
