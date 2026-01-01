@@ -86,10 +86,33 @@ export class CloudStorageService {
     return isTokenValid(token)
   }
 
-  async uploadChat(chat: StoredChat): Promise<void> {
+  async uploadChat(chat: StoredChat): Promise<string | null> {
+    let chatId = chat.id
+    let chatToUpload = chat
+
+    // If the chat has a temp ID, generate a proper server ID first
+    if (chatId.startsWith('temp-')) {
+      try {
+        const result = await this.generateConversationId()
+        chatId = result.conversationId
+        chatToUpload = { ...chat, id: chatId }
+      } catch (error) {
+        logError(
+          'Failed to generate server ID for temp chat, skipping upload',
+          error,
+          {
+            component: 'CloudStorage',
+            action: 'uploadChat',
+            metadata: { tempId: chat.id },
+          },
+        )
+        return null
+      }
+    }
+
     // Encrypt the chat data first
     await encryptionService.initialize()
-    const encrypted = await encryptionService.encrypt(chat)
+    const encrypted = await encryptionService.encrypt(chatToUpload)
 
     // Metadata for the chat
     const metadata = {
@@ -104,7 +127,7 @@ export class CloudStorageService {
       method: 'PUT',
       headers: await this.getHeaders(),
       body: JSON.stringify({
-        conversationId: chat.id,
+        conversationId: chatId,
         data: JSON.stringify(encrypted),
         metadata,
       }),
@@ -113,6 +136,9 @@ export class CloudStorageService {
     if (!response.ok) {
       throw new Error(`Failed to upload chat: ${response.statusText}`)
     }
+
+    // Return the new ID if it changed, null otherwise
+    return chatId !== chat.id ? chatId : null
   }
 
   async downloadChat(chatId: string): Promise<StoredChat | null> {
