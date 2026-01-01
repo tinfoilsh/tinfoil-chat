@@ -693,117 +693,99 @@ export function ChatInput({
             }}
           />
 
-          <div className="mt-3 flex items-center justify-between">
-            <div className="flex items-center gap-1">
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <div className="group relative">
+              <button
+                id="upload-button"
+                type="button"
+                onClick={triggerFileInput}
+                className="rounded-lg px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+              >
+                <DocumentIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Upload document
+              </span>
+            </div>
+            {onWebSearchToggle && (
               <div className="group relative">
                 <button
-                  id="upload-button"
+                  id="web-search-button"
                   type="button"
-                  onClick={triggerFileInput}
-                  className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                >
-                  <DocumentIcon className="h-5 w-5" />
-                </button>
-                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                  Upload document
-                </span>
-              </div>
-              {onWebSearchToggle && (
-                <div className="group relative">
-                  <button
-                    id="web-search-button"
-                    type="button"
-                    onClick={onWebSearchToggle}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-lg px-2 py-1.5 transition-colors',
-                      webSearchEnabled
-                        ? 'bg-blue-500/20 text-blue-500'
-                        : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                    )}
-                  >
-                    <GlobeAltIcon className="h-5 w-5" />
-                    {webSearchEnabled && (
-                      <span className="text-sm font-medium">Web Search</span>
-                    )}
-                  </button>
-                  {!webSearchEnabled && (
-                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                      Web search
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {modelSelectorButton && <div>{modelSelectorButton}</div>}
-              {isPremium && audioModel && (
-                <button
-                  type="button"
-                  onClick={isRecording ? stopRecording : startRecording}
+                  onClick={onWebSearchToggle}
                   className={cn(
-                    'rounded-lg p-1.5 disabled:opacity-50',
-                    isRecording
-                      ? 'animate-pulse text-red-500'
-                      : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
+                    'flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors',
+                    webSearchEnabled
+                      ? 'bg-blue-500/20 text-blue-500'
+                      : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
                   )}
-                  title={
-                    isRecording
-                      ? 'Stop recording'
-                      : isConverting
-                        ? 'Converting to WAV...'
-                        : 'Start recording'
-                  }
-                  disabled={isTranscribing || isConverting}
                 >
-                  {isRecording ? (
-                    <StopIcon className="h-5 w-5" />
-                  ) : isTranscribing || isConverting ? (
-                    <PiSpinner className="h-5 w-5 animate-spin text-current" />
-                  ) : (
-                    <MicrophoneIcon className="h-5 w-5" />
+                  <GlobeAltIcon className="h-5 w-5" />
+                  {webSearchEnabled && (
+                    <span className="text-xs font-medium">Web Search</span>
                   )}
                 </button>
-              )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {modelSelectorButton && <div>{modelSelectorButton}</div>}
+            {isPremium && audioModel && (
               <button
-                id="send-button"
                 type="button"
-                onClick={(e) => {
-                  if (
-                    loadingState === 'loading' ||
-                    loadingState === 'retrying'
-                  ) {
-                    e.preventDefault()
-                    cancelGeneration()
-                  } else {
-                    const hasDocuments =
-                      processedDocuments &&
-                      processedDocuments.some((doc) => !doc.isUploading)
-                    const hasInput = input.trim().length > 0
-                    if (hasInput || hasDocuments) {
-                      handleSubmit(e)
-                    }
-                  }
-                }}
-                className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
-                disabled={
-                  loadingState !== 'loading' &&
-                  loadingState !== 'retrying' &&
-                  (isTranscribing ||
-                    isConverting ||
-                    (!input.trim() &&
-                      (!processedDocuments ||
-                        !processedDocuments.some((doc) => !doc.isUploading))))
+                onClick={isRecording ? stopRecording : startRecording}
+                className={cn(
+                  'rounded-lg p-1.5 disabled:opacity-50',
+                  isRecording
+                    ? 'animate-pulse text-red-500'
+                    : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
+                )}
+                title={
+                  isRecording
+                    ? 'Stop recording'
+                    : isConverting
+                      ? 'Converting to WAV...'
+                      : 'Start recording'
                 }
+                disabled={isTranscribing || isConverting}
               >
-                {loadingState === 'loading' || loadingState === 'retrying' ? (
-                  <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
+                {isRecording ? (
+                  <StopIcon className="h-5 w-5" />
+                ) : isTranscribing || isConverting ? (
+                  <PiSpinner className="h-5 w-5 animate-spin text-current" />
                 ) : (
-                  <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
+                  <MicrophoneIcon className="h-5 w-5" />
                 )}
               </button>
-            </div>
+            )}
+            <button
+              id="send-button"
+              type="button"
+              onClick={(e) => {
+                if (loadingState === 'loading' || loadingState === 'retrying') {
+                  e.preventDefault()
+                  cancelGeneration()
+                } else {
+                  handleSubmit(e)
+                }
+              }}
+              className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
+              disabled={
+                loadingState !== 'loading' &&
+                loadingState !== 'retrying' &&
+                (isTranscribing || isConverting)
+              }
+            >
+              {loadingState === 'loading' || loadingState === 'retrying' ? (
+                <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
+              ) : (
+                <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
+              )}
+            </button>
           </div>
+        </div>
         </div>
       </div>
 
