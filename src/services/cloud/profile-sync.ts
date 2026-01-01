@@ -1,6 +1,7 @@
 import { logError, logInfo } from '@/utils/error-handling'
 import { isTokenValid } from '@/utils/token-validation'
 import { encryptionService } from '../encryption/encryption-service'
+import type { ProfileSyncStatus } from './r2-storage'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -292,6 +293,45 @@ export class ProfileSyncService {
   clearCache(): void {
     this.cachedProfile = null
     this.failedDecryptionData = null
+  }
+
+  // Get sync status to check if profile changed without fetching full data
+  async getSyncStatus(): Promise<ProfileSyncStatus | null> {
+    try {
+      if (!(await this.isAuthenticated())) {
+        return null
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/profile/sync-status`, {
+        headers: await this.getHeaders(),
+      })
+
+      if (response.status === 401 || response.status === 404) {
+        return { exists: false }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to get profile sync status: ${response.statusText}`,
+        )
+      }
+
+      return await response.json()
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Authentication token not set')
+      ) {
+        return null
+      }
+
+      logError('Failed to get profile sync status', error, {
+        component: 'ProfileSync',
+        action: 'getSyncStatus',
+      })
+
+      return null
+    }
   }
 }
 

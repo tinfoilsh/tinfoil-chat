@@ -116,6 +116,7 @@ export function ChatInterface({
   const {
     syncing,
     syncChats,
+    smartSyncChats,
     encryptionKey,
     isFirstTimeUser,
     setEncryptionKey,
@@ -128,6 +129,7 @@ export function ChatInterface({
   const {
     retryDecryption: retryProfileDecryption,
     syncFromCloud: syncProfileFromCloud,
+    smartSyncFromCloud: smartSyncProfileFromCloud,
     syncToCloud: syncProfileToCloud,
   } = useProfileSync()
 
@@ -452,7 +454,7 @@ export function ChatInterface({
   useEffect(() => {
     if (!isSignedIn) return
 
-    // Initial sync on page load/refresh - sync both chats and profile
+    // Initial sync on page load/refresh - do a full sync to ensure we have all data
     Promise.all([
       syncChats().then(() => {
         // Reload chats from IndexedDB after sync completes
@@ -469,17 +471,16 @@ export function ChatInterface({
       })
     })
 
-    // Sync at regular intervals
+    // Use smart sync at regular intervals - checks sync status first to reduce bandwidth
     const interval = setInterval(() => {
       Promise.all([
-        syncChats().then(() => {
-          // Reload chats from IndexedDB after sync completes
-          return reloadChats()
+        smartSyncChats().then((result) => {
+          // Only reload chats if something was actually synced
+          if (result.uploaded > 0 || result.downloaded > 0) {
+            return reloadChats()
+          }
         }),
-        syncProfileFromCloud().then(() => {
-          // After syncing from cloud, sync local changes back to cloud
-          return syncProfileToCloud()
-        }),
+        smartSyncProfileFromCloud(),
       ]).catch((error) => {
         logError('Failed to sync data (periodic)', error, {
           component: 'ChatInterface',
@@ -492,8 +493,10 @@ export function ChatInterface({
   }, [
     isSignedIn,
     syncChats,
+    smartSyncChats,
     reloadChats,
     syncProfileFromCloud,
+    smartSyncProfileFromCloud,
     syncProfileToCloud,
   ])
 

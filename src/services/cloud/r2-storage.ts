@@ -22,6 +22,17 @@ export interface ChatListResponse {
   hasMore: boolean
 }
 
+export interface ChatSyncStatus {
+  count: number
+  lastUpdated: string | null
+}
+
+export interface ProfileSyncStatus {
+  exists: boolean
+  version?: number
+  lastUpdated?: string
+}
+
 export class R2StorageService {
   private getToken: (() => Promise<string | null>) | null = null
 
@@ -215,6 +226,56 @@ export class R2StorageService {
     if (!response.ok && response.status !== 404) {
       throw new Error(`Failed to delete chat: ${response.statusText}`)
     }
+  }
+
+  async getChatSyncStatus(): Promise<ChatSyncStatus> {
+    const response = await fetch(`${API_BASE_URL}/api/chats/sync-status`, {
+      headers: await this.getHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to get chat sync status: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
+  async getProfileSyncStatus(): Promise<ProfileSyncStatus> {
+    const response = await fetch(`${API_BASE_URL}/api/profile/sync-status`, {
+      headers: await this.getHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get profile sync status: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
+  async getChatsUpdatedSince(options: {
+    since: string
+    includeContent?: boolean
+  }): Promise<ChatListResponse> {
+    const params = new URLSearchParams()
+    params.append('since', options.since)
+    if (options.includeContent) {
+      params.append('includeContent', 'true')
+    }
+
+    const url = `${API_BASE_URL}/api/chats/updated-since?${params.toString()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get chats updated since: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
   }
 }
 
