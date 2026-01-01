@@ -450,55 +450,40 @@ export function ChatInterface({
     selectedModelDetails,
   )
 
-  // Sync chats and profile when user signs in and periodically
+  // Sync chats when user signs in and periodically
+  // Profile sync is handled separately by useProfileSync hook
   useEffect(() => {
     if (!isSignedIn) return
 
     // Initial sync on page load/refresh - do a full sync to ensure we have all data
-    Promise.all([
-      syncChats().then(() => {
-        // Reload chats from IndexedDB after sync completes
-        return reloadChats()
-      }),
-      syncProfileFromCloud().then(() => {
-        // After syncing from cloud, sync local changes back to cloud
-        return syncProfileToCloud()
-      }),
-    ]).catch((error) => {
-      logError('Failed to sync data on page load', error, {
-        component: 'ChatInterface',
-        action: 'initialSync',
+    syncChats()
+      .then(() => reloadChats())
+      .catch((error) => {
+        logError('Failed to sync chats on page load', error, {
+          component: 'ChatInterface',
+          action: 'initialSync',
+        })
       })
-    })
 
     // Use smart sync at regular intervals - checks sync status first to reduce bandwidth
     const interval = setInterval(() => {
-      Promise.all([
-        smartSyncChats().then((result) => {
+      smartSyncChats()
+        .then((result) => {
           // Only reload chats if something was actually synced
           if (result.uploaded > 0 || result.downloaded > 0) {
             return reloadChats()
           }
-        }),
-        smartSyncProfileFromCloud(),
-      ]).catch((error) => {
-        logError('Failed to sync data (periodic)', error, {
-          component: 'ChatInterface',
-          action: 'periodicSync',
         })
-      })
-    }, CLOUD_SYNC.SYNC_INTERVAL)
+        .catch((error) => {
+          logError('Failed to sync chats (periodic)', error, {
+            component: 'ChatInterface',
+            action: 'periodicSync',
+          })
+        })
+    }, CLOUD_SYNC.CHAT_SYNC_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [
-    isSignedIn,
-    syncChats,
-    smartSyncChats,
-    reloadChats,
-    syncProfileFromCloud,
-    smartSyncProfileFromCloud,
-    syncProfileToCloud,
-  ])
+  }, [isSignedIn, syncChats, smartSyncChats, reloadChats])
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
