@@ -84,12 +84,14 @@ if (typeof window !== 'undefined') {
   loadPlugins()
 }
 
-export function useMathPlugins() {
+export function useMathPlugins(): PluginState {
   const [plugins, setPlugins] = useState<PluginState>(() => {
     // If already loaded, use cached plugins immediately
     if (cachedPlugins) {
       return cachedPlugins
     }
+    // Return initial plugins while loading - this ensures ReactMarkdown
+    // always receives valid plugin arrays, avoiding component type changes
     return {
       remarkPlugins: INITIAL_REMARK_PLUGINS,
       rehypePlugins: INITIAL_REHYPE_PLUGINS,
@@ -106,7 +108,7 @@ export function useMathPlugins() {
     let mounted = true
 
     loadPlugins().then((loadedPlugins) => {
-      if (mounted && !plugins.loaded) {
+      if (mounted) {
         setPlugins(loadedPlugins)
       }
     })
