@@ -14,7 +14,7 @@
  * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
  */
 import { type BaseModel } from '@/config/models'
-import { r2Storage } from '@/services/cloud/r2-storage'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
 import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
@@ -93,9 +93,9 @@ export function useChatMessaging({
     isPremiumRef.current = isPremium
   }, [isPremium])
 
-  // Initialize r2Storage and tinfoil client with token getter
+  // Initialize cloudStorage and tinfoil client with token getter
   useEffect(() => {
-    r2Storage.setTokenGetter(getToken)
+    cloudStorage.setTokenGetter(getToken)
     setAuthTokenGetter(getToken, () => isPremiumRef.current)
   }, [getToken])
 
@@ -352,7 +352,7 @@ export function useChatMessaging({
         }
 
         // Get server ID in background and update when ready
-        r2Storage
+        cloudStorage
           .generateConversationId()
           .then((result) => {
             if (result) {

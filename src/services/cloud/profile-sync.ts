@@ -1,7 +1,7 @@
 import { logError, logInfo } from '@/utils/error-handling'
 import { isTokenValid } from '@/utils/token-validation'
 import { encryptionService } from '../encryption/encryption-service'
-import type { ProfileSyncStatus } from './r2-storage'
+import type { ProfileSyncStatus } from './cloud-storage'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'

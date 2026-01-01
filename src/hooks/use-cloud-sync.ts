@@ -1,6 +1,6 @@
 import { CLOUD_SYNC } from '@/config'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { cloudSync } from '@/services/cloud/cloud-sync'
-import { r2Storage } from '@/services/cloud/r2-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
@@ -50,7 +50,7 @@ export function useCloudSync() {
         // Set token getter for cloud sync and r2 storage
         // This ensures we get a fresh token for each request
         cloudSync.setTokenGetter(getToken)
-        r2Storage.setTokenGetter(getToken)
+        cloudStorage.setTokenGetter(getToken)
 
         // Check if user already has a key before initializing
         const existingKey = localStorage.getItem('tinfoil-encryption-key')

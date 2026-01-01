@@ -5,7 +5,7 @@ import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
-import { r2Storage, type ChatSyncStatus } from './r2-storage'
+import { cloudStorage, type ChatSyncStatus } from './cloud-storage'
 import { streamingTracker } from './streaming-tracker'
 
 export interface SyncResult {
@@ -38,7 +38,7 @@ export class CloudSyncService {
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
-    r2Storage.setTokenGetter(getToken)
+    cloudStorage.setTokenGetter(getToken)
   }
 
   // Load cached sync status from localStorage
@@ -68,7 +68,7 @@ export class CloudSyncService {
 
   // Check if sync is needed by comparing local and remote sync status
   async checkSyncStatus(): Promise<SyncStatusResult> {
-    if (!(await r2Storage.isAuthenticated())) {
+    if (!(await cloudStorage.isAuthenticated())) {
       return { needsSync: false, reason: 'no_changes' }
     }
 
@@ -90,7 +90,7 @@ export class CloudSyncService {
       }
 
       // Fetch remote sync status
-      const remoteStatus = await r2Storage.getChatSyncStatus()
+      const remoteStatus = await cloudStorage.getChatSyncStatus()
 
       // Get cached status
       const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
@@ -172,7 +172,7 @@ export class CloudSyncService {
       // Fetch only chats updated since our last sync
       let updatedChats
       try {
-        updatedChats = await r2Storage.getChatsUpdatedSince({
+        updatedChats = await cloudStorage.getChatsUpdatedSince({
           since: cachedStatus.lastUpdated,
           includeContent: true,
         })
@@ -198,7 +198,7 @@ export class CloudSyncService {
           metadata: { since: cachedStatus.lastUpdated },
         })
         // Update the cached status with current time to track this sync
-        const newStatus = await r2Storage.getChatSyncStatus()
+        const newStatus = await cloudStorage.getChatSyncStatus()
         this.saveSyncStatus(newStatus)
         this.isSyncing = false
         return result
@@ -257,7 +257,7 @@ export class CloudSyncService {
               } as StoredChat
             }
           } else {
-            downloadedChat = await r2Storage.downloadChat(remoteChat.id)
+            downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
             if (downloadedChat) {
               downloadedChat.createdAt = ensureValidISODate(
                 downloadedChat.createdAt ?? remoteChat.createdAt,
@@ -301,7 +301,7 @@ export class CloudSyncService {
       }
 
       // Update cached sync status
-      const newStatus = await r2Storage.getChatSyncStatus()
+      const newStatus = await cloudStorage.getChatSyncStatus()
       this.saveSyncStatus(newStatus)
 
       if (savedIds.length > 0) {
@@ -333,7 +333,7 @@ export class CloudSyncService {
   // Backup a single chat to the cloud with rate limiting
   async backupChat(chatId: string): Promise<void> {
     // Don't attempt backup if not authenticated
-    if (!(await r2Storage.isAuthenticated())) {
+    if (!(await cloudStorage.isAuthenticated())) {
       return
     }
 
@@ -435,7 +435,7 @@ export class CloudSyncService {
         return
       }
 
-      await r2Storage.uploadChat(chat)
+      await cloudStorage.uploadChat(chat)
 
       // Mark as synced with incremented version
       const newVersion = (chat.syncVersion || 0) + 1
@@ -494,7 +494,7 @@ export class CloudSyncService {
             return
           }
 
-          await r2Storage.uploadChat(chat)
+          await cloudStorage.uploadChat(chat)
           const newVersion = (chat.syncVersion || 0) + 1
           await indexedDBStorage.markAsSynced(chat.id, newVersion)
           result.uploaded++
@@ -537,7 +537,7 @@ export class CloudSyncService {
       // Then, get list of remote chats with content
       let remoteList
       try {
-        remoteList = await r2Storage.listChats({
+        remoteList = await cloudStorage.listChats({
           includeContent: true,
           limit: PAGINATION.CHATS_PER_PAGE,
         })
@@ -634,7 +634,7 @@ export class CloudSyncService {
                 } as StoredChat
               }
             } else {
-              downloadedChat = await r2Storage.downloadChat(remoteChat.id)
+              downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
               if (downloadedChat) {
                 const safeCreatedAt = ensureValidISODate(
                   downloadedChat.createdAt ?? remoteChat.createdAt,
@@ -690,7 +690,7 @@ export class CloudSyncService {
 
       // Update cached sync status after successful sync
       try {
-        const newStatus = await r2Storage.getChatSyncStatus()
+        const newStatus = await cloudStorage.getChatSyncStatus()
         this.saveSyncStatus(newStatus)
       } catch (statusError) {
         // Non-fatal: continue even if we can't update status
@@ -753,12 +753,12 @@ export class CloudSyncService {
   // Delete a chat from cloud storage
   async deleteFromCloud(chatId: string): Promise<void> {
     // Don't attempt deletion if not authenticated
-    if (!(await r2Storage.isAuthenticated())) {
+    if (!(await cloudStorage.isAuthenticated())) {
       return
     }
 
     try {
-      await r2Storage.deleteChat(chatId)
+      await cloudStorage.deleteChat(chatId)
 
       // Successfully deleted from cloud, can remove from tracker
       // This allows the chat to be re-created with the same ID if needed
@@ -790,7 +790,7 @@ export class CloudSyncService {
     const { limit, continuationToken, loadLocal = true } = options
 
     // If no authentication, just return local chats
-    if (!(await r2Storage.isAuthenticated())) {
+    if (!(await cloudStorage.isAuthenticated())) {
       if (loadLocal) {
         const localChats = await indexedDBStorage.getAllChats()
         const sortedChats = localChats.sort((a, b) => {
@@ -819,7 +819,7 @@ export class CloudSyncService {
       await encryptionService.initialize()
 
       // For authenticated users, load from R2 with content
-      const remoteList = await r2Storage.listChats({
+      const remoteList = await cloudStorage.listChats({
         limit,
         continuationToken,
         includeContent: true,
@@ -1079,7 +1079,7 @@ export class CloudSyncService {
 
           // Re-encrypt the chat with the new key by forcing a sync
           // The sync process will automatically encrypt with the current key
-          if (await r2Storage.isAuthenticated()) {
+          if (await cloudStorage.isAuthenticated()) {
             // Increment sync version to force upload
             chatToReencrypt.syncVersion = (chatToReencrypt.syncVersion || 0) + 1
 
@@ -1087,7 +1087,7 @@ export class CloudSyncService {
             await indexedDBStorage.saveChat(chatToReencrypt)
 
             // Upload to cloud (will be encrypted with new key)
-            await r2Storage.uploadChat(chatToReencrypt)
+            await cloudStorage.uploadChat(chatToReencrypt)
             await indexedDBStorage.markAsSynced(
               chatToReencrypt.id,
               chatToReencrypt.syncVersion,
@@ -1140,7 +1140,7 @@ export class CloudSyncService {
     const { limit, continuationToken } = options
 
     // Only operate when authenticated
-    if (!(await r2Storage.isAuthenticated())) {
+    if (!(await cloudStorage.isAuthenticated())) {
       return { hasMore: false, saved: 0 }
     }
 
@@ -1149,7 +1149,7 @@ export class CloudSyncService {
       await encryptionService.initialize()
 
       // Request a page with content for decryption
-      const remoteList = await r2Storage.listChats({
+      const remoteList = await cloudStorage.listChats({
         limit,
         continuationToken,
         includeContent: true,
@@ -1196,7 +1196,7 @@ export class CloudSyncService {
             }
           } else {
             // Fallback: download content by ID (should be rare when includeContent is true)
-            chat = await r2Storage.downloadChat(remoteChat.id)
+            chat = await cloudStorage.downloadChat(remoteChat.id)
             if (chat) {
               chat.createdAt = ensureValidISODate(
                 chat.createdAt ?? remoteChat.createdAt,

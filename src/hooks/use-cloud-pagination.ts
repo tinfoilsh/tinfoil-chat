@@ -1,6 +1,6 @@
 import { CLOUD_SYNC, PAGINATION } from '@/config'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { cloudSync } from '@/services/cloud/cloud-sync'
-import { r2Storage } from '@/services/cloud/r2-storage'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
@@ -118,7 +118,7 @@ export function useCloudPagination(
         }
       }
 
-      const result = await r2Storage.listChats({ limit: pageSize })
+      const result = await cloudStorage.listChats({ limit: pageSize })
       setNextToken(result.nextContinuationToken)
       setHasMore(!!result.nextContinuationToken)
       setHasAttempted(false)
@@ -150,7 +150,7 @@ export function useCloudPagination(
     try {
       let tokenToUse = nextToken
       if (!tokenToUse && !initializedRef.current) {
-        const init = await r2Storage.listChats({ limit: pageSize })
+        const init = await cloudStorage.listChats({ limit: pageSize })
         tokenToUse = init.nextContinuationToken
       }
 

@@ -1,6 +1,6 @@
 import { CLOUD_SYNC } from '@/config'
+import type { ProfileSyncStatus } from '@/services/cloud/cloud-storage'
 import { profileSync, type ProfileData } from '@/services/cloud/profile-sync'
-import type { ProfileSyncStatus } from '@/services/cloud/r2-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
