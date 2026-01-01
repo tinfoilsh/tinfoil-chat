@@ -184,6 +184,19 @@ const DefaultMessageComponent = ({
         />
       )}
 
+      {/* Show web search for assistant messages - before thoughts if it started first */}
+      {!isUser && message.webSearch && message.webSearchBeforeThinking && (
+        <div className="no-scroll-anchoring w-full px-4 py-2">
+          <div className="mb-2 w-full">
+            <WebSearchProcess
+              webSearch={message.webSearch}
+              isDarkMode={isDarkMode}
+              messageId={messageUniqueId}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Show thoughts for assistant messages */}
       {!isUser &&
         (message.isThinking ||
@@ -213,8 +226,8 @@ const DefaultMessageComponent = ({
           </div>
         )}
 
-      {/* Show web search for assistant messages */}
-      {!isUser && message.webSearch && (
+      {/* Show web search for assistant messages - after thoughts if it started after */}
+      {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
         <div className="no-scroll-anchoring w-full px-4 py-2">
           <div className="mb-2 w-full">
             <WebSearchProcess
