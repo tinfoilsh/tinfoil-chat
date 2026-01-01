@@ -506,7 +506,11 @@ export function useProfileSync() {
       hasPendingChanges.current = false
       lastSyncedVersion.current = 0
       lastSyncedProfile.current = null
+      cachedSyncStatus.current = null
       profileSync.clearCache()
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(PROFILE_SYNC_STATUS_KEY)
+      }
       return
     }
 
