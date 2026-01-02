@@ -1,17 +1,31 @@
 import {
-  FaFile,
-  FaFileAlt,
-  FaFileArchive,
-  FaFileAudio,
-  FaFileCode,
-  FaFileExcel,
-  FaFileImage,
-  FaFilePdf,
-  FaFilePowerpoint,
-  FaFileVideo,
-  FaFileWord,
-} from '@/components/icons/lazy-icons'
-import { getFileIconType } from '../document-uploader'
+  BsFile,
+  BsFiletypeCss,
+  BsFiletypeCsv,
+  BsFiletypeDoc,
+  BsFiletypeDocx,
+  BsFiletypeGif,
+  BsFiletypeHtml,
+  BsFiletypeJpg,
+  BsFiletypeJs,
+  BsFiletypeJson,
+  BsFiletypeJsx,
+  BsFiletypeMd,
+  BsFiletypeMov,
+  BsFiletypeMp3,
+  BsFiletypeMp4,
+  BsFiletypePdf,
+  BsFiletypePng,
+  BsFiletypePpt,
+  BsFiletypePptx,
+  BsFiletypeTsx,
+  BsFiletypeTxt,
+  BsFiletypeWav,
+  BsFiletypeXls,
+  BsFiletypeXlsx,
+  BsFiletypeXml,
+} from 'react-icons/bs'
+import { PiSpinner } from 'react-icons/pi'
 
 type MacFileIconProps = {
   filename: string
@@ -24,122 +38,76 @@ type MacFileIconProps = {
 export function MacFileIcon({
   filename,
   size = 20,
-  isDarkMode = false,
   isUploading = false,
-  compact = false,
 }: MacFileIconProps) {
-  const type = getFileIconType(filename)
-
-  // Get spinner size based on file icon size - using proper Tailwind classes
-  const getSpinnerClasses = (iconSize: number) => {
-    if (iconSize <= 16) return 'h-4 w-4'
-    if (iconSize <= 24) return 'h-5 w-5'
-    if (iconSize <= 32) return 'h-6 w-6'
-    return 'h-8 w-8'
-  }
-
-  // If uploading, show spinner instead of file icon
   if (isUploading) {
     return (
-      <div className="flex flex-col items-center">
-        <div className="flex items-center justify-center rounded-md bg-surface-card/80 p-1 shadow-sm">
-          <svg
-            className={`${getSpinnerClasses(size)} animate-spin text-emerald-500`}
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        </div>
+      <div className="flex items-center justify-center p-2">
+        <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
       </div>
     )
   }
 
-  const iconElement = (
-    <div className="relative inline-flex flex-col items-center justify-center">
-      {/* Mac-style icon with subtle shadow */}
-      <div
-        className={`flex items-center justify-center rounded-lg p-2 shadow-md transition-all ${
-          isDarkMode ? 'bg-gray-700' : 'bg-white'
-        }`}
-      >
-        {type === 'pdf' && (
-          <FaFilePdf size={size} className="text-red-600 dark:text-red-400" />
-        )}
-        {type === 'word' && (
-          <FaFileWord
-            size={size}
-            className="text-blue-600 dark:text-blue-400"
-          />
-        )}
-        {type === 'excel' && (
-          <FaFileExcel
-            size={size}
-            className="text-green-600 dark:text-green-400"
-          />
-        )}
-        {type === 'powerpoint' && (
-          <FaFilePowerpoint
-            size={size}
-            className="text-orange-600 dark:text-orange-400"
-          />
-        )}
-        {type === 'image' && (
-          <FaFileImage
-            size={size}
-            className="text-purple-600 dark:text-purple-400"
-          />
-        )}
-        {type === 'video' && (
-          <FaFileVideo
-            size={size}
-            className="text-pink-600 dark:text-pink-400"
-          />
-        )}
-        {type === 'audio' && (
-          <FaFileAudio
-            size={size}
-            className="text-indigo-600 dark:text-indigo-400"
-          />
-        )}
-        {type === 'archive' && (
-          <FaFileArchive
-            size={size}
-            className="text-yellow-600 dark:text-yellow-400"
-          />
-        )}
-        {type === 'code' && (
-          <FaFileCode
-            size={size}
-            className="text-cyan-600 dark:text-cyan-400"
-          />
-        )}
-        {type === 'text' && (
-          <FaFileAlt size={size} className="text-gray-600 dark:text-gray-400" />
-        )}
-        {type === 'generic' && (
-          <FaFile size={size} className="text-gray-500 dark:text-gray-400" />
-        )}
-      </div>
-    </div>
-  )
+  const extension = filename.toLowerCase().split('.').pop() || ''
+  const iconClass = 'text-content-secondary'
 
-  if (compact) {
-    return iconElement
+  const getIcon = () => {
+    switch (extension) {
+      case 'pdf':
+        return <BsFiletypePdf size={size} className={iconClass} />
+      case 'doc':
+        return <BsFiletypeDoc size={size} className={iconClass} />
+      case 'docx':
+        return <BsFiletypeDocx size={size} className={iconClass} />
+      case 'xls':
+        return <BsFiletypeXls size={size} className={iconClass} />
+      case 'xlsx':
+        return <BsFiletypeXlsx size={size} className={iconClass} />
+      case 'csv':
+        return <BsFiletypeCsv size={size} className={iconClass} />
+      case 'ppt':
+        return <BsFiletypePpt size={size} className={iconClass} />
+      case 'pptx':
+        return <BsFiletypePptx size={size} className={iconClass} />
+      case 'html':
+      case 'htm':
+        return <BsFiletypeHtml size={size} className={iconClass} />
+      case 'css':
+        return <BsFiletypeCss size={size} className={iconClass} />
+      case 'js':
+        return <BsFiletypeJs size={size} className={iconClass} />
+      case 'jsx':
+        return <BsFiletypeJsx size={size} className={iconClass} />
+      case 'ts':
+      case 'tsx':
+        return <BsFiletypeTsx size={size} className={iconClass} />
+      case 'json':
+        return <BsFiletypeJson size={size} className={iconClass} />
+      case 'md':
+        return <BsFiletypeMd size={size} className={iconClass} />
+      case 'xml':
+        return <BsFiletypeXml size={size} className={iconClass} />
+      case 'txt':
+        return <BsFiletypeTxt size={size} className={iconClass} />
+      case 'png':
+        return <BsFiletypePng size={size} className={iconClass} />
+      case 'jpg':
+      case 'jpeg':
+        return <BsFiletypeJpg size={size} className={iconClass} />
+      case 'gif':
+        return <BsFiletypeGif size={size} className={iconClass} />
+      case 'mp3':
+        return <BsFiletypeMp3 size={size} className={iconClass} />
+      case 'wav':
+        return <BsFiletypeWav size={size} className={iconClass} />
+      case 'mp4':
+        return <BsFiletypeMp4 size={size} className={iconClass} />
+      case 'mov':
+        return <BsFiletypeMov size={size} className={iconClass} />
+      default:
+        return <BsFile size={size} className={iconClass} />
+    }
   }
 
-  return <div className="flex flex-col items-center">{iconElement}</div>
+  return <div className="flex items-center justify-center p-1">{getIcon()}</div>
 }

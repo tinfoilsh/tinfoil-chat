@@ -337,36 +337,25 @@ export function ChatInput({
         />
 
         {processedDocuments && processedDocuments.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2">
-            {processedDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className="group relative flex items-center gap-2 rounded-xl border border-border-subtle bg-surface-chat px-2.5 py-1.5 text-content-primary shadow-sm transition-colors hover:bg-surface-chat/80"
-                title={doc.name}
-              >
-                <div className="relative">
-                  {doc.imageData ? (
-                    <div className="relative h-9 w-9 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
-                      <img
-                        src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
-                        alt={doc.name}
-                        className="h-full w-full object-cover"
-                      />
-                      {doc.isUploading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
-                          <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <MacFileIcon
-                      filename={doc.name}
-                      size={18}
-                      isDarkMode={isDarkMode}
-                      isUploading={doc.isUploading}
-                      compact
-                    />
-                  )}
+          <div className="mb-3 flex flex-wrap gap-2">
+            {processedDocuments.map((doc) => {
+              const getPreviewText = (content?: string) => {
+                if (!content) return null
+                const lines = content.split('\n').filter((line) => {
+                  const trimmed = line.trim()
+                  if (!trimmed) return false
+                  if (trimmed.startsWith('# ')) return false
+                  return true
+                })
+                return lines.slice(0, 2).join('\n')
+              }
+              const preview = getPreviewText(doc.content)
+
+              return (
+                <div
+                  key={doc.id}
+                  className="group relative flex min-w-[200px] max-w-[300px] flex-col rounded-xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
+                >
                   {removeDocument && !doc.isUploading && (
                     <button
                       onClick={(e) => {
@@ -374,8 +363,8 @@ export function ChatInput({
                         removeDocument(doc.id)
                       }}
                       className={cn(
-                        'absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100',
-                        'bg-surface-chat-background/90 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                        'absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100',
+                        'bg-surface-chat text-content-secondary shadow-sm hover:bg-surface-chat-background hover:text-content-primary',
                       )}
                       aria-label="Remove document"
                     >
@@ -393,12 +382,46 @@ export function ChatInput({
                       </svg>
                     </button>
                   )}
+
+                  <div className="flex items-center gap-2">
+                    {doc.imageData ? (
+                      <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
+                        <img
+                          src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
+                          alt={doc.name}
+                          className="h-full w-full object-cover"
+                        />
+                        {doc.isUploading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
+                            <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
+                          </div>
+                        )}
+                      </div>
+                    ) : doc.isUploading ? (
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
+                        <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
+                      </div>
+                    ) : (
+                      <MacFileIcon
+                        filename={doc.name}
+                        size={18}
+                        isDarkMode={isDarkMode}
+                        compact
+                      />
+                    )}
+                    <span className="truncate text-sm font-medium text-content-primary">
+                      {doc.name}
+                    </span>
+                  </div>
+
+                  {preview && !doc.isUploading && (
+                    <div className="mt-2 line-clamp-2 text-xs text-content-muted">
+                      {preview}
+                    </div>
+                  )}
                 </div>
-                <span className="max-w-[180px] truncate text-xs text-content-primary">
-                  {doc.name}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
