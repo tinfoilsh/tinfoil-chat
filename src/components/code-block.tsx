@@ -56,7 +56,7 @@ const PlayIcon = () => (
   </svg>
 )
 
-const EXECUTABLE_LANGUAGES = ['html', 'javascript', 'js']
+const EXECUTABLE_LANGUAGES = ['html', 'javascript', 'js', 'typescript', 'ts']
 
 const DARK_THEME = {
   ...oneDark,
@@ -150,6 +150,8 @@ const PREVIEWABLE_LANGUAGES = [
   'md',
   'javascript',
   'js',
+  'typescript',
+  'ts',
   'mermaid',
   'json',
   'css',
@@ -169,13 +171,16 @@ const isCodeWorthPreviewing = (code: string, language: string): boolean => {
       // Must have actual content, not just a single tag or link/style reference
       const tagCount = (trimmed.match(/<[a-z]/gi) || []).length
       if (tagCount <= 1) return false
-      // Skip if it's just a link/script/style tag
-      if (/^<(link|script|style|meta|!DOCTYPE)/i.test(trimmed)) return false
+      // Skip if it's just a single link/script/style/meta tag (but allow full documents)
+      if (/^<(link|script|style|meta)\b/i.test(trimmed) && tagCount <= 2)
+        return false
       return true
     }
 
     case 'javascript':
-    case 'js': {
+    case 'js':
+    case 'typescript':
+    case 'ts': {
       // Skip if it's just comments
       const withoutComments = trimmed
         .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -334,6 +339,20 @@ const MarkdownPreview = ({
   </div>
 )
 
+const stripTypeAnnotations = (code: string): string => {
+  return (
+    code
+      // Remove type annotations after colons (e.g., `: string`, `: number[]`, `: void`)
+      .replace(/:\s*[A-Za-z_$][\w$]*(?:<[^>]+>)?(?:\[\])?(?=\s*[,)=;{\n])/g, '')
+      // Remove generic type parameters on functions (e.g., `<T>`, `<T, U>`)
+      .replace(/(<[A-Za-z_$][\w$]*(?:\s*,\s*[A-Za-z_$][\w$]*)*>)(?=\s*\()/g, '')
+      // Remove `as Type` assertions
+      .replace(/\s+as\s+[A-Za-z_$][\w$]*(?:<[^>]+>)?/g, '')
+      // Remove interface/type declarations
+      .replace(/^(interface|type)\s+[^{]+\{[^}]*\}\s*/gm, '')
+  )
+}
+
 const JavaScriptPreview = ({ code }: { code: string }) => {
   const [output, setOutput] = useState<string[]>([])
 
@@ -348,7 +367,7 @@ const JavaScriptPreview = ({ code }: { code: string }) => {
   }, [])
 
   const iframeSrc = useMemo(() => {
-    const escapedCode = code
+    const escapedCode = stripTypeAnnotations(code)
       .replace(/\\/g, '\\\\')
       .replace(/`/g, '\\`')
       .replace(/<\/script>/gi, '<\\/script>')
@@ -656,6 +675,8 @@ const CodePreview = ({
         return <MarkdownPreview code={code} contentRef={markdownRef!} />
       case 'javascript':
       case 'js':
+      case 'typescript':
+      case 'ts':
         return <JavaScriptPreview code={code} />
       case 'mermaid':
         return <MermaidPreview code={code} isDarkMode={isDarkMode} />
