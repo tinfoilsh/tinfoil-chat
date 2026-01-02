@@ -75,7 +75,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         type="button"
         onClick={handleToggle}
         disabled={!hasSources}
-        className={`flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors ${
+        className={`flex min-h-10 w-full items-center justify-between rounded-lg px-4 py-2 text-left text-content-primary transition-colors ${
           hasSources
             ? 'hover:bg-surface-secondary/50 cursor-pointer'
             : 'cursor-default'
