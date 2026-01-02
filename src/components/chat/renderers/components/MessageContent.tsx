@@ -5,10 +5,56 @@ import {
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { GeneratingTable } from './GeneratingTable'
 import { useMathPlugins } from './use-math-plugins'
+
+function getFaviconUrl(url: string): string {
+  try {
+    const parsedUrl = new URL(url)
+    return `https://www.google.com/s2/favicons?sz=32&domain=${parsedUrl.hostname}`
+  } catch {
+    return ''
+  }
+}
+
+function getDomainName(url: string): string {
+  try {
+    const parsedUrl = new URL(url)
+    const hostname = parsedUrl.hostname.replace(/^www\./, '')
+    const parts = hostname.split('.')
+    return parts.length > 1 ? parts[parts.length - 2] : hostname
+  } catch {
+    return ''
+  }
+}
+
+function CitationPill({ url }: { url: string }) {
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const domain = getDomainName(url)
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="bg-surface-secondary hover:bg-surface-tertiary mx-0.5 inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 align-baseline text-xs text-content-secondary transition-colors"
+    >
+      {!imgError && (
+        <img
+          src={getFaviconUrl(url)}
+          alt=""
+          className={`h-3 w-3 rounded-full transition-opacity ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgError(true)}
+        />
+      )}
+      <span>{domain}</span>
+    </a>
+  )
+}
 
 interface MessageContentProps {
   content: string
@@ -213,6 +259,14 @@ export const MessageContent = memo(function MessageContent({
             )
           },
           a({ children, href, ...props }: any) {
+            // Check for citation link format: #cite-N|url
+            if (href?.startsWith('#cite-')) {
+              const pipeIndex = href.indexOf('|')
+              if (pipeIndex !== -1) {
+                const url = href.slice(pipeIndex + 1)
+                return <CitationPill url={url} />
+              }
+            }
             const sanitizedHref = sanitizeUrl(href)
             return (
               <a
