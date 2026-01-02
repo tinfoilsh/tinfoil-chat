@@ -331,7 +331,7 @@ export function ChatInterface({
     }
   }, [])
 
-  // Scroll the last user message to the top of the viewport
+  // Scroll the last user message to the top of the viewport (with offset for header)
   const scrollUserMessageToTop = useCallback(() => {
     const container = scrollContainerRef.current
     if (!container) return
@@ -341,12 +341,19 @@ export function ChatInterface({
       const userMessages = container.querySelectorAll(
         '[data-message-role="user"]',
       )
-      const lastUserMessage = userMessages[userMessages.length - 1]
+      const lastUserMessage = userMessages[
+        userMessages.length - 1
+      ] as HTMLElement | null
 
       if (lastUserMessage) {
-        lastUserMessage.scrollIntoView({
+        // Calculate scroll position with offset for header buttons
+        // Mobile needs more offset due to overlapping header buttons
+        const messageTop = lastUserMessage.offsetTop
+        const isMobile = window.innerWidth < CONSTANTS.MOBILE_BREAKPOINT
+        const headerOffset = isMobile ? 80 : 16
+        container.scrollTo({
+          top: messageTop - headerOffset,
           behavior: 'smooth',
-          block: 'start',
         })
       }
     }, 100)
@@ -774,23 +781,17 @@ export function ChatInterface({
     const el = scrollContainerRef.current
     if (!el) return
 
-    // Find the last message element (ignore the spacer)
-    const allMessages = el.querySelectorAll('[data-message-role]')
-    const lastMessage = allMessages[
-      allMessages.length - 1
-    ] as HTMLElement | null
+    // Check if spacer is present and get its height
+    const spacer = el.querySelector('[data-spacer]') as HTMLElement | null
+    const spacerHeight = spacer?.offsetHeight || 0
 
-    if (!lastMessage) {
-      setShowScrollButton(false)
-      return
-    }
+    // Show button when user has scrolled up from the bottom by more than threshold
+    // Subtract spacer height since it's empty space, not content
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight - spacerHeight
+    const SCROLL_THRESHOLD = 200
 
-    // Check if the last message is visible in the viewport
-    const containerRect = el.getBoundingClientRect()
-    const messageRect = lastMessage.getBoundingClientRect()
-    const isLastMessageVisible = messageRect.top < containerRect.bottom - 50
-
-    setShowScrollButton(!isLastMessageVisible)
+    setShowScrollButton(distanceFromBottom > SCROLL_THRESHOLD)
   }, [])
 
   // Throttled scroll handler
