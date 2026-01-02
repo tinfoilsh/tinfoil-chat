@@ -1449,7 +1449,7 @@ function DeleteConfirmation({
       <button
         className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
           isDarkMode
-            ? 'bg-surface-sidebar text-content-inverse hover:bg-surface-sidebar/90'
+            ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
             : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
         }`}
         onClick={(e) => {
