@@ -177,6 +177,7 @@ const DefaultMessageComponent = ({
       {isUser && message.documents && message.documents.length > 0 && (
         <DocumentList
           documents={message.documents}
+          documentContent={message.documentContent}
           imageData={message.imageData}
           isDarkMode={isDarkMode}
         />
