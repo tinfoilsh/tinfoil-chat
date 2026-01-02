@@ -44,7 +44,23 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             : 'cursor-default'
         }`}
       >
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {hasSources && !isSearching && (
+            <div className="flex shrink-0 items-center">
+              {webSearch.sources!.slice(0, 5).map((source, index) => (
+                <img
+                  key={`${source.url}-${index}`}
+                  src={getFaviconUrl(source.url)}
+                  alt=""
+                  className="h-5 w-5 shrink-0 rounded-full border-2 border-surface-chat bg-surface-chat"
+                  style={{ marginLeft: index === 0 ? 0 : -8 }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {isSearching ? (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Searching</span>
@@ -97,30 +113,42 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         <div
           className="overflow-hidden transition-all duration-300 ease-out"
           style={{
-            maxHeight: isExpanded
-              ? `${webSearch.sources!.length * 48 + 24}px`
-              : '0px',
+            maxHeight: isExpanded ? '1000px' : '0px',
           }}
         >
           <div className="px-4 py-3">
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {webSearch.sources!.map((source, index) => (
                 <a
                   key={`${source.url}-${index}`}
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:bg-surface-secondary/50 flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-content-primary transition-colors"
+                  className="hover:bg-surface-secondary/50 flex flex-col gap-1 rounded-lg px-3 py-2 text-sm text-content-primary transition-colors"
                 >
-                  <img
-                    src={getFaviconUrl(source.url)}
-                    alt=""
-                    className="h-4 w-4 shrink-0"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                  <span className="min-w-0 truncate">{source.title}</span>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={getFaviconUrl(source.url)}
+                      alt=""
+                      className="h-4 w-4 shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                    <span className="min-w-0 truncate font-medium">
+                      {source.title}
+                    </span>
+                    {source.publishedDate && (
+                      <span className="shrink-0 text-xs opacity-50">
+                        {source.publishedDate}
+                      </span>
+                    )}
+                  </div>
+                  {source.text && (
+                    <p className="line-clamp-2 pl-7 text-xs opacity-70">
+                      {source.text}
+                    </p>
+                  )}
                 </a>
               ))}
             </div>
