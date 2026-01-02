@@ -346,9 +346,9 @@ export function useChatMessaging({
           ])
         })
 
-        // Scroll immediately after state update
+        // Scroll after state update and DOM renders
         if (scrollToBottom) {
-          setTimeout(() => scrollToBottom(), 0)
+          setTimeout(() => scrollToBottom(), 50)
         }
 
         // Get server ID in background and update when ready
@@ -487,9 +487,9 @@ export function useChatMessaging({
           return [updatedChat, ...otherChats]
         })
 
-        // Scroll immediately after state update
+        // Scroll after state update and DOM renders
         if (scrollToBottom) {
-          setTimeout(() => scrollToBottom(), 0)
+          setTimeout(() => scrollToBottom(), 50)
         }
 
         sessionChatStorage.saveChat(updatedChat)
@@ -525,9 +525,9 @@ export function useChatMessaging({
           ),
         )
 
-        // Scroll immediately after state update
+        // Scroll after state update and DOM renders
         if (scrollToBottom) {
-          setTimeout(() => scrollToBottom(), 0)
+          setTimeout(() => scrollToBottom(), 50)
         }
 
         // Save the updated chat

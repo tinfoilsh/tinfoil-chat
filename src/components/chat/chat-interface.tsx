@@ -331,6 +331,32 @@ export function ChatInterface({
     }
   }, [])
 
+  // Scroll the last user message to the top of the viewport
+  const scrollUserMessageToTop = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    // Wait for DOM to render, then scroll
+    setTimeout(() => {
+      const userMessages = container.querySelectorAll(
+        '[data-message-role="user"]',
+      )
+      const lastUserMessage = userMessages[userMessages.length - 1]
+
+      if (lastUserMessage) {
+        lastUserMessage.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      }
+    }, 100)
+  }, [])
+
+  // Scroll to the last message (for the scroll button)
+  const scrollToLastMessage = useCallback(() => {
+    scrollToBottom(true)
+  }, [scrollToBottom])
+
   const {
     // State
     chats,
@@ -380,8 +406,8 @@ export function ChatInterface({
     isPremium: isPremium,
     models: models,
     subscriptionLoading: subscriptionLoading,
-    // Scroll on user send to keep view anchored when thinking placeholder appears
-    scrollToBottom: scrollToBottom,
+    // Scroll user message to top of viewport when sending
+    scrollToBottom: scrollUserMessageToTop,
     reasoningEffort,
   })
 
@@ -748,12 +774,23 @@ export function ChatInterface({
     const el = scrollContainerRef.current
     if (!el) return
 
-    const SCROLL_THRESHOLD = 50 // pixels from bottom to consider "at bottom"
-    const isOverflowing = el.scrollHeight > el.clientHeight
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    const shouldShow = isOverflowing && distanceFromBottom > SCROLL_THRESHOLD
+    // Find the last message element (ignore the spacer)
+    const allMessages = el.querySelectorAll('[data-message-role]')
+    const lastMessage = allMessages[
+      allMessages.length - 1
+    ] as HTMLElement | null
 
-    setShowScrollButton(shouldShow)
+    if (!lastMessage) {
+      setShowScrollButton(false)
+      return
+    }
+
+    // Check if the last message is visible in the viewport
+    const containerRect = el.getBoundingClientRect()
+    const messageRect = lastMessage.getBoundingClientRect()
+    const isLastMessageVisible = messageRect.top < containerRect.bottom - 50
+
+    setShowScrollButton(!isLastMessageVisible)
   }, [])
 
   // Throttled scroll handler
@@ -1214,6 +1251,7 @@ export function ChatInterface({
                 handleLabelClick={handleLabelClick}
                 onEditMessage={editMessage}
                 onRegenerateMessage={regenerateMessage}
+                showScrollButton={showScrollButton}
               />
             </div>
           </div>
@@ -1311,7 +1349,7 @@ export function ChatInterface({
                 {showScrollButton && currentChat?.messages?.length > 0 && (
                   <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
                     <button
-                      onClick={() => scrollToBottom()}
+                      onClick={() => scrollToLastMessage()}
                       className="flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle bg-surface-sidebar-button shadow-md transition-colors hover:bg-surface-sidebar-button-hover"
                       aria-label="Scroll to bottom"
                     >
