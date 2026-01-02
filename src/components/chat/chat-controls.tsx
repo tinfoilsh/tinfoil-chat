@@ -1,14 +1,11 @@
 import { cn } from '@/components/ui/utils'
 import { type BaseModel } from '@/config/models'
 import { useAuth, useClerk } from '@clerk/nextjs'
-import {
-  TfBrain,
-  TfCopy,
-  TfShieldCheck,
-  TfWarning,
-} from '@tinfoilsh/tinfoil-icons'
+import { ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useState } from 'react'
-import { PiSpinner } from 'react-icons/pi'
+import { IoWarningOutline } from 'react-icons/io5'
+import { PiSpeedometerLight, PiSpinner } from 'react-icons/pi'
+import { RxCopy } from 'react-icons/rx'
 import {
   isReasoningModel,
   type ReasoningEffort,
@@ -92,7 +89,7 @@ export function ChatControls({
       <div className="mb-2 flex items-center gap-2">
         <div className="flex gap-2">
           <div className="flex items-center gap-1.5 rounded-lg px-2 py-1">
-            <TfWarning className="h-5 w-5 text-red-500" />
+            <IoWarningOutline className="h-5 w-5 text-red-500" />
             <span className="text-xs text-red-500">Model not found</span>
           </div>
         </div>
@@ -188,7 +185,7 @@ export function ChatControls({
                 )}
                 title={`Reasoning effort: ${reasoningEffort}`}
               >
-                <TfBrain className="h-5 w-5 text-content-secondary" />
+                <PiSpeedometerLight className="h-5 w-5 text-content-secondary" />
                 {!isCompactMode && (
                   <span className="text-xs text-content-secondary">
                     {EFFORT_OPTIONS.find((o) => o.value === reasoningEffort)
@@ -239,9 +236,9 @@ export function ChatControls({
           {!verificationComplete ? (
             <PiSpinner className="h-5 w-5 animate-spin text-content-primary" />
           ) : verificationSuccess ? (
-            <TfShieldCheck className="lock-close-animation h-5 w-5 text-emerald-500" />
+            <ShieldCheckIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
           ) : (
-            <TfWarning className="h-5 w-5 text-red-500" />
+            <IoWarningOutline className="h-5 w-5 text-red-500" />
           )}
           {!isCompactMode && (
             <span className="text-xs text-content-secondary">
@@ -262,7 +259,7 @@ export function ChatControls({
             className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
             title="Copy"
           >
-            <TfCopy className="h-5 w-5 text-content-secondary" />
+            <RxCopy className="h-5 w-5 text-content-secondary" />
             {!isCompactMode && (
               <span className="text-xs text-content-secondary">Copy</span>
             )}
