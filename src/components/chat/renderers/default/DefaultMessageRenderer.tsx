@@ -171,7 +171,7 @@ const DefaultMessageComponent = ({
 
   return (
     <div
-      className={`flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
+      className={`relative flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
     >
       {/* Display documents for user messages */}
       {isUser && message.documents && message.documents.length > 0 && (
@@ -326,9 +326,9 @@ const DefaultMessageComponent = ({
             </div>
           )}
 
-          {/* Action bar for user messages */}
+          {/* Action bar for user messages - absolute positioned to not affect layout */}
           {isUser && !isEditing && (
-            <div className="flex items-center justify-end gap-1 px-4 pt-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="pointer-events-none absolute bottom-0 right-0 flex translate-y-full items-center justify-end gap-1 px-4 pt-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
               {formattedDate && (
                 <div className="group/date relative">
                   <span className="px-2 py-1 text-sm text-content-muted">
