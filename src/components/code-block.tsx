@@ -325,7 +325,7 @@ const MarkdownPreview = ({
   contentRef,
 }: {
   code: string
-  contentRef: React.RefObject<HTMLDivElement | null>
+  contentRef: React.RefObject<HTMLDivElement>
 }) => (
   <div ref={contentRef} className="prose prose-sm max-w-none dark:prose-invert">
     <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
@@ -643,7 +643,7 @@ const CodePreview = ({
   code: string
   language: string
   isDarkMode: boolean
-  markdownRef?: React.RefObject<HTMLDivElement | null>
+  markdownRef?: React.RefObject<HTMLDivElement>
 }) => {
   const renderPreview = () => {
     switch (language) {
