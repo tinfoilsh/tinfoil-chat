@@ -52,18 +52,7 @@ export const useCustomSystemPrompt = (
         }
       }
 
-      // Set language from localStorage or default to user's locale
-      let language = ''
-      if (savedLanguage) {
-        language = savedLanguage
-      } else {
-        const userLocale = navigator.language || 'en-US'
-        language =
-          new Intl.DisplayNames([userLocale], { type: 'language' }).of(
-            userLocale.split('-')[0],
-          ) || 'English'
-        localStorage.setItem('userLanguage', language)
-      }
+      const language = savedLanguage || ''
 
       setPersonalization({
         nickname: savedNickname,
