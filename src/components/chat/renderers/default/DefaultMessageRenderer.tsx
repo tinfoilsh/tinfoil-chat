@@ -4,9 +4,9 @@ import {
   InformationCircleIcon,
   PencilSquareIcon,
 } from '@heroicons/react/24/outline'
-import { TfCopy } from '@tinfoilsh/tinfoil-icons'
 import React, { memo } from 'react'
 import { BsCheckLg } from 'react-icons/bs'
+import { RxCopy } from 'react-icons/rx'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
@@ -382,7 +382,7 @@ const DefaultMessageComponent = ({
                       <span>Copied!</span>
                     </>
                   ) : (
-                    <TfCopy className="h-4 w-4" />
+                    <RxCopy className="h-4 w-4" />
                   )}
                 </button>
                 {!copiedUser && (
