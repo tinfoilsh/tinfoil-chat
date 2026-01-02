@@ -283,6 +283,9 @@ const HtmlPreview = ({ code }: { code: string }) => {
   }, [])
 
   const iframeSrc = useMemo(() => {
+    // CSP blocks network requests (fetch, XHR, WebSocket, etc.)
+    const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">`
+
     const heightReporter = `
 <script>
 function reportHeight() {
@@ -295,12 +298,12 @@ new MutationObserver(reportHeight).observe(document.body, { childList: true, sub
 setTimeout(reportHeight, 100);
 </script>`
 
-    if (code.includes('</head>')) {
-      return code.replace('</head>', `${heightReporter}</head>`)
-    } else if (code.includes('</body>')) {
-      return code.replace('</body>', `${heightReporter}</body>`)
+    if (code.includes('<head>')) {
+      return code.replace('<head>', `<head>${csp}`) + heightReporter
+    } else if (code.includes('</head>')) {
+      return code.replace('</head>', `${csp}${heightReporter}</head>`)
     } else {
-      return code + heightReporter
+      return `${csp}${code}${heightReporter}`
     }
   }, [code])
 
@@ -342,9 +345,13 @@ const JavaScriptPreview = ({ code }: { code: string }) => {
       .replace(/`/g, '\\`')
       .replace(/<\/script>/gi, '<\\/script>')
 
+    // CSP blocks network requests (fetch, XHR, WebSocket, etc.)
     return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval';">
+</head>
 <body>
 <script>
 const output = [];
@@ -579,6 +586,7 @@ const CssPreview = ({ code }: { code: string }) => {
 <html>
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
   <style>${code}</style>
   <script>
     function reportHeight() {
