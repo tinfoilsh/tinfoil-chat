@@ -56,7 +56,7 @@ export const CodeBlock = memo(function CodeBlock({
   }
 
   return (
-    <div className="group relative overflow-x-auto overflow-y-visible">
+    <div className="group relative my-4 overflow-x-auto overflow-y-visible">
       <button
         onClick={copyToClipboard}
         className="absolute right-2 top-2 rounded-lg bg-surface-input p-2 opacity-0 transition-opacity duration-200 hover:bg-surface-input/80 group-hover:opacity-100"
