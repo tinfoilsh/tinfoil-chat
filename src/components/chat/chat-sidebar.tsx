@@ -5,6 +5,8 @@ import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
+  CloudArrowUpIcon,
+  CloudIcon,
   PencilSquareIcon,
   PlusIcon,
   TrashIcon,
@@ -862,7 +864,7 @@ export function ChatSidebar({
               <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
                 <button
                   onClick={() => setActiveTab('cloud')}
-                  className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'cloud'
                       ? isDarkMode
                         ? 'border border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
@@ -870,18 +872,12 @@ export function ChatSidebar({
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
-                  Cloud (
-                  {
-                    chats.filter((chat) => {
-                      if (chat.isBlankChat) return false
-                      return !(chat as any).isLocalOnly
-                    }).length
-                  }
-                  )
+                  <CloudIcon className="h-3.5 w-3.5" />
+                  Cloud
                 </button>
                 <button
                   onClick={() => setActiveTab('local')}
-                  className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'local'
                       ? isDarkMode
                         ? 'border border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
@@ -889,14 +885,8 @@ export function ChatSidebar({
                       : 'text-content-muted hover:text-content-secondary'
                   }`}
                 >
-                  Local (
-                  {
-                    chats.filter((chat) => {
-                      if (chat.isBlankChat) return false
-                      return (chat as any).isLocalOnly
-                    }).length
-                  }
-                  )
+                  <CiFloppyDisk className="h-3.5 w-3.5" />
+                  Local
                 </button>
               </div>
             )}
@@ -1000,10 +990,7 @@ export function ChatSidebar({
                         updateChatTitle={updateChatTitle}
                         setEditingChatId={setEditingChatId}
                         setDeletingChatId={setDeletingChatId}
-                        isPremium={isPremium}
                         isDarkMode={isDarkMode}
-                        isSignedIn={isSignedIn ?? false}
-                        cloudSyncEnabled={cloudSyncEnabled}
                       />
                     </div>
                     {/* Delete confirmation */}
@@ -1195,10 +1182,7 @@ function ChatListItem({
   updateChatTitle,
   setEditingChatId,
   setDeletingChatId,
-  isPremium = true,
   isDarkMode,
-  isSignedIn,
-  cloudSyncEnabled,
 }: {
   chat: Chat
   isEditing: boolean
@@ -1207,10 +1191,7 @@ function ChatListItem({
   updateChatTitle: (chatId: string, title: string) => void
   setEditingChatId: (id: string | null) => void
   setDeletingChatId: (id: string | null) => void
-  isPremium?: boolean
   isDarkMode: boolean
-  isSignedIn: boolean
-  cloudSyncEnabled: boolean
 }) {
   // Track previous title for animation
   const [displayTitle, setDisplayTitle] = useState(chat.title)
@@ -1248,7 +1229,7 @@ function ChatListItem({
     e.preventDefault()
     e.stopPropagation()
 
-    if (editingTitle.trim() && isPremium) {
+    if (editingTitle.trim()) {
       updateChatTitle(chat.id, editingTitle)
       setEditingChatId(null)
     }
@@ -1256,8 +1237,6 @@ function ChatListItem({
 
   // Start editing
   const startEditing = (e: React.MouseEvent) => {
-    if (!isPremium) return
-
     e.stopPropagation()
     setEditingTitle(chat.title)
     setEditingChatId(chat.id)
@@ -1274,7 +1253,7 @@ function ChatListItem({
     <>
       <div className="flex w-full items-start justify-between">
         <div className="min-w-0 flex-1 pr-2">
-          {isEditing && isPremium ? (
+          {isEditing ? (
             <form
               onSubmit={handleSubmit}
               className="w-full"
@@ -1329,20 +1308,39 @@ function ChatListItem({
                   />
                 )}
               </div>
-              <div className="flex w-full items-center justify-between gap-2">
+              <div className="flex min-h-[16px] w-full items-center gap-2">
                 {chat.decryptionFailed ? (
                   <div className="text-xs text-red-500">
                     {(chat as any).dataCorrupted
                       ? 'Failed to decrypt: corrupted data'
                       : 'Failed to decrypt: wrong key'}
                   </div>
-                ) : chat.messages.length === 0 ? (
-                  <div className="text-xs text-content-muted">{'\u00A0'}</div>
-                ) : (
-                  <div className="text-xs text-content-muted">
+                ) : chat.messages.length > 0 ? (
+                  <div className="text-xs leading-none text-content-muted">
                     {formatRelativeTime(chat.createdAt)}
                   </div>
-                )}
+                ) : null}
+                {(chat as any).isLocalOnly ? (
+                  <>
+                    {chat.messages.length > 0 && (
+                      <span className="text-xs text-content-muted">·</span>
+                    )}
+                    <span className="flex items-center gap-0.5 text-xs leading-none text-content-muted">
+                      <CiFloppyDisk className="h-3 w-3" />
+                      Only saved on this browser
+                    </span>
+                  </>
+                ) : !chat.isBlankChat && (chat as any).pendingSave ? (
+                  <>
+                    {chat.messages.length > 0 && (
+                      <span className="text-xs text-content-muted">·</span>
+                    )}
+                    <span className="flex items-center gap-0.5 text-xs leading-none text-orange-500">
+                      <CloudArrowUpIcon className="h-3 w-3" />
+                      Syncing with cloud
+                    </span>
+                  </>
+                ) : null}
               </div>
             </>
           )}
@@ -1350,8 +1348,8 @@ function ChatListItem({
 
         {!isEditing && (
           <div className="flex flex-shrink-0 items-center gap-1.5">
-            <div className="flex opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-              {!chat.decryptionFailed && isPremium && (
+            <div className="hidden items-center md:group-hover:flex">
+              {!chat.decryptionFailed && !chat.isBlankChat && (
                 <button
                   className={`mr-1 rounded p-1 transition-colors ${
                     isDarkMode
@@ -1379,22 +1377,35 @@ function ChatListItem({
                 <TrashIcon className="h-4 w-4" />
               </button>
             </div>
-            {(chat as any).isLocalOnly ? (
-              <span
-                className="flex items-center gap-1 rounded bg-content-muted/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-content-muted"
-                title="This chat is stored locally and won't sync to cloud"
+            <div className="flex items-center md:hidden">
+              {!chat.decryptionFailed && !chat.isBlankChat && (
+                <button
+                  className={`mr-1 rounded p-1 transition-colors ${
+                    isDarkMode
+                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
+                  }`}
+                  onClick={startEditing}
+                  title="Rename"
+                >
+                  <PencilSquareIcon className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                className={`rounded p-1 transition-colors ${
+                  isDarkMode
+                    ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                    : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDeletingChatId(chat.id)
+                }}
+                title="Delete"
               >
-                <CiFloppyDisk className="h-3 w-3 flex-shrink-0" />
-                local
-              </span>
-            ) : !chat.isBlankChat && (chat as any).pendingSave ? (
-              <span
-                className="rounded bg-orange-500/20 px-1.5 py-px font-aeonik-fono text-[10px] font-medium text-orange-500"
-                title="Syncing to cloud"
-              >
-                syncing
-              </span>
-            ) : null}
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>
