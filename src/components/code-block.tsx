@@ -408,6 +408,9 @@ parent.postMessage({ type: 'js-preview-output', output }, '*');
         sandbox="allow-scripts"
         title="JavaScript preview"
       />
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-content-muted">
+        Console Output
+      </div>
       {output.map((line, i) => (
         <div
           key={i}
