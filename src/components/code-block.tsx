@@ -1,6 +1,6 @@
 import { toast } from '@/hooks/use-toast'
 import DOMPurify from 'isomorphic-dompurify'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { BsFiletypeMd, BsFiletypePdf } from 'react-icons/bs'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -278,16 +278,20 @@ const SvgPreview = ({ code }: { code: string }) => {
 
 const HtmlPreview = ({ code }: { code: string }) => {
   const [height, setHeight] = useState(100)
+  const instanceId = useId()
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'html-preview-height') {
+      if (
+        event.data?.type === 'html-preview-height' &&
+        event.data?.instanceId === instanceId
+      ) {
         setHeight(event.data.height)
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [instanceId])
 
   const iframeSrc = useMemo(() => {
     // CSP blocks network requests (fetch, XHR, WebSocket, etc.)
@@ -297,7 +301,7 @@ const HtmlPreview = ({ code }: { code: string }) => {
 <script>
 function reportHeight() {
   const height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-  parent.postMessage({ type: 'html-preview-height', height }, '*');
+  parent.postMessage({ type: 'html-preview-height', instanceId: '${instanceId}', height }, '*');
 }
 window.addEventListener('load', reportHeight);
 window.addEventListener('resize', reportHeight);
@@ -312,7 +316,7 @@ setTimeout(reportHeight, 100);
     } else {
       return `${csp}${code}${heightReporter}`
     }
-  }, [code])
+  }, [code, instanceId])
 
   return (
     <iframe
@@ -355,16 +359,20 @@ const stripTypeAnnotations = (code: string): string => {
 
 const JavaScriptPreview = ({ code }: { code: string }) => {
   const [output, setOutput] = useState<string[]>([])
+  const instanceId = useId()
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'js-preview-output') {
+      if (
+        event.data?.type === 'js-preview-output' &&
+        event.data?.instanceId === instanceId
+      ) {
         setOutput(event.data.output)
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [instanceId])
 
   const iframeSrc = useMemo(() => {
     const escapedCode = stripTypeAnnotations(code)
@@ -394,11 +402,11 @@ try {
 } catch (e) {
   output.push('Error: ' + e.message);
 }
-parent.postMessage({ type: 'js-preview-output', output }, '*');
+parent.postMessage({ type: 'js-preview-output', instanceId: '${instanceId}', output }, '*');
 </script>
 </body>
 </html>`
-  }, [code])
+  }, [code, instanceId])
 
   return (
     <div className="font-mono text-sm">
@@ -600,16 +608,20 @@ const JsonPreview = ({ code }: { code: string }) => {
 
 const CssPreview = ({ code }: { code: string }) => {
   const [height, setHeight] = useState(150)
+  const instanceId = useId()
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'css-preview-height') {
+      if (
+        event.data?.type === 'css-preview-height' &&
+        event.data?.instanceId === instanceId
+      ) {
         setHeight(event.data.height)
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [instanceId])
 
   const iframeSrc = useMemo(() => {
     const sampleHtml = `<!DOCTYPE html>
@@ -621,7 +633,7 @@ const CssPreview = ({ code }: { code: string }) => {
   <script>
     function reportHeight() {
       const height = Math.max(document.body.scrollHeight, 150);
-      parent.postMessage({ type: 'css-preview-height', height }, '*');
+      parent.postMessage({ type: 'css-preview-height', instanceId: '${instanceId}', height }, '*');
     }
     window.addEventListener('load', reportHeight);
     setTimeout(reportHeight, 100);
@@ -643,7 +655,7 @@ const CssPreview = ({ code }: { code: string }) => {
 </body>
 </html>`
     return sampleHtml
-  }, [code])
+  }, [code, instanceId])
 
   return (
     <iframe
