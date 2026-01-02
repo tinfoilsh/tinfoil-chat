@@ -348,6 +348,19 @@ export async function processStreamingResponse(
             json.choices?.[0]?.delta?.reasoning_content ||
             ''
           let content = json.choices?.[0]?.delta?.content || ''
+          // Replace citation markers with special citation links (only when we have sources)
+          if (collectedSources.length > 0) {
+            // OpenAI-style citations: 【1】 or 【1†L1-L15】
+            // Replace with markdown link using #cite-N fragment to identify as citation
+            content = content.replace(
+              /【(\d+)[^】]*】/g,
+              (_: string, num: string) => {
+                const index = parseInt(num, 10) - 1
+                const source = collectedSources[index]
+                return source ? `[](#cite-${num}|${source.url})` : ''
+              },
+            )
+          }
 
           if (
             hasReasoningContent &&
