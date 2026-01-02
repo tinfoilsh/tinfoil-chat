@@ -1,5 +1,7 @@
+import { toast } from '@/hooks/use-toast'
 import DOMPurify from 'isomorphic-dompurify'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { BsFiletypeMd, BsFiletypePdf } from 'react-icons/bs'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import {
@@ -318,8 +320,14 @@ setTimeout(reportHeight, 100);
   )
 }
 
-const MarkdownPreview = ({ code }: { code: string }) => (
-  <div className="prose prose-sm max-w-none dark:prose-invert">
+const MarkdownPreview = ({
+  code,
+  contentRef,
+}: {
+  code: string
+  contentRef: React.RefObject<HTMLDivElement | null>
+}) => (
+  <div ref={contentRef} className="prose prose-sm max-w-none dark:prose-invert">
     <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
       {code}
     </ReactMarkdown>
@@ -630,10 +638,12 @@ const CodePreview = ({
   code,
   language,
   isDarkMode,
+  markdownRef,
 }: {
   code: string
   language: string
   isDarkMode: boolean
+  markdownRef?: React.RefObject<HTMLDivElement | null>
 }) => {
   const renderPreview = () => {
     switch (language) {
@@ -643,7 +653,7 @@ const CodePreview = ({
         return <HtmlPreview code={code} />
       case 'markdown':
       case 'md':
-        return <MarkdownPreview code={code} />
+        return <MarkdownPreview code={code} contentRef={markdownRef!} />
       case 'javascript':
       case 'js':
         return <JavaScriptPreview code={code} />
@@ -677,7 +687,10 @@ export const CodeBlock = memo(function CodeBlock({
   isStreaming?: boolean
 }) {
   const [copied, setCopied] = useState(false)
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const markdownRef = useRef<HTMLDivElement>(null)
 
+  const isMarkdown = language === 'markdown' || language === 'md'
   const isExecutable = EXECUTABLE_LANGUAGES.includes(language)
 
   // Check if this language supports preview (static check, doesn't depend on code content)
@@ -734,6 +747,39 @@ export const CodeBlock = memo(function CodeBlock({
     setTimeout(() => setCopied(false), CONSTANTS.COPY_TIMEOUT_MS)
   }
 
+  const downloadMarkdown = () => {
+    const blob = new Blob([code], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'document.md'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadPdf = async () => {
+    if (!markdownRef.current || isGeneratingPdf) return
+
+    setIsGeneratingPdf(true)
+    try {
+      const html2pdf = (await import('html2pdf.js')).default
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: 'document.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        })
+        .from(markdownRef.current)
+        .save()
+    } catch {
+      toast({ title: 'Failed to generate PDF', variant: 'destructive' })
+    } finally {
+      setIsGeneratingPdf(false)
+    }
+  }
+
   return (
     <div className="group relative my-4 overflow-x-auto overflow-y-visible">
       {canShowPreview && codeIsWorthPreviewing && (
@@ -746,44 +792,83 @@ export const CodeBlock = memo(function CodeBlock({
           />
         </div>
       )}
-      <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-        <button
-          onClick={copyToClipboard}
-          className="rounded-lg bg-surface-input p-2 hover:bg-surface-input/80"
-        >
-          {copied ? (
-            <svg
-              className="h-5 w-5 text-green-400"
-              fill="none"
-              strokeWidth="1.5"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4.5 12.75l6 6 9-13.5"
-              />
-            </svg>
-          ) : (
-            <svg
-              className="h-5 w-5 text-content-muted"
-              fill="none"
-              strokeWidth="1.5"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
-              />
-            </svg>
-          )}
-        </button>
+      <div className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        {isMarkdown && viewMode === 'preview' && (
+          <>
+            <div className="group/md relative">
+              <button
+                onClick={downloadMarkdown}
+                className="rounded-lg bg-surface-input p-2 hover:bg-surface-input/80"
+              >
+                <BsFiletypeMd className="h-5 w-5 text-content-muted" />
+              </button>
+              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/md:opacity-100">
+                .md
+              </span>
+            </div>
+            <div className="group/pdf relative">
+              <button
+                onClick={downloadPdf}
+                disabled={isGeneratingPdf}
+                className="rounded-lg bg-surface-input p-2 hover:bg-surface-input/80 disabled:opacity-50"
+              >
+                <BsFiletypePdf
+                  className={`h-5 w-5 ${isGeneratingPdf ? 'animate-pulse' : ''} text-content-muted`}
+                />
+              </button>
+              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/pdf:opacity-100">
+                {isGeneratingPdf ? 'Generating...' : 'PDF'}
+              </span>
+            </div>
+          </>
+        )}
+        <div className="group/copy relative">
+          <button
+            onClick={copyToClipboard}
+            className="rounded-lg bg-surface-input p-2 hover:bg-surface-input/80"
+          >
+            {copied ? (
+              <svg
+                className="h-5 w-5 text-green-400"
+                fill="none"
+                strokeWidth="1.5"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.5 12.75l6 6 9-13.5"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="h-5 w-5 text-content-muted"
+                fill="none"
+                strokeWidth="1.5"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+                />
+              </svg>
+            )}
+          </button>
+          <span className="pointer-events-none absolute -top-8 right-0 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
+            {copied ? 'Copied!' : 'Copy'}
+          </span>
+        </div>
       </div>
       {showPreview ? (
-        <CodePreview code={code} language={language} isDarkMode={isDarkMode} />
+        <CodePreview
+          code={code}
+          language={language}
+          isDarkMode={isDarkMode}
+          markdownRef={markdownRef}
+        />
       ) : (
         <SyntaxHighlighter
           language={language}
