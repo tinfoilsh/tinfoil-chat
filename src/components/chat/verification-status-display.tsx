@@ -1,4 +1,3 @@
-import { TextureGrid } from '@/components/texture-grid'
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -175,7 +174,6 @@ export const VerificationStatusDisplay = memo(
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="relative mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent"
         >
-          <TextureGrid />
           <button
             id="verification-expand"
             onClick={handleToggle}
@@ -200,7 +198,9 @@ export const VerificationStatusDisplay = memo(
                     repeatDelay: 1,
                   }}
                 >
-                  <ShieldCheckIcon className="h-5 w-5 text-emerald-500" />
+                  <ShieldCheckIcon
+                    className={`h-5 w-5 ${isDarkMode ? 'text-emerald-500' : 'text-brand-accent-dark'}`}
+                  />
                 </motion.div>
               ) : (
                 <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
@@ -208,7 +208,9 @@ export const VerificationStatusDisplay = memo(
               <span
                 className={`font-aeonik-fono ${
                   isComplete
-                    ? 'text-emerald-500'
+                    ? isDarkMode
+                      ? 'text-emerald-500'
+                      : 'text-brand-accent-dark'
                     : hasError
                       ? 'text-red-500'
                       : 'text-content-secondary'
