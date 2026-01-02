@@ -93,6 +93,13 @@ const ShareModalLazy = dynamic(
   () => import('./share-modal').then((m) => m.ShareModal),
   { ssr: false },
 )
+const WebSearchIntroModal = dynamic(
+  () =>
+    import('../tutorial/WebSearchIntroModal').then(
+      (m) => m.WebSearchIntroModal,
+    ),
+  { ssr: false },
+)
 
 type ChatInterfaceProps = {
   verificationState?: any
@@ -2098,6 +2105,10 @@ export function ChatInterface({
         fileName={pendingUploadFile?.name ?? ''}
         projectName={activeProject?.name ?? ''}
         isDarkMode={isDarkMode}
+      />
+
+      <WebSearchIntroModal
+        onEnableWebSearch={() => setWebSearchEnabled(true)}
       />
     </div>
   )
