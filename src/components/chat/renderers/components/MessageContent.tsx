@@ -13,12 +13,14 @@ interface MessageContentProps {
   content: string
   isDarkMode: boolean
   isUser?: boolean
+  isStreaming?: boolean
 }
 
 export const MessageContent = memo(function MessageContent({
   content,
   isDarkMode,
   isUser = false,
+  isStreaming = false,
 }: MessageContentProps) {
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const preprocessed = preprocessMarkdown(content)
@@ -88,6 +90,7 @@ export const MessageContent = memo(function MessageContent({
                   code={code}
                   language={language}
                   isDarkMode={isDarkMode}
+                  isStreaming={isStreaming}
                 />
               )
             }

@@ -1,10 +1,60 @@
-import { memo, useState } from 'react'
+import DOMPurify from 'isomorphic-dompurify'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import {
   oneDark,
   oneLight,
 } from 'react-syntax-highlighter/dist/cjs/styles/prism'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
 import { CONSTANTS } from './chat/constants'
+
+const CodeIcon = () => (
+  <svg
+    className="h-4 w-4"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+)
+
+const EyeIcon = () => (
+  <svg
+    className="h-4 w-4"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+)
+
+const PlayIcon = () => (
+  <svg
+    className="h-4 w-4"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+)
+
+const EXECUTABLE_LANGUAGES = ['html', 'javascript', 'js']
 
 const DARK_THEME = {
   ...oneDark,
@@ -38,16 +88,637 @@ const LIGHT_THEME = {
   },
 }
 
+type ViewMode = 'code' | 'preview'
+
+const ViewModeToggle = ({
+  mode,
+  onModeChange,
+  isDarkMode,
+  language,
+}: {
+  mode: ViewMode
+  onModeChange: (mode: ViewMode) => void
+  isDarkMode: boolean
+  language: string
+}) => {
+  const isExecutable = EXECUTABLE_LANGUAGES.includes(language)
+  const PreviewIcon = isExecutable ? PlayIcon : EyeIcon
+
+  return (
+    <div
+      className="flex rounded-md p-0.5"
+      style={{
+        background: isDarkMode ? 'rgb(31 41 55)' : 'rgb(229 231 235)',
+      }}
+    >
+      <button
+        onClick={() => onModeChange('preview')}
+        className={`flex items-center justify-center rounded p-1.5 transition-colors ${
+          mode === 'preview'
+            ? isDarkMode
+              ? 'bg-gray-700 text-white'
+              : 'bg-white text-gray-900'
+            : 'text-content-muted hover:text-content-secondary'
+        }`}
+        aria-label={isExecutable ? 'Run' : 'Preview'}
+      >
+        <PreviewIcon />
+      </button>
+      <button
+        onClick={() => onModeChange('code')}
+        className={`flex items-center justify-center rounded p-1.5 transition-colors ${
+          mode === 'code'
+            ? isDarkMode
+              ? 'bg-gray-700 text-white'
+              : 'bg-white text-gray-900'
+            : 'text-content-muted hover:text-content-secondary'
+        }`}
+        aria-label="View code"
+      >
+        <CodeIcon />
+      </button>
+    </div>
+  )
+}
+
+const PREVIEWABLE_LANGUAGES = [
+  'svg',
+  'html',
+  'markdown',
+  'md',
+  'javascript',
+  'js',
+  'mermaid',
+  'json',
+  'css',
+]
+
+const isCodeWorthPreviewing = (code: string, language: string): boolean => {
+  const trimmed = code.trim()
+
+  // Too short to be meaningful
+  if (trimmed.length < 20) return false
+
+  // Single line is usually just an example snippet
+  if (!trimmed.includes('\n') && trimmed.length < 80) return false
+
+  switch (language) {
+    case 'html': {
+      // Must have actual content, not just a single tag or link/style reference
+      const tagCount = (trimmed.match(/<[a-z]/gi) || []).length
+      if (tagCount <= 1) return false
+      // Skip if it's just a link/script/style tag
+      if (/^<(link|script|style|meta|!DOCTYPE)/i.test(trimmed)) return false
+      return true
+    }
+
+    case 'javascript':
+    case 'js': {
+      // Skip if it's just comments
+      const withoutComments = trimmed
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*/g, '')
+        .trim()
+      if (withoutComments.length < 10) return false
+      // Skip simple declarations without logic
+      const hasLogic =
+        /\b(if|for|while|function|=>|console\.|return|\.map|\.filter|\.reduce|\.forEach|async|await|new |class )/i.test(
+          trimmed,
+        )
+      if (!hasLogic && trimmed.split('\n').length < 3) return false
+      return true
+    }
+
+    case 'css': {
+      // Must have actual rules, not just a selector or single property
+      const ruleCount = (trimmed.match(/\{/g) || []).length
+      if (ruleCount < 1) return false
+      // Must have actual properties
+      const propertyCount = (trimmed.match(/:\s*[^;]+;/g) || []).length
+      if (propertyCount < 2) return false
+      return true
+    }
+
+    case 'svg': {
+      // Must be a complete SVG
+      return /<svg[\s\S]*<\/svg>/i.test(trimmed)
+    }
+
+    case 'markdown':
+    case 'md': {
+      // Must have some formatting or be substantial
+      const hasFormatting = /[#*`\[\]|]/.test(trimmed)
+      return hasFormatting || trimmed.length > 100
+    }
+
+    case 'mermaid': {
+      // Must have a diagram type
+      return /^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap)/m.test(
+        trimmed,
+      )
+    }
+
+    case 'json': {
+      // Must be an object or array with content
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (typeof parsed !== 'object' || parsed === null) return false
+        const keys = Object.keys(parsed)
+        return keys.length > 0
+      } catch {
+        return false
+      }
+    }
+
+    default:
+      return true
+  }
+}
+
+const PreviewContainer = ({
+  children,
+  isDarkMode,
+}: {
+  children: React.ReactNode
+  isDarkMode: boolean
+}) => (
+  <div
+    className={`min-h-[100px] rounded-lg p-4 pt-12 ${
+      isDarkMode ? 'bg-surface-chat-background' : 'bg-surface-card'
+    }`}
+    style={{
+      border: isDarkMode
+        ? '1px solid rgb(31 41 55)'
+        : '1px solid rgb(229 231 235)',
+    }}
+  >
+    {children}
+  </div>
+)
+
+const SvgPreview = ({ code }: { code: string }) => {
+  const sanitizedSvg = DOMPurify.sanitize(code, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+  })
+
+  return (
+    <div
+      className="flex w-full items-center justify-center [&>svg]:h-auto [&>svg]:max-h-[400px] [&>svg]:w-full [&>svg]:max-w-full"
+      dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
+    />
+  )
+}
+
+const HtmlPreview = ({ code }: { code: string }) => {
+  const [height, setHeight] = useState(100)
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'html-preview-height') {
+        setHeight(event.data.height)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  const iframeSrc = useMemo(() => {
+    const heightReporter = `
+<script>
+function reportHeight() {
+  const height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  parent.postMessage({ type: 'html-preview-height', height }, '*');
+}
+window.addEventListener('load', reportHeight);
+window.addEventListener('resize', reportHeight);
+new MutationObserver(reportHeight).observe(document.body, { childList: true, subtree: true });
+setTimeout(reportHeight, 100);
+</script>`
+
+    if (code.includes('</head>')) {
+      return code.replace('</head>', `${heightReporter}</head>`)
+    } else if (code.includes('</body>')) {
+      return code.replace('</body>', `${heightReporter}</body>`)
+    } else {
+      return code + heightReporter
+    }
+  }, [code])
+
+  return (
+    <iframe
+      srcDoc={iframeSrc}
+      className="w-full rounded border-0"
+      style={{ height: `${height}px`, minHeight: '100px' }}
+      sandbox="allow-scripts"
+      title="HTML preview"
+    />
+  )
+}
+
+const MarkdownPreview = ({ code }: { code: string }) => (
+  <div className="prose prose-sm max-w-none dark:prose-invert">
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+      {code}
+    </ReactMarkdown>
+  </div>
+)
+
+const JavaScriptPreview = ({ code }: { code: string }) => {
+  const [output, setOutput] = useState<string[]>([])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'js-preview-output') {
+        setOutput(event.data.output)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  const iframeSrc = useMemo(() => {
+    const escapedCode = code
+      .replace(/\\/g, '\\\\')
+      .replace(/`/g, '\\`')
+      .replace(/<\/script>/gi, '<\\/script>')
+
+    return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script>
+const output = [];
+const originalLog = console.log;
+console.log = (...args) => {
+  output.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+};
+try {
+  const result = eval(\`${escapedCode}\`);
+  if (result !== undefined) {
+    output.push('→ ' + (typeof result === 'object' ? JSON.stringify(result) : String(result)));
+  }
+} catch (e) {
+  output.push('Error: ' + e.message);
+}
+parent.postMessage({ type: 'js-preview-output', output }, '*');
+</script>
+</body>
+</html>`
+  }, [code])
+
+  return (
+    <div className="font-mono text-sm">
+      <iframe
+        srcDoc={iframeSrc}
+        className="hidden"
+        sandbox="allow-scripts"
+        title="JavaScript preview"
+      />
+      {output.map((line, i) => (
+        <div
+          key={i}
+          className={
+            line.startsWith('Error:') ? 'text-red-500' : 'text-content-primary'
+          }
+        >
+          {line}
+        </div>
+      ))}
+      {output.length === 0 && (
+        <div className="italic text-content-muted">No output</div>
+      )}
+    </div>
+  )
+}
+
+const MermaidPreview = ({
+  code,
+  isDarkMode,
+}: {
+  code: string
+  isDarkMode: boolean
+}) => {
+  const [svg, setSvg] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+  const idRef = useMemo(
+    () => `mermaid-${Math.random().toString(36).slice(2, 11)}`,
+    [],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    const renderMermaid = async () => {
+      try {
+        const mermaid = (await import('mermaid')).default
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: isDarkMode ? 'dark' : 'default',
+          securityLevel: 'strict',
+        })
+
+        const { svg: renderedSvg } = await mermaid.render(idRef, code)
+        if (!cancelled) {
+          setSvg(renderedSvg)
+          setError(null)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e))
+          setSvg('')
+        }
+      }
+    }
+
+    renderMermaid()
+    return () => {
+      cancelled = true
+    }
+  }, [code, isDarkMode, idRef])
+
+  if (error) {
+    return <div className="text-sm text-red-500">Mermaid error: {error}</div>
+  }
+
+  return (
+    <div
+      className="flex w-full items-center justify-center [&>svg]:max-w-full"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  )
+}
+
+const JsonTreeNode = ({
+  data,
+  name,
+  isLast = true,
+  depth = 0,
+}: {
+  data: unknown
+  name?: string
+  isLast?: boolean
+  depth?: number
+}) => {
+  const [isExpanded, setIsExpanded] = useState(depth < 2)
+
+  const isObject = typeof data === 'object' && data !== null
+  const isArray = Array.isArray(data)
+  const entries = isObject ? Object.entries(data) : []
+  const hasChildren = entries.length > 0
+
+  const getValueDisplay = () => {
+    if (data === null) return <span className="text-orange-400">null</span>
+    if (typeof data === 'boolean')
+      return <span className="text-orange-400">{String(data)}</span>
+    if (typeof data === 'number')
+      return <span className="text-blue-400">{data}</span>
+    if (typeof data === 'string')
+      return <span className="text-green-400">&quot;{data}&quot;</span>
+    return null
+  }
+
+  if (!isObject) {
+    return (
+      <div className="flex">
+        {name !== undefined && (
+          <span className="text-purple-400">&quot;{name}&quot;</span>
+        )}
+        {name !== undefined && <span className="text-content-muted">: </span>}
+        {getValueDisplay()}
+        {!isLast && <span className="text-content-muted">,</span>}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div
+        className="hover:bg-surface-secondary/50 flex cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <span className="w-4 text-content-muted">
+          {hasChildren ? (isExpanded ? '▼' : '▶') : ' '}
+        </span>
+        {name !== undefined && (
+          <span className="text-purple-400">&quot;{name}&quot;</span>
+        )}
+        {name !== undefined && <span className="text-content-muted">: </span>}
+        <span className="text-content-muted">{isArray ? '[' : '{'}</span>
+        {!isExpanded && (
+          <>
+            <span className="text-content-muted">...</span>
+            <span className="text-content-muted">{isArray ? ']' : '}'}</span>
+            {!isLast && <span className="text-content-muted">,</span>}
+          </>
+        )}
+      </div>
+      {isExpanded && (
+        <>
+          <div className="ml-4">
+            {entries.map(([key, value], i) => (
+              <JsonTreeNode
+                key={key}
+                data={value}
+                name={isArray ? undefined : key}
+                isLast={i === entries.length - 1}
+                depth={depth + 1}
+              />
+            ))}
+          </div>
+          <div className="flex">
+            <span className="w-4" />
+            <span className="text-content-muted">{isArray ? ']' : '}'}</span>
+            {!isLast && <span className="text-content-muted">,</span>}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+const JsonPreview = ({ code }: { code: string }) => {
+  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<unknown>(null)
+
+  useEffect(() => {
+    try {
+      setData(JSON.parse(code))
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setData(null)
+    }
+  }, [code])
+
+  if (error) {
+    return <div className="text-sm text-red-500">JSON error: {error}</div>
+  }
+
+  return (
+    <div className="overflow-x-auto font-mono text-sm">
+      <JsonTreeNode data={data} />
+    </div>
+  )
+}
+
+const CssPreview = ({ code }: { code: string }) => {
+  const [height, setHeight] = useState(150)
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'css-preview-height') {
+        setHeight(event.data.height)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  const iframeSrc = useMemo(() => {
+    const sampleHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>${code}</style>
+  <script>
+    function reportHeight() {
+      const height = Math.max(document.body.scrollHeight, 150);
+      parent.postMessage({ type: 'css-preview-height', height }, '*');
+    }
+    window.addEventListener('load', reportHeight);
+    setTimeout(reportHeight, 100);
+  </script>
+</head>
+<body style="margin: 0; padding: 16px; font-family: system-ui, sans-serif;">
+  <h1>Heading 1</h1>
+  <h2>Heading 2</h2>
+  <p>This is a <strong>paragraph</strong> with <em>formatted</em> text and a <a href="#">link</a>.</p>
+  <ul>
+    <li>List item 1</li>
+    <li>List item 2</li>
+  </ul>
+  <button>Button</button>
+  <input type="text" placeholder="Input field" style="margin-left: 8px;">
+  <div class="box" style="margin-top: 16px; padding: 16px; border: 1px solid #ccc; border-radius: 4px;">
+    <p>A div with class "box"</p>
+  </div>
+</body>
+</html>`
+    return sampleHtml
+  }, [code])
+
+  return (
+    <iframe
+      srcDoc={iframeSrc}
+      className="w-full rounded border-0"
+      style={{ height: `${height}px`, minHeight: '150px' }}
+      sandbox="allow-scripts"
+      title="CSS preview"
+    />
+  )
+}
+
+const CodePreview = ({
+  code,
+  language,
+  isDarkMode,
+}: {
+  code: string
+  language: string
+  isDarkMode: boolean
+}) => {
+  const renderPreview = () => {
+    switch (language) {
+      case 'svg':
+        return <SvgPreview code={code} />
+      case 'html':
+        return <HtmlPreview code={code} />
+      case 'markdown':
+      case 'md':
+        return <MarkdownPreview code={code} />
+      case 'javascript':
+      case 'js':
+        return <JavaScriptPreview code={code} />
+      case 'mermaid':
+        return <MermaidPreview code={code} isDarkMode={isDarkMode} />
+      case 'json':
+        return <JsonPreview code={code} />
+      case 'css':
+        return <CssPreview code={code} />
+      default:
+        return null
+    }
+  }
+
+  return (
+    <PreviewContainer isDarkMode={isDarkMode}>
+      {renderPreview()}
+    </PreviewContainer>
+  )
+}
+
 export const CodeBlock = memo(function CodeBlock({
   code,
   language,
   isDarkMode = true,
+  isStreaming = false,
 }: {
   code: string
   language: string
   isDarkMode?: boolean
+  isStreaming?: boolean
 }) {
   const [copied, setCopied] = useState(false)
+
+  const isExecutable = EXECUTABLE_LANGUAGES.includes(language)
+
+  // Check if this language supports preview (static check, doesn't depend on code content)
+  const languageSupportsPreview = PREVIEWABLE_LANGUAGES.includes(language)
+
+  // Check if the current code is worth previewing
+  const codeIsWorthPreviewing =
+    languageSupportsPreview && isCodeWorthPreviewing(code, language)
+
+  // For non-executable languages during streaming, don't show preview at all
+  // This prevents flickering as incomplete code causes preview errors
+  const canShowPreview =
+    languageSupportsPreview && (isExecutable || !isStreaming)
+
+  // Track if user has manually changed the view mode
+  const userHasToggledRef = useRef(false)
+
+  // Determine initial view mode based on current state
+  const shouldStartInPreview =
+    codeIsWorthPreviewing && !isExecutable && !isStreaming
+
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    shouldStartInPreview ? 'preview' : 'code',
+  )
+
+  // Switch to preview mode when streaming ends (only if user hasn't manually toggled)
+  const wasStreamingRef = useRef(isStreaming)
+  useEffect(() => {
+    const streamingJustEnded = wasStreamingRef.current && !isStreaming
+    wasStreamingRef.current = isStreaming
+
+    if (
+      streamingJustEnded &&
+      codeIsWorthPreviewing &&
+      !isExecutable &&
+      !userHasToggledRef.current
+    ) {
+      setViewMode('preview')
+    }
+  }, [isStreaming, codeIsWorthPreviewing, isExecutable])
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    userHasToggledRef.current = true
+    setViewMode(mode)
+  }
+
+  // Determine what to actually show: preview only if allowed and code is worth it
+  const showPreview =
+    canShowPreview && codeIsWorthPreviewing && viewMode === 'preview'
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(code)
@@ -57,61 +728,79 @@ export const CodeBlock = memo(function CodeBlock({
 
   return (
     <div className="group relative my-4 overflow-x-auto overflow-y-visible">
-      <button
-        onClick={copyToClipboard}
-        className="absolute right-2 top-2 rounded-lg bg-surface-input p-2 opacity-0 transition-opacity duration-200 hover:bg-surface-input/80 group-hover:opacity-100"
-      >
-        {copied ? (
-          <svg
-            className="h-5 w-5 text-green-400"
-            fill="none"
-            strokeWidth="1.5"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4.5 12.75l6 6 9-13.5"
-            />
-          </svg>
-        ) : (
-          <svg
-            className="h-5 w-5 text-content-muted"
-            fill="none"
-            strokeWidth="1.5"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
-            />
-          </svg>
-        )}
-      </button>
-      <SyntaxHighlighter
-        language={language}
-        style={isDarkMode ? DARK_THEME : LIGHT_THEME}
-        customStyle={{
-          borderRadius: '0.5rem',
-          margin: 0,
-          fontSize: '0.875rem',
-          background: isDarkMode
-            ? `hsl(var(--surface-chat-background))`
-            : `hsl(var(--surface-card))`,
-          border: isDarkMode
-            ? '1px solid rgb(31 41 55)'
-            : '1px solid rgb(229 231 235)',
-          overflowX: 'auto',
-          overflowY: 'visible',
-          maxWidth: '100%',
-        }}
-        wrapLongLines={false}
-      >
-        {code}
-      </SyntaxHighlighter>
+      {canShowPreview && codeIsWorthPreviewing && (
+        <div className="absolute left-2 top-2 z-10">
+          <ViewModeToggle
+            mode={viewMode}
+            onModeChange={handleViewModeChange}
+            isDarkMode={isDarkMode}
+            language={language}
+          />
+        </div>
+      )}
+      <div className="absolute right-2 top-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <button
+          onClick={copyToClipboard}
+          className="rounded-lg bg-surface-input p-2 hover:bg-surface-input/80"
+        >
+          {copied ? (
+            <svg
+              className="h-5 w-5 text-green-400"
+              fill="none"
+              strokeWidth="1.5"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4.5 12.75l6 6 9-13.5"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="h-5 w-5 text-content-muted"
+              fill="none"
+              strokeWidth="1.5"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+              />
+            </svg>
+          )}
+        </button>
+      </div>
+      {showPreview ? (
+        <CodePreview code={code} language={language} isDarkMode={isDarkMode} />
+      ) : (
+        <SyntaxHighlighter
+          language={language}
+          style={isDarkMode ? DARK_THEME : LIGHT_THEME}
+          customStyle={{
+            borderRadius: '0.5rem',
+            margin: 0,
+            fontSize: '0.875rem',
+            background: isDarkMode
+              ? `hsl(var(--surface-chat-background))`
+              : `hsl(var(--surface-card))`,
+            border: isDarkMode
+              ? '1px solid rgb(31 41 55)'
+              : '1px solid rgb(229 231 235)',
+            overflowX: 'auto',
+            overflowY: 'visible',
+            maxWidth: '100%',
+            paddingTop:
+              canShowPreview && codeIsWorthPreviewing ? '2.5rem' : '1rem',
+          }}
+          wrapLongLines={false}
+        >
+          {code}
+        </SyntaxHighlighter>
+      )}
     </div>
   )
 })

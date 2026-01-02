@@ -185,16 +185,19 @@ const ChunkRenderer = memo(
     chunk,
     isDarkMode,
     isUser,
+    isStreaming,
   }: {
     chunk: ContentChunk
     isDarkMode: boolean
     isUser?: boolean
+    isStreaming?: boolean
   }) {
     return (
       <MessageContent
         content={chunk.content}
         isDarkMode={isDarkMode}
         isUser={isUser}
+        isStreaming={isStreaming}
       />
     )
   },
@@ -204,14 +207,16 @@ const ChunkRenderer = memo(
       // Both complete - only re-render if content is different
       return (
         prevProps.chunk.content === nextProps.chunk.content &&
-        prevProps.isDarkMode === nextProps.isDarkMode
+        prevProps.isDarkMode === nextProps.isDarkMode &&
+        prevProps.isStreaming === nextProps.isStreaming
       )
     }
     // One or both incomplete - check everything
     return (
       prevProps.chunk.content === nextProps.chunk.content &&
       prevProps.chunk.isComplete === nextProps.chunk.isComplete &&
-      prevProps.isDarkMode === nextProps.isDarkMode
+      prevProps.isDarkMode === nextProps.isDarkMode &&
+      prevProps.isStreaming === nextProps.isStreaming
     )
   },
 )
@@ -251,6 +256,7 @@ export const StreamingChunkedText = memo(function StreamingChunkedText({
           chunk={chunk}
           isDarkMode={isDarkMode}
           isUser={isUser}
+          isStreaming={isStreaming}
         />
       ))}
     </>
