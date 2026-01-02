@@ -38,6 +38,7 @@ type ChatMessagesProps = {
   ) => void
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
+  showScrollButton?: boolean
 }
 
 // Optimized wrapper component that receives expanded state from parent
@@ -248,12 +249,51 @@ export function ChatMessages({
   handleLabelClick,
   onEditMessage,
   onRegenerateMessage,
+  showScrollButton,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const [expandedThoughtsState, setExpandedThoughtsState] = useState<
     Record<string, boolean>
   >({})
   const maxMessages = useMaxMessages()
+  const [showSpacer, setShowSpacer] = useState(false)
+  const prevMessageCountRef = React.useRef(messages.length)
+  const prevShowScrollButtonRef = React.useRef(showScrollButton)
+  const messageCountWhenSpacerSetRef = React.useRef<number | null>(null)
+
+  // Show spacer when user sends a new message
+  React.useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (
+      messages.length > prevMessageCountRef.current &&
+      lastMessage?.role === 'user'
+    ) {
+      setShowSpacer(true)
+      messageCountWhenSpacerSetRef.current = messages.length
+    }
+    prevMessageCountRef.current = messages.length
+  }, [messages])
+
+  // Reset spacer when chat changes
+  React.useEffect(() => {
+    setShowSpacer(false)
+    prevMessageCountRef.current = messages.length
+    messageCountWhenSpacerSetRef.current = null
+  }, [chatId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset spacer when scroll-to-bottom button appears (user scrolled up)
+  React.useEffect(() => {
+    const buttonJustAppeared =
+      showScrollButton && !prevShowScrollButtonRef.current
+    const spacerSetForCurrentMessage =
+      messageCountWhenSpacerSetRef.current === messages.length
+
+    // Only reset if button transitioned to visible and we're not on the same message that triggered the spacer
+    if (buttonJustAppeared && !spacerSetForCurrentMessage) {
+      setShowSpacer(false)
+    }
+    prevShowScrollButtonRef.current = showScrollButton
+  }, [showScrollButton, messages.length])
 
   // Memoize the setter to prevent function reference changes
   const memoizedSetExpandedThoughtsState = useCallback(
@@ -389,6 +429,14 @@ export function ChatMessages({
         />
       ))}
       {showLoadingPlaceholder && <LoadingMessage isDarkMode={isDarkMode} />}
+      {/* Spacer allows scrollIntoView to bring user message to top of viewport */}
+      {showSpacer && (
+        <div
+          data-spacer
+          className="h-[70vh] flex-shrink-0"
+          aria-hidden="true"
+        />
+      )}
     </div>
   )
 }

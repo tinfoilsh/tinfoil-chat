@@ -172,6 +172,7 @@ const DefaultMessageComponent = ({
   return (
     <div
       className={`relative flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
+      data-message-role={message.role}
     >
       {/* Display documents for user messages */}
       {isUser && message.documents && message.documents.length > 0 && (
