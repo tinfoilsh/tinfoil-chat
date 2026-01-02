@@ -8,13 +8,12 @@ import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
   FolderIcon,
-  GlobeAltIcon,
   MicrophoneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PiSpinner } from 'react-icons/pi'
+import { PiGlobe, PiGlobeX, PiSpinner } from 'react-icons/pi'
 import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
 import type { ProcessedDocument } from './renderers/types'
@@ -700,7 +699,7 @@ export function ChatInput({
                 id="upload-button"
                 type="button"
                 onClick={triggerFileInput}
-                className="rounded-lg px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
               >
                 <DocumentIcon className="h-5 w-5" />
               </button>
@@ -715,15 +714,26 @@ export function ChatInput({
                   type="button"
                   onClick={onWebSearchToggle}
                   className={cn(
-                    'flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors',
+                    'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
                     webSearchEnabled
-                      ? 'bg-blue-500/20 text-blue-500'
-                      : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                      ? cn(
+                          'px-2',
+                          isDarkMode
+                            ? 'bg-brand-accent-light/20 text-brand-accent-light'
+                            : 'bg-brand-accent-dark/20 text-brand-accent-dark',
+                        )
+                      : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
                   )}
                 >
-                  <GlobeAltIcon className="h-5 w-5" />
+                  {webSearchEnabled ? (
+                    <PiGlobe className="h-5 w-5" />
+                  ) : (
+                    <PiGlobeX className="h-5 w-5" />
+                  )}
                   {webSearchEnabled && (
-                    <span className="text-xs font-medium">Web Search</span>
+                    <span className="text-xs font-medium leading-none">
+                      Web Search
+                    </span>
                   )}
                 </button>
               </div>
