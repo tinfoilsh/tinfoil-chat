@@ -760,7 +760,7 @@ export function ChatSidebar({
                         : 'text-emerald-600 hover:text-emerald-500'
                     } ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
                   >
-                    {upgradeLoading ? 'Redirecting…' : 'Upgrade to Pro'}
+                    {upgradeLoading ? 'Redirecting…' : 'Subscribe to premium'}
                     {!upgradeLoading && (
                       <svg
                         className="h-3 w-3"

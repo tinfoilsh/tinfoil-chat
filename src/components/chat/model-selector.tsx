@@ -1,5 +1,4 @@
 import { type BaseModel, isModelAvailable } from '@/config/models'
-import { LockClosedIcon } from '@heroicons/react/24/outline'
 import { useEffect, useRef, useState } from 'react'
 import type { AIModel } from './types'
 
@@ -24,6 +23,8 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
+  // Track images that have loaded
+  const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Start with sensible defaults based on preferred positioning
@@ -38,6 +39,10 @@ export function ModelSelector({
 
   const handleImageError = (modelName: string) => {
     setFailedImages((prev) => ({ ...prev, [modelName]: true }))
+  }
+
+  const handleImageLoad = (modelName: string) => {
+    setLoadedImages((prev) => ({ ...prev, [modelName]: true }))
   }
 
   // Calculate optimal positioning and height
@@ -137,7 +142,7 @@ export function ModelSelector({
     <div
       ref={menuRef}
       data-model-menu
-      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border border-border-subtle bg-surface-chat font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
+      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border border-border-subtle bg-surface-chat p-2 font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
       style={{
         maxHeight: dynamicStyles.maxHeight,
         ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
@@ -150,7 +155,7 @@ export function ModelSelector({
         const isPremiumModel = model.paid === true
 
         const buttonClasses = [
-          'relative flex w-full items-start gap-3 rounded-lg border border-border-subtle px-3 py-2 text-left text-sm transition-colors',
+          'relative flex w-full items-start gap-3 rounded-md px-3 py-3 text-left text-sm transition-colors',
           'text-content-secondary',
         ]
 
@@ -202,7 +207,11 @@ export function ModelSelector({
               (!isPremiumModel || isPremium || !onPremiumModelClick)
             }
           >
-            <div className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center">
+            <div className="relative mt-0.5 flex h-5 w-5 flex-none items-center justify-center">
+              {!loadedImages[model.modelName] &&
+                !failedImages[model.modelName] && (
+                  <div className="absolute h-5 w-5 rounded-full bg-gray-300 dark:bg-gray-600" />
+                )}
               <img
                 src={
                   failedImages[model.modelName]
@@ -213,25 +222,25 @@ export function ModelSelector({
                         ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
                         : `/model-icons/${model.image}`
                 }
-                alt={model.name}
-                className={`h-5 w-5 ${!isAvailable ? 'opacity-70 grayscale' : ''}`}
+                alt=""
+                className={`h-5 w-5 transition-opacity duration-200 ${!isAvailable ? 'opacity-70 grayscale' : ''} ${!loadedImages[model.modelName] && !failedImages[model.modelName] ? 'opacity-0' : ''}`}
+                onLoad={() => handleImageLoad(model.modelName)}
                 onError={() => handleImageError(model.modelName)}
               />
             </div>
-            <div className="flex flex-1 flex-col">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`font-medium ${!isAvailable ? 'opacity-70' : ''}`}
-                >
-                  {model.name}
-                </span>
-                {isPremiumModel && !isPremium && (
-                  <div className="inline-flex items-center gap-0.5 rounded border border-brand-accent-light/40 bg-brand-accent-light/10 px-1 py-0.5 text-xs text-brand-accent-light">
-                    <LockClosedIcon className="h-2 w-2" />
-                    <span className="text-xs font-medium">Pro</span>
-                  </div>
-                )}
+            {isPremiumModel && !isPremium && (
+              <div
+                className={`absolute right-2 top-2 inline-flex items-center rounded px-1 text-[10px] ${isDarkMode ? 'text-emerald-500' : 'text-brand-accent-dark'}`}
+              >
+                <span className="font-medium">Premium</span>
               </div>
+            )}
+            <div className="flex flex-1 flex-col">
+              <span
+                className={`font-medium ${!isAvailable ? 'opacity-70' : ''}`}
+              >
+                {model.name}
+              </span>
               <span
                 className={`text-xs text-content-muted ${!isAvailable ? 'opacity-70' : ''}`}
               >
