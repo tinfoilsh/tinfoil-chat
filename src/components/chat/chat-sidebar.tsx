@@ -830,19 +830,22 @@ export function ChatSidebar({
                 Chat History
               </h3>
               <div className="flex items-center gap-1">
-                {onEncryptionKeyClick && isSignedIn && cloudSyncEnabled && (
-                  <button
-                    onClick={onEncryptionKeyClick}
-                    className={`rounded-lg p-1.5 transition-all duration-200 ${
-                      isDarkMode
-                        ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
-                        : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                    }`}
-                    title="Manage encryption key"
-                  >
-                    <KeyIcon className="h-4 w-4" />
-                  </button>
-                )}
+                {onEncryptionKeyClick &&
+                  isSignedIn &&
+                  cloudSyncEnabled &&
+                  activeTab === 'cloud' && (
+                    <button
+                      onClick={onEncryptionKeyClick}
+                      className={`rounded-lg p-1.5 transition-all duration-200 ${
+                        isDarkMode
+                          ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
+                          : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
+                      }`}
+                      title="Manage encryption key"
+                    >
+                      <KeyIcon className="h-4 w-4" />
+                    </button>
+                  )}
                 {chats.length > 0 && (
                   <button
                     onClick={() => downloadChats(chats)}
@@ -864,12 +867,12 @@ export function ChatSidebar({
               <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
                 <button
                   onClick={() => setActiveTab('cloud')}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'cloud'
                       ? isDarkMode
-                        ? 'border border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                        : 'border border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                      : 'text-content-muted hover:text-content-secondary'
+                        ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                        : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
+                      : 'border-transparent text-content-muted hover:text-content-secondary'
                   }`}
                 >
                   <CloudIcon className="h-3.5 w-3.5" />
@@ -877,12 +880,12 @@ export function ChatSidebar({
                 </button>
                 <button
                   onClick={() => setActiveTab('local')}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
                     activeTab === 'local'
                       ? isDarkMode
-                        ? 'border border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                        : 'border border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                      : 'text-content-muted hover:text-content-secondary'
+                        ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                        : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
+                      : 'border-transparent text-content-muted hover:text-content-secondary'
                   }`}
                 >
                   <CiFloppyDisk className="h-3.5 w-3.5" />
@@ -891,7 +894,7 @@ export function ChatSidebar({
               </div>
             )}
 
-            <div className="font-base mt-1 font-aeonik-fono text-xs text-content-muted">
+            <div className="font-base mt-1 min-h-[52px] font-aeonik-fono text-xs text-content-muted">
               {!isSignedIn ? (
                 'Your chats are stored temporarily in this browser tab.'
               ) : activeTab === 'cloud' ? (
