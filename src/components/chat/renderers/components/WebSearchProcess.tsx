@@ -17,6 +17,43 @@ function getFaviconUrl(url: string): string {
   }
 }
 
+function getDomainName(url: string): string {
+  try {
+    const parsedUrl = new URL(url)
+    const hostname = parsedUrl.hostname.replace(/^www\./, '')
+    const parts = hostname.split('.')
+    return parts.length > 1 ? parts[parts.length - 2] : hostname
+  } catch {
+    return ''
+  }
+}
+
+function FadeInFavicon({
+  url,
+  className,
+  style,
+}: {
+  url: string
+  className: string
+  style?: React.CSSProperties
+}) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  if (error) return null
+
+  return (
+    <img
+      src={getFaviconUrl(url)}
+      alt=""
+      className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      style={style}
+      onLoad={() => setLoaded(true)}
+      onError={() => setError(true)}
+    />
+  )
+}
+
 export const WebSearchProcess = memo(function WebSearchProcess({
   webSearch,
   isDarkMode,
@@ -48,22 +85,18 @@ export const WebSearchProcess = memo(function WebSearchProcess({
           {hasSources && !isSearching && (
             <div className="flex shrink-0 items-center">
               {webSearch.sources!.slice(0, 5).map((source, index) => (
-                <img
+                <FadeInFavicon
                   key={`${source.url}-${index}`}
-                  src={getFaviconUrl(source.url)}
-                  alt=""
-                  className="h-5 w-5 shrink-0 rounded-full border-2 border-surface-chat bg-surface-chat"
-                  style={{ marginLeft: index === 0 ? 0 : -8 }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
+                  url={source.url}
+                  className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
+                  style={{ marginLeft: index === 0 ? 0 : -6 }}
                 />
               ))}
             </div>
           )}
           {isSearching ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Searching</span>
+              <span className="text-sm font-medium">Searching the web...</span>
               {webSearch.query && (
                 <span className="truncate text-sm opacity-70">
                   &quot;{webSearch.query}&quot;
@@ -73,18 +106,11 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             </div>
           ) : (
             <span className="text-sm leading-5">
-              <span className="font-bold">Searched</span>
+              <span className="font-medium opacity-70">Searched the web</span>
               {webSearch.query && (
                 <span className="font-normal opacity-70">
                   {' '}
                   for &quot;{webSearch.query}&quot;
-                </span>
-              )}
-              {hasSources && (
-                <span className="font-normal opacity-70">
-                  {' '}
-                  · {webSearch.sources!.length} source
-                  {webSearch.sources!.length !== 1 ? 's' : ''}
                 </span>
               )}
             </span>
@@ -124,31 +150,23 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:bg-surface-secondary/50 flex flex-col gap-1 rounded-lg px-3 py-2 text-sm text-content-primary transition-colors"
+                  className="hover:bg-surface-secondary/50 flex items-start gap-3 rounded-lg px-3 py-2 text-sm text-content-primary transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={getFaviconUrl(source.url)}
-                      alt=""
-                      className="h-4 w-4 shrink-0"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                    <span className="min-w-0 truncate font-medium">
-                      {source.title}
+                  <FadeInFavicon
+                    url={source.url}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
+                  />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-xs opacity-50">
+                      {getDomainName(source.url)}
                     </span>
-                    {source.publishedDate && (
-                      <span className="shrink-0 text-xs opacity-50">
-                        {source.publishedDate}
-                      </span>
+                    <span className="truncate font-medium">{source.title}</span>
+                    {source.text && (
+                      <p className="line-clamp-2 text-xs opacity-70">
+                        {source.text}
+                      </p>
                     )}
                   </div>
-                  {source.text && (
-                    <p className="line-clamp-2 pl-7 text-xs opacity-70">
-                      {source.text}
-                    </p>
-                  )}
                 </a>
               ))}
             </div>

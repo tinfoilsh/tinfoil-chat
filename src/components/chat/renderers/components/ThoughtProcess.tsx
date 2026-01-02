@@ -287,7 +287,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             </div>
           ) : (
             <span className="text-sm leading-5">
-              <span className="font-bold">Thought</span>
+              <span className="font-medium opacity-70">Thought</span>
               {thinkingDuration && (
                 <span className="font-normal opacity-70">
                   {thinkingDuration < 60
