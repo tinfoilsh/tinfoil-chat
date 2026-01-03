@@ -279,9 +279,16 @@ const SvgPreview = ({ code }: { code: string }) => {
 const HtmlPreview = ({ code }: { code: string }) => {
   const [height, setHeight] = useState(100)
   const instanceId = useId()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== 'null' ||
+        event.source !== iframeRef.current?.contentWindow
+      ) {
+        return
+      }
       if (
         event.data?.type === 'html-preview-height' &&
         event.data?.instanceId === instanceId
@@ -320,6 +327,7 @@ setTimeout(reportHeight, 100);
 
   return (
     <iframe
+      ref={iframeRef}
       srcDoc={iframeSrc}
       className="w-full rounded border-0"
       style={{ height: `${height}px`, minHeight: '100px' }}
@@ -360,9 +368,16 @@ const stripTypeAnnotations = (code: string): string => {
 const JavaScriptPreview = ({ code }: { code: string }) => {
   const [output, setOutput] = useState<string[]>([])
   const instanceId = useId()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== 'null' ||
+        event.source !== iframeRef.current?.contentWindow
+      ) {
+        return
+      }
       if (
         event.data?.type === 'js-preview-output' &&
         event.data?.instanceId === instanceId
@@ -411,6 +426,7 @@ parent.postMessage({ type: 'js-preview-output', instanceId: '${instanceId}', out
   return (
     <div className="font-mono text-sm">
       <iframe
+        ref={iframeRef}
         srcDoc={iframeSrc}
         className="hidden"
         sandbox="allow-scripts"
@@ -609,9 +625,16 @@ const JsonPreview = ({ code }: { code: string }) => {
 const CssPreview = ({ code }: { code: string }) => {
   const [height, setHeight] = useState(150)
   const instanceId = useId()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== 'null' ||
+        event.source !== iframeRef.current?.contentWindow
+      ) {
+        return
+      }
       if (
         event.data?.type === 'css-preview-height' &&
         event.data?.instanceId === instanceId
@@ -660,6 +683,7 @@ const CssPreview = ({ code }: { code: string }) => {
 
   return (
     <iframe
+      ref={iframeRef}
       srcDoc={iframeSrc}
       className="w-full rounded border-0"
       style={{ height: `${height}px`, minHeight: '150px' }}
