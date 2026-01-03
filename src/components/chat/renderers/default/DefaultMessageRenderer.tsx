@@ -188,11 +188,7 @@ const DefaultMessageComponent = ({
       {!isUser && message.webSearch && message.webSearchBeforeThinking && (
         <div className="no-scroll-anchoring w-full px-4 py-2">
           <div className="mb-2 w-full">
-            <WebSearchProcess
-              webSearch={message.webSearch}
-              isDarkMode={isDarkMode}
-              messageId={messageUniqueId}
-            />
+            <WebSearchProcess webSearch={message.webSearch} />
           </div>
         </div>
       )}
@@ -230,11 +226,7 @@ const DefaultMessageComponent = ({
       {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
         <div className="no-scroll-anchoring w-full px-4 py-2">
           <div className="mb-2 w-full">
-            <WebSearchProcess
-              webSearch={message.webSearch}
-              isDarkMode={isDarkMode}
-              messageId={messageUniqueId}
-            />
+            <WebSearchProcess webSearch={message.webSearch} />
           </div>
         </div>
       )}
