@@ -337,7 +337,7 @@ export function ChatInput({
         />
 
         {processedDocuments && processedDocuments.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
             {processedDocuments.map((doc) => {
               const getPreviewText = (content?: string) => {
                 if (!content) return null
@@ -354,7 +354,7 @@ export function ChatInput({
               return (
                 <div
                   key={doc.id}
-                  className="group relative flex min-w-[200px] max-w-[300px] flex-col rounded-xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
+                  className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
                 >
                   {removeDocument && !doc.isUploading && (
                     <button
