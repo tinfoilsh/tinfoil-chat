@@ -897,14 +897,14 @@ export function ChatSidebar({
             <div className="font-base mt-1 min-h-[52px] font-aeonik-fono text-xs text-content-muted">
               {!isSignedIn ? (
                 'Your chats are stored temporarily in this browser tab.'
-              ) : activeTab === 'cloud' ? (
+              ) : !cloudSyncEnabled || activeTab === 'local' ? (
+                "Local chats are stored only on this device and won't sync."
+              ) : (
                 <>
                   Your chats are encrypted and synced to the cloud. The
                   encryption key is only stored on this browser and never sent
                   to Tinfoil.
                 </>
-              ) : (
-                "Local chats are stored only on this device and won't sync."
               )}
             </div>
           </div>
