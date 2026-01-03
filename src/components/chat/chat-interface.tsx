@@ -381,6 +381,7 @@ export function ChatInterface({
     verificationSuccess,
     isWaitingForResponse,
     selectedModel,
+    hasValidatedModel,
     expandedLabel,
     windowWidth,
 
@@ -982,7 +983,9 @@ export function ChatInterface({
     >
       {/* URL Hash Message Handler */}
       <UrlHashMessageHandler
-        isReady={!isLoadingConfig && isClient && !!currentChat}
+        isReady={
+          !isLoadingConfig && isClient && !!currentChat && hasValidatedModel
+        }
         onMessageReady={(message) => {
           handleQuery(message)
         }}
