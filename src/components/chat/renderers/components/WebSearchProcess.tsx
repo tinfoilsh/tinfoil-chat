@@ -1,11 +1,10 @@
 import type { WebSearchState } from '@/components/chat/types'
-import { LoadingDots } from '@/components/loading-dots'
 import { memo, useState } from 'react'
+
+const BOUNCE_DELAYS = ['0ms', '150ms', '300ms', '450ms', '600ms']
 
 interface WebSearchProcessProps {
   webSearch: WebSearchState
-  isDarkMode: boolean
-  messageId?: string
 }
 
 function getFaviconUrl(url: string): string {
@@ -28,14 +27,36 @@ function getDomainName(url: string): string {
   }
 }
 
+function BouncingPlaceholder({
+  index,
+  style,
+}: {
+  index: number
+  style?: React.CSSProperties
+}) {
+  return (
+    <div
+      className="h-4 w-4 shrink-0 animate-spring-horizontal rounded-full bg-content-primary/30"
+      style={{
+        ...style,
+        animationDelay: BOUNCE_DELAYS[index] || '0ms',
+      }}
+    />
+  )
+}
+
 function FadeInFavicon({
   url,
   className,
   style,
+  isSearching,
+  index,
 }: {
   url: string
   className: string
   style?: React.CSSProperties
+  isSearching?: boolean
+  index?: number
 }) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
@@ -43,21 +64,26 @@ function FadeInFavicon({
   if (error) return null
 
   return (
-    <img
-      src={getFaviconUrl(url)}
-      alt=""
-      className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-      style={style}
-      onLoad={() => setLoaded(true)}
-      onError={() => setError(true)}
-    />
+    <div className="relative" style={style}>
+      {isSearching && !loaded && (
+        <BouncingPlaceholder
+          index={index ?? 0}
+          style={{ position: 'absolute' }}
+        />
+      )}
+      <img
+        src={getFaviconUrl(url)}
+        alt=""
+        className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+      />
+    </div>
   )
 }
 
 export const WebSearchProcess = memo(function WebSearchProcess({
   webSearch,
-  isDarkMode,
-  messageId,
 }: WebSearchProcessProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isSearching = webSearch.status === 'searching'
@@ -82,13 +108,26 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         }`}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          {hasSources && !isSearching && (
+          {hasSources && (
             <div className="flex shrink-0 items-center">
               {webSearch.sources!.slice(0, 5).map((source, index) => (
                 <FadeInFavicon
                   key={`${source.url}-${index}`}
                   url={source.url}
                   className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
+                  style={{ marginLeft: index === 0 ? 0 : -6 }}
+                  isSearching={isSearching}
+                  index={index}
+                />
+              ))}
+            </div>
+          )}
+          {!hasSources && isSearching && (
+            <div className="flex shrink-0 items-center">
+              {[0, 1, 2, 3, 4].map((index) => (
+                <BouncingPlaceholder
+                  key={index}
+                  index={index}
                   style={{ marginLeft: index === 0 ? 0 : -6 }}
                 />
               ))}
@@ -102,7 +141,6 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                   &quot;{webSearch.query}&quot;
                 </span>
               )}
-              <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
             </div>
           ) : (
             <span className="text-sm leading-5">
