@@ -82,8 +82,7 @@ export const useDocumentUploader = (
       reader.readAsText(file)
     })
 
-    // Format the content
-    return `# ${file.name}\n\n${fileContents}`
+    return fileContents
   }
 
   // Main upload function

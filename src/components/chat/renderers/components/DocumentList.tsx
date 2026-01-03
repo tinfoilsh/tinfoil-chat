@@ -33,7 +33,6 @@ interface DocumentListProps {
   documents: Array<{ name: string }>
   documentContent?: string
   imageData?: Array<{ base64: string; mimeType: string }>
-  isDarkMode: boolean
 }
 
 function getFileIcon(filename: string, size: number = 20) {
@@ -103,13 +102,17 @@ function getPreviewForDocument(
 ): string | null {
   if (!documentContent) return null
 
-  const docHeader = `# ${docName}`
+  const docHeader = `Document title: ${docName}`
   const headerIndex = documentContent.indexOf(docHeader)
 
   if (headerIndex === -1) return null
 
-  const startIndex = headerIndex + docHeader.length
-  const nextDocIndex = documentContent.indexOf('\n# ', startIndex)
+  const contentsMarker = 'Document contents:\n'
+  const contentsStart = documentContent.indexOf(contentsMarker, headerIndex)
+  if (contentsStart === -1) return null
+
+  const startIndex = contentsStart + contentsMarker.length
+  const nextDocIndex = documentContent.indexOf('\nDocument title: ', startIndex)
   const docSection =
     nextDocIndex === -1
       ? documentContent.slice(startIndex)
@@ -129,7 +132,6 @@ export const DocumentList = memo(function DocumentList({
   documents,
   documentContent,
   imageData,
-  isDarkMode,
 }: DocumentListProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalContent, setModalContent] = useState<{
@@ -157,13 +159,20 @@ export const DocumentList = memo(function DocumentList({
   const openModal = (docName: string) => {
     if (!documentContent) return
 
-    const docHeader = `# ${docName}`
+    const docHeader = `Document title: ${docName}`
     const headerIndex = documentContent.indexOf(docHeader)
 
     if (headerIndex === -1) return
 
-    const startIndex = headerIndex + docHeader.length
-    const nextDocIndex = documentContent.indexOf('\n# ', startIndex)
+    const contentsMarker = 'Document contents:\n'
+    const contentsStart = documentContent.indexOf(contentsMarker, headerIndex)
+    if (contentsStart === -1) return
+
+    const startIndex = contentsStart + contentsMarker.length
+    const nextDocIndex = documentContent.indexOf(
+      '\nDocument title: ',
+      startIndex,
+    )
     const docSection =
       nextDocIndex === -1
         ? documentContent.slice(startIndex)
