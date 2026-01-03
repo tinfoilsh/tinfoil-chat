@@ -597,10 +597,10 @@ export function SettingsSidebar({
                   <div
                     className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
                         <CloudArrowUpIcon
-                          className={`h-5 w-5 ${'text-content-muted'}`}
+                          className={`mt-0.5 h-7 w-7 ${'text-content-muted'}`}
                         />
                         <div className="text-left">
                           <div
@@ -612,8 +612,8 @@ export function SettingsSidebar({
                             className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
                           >
                             {cloudSyncEnabled
-                              ? 'Chats are synced to cloud'
-                              : 'Chats are stored locally only'}
+                              ? 'End-to-end encrypted. Only you can access your chats and data.'
+                              : 'Chats and settings are stored locally only'}
                           </div>
                         </div>
                       </div>
@@ -647,11 +647,11 @@ export function SettingsSidebar({
                   {cloudSyncEnabled && (
                     <button
                       onClick={onEncryptionKeyClick}
-                      className={`flex w-full items-center justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                      className={`flex w-full items-start justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-3">
                         <KeyIcon
-                          className={`h-5 w-5 ${'text-content-muted'}`}
+                          className={`mt-0.5 h-5 w-5 ${'text-content-muted'}`}
                         />
                         <div className="text-left">
                           <div
@@ -666,7 +666,11 @@ export function SettingsSidebar({
                           </div>
                         </div>
                       </div>
-                      <div className={`text-xs ${'text-content-muted'}`}>→</div>
+                      <div
+                        className={`self-center text-sm ${'text-content-muted'}`}
+                      >
+                        →
+                      </div>
                     </button>
                   )}
                 </div>
