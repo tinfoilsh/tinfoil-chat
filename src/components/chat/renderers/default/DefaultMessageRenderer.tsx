@@ -180,7 +180,6 @@ const DefaultMessageComponent = ({
           documents={message.documents}
           documentContent={message.documentContent}
           imageData={message.imageData}
-          isDarkMode={isDarkMode}
         />
       )}
 
