@@ -390,10 +390,11 @@ const JavaScriptPreview = ({ code }: { code: string }) => {
   }, [instanceId])
 
   const iframeSrc = useMemo(() => {
-    const escapedCode = stripTypeAnnotations(code)
-      .replace(/\\/g, '\\\\')
-      .replace(/`/g, '\\`')
-      .replace(/<\/script>/gi, '<\\/script>')
+    const strippedCode = stripTypeAnnotations(code)
+    const jsonEscapedCode = JSON.stringify(strippedCode).replace(
+      /<\/script>/gi,
+      '<\\/script>',
+    )
 
     // CSP blocks network requests (fetch, XHR, WebSocket, etc.)
     return `<!DOCTYPE html>
@@ -410,7 +411,7 @@ console.log = (...args) => {
   output.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
 };
 try {
-  const result = eval(\`${escapedCode}\`);
+  const result = eval(${jsonEscapedCode});
   if (result !== undefined) {
     output.push('→ ' + (typeof result === 'object' ? JSON.stringify(result) : String(result)));
   }
