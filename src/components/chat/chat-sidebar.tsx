@@ -1330,7 +1330,7 @@ function ChatListItem({
                     )}
                     <span className="flex items-center gap-0.5 text-xs leading-none text-content-muted">
                       <CiFloppyDisk className="h-3 w-3" />
-                      Only saved on this browser
+                      Only saved locally
                     </span>
                   </>
                 ) : !chat.isBlankChat && (chat as any).pendingSave ? (
