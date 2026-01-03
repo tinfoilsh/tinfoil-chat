@@ -243,6 +243,7 @@ export const StreamingChunkedText = memo(function StreamingChunkedText({
         content={content}
         isDarkMode={isDarkMode}
         isUser={isUser}
+        isStreaming={isStreaming}
       />
     )
   }
