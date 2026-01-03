@@ -1,8 +1,17 @@
 import { type BaseModel } from '@/config/models'
+import { useChatPrint } from '@/hooks/use-chat-print'
 import 'katex/dist/katex.min.css'
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { LoadingDots } from '../loading-dots'
 import { useMaxMessages } from './hooks/use-max-messages'
+import { PrintableChat } from './PrintableChat'
 import { getRendererRegistry } from './renderers/client'
 import type { LabelType, Message } from './types'
 import { WelcomeScreen } from './WelcomeScreen'
@@ -260,6 +269,12 @@ export function ChatMessages({
   const prevMessageCountRef = React.useRef(messages.length)
   const prevShowScrollButtonRef = React.useRef(showScrollButton)
   const messageCountWhenSpacerSetRef = React.useRef<number | null>(null)
+  const printRef = useRef<HTMLDivElement>(null)
+
+  useChatPrint({
+    printRef,
+    enabled: messages.length > 0,
+  })
 
   // Show spacer when user sends a new message
   React.useEffect(() => {
@@ -437,6 +452,7 @@ export function ChatMessages({
           aria-hidden="true"
         />
       )}
+      <PrintableChat messages={messages} printRef={printRef} />
     </div>
   )
 }

@@ -361,3 +361,126 @@
 .no-scroll-anchoring {
   overflow-anchor: none;
 }
+
+/* Printable chat styles */
+.printable-chat {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #000;
+  background: #fff;
+  padding: 2rem;
+  max-width: 800px;
+}
+
+.printable-message {
+  page-break-inside: avoid;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.printable-message:last-child {
+  border-bottom: none;
+}
+
+.printable-role-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.printable-role {
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.printable-timestamp {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.printable-documents {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #f9f9f9;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.printable-documents-label {
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.printable-documents ul {
+  margin: 0.25rem 0 0 1rem;
+  padding: 0;
+}
+
+.printable-documents li {
+  margin: 0.125rem 0;
+}
+
+.printable-thinking {
+  background: #f5f5f5;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid #d1d5db;
+}
+
+.printable-thinking-label {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.printable-content {
+  line-height: 1.6;
+}
+
+.printable-chat pre {
+  background: #f8f8f8 !important;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  border: 1px solid #e5e5e5;
+}
+
+.printable-chat code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.printable-chat table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  table-layout: fixed;
+}
+
+.printable-chat th,
+.printable-chat td {
+  border: 1px solid #e5e5e5;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.printable-chat th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
