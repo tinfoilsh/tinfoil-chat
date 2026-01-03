@@ -14,6 +14,7 @@ interface UseModelManagementProps {
 
 interface UseModelManagementReturn {
   selectedModel: AIModel
+  hasValidatedModel: boolean
   expandedLabel: LabelType
   setExpandedLabel: (label: LabelType) => void
   setVerificationComplete: (complete: boolean) => void
@@ -225,6 +226,7 @@ export function useModelManagement({
 
   return {
     selectedModel,
+    hasValidatedModel: hasValidated,
     expandedLabel,
     setExpandedLabel,
     setVerificationComplete,

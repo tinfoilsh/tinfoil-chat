@@ -25,6 +25,7 @@ interface UseChatStateReturn {
   verificationSuccess: boolean
   isWaitingForResponse: boolean
   selectedModel: AIModel
+  hasValidatedModel: boolean
   expandedLabel: LabelType
   windowWidth: number
 
@@ -126,6 +127,7 @@ export function useChatState({
   // Model Management
   const {
     selectedModel,
+    hasValidatedModel,
     expandedLabel,
     setExpandedLabel,
     setVerificationComplete,
@@ -255,6 +257,7 @@ export function useChatState({
     verificationSuccess,
     isWaitingForResponse,
     selectedModel,
+    hasValidatedModel,
     expandedLabel,
     windowWidth,
 
