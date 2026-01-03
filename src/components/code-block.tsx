@@ -624,12 +624,13 @@ const CssPreview = ({ code }: { code: string }) => {
   }, [instanceId])
 
   const iframeSrc = useMemo(() => {
+    const escapedCode = code.replace(/<\//g, '<\\/')
     const sampleHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
-  <style>${code}</style>
+  <style>${escapedCode}</style>
   <script>
     function reportHeight() {
       const height = Math.max(document.body.scrollHeight, 150);
