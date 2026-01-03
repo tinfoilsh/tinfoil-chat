@@ -501,10 +501,14 @@ const MermaidPreview = ({
     return <div className="text-sm text-red-500">Mermaid error: {error}</div>
   }
 
+  const sanitizedSvg = DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+  })
+
   return (
     <div
       className="flex w-full items-center justify-center [&>svg]:max-w-full"
-      dangerouslySetInnerHTML={{ __html: svg }}
+      dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
     />
   )
 }
