@@ -10,7 +10,7 @@ import {
   StopIcon,
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PiSpinner } from 'react-icons/pi'
 import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
@@ -55,6 +55,7 @@ export function ChatInput({
   modelSelectorButton,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const documentsScrollRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
   // --- Speech-to-text state ---
@@ -67,6 +68,14 @@ export function ChatInput({
 
   // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // Scroll to the end when new documents are added
+  useEffect(() => {
+    if (documentsScrollRef.current && processedDocuments?.length) {
+      documentsScrollRef.current.scrollLeft =
+        documentsScrollRef.current.scrollWidth
+    }
+  }, [processedDocuments?.length])
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,7 +346,10 @@ export function ChatInput({
         />
 
         {processedDocuments && processedDocuments.length > 0 && (
-          <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+          <div
+            ref={documentsScrollRef}
+            className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4"
+          >
             {processedDocuments.map((doc) => {
               const getPreviewText = (content?: string) => {
                 if (!content) return null
