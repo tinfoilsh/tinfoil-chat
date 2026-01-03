@@ -140,11 +140,17 @@ module.exports = {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
+        'spring-horizontal': {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '25%': { transform: 'translateX(3px)' },
+          '75%': { transform: 'translateX(-3px)' },
+        },
       },
       animation: {
         scroll: 'scroll 12s linear infinite',
         shimmer: 'shimmer 3s ease-in-out infinite',
         fadeIn: 'fadeIn 1s ease-in-out forwards',
+        'spring-horizontal': 'spring-horizontal 0.5s ease-in-out infinite',
       },
     },
   },
