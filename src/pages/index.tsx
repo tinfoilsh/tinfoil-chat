@@ -1,9 +1,12 @@
 import { ChatInterface } from '@/components/chat'
+import { ProjectProvider } from '@/components/project'
 
 export default function Chat() {
   return (
     <div className="h-screen font-aeonik">
-      <ChatInterface />
+      <ProjectProvider>
+        <ChatInterface />
+      </ProjectProvider>
     </div>
   )
 }

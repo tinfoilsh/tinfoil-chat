@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { PiSpinner } from 'react-icons/pi'
 
+import { useProject, useProjectSystemPrompt } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
@@ -189,6 +190,13 @@ export function ChatInterface({
     systemPrompt,
     rules,
   )
+
+  // Use project system prompt hook to inject project context
+  const { isProjectMode } = useProject()
+  const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
+    baseSystemPrompt: effectiveSystemPrompt,
+    baseRules: processedRules,
+  })
 
   // Initialize renderers on mount
   useEffect(() => {
@@ -417,7 +425,7 @@ export function ChatInterface({
     editMessage,
     regenerateMessage,
   } = useChatState({
-    systemPrompt: effectiveSystemPrompt,
+    systemPrompt: finalSystemPrompt,
     rules: processedRules,
     storeHistory: isSignedIn || !isCloudSyncEnabled(), // Enable storage for signed-in users OR local-only mode
     isPremium: isPremium,

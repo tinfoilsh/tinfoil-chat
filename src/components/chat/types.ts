@@ -26,6 +26,8 @@ export type Chat = {
   isLocalOnly?: boolean
   // Pending save flag - true while initial save is in progress
   pendingSave?: boolean
+  // Project association - when set, chat belongs to a project
+  projectId?: string
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming' | 'retrying'

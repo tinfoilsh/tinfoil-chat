@@ -1,3 +1,5 @@
+export { useProjectSystemPrompt } from './hooks/use-project-system-prompt'
+export { ProjectChatWrapper } from './project-chat-wrapper'
 export {
   ProjectContext,
   buildProjectContext,
