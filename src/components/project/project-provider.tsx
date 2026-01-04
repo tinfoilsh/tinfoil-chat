@@ -2,6 +2,8 @@
 
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { projectEvents } from '@/services/project/project-events'
+import { updateProjectSummary as updateSummaryWithLLM } from '@/services/project/project-summary'
 import type {
   CreateProjectData,
   Project,
@@ -41,6 +43,64 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       projectStorage.setTokenGetter(getToken)
     }
   }, [isSignedIn, getToken])
+
+  useEffect(() => {
+    if (!activeProject || !getToken) return
+
+    const unsubscribe = projectEvents.on(
+      'summary-update-needed',
+      async (event) => {
+        if (event.projectId !== activeProject.id) return
+
+        logInfo('Processing summary update event', {
+          component: 'ProjectProvider',
+          action: 'summaryUpdateEvent',
+          metadata: { projectId: event.projectId },
+        })
+
+        try {
+          const newSummary = await updateSummaryWithLLM({
+            currentSummary: activeProject.summary || '',
+            userMessage: event.userMessage,
+            assistantResponse: event.assistantResponse,
+            getToken,
+          })
+
+          if (newSummary) {
+            await projectStorage.updateProject(activeProject.id, {
+              summary: newSummary,
+            })
+            setActiveProject((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    summary: newSummary,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : null,
+            )
+
+            logInfo('Project summary updated successfully', {
+              component: 'ProjectProvider',
+              action: 'summaryUpdateComplete',
+              metadata: {
+                projectId: activeProject.id,
+                summaryLength: newSummary.length,
+              },
+            })
+          }
+        } catch (error) {
+          logError('Failed to update project summary', error, {
+            component: 'ProjectProvider',
+            action: 'summaryUpdateEvent',
+            metadata: { projectId: event.projectId },
+          })
+        }
+      },
+    )
+
+    return unsubscribe
+  }, [activeProject, getToken])
 
   const enterProjectMode = useCallback(async (projectId: string) => {
     setLoading(true)

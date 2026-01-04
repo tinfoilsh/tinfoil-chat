@@ -13,11 +13,13 @@
  * - isStreamingRef is true only while processing an assistant response (used to defer cloud sync)
  * - thinkingStartTimeRef is set only while a model is in thinking/reasoning mode
  */
+import { useProject } from '@/components/project'
 import { type BaseModel } from '@/config/models'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
 import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
+import { projectEvents } from '@/services/project/project-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
@@ -87,6 +89,7 @@ export function useChatMessaging({
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
+  const { isProjectMode, activeProject } = useProject()
 
   // Track isPremium in a ref so the subscription checker always has current value
   const isPremiumRef = useRef(isPremium)
@@ -820,6 +823,21 @@ export function useChatMessaging({
               },
             })
           }
+
+          // Trigger project summary update if in project mode
+          if (isProjectMode && activeProject && userMessage) {
+            const lastUserContent = userMessage.content || ''
+            const lastAssistantContent = assistantMessage.content || ''
+
+            if (lastUserContent && lastAssistantContent) {
+              projectEvents.emit({
+                type: 'summary-update-needed',
+                projectId: activeProject.id,
+                userMessage: lastUserContent,
+                assistantResponse: lastAssistantContent,
+              })
+            }
+          }
         } else {
           logWarning('No assistant content to save after streaming', {
             component: 'useChatMessaging',
@@ -881,6 +899,8 @@ export function useChatMessaging({
       updateChatWithHistoryCheck,
       scrollToBottom,
       reasoningEffort,
+      isProjectMode,
+      activeProject,
     ],
   )
 
