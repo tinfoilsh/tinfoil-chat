@@ -75,17 +75,7 @@ export interface ProjectSyncStatus {
 }
 
 export interface ProjectDocumentListResponse {
-  documents: Array<{
-    id: string
-    projectId: string
-    filename: string
-    contentType: string
-    sizeBytes: number
-    syncVersion: number
-    createdAt: string
-    updatedAt: string
-    content?: string
-  }>
+  documents: ProjectDocument[]
 }
 
 export interface ProjectDocumentSyncStatus {
