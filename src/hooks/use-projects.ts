@@ -172,7 +172,12 @@ export function useProjects(
               updatedAt: item.updatedAt,
               syncVersion: item.syncVersion,
             }
-          } catch {
+          } catch (decryptError) {
+            logError('Failed to decrypt project', decryptError, {
+              component: 'useProjects',
+              action: 'loadMore',
+              metadata: { projectId: item.id },
+            })
             return {
               id: item.id,
               name: 'Encrypted',
