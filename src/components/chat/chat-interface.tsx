@@ -15,7 +15,11 @@ import {
 } from '@heroicons/react/24/outline'
 import { PiSpinner } from 'react-icons/pi'
 
-import { useProject, useProjectSystemPrompt } from '@/components/project'
+import {
+  ProjectSelectorModal,
+  useProject,
+  useProjectSystemPrompt,
+} from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
@@ -160,6 +164,9 @@ export function ChatInterface({
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
+  // State for project selector modal
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false)
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -192,7 +199,7 @@ export function ChatInterface({
   )
 
   // Use project system prompt hook to inject project context
-  const { isProjectMode } = useProject()
+  const { isProjectMode, activeProject } = useProject()
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
     baseRules: processedRules,
@@ -1187,6 +1194,9 @@ export function ChatInterface({
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
         }
         onChatsUpdated={reloadChats}
+        onProjectsClick={() => setIsProjectSelectorOpen(true)}
+        isProjectMode={isProjectMode}
+        activeProjectName={activeProject?.name}
       />
 
       {/* Right Verifier Sidebar */}
@@ -1449,6 +1459,13 @@ export function ChatInterface({
       <CloudSyncIntroModal
         isOpen={isCloudSyncIntroModalOpen}
         onClose={() => setIsCloudSyncIntroModalOpen(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Project Selector Modal */}
+      <ProjectSelectorModal
+        isOpen={isProjectSelectorOpen}
+        onClose={() => setIsProjectSelectorOpen(false)}
         isDarkMode={isDarkMode}
       />
 

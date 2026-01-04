@@ -7,6 +7,7 @@ import {
   Bars3Icon,
   CloudArrowUpIcon,
   CloudIcon,
+  FolderIcon,
   PencilSquareIcon,
   PlusIcon,
   TrashIcon,
@@ -95,6 +96,9 @@ type ChatSidebarProps = {
   verificationSuccess?: boolean
   onVerificationComplete?: (success: boolean) => void
   onVerificationUpdate?: (state: any) => void
+  onProjectsClick?: () => void
+  isProjectMode?: boolean
+  activeProjectName?: string
 }
 
 // Add this constant at the top of the file
@@ -207,6 +211,9 @@ export function ChatSidebar({
   isPremium = true,
   onEncryptionKeyClick,
   onChatsUpdated,
+  onProjectsClick,
+  isProjectMode,
+  activeProjectName,
 }: ChatSidebarProps) {
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
@@ -802,6 +809,31 @@ export function ChatSidebar({
               <PlusIcon className="h-5 w-5 shrink-0" />
               <span className="leading-5">New Chat</span>
             </button>
+
+            {/* Projects button - only show for signed in users with cloud sync */}
+            {isSignedIn && cloudSyncEnabled && onProjectsClick && (
+              <button
+                onClick={onProjectsClick}
+                className={cn(
+                  'mx-2 flex items-center gap-2 rounded-lg border p-3 text-sm',
+                  isDarkMode ? 'bg-surface-chat' : 'bg-white',
+                  isProjectMode
+                    ? isDarkMode
+                      ? 'border-emerald-500/60 text-emerald-400'
+                      : 'border-emerald-500/60 text-emerald-600'
+                    : isDarkMode
+                      ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                      : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white',
+                )}
+              >
+                <FolderIcon className="h-5 w-5 shrink-0" />
+                <span className="flex-1 truncate leading-5">
+                  {isProjectMode && activeProjectName
+                    ? activeProjectName
+                    : 'Projects'}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Chat History Header */}
