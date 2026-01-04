@@ -1,7 +1,7 @@
 'use client'
 
 import { cn } from '@/components/ui/utils'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useProject } from './project-context'
 
 interface ProjectSettingsContentProps {
@@ -32,6 +32,15 @@ export function ProjectSettingsContent({
   const [saveStatus, setSaveStatus] = useState<
     'idle' | 'saving' | 'saved' | 'error'
   >('idle')
+
+  useEffect(() => {
+    setName(activeProject?.name || '')
+    setDescription(activeProject?.description || '')
+    setSystemInstructions(activeProject?.systemInstructions || '')
+    setSaveStatus('idle')
+    // Only reset form when project ID changes, not when individual fields change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id])
 
   const contextUsage = getContextUsage(modelContextLimit)
   const usagePercent = Math.min(
