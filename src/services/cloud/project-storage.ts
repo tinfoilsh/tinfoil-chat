@@ -284,7 +284,11 @@ export class ProjectStorageService {
     const { documentId } = await this.generateDocumentId(projectId)
 
     await encryptionService.initialize()
-    const encrypted = await encryptionService.encrypt({ content })
+    const encrypted = await encryptionService.encrypt({
+      content,
+      filename,
+      contentType,
+    })
 
     const response = await fetch(
       `${API_BASE_URL}/api/projects/${projectId}/documents`,
@@ -293,8 +297,6 @@ export class ProjectStorageService {
         headers: await this.getHeaders(),
         body: JSON.stringify({
           documentId,
-          filename,
-          contentType,
           data: JSON.stringify(encrypted),
         }),
       },
@@ -342,13 +344,15 @@ export class ProjectStorageService {
       await encryptionService.initialize()
       const decrypted = (await encryptionService.decrypt(encrypted)) as {
         content: string
+        filename?: string
+        contentType?: string
       }
 
       return {
         id: documentId,
         projectId,
-        filename: '',
-        contentType: '',
+        filename: decrypted.filename || '',
+        contentType: decrypted.contentType || '',
         sizeBytes: new TextEncoder().encode(decrypted.content).length,
         syncVersion: 1,
         createdAt: '',

@@ -210,7 +210,7 @@ export const useDocumentUploader = (
       logError('Document processing failed', error, {
         component: 'DocumentUploader',
         action: 'uploadDocument',
-        metadata: { fileName: file.name },
+        metadata: { documentId, fileName: file.name },
       })
       onError(
         error instanceof Error

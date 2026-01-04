@@ -123,10 +123,12 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
               await encryptionService.initialize()
               const decrypted = (await encryptionService.decrypt(
                 JSON.parse(doc.content),
-              )) as { content: string }
+              )) as { content: string; filename: string; contentType: string }
               return {
                 ...doc,
                 content: decrypted.content,
+                filename: decrypted.filename,
+                contentType: decrypted.contentType,
               }
             } catch (decryptError) {
               logError('Failed to decrypt document', decryptError, {
@@ -350,10 +352,12 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
               await encryptionService.initialize()
               const decrypted = (await encryptionService.decrypt(
                 JSON.parse(doc.content),
-              )) as { content: string }
+              )) as { content: string; filename: string; contentType: string }
               return {
                 ...doc,
                 content: decrypted.content,
+                filename: decrypted.filename,
+                contentType: decrypted.contentType,
               }
             } catch {
               return { ...doc, content: undefined }
