@@ -810,8 +810,8 @@ export function ChatSidebar({
               <span className="leading-5">New Chat</span>
             </button>
 
-            {/* Projects button - only show for signed in users with cloud sync */}
-            {isSignedIn && cloudSyncEnabled && onProjectsClick && (
+            {/* Projects button - only show for premium users with cloud sync */}
+            {isSignedIn && cloudSyncEnabled && isPremium && onProjectsClick && (
               <button
                 onClick={onProjectsClick}
                 className={cn(

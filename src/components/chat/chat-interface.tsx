@@ -1462,12 +1462,14 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
-      {/* Project Selector Modal */}
-      <ProjectSelectorModal
-        isOpen={isProjectSelectorOpen}
-        onClose={() => setIsProjectSelectorOpen(false)}
-        isDarkMode={isDarkMode}
-      />
+      {/* Project Selector Modal - only for premium users */}
+      {isPremium && (
+        <ProjectSelectorModal
+          isOpen={isProjectSelectorOpen}
+          onClose={() => setIsProjectSelectorOpen(false)}
+          isDarkMode={isDarkMode}
+        />
+      )}
 
       {/* Cloud Sync Setup Modal - manually triggered from settings */}
       {showCloudSyncSetupModal && (
