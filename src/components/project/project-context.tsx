@@ -30,40 +30,7 @@ export interface ProjectContextValue {
   getContextUsage: (modelContextLimit: number) => ProjectContextUsage
 }
 
-const defaultContextValue: ProjectContextValue = {
-  activeProject: null,
-  isProjectMode: false,
-  projectDocuments: [],
-  loading: false,
-  error: null,
-
-  enterProjectMode: async () => {},
-  exitProjectMode: () => {},
-  createProject: async () => {
-    throw new Error('ProjectProvider not mounted')
-  },
-  updateProject: async () => {},
-  deleteProject: async () => {},
-  uploadDocument: async () => {
-    throw new Error('ProjectProvider not mounted')
-  },
-  removeDocument: async () => {},
-  refreshDocuments: async () => {},
-  updateProjectSummary: async () => {},
-
-  getProjectSystemPrompt: () => '',
-  getContextUsage: () => ({
-    systemInstructions: 0,
-    documents: [],
-    summary: 0,
-    totalUsed: 0,
-    modelLimit: 0,
-    availableForChat: 0,
-  }),
-}
-
-export const ProjectContext =
-  createContext<ProjectContextValue>(defaultContextValue)
+export const ProjectContext = createContext<ProjectContextValue | null>(null)
 
 export function useProject(): ProjectContextValue {
   const context = useContext(ProjectContext)
