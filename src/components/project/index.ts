@@ -5,6 +5,7 @@ export {
   useProject,
 } from './project-context'
 export type { ProjectContextValue } from './project-context'
+export { ProjectDocumentUpload } from './project-document-upload'
 export { ProjectHeader } from './project-header'
 export { ProjectProvider } from './project-provider'
 export { ProjectSelectorModal } from './project-selector-modal'

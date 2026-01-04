@@ -9,6 +9,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { useProject } from './project-context'
+import { ProjectDocumentUpload } from './project-document-upload'
 
 interface ProjectSidebarContentProps {
   isDarkMode: boolean
@@ -17,6 +18,7 @@ interface ProjectSidebarContentProps {
   onChatSelect: (chatId: string) => void
   onNewChat: () => void
   onExitProject: () => void
+  isPremium?: boolean
 }
 
 export function ProjectSidebarContent({
@@ -26,6 +28,7 @@ export function ProjectSidebarContent({
   onChatSelect,
   onNewChat,
   onExitProject,
+  isPremium,
 }: ProjectSidebarContentProps) {
   const { activeProject, projectDocuments, removeDocument, loading } =
     useProject()
@@ -121,7 +124,7 @@ export function ProjectSidebarContent({
           </span>
         </div>
 
-        <div className="space-y-1">
+        <div className="mb-3 space-y-1">
           {projectDocuments.length === 0 ? (
             <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
               No documents uploaded yet.
@@ -167,6 +170,8 @@ export function ProjectSidebarContent({
             ))
           )}
         </div>
+
+        <ProjectDocumentUpload isDarkMode={isDarkMode} isPremium={isPremium} />
       </div>
 
       {/* Project summary preview */}
