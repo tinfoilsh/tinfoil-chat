@@ -16,6 +16,7 @@ import {
 import { PiSpinner } from 'react-icons/pi'
 
 import {
+  ProjectSelectorModal,
   ProjectSidebar,
   useProject,
   useProjectSystemPrompt,
@@ -85,7 +86,6 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
-  onProjectsClick?: () => void
   onExitProject?: () => void
 }
 
@@ -112,7 +112,6 @@ export function ChatInterface({
   minHeight,
   inputMinHeight = '28px',
   isDarkMode: propIsDarkMode,
-  onProjectsClick,
   onExitProject,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
@@ -168,6 +167,10 @@ export function ChatInterface({
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
+  // State for project selector modal
+  const [isProjectSelectorModalOpen, setIsProjectSelectorModalOpen] =
+    useState(false)
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -200,7 +203,7 @@ export function ChatInterface({
   )
 
   // Use project system prompt hook to inject project context
-  const { isProjectMode, activeProject } = useProject()
+  const { isProjectMode, activeProject, enterProjectMode } = useProject()
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
     baseRules: processedRules,
@@ -1208,9 +1211,10 @@ export function ChatInterface({
             isSignedIn ? handleOpenEncryptionKeyModal : undefined
           }
           onChatsUpdated={reloadChats}
-          onProjectsClick={onProjectsClick}
           isProjectMode={isProjectMode}
           activeProjectName={activeProject?.name}
+          onEnterProject={enterProjectMode}
+          onCreateProjectClick={() => setIsProjectSelectorModalOpen(true)}
         />
       )}
 
@@ -1474,6 +1478,13 @@ export function ChatInterface({
       <CloudSyncIntroModal
         isOpen={isCloudSyncIntroModalOpen}
         onClose={() => setIsCloudSyncIntroModalOpen(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Project Selector Modal */}
+      <ProjectSelectorModal
+        isOpen={isProjectSelectorModalOpen}
+        onClose={() => setIsProjectSelectorModalOpen(false)}
         isDarkMode={isDarkMode}
       />
 

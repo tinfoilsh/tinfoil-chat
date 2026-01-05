@@ -1,15 +1,18 @@
 import { FaLock } from '@/components/icons/lazy-icons'
 import { API_BASE_URL, PAGINATION } from '@/config'
+import { useProjects } from '@/hooks/use-projects'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   Bars3Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   CloudArrowUpIcon,
   CloudIcon,
   FolderIcon,
+  FolderPlusIcon,
   PencilSquareIcon,
-  PlusIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -96,9 +99,10 @@ type ChatSidebarProps = {
   verificationSuccess?: boolean
   onVerificationComplete?: (success: boolean) => void
   onVerificationUpdate?: (state: any) => void
-  onProjectsClick?: () => void
   isProjectMode?: boolean
   activeProjectName?: string
+  onEnterProject?: (projectId: string) => Promise<void>
+  onCreateProjectClick?: () => void
 }
 
 // Add this constant at the top of the file
@@ -211,14 +215,16 @@ export function ChatSidebar({
   isPremium = true,
   onEncryptionKeyClick,
   onChatsUpdated,
-  onProjectsClick,
   isProjectMode,
   activeProjectName,
+  onEnterProject,
+  onCreateProjectClick,
 }: ChatSidebarProps) {
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [isProjectsExpanded, setIsProjectsExpanded] = useState(false)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -240,6 +246,14 @@ export function ChatSidebar({
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
+
+  const {
+    projects,
+    loading: projectsLoading,
+    hasMore: hasMoreProjects,
+    loadMore: loadMoreProjects,
+  } = useProjects({ autoLoad: isSignedIn && cloudSyncEnabled && isPremium })
+
   // Cloud pagination state via hook
   const {
     hasMore: hasMoreRemote,
@@ -780,59 +794,118 @@ export function ChatSidebar({
             <div className="relative z-10 border-b border-border-subtle" />
           )}
 
-          {/* New Chat button */}
+          {/* Projects dropdown - only show for premium users with cloud sync */}
           <div className="relative z-10 flex-none">
-            <button
-              onClick={() => {
-                // Create local-only chat if on local tab, cloud chat otherwise
-                const shouldBeLocal =
-                  isSignedIn && cloudSyncEnabled && activeTab === 'local'
-                createNewChat(shouldBeLocal)
-                // Only close sidebar on mobile
-                if (windowWidth < MOBILE_BREAKPOINT) {
-                  setIsOpen(false)
-                }
-              }}
-              className={`m-2 flex items-center gap-2 rounded-lg border p-3 text-sm ${
-                isDarkMode ? 'bg-surface-chat' : 'bg-white'
-              } ${
-                currentChat?.messages?.length === 0
-                  ? isDarkMode
-                    ? 'cursor-not-allowed border-border-strong text-content-muted opacity-50'
-                    : 'cursor-not-allowed border-border-subtle text-content-muted opacity-50'
-                  : isDarkMode
-                    ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                    : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white'
-              }`}
-              disabled={currentChat?.messages?.length === 0}
-            >
-              <PlusIcon className="h-5 w-5 shrink-0" />
-              <span className="leading-5">New Chat</span>
-            </button>
+            {isSignedIn && cloudSyncEnabled && isPremium && (
+              <div className="mx-2">
+                <button
+                  onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-lg border p-3 text-sm',
+                    isDarkMode ? 'bg-surface-chat' : 'bg-white',
+                    isProjectMode
+                      ? isDarkMode
+                        ? 'border-emerald-500/60 text-emerald-400'
+                        : 'border-emerald-500/60 text-emerald-600'
+                      : isDarkMode
+                        ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                        : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white',
+                  )}
+                >
+                  <FolderIcon className="h-5 w-5 shrink-0" />
+                  <span className="flex-1 truncate text-left leading-5">
+                    {isProjectMode && activeProjectName
+                      ? activeProjectName
+                      : 'Projects'}
+                  </span>
+                  {isProjectsExpanded ? (
+                    <ChevronDownIcon className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <ChevronRightIcon className="h-4 w-4 shrink-0" />
+                  )}
+                </button>
 
-            {/* Projects button - only show for premium users with cloud sync */}
-            {isSignedIn && cloudSyncEnabled && isPremium && onProjectsClick && (
-              <button
-                onClick={onProjectsClick}
-                className={cn(
-                  'mx-2 flex items-center gap-2 rounded-lg border p-3 text-sm',
-                  isDarkMode ? 'bg-surface-chat' : 'bg-white',
-                  isProjectMode
-                    ? isDarkMode
-                      ? 'border-emerald-500/60 text-emerald-400'
-                      : 'border-emerald-500/60 text-emerald-600'
-                    : isDarkMode
-                      ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                      : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white',
+                {/* Expanded projects list */}
+                {isProjectsExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="mt-1 space-y-1"
+                  >
+                    {/* Create new project button */}
+                    {onCreateProjectClick && (
+                      <button
+                        onClick={onCreateProjectClick}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                          isDarkMode
+                            ? 'text-emerald-400 hover:bg-surface-chat'
+                            : 'text-emerald-600 hover:bg-surface-sidebar',
+                        )}
+                      >
+                        <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                        <span className="truncate">Create New Project</span>
+                      </button>
+                    )}
+
+                    {/* Projects list */}
+                    {projectsLoading && projects.length === 0 ? (
+                      <div className="px-3 py-2 text-center">
+                        <div className="mx-auto h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                      </div>
+                    ) : projects.length === 0 ? (
+                      <div className="px-3 py-2 text-center text-xs text-content-muted">
+                        No projects yet
+                      </div>
+                    ) : (
+                      <>
+                        {projects.map((project) => (
+                          <button
+                            key={project.id}
+                            onClick={async () => {
+                              if (onEnterProject) {
+                                await onEnterProject(project.id)
+                                if (windowWidth < MOBILE_BREAKPOINT) {
+                                  setIsOpen(false)
+                                }
+                              }
+                            }}
+                            className={cn(
+                              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-chat'
+                                : 'text-content-secondary hover:bg-surface-sidebar',
+                            )}
+                          >
+                            <FolderIcon className="h-4 w-4 shrink-0 text-content-muted" />
+                            <span className="truncate">{project.name}</span>
+                          </button>
+                        ))}
+
+                        {/* Load more button */}
+                        {hasMoreProjects && (
+                          <button
+                            onClick={() => loadMoreProjects()}
+                            disabled={projectsLoading}
+                            className={cn(
+                              'w-full rounded-lg px-3 py-2 text-center text-xs transition-colors',
+                              isDarkMode
+                                ? 'text-content-muted hover:text-content-secondary'
+                                : 'text-content-muted hover:text-content-secondary',
+                              projectsLoading &&
+                                'cursor-not-allowed opacity-50',
+                            )}
+                          >
+                            {projectsLoading ? 'Loading...' : 'Load more'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </motion.div>
                 )}
-              >
-                <FolderIcon className="h-5 w-5 shrink-0" />
-                <span className="flex-1 truncate leading-5">
-                  {isProjectMode && activeProjectName
-                    ? activeProjectName
-                    : 'Projects'}
-                </span>
-              </button>
+              </div>
             )}
           </div>
 
