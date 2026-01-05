@@ -1,5 +1,6 @@
 'use client'
 
+import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
 import { TextureGrid } from '@/components/texture-grid'
@@ -98,7 +99,8 @@ export function ProjectSidebar({
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
   const [settingsExpanded, setSettingsExpanded] = useState(false)
-  const [documentsExpanded, setDocumentsExpanded] = useState(false)
+  const [documentsExpanded, setDocumentsExpanded] = useState(true)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
@@ -116,6 +118,10 @@ export function ProjectSidebar({
 
   const [isEditingProjectName, setIsEditingProjectName] = useState(false)
   const [editingProjectName, setEditingProjectName] = useState(project.name)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadingFileName, setUploadingFileName] = useState<string | null>(
+    null,
+  )
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -248,16 +254,63 @@ export function ProjectSidebar({
       const file = e.target.files?.[0]
       if (!file) return
 
+      setIsUploading(true)
+      setUploadingFileName(file.name)
+
       const reader = new FileReader()
       reader.onload = async () => {
-        const content = reader.result as string
-        await uploadDocument(file, content)
+        try {
+          const content = reader.result as string
+          await uploadDocument(file, content)
+        } finally {
+          setIsUploading(false)
+          setUploadingFileName(null)
+        }
       }
       reader.readAsText(file)
       e.target.value = ''
     },
     [uploadDocument],
   )
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDraggingOver(false)
+
+      const file = e.dataTransfer.files?.[0]
+      if (!file) return
+
+      setIsUploading(true)
+      setUploadingFileName(file.name)
+
+      const reader = new FileReader()
+      reader.onload = async () => {
+        try {
+          const content = reader.result as string
+          await uploadDocument(file, content)
+        } finally {
+          setIsUploading(false)
+          setUploadingFileName(null)
+        }
+      }
+      reader.readAsText(file)
+    },
+    [uploadDocument],
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingOver(false)
+  }, [])
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
@@ -283,7 +336,7 @@ export function ProjectSidebar({
 
   const blankChat: DecryptedChat = {
     id: '',
-    title: 'Untitled',
+    title: 'New Chat',
     messageCount: 0,
     updatedAt: new Date().toISOString(),
     isBlankChat: true,
@@ -412,10 +465,10 @@ export function ProjectSidebar({
             <button
               onClick={() => setSettingsExpanded(!settingsExpanded)}
               className={cn(
-                'flex w-full items-center justify-between px-4 py-3 text-sm transition-colors',
+                'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                 isDarkMode
                   ? 'text-content-secondary hover:bg-surface-chat'
-                  : 'text-content-secondary hover:bg-surface-sidebar',
+                  : 'text-content-secondary hover:bg-white',
               )}
             >
               <span className="flex items-center gap-2">
@@ -432,46 +485,70 @@ export function ProjectSidebar({
             </button>
 
             {settingsExpanded && (
-              <div className="max-h-64 overflow-y-auto border-t border-border-subtle px-4 py-3">
-                <div className="space-y-4">
+              <div className="border-t border-border-subtle px-4 py-4">
+                <div className="space-y-3">
                   {/* Description */}
-                  <div>
-                    <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
-                      Description
-                    </label>
-                    <textarea
-                      value={editedDescription}
-                      onChange={(e) => setEditedDescription(e.target.value)}
-                      placeholder="Brief description..."
-                      rows={2}
-                      className={cn(
-                        'w-full resize-none rounded-md border px-3 py-2 text-sm',
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                          : 'border-border-subtle bg-white text-content-primary placeholder:text-content-muted',
-                        'focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                      )}
-                    />
+                  <div
+                    className={cn(
+                      'rounded-lg border border-border-subtle p-3',
+                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <div>
+                        <div className="font-aeonik text-sm font-medium text-content-secondary">
+                          Description
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Brief summary of this project
+                        </div>
+                      </div>
+                      <textarea
+                        value={editedDescription}
+                        onChange={(e) => setEditedDescription(e.target.value)}
+                        placeholder="Brief description..."
+                        rows={2}
+                        className={cn(
+                          'w-full resize-none rounded-md border px-3 py-2 text-sm',
+                          isDarkMode
+                            ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                            : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                          'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                        )}
+                      />
+                    </div>
                   </div>
 
                   {/* System Instructions */}
-                  <div>
-                    <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
-                      System Instructions
-                    </label>
-                    <textarea
-                      value={editedInstructions}
-                      onChange={(e) => setEditedInstructions(e.target.value)}
-                      placeholder="Custom instructions..."
-                      rows={3}
-                      className={cn(
-                        'w-full resize-none rounded-md border px-3 py-2 font-mono text-xs',
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                          : 'border-border-subtle bg-white text-content-primary placeholder:text-content-muted',
-                        'focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                      )}
-                    />
+                  <div
+                    className={cn(
+                      'rounded-lg border border-border-subtle p-3',
+                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <div>
+                        <div className="font-aeonik text-sm font-medium text-content-secondary">
+                          System Instructions
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Custom instructions for all chats in this project
+                        </div>
+                      </div>
+                      <textarea
+                        value={editedInstructions}
+                        onChange={(e) => setEditedInstructions(e.target.value)}
+                        placeholder="Custom instructions..."
+                        rows={4}
+                        className={cn(
+                          'w-full resize-none rounded-md border px-3 py-2 font-mono text-xs',
+                          isDarkMode
+                            ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                            : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                          'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                        )}
+                      />
+                    </div>
                   </div>
 
                   {/* Save button */}
@@ -480,7 +557,7 @@ export function ProjectSidebar({
                       onClick={handleSaveSettings}
                       disabled={isSaving}
                       className={cn(
-                        'w-full rounded-md px-3 py-2 font-aeonik text-sm font-medium transition-colors',
+                        'w-full rounded-lg px-3 py-2 font-aeonik text-sm font-medium transition-colors',
                         'bg-emerald-600 text-white hover:bg-emerald-700',
                         isSaving && 'cursor-not-allowed opacity-50',
                       )}
@@ -490,17 +567,22 @@ export function ProjectSidebar({
                   )}
 
                   {/* Delete Project */}
-                  <div className="border-t border-border-subtle pt-3">
+                  <div
+                    className={cn(
+                      'rounded-lg border border-border-subtle p-3',
+                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                    )}
+                  >
                     {showDeleteConfirm ? (
                       <div
                         className={cn(
-                          'rounded-md border p-3',
+                          'rounded-lg border p-3',
                           isDarkMode
                             ? 'border-red-500/30 bg-red-950/20'
                             : 'border-red-200 bg-red-50',
                         )}
                       >
-                        <p className="mb-3 text-xs text-content-secondary">
+                        <p className="mb-3 font-aeonik-fono text-xs text-content-secondary">
                           Delete this project? This cannot be undone.
                         </p>
                         <div className="flex gap-2">
@@ -508,7 +590,7 @@ export function ProjectSidebar({
                             onClick={handleDeleteProject}
                             disabled={isDeleting}
                             className={cn(
-                              'flex-1 rounded-md px-3 py-1.5 text-xs font-medium',
+                              'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium',
                               'bg-red-600 text-white hover:bg-red-700',
                               isDeleting && 'cursor-not-allowed opacity-50',
                             )}
@@ -518,7 +600,7 @@ export function ProjectSidebar({
                           <button
                             onClick={() => setShowDeleteConfirm(false)}
                             className={cn(
-                              'flex-1 rounded-md px-3 py-1.5 text-xs font-medium',
+                              'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium',
                               isDarkMode
                                 ? 'bg-surface-chat text-content-secondary'
                                 : 'bg-surface-sidebar text-content-secondary',
@@ -532,7 +614,7 @@ export function ProjectSidebar({
                       <button
                         onClick={() => setShowDeleteConfirm(true)}
                         className={cn(
-                          'flex w-full items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors',
+                          'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
                           isDarkMode
                             ? 'border-red-500/30 text-red-400 hover:bg-red-950/20'
                             : 'border-red-200 text-red-600 hover:bg-red-50',
@@ -553,10 +635,10 @@ export function ProjectSidebar({
             <button
               onClick={() => setDocumentsExpanded(!documentsExpanded)}
               className={cn(
-                'flex w-full items-center justify-between px-4 py-3 text-sm transition-colors',
+                'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                 isDarkMode
                   ? 'text-content-secondary hover:bg-surface-chat'
-                  : 'text-content-secondary hover:bg-surface-sidebar',
+                  : 'text-content-secondary hover:bg-white',
               )}
             >
               <span className="flex items-center gap-2">
@@ -565,30 +647,11 @@ export function ProjectSidebar({
                   Documents ({projectDocuments.length})
                 </span>
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    fileInputRef.current?.click()
-                  }}
-                  disabled={contextLoading}
-                  className={cn(
-                    'rounded p-1 transition-colors',
-                    isDarkMode
-                      ? 'text-emerald-400 hover:bg-surface-chat'
-                      : 'text-emerald-600 hover:bg-surface-sidebar',
-                    contextLoading && 'cursor-not-allowed opacity-50',
-                  )}
-                  title="Upload document"
-                >
-                  <DocumentPlusIcon className="h-4 w-4" />
-                </button>
-                {documentsExpanded ? (
-                  <ChevronUpIcon className="h-4 w-4" />
-                ) : (
-                  <ChevronDownIcon className="h-4 w-4" />
-                )}
-              </div>
+              {documentsExpanded ? (
+                <ChevronUpIcon className="h-4 w-4" />
+              ) : (
+                <ChevronDownIcon className="h-4 w-4" />
+              )}
             </button>
             <input
               ref={fileInputRef}
@@ -600,13 +663,10 @@ export function ProjectSidebar({
             />
 
             {documentsExpanded && (
-              <div className="max-h-48 overflow-y-auto border-t border-border-subtle px-2 py-2">
-                {projectDocuments.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-xs text-content-muted">
-                    No documents yet
-                  </div>
-                ) : (
-                  <div className="space-y-1">
+              <div className="max-h-64 overflow-y-auto border-t border-border-subtle px-2 py-2">
+                {/* Document list */}
+                {projectDocuments.length > 0 && (
+                  <div className="mb-2 space-y-1">
                     {projectDocuments.map((doc) => (
                       <div
                         key={doc.id}
@@ -648,6 +708,69 @@ export function ProjectSidebar({
                     ))}
                   </div>
                 )}
+
+                {/* Drag and drop zone - always visible */}
+                <div
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={cn(
+                    'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
+                    projectDocuments.length > 0 && !isUploading
+                      ? 'py-3'
+                      : 'py-6',
+                    isUploading ? 'cursor-default' : 'cursor-pointer',
+                    isDraggingOver
+                      ? isDarkMode
+                        ? 'border-emerald-400 bg-emerald-950/30'
+                        : 'border-emerald-500 bg-emerald-50'
+                      : isDarkMode
+                        ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
+                        : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
+                  )}
+                >
+                  {isUploading ? (
+                    <>
+                      <PiSpinnerThin
+                        className={cn(
+                          'mb-2 h-6 w-6 animate-spin',
+                          isDarkMode ? 'text-emerald-400' : 'text-emerald-600',
+                        )}
+                      />
+                      <p className="font-aeonik-fono text-xs text-content-muted">
+                        Uploading...
+                      </p>
+                      {uploadingFileName && (
+                        <p className="mt-1 max-w-full truncate font-aeonik-fono text-[10px] text-content-muted">
+                          {uploadingFileName}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <DocumentPlusIcon
+                        className={cn(
+                          'h-5 w-5',
+                          projectDocuments.length === 0 && 'mb-2 h-6 w-6',
+                          isDarkMode
+                            ? 'text-content-muted'
+                            : 'text-content-muted',
+                        )}
+                      />
+                      {projectDocuments.length === 0 && (
+                        <>
+                          <p className="font-aeonik-fono text-xs text-content-muted">
+                            Drop files here or click to upload
+                          </p>
+                          <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
+                            PDF, TXT, MD, DOCX, XLSX, PPTX
+                          </p>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -724,19 +847,22 @@ export function ProjectSidebar({
                               <div className="truncate font-aeonik-fono text-sm font-medium">
                                 {chat.title}
                               </div>
-                              {chat.isBlankChat && (
+                              {/* New chat indicator - show for blank chats or chats with 0 messages */}
+                              {(chat.isBlankChat ||
+                                chat.messageCount === 0) && (
                                 <div
                                   className="h-1.5 w-1.5 rounded-full bg-blue-500"
                                   title="New chat"
                                 />
                               )}
                             </div>
-                            {!chat.isBlankChat && (
-                              <div className="mt-1 text-xs text-content-muted">
-                                {chat.messageCount} messages •{' '}
-                                {formatRelativeTime(new Date(chat.updatedAt))}
-                              </div>
-                            )}
+                            <div className="mt-1 flex min-h-[16px] w-full items-center">
+                              {!chat.isBlankChat && chat.messageCount > 0 && (
+                                <div className="text-xs leading-none text-content-muted">
+                                  {formatRelativeTime(new Date(chat.updatedAt))}
+                                </div>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
