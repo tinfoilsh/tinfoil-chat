@@ -17,7 +17,6 @@ import {
   DocumentIcon,
   DocumentPlusIcon,
   PencilSquareIcon,
-  PlusIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -32,6 +31,7 @@ interface DecryptedChat {
   title: string
   messageCount: number
   updatedAt: string
+  isBlankChat?: boolean
 }
 
 interface ProjectSidebarProps {
@@ -98,6 +98,7 @@ export function ProjectSidebar({
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
   const [settingsExpanded, setSettingsExpanded] = useState(false)
+  const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
@@ -113,6 +114,9 @@ export function ProjectSidebar({
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false)
+  const [editingProjectName, setEditingProjectName] = useState(project.name)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -125,6 +129,7 @@ export function ProjectSidebar({
     setEditedName(project.name)
     setEditedDescription(project.description)
     setEditedInstructions(project.systemInstructions)
+    setEditingProjectName(project.name)
   }, [project])
 
   useEffect(() => {
@@ -212,6 +217,21 @@ export function ProjectSidebar({
     updateProject,
   ])
 
+  const handleSaveProjectName = useCallback(async () => {
+    if (editingProjectName.trim() && editingProjectName !== project.name) {
+      setIsSaving(true)
+      try {
+        await updateProject(project.id, {
+          name: editingProjectName.trim(),
+        })
+        setEditedName(editingProjectName.trim())
+      } finally {
+        setIsSaving(false)
+      }
+    }
+    setIsEditingProjectName(false)
+  }, [editingProjectName, project.id, project.name, updateProject])
+
   const handleDeleteProject = useCallback(async () => {
     setIsDeleting(true)
     try {
@@ -260,6 +280,16 @@ export function ProjectSidebar({
     editedName !== project.name ||
     editedDescription !== project.description ||
     editedInstructions !== project.systemInstructions
+
+  const blankChat: DecryptedChat = {
+    id: '',
+    title: 'Untitled',
+    messageCount: 0,
+    updatedAt: new Date().toISOString(),
+    isBlankChat: true,
+  }
+
+  const chatsWithBlank = [blankChat, ...chats]
 
   return (
     <>
@@ -314,7 +344,7 @@ export function ProjectSidebar({
         <div className="relative flex h-full flex-col overflow-hidden">
           <TextureGrid />
 
-          {/* Project header with exit button */}
+          {/* Project header with exit button and editable title */}
           <div className="relative z-10 flex-none border-b border-border-subtle p-3">
             <button
               onClick={onExitProject}
@@ -329,10 +359,47 @@ export function ProjectSidebar({
               <span className="font-aeonik font-medium">Exit Project</span>
             </button>
             <div className="mt-2 px-2">
-              <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
-                {project.name}
-              </h2>
-              {project.description && (
+              {isEditingProjectName ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    handleSaveProjectName()
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    value={editingProjectName}
+                    onChange={(e) => setEditingProjectName(e.target.value)}
+                    onBlur={handleSaveProjectName}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setEditingProjectName(project.name)
+                        setIsEditingProjectName(false)
+                      }
+                    }}
+                    autoFocus
+                    className={cn(
+                      'w-full rounded-md border px-2 py-1 font-aeonik text-lg font-semibold',
+                      isDarkMode
+                        ? 'border-border-strong bg-surface-chat text-content-primary'
+                        : 'border-border-subtle bg-white text-content-primary',
+                      'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                    )}
+                  />
+                </form>
+              ) : (
+                <div
+                  className="group flex cursor-pointer items-center gap-2"
+                  onClick={() => setIsEditingProjectName(true)}
+                >
+                  <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
+                    {project.name}
+                  </h2>
+                  <PencilSquareIcon className="h-4 w-4 text-content-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                </div>
+              )}
+              {project.description && !isEditingProjectName && (
                 <p className="mt-0.5 truncate font-aeonik-fono text-xs text-content-muted">
                   {project.description}
                 </p>
@@ -340,242 +407,8 @@ export function ProjectSidebar({
             </div>
           </div>
 
-          {/* New Chat button */}
-          <div className="relative z-10 flex-none p-2">
-            <button
-              onClick={handleNewChat}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-lg border p-3 text-sm',
-                isDarkMode ? 'bg-surface-chat' : 'bg-white',
-                isDarkMode
-                  ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                  : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white',
-              )}
-            >
-              <PlusIcon className="h-5 w-5 shrink-0" />
-              <span className="leading-5">New Chat</span>
-            </button>
-          </div>
-
-          {/* Chat History Header */}
-          <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
-            <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
-              Project Chats
-            </h3>
-            <p className="font-aeonik-fono text-xs text-content-muted">
-              Chats in this project share context and documents.
-            </p>
-          </div>
-
-          {/* Scrollable Chat List */}
-          <div className="relative z-10 flex-1 overflow-y-auto">
-            <div className="space-y-2 p-2">
-              {loadingChats ? (
-                <div className="py-8 text-center">
-                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                  <p className="font-aeonik-fono text-sm text-content-muted">
-                    Loading chats...
-                  </p>
-                </div>
-              ) : chats.length === 0 ? (
-                <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                  <p className="text-sm text-content-muted">No chats yet</p>
-                  <p className="mt-1 text-xs text-content-muted">
-                    Start a new chat to begin
-                  </p>
-                </div>
-              ) : (
-                chats.map((chat) => (
-                  <div key={chat.id} className="relative">
-                    <div
-                      onClick={() => handleChatSelect(chat.id)}
-                      className={cn(
-                        'group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-3 text-left text-sm',
-                        currentChatId === chat.id
-                          ? isDarkMode
-                            ? 'border-brand-accent-light/60 bg-surface-chat text-white'
-                            : 'border-brand-accent-light/60 bg-white text-content-primary'
-                          : isDarkMode
-                            ? 'border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                            : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar',
-                      )}
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        {editingChatId === chat.id ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault()
-                              setEditingChatId(null)
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              autoFocus
-                            />
-                          </form>
-                        ) : (
-                          <>
-                            <div className="truncate font-aeonik-fono text-sm font-medium">
-                              {chat.title}
-                            </div>
-                            <div className="mt-1 text-xs text-content-muted">
-                              {chat.messageCount} messages •{' '}
-                              {formatRelativeTime(new Date(chat.updatedAt))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {editingChatId !== chat.id && (
-                        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
-                          <button
-                            className={cn(
-                              'rounded p-1 transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setEditingTitle(chat.title)
-                              setEditingChatId(chat.id)
-                            }}
-                            title="Rename"
-                          >
-                            <PencilSquareIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            className={cn(
-                              'rounded p-1 transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeletingChatId(chat.id)
-                            }}
-                            title="Delete"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {deletingChatId === chat.id && (
-                      <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
-                        <button
-                          className={cn(
-                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
-                            isDarkMode
-                              ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                              : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
-                          )}
-                          onClick={() => setDeletingChatId(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className={cn(
-                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
-                            isDarkMode
-                              ? 'bg-red-600 text-white hover:bg-red-700'
-                              : 'bg-red-500 text-white hover:bg-red-600',
-                          )}
-                          onClick={() => {
-                            setDeletingChatId(null)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Documents Section */}
-          <div className="relative z-10 flex-none border-t border-border-subtle">
-            <div className="px-3 py-2 sm:px-4 sm:py-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-aeonik-fono text-sm font-medium text-content-primary">
-                  Documents ({projectDocuments.length})
-                </h3>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={contextLoading}
-                  className={cn(
-                    'rounded p-1 transition-colors',
-                    isDarkMode
-                      ? 'text-emerald-400 hover:bg-surface-chat'
-                      : 'text-emerald-600 hover:bg-surface-sidebar',
-                    contextLoading && 'cursor-not-allowed opacity-50',
-                  )}
-                  title="Upload document"
-                >
-                  <DocumentPlusIcon className="h-4 w-4" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                  disabled={contextLoading}
-                  accept=".txt,.md,.json,.pdf,.docx,.xlsx,.pptx"
-                />
-              </div>
-            </div>
-            {projectDocuments.length > 0 && (
-              <div className="max-h-32 overflow-y-auto px-2 pb-2">
-                <div className="space-y-1">
-                  {projectDocuments.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md px-2 py-1.5',
-                        isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar',
-                      )}
-                    >
-                      <DocumentIcon
-                        className={cn(
-                          'h-4 w-4 flex-shrink-0',
-                          isDarkMode ? 'text-emerald-400' : 'text-emerald-600',
-                        )}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-aeonik-fono text-xs text-content-primary">
-                          {doc.filename}
-                        </div>
-                        <div className="font-aeonik-fono text-[10px] text-content-muted">
-                          {formatFileSize(doc.sizeBytes)}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => removeDocument(doc.id)}
-                        disabled={contextLoading}
-                        className={cn(
-                          'rounded p-0.5 transition-colors',
-                          isDarkMode
-                            ? 'text-content-muted hover:text-red-400'
-                            : 'text-content-muted hover:text-red-600',
-                          contextLoading && 'cursor-not-allowed opacity-50',
-                        )}
-                      >
-                        <TrashIcon className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Project Settings Dropdown */}
-          <div className="relative z-10 flex-none border-t border-border-subtle">
+          {/* Project Settings Dropdown - moved up */}
+          <div className="relative z-10 flex-none border-b border-border-subtle">
             <button
               onClick={() => setSettingsExpanded(!settingsExpanded)}
               className={cn(
@@ -601,25 +434,6 @@ export function ProjectSidebar({
             {settingsExpanded && (
               <div className="max-h-64 overflow-y-auto border-t border-border-subtle px-4 py-3">
                 <div className="space-y-4">
-                  {/* Project Name */}
-                  <div>
-                    <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
-                      Project Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editedName}
-                      onChange={(e) => setEditedName(e.target.value)}
-                      className={cn(
-                        'w-full rounded-md border px-3 py-2 text-sm',
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary'
-                          : 'border-border-subtle bg-white text-content-primary',
-                        'focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                      )}
-                    />
-                  </div>
-
                   {/* Description */}
                   <div>
                     <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
@@ -732,6 +546,268 @@ export function ProjectSidebar({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Documents Section - moved below settings */}
+          <div className="relative z-10 flex-none border-b border-border-subtle">
+            <button
+              onClick={() => setDocumentsExpanded(!documentsExpanded)}
+              className={cn(
+                'flex w-full items-center justify-between px-4 py-3 text-sm transition-colors',
+                isDarkMode
+                  ? 'text-content-secondary hover:bg-surface-chat'
+                  : 'text-content-secondary hover:bg-surface-sidebar',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <DocumentIcon className="h-4 w-4" />
+                <span className="font-aeonik font-medium">
+                  Documents ({projectDocuments.length})
+                </span>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    fileInputRef.current?.click()
+                  }}
+                  disabled={contextLoading}
+                  className={cn(
+                    'rounded p-1 transition-colors',
+                    isDarkMode
+                      ? 'text-emerald-400 hover:bg-surface-chat'
+                      : 'text-emerald-600 hover:bg-surface-sidebar',
+                    contextLoading && 'cursor-not-allowed opacity-50',
+                  )}
+                  title="Upload document"
+                >
+                  <DocumentPlusIcon className="h-4 w-4" />
+                </button>
+                {documentsExpanded ? (
+                  <ChevronUpIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronDownIcon className="h-4 w-4" />
+                )}
+              </div>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileUpload}
+              disabled={contextLoading}
+              accept=".txt,.md,.json,.pdf,.docx,.xlsx,.pptx"
+            />
+
+            {documentsExpanded && (
+              <div className="max-h-48 overflow-y-auto border-t border-border-subtle px-2 py-2">
+                {projectDocuments.length === 0 ? (
+                  <div className="px-2 py-4 text-center text-xs text-content-muted">
+                    No documents yet
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {projectDocuments.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md px-2 py-1.5',
+                          isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar',
+                        )}
+                      >
+                        <DocumentIcon
+                          className={cn(
+                            'h-4 w-4 flex-shrink-0',
+                            isDarkMode
+                              ? 'text-emerald-400'
+                              : 'text-emerald-600',
+                          )}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-aeonik-fono text-xs text-content-primary">
+                            {doc.filename}
+                          </div>
+                          <div className="font-aeonik-fono text-[10px] text-content-muted">
+                            {formatFileSize(doc.sizeBytes)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeDocument(doc.id)}
+                          disabled={contextLoading}
+                          className={cn(
+                            'rounded p-0.5 transition-colors',
+                            isDarkMode
+                              ? 'text-content-muted hover:text-red-400'
+                              : 'text-content-muted hover:text-red-600',
+                            contextLoading && 'cursor-not-allowed opacity-50',
+                          )}
+                        >
+                          <TrashIcon className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Chat History Header */}
+          <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
+            <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
+              Project Chats
+            </h3>
+            <p className="font-aeonik-fono text-xs text-content-muted">
+              Chats in this project share context and documents.
+            </p>
+          </div>
+
+          {/* Scrollable Chat List */}
+          <div className="relative z-10 flex-1 overflow-y-auto">
+            <div className="space-y-2 p-2">
+              {loadingChats ? (
+                <div className="py-8 text-center">
+                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                  <p className="font-aeonik-fono text-sm text-content-muted">
+                    Loading chats...
+                  </p>
+                </div>
+              ) : (
+                chatsWithBlank.map((chat) => (
+                  <div key={chat.id || 'blank-chat'} className="relative">
+                    <div
+                      onClick={() => {
+                        if (chat.isBlankChat) {
+                          handleNewChat()
+                        } else {
+                          handleChatSelect(chat.id)
+                        }
+                      }}
+                      className={cn(
+                        'group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-3 text-left text-sm',
+                        chat.isBlankChat
+                          ? !currentChatId
+                            ? isDarkMode
+                              ? 'border-brand-accent-light/60 bg-surface-chat text-white'
+                              : 'border-brand-accent-light/60 bg-white text-content-primary'
+                            : isDarkMode
+                              ? 'border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                          : currentChatId === chat.id
+                            ? isDarkMode
+                              ? 'border-brand-accent-light/60 bg-surface-chat text-white'
+                              : 'border-brand-accent-light/60 bg-white text-content-primary'
+                            : isDarkMode
+                              ? 'border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar',
+                      )}
+                    >
+                      <div className="min-w-0 flex-1 pr-2">
+                        {editingChatId === chat.id ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              setEditingChatId(null)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              autoFocus
+                            />
+                          </form>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <div className="truncate font-aeonik-fono text-sm font-medium">
+                                {chat.title}
+                              </div>
+                              {chat.isBlankChat && (
+                                <div
+                                  className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                  title="New chat"
+                                />
+                              )}
+                            </div>
+                            {!chat.isBlankChat && (
+                              <div className="mt-1 text-xs text-content-muted">
+                                {chat.messageCount} messages •{' '}
+                                {formatRelativeTime(new Date(chat.updatedAt))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {editingChatId !== chat.id && !chat.isBlankChat && (
+                        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
+                          <button
+                            className={cn(
+                              'rounded p-1 transition-colors',
+                              isDarkMode
+                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingTitle(chat.title)
+                              setEditingChatId(chat.id)
+                            }}
+                            title="Rename"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            className={cn(
+                              'rounded p-1 transition-colors',
+                              isDarkMode
+                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeletingChatId(chat.id)
+                            }}
+                            title="Delete"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {deletingChatId === chat.id && (
+                      <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
+                        <button
+                          className={cn(
+                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                              : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
+                          )}
+                          onClick={() => setDeletingChatId(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className={cn(
+                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
+                            isDarkMode
+                              ? 'bg-red-600 text-white hover:bg-red-700'
+                              : 'bg-red-500 text-white hover:bg-red-600',
+                          )}
+                          onClick={() => {
+                            setDeletingChatId(null)
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           {/* Terms and privacy policy */}
