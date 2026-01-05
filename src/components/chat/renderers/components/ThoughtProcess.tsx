@@ -273,7 +273,15 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           {isThinking ? (
             <div className="min-w-0 flex-1">
               {thoughtSummary ? (
-                <span className="block animate-shimmer truncate text-sm font-medium">
+                <span
+                  className="block animate-shimmer truncate bg-clip-text text-sm font-medium text-transparent"
+                  style={{
+                    backgroundImage: isDarkMode
+                      ? 'linear-gradient(90deg, #9ca3af 0%, #e5e7eb 25%, #f9fafb 50%, #e5e7eb 75%, #9ca3af 100%)'
+                      : 'linear-gradient(90deg, #4b5563 0%, #6b7280 25%, #9ca3af 50%, #6b7280 75%, #4b5563 100%)',
+                    backgroundSize: '200% 100%',
+                  }}
+                >
                   {thoughtSummary}
                 </span>
               ) : (
