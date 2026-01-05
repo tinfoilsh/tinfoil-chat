@@ -132,10 +132,12 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     if (summaryGenerationRef.current) return
 
+    // Only send new content since last summary
+    const newContent = thoughts.slice(lastThoughtsRef.current.length)
     lastThoughtsRef.current = thoughts
 
     summaryGenerationRef.current = generateSummary(
-      thoughts,
+      newContent,
       isMountedRef,
     ).finally(() => {
       summaryGenerationRef.current = null
