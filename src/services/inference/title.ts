@@ -14,7 +14,9 @@ export async function generateTitle(
     if (!assistantMessage?.content) return 'Untitled'
 
     const words = assistantMessage.content.split(/\s+/)
-    const truncatedContent = words.slice(0, 500).join(' ')
+    const truncatedContent = words
+      .slice(0, CONSTANTS.TITLE_GENERATION_WORD_THRESHOLD)
+      .join(' ')
 
     const client = await getTinfoilClient()
 

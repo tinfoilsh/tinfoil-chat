@@ -110,6 +110,8 @@ export function useChatMessaging({
   const currentChatIdRef = useRef<string>(currentChat?.id || '')
   const isStreamingRef = useRef(false)
   const thinkingStartTimeRef = useRef<number | null>(null)
+  const titleGeneratedRef = useRef(false)
+  const generatedTitleRef = useRef<string | null>(null)
 
   // Helper to calculate thinking duration and reset timer
   const getThinkingDuration = () => {
@@ -296,6 +298,12 @@ export function useChatMessaging({
       const isBlankChat = currentChat.isBlankChat === true
       const isFirstMessage = currentChat.messages.length === 0
       let updatedMessages: Message[] = []
+
+      // Reset title generation flags for new chats
+      if (isFirstMessage) {
+        titleGeneratedRef.current = false
+        generatedTitleRef.current = null
+      }
 
       // Handle blank chat conversion: create chat immediately with temp ID, get server ID async
       if (isBlankChat && storeHistory) {
@@ -570,6 +578,54 @@ export function useChatMessaging({
           reasoningEffort,
         })
 
+        // Callback for early title generation when word threshold is reached
+        const handleEarlyTitleGeneration = async (content: string) => {
+          if (titleGeneratedRef.current) return
+
+          const titleModel = models.find((m) => m.type === 'title')
+          if (!titleModel) return
+
+          titleGeneratedRef.current = true
+          const chatId = currentChatIdRef.current
+
+          try {
+            const titleMessages = [{ role: 'assistant', content }]
+            const generatedTitle = await generateTitle(
+              titleMessages,
+              titleModel.modelName,
+            )
+
+            if (generatedTitle && generatedTitle !== 'Untitled') {
+              logInfo('[handleQuery] Early title generated successfully', {
+                component: 'useChatMessaging',
+                action: 'handleQuery.earlyTitleGenComplete',
+                metadata: { chatId, title: generatedTitle },
+              })
+
+              // Store in ref so final save can use it
+              generatedTitleRef.current = generatedTitle
+
+              setCurrentChat((prev) =>
+                prev.id === chatId ? { ...prev, title: generatedTitle } : prev,
+              )
+              setChats((prevChats) =>
+                prevChats.map((c) =>
+                  c.id === chatId ? { ...c, title: generatedTitle } : c,
+                ),
+              )
+            } else {
+              // Reset flag to allow fallback title generation at end of stream
+              titleGeneratedRef.current = false
+            }
+          } catch (error) {
+            logError('Early title generation error', error, {
+              component: 'useChatMessaging',
+              action: 'generateTitle.early',
+            })
+            titleGeneratedRef.current = false
+          }
+        }
+
         const assistantMessage = await processStreamingResponse(response, {
           updatedChat,
           updatedMessages,
@@ -586,6 +642,8 @@ export function useChatMessaging({
           setLoadingState,
           storeHistory,
           startingChatId,
+          onEarlyTitleGeneration: handleEarlyTitleGeneration,
+          titleGeneratedRef,
         })
 
         if (
@@ -634,7 +692,8 @@ export function useChatMessaging({
           if (
             isFirstMessage &&
             updatedChat.title === 'Untitled' &&
-            models.length > 0
+            models.length > 0 &&
+            !titleGeneratedRef.current
           ) {
             logInfo('[handleQuery] Generating title for new chat', {
               component: 'useChatMessaging',
@@ -697,9 +756,12 @@ export function useChatMessaging({
           }
 
           // Update the chat object with the correct ID and messages before saving
+          // Use early-generated title if available
+          const finalTitle = generatedTitleRef.current || updatedChat.title
           const chatToSave = {
             ...updatedChat,
             id: chatId,
+            title: finalTitle,
             messages: finalMessages,
             pendingSave: false, // Clear pendingSave flag in final save
           }
