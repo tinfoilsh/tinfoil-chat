@@ -10,10 +10,11 @@ export async function generateTitle(
   if (!titleModelName) return 'Untitled'
 
   try {
-    const conversationForTitle = messages
-      .slice(0, Math.min(4, messages.length))
-      .map((msg) => `${msg.role.toUpperCase()}: ${msg.content.slice(0, 500)}`)
-      .join('\n\n')
+    const assistantMessage = messages.find((msg) => msg.role === 'assistant')
+    if (!assistantMessage?.content) return 'Untitled'
+
+    const words = assistantMessage.content.split(/\s+/)
+    const truncatedContent = words.slice(0, 500).join(' ')
 
     const client = await getTinfoilClient()
 
@@ -23,11 +24,11 @@ export async function generateTitle(
         { role: 'system', content: CONSTANTS.TITLE_GENERATION_PROMPT },
         {
           role: 'user',
-          content: `Generate a title for this conversation:\n\n${conversationForTitle}`,
+          content: truncatedContent,
         },
       ],
       stream: false,
-      max_tokens: 30,
+      max_tokens: 50,
     })
 
     const title = completion.choices?.[0]?.message?.content?.trim() || ''

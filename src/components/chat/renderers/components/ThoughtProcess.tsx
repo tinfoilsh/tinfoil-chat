@@ -1,3 +1,4 @@
+import { CONSTANTS } from '@/components/chat/constants'
 import { LoadingDots } from '@/components/loading-dots'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
@@ -79,8 +80,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           messages: [
             {
               role: 'system',
-              content:
-                'Summarize the following thought process in a brief phrase that captures the main idea.',
+              content: CONSTANTS.THOUGHT_SUMMARY_GENERATION_PROMPT,
             },
             {
               role: 'user',
@@ -88,12 +88,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             },
           ],
           stream: false,
-          max_tokens: 150,
+          max_tokens: 50,
         })
 
         const summary = completion.choices?.[0]?.message?.content?.trim() || ''
-        if (isMountedRef.current) {
-          setThoughtSummary(summary)
+        const cleanSummary = summary.replace(/^["']|["']$/g, '').trim()
+        if (isMountedRef.current && cleanSummary) {
+          setThoughtSummary(cleanSummary)
         }
       } catch (error) {
         logError('Failed to generate thought summary', error, {
