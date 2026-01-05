@@ -133,13 +133,13 @@ module.exports = {
           '100%': { transform: 'translateX(-50%)' },
         },
         shimmer: {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.5' },
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
         },
       },
       animation: {
         scroll: 'scroll 12s linear infinite',
-        shimmer: 'shimmer 2s ease-in-out infinite',
+        shimmer: 'shimmer 3s ease-in-out infinite',
       },
     },
   },
