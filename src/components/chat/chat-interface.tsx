@@ -15,11 +15,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { PiSpinner } from 'react-icons/pi'
 
-import {
-  ProjectSelectorModal,
-  useProject,
-  useProjectSystemPrompt,
-} from '@/components/project'
+import { useProject, useProjectSystemPrompt } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
@@ -85,6 +81,7 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
+  onProjectsClick?: () => void
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -110,6 +107,7 @@ export function ChatInterface({
   minHeight,
   inputMinHeight = '28px',
   isDarkMode: propIsDarkMode,
+  onProjectsClick,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn } = useAuth()
@@ -163,9 +161,6 @@ export function ChatInterface({
 
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
-
-  // State for project selector modal
-  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false)
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -1194,7 +1189,7 @@ export function ChatInterface({
           isSignedIn ? handleOpenEncryptionKeyModal : undefined
         }
         onChatsUpdated={reloadChats}
-        onProjectsClick={() => setIsProjectSelectorOpen(true)}
+        onProjectsClick={onProjectsClick}
         isProjectMode={isProjectMode}
         activeProjectName={activeProject?.name}
       />
@@ -1461,15 +1456,6 @@ export function ChatInterface({
         onClose={() => setIsCloudSyncIntroModalOpen(false)}
         isDarkMode={isDarkMode}
       />
-
-      {/* Project Selector Modal - only for premium users */}
-      {isPremium && (
-        <ProjectSelectorModal
-          isOpen={isProjectSelectorOpen}
-          onClose={() => setIsProjectSelectorOpen(false)}
-          isDarkMode={isDarkMode}
-        />
-      )}
 
       {/* Cloud Sync Setup Modal - manually triggered from settings */}
       {showCloudSyncSetupModal && (
