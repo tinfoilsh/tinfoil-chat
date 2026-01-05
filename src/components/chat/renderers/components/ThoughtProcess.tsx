@@ -7,7 +7,6 @@ import {
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
-import { TfTin } from '@tinfoilsh/tinfoil-icons'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useMathPlugins } from './use-math-plugins'
@@ -269,7 +268,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <TfTin className="h-5 w-5 shrink-0" aria-hidden="true" />
           {isThinking ? (
             <div className="min-w-0 flex-1">
               {thoughtSummary ? (
