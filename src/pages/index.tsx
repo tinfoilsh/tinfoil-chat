@@ -2,7 +2,6 @@
 
 import { ChatInterface } from '@/components/chat'
 import {
-  ProjectDetailView,
   ProjectProvider,
   ProjectSelectorView,
   useProject,
@@ -10,18 +9,16 @@ import {
 import type { Project } from '@/types/project'
 import { useCallback, useEffect, useState } from 'react'
 
-type ProjectView = 'chat' | 'list' | 'detail'
+type ProjectView = 'chat' | 'list'
 
 function ProjectViewRouter({ isDarkMode }: { isDarkMode: boolean }) {
-  const { enterProjectMode } = useProject()
+  const { enterProjectMode, exitProjectMode, isProjectMode } = useProject()
   const [view, setView] = useState<ProjectView>('chat')
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
 
   const handleSelectProject = useCallback(
     async (project: Project) => {
-      setSelectedProject(project)
       await enterProjectMode(project.id)
-      setView('detail')
+      setView('chat')
     },
     [enterProjectMode],
   )
@@ -30,31 +27,14 @@ function ProjectViewRouter({ isDarkMode }: { isDarkMode: boolean }) {
     setView('chat')
   }, [])
 
-  const handleBackFromDetail = useCallback(() => {
-    setSelectedProject(null)
+  const handleExitProject = useCallback(() => {
+    exitProjectMode()
     setView('list')
-  }, [])
-
-  const handleStartChat = useCallback(() => {
-    setView('chat')
-  }, [])
+  }, [exitProjectMode])
 
   const handleProjectsClick = useCallback(() => {
     setView('list')
   }, [])
-
-  if (view === 'detail' && selectedProject) {
-    return (
-      <div className="h-full bg-surface-chat-background">
-        <ProjectDetailView
-          project={selectedProject}
-          isDarkMode={isDarkMode}
-          onBack={handleBackFromDetail}
-          onStartChat={handleStartChat}
-        />
-      </div>
-    )
-  }
 
   if (view === 'list') {
     return (
@@ -70,7 +50,12 @@ function ProjectViewRouter({ isDarkMode }: { isDarkMode: boolean }) {
     )
   }
 
-  return <ChatInterface onProjectsClick={handleProjectsClick} />
+  return (
+    <ChatInterface
+      onProjectsClick={handleProjectsClick}
+      onExitProject={handleExitProject}
+    />
+  )
 }
 
 export default function Chat() {

@@ -15,7 +15,11 @@ import {
 } from '@heroicons/react/24/outline'
 import { PiSpinner } from 'react-icons/pi'
 
-import { useProject, useProjectSystemPrompt } from '@/components/project'
+import {
+  ProjectSidebar,
+  useProject,
+  useProjectSystemPrompt,
+} from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
@@ -82,6 +86,7 @@ type ChatInterfaceProps = {
   inputMinHeight?: string
   isDarkMode?: boolean
   onProjectsClick?: () => void
+  onExitProject?: () => void
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -108,6 +113,7 @@ export function ChatInterface({
   inputMinHeight = '28px',
   isDarkMode: propIsDarkMode,
   onProjectsClick,
+  onExitProject,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn } = useAuth()
@@ -1166,33 +1172,47 @@ export function ChatInterface({
         </div>
       )}
 
-      {/* Left Sidebar Component - For all users, but with limited functionality for basic */}
-      <ChatSidebar
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        chats={chats}
-        currentChat={currentChat}
-        isDarkMode={isDarkMode}
-        createNewChat={createNewChat}
-        handleChatSelect={handleChatSelect}
-        updateChatTitle={updateChatTitle}
-        deleteChat={deleteChat}
-        isClient={isClient}
-        verificationComplete={verificationComplete}
-        verificationSuccess={verificationSuccess}
-        onVerificationComplete={(success) => {
-          setVerificationComplete(true)
-          setVerificationSuccess(success)
-        }}
-        isPremium={isPremium}
-        onEncryptionKeyClick={
-          isSignedIn ? handleOpenEncryptionKeyModal : undefined
-        }
-        onChatsUpdated={reloadChats}
-        onProjectsClick={onProjectsClick}
-        isProjectMode={isProjectMode}
-        activeProjectName={activeProject?.name}
-      />
+      {/* Left Sidebar Component - Show ProjectSidebar when in project mode */}
+      {isProjectMode && activeProject ? (
+        <ProjectSidebar
+          isOpen={isSidebarOpen}
+          setIsOpen={setIsSidebarOpen}
+          project={activeProject}
+          isDarkMode={isDarkMode}
+          onExitProject={onExitProject ?? (() => {})}
+          onNewChat={() => createNewChat(false, true)}
+          onSelectChat={handleChatSelect}
+          currentChatId={currentChat?.id}
+          isClient={isClient}
+        />
+      ) : (
+        <ChatSidebar
+          isOpen={isSidebarOpen}
+          setIsOpen={setIsSidebarOpen}
+          chats={chats}
+          currentChat={currentChat}
+          isDarkMode={isDarkMode}
+          createNewChat={createNewChat}
+          handleChatSelect={handleChatSelect}
+          updateChatTitle={updateChatTitle}
+          deleteChat={deleteChat}
+          isClient={isClient}
+          verificationComplete={verificationComplete}
+          verificationSuccess={verificationSuccess}
+          onVerificationComplete={(success) => {
+            setVerificationComplete(true)
+            setVerificationSuccess(success)
+          }}
+          isPremium={isPremium}
+          onEncryptionKeyClick={
+            isSignedIn ? handleOpenEncryptionKeyModal : undefined
+          }
+          onChatsUpdated={reloadChats}
+          onProjectsClick={onProjectsClick}
+          isProjectMode={isProjectMode}
+          activeProjectName={activeProject?.name}
+        />
+      )}
 
       {/* Right Verifier Sidebar */}
       <VerifierSidebarLazy

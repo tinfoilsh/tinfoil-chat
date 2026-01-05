@@ -7,11 +7,11 @@ export {
   useProject,
 } from './project-context'
 export type { ProjectContextValue } from './project-context'
-export { ProjectDetailView } from './project-detail-view'
 export { ProjectDocumentUpload } from './project-document-upload'
 export { ProjectHeader } from './project-header'
 export { ProjectProvider } from './project-provider'
 export { ProjectSelectorModal } from './project-selector-modal'
 export { ProjectSelectorView } from './project-selector-view'
 export { ProjectSettingsContent } from './project-settings-content'
+export { ProjectSidebar } from './project-sidebar'
 export { ProjectSidebarContent } from './project-sidebar-content'
