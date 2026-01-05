@@ -205,7 +205,7 @@ export async function processStreamingResponse(
               ctx.currentChatIdRef.current,
               newMessages,
               false,
-              false, // Save to IndexedDB when stream completes
+              true, // Skip IndexedDB save - final save happens after title generation
             )
           }
         } else if (isInThinkingMode && thoughtsBuffer.trim()) {
@@ -239,7 +239,7 @@ export async function processStreamingResponse(
               chatId,
               newMessages,
               false,
-              false, // Save to IndexedDB when stream completes
+              true, // Skip IndexedDB save - final save happens after title generation
             )
           }
         }
