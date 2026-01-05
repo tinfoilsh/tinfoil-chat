@@ -1,6 +1,7 @@
 import type {
   CreateProjectData,
   Project,
+  ProjectChatListResponse,
   ProjectData,
   ProjectDocument,
   ProjectDocumentListResponse,
@@ -418,6 +419,27 @@ export class ProjectStorageService {
       throw new Error(
         `Failed to get document sync status: ${response.statusText}`,
       )
+    }
+
+    return response.json()
+  }
+
+  async listProjectChats(
+    projectId: string,
+    options?: { includeContent?: boolean },
+  ): Promise<ProjectChatListResponse> {
+    const params = new URLSearchParams()
+    if (options?.includeContent) {
+      params.append('includeContent', 'true')
+    }
+
+    const url = `${API_BASE_URL}/api/projects/${projectId}/chats${params.toString() ? `?${params.toString()}` : ''}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to list project chats: ${response.statusText}`)
     }
 
     return response.json()

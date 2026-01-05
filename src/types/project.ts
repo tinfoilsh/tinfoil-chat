@@ -29,10 +29,16 @@ export interface ProjectDocument {
 export interface ProjectChat {
   id: string
   projectId: string
-  title: string
   messageCount: number
+  syncVersion: number
+  size: number
   createdAt: string
   updatedAt: string
+  content?: string
+}
+
+export interface ProjectChatListResponse {
+  chats: ProjectChat[]
 }
 
 export interface ProjectData {
@@ -74,8 +80,18 @@ export interface ProjectSyncStatus {
   lastUpdated: string | null
 }
 
+export interface ProjectDocumentListItem {
+  id: string
+  projectId: string
+  sizeBytes: number
+  syncVersion: number
+  createdAt: string
+  updatedAt: string
+  content?: string
+}
+
 export interface ProjectDocumentListResponse {
-  documents: ProjectDocument[]
+  documents: ProjectDocumentListItem[]
 }
 
 export interface ProjectDocumentSyncStatus {

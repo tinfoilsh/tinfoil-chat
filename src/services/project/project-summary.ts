@@ -93,13 +93,16 @@ export async function updateProjectSummary({
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let summary = ''
+    let sseBuffer = ''
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
 
       const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n')
+      sseBuffer += chunk
+      const lines = sseBuffer.split(/\r?\n/)
+      sseBuffer = lines.pop() || ''
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {

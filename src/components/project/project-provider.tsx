@@ -136,10 +136,15 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
                 action: 'enterProjectMode',
                 metadata: { documentId: doc.id },
               })
-              return { ...doc, content: undefined }
+              return {
+                ...doc,
+                content: undefined,
+                filename: '',
+                contentType: '',
+              }
             }
           }
-          return doc
+          return { ...doc, filename: '', contentType: '' }
         }),
       )
 
@@ -359,11 +364,21 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
                 filename: decrypted.filename,
                 contentType: decrypted.contentType,
               }
-            } catch {
-              return { ...doc, content: undefined }
+            } catch (decryptError) {
+              logError('Failed to decrypt document', decryptError, {
+                component: 'ProjectProvider',
+                action: 'refreshDocuments',
+                metadata: { documentId: doc.id },
+              })
+              return {
+                ...doc,
+                content: undefined,
+                filename: '',
+                contentType: '',
+              }
             }
           }
-          return doc
+          return { ...doc, filename: '', contentType: '' }
         }),
       )
 
