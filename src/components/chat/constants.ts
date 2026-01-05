@@ -25,6 +25,6 @@ export const CONSTANTS = {
   LONG_PASTE_THRESHOLD: 3000,
   // Title generation settings
   TITLE_GENERATION_WORD_THRESHOLD: 100, // Words needed to trigger early title generation during streaming
-  TITLE_GENERATION_PROMPT: `You are a chat title generator. Generate a concise, descriptive title (max 5 words) for the following message. Output ONLY the title in plain text. NEVER output markdown.`,
-  THOUGHT_SUMMARY_GENERATION_PROMPT: `You are a text summarizer. Generate a concise, descriptive title (max 10 words) for the following text blob. Output ONLY the title in plain text. NEVER output markdown.`,
+  TITLE_GENERATION_PROMPT: `You are a title generator. Generate a concise, descriptive title or headline (max 5 words) for the following text blob. Output ONLY the title in plain text. NEVER output markdown.`,
+  THOUGHT_SUMMARY_GENERATION_PROMPT: `You are a text summarizer. Generate a concise, descriptive title or headline (max 10 words) for the following text blob. Output ONLY the title in plain text. NEVER output markdown.`,
 } as const
