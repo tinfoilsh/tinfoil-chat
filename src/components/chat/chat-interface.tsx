@@ -16,7 +16,6 @@ import {
 import { PiSpinner } from 'react-icons/pi'
 
 import {
-  ProjectSelectorModal,
   ProjectSidebar,
   useProject,
   useProjectSystemPrompt,
@@ -107,6 +106,50 @@ const parseContextWindowTokens = (contextWindow?: string): number => {
   return tokens
 }
 
+// Generate a silly privacy-themed project name
+function generateProjectName(): string {
+  const adjectives = [
+    'Private',
+    'Secret',
+    'Encrypted',
+    'Anonymous',
+    'Stealth',
+    'Incognito',
+    'Covert',
+    'Hidden',
+    'Shadowy',
+    'Mysterious',
+    'Whispered',
+    'Cloaked',
+    'Veiled',
+    'Masked',
+    'Undercover',
+  ]
+
+  const animals = [
+    'Orangutan',
+    'Penguin',
+    'Platypus',
+    'Armadillo',
+    'Chameleon',
+    'Pangolin',
+    'Narwhal',
+    'Capybara',
+    'Axolotl',
+    'Quokka',
+    'Wombat',
+    'Hedgehog',
+    'Otter',
+    'Sloth',
+    'Lemur',
+  ]
+
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)]
+  const animal = animals[Math.floor(Math.random() * animals.length)]
+
+  return `${adjective} ${animal}`
+}
+
 export function ChatInterface({
   verificationState,
   minHeight,
@@ -167,10 +210,6 @@ export function ChatInterface({
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
-  // State for project selector modal
-  const [isProjectSelectorModalOpen, setIsProjectSelectorModalOpen] =
-    useState(false)
-
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -203,7 +242,8 @@ export function ChatInterface({
   )
 
   // Use project system prompt hook to inject project context
-  const { isProjectMode, activeProject, enterProjectMode } = useProject()
+  const { isProjectMode, activeProject, enterProjectMode, createProject } =
+    useProject()
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
     baseRules: processedRules,
@@ -628,6 +668,13 @@ export function ChatInterface({
   const handleOpenCloudSyncSetup = () => {
     setShowCloudSyncSetupModal(true)
   }
+
+  // Handler for creating a new project with a random name
+  const handleCreateProject = useCallback(async () => {
+    const name = generateProjectName()
+    const project = await createProject({ name, description: '' })
+    await enterProjectMode(project.id)
+  }, [createProject, enterProjectMode])
 
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
@@ -1214,7 +1261,7 @@ export function ChatInterface({
           isProjectMode={isProjectMode}
           activeProjectName={activeProject?.name}
           onEnterProject={enterProjectMode}
-          onCreateProjectClick={() => setIsProjectSelectorModalOpen(true)}
+          onCreateProject={handleCreateProject}
         />
       )}
 
@@ -1478,13 +1525,6 @@ export function ChatInterface({
       <CloudSyncIntroModal
         isOpen={isCloudSyncIntroModalOpen}
         onClose={() => setIsCloudSyncIntroModalOpen(false)}
-        isDarkMode={isDarkMode}
-      />
-
-      {/* Project Selector Modal */}
-      <ProjectSelectorModal
-        isOpen={isProjectSelectorModalOpen}
-        onClose={() => setIsProjectSelectorModalOpen(false)}
         isDarkMode={isDarkMode}
       />
 

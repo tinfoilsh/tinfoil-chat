@@ -102,7 +102,7 @@ type ChatSidebarProps = {
   isProjectMode?: boolean
   activeProjectName?: string
   onEnterProject?: (projectId: string) => Promise<void>
-  onCreateProjectClick?: () => void
+  onCreateProject?: () => Promise<void>
 }
 
 // Add this constant at the top of the file
@@ -218,13 +218,14 @@ export function ChatSidebar({
   isProjectMode,
   activeProjectName,
   onEnterProject,
-  onCreateProjectClick,
+  onCreateProject,
 }: ChatSidebarProps) {
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(false)
+  const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -835,18 +836,38 @@ export function ChatSidebar({
                     className="mt-1 space-y-1"
                   >
                     {/* Create new project button */}
-                    {onCreateProjectClick && (
+                    {onCreateProject && (
                       <button
-                        onClick={onCreateProjectClick}
+                        onClick={async () => {
+                          setIsCreatingProject(true)
+                          try {
+                            await onCreateProject()
+                            if (windowWidth < MOBILE_BREAKPOINT) {
+                              setIsOpen(false)
+                            }
+                          } finally {
+                            setIsCreatingProject(false)
+                          }
+                        }}
+                        disabled={isCreatingProject}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
                           isDarkMode
                             ? 'text-emerald-400 hover:bg-surface-chat'
                             : 'text-emerald-600 hover:bg-surface-sidebar',
+                          isCreatingProject && 'cursor-not-allowed opacity-50',
                         )}
                       >
-                        <FolderPlusIcon className="h-4 w-4 shrink-0" />
-                        <span className="truncate">Create New Project</span>
+                        {isCreatingProject ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                        ) : (
+                          <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {isCreatingProject
+                            ? 'Creating...'
+                            : 'Create New Project'}
+                        </span>
                       </button>
                     )}
 
