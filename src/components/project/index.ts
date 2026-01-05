@@ -7,6 +7,7 @@ export {
   useProject,
 } from './project-context'
 export type { ProjectContextValue } from './project-context'
+export { ProjectDetailView } from './project-detail-view'
 export { ProjectDocumentUpload } from './project-document-upload'
 export { ProjectHeader } from './project-header'
 export { ProjectProvider } from './project-provider'

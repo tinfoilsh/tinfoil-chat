@@ -15,18 +15,16 @@ import { useProject } from './project-context'
 interface ProjectSelectorViewProps {
   isDarkMode: boolean
   onBack: () => void
+  onSelectProject: (project: Project) => void
 }
 
 export function ProjectSelectorView({
   isDarkMode,
   onBack,
+  onSelectProject,
 }: ProjectSelectorViewProps) {
   const { projects, loading: loadingList, hasMore, loadMore } = useProjects()
-  const {
-    createProject,
-    enterProjectMode,
-    loading: loadingAction,
-  } = useProject()
+  const { createProject, loading: loadingAction } = useProject()
   const [view, setView] = useState<'list' | 'create'>('list')
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDescription, setNewProjectDescription] = useState('')
@@ -44,24 +42,20 @@ export function ProjectSelectorView({
         name: newProjectName.trim(),
         description: newProjectDescription.trim(),
       })
-      await enterProjectMode(project.id)
       setNewProjectName('')
       setNewProjectDescription('')
       setView('list')
+      onSelectProject(project)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project')
     }
-  }, [newProjectName, newProjectDescription, createProject, enterProjectMode])
+  }, [newProjectName, newProjectDescription, createProject, onSelectProject])
 
   const handleSelectProject = useCallback(
-    async (project: Project) => {
-      try {
-        await enterProjectMode(project.id)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to open project')
-      }
+    (project: Project) => {
+      onSelectProject(project)
     },
-    [enterProjectMode],
+    [onSelectProject],
   )
 
   const handleBack = useCallback(() => {

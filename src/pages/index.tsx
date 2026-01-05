@@ -1,11 +1,79 @@
 'use client'
 
 import { ChatInterface } from '@/components/chat'
-import { ProjectProvider, ProjectSelectorView } from '@/components/project'
-import { useEffect, useState } from 'react'
+import {
+  ProjectDetailView,
+  ProjectProvider,
+  ProjectSelectorView,
+  useProject,
+} from '@/components/project'
+import type { Project } from '@/types/project'
+import { useCallback, useEffect, useState } from 'react'
+
+type ProjectView = 'chat' | 'list' | 'detail'
+
+function ProjectViewRouter({ isDarkMode }: { isDarkMode: boolean }) {
+  const { enterProjectMode } = useProject()
+  const [view, setView] = useState<ProjectView>('chat')
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+
+  const handleSelectProject = useCallback(
+    async (project: Project) => {
+      setSelectedProject(project)
+      await enterProjectMode(project.id)
+      setView('detail')
+    },
+    [enterProjectMode],
+  )
+
+  const handleBackFromList = useCallback(() => {
+    setView('chat')
+  }, [])
+
+  const handleBackFromDetail = useCallback(() => {
+    setSelectedProject(null)
+    setView('list')
+  }, [])
+
+  const handleStartChat = useCallback(() => {
+    setView('chat')
+  }, [])
+
+  const handleProjectsClick = useCallback(() => {
+    setView('list')
+  }, [])
+
+  if (view === 'detail' && selectedProject) {
+    return (
+      <div className="h-full bg-surface-chat-background">
+        <ProjectDetailView
+          project={selectedProject}
+          isDarkMode={isDarkMode}
+          onBack={handleBackFromDetail}
+          onStartChat={handleStartChat}
+        />
+      </div>
+    )
+  }
+
+  if (view === 'list') {
+    return (
+      <div className="flex h-full items-center justify-center bg-surface-chat-background">
+        <div className="w-full max-w-4xl px-8">
+          <ProjectSelectorView
+            isDarkMode={isDarkMode}
+            onBack={handleBackFromList}
+            onSelectProject={handleSelectProject}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return <ChatInterface onProjectsClick={handleProjectsClick} />
+}
 
 export default function Chat() {
-  const [showProjectSelector, setShowProjectSelector] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
 
   useEffect(() => {
@@ -41,18 +109,7 @@ export default function Chat() {
   return (
     <div className="h-screen font-aeonik">
       <ProjectProvider>
-        {showProjectSelector ? (
-          <div className="flex h-full items-center justify-center bg-surface-chat-background">
-            <div className="w-full max-w-4xl px-8">
-              <ProjectSelectorView
-                isDarkMode={isDarkMode}
-                onBack={() => setShowProjectSelector(false)}
-              />
-            </div>
-          </div>
-        ) : (
-          <ChatInterface onProjectsClick={() => setShowProjectSelector(true)} />
-        )}
+        <ProjectViewRouter isDarkMode={isDarkMode} />
       </ProjectProvider>
     </div>
   )
