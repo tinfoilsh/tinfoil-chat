@@ -117,14 +117,16 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     if (!thoughts.trim()) return
 
-    const MIN_CONTENT_LENGTH = 100
-    const MIN_NEW_CONTENT = 50
+    const MIN_CONTENT_WORDS = 20
+    const MIN_NEW_CONTENT_WORDS = 50
 
-    if (thoughts.length < MIN_CONTENT_LENGTH) return
+    const totalWords = thoughts.split(/\s+/).filter(Boolean).length
+    if (totalWords < MIN_CONTENT_WORDS) return
 
-    const newContentLength = thoughts.length - lastThoughtsRef.current.length
+    const newContent = thoughts.slice(lastThoughtsRef.current.length)
+    const newWordCount = newContent.split(/\s+/).filter(Boolean).length
     if (
-      newContentLength < MIN_NEW_CONTENT &&
+      newWordCount < MIN_NEW_CONTENT_WORDS &&
       lastThoughtsRef.current.length > 0
     ) {
       return
@@ -132,8 +134,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     if (summaryGenerationRef.current) return
 
-    // Only send new content since last summary
-    const newContent = thoughts.slice(lastThoughtsRef.current.length)
     lastThoughtsRef.current = thoughts
 
     summaryGenerationRef.current = generateSummary(
