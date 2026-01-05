@@ -24,5 +24,6 @@ export const CONSTANTS = {
   // Long text paste threshold (characters) - texts longer than this will be converted to .txt file
   LONG_PASTE_THRESHOLD: 3000,
   // System prompt for AI title generation
-  TITLE_GENERATION_PROMPT: `You are a conversation title generator. Your job is to generate a title for the following conversation between the USER and the ASSISTANT. Generate a concise, descriptive title (max 15 tokens) for this conversation. Output ONLY the title, nothing else.`,
+  TITLE_GENERATION_PROMPT: `You are a chat title generator. Generate a concise, descriptive title (max 5 words) for the following message. Output ONLY the title in plain text. NEVER output markdown.`,
+  THOUGHT_SUMMARY_GENERATION_PROMPT: `You are a text summarizer. Generate a concise, descriptive title (max 10 words) for the following text blob. Output ONLY the title in plain text. NEVER output markdown.`,
 } as const
