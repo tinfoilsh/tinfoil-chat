@@ -90,10 +90,19 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           max_tokens: 50,
         })
 
-        const summary = completion.choices?.[0]?.message?.content?.trim() || ''
-        const cleanSummary = summary.replace(/^["']|["']$/g, '').trim()
-        if (isMountedRef.current && cleanSummary) {
-          setThoughtSummary(cleanSummary)
+        const generatedSummary =
+          completion.choices?.[0]?.message?.content?.trim() || ''
+        const cleaned = generatedSummary
+          .toLowerCase()
+          .replace(/[".]/g, '')
+          .replace(
+            /\b(my|your|yours|mine|our|ours|their|theirs|his|her|hers)\b/g,
+            '',
+          )
+          .replace(/\s+/g, ' ')
+          .trim()
+        if (isMountedRef.current && cleaned) {
+          setThoughtSummary(cleaned)
         }
       } catch (error) {
         logError('Failed to generate thought summary', error, {
