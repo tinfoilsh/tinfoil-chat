@@ -1,5 +1,6 @@
 'use client'
 
+import { useDocumentUploader } from '@/components/chat/document-uploader'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
@@ -46,6 +47,7 @@ interface ProjectSidebarProps {
   onSelectChat: (chatId: string) => void
   currentChatId?: string
   isClient: boolean
+  isPremium?: boolean
 }
 
 function formatRelativeTime(date: Date): string {
@@ -82,6 +84,7 @@ export function ProjectSidebar({
   onSelectChat,
   currentChatId,
   isClient,
+  isPremium,
 }: ProjectSidebarProps) {
   const { getToken, isSignedIn } = useAuth()
   const {
@@ -93,6 +96,8 @@ export function ProjectSidebar({
     refreshDocuments,
     loading: contextLoading,
   } = useProject()
+  const { handleDocumentUpload: processDocument, isDocumentUploading } =
+    useDocumentUploader(isPremium)
 
   const [chats, setChats] = useState<DecryptedChat[]>([])
   const [loadingChats, setLoadingChats] = useState(true)
@@ -268,27 +273,38 @@ export function ProjectSidebar({
 
       await Promise.all(
         fileArray.map(async (file, i) => {
-          const reader = new FileReader()
           return new Promise<void>((resolve) => {
-            reader.onload = async () => {
-              try {
-                const content = reader.result as string
-                await uploadDocument(file, content)
-              } finally {
+            processDocument(
+              file,
+              async (content) => {
+                try {
+                  await uploadDocument(file, content)
+                } finally {
+                  setUploadingFiles((prev) =>
+                    prev.filter((f) => f.id !== uploadIds[i]),
+                  )
+                  resolve()
+                }
+              },
+              (error) => {
+                toast({
+                  title: 'Upload failed',
+                  description: error.message,
+                  variant: 'destructive',
+                })
                 setUploadingFiles((prev) =>
                   prev.filter((f) => f.id !== uploadIds[i]),
                 )
                 resolve()
-              }
-            }
-            reader.readAsText(file)
+              },
+            )
           })
         }),
       )
 
       e.target.value = ''
     },
-    [uploadDocument],
+    [uploadDocument, processDocument],
   )
 
   const handleDrop = useCallback(
@@ -314,25 +330,36 @@ export function ProjectSidebar({
 
       await Promise.all(
         fileArray.map(async (file, i) => {
-          const reader = new FileReader()
           return new Promise<void>((resolve) => {
-            reader.onload = async () => {
-              try {
-                const content = reader.result as string
-                await uploadDocument(file, content)
-              } finally {
+            processDocument(
+              file,
+              async (content) => {
+                try {
+                  await uploadDocument(file, content)
+                } finally {
+                  setUploadingFiles((prev) =>
+                    prev.filter((f) => f.id !== uploadIds[i]),
+                  )
+                  resolve()
+                }
+              },
+              (error) => {
+                toast({
+                  title: 'Upload failed',
+                  description: error.message,
+                  variant: 'destructive',
+                })
                 setUploadingFiles((prev) =>
                   prev.filter((f) => f.id !== uploadIds[i]),
                 )
                 resolve()
-              }
-            }
-            reader.readAsText(file)
+              },
+            )
           })
         }),
       )
     },
-    [uploadDocument],
+    [uploadDocument, processDocument],
   )
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -685,7 +712,7 @@ export function ProjectSidebar({
               className="hidden"
               onChange={handleFileUpload}
               disabled={contextLoading}
-              accept=".txt,.md,.json,.pdf,.docx,.xlsx,.pptx"
+              accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
             />
 
             {documentsExpanded && (

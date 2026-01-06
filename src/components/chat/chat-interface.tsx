@@ -1234,6 +1234,7 @@ export function ChatInterface({
           onSelectChat={handleChatSelect}
           currentChatId={currentChat?.id}
           isClient={isClient}
+          isPremium={isPremium}
         />
       ) : (
         <ChatSidebar
