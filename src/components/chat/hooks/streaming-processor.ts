@@ -12,7 +12,13 @@
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { logError } from '@/utils/error-handling'
 import { CONSTANTS } from '../constants'
-import type { Chat, Message, WebSearchSource, WebSearchState } from '../types'
+import type {
+  Annotation,
+  Chat,
+  Message,
+  WebSearchSource,
+  WebSearchState,
+} from '../types'
 
 export interface StreamingContext {
   updatedChat: Chat
@@ -95,6 +101,8 @@ export async function processStreamingResponse(
     let earlyTitleTriggered = false
     let webSearchState: WebSearchState | undefined = undefined
     let collectedSources: WebSearchSource[] = []
+    let collectedAnnotations: Annotation[] = []
+    let searchReasoning = ''
     let webSearchStarted = false
     let thinkingStarted = false
 
@@ -298,6 +306,17 @@ export async function processStreamingResponse(
             continue
           }
 
+          // Handle search_reasoning field
+          const deltaSearchReasoning =
+            json.choices?.[0]?.delta?.search_reasoning
+          if (deltaSearchReasoning) {
+            searchReasoning += deltaSearchReasoning
+            assistantMessage = {
+              ...assistantMessage,
+              searchReasoning,
+            }
+          }
+
           // Handle url_citation annotations
           const annotations = json.choices?.[0]?.delta?.annotations
           if (annotations && Array.isArray(annotations)) {
@@ -318,6 +337,15 @@ export async function processStreamingResponse(
                     text: content,
                     publishedDate: published_date,
                   })
+                  collectedAnnotations.push({
+                    type: 'url_citation',
+                    url_citation: {
+                      title: title || url,
+                      url,
+                      content,
+                      published_date,
+                    },
+                  })
                 }
               }
             }
@@ -330,6 +358,7 @@ export async function processStreamingResponse(
               assistantMessage = {
                 ...assistantMessage,
                 webSearch: webSearchState,
+                annotations: [...collectedAnnotations],
               }
             }
           }
