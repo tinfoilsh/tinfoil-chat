@@ -213,44 +213,50 @@ export function ChatListItem({
                 />
               )}
             </div>
-            <div className="mt-1 flex min-h-[16px] w-full items-center gap-2">
-              {chat.decryptionFailed ? (
-                <div className="text-xs text-red-500">
-                  {chat.dataCorrupted
-                    ? 'Failed to decrypt: corrupted data'
-                    : 'Failed to decrypt: wrong key'}
-                </div>
-              ) : messageCount > 0 && timestamp ? (
-                <div className="text-xs leading-none text-content-muted">
-                  {formatRelativeTime(timestamp)}
-                </div>
-              ) : null}
-              {showSyncStatus && (
-                <>
-                  {chat.isLocalOnly ? (
-                    <>
-                      {messageCount > 0 && (
-                        <span className="text-xs text-content-muted">·</span>
-                      )}
-                      <span className="flex items-center gap-0.5 text-xs leading-none text-content-muted">
-                        <CiFloppyDisk className="h-3 w-3" />
-                        Only saved locally
-                      </span>
-                    </>
-                  ) : !chat.isBlankChat && chat.pendingSave ? (
-                    <>
-                      {messageCount > 0 && (
-                        <span className="text-xs text-content-muted">·</span>
-                      )}
-                      <span className="flex items-center gap-0.5 text-xs leading-none text-orange-500">
-                        <CloudArrowUpIcon className="h-3 w-3" />
-                        Syncing with cloud
-                      </span>
-                    </>
-                  ) : null}
-                </>
-              )}
-            </div>
+            {(chat.decryptionFailed ||
+              (messageCount > 0 && timestamp) ||
+              (showSyncStatus &&
+                (chat.isLocalOnly ||
+                  (!chat.isBlankChat && chat.pendingSave)))) && (
+              <div className="mt-1 flex min-h-[16px] w-full items-center gap-2">
+                {chat.decryptionFailed ? (
+                  <div className="text-xs text-red-500">
+                    {chat.dataCorrupted
+                      ? 'Failed to decrypt: corrupted data'
+                      : 'Failed to decrypt: wrong key'}
+                  </div>
+                ) : messageCount > 0 && timestamp ? (
+                  <div className="text-xs leading-none text-content-muted">
+                    {formatRelativeTime(timestamp)}
+                  </div>
+                ) : null}
+                {showSyncStatus && (
+                  <>
+                    {chat.isLocalOnly ? (
+                      <>
+                        {messageCount > 0 && (
+                          <span className="text-xs text-content-muted">·</span>
+                        )}
+                        <span className="flex items-center gap-0.5 text-xs leading-none text-content-muted">
+                          <CiFloppyDisk className="h-3 w-3" />
+                          Only saved locally
+                        </span>
+                      </>
+                    ) : !chat.isBlankChat && chat.pendingSave ? (
+                      <>
+                        {messageCount > 0 && (
+                          <span className="text-xs text-content-muted">·</span>
+                        )}
+                        <span className="flex items-center gap-0.5 text-xs leading-none text-orange-500">
+                          <CloudArrowUpIcon className="h-3 w-3" />
+                          Syncing with cloud
+                        </span>
+                      </>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
