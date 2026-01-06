@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { IoChatbubblesOutline } from 'react-icons/io5'
-import { PiSignIn } from 'react-icons/pi'
+import { PiSignIn, PiSpinner } from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
@@ -849,8 +849,8 @@ export function ChatSidebar({
 
                   {/* Projects list */}
                   {projectsLoading && projects.length === 0 ? (
-                    <div className="px-3 py-2 text-center">
-                      <div className="mx-auto h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                    <div className="flex justify-center px-3 py-2">
+                      <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
                     </div>
                   ) : projects.length === 0 ? (
                     <div className="px-3 py-2 text-center text-xs text-content-muted">
