@@ -105,11 +105,21 @@ export class ChatQueryBuilder {
           content: userContent,
         } as ChatCompletionUserMessageParam)
       } else if (msg.content) {
-        // Assistant messages
-        result.push({
+        // Assistant messages - include annotations and searchReasoning for multi-turn context
+        const assistantParam: ChatCompletionAssistantMessageParam & {
+          annotations?: Message['annotations']
+          search_reasoning?: string
+        } = {
           role: 'assistant',
           content: msg.content,
-        } as ChatCompletionAssistantMessageParam)
+        }
+        if (msg.annotations && msg.annotations.length > 0) {
+          assistantParam.annotations = msg.annotations
+        }
+        if (msg.searchReasoning) {
+          assistantParam.search_reasoning = msg.searchReasoning
+        }
+        result.push(assistantParam)
       }
     }
 
