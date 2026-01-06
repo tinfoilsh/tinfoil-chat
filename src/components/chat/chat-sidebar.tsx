@@ -814,7 +814,7 @@ export function ChatSidebar({
 
           {/* Projects dropdown - only show for premium users with cloud sync */}
           {isSignedIn && cloudSyncEnabled && isPremium && (
-            <div className="relative z-10 flex-none border-y border-border-subtle">
+            <div className="relative z-10 flex-none border-t border-border-subtle">
               <button
                 onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
                 className={cn(
@@ -911,8 +911,16 @@ export function ChatSidebar({
                               : 'text-content-secondary hover:bg-surface-sidebar',
                           )}
                         >
-                          <FolderIcon className="h-4 w-4 shrink-0 text-content-muted" />
-                          <span className="truncate">{project.name}</span>
+                          <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate leading-5">
+                              {project.name}
+                            </span>
+                            <span className="text-xs text-content-muted">
+                              Updated{' '}
+                              {formatRelativeTime(new Date(project.updatedAt))}
+                            </span>
+                          </div>
                         </button>
                       ))}
 
@@ -922,10 +930,10 @@ export function ChatSidebar({
                           onClick={() => loadMoreProjects()}
                           disabled={projectsLoading}
                           className={cn(
-                            'w-full rounded-lg px-3 py-2 text-center text-xs transition-colors',
+                            'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
                             isDarkMode
-                              ? 'text-content-muted hover:text-content-secondary'
-                              : 'text-content-muted hover:text-content-secondary',
+                              ? 'border-border-strong text-content-muted hover:text-content-secondary'
+                              : 'border-border-subtle text-content-muted hover:text-content-secondary',
                             projectsLoading && 'cursor-not-allowed opacity-50',
                           )}
                         >
@@ -940,7 +948,12 @@ export function ChatSidebar({
           )}
 
           {/* Chats Header */}
-          <div className="relative z-10 flex-none">
+          <div
+            className={cn(
+              'relative z-10 flex-none border-t border-border-subtle',
+              !isChatHistoryExpanded && 'border-b',
+            )}
+          >
             <button
               onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
               className={cn(
@@ -1107,32 +1120,31 @@ export function ChatSidebar({
                             setIsOpen(false)
                           }
                         }}
-                        className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
+                        className={cn(
+                          'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
                           chat.decryptionFailed
                             ? onEncryptionKeyClick
                               ? isDarkMode
-                                ? 'cursor-pointer border-border-strong bg-surface-sidebar hover:border-gray-600 hover:bg-surface-chat'
-                                : 'cursor-pointer border-border-subtle bg-surface-sidebar hover:border-gray-400 hover:bg-surface-sidebar'
-                              : isDarkMode
-                                ? 'cursor-not-allowed border-border-strong bg-surface-sidebar opacity-60'
-                                : 'cursor-not-allowed border-border-subtle bg-surface-sidebar opacity-60'
+                                ? 'text-content-muted hover:bg-surface-chat'
+                                : 'text-content-muted hover:bg-surface-sidebar'
+                              : 'cursor-not-allowed opacity-60'
                             : chat.isBlankChat
                               ? currentChat?.isBlankChat &&
                                 chat.isLocalOnly === currentChat.isLocalOnly
                                 ? isDarkMode
-                                  ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
-                                  : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
+                                  ? 'bg-surface-chat text-white'
+                                  : 'bg-white text-content-primary'
                                 : isDarkMode
-                                  ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                                  : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                                  ? 'text-content-secondary hover:bg-surface-chat'
+                                  : 'text-content-secondary hover:bg-surface-sidebar'
                               : currentChat?.id === chat.id
                                 ? isDarkMode
-                                  ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
-                                  : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
+                                  ? 'bg-surface-chat text-white'
+                                  : 'bg-white text-content-primary'
                                 : isDarkMode
-                                  ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                                  : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
-                        }`}
+                                  ? 'text-content-secondary hover:bg-surface-chat'
+                                  : 'text-content-secondary hover:bg-surface-sidebar',
+                        )}
                       >
                         {/* Chat item content */}
                         <ChatListItem
@@ -1163,13 +1175,15 @@ export function ChatSidebar({
                   <button
                     onClick={() => loadMoreChats()}
                     disabled={isLoadingMore}
-                    className={`w-full rounded-lg border border-border-subtle p-3 text-center text-sm font-medium transition-colors ${
+                    className={cn(
+                      'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
                       isDarkMode
-                        ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80 disabled:bg-surface-chat disabled:text-content-muted'
-                        : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar/80 disabled:bg-surface-sidebar disabled:text-content-muted'
-                    }`}
+                        ? 'border-border-strong text-content-muted hover:text-content-secondary'
+                        : 'border-border-subtle text-content-muted hover:text-content-secondary',
+                      isLoadingMore && 'cursor-not-allowed opacity-50',
+                    )}
                   >
-                    {isLoadingMore ? 'Loading...' : 'Load More'}
+                    {isLoadingMore ? 'Loading...' : 'Load more'}
                   </button>
                 )}
 
@@ -1178,7 +1192,7 @@ export function ChatSidebar({
                   !shouldShowLoadMore &&
                   !hasMoreRemote &&
                   hasAttemptedLoadMore && (
-                    <div className="w-full rounded-lg p-3 text-center text-sm text-content-muted">
+                    <div className="px-3 py-2 text-center text-xs text-content-muted">
                       No more chats
                     </div>
                   )}
