@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildProjectContext,
   estimateTokenCount,
+  type LoadingProject,
   ProjectContext,
   type ProjectContextValue,
 } from './project-context'
@@ -32,6 +33,9 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     [],
   )
   const [loading, setLoading] = useState(false)
+  const [loadingProject, setLoadingProject] = useState<LoadingProject | null>(
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
   const initializingRef = useRef(false)
 
@@ -102,73 +106,89 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     return unsubscribe
   }, [activeProject, getToken])
 
-  const enterProjectMode = useCallback(async (projectId: string) => {
-    setLoading(true)
-    setError(null)
+  const enterProjectMode = useCallback(
+    async (projectId: string, projectName?: string) => {
+      setLoading(true)
+      setError(null)
+      setLoadingProject({ id: projectId, name: projectName || 'Loading...' })
 
-    try {
-      const project = await projectStorage.getProject(projectId)
-      if (!project) {
-        throw new Error('Project not found')
-      }
+      try {
+        // Refresh the token before fetching to avoid expired token errors
+        if (getToken) {
+          const freshToken = await getToken({ skipCache: true })
+          if (freshToken) {
+            projectStorage.setTokenGetter(async () => freshToken)
+          }
+        }
 
-      const documentsResponse = await projectStorage.listDocuments(projectId, {
-        includeContent: true,
-      })
+        const project = await projectStorage.getProject(projectId)
+        if (!project) {
+          throw new Error('Project not found')
+        }
 
-      const documents: ProjectDocument[] = await Promise.all(
-        documentsResponse.documents.map(async (doc) => {
-          if (doc.content) {
-            try {
-              await encryptionService.initialize()
-              const decrypted = (await encryptionService.decrypt(
-                JSON.parse(doc.content),
-              )) as { content: string; filename: string; contentType: string }
-              return {
-                ...doc,
-                content: decrypted.content,
-                filename: decrypted.filename,
-                contentType: decrypted.contentType,
-              }
-            } catch (decryptError) {
-              logError('Failed to decrypt document', decryptError, {
-                component: 'ProjectProvider',
-                action: 'enterProjectMode',
-                metadata: { documentId: doc.id },
-              })
-              return {
-                ...doc,
-                content: undefined,
-                filename: '',
-                contentType: '',
+        const documentsResponse = await projectStorage.listDocuments(
+          projectId,
+          {
+            includeContent: true,
+          },
+        )
+
+        const documents: ProjectDocument[] = await Promise.all(
+          documentsResponse.documents.map(async (doc) => {
+            if (doc.content) {
+              try {
+                await encryptionService.initialize()
+                const decrypted = (await encryptionService.decrypt(
+                  JSON.parse(doc.content),
+                )) as { content: string; filename: string; contentType: string }
+                return {
+                  ...doc,
+                  content: decrypted.content,
+                  filename: decrypted.filename,
+                  contentType: decrypted.contentType,
+                }
+              } catch (decryptError) {
+                logError('Failed to decrypt document', decryptError, {
+                  component: 'ProjectProvider',
+                  action: 'enterProjectMode',
+                  metadata: { documentId: doc.id },
+                })
+                return {
+                  ...doc,
+                  content: undefined,
+                  filename: '',
+                  contentType: '',
+                }
               }
             }
-          }
-          return { ...doc, filename: '', contentType: '' }
-        }),
-      )
+            return { ...doc, filename: '', contentType: '' }
+          }),
+        )
 
-      setActiveProject(project)
-      setProjectDocuments(documents)
+        setActiveProject(project)
+        setProjectDocuments(documents)
 
-      logInfo('Entered project mode', {
-        component: 'ProjectProvider',
-        action: 'enterProjectMode',
-        metadata: { projectId, documentCount: documents.length },
-      })
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to load project'
-      setError(message)
-      logError('Failed to enter project mode', err, {
-        component: 'ProjectProvider',
-        action: 'enterProjectMode',
-        metadata: { projectId },
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+        logInfo('Entered project mode', {
+          component: 'ProjectProvider',
+          action: 'enterProjectMode',
+          metadata: { projectId, documentCount: documents.length },
+        })
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to load project'
+        setError(message)
+        logError('Failed to enter project mode', err, {
+          component: 'ProjectProvider',
+          action: 'enterProjectMode',
+          metadata: { projectId },
+        })
+      } finally {
+        setLoading(false)
+        setLoadingProject(null)
+      }
+    },
+    [getToken],
+  )
 
   const exitProjectMode = useCallback(() => {
     setActiveProject(null)
@@ -464,6 +484,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       isProjectMode,
       projectDocuments,
       loading,
+      loadingProject,
       error,
       enterProjectMode,
       exitProjectMode,
@@ -482,6 +503,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       isProjectMode,
       projectDocuments,
       loading,
+      loadingProject,
       error,
       enterProjectMode,
       exitProjectMode,

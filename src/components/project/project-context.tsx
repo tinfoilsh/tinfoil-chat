@@ -9,14 +9,20 @@ import type {
 } from '@/types/project'
 import { createContext, useContext } from 'react'
 
+export interface LoadingProject {
+  id: string
+  name: string
+}
+
 export interface ProjectContextValue {
   activeProject: Project | null
   isProjectMode: boolean
   projectDocuments: ProjectDocument[]
   loading: boolean
+  loadingProject: LoadingProject | null
   error: string | null
 
-  enterProjectMode: (projectId: string) => Promise<void>
+  enterProjectMode: (projectId: string, projectName?: string) => Promise<void>
   exitProjectMode: () => void
   createProject: (data: CreateProjectData) => Promise<Project>
   updateProject: (id: string, data: UpdateProjectData) => Promise<void>

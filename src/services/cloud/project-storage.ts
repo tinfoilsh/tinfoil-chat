@@ -153,11 +153,11 @@ export class ProjectStorageService {
         throw new Error(`Failed to get project: ${response.statusText}`)
       }
 
-      const encrypted = await response.json()
+      const data = await response.json()
 
       await encryptionService.initialize()
       const decrypted = (await encryptionService.decrypt(
-        encrypted,
+        data.content,
       )) as ProjectData
 
       return {
@@ -166,9 +166,9 @@ export class ProjectStorageService {
         description: decrypted.description,
         systemInstructions: decrypted.systemInstructions,
         summary: decrypted.summary,
-        createdAt: '', // These will be filled by list response
-        updatedAt: '',
-        syncVersion: 1,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        syncVersion: data.syncVersion,
       }
     } catch (error) {
       logError(`Failed to get project ${projectId}`, error, {

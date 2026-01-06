@@ -102,7 +102,7 @@ type ChatSidebarProps = {
   onVerificationUpdate?: (state: any) => void
   isProjectMode?: boolean
   activeProjectName?: string
-  onEnterProject?: (projectId: string) => Promise<void>
+  onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
 }
 
@@ -899,7 +899,7 @@ export function ChatSidebar({
                           key={project.id}
                           onClick={async () => {
                             if (onEnterProject) {
-                              await onEnterProject(project.id)
+                              await onEnterProject(project.id, project.name)
                               if (windowWidth < MOBILE_BREAKPOINT) {
                                 setIsOpen(false)
                               }

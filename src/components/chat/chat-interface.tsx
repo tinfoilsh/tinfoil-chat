@@ -242,8 +242,13 @@ export function ChatInterface({
   )
 
   // Use project system prompt hook to inject project context
-  const { isProjectMode, activeProject, enterProjectMode, createProject } =
-    useProject()
+  const {
+    isProjectMode,
+    activeProject,
+    enterProjectMode,
+    createProject,
+    loadingProject,
+  } = useProject()
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
     baseRules: processedRules,
@@ -1222,7 +1227,7 @@ export function ChatInterface({
         </div>
       )}
 
-      {/* Left Sidebar Component - Show ProjectSidebar when in project mode */}
+      {/* Left Sidebar Component - Show ProjectSidebar when in project mode or loading */}
       {isProjectMode && activeProject ? (
         <ProjectSidebar
           isOpen={isSidebarOpen}
@@ -1246,6 +1251,20 @@ export function ChatInterface({
               isBlankChat: c.isBlankChat,
             }))}
           deleteChat={deleteChat}
+        />
+      ) : loadingProject ? (
+        <ProjectSidebar
+          isOpen={isSidebarOpen}
+          setIsOpen={setIsSidebarOpen}
+          project={null}
+          projectName={loadingProject.name}
+          isLoading={true}
+          isDarkMode={isDarkMode}
+          onExitProject={onExitProject ?? (() => {})}
+          onNewChat={() => {}}
+          onSelectChat={() => {}}
+          isClient={isClient}
+          isPremium={isPremium}
         />
       ) : (
         <ChatSidebar

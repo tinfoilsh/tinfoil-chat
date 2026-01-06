@@ -48,7 +48,9 @@ interface ProjectChat {
 interface ProjectSidebarProps {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  project: Project
+  project: Project | null
+  projectName?: string
+  isLoading?: boolean
   isDarkMode: boolean
   onExitProject: () => void
   onNewChat: () => void
@@ -84,10 +86,20 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function Shimmer({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn('animate-pulse rounded bg-content-muted/20', className)}
+    />
+  )
+}
+
 export function ProjectSidebar({
   isOpen,
   setIsOpen,
   project,
+  projectName,
+  isLoading,
   isDarkMode,
   onExitProject,
   onNewChat,
@@ -114,25 +126,27 @@ export function ProjectSidebar({
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
   const [settingsExpanded, setSettingsExpanded] = useState(false)
-  const [documentsExpanded, setDocumentsExpanded] = useState(true)
+  const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
 
-  const [editedName, setEditedName] = useState(project.name)
+  const [editedName, setEditedName] = useState(project?.name ?? '')
   const [editedDescription, setEditedDescription] = useState(
-    project.description,
+    project?.description ?? '',
   )
   const [editedInstructions, setEditedInstructions] = useState(
-    project.systemInstructions,
+    project?.systemInstructions ?? '',
   )
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const [isEditingProjectName, setIsEditingProjectName] = useState(false)
-  const [editingProjectName, setEditingProjectName] = useState(project.name)
+  const [editingProjectName, setEditingProjectName] = useState(
+    project?.name ?? '',
+  )
   const [uploadingFiles, setUploadingFiles] = useState<
     { id: string; name: string; size: number }[]
   >([])
@@ -146,10 +160,12 @@ export function ProjectSidebar({
   }, [getToken])
 
   useEffect(() => {
-    setEditedName(project.name)
-    setEditedDescription(project.description)
-    setEditedInstructions(project.systemInstructions)
-    setEditingProjectName(project.name)
+    if (project) {
+      setEditedName(project.name)
+      setEditedDescription(project.description)
+      setEditedInstructions(project.systemInstructions)
+      setEditingProjectName(project.name)
+    }
   }, [project])
 
   useEffect(() => {
@@ -167,6 +183,7 @@ export function ProjectSidebar({
   }, [isClient])
 
   const handleSaveSettings = useCallback(async () => {
+    if (!project) return
     setIsSaving(true)
     try {
       await updateProject(project.id, {
@@ -178,7 +195,7 @@ export function ProjectSidebar({
       setIsSaving(false)
     }
   }, [
-    project.id,
+    project,
     editedName,
     editedDescription,
     editedInstructions,
@@ -186,6 +203,7 @@ export function ProjectSidebar({
   ])
 
   const handleSaveProjectName = useCallback(async () => {
+    if (!project) return
     if (editingProjectName.trim() && editingProjectName !== project.name) {
       setIsSaving(true)
       try {
@@ -198,9 +216,10 @@ export function ProjectSidebar({
       }
     }
     setIsEditingProjectName(false)
-  }, [editingProjectName, project.id, project.name, updateProject])
+  }, [editingProjectName, project, updateProject])
 
   const handleDeleteProject = useCallback(async () => {
+    if (!project) return
     setIsDeleting(true)
     try {
       await deleteProject(project.id)
@@ -209,7 +228,7 @@ export function ProjectSidebar({
       setIsDeleting(false)
       setShowDeleteConfirm(false)
     }
-  }, [project.id, deleteProject, onExitProject])
+  }, [project, deleteProject, onExitProject])
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -372,10 +391,11 @@ export function ProjectSidebar({
     [deleteChat],
   )
 
-  const hasUnsavedChanges =
-    editedName !== project.name ||
-    editedDescription !== project.description ||
-    editedInstructions !== project.systemInstructions
+  const hasUnsavedChanges = project
+    ? editedName !== project.name ||
+      editedDescription !== project.description ||
+      editedInstructions !== project.systemInstructions
+    : false
 
   const blankChat: DecryptedChat = {
     id: '',
@@ -472,7 +492,14 @@ export function ProjectSidebar({
               <span className="font-aeonik font-medium">Exit Project</span>
             </button>
             <div className="mt-2 px-2">
-              {isEditingProjectName ? (
+              {isLoading ? (
+                <div className="space-y-2">
+                  <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
+                    {projectName || 'Loading...'}
+                  </h2>
+                  <Shimmer className="h-3 w-32" />
+                </div>
+              ) : isEditingProjectName && project ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault()
@@ -501,34 +528,39 @@ export function ProjectSidebar({
                     )}
                   />
                 </form>
-              ) : (
-                <div
-                  className="group flex cursor-pointer items-center gap-2"
-                  onClick={() => setIsEditingProjectName(true)}
-                >
-                  <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
-                    {project.name}
-                  </h2>
-                  <PencilSquareIcon className="h-4 w-4 text-content-muted opacity-0 transition-opacity group-hover:opacity-100" />
-                </div>
-              )}
-              {project.description && !isEditingProjectName && (
-                <p className="mt-0.5 truncate font-aeonik-fono text-xs text-content-muted">
-                  {project.description}
-                </p>
-              )}
+              ) : project ? (
+                <>
+                  <div
+                    className="group flex cursor-pointer items-center gap-2"
+                    onClick={() => setIsEditingProjectName(true)}
+                  >
+                    <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
+                      {project.name}
+                    </h2>
+                    <PencilSquareIcon className="h-4 w-4 text-content-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                  </div>
+                  <p className="mt-0.5 font-aeonik-fono text-xs text-content-muted">
+                    Updated {formatRelativeTime(new Date(project.updatedAt))}
+                  </p>
+                </>
+              ) : null}
             </div>
           </div>
 
           {/* Project Settings Dropdown - moved up */}
           <div className="relative z-10 mt-3 flex-none border-y border-border-subtle">
             <button
-              onClick={() => setSettingsExpanded(!settingsExpanded)}
+              onClick={() =>
+                !isLoading && setSettingsExpanded(!settingsExpanded)
+              }
+              disabled={isLoading}
               className={cn(
                 'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                isDarkMode
-                  ? 'text-content-secondary hover:bg-surface-chat'
-                  : 'text-content-secondary hover:bg-white',
+                isLoading
+                  ? 'cursor-default opacity-50'
+                  : isDarkMode
+                    ? 'text-content-secondary hover:bg-surface-chat'
+                    : 'text-content-secondary hover:bg-white',
               )}
             >
               <span className="flex items-center gap-2">
@@ -537,14 +569,14 @@ export function ProjectSidebar({
                   Project Settings
                 </span>
               </span>
-              {settingsExpanded ? (
+              {settingsExpanded && !isLoading ? (
                 <ChevronUpIcon className="h-4 w-4" />
               ) : (
                 <ChevronDownIcon className="h-4 w-4" />
               )}
             </button>
 
-            {settingsExpanded && (
+            {settingsExpanded && !isLoading && (
               <div className="px-4 py-4">
                 <div className="space-y-3">
                   {/* Description */}
@@ -668,21 +700,26 @@ export function ProjectSidebar({
           {/* Documents Section - moved below settings */}
           <div className="relative z-10 mb-3 flex-none border-b border-border-subtle">
             <button
-              onClick={() => setDocumentsExpanded(!documentsExpanded)}
+              onClick={() =>
+                !isLoading && setDocumentsExpanded(!documentsExpanded)
+              }
+              disabled={isLoading}
               className={cn(
                 'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                isDarkMode
-                  ? 'text-content-secondary hover:bg-surface-chat'
-                  : 'text-content-secondary hover:bg-white',
+                isLoading
+                  ? 'cursor-default opacity-50'
+                  : isDarkMode
+                    ? 'text-content-secondary hover:bg-surface-chat'
+                    : 'text-content-secondary hover:bg-white',
               )}
             >
               <span className="flex items-center gap-2">
                 <DocumentIcon className="h-4 w-4" />
                 <span className="font-aeonik font-medium">
-                  Documents ({projectDocuments.length})
+                  Documents {isLoading ? '' : `(${projectDocuments.length})`}
                 </span>
               </span>
-              {documentsExpanded ? (
+              {documentsExpanded && !isLoading ? (
                 <ChevronUpIcon className="h-4 w-4" />
               ) : (
                 <ChevronDownIcon className="h-4 w-4" />
@@ -698,7 +735,7 @@ export function ProjectSidebar({
               accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
             />
 
-            {documentsExpanded && (
+            {documentsExpanded && !isLoading && (
               <div className="max-h-64 overflow-y-auto px-2 py-2">
                 {/* Drag and drop zone - at top */}
                 <div
@@ -831,142 +868,160 @@ export function ProjectSidebar({
           {/* Scrollable Chat List */}
           <div className="relative z-10 flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
-              {chatsWithBlank.map((chat) => (
-                <div key={chat.id || 'blank-chat'} className="relative">
-                  <div
-                    onClick={() => {
-                      if (chat.isBlankChat) {
-                        handleNewChat()
-                      } else {
-                        handleChatSelect(chat.id)
-                      }
-                    }}
-                    className={cn(
-                      'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                      chat.isBlankChat
-                        ? !currentChatId
-                          ? isDarkMode
-                            ? 'bg-surface-chat text-white'
-                            : 'bg-white text-content-primary'
-                          : isDarkMode
-                            ? 'text-content-secondary hover:bg-surface-chat'
-                            : 'text-content-secondary hover:bg-surface-sidebar'
-                        : currentChatId === chat.id
-                          ? isDarkMode
-                            ? 'bg-surface-chat text-white'
-                            : 'bg-white text-content-primary'
-                          : isDarkMode
-                            ? 'text-content-secondary hover:bg-surface-chat'
-                            : 'text-content-secondary hover:bg-surface-sidebar',
-                    )}
-                  >
-                    <div className="min-w-0 flex-1 pr-2">
-                      {editingChatId === chat.id ? (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault()
-                            setEditingChatId(null)
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            autoFocus
-                          />
-                        </form>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-1.5">
-                            <div className="truncate font-aeonik-fono text-sm font-medium">
-                              {chat.title}
-                            </div>
-                            {/* New chat indicator - show for blank chats or chats with 0 messages */}
-                            {(chat.isBlankChat || chat.messageCount === 0) && (
-                              <div
-                                className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                                title="New chat"
-                              />
-                            )}
-                          </div>
-                          <div className="mt-1 flex min-h-[16px] w-full items-center">
-                            {!chat.isBlankChat && chat.messageCount > 0 && (
-                              <div className="text-xs leading-none text-content-muted">
-                                {formatRelativeTime(new Date(chat.updatedAt))}
+              {isLoading ? (
+                <>
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        'rounded-lg px-3 py-2',
+                        isDarkMode ? 'bg-surface-chat' : 'bg-white',
+                      )}
+                    >
+                      <Shimmer className="mb-2 h-4 w-3/4" />
+                      <Shimmer className="h-3 w-1/2" />
+                    </div>
+                  ))}
+                </>
+              ) : (
+                chatsWithBlank.map((chat) => (
+                  <div key={chat.id || 'blank-chat'} className="relative">
+                    <div
+                      onClick={() => {
+                        if (chat.isBlankChat) {
+                          handleNewChat()
+                        } else {
+                          handleChatSelect(chat.id)
+                        }
+                      }}
+                      className={cn(
+                        'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                        chat.isBlankChat
+                          ? !currentChatId
+                            ? isDarkMode
+                              ? 'bg-surface-chat text-white'
+                              : 'bg-white text-content-primary'
+                            : isDarkMode
+                              ? 'text-content-secondary hover:bg-surface-chat'
+                              : 'text-content-secondary hover:bg-surface-sidebar'
+                          : currentChatId === chat.id
+                            ? isDarkMode
+                              ? 'bg-surface-chat text-white'
+                              : 'bg-white text-content-primary'
+                            : isDarkMode
+                              ? 'text-content-secondary hover:bg-surface-chat'
+                              : 'text-content-secondary hover:bg-surface-sidebar',
+                      )}
+                    >
+                      <div className="min-w-0 flex-1 pr-2">
+                        {editingChatId === chat.id ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              setEditingChatId(null)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              autoFocus
+                            />
+                          </form>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <div className="truncate font-aeonik-fono text-sm font-medium">
+                                {chat.title}
                               </div>
+                              {/* New chat indicator - show for blank chats or chats with 0 messages */}
+                              {(chat.isBlankChat ||
+                                chat.messageCount === 0) && (
+                                <div
+                                  className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                  title="New chat"
+                                />
+                              )}
+                            </div>
+                            <div className="mt-1 flex min-h-[16px] w-full items-center">
+                              {!chat.isBlankChat && chat.messageCount > 0 && (
+                                <div className="text-xs leading-none text-content-muted">
+                                  {formatRelativeTime(new Date(chat.updatedAt))}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {editingChatId !== chat.id && !chat.isBlankChat && (
+                        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
+                          <button
+                            className={cn(
+                              'rounded p-1 transition-colors',
+                              isDarkMode
+                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
                             )}
-                          </div>
-                        </>
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingTitle(chat.title)
+                              setEditingChatId(chat.id)
+                            }}
+                            title="Rename"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            className={cn(
+                              'rounded p-1 transition-colors',
+                              isDarkMode
+                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeletingChatId(chat.id)
+                            }}
+                            title="Delete"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
-                    {editingChatId !== chat.id && !chat.isBlankChat && (
-                      <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
+                    {deletingChatId === chat.id && (
+                      <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
                         <button
                           className={cn(
-                            'rounded p-1 transition-colors',
+                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
                             isDarkMode
-                              ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                              : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                              ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                              : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
                           )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setEditingTitle(chat.title)
-                            setEditingChatId(chat.id)
-                          }}
-                          title="Rename"
+                          onClick={() => setDeletingChatId(null)}
                         >
-                          <PencilSquareIcon className="h-4 w-4" />
+                          Cancel
                         </button>
                         <button
                           className={cn(
-                            'rounded p-1 transition-colors',
+                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
                             isDarkMode
-                              ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                              : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                              ? 'bg-red-600 text-white hover:bg-red-700'
+                              : 'bg-red-500 text-white hover:bg-red-600',
                           )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDeletingChatId(chat.id)
+                          onClick={() => {
+                            handleDeleteChat(chat.id)
+                            setDeletingChatId(null)
                           }}
-                          title="Delete"
                         >
-                          <TrashIcon className="h-4 w-4" />
+                          Delete
                         </button>
                       </div>
                     )}
                   </div>
-                  {deletingChatId === chat.id && (
-                    <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
-                      <button
-                        className={cn(
-                          'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
-                          isDarkMode
-                            ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                            : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
-                        )}
-                        onClick={() => setDeletingChatId(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className={cn(
-                          'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
-                          isDarkMode
-                            ? 'bg-red-600 text-white hover:bg-red-700'
-                            : 'bg-red-500 text-white hover:bg-red-600',
-                        )}
-                        onClick={() => {
-                          handleDeleteChat(chat.id)
-                          setDeletingChatId(null)
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
