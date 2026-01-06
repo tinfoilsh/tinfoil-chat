@@ -226,6 +226,7 @@ export async function processStreamingResponse(
 
         if (isFirstChunk && initialContentBuffer.trim()) {
           assistantMessage = {
+            ...assistantMessage,
             role: 'assistant',
             content: initialContentBuffer.trim(),
             timestamp: assistantMessage?.timestamp || new Date(),
@@ -250,6 +251,7 @@ export async function processStreamingResponse(
 
           assistantMessage = isUsingReasoningFormat
             ? {
+                ...assistantMessage,
                 role: 'assistant',
                 content: '',
                 thoughts: thoughtsBuffer.trim(),
@@ -258,6 +260,7 @@ export async function processStreamingResponse(
                 thinkingDuration,
               }
             : {
+                ...assistantMessage,
                 role: 'assistant',
                 content: thoughtsBuffer.trim(),
                 timestamp: assistantMessage?.timestamp || new Date(),
@@ -390,16 +393,25 @@ export async function processStreamingResponse(
                 }
               }
             }
-            if (collectedSources.length > 0 && webSearchState) {
-              webSearchState = {
-                query: webSearchState.query,
-                status: webSearchState.status,
-                sources: [...collectedSources],
-              }
-              assistantMessage = {
-                ...assistantMessage,
-                webSearch: webSearchState,
-                annotations: [...collectedAnnotations],
+            if (collectedSources.length > 0) {
+              // Update webSearchState with sources if it exists
+              if (webSearchState) {
+                webSearchState = {
+                  query: webSearchState.query,
+                  status: webSearchState.status,
+                  sources: [...collectedSources],
+                }
+                assistantMessage = {
+                  ...assistantMessage,
+                  webSearch: webSearchState,
+                  annotations: [...collectedAnnotations],
+                }
+              } else {
+                // Store annotations even without webSearchState
+                assistantMessage = {
+                  ...assistantMessage,
+                  annotations: [...collectedAnnotations],
+                }
               }
             }
           }
