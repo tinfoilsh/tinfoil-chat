@@ -1,4 +1,8 @@
-import { type BaseModel, isModelAvailable } from '@/config/models'
+import {
+  type BaseModel,
+  isLocalDevelopment,
+  isModelAvailable,
+} from '@/config/models'
 import { useEffect, useRef, useState } from 'react'
 import type { AIModel } from './types'
 
@@ -124,15 +128,16 @@ export function ModelSelector({
   }, [preferredPosition])
 
   // Filter models based on subscription status
-  // Premium users: show only premium models
+  // Premium users: show only premium models (plus free models in dev mode)
   // Free users: show all models (free models enabled, premium models disabled)
+  const isDevMode = isLocalDevelopment()
   const displayModels = models.filter((model) => {
     const isChatOrCodeModel =
       (model.type === 'chat' || model.type === 'code') && model.chat === true
     if (!isChatOrCodeModel) return false
 
-    // For premium users, only show premium models
-    if (isPremium && !model.paid) {
+    // For premium users, only show premium models (but include free models in dev mode)
+    if (isPremium && !model.paid && !isDevMode) {
       return false
     }
 
