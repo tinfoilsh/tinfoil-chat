@@ -540,20 +540,21 @@ export function ChatSidebar({
 
   const sortedChats = useMemo(() => {
     // Filter chats based on active tab and cloud sync status
+    // Also exclude chats that belong to a project
     const filteredChats =
       isSignedIn && cloudSyncEnabled
         ? activeTab === 'cloud'
           ? chats.filter((chat) => {
-              // Filter for cloud chats (not local-only)
-              return !chat.isLocalOnly
+              // Filter for cloud chats (not local-only) and not in a project
+              return !chat.isLocalOnly && !chat.projectId
             })
           : chats.filter((chat) => {
-              // Filter for local-only chats
-              return chat.isLocalOnly
+              // Filter for local-only chats and not in a project
+              return chat.isLocalOnly && !chat.projectId
             })
         : chats.filter((chat) => {
-            // When cloud sync is disabled, only show local chats
-            return (chat as any).isLocalOnly
+            // When cloud sync is disabled, only show local chats that aren't in a project
+            return (chat as any).isLocalOnly && !chat.projectId
           })
 
     return [...filteredChats].sort((a, b) => {

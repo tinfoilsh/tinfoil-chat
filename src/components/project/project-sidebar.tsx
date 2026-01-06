@@ -7,6 +7,7 @@ import { Logo } from '@/components/logo'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { toast } from '@/hooks/use-toast'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import type { Project } from '@/types/project'
@@ -405,6 +406,19 @@ export function ProjectSidebar({
     },
     [removeDocument],
   )
+
+  const handleDeleteChat = useCallback(async (chatId: string) => {
+    try {
+      await cloudStorage.deleteChat(chatId)
+      setChats((prev) => prev.filter((c) => c.id !== chatId))
+    } catch {
+      toast({
+        title: 'Failed to delete chat',
+        description: 'The chat could not be deleted. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }, [])
 
   const hasUnsavedChanges =
     editedName !== project.name ||
@@ -983,6 +997,7 @@ export function ProjectSidebar({
                               : 'bg-red-500 text-white hover:bg-red-600',
                           )}
                           onClick={() => {
+                            handleDeleteChat(chat.id)
                             setDeletingChatId(null)
                           }}
                         >
