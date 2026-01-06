@@ -1235,6 +1235,17 @@ export function ChatInterface({
           currentChatId={currentChat?.id}
           isClient={isClient}
           isPremium={isPremium}
+          chats={chats
+            .filter((c) => c.projectId === activeProject.id)
+            .map((c) => ({
+              id: c.id,
+              title: c.title,
+              messageCount: c.messages.length,
+              createdAt: c.createdAt,
+              projectId: c.projectId,
+              isBlankChat: c.isBlankChat,
+            }))}
+          deleteChat={deleteChat}
         />
       ) : (
         <ChatSidebar

@@ -7,9 +7,7 @@ import { Logo } from '@/components/logo'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { toast } from '@/hooks/use-toast'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { projectStorage } from '@/services/cloud/project-storage'
-import { encryptionService } from '@/services/encryption/encryption-service'
 import type { Project } from '@/types/project'
 import { useAuth, UserButton } from '@clerk/nextjs'
 import {
@@ -38,6 +36,15 @@ interface DecryptedChat {
   isBlankChat?: boolean
 }
 
+interface ProjectChat {
+  id: string
+  title: string
+  messageCount: number
+  createdAt: Date
+  projectId?: string
+  isBlankChat?: boolean
+}
+
 interface ProjectSidebarProps {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
@@ -49,6 +56,8 @@ interface ProjectSidebarProps {
   currentChatId?: string
   isClient: boolean
   isPremium?: boolean
+  chats?: ProjectChat[]
+  deleteChat?: (chatId: string) => void
 }
 
 function formatRelativeTime(date: Date): string {
@@ -86,6 +95,8 @@ export function ProjectSidebar({
   currentChatId,
   isClient,
   isPremium,
+  chats: chatsProp,
+  deleteChat,
 }: ProjectSidebarProps) {
   const { getToken, isSignedIn } = useAuth()
   const {
@@ -99,9 +110,6 @@ export function ProjectSidebar({
   } = useProject()
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader(isPremium)
-
-  const [chats, setChats] = useState<DecryptedChat[]>([])
-  const [loadingChats, setLoadingChats] = useState(true)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -143,58 +151,6 @@ export function ProjectSidebar({
     setEditedInstructions(project.systemInstructions)
     setEditingProjectName(project.name)
   }, [project])
-
-  useEffect(() => {
-    async function loadChats() {
-      setLoadingChats(true)
-      try {
-        const response = await projectStorage.listProjectChats(project.id, {
-          includeContent: true,
-        })
-
-        await encryptionService.initialize()
-
-        const decryptedChats: DecryptedChat[] = await Promise.all(
-          response.chats.map(async (chat) => {
-            try {
-              if (chat.content) {
-                const decrypted = (await encryptionService.decrypt(
-                  JSON.parse(chat.content),
-                )) as { title?: string; messages?: unknown[] }
-                return {
-                  id: chat.id,
-                  title: decrypted.title || 'Untitled Chat',
-                  messageCount: decrypted.messages?.length || 0,
-                  updatedAt: chat.updatedAt,
-                }
-              }
-              return {
-                id: chat.id,
-                title: 'Untitled Chat',
-                messageCount: chat.messageCount,
-                updatedAt: chat.updatedAt,
-              }
-            } catch {
-              return {
-                id: chat.id,
-                title: 'Encrypted Chat',
-                messageCount: chat.messageCount,
-                updatedAt: chat.updatedAt,
-              }
-            }
-          }),
-        )
-
-        setChats(decryptedChats)
-      } catch {
-        setChats([])
-      } finally {
-        setLoadingChats(false)
-      }
-    }
-
-    loadChats()
-  }, [project.id])
 
   useEffect(() => {
     refreshDocuments()
@@ -407,18 +363,14 @@ export function ProjectSidebar({
     [removeDocument],
   )
 
-  const handleDeleteChat = useCallback(async (chatId: string) => {
-    try {
-      await cloudStorage.deleteChat(chatId)
-      setChats((prev) => prev.filter((c) => c.id !== chatId))
-    } catch {
-      toast({
-        title: 'Failed to delete chat',
-        description: 'The chat could not be deleted. Please try again.',
-        variant: 'destructive',
-      })
-    }
-  }, [])
+  const handleDeleteChat = useCallback(
+    (chatId: string) => {
+      if (deleteChat) {
+        deleteChat(chatId)
+      }
+    },
+    [deleteChat],
+  )
 
   const hasUnsavedChanges =
     editedName !== project.name ||
@@ -433,7 +385,24 @@ export function ProjectSidebar({
     isBlankChat: true,
   }
 
-  const chatsWithBlank = [blankChat, ...chats]
+  // Convert chatsProp to DecryptedChat format and sort by createdAt descending
+  const projectChats: DecryptedChat[] = (chatsProp || [])
+    .filter((c) => !c.isBlankChat)
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      messageCount: c.messageCount,
+      updatedAt:
+        c.createdAt instanceof Date
+          ? c.createdAt.toISOString()
+          : new Date(c.createdAt).toISOString(),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )
+
+  const chatsWithBlank = [blankChat, ...projectChats]
 
   return (
     <>
@@ -862,152 +831,142 @@ export function ProjectSidebar({
           {/* Scrollable Chat List */}
           <div className="relative z-10 flex-1 overflow-y-auto">
             <div className="space-y-2 p-2">
-              {loadingChats ? (
-                <div className="py-8 text-center">
-                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                  <p className="font-aeonik-fono text-sm text-content-muted">
-                    Loading chats...
-                  </p>
-                </div>
-              ) : (
-                chatsWithBlank.map((chat) => (
-                  <div key={chat.id || 'blank-chat'} className="relative">
-                    <div
-                      onClick={() => {
-                        if (chat.isBlankChat) {
-                          handleNewChat()
-                        } else {
-                          handleChatSelect(chat.id)
-                        }
-                      }}
-                      className={cn(
-                        'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                        chat.isBlankChat
-                          ? !currentChatId
-                            ? isDarkMode
-                              ? 'bg-surface-chat text-white'
-                              : 'bg-white text-content-primary'
-                            : isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-chat'
-                              : 'text-content-secondary hover:bg-surface-sidebar'
-                          : currentChatId === chat.id
-                            ? isDarkMode
-                              ? 'bg-surface-chat text-white'
-                              : 'bg-white text-content-primary'
-                            : isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-chat'
-                              : 'text-content-secondary hover:bg-surface-sidebar',
-                      )}
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        {editingChatId === chat.id ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault()
-                              setEditingChatId(null)
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              autoFocus
-                            />
-                          </form>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-1.5">
-                              <div className="truncate font-aeonik-fono text-sm font-medium">
-                                {chat.title}
+              {chatsWithBlank.map((chat) => (
+                <div key={chat.id || 'blank-chat'} className="relative">
+                  <div
+                    onClick={() => {
+                      if (chat.isBlankChat) {
+                        handleNewChat()
+                      } else {
+                        handleChatSelect(chat.id)
+                      }
+                    }}
+                    className={cn(
+                      'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                      chat.isBlankChat
+                        ? !currentChatId
+                          ? isDarkMode
+                            ? 'bg-surface-chat text-white'
+                            : 'bg-white text-content-primary'
+                          : isDarkMode
+                            ? 'text-content-secondary hover:bg-surface-chat'
+                            : 'text-content-secondary hover:bg-surface-sidebar'
+                        : currentChatId === chat.id
+                          ? isDarkMode
+                            ? 'bg-surface-chat text-white'
+                            : 'bg-white text-content-primary'
+                          : isDarkMode
+                            ? 'text-content-secondary hover:bg-surface-chat'
+                            : 'text-content-secondary hover:bg-surface-sidebar',
+                    )}
+                  >
+                    <div className="min-w-0 flex-1 pr-2">
+                      {editingChatId === chat.id ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            setEditingChatId(null)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            autoFocus
+                          />
+                        </form>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <div className="truncate font-aeonik-fono text-sm font-medium">
+                              {chat.title}
+                            </div>
+                            {/* New chat indicator - show for blank chats or chats with 0 messages */}
+                            {(chat.isBlankChat || chat.messageCount === 0) && (
+                              <div
+                                className="h-1.5 w-1.5 rounded-full bg-blue-500"
+                                title="New chat"
+                              />
+                            )}
+                          </div>
+                          <div className="mt-1 flex min-h-[16px] w-full items-center">
+                            {!chat.isBlankChat && chat.messageCount > 0 && (
+                              <div className="text-xs leading-none text-content-muted">
+                                {formatRelativeTime(new Date(chat.updatedAt))}
                               </div>
-                              {/* New chat indicator - show for blank chats or chats with 0 messages */}
-                              {(chat.isBlankChat ||
-                                chat.messageCount === 0) && (
-                                <div
-                                  className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                                  title="New chat"
-                                />
-                              )}
-                            </div>
-                            <div className="mt-1 flex min-h-[16px] w-full items-center">
-                              {!chat.isBlankChat && chat.messageCount > 0 && (
-                                <div className="text-xs leading-none text-content-muted">
-                                  {formatRelativeTime(new Date(chat.updatedAt))}
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {editingChatId !== chat.id && !chat.isBlankChat && (
-                        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
-                          <button
-                            className={cn(
-                              'rounded p-1 transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
                             )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setEditingTitle(chat.title)
-                              setEditingChatId(chat.id)
-                            }}
-                            title="Rename"
-                          >
-                            <PencilSquareIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            className={cn(
-                              'rounded p-1 transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeletingChatId(chat.id)
-                            }}
-                            title="Delete"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </div>
+                          </div>
+                        </>
                       )}
                     </div>
-                    {deletingChatId === chat.id && (
-                      <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
+                    {editingChatId !== chat.id && !chat.isBlankChat && (
+                      <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
                         <button
                           className={cn(
-                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
+                            'rounded p-1 transition-colors',
                             isDarkMode
-                              ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                              : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
+                              ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                              : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
                           )}
-                          onClick={() => setDeletingChatId(null)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingTitle(chat.title)
+                            setEditingChatId(chat.id)
+                          }}
+                          title="Rename"
                         >
-                          Cancel
+                          <PencilSquareIcon className="h-4 w-4" />
                         </button>
                         <button
                           className={cn(
-                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
+                            'rounded p-1 transition-colors',
                             isDarkMode
-                              ? 'bg-red-600 text-white hover:bg-red-700'
-                              : 'bg-red-500 text-white hover:bg-red-600',
+                              ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                              : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
                           )}
-                          onClick={() => {
-                            handleDeleteChat(chat.id)
-                            setDeletingChatId(null)
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeletingChatId(chat.id)
                           }}
+                          title="Delete"
                         >
-                          Delete
+                          <TrashIcon className="h-4 w-4" />
                         </button>
                       </div>
                     )}
                   </div>
-                ))
-              )}
+                  {deletingChatId === chat.id && (
+                    <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
+                      <button
+                        className={cn(
+                          'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
+                          isDarkMode
+                            ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                            : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
+                        )}
+                        onClick={() => setDeletingChatId(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={cn(
+                          'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
+                          isDarkMode
+                            ? 'bg-red-600 text-white hover:bg-red-700'
+                            : 'bg-red-500 text-white hover:bg-red-600',
+                        )}
+                        onClick={() => {
+                          handleDeleteChat(chat.id)
+                          setDeletingChatId(null)
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
