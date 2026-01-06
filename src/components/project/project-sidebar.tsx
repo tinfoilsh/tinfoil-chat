@@ -1,6 +1,9 @@
 'use client'
 
+import { ChatList, type ChatItemData } from '@/components/chat/chat-list'
+import { formatRelativeTime } from '@/components/chat/chat-list-utils'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
+import { TypingAnimation } from '@/components/chat/typing-animation'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
@@ -23,18 +26,10 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
-const SIDEBAR_WIDTH_PX = 320
 const MOBILE_BREAKPOINT = 1024
-
-interface DecryptedChat {
-  id: string
-  title: string
-  messageCount: number
-  updatedAt: string
-  isBlankChat?: boolean
-}
 
 interface ProjectChat {
   id: string
@@ -60,24 +55,6 @@ interface ProjectSidebarProps {
   isPremium?: boolean
   chats?: ProjectChat[]
   deleteChat?: (chatId: string) => void
-}
-
-function formatRelativeTime(date: Date): string {
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 60) return `${seconds}s ago`
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-
-  return date.toLocaleDateString()
 }
 
 function formatFileSize(bytes: number): string {
@@ -128,9 +105,6 @@ export function ProjectSidebar({
   const [settingsExpanded, setSettingsExpanded] = useState(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
-  const [editingChatId, setEditingChatId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState('')
-  const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
 
   const [editedName, setEditedName] = useState(project?.name ?? '')
   const [editedDescription, setEditedDescription] = useState(
@@ -151,6 +125,14 @@ export function ProjectSidebar({
     { id: string; name: string; size: number }[]
   >([])
 
+  const [displayProjectName, setDisplayProjectName] = useState(
+    project?.name ?? '',
+  )
+  const [isAnimatingName, setIsAnimatingName] = useState(false)
+  const [animationFromName, setAnimationFromName] = useState('')
+  const [animationToName, setAnimationToName] = useState('')
+  const prevProjectNameRef = useRef(project?.name ?? '')
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -165,6 +147,18 @@ export function ProjectSidebar({
       setEditedDescription(project.description)
       setEditedInstructions(project.systemInstructions)
       setEditingProjectName(project.name)
+
+      if (
+        prevProjectNameRef.current !== project.name &&
+        prevProjectNameRef.current !== ''
+      ) {
+        setAnimationFromName(prevProjectNameRef.current)
+        setAnimationToName(project.name)
+        setIsAnimatingName(true)
+      } else {
+        setDisplayProjectName(project.name)
+        prevProjectNameRef.current = project.name
+      }
     }
   }, [project])
 
@@ -217,6 +211,14 @@ export function ProjectSidebar({
     }
     setIsEditingProjectName(false)
   }, [editingProjectName, project, updateProject])
+
+  const handleNameAnimationComplete = useCallback(() => {
+    if (project) {
+      setDisplayProjectName(project.name)
+      setIsAnimatingName(false)
+      prevProjectNameRef.current = project.name
+    }
+  }, [project])
 
   const handleDeleteProject = useCallback(async () => {
     if (!project) return
@@ -397,7 +399,7 @@ export function ProjectSidebar({
       editedInstructions !== project.systemInstructions
     : false
 
-  const blankChat: DecryptedChat = {
+  const blankChat: ChatItemData = {
     id: '',
     title: 'New Chat',
     messageCount: 0,
@@ -405,8 +407,8 @@ export function ProjectSidebar({
     isBlankChat: true,
   }
 
-  // Convert chatsProp to DecryptedChat format and sort by createdAt descending
-  const projectChats: DecryptedChat[] = (chatsProp || [])
+  // Convert chatsProp to ChatItemData format and sort by createdAt descending
+  const projectChats: ChatItemData[] = (chatsProp || [])
     .filter((c) => !c.isBlankChat)
     .map((c) => ({
       id: c.id,
@@ -419,10 +421,10 @@ export function ProjectSidebar({
     }))
     .sort(
       (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime(),
     )
 
-  const chatsWithBlank = [blankChat, ...projectChats]
+  const chatsWithBlank: ChatItemData[] = [blankChat, ...projectChats]
 
   return (
     <>
@@ -433,7 +435,7 @@ export function ProjectSidebar({
           'border-border-subtle bg-surface-sidebar text-content-primary',
           'transition-all duration-200 ease-in-out',
         )}
-        style={{ maxWidth: `${SIDEBAR_WIDTH_PX}px` }}
+        style={{ maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px` }}
       >
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
@@ -535,7 +537,15 @@ export function ProjectSidebar({
                     onClick={() => setIsEditingProjectName(true)}
                   >
                     <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
-                      {project.name}
+                      {isAnimatingName ? (
+                        <TypingAnimation
+                          fromText={animationFromName}
+                          toText={animationToName}
+                          onComplete={handleNameAnimationComplete}
+                        />
+                      ) : (
+                        displayProjectName
+                      )}
                     </h2>
                     <PencilSquareIcon className="h-4 w-4 text-content-muted opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
@@ -867,162 +877,22 @@ export function ProjectSidebar({
 
           {/* Scrollable Chat List */}
           <div className="relative z-10 flex-1 overflow-y-auto">
-            <div className="space-y-2 p-2">
-              {isLoading ? (
-                <>
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        'rounded-lg px-3 py-2',
-                        isDarkMode ? 'bg-surface-chat' : 'bg-white',
-                      )}
-                    >
-                      <Shimmer className="mb-2 h-4 w-3/4" />
-                      <Shimmer className="h-3 w-1/2" />
-                    </div>
-                  ))}
-                </>
-              ) : (
-                chatsWithBlank.map((chat) => (
-                  <div key={chat.id || 'blank-chat'} className="relative">
-                    <div
-                      onClick={() => {
-                        if (chat.isBlankChat) {
-                          handleNewChat()
-                        } else {
-                          handleChatSelect(chat.id)
-                        }
-                      }}
-                      className={cn(
-                        'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                        chat.isBlankChat
-                          ? !currentChatId
-                            ? isDarkMode
-                              ? 'bg-surface-chat text-white'
-                              : 'bg-white text-content-primary'
-                            : isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-chat'
-                              : 'text-content-secondary hover:bg-surface-sidebar'
-                          : currentChatId === chat.id
-                            ? isDarkMode
-                              ? 'bg-surface-chat text-white'
-                              : 'bg-white text-content-primary'
-                            : isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-chat'
-                              : 'text-content-secondary hover:bg-surface-sidebar',
-                      )}
-                    >
-                      <div className="min-w-0 flex-1 pr-2">
-                        {editingChatId === chat.id ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault()
-                              setEditingChatId(null)
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              autoFocus
-                            />
-                          </form>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-1.5">
-                              <div className="truncate font-aeonik-fono text-sm font-medium">
-                                {chat.title}
-                              </div>
-                              {/* New chat indicator - show for blank chats or chats with 0 messages */}
-                              {(chat.isBlankChat ||
-                                chat.messageCount === 0) && (
-                                <div
-                                  className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                                  title="New chat"
-                                />
-                              )}
-                            </div>
-                            <div className="mt-1 flex min-h-[16px] w-full items-center">
-                              {!chat.isBlankChat && chat.messageCount > 0 && (
-                                <div className="text-xs leading-none text-content-muted">
-                                  {formatRelativeTime(new Date(chat.updatedAt))}
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {editingChatId !== chat.id && !chat.isBlankChat && (
-                        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-0 group-hover:opacity-100">
-                          <button
-                            className={cn(
-                              'rounded p-1 transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setEditingTitle(chat.title)
-                              setEditingChatId(chat.id)
-                            }}
-                            title="Rename"
-                          >
-                            <PencilSquareIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            className={cn(
-                              'rounded p-1 transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeletingChatId(chat.id)
-                            }}
-                            title="Delete"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {deletingChatId === chat.id && (
-                      <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
-                        <button
-                          className={cn(
-                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
-                            isDarkMode
-                              ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                              : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80',
-                          )}
-                          onClick={() => setDeletingChatId(null)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className={cn(
-                            'flex-1 rounded-md p-2 text-sm font-medium transition-colors',
-                            isDarkMode
-                              ? 'bg-red-600 text-white hover:bg-red-700'
-                              : 'bg-red-500 text-white hover:bg-red-600',
-                          )}
-                          onClick={() => {
-                            handleDeleteChat(chat.id)
-                            setDeletingChatId(null)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+            <ChatList
+              chats={chatsWithBlank}
+              currentChatId={currentChatId}
+              currentChatIsBlank={!currentChatId}
+              isDarkMode={isDarkMode}
+              isLoading={isLoading}
+              animatedDeleteConfirmation={false}
+              onSelectChat={(chatId) => {
+                if (chatId.startsWith('blank-') || chatId === '') {
+                  handleNewChat()
+                } else {
+                  handleChatSelect(chatId)
+                }
+              }}
+              onDeleteChat={handleDeleteChat}
+            />
           </div>
 
           {/* Terms and privacy policy */}

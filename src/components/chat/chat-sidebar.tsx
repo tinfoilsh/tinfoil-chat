@@ -1,4 +1,3 @@
-import { FaLock } from '@/components/icons/lazy-icons'
 import { API_BASE_URL, PAGINATION } from '@/config'
 import { useProjects } from '@/hooks/use-projects'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
@@ -8,25 +7,22 @@ import {
   Bars3Icon,
   ChevronDownIcon,
   ChevronRightIcon,
-  CloudArrowUpIcon,
   CloudIcon,
   FolderIcon,
   FolderPlusIcon,
-  PencilSquareIcon,
-  TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { motion } from 'framer-motion'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { IoChatbubblesOutline } from 'react-icons/io5'
 import { PiSignIn } from 'react-icons/pi'
+import { ChatList, type ChatItemData } from './chat-list'
+import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
 
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
-// Cloud pagination handled via hook; no direct cloudSync usage here
 import { useCloudPagination } from '@/hooks/use-cloud-pagination'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { type StoredChat } from '@/services/storage/indexed-db'
 import { getConversationTimestampFromId } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
@@ -43,44 +39,6 @@ function isIOSDevice() {
 }
 
 // Pagination state is managed by useCloudPagination
-
-// Utility function to format relative timestamps
-function formatRelativeTime(date: Date): string {
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-  if (seconds < 60) {
-    return `${seconds}s ago`
-  }
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) {
-    return `${minutes}m ago`
-  }
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) {
-    return `${hours}h ago`
-  }
-
-  const days = Math.floor(hours / 24)
-  if (days < 7) {
-    return `${days}d ago`
-  }
-
-  const weeks = Math.floor(days / 7)
-  if (weeks < 4) {
-    return `${weeks}w ago`
-  }
-
-  const months = Math.floor(days / 30)
-  if (months < 12) {
-    return `${months}mo ago`
-  }
-
-  const years = Math.floor(days / 365)
-  return `${years}y ago`
-}
 
 type ChatSidebarProps = {
   isOpen: boolean
@@ -221,9 +179,6 @@ export function ChatSidebar({
   onEnterProject,
   onCreateProject,
 }: ChatSidebarProps) {
-  const [editingChatId, setEditingChatId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState('')
-  const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(false)
   const [isCreatingProject, setIsCreatingProject] = useState(false)
@@ -1073,131 +1028,67 @@ export function ChatSidebar({
                 isChatListScrolled && 'border-t border-border-subtle',
               )}
             >
-              <div className="space-y-2 p-2">
-                {isClient &&
-                  sortedChats.length === 0 &&
-                  activeTab === 'local' && (
-                    <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                      <p className="text-sm text-content-muted">
-                        No local chats yet
-                      </p>
-                      <p className="mt-1 text-xs text-content-muted">
-                        Disable cloud sync in settings to create local-only
-                        chats
-                      </p>
-                    </div>
-                  )}
-                {isClient &&
-                  sortedChats.map((chat) => (
-                    <div
-                      key={
-                        chat.id ||
-                        `blank-${chat.isLocalOnly ? 'local' : 'cloud'}`
-                      }
-                      className="relative"
-                    >
-                      <div
-                        onClick={() => {
-                          // Open encryption key modal for encrypted chats
-                          if (chat.decryptionFailed) {
-                            if (onEncryptionKeyClick) {
-                              onEncryptionKeyClick()
-                            }
-                            return
-                          }
-
-                          // For blank chats, we need to pass a special identifier
-                          // that includes the isLocalOnly flag since they have empty IDs
-                          if (chat.isBlankChat) {
-                            handleChatSelect(
-                              chat.isLocalOnly ? 'blank-local' : 'blank-cloud',
-                            )
-                          } else {
-                            handleChatSelect(chat.id)
-                          }
-
-                          // Only close sidebar on mobile
-                          if (windowWidth < MOBILE_BREAKPOINT) {
-                            setIsOpen(false)
-                          }
-                        }}
-                        className={cn(
-                          'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                          chat.decryptionFailed
-                            ? onEncryptionKeyClick
-                              ? isDarkMode
-                                ? 'text-content-muted hover:bg-surface-chat'
-                                : 'text-content-muted hover:bg-surface-sidebar'
-                              : 'cursor-not-allowed opacity-60'
-                            : chat.isBlankChat
-                              ? currentChat?.isBlankChat &&
-                                chat.isLocalOnly === currentChat.isLocalOnly
-                                ? isDarkMode
-                                  ? 'bg-surface-chat text-white'
-                                  : 'bg-white text-content-primary'
-                                : isDarkMode
-                                  ? 'text-content-secondary hover:bg-surface-chat'
-                                  : 'text-content-secondary hover:bg-surface-sidebar'
-                              : currentChat?.id === chat.id
-                                ? isDarkMode
-                                  ? 'bg-surface-chat text-white'
-                                  : 'bg-white text-content-primary'
-                                : isDarkMode
-                                  ? 'text-content-secondary hover:bg-surface-chat'
-                                  : 'text-content-secondary hover:bg-surface-sidebar',
-                        )}
-                      >
-                        {/* Chat item content */}
-                        <ChatListItem
-                          chat={chat}
-                          isEditing={editingChatId === chat.id}
-                          editingTitle={editingTitle}
-                          setEditingTitle={setEditingTitle}
-                          updateChatTitle={updateChatTitle}
-                          setEditingChatId={setEditingChatId}
-                          setDeletingChatId={setDeletingChatId}
-                          isDarkMode={isDarkMode}
-                        />
+              {isClient && (
+                <ChatList
+                  chats={sortedChats as ChatItemData[]}
+                  currentChatId={currentChat?.id}
+                  currentChatIsBlank={currentChat?.isBlankChat}
+                  currentChatIsLocalOnly={currentChat?.isLocalOnly}
+                  isDarkMode={isDarkMode}
+                  showEncryptionStatus={true}
+                  showSyncStatus={true}
+                  enableTitleAnimation={true}
+                  onSelectChat={handleChatSelect}
+                  onAfterSelect={() => {
+                    if (windowWidth < MOBILE_BREAKPOINT) {
+                      setIsOpen(false)
+                    }
+                  }}
+                  onUpdateTitle={updateChatTitle}
+                  onDeleteChat={deleteChat}
+                  onEncryptionKeyClick={onEncryptionKeyClick}
+                  emptyState={
+                    activeTab === 'local' ? (
+                      <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                        <p className="text-sm text-content-muted">
+                          No local chats yet
+                        </p>
+                        <p className="mt-1 text-xs text-content-muted">
+                          Disable cloud sync in settings to create local-only
+                          chats
+                        </p>
                       </div>
-                      {/* Delete confirmation */}
-                      {deletingChatId === chat.id && (
-                        <DeleteConfirmation
-                          chatId={chat.id}
-                          onDelete={deleteChat}
-                          onCancel={() => setDeletingChatId(null)}
-                          isDarkMode={isDarkMode}
-                        />
+                    ) : undefined
+                  }
+                  loadMoreButton={
+                    <>
+                      {shouldShowLoadMore && (
+                        <button
+                          onClick={() => loadMoreChats()}
+                          disabled={isLoadingMore}
+                          className={cn(
+                            'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
+                            isDarkMode
+                              ? 'border-border-strong text-content-muted hover:text-content-secondary'
+                              : 'border-border-subtle text-content-muted hover:text-content-secondary',
+                            isLoadingMore && 'cursor-not-allowed opacity-50',
+                          )}
+                        >
+                          {isLoadingMore ? 'Loading...' : 'Load more'}
+                        </button>
                       )}
-                    </div>
-                  ))}
-
-                {/* Load More button - only for remote chats */}
-                {shouldShowLoadMore && (
-                  <button
-                    onClick={() => loadMoreChats()}
-                    disabled={isLoadingMore}
-                    className={cn(
-                      'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
-                      isDarkMode
-                        ? 'border-border-strong text-content-muted hover:text-content-secondary'
-                        : 'border-border-subtle text-content-muted hover:text-content-secondary',
-                      isLoadingMore && 'cursor-not-allowed opacity-50',
-                    )}
-                  >
-                    {isLoadingMore ? 'Loading...' : 'Load more'}
-                  </button>
-                )}
-
-                {/* Show "No more chats" message when we've loaded everything */}
-                {isSignedIn &&
-                  !shouldShowLoadMore &&
-                  !hasMoreRemote &&
-                  hasAttemptedLoadMore && (
-                    <div className="px-3 py-2 text-center text-xs text-content-muted">
-                      No more chats
-                    </div>
-                  )}
-              </div>
+                      {isSignedIn &&
+                        !shouldShowLoadMore &&
+                        !hasMoreRemote &&
+                        hasAttemptedLoadMore && (
+                          <div className="px-3 py-2 text-center text-xs text-content-muted">
+                            No more chats
+                          </div>
+                        )}
+                    </>
+                  }
+                />
+              )}
             </div>
           )}
 
@@ -1266,380 +1157,5 @@ export function ChatSidebar({
         />
       )}
     </>
-  )
-}
-
-// Typing animation component
-function TypingAnimation({
-  fromText,
-  toText,
-  onComplete,
-  isDarkMode,
-}: {
-  fromText: string
-  toText: string
-  onComplete: () => void
-  isDarkMode: boolean
-}) {
-  const [currentText, setCurrentText] = useState(fromText)
-  const [showCursor, setShowCursor] = useState(true)
-  const [phase, setPhase] = useState<'deleting' | 'typing'>('deleting')
-
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout
-    let completionTimeoutId: NodeJS.Timeout
-
-    // Cursor blinking effect
-    const cursorInterval = setInterval(() => {
-      setShowCursor((prev) => !prev)
-    }, 424)
-    if (phase === 'deleting') {
-      // Delete characters one by one
-      if (currentText.length > 0) {
-        timeoutId = setTimeout(
-          () => {
-            setCurrentText((prev) => prev.slice(0, -1))
-          },
-          40 + Math.random() * 24,
-        )
-      } else {
-        // Start typing phase
-        setPhase('typing')
-      }
-    } else if (phase === 'typing') {
-      // Type new characters one by one
-      if (currentText.length < toText.length) {
-        timeoutId = setTimeout(
-          () => {
-            setCurrentText(toText.slice(0, currentText.length + 1))
-          },
-          64 + Math.random() * 32,
-        )
-      } else {
-        // Animation complete
-        clearInterval(cursorInterval)
-        completionTimeoutId = setTimeout(() => {
-          onComplete()
-        }, 400)
-      }
-    }
-
-    return () => {
-      clearTimeout(timeoutId)
-      clearTimeout(completionTimeoutId)
-      clearInterval(cursorInterval)
-    }
-  }, [currentText, phase, toText, onComplete])
-
-  return (
-    <span className="inline-flex items-baseline">
-      <span>{currentText}</span>
-      <span
-        className={`ml-0.5 inline-block w-0.5 bg-content-primary ${showCursor ? 'opacity-100' : 'opacity-0'}`}
-        style={{ height: '1.1em', transform: 'translateY(0.05em)' }}
-      />
-    </span>
-  )
-}
-
-// Helper components
-function ChatListItem({
-  chat,
-  isEditing,
-  editingTitle,
-  setEditingTitle,
-  updateChatTitle,
-  setEditingChatId,
-  setDeletingChatId,
-  isDarkMode,
-}: {
-  chat: Chat
-  isEditing: boolean
-  editingTitle: string
-  setEditingTitle: (title: string) => void
-  updateChatTitle: (chatId: string, title: string) => void
-  setEditingChatId: (id: string | null) => void
-  setDeletingChatId: (id: string | null) => void
-  isDarkMode: boolean
-}) {
-  // Track previous title for animation
-  const [displayTitle, setDisplayTitle] = useState(chat.title)
-  const [isAnimating, setIsAnimating] = useState(false)
-  const [animationFromTitle, setAnimationFromTitle] = useState('')
-  const [animationToTitle, setAnimationToTitle] = useState('')
-  const prevTitleRef = useRef(chat.title)
-
-  // Animate title changes
-  useEffect(() => {
-    if (
-      prevTitleRef.current !== chat.title &&
-      chat.title !== 'Untitled' &&
-      prevTitleRef.current !== ''
-    ) {
-      // Title changed - trigger typing animation
-      setAnimationFromTitle(prevTitleRef.current)
-      setAnimationToTitle(chat.title)
-      setIsAnimating(true)
-    } else {
-      // Instant update for "Untitled" title or initial load
-      setDisplayTitle(chat.title)
-      prevTitleRef.current = chat.title
-    }
-  }, [chat.title])
-
-  const handleAnimationComplete = () => {
-    setDisplayTitle(chat.title)
-    setIsAnimating(false)
-    prevTitleRef.current = chat.title
-  }
-
-  // Handle edit form submission
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (editingTitle.trim()) {
-      updateChatTitle(chat.id, editingTitle)
-      setEditingChatId(null)
-    }
-  }
-
-  // Start editing
-  const startEditing = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setEditingTitle(chat.title)
-    setEditingChatId(chat.id)
-  }
-
-  // Handle escape key
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setEditingChatId(null)
-    }
-  }
-
-  return (
-    <>
-      <div className="flex w-full items-start justify-between">
-        <div className="min-w-0 flex-1 pr-2">
-          {isEditing ? (
-            <form
-              onSubmit={handleSubmit}
-              className="w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <input
-                className={`w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                value={editingTitle}
-                onChange={(e) => setEditingTitle(e.target.value)}
-                onKeyDown={handleKeyDown}
-                autoFocus
-                onClick={(e) => e.stopPropagation()}
-              />
-            </form>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5">
-                {/* Lock icon for encrypted chats - moved to the left */}
-                {chat.decryptionFailed && (
-                  <FaLock
-                    className="h-3.5 w-3.5 flex-shrink-0 text-orange-500"
-                    title="Encrypted chat"
-                  />
-                )}
-                <div
-                  className={`truncate font-aeonik-fono text-sm font-medium ${
-                    chat.decryptionFailed
-                      ? 'text-orange-500'
-                      : isDarkMode
-                        ? 'text-content-primary'
-                        : 'text-content-primary'
-                  }`}
-                >
-                  {chat.decryptionFailed ? (
-                    'Encrypted'
-                  ) : isAnimating ? (
-                    <TypingAnimation
-                      fromText={animationFromTitle}
-                      toText={animationToTitle}
-                      onComplete={handleAnimationComplete}
-                      isDarkMode={isDarkMode}
-                    />
-                  ) : (
-                    displayTitle
-                  )}
-                </div>
-                {/* New chat indicator */}
-                {chat.messages.length === 0 && !chat.decryptionFailed && (
-                  <div
-                    className="h-1.5 w-1.5 rounded-full bg-blue-500"
-                    title="New chat"
-                  />
-                )}
-              </div>
-              <div className="flex min-h-[16px] w-full items-center gap-2">
-                {chat.decryptionFailed ? (
-                  <div className="text-xs text-red-500">
-                    {(chat as any).dataCorrupted
-                      ? 'Failed to decrypt: corrupted data'
-                      : 'Failed to decrypt: wrong key'}
-                  </div>
-                ) : chat.messages.length > 0 ? (
-                  <div className="text-xs leading-none text-content-muted">
-                    {formatRelativeTime(chat.createdAt)}
-                  </div>
-                ) : null}
-                {(chat as any).isLocalOnly ? (
-                  <>
-                    {chat.messages.length > 0 && (
-                      <span className="text-xs text-content-muted">·</span>
-                    )}
-                    <span className="flex items-center gap-0.5 text-xs leading-none text-content-muted">
-                      <CiFloppyDisk className="h-3 w-3" />
-                      Only saved locally
-                    </span>
-                  </>
-                ) : !chat.isBlankChat && (chat as any).pendingSave ? (
-                  <>
-                    {chat.messages.length > 0 && (
-                      <span className="text-xs text-content-muted">·</span>
-                    )}
-                    <span className="flex items-center gap-0.5 text-xs leading-none text-orange-500">
-                      <CloudArrowUpIcon className="h-3 w-3" />
-                      Syncing with cloud
-                    </span>
-                  </>
-                ) : null}
-              </div>
-            </>
-          )}
-        </div>
-
-        {!isEditing && (
-          <div className="flex flex-shrink-0 items-center gap-1.5">
-            <div className="hidden items-center md:group-hover:flex">
-              {!chat.decryptionFailed && !chat.isBlankChat && (
-                <button
-                  className={`mr-1 rounded p-1 transition-colors ${
-                    isDarkMode
-                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                  }`}
-                  onClick={startEditing}
-                  title="Rename"
-                >
-                  <PencilSquareIcon className="h-4 w-4" />
-                </button>
-              )}
-              <button
-                className={`rounded p-1 transition-colors ${
-                  isDarkMode
-                    ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                    : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setDeletingChatId(chat.id)
-                }}
-                title="Delete"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex items-center md:hidden">
-              {!chat.decryptionFailed && !chat.isBlankChat && (
-                <button
-                  className={`mr-1 rounded p-1 transition-colors ${
-                    isDarkMode
-                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                  }`}
-                  onClick={startEditing}
-                  title="Rename"
-                >
-                  <PencilSquareIcon className="h-4 w-4" />
-                </button>
-              )}
-              <button
-                className={`rounded p-1 transition-colors ${
-                  isDarkMode
-                    ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                    : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setDeletingChatId(chat.id)
-                }}
-                title="Delete"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  )
-}
-
-function DeleteConfirmation({
-  chatId,
-  onDelete,
-  onCancel,
-  isDarkMode,
-}: {
-  chatId: string
-  onDelete: (chatId: string) => void
-  onCancel: () => void
-  isDarkMode: boolean
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 5 }}
-      animate={{
-        opacity: 1,
-        y: 0,
-        transition: {
-          duration: 0.2,
-          ease: 'easeOut',
-        },
-      }}
-      exit={{
-        opacity: 0,
-        transition: {
-          duration: 0.15,
-        },
-      }}
-      className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg"
-    >
-      <button
-        className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
-          isDarkMode
-            ? 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-            : 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
-        }`}
-        onClick={(e) => {
-          e.stopPropagation()
-          onCancel()
-        }}
-      >
-        Cancel
-      </button>
-      <button
-        className={`flex-1 rounded-md p-2 text-sm font-medium transition-colors ${
-          isDarkMode
-            ? 'bg-red-600 text-white hover:bg-red-700'
-            : 'bg-red-500 text-white hover:bg-red-600'
-        }`}
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete(chatId)
-          onCancel()
-        }}
-        autoFocus
-      >
-        Delete
-      </button>
-    </motion.div>
   )
 }
