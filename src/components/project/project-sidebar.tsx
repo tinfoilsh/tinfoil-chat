@@ -5,6 +5,7 @@ import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
+import { toast } from '@/hooks/use-toast'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import type { Project } from '@/types/project'
@@ -118,10 +119,9 @@ export function ProjectSidebar({
 
   const [isEditingProjectName, setIsEditingProjectName] = useState(false)
   const [editingProjectName, setEditingProjectName] = useState(project.name)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadingFileName, setUploadingFileName] = useState<string | null>(
-    null,
-  )
+  const [uploadingFiles, setUploadingFiles] = useState<
+    { id: string; name: string; size: number }[]
+  >([])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -251,23 +251,41 @@ export function ProjectSidebar({
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (!file) return
+      const files = e.target.files
+      if (!files || files.length === 0) return
 
-      setIsUploading(true)
-      setUploadingFileName(file.name)
+      const fileArray = Array.from(files)
+      const uploadIds = fileArray.map(() => crypto.randomUUID())
 
-      const reader = new FileReader()
-      reader.onload = async () => {
-        try {
-          const content = reader.result as string
-          await uploadDocument(file, content)
-        } finally {
-          setIsUploading(false)
-          setUploadingFileName(null)
-        }
-      }
-      reader.readAsText(file)
+      setUploadingFiles((prev) => [
+        ...prev,
+        ...fileArray.map((file, i) => ({
+          id: uploadIds[i],
+          name: file.name,
+          size: file.size,
+        })),
+      ])
+
+      await Promise.all(
+        fileArray.map(async (file, i) => {
+          const reader = new FileReader()
+          return new Promise<void>((resolve) => {
+            reader.onload = async () => {
+              try {
+                const content = reader.result as string
+                await uploadDocument(file, content)
+              } finally {
+                setUploadingFiles((prev) =>
+                  prev.filter((f) => f.id !== uploadIds[i]),
+                )
+                resolve()
+              }
+            }
+            reader.readAsText(file)
+          })
+        }),
+      )
+
       e.target.value = ''
     },
     [uploadDocument],
@@ -279,23 +297,40 @@ export function ProjectSidebar({
       e.stopPropagation()
       setIsDraggingOver(false)
 
-      const file = e.dataTransfer.files?.[0]
-      if (!file) return
+      const files = e.dataTransfer.files
+      if (!files || files.length === 0) return
 
-      setIsUploading(true)
-      setUploadingFileName(file.name)
+      const fileArray = Array.from(files)
+      const uploadIds = fileArray.map(() => crypto.randomUUID())
 
-      const reader = new FileReader()
-      reader.onload = async () => {
-        try {
-          const content = reader.result as string
-          await uploadDocument(file, content)
-        } finally {
-          setIsUploading(false)
-          setUploadingFileName(null)
-        }
-      }
-      reader.readAsText(file)
+      setUploadingFiles((prev) => [
+        ...prev,
+        ...fileArray.map((file, i) => ({
+          id: uploadIds[i],
+          name: file.name,
+          size: file.size,
+        })),
+      ])
+
+      await Promise.all(
+        fileArray.map(async (file, i) => {
+          const reader = new FileReader()
+          return new Promise<void>((resolve) => {
+            reader.onload = async () => {
+              try {
+                const content = reader.result as string
+                await uploadDocument(file, content)
+              } finally {
+                setUploadingFiles((prev) =>
+                  prev.filter((f) => f.id !== uploadIds[i]),
+                )
+                resolve()
+              }
+            }
+            reader.readAsText(file)
+          })
+        }),
+      )
     },
     [uploadDocument],
   )
@@ -328,6 +363,21 @@ export function ProjectSidebar({
       setIsOpen(false)
     }
   }, [onNewChat, windowWidth, setIsOpen])
+
+  const handleRemoveDocument = useCallback(
+    async (docId: string) => {
+      try {
+        await removeDocument(docId)
+      } catch {
+        toast({
+          title: 'Failed to delete document',
+          description: 'The document could not be deleted. Please try again.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [removeDocument],
+  )
 
   const hasUnsavedChanges =
     editedName !== project.name ||
@@ -398,7 +448,7 @@ export function ProjectSidebar({
           <TextureGrid />
 
           {/* Project header with exit button and editable title */}
-          <div className="relative z-10 flex-none border-b border-border-subtle p-3">
+          <div className="relative z-10 flex-none p-3">
             <button
               onClick={onExitProject}
               className={cn(
@@ -461,7 +511,7 @@ export function ProjectSidebar({
           </div>
 
           {/* Project Settings Dropdown - moved up */}
-          <div className="relative z-10 flex-none border-b border-border-subtle">
+          <div className="relative z-10 mt-3 flex-none border-y border-border-subtle">
             <button
               onClick={() => setSettingsExpanded(!settingsExpanded)}
               className={cn(
@@ -485,7 +535,7 @@ export function ProjectSidebar({
             </button>
 
             {settingsExpanded && (
-              <div className="border-t border-border-subtle px-4 py-4">
+              <div className="px-4 py-4">
                 <div className="space-y-3">
                   {/* Description */}
                   <div
@@ -567,71 +617,46 @@ export function ProjectSidebar({
                   )}
 
                   {/* Delete Project */}
-                  <div
-                    className={cn(
-                      'rounded-lg border border-border-subtle p-3',
-                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                    )}
-                  >
-                    {showDeleteConfirm ? (
-                      <div
-                        className={cn(
-                          'rounded-lg border p-3',
-                          isDarkMode
-                            ? 'border-red-500/30 bg-red-950/20'
-                            : 'border-red-200 bg-red-50',
-                        )}
-                      >
-                        <p className="mb-3 font-aeonik-fono text-xs text-content-secondary">
-                          Delete this project? This cannot be undone.
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleDeleteProject}
-                            disabled={isDeleting}
-                            className={cn(
-                              'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium',
-                              'bg-red-600 text-white hover:bg-red-700',
-                              isDeleting && 'cursor-not-allowed opacity-50',
-                            )}
-                          >
-                            {isDeleting ? 'Deleting...' : 'Delete'}
-                          </button>
-                          <button
-                            onClick={() => setShowDeleteConfirm(false)}
-                            className={cn(
-                              'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium',
-                              isDarkMode
-                                ? 'bg-surface-chat text-content-secondary'
-                                : 'bg-surface-sidebar text-content-secondary',
-                            )}
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                  {showDeleteConfirm ? (
+                    <div className="rounded-lg bg-red-600 p-3">
+                      <p className="mb-3 font-aeonik-fono text-xs text-white">
+                        Delete this project? This cannot be undone.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleDeleteProject}
+                          disabled={isDeleting}
+                          className={cn(
+                            'flex-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50',
+                            isDeleting && 'cursor-not-allowed opacity-50',
+                          )}
+                        >
+                          {isDeleting ? 'Deleting...' : 'Delete'}
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteConfirm(false)}
+                          className="flex-1 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800"
+                        >
+                          Cancel
+                        </button>
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => setShowDeleteConfirm(true)}
-                        className={cn(
-                          'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                          isDarkMode
-                            ? 'border-red-500/30 text-red-400 hover:bg-red-950/20'
-                            : 'border-red-200 text-red-600 hover:bg-red-50',
-                        )}
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                        Delete Project
-                      </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-950/40"
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                      Delete Project
+                    </button>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
           {/* Documents Section - moved below settings */}
-          <div className="relative z-10 flex-none border-b border-border-subtle">
+          <div className="relative z-10 mb-3 flex-none border-b border-border-subtle">
             <button
               onClick={() => setDocumentsExpanded(!documentsExpanded)}
               className={cn(
@@ -656,6 +681,7 @@ export function ProjectSidebar({
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={handleFileUpload}
               disabled={contextLoading}
@@ -663,11 +689,81 @@ export function ProjectSidebar({
             />
 
             {documentsExpanded && (
-              <div className="max-h-64 overflow-y-auto border-t border-border-subtle px-2 py-2">
+              <div className="max-h-64 overflow-y-auto px-2 py-2">
+                {/* Drag and drop zone - at top */}
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={cn(
+                    'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
+                    projectDocuments.length > 0 || uploadingFiles.length > 0
+                      ? 'mb-2 py-3'
+                      : 'py-6',
+                    isDraggingOver
+                      ? isDarkMode
+                        ? 'border-emerald-400 bg-emerald-950/30'
+                        : 'border-emerald-500 bg-emerald-50'
+                      : isDarkMode
+                        ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
+                        : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
+                  )}
+                >
+                  <DocumentPlusIcon
+                    className={cn(
+                      'h-5 w-5',
+                      projectDocuments.length === 0 &&
+                        uploadingFiles.length === 0 &&
+                        'mb-2 h-6 w-6',
+                      isDarkMode ? 'text-content-muted' : 'text-content-muted',
+                    )}
+                  />
+                  {projectDocuments.length === 0 &&
+                    uploadingFiles.length === 0 && (
+                      <>
+                        <p className="font-aeonik-fono text-xs text-content-muted">
+                          Drop files here or click to upload
+                        </p>
+                        <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
+                          PDF, TXT, MD, DOCX, XLSX, PPTX
+                        </p>
+                      </>
+                    )}
+                </div>
+
                 {/* Document list */}
-                {projectDocuments.length > 0 && (
-                  <div className="mb-2 space-y-1">
-                    {projectDocuments.map((doc) => (
+                {(projectDocuments.length > 0 || uploadingFiles.length > 0) && (
+                  <div className="space-y-1">
+                    {/* Uploading placeholder documents - newest at top */}
+                    {[...uploadingFiles].reverse().map((file) => (
+                      <div
+                        key={file.id}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md px-2 py-1.5 opacity-70',
+                          isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar',
+                        )}
+                      >
+                        <PiSpinnerThin
+                          className={cn(
+                            'h-4 w-4 flex-shrink-0 animate-spin',
+                            isDarkMode
+                              ? 'text-emerald-400'
+                              : 'text-emerald-600',
+                          )}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-aeonik-fono text-xs text-content-primary">
+                            {file.name}
+                          </div>
+                          <div className="font-aeonik-fono text-[10px] text-content-muted">
+                            Uploading...
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {/* Existing documents - newest at top */}
+                    {[...projectDocuments].reverse().map((doc) => (
                       <div
                         key={doc.id}
                         className={cn(
@@ -692,7 +788,7 @@ export function ProjectSidebar({
                           </div>
                         </div>
                         <button
-                          onClick={() => removeDocument(doc.id)}
+                          onClick={() => handleRemoveDocument(doc.id)}
                           disabled={contextLoading}
                           className={cn(
                             'rounded p-0.5 transition-colors',
@@ -708,69 +804,6 @@ export function ProjectSidebar({
                     ))}
                   </div>
                 )}
-
-                {/* Drag and drop zone - always visible */}
-                <div
-                  onClick={() => !isUploading && fileInputRef.current?.click()}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  className={cn(
-                    'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
-                    projectDocuments.length > 0 && !isUploading
-                      ? 'py-3'
-                      : 'py-6',
-                    isUploading ? 'cursor-default' : 'cursor-pointer',
-                    isDraggingOver
-                      ? isDarkMode
-                        ? 'border-emerald-400 bg-emerald-950/30'
-                        : 'border-emerald-500 bg-emerald-50'
-                      : isDarkMode
-                        ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
-                        : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
-                  )}
-                >
-                  {isUploading ? (
-                    <>
-                      <PiSpinnerThin
-                        className={cn(
-                          'mb-2 h-6 w-6 animate-spin',
-                          isDarkMode ? 'text-emerald-400' : 'text-emerald-600',
-                        )}
-                      />
-                      <p className="font-aeonik-fono text-xs text-content-muted">
-                        Uploading...
-                      </p>
-                      {uploadingFileName && (
-                        <p className="mt-1 max-w-full truncate font-aeonik-fono text-[10px] text-content-muted">
-                          {uploadingFileName}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <DocumentPlusIcon
-                        className={cn(
-                          'h-5 w-5',
-                          projectDocuments.length === 0 && 'mb-2 h-6 w-6',
-                          isDarkMode
-                            ? 'text-content-muted'
-                            : 'text-content-muted',
-                        )}
-                      />
-                      {projectDocuments.length === 0 && (
-                        <>
-                          <p className="font-aeonik-fono text-xs text-content-muted">
-                            Drop files here or click to upload
-                          </p>
-                          <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
-                            PDF, TXT, MD, DOCX, XLSX, PPTX
-                          </p>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
               </div>
             )}
           </div>

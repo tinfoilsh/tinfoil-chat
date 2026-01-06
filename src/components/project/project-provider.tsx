@@ -319,10 +319,13 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
 
       setError(null)
 
+      const removedDoc = projectDocuments.find((doc) => doc.id === docId)
+      const removedIndex = projectDocuments.findIndex((doc) => doc.id === docId)
+
+      setProjectDocuments((prev) => prev.filter((doc) => doc.id !== docId))
+
       try {
         await projectStorage.deleteDocument(activeProject.id, docId)
-
-        setProjectDocuments((prev) => prev.filter((doc) => doc.id !== docId))
 
         logInfo('Removed document', {
           component: 'ProjectProvider',
@@ -330,13 +333,21 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
           metadata: { projectId: activeProject.id, documentId: docId },
         })
       } catch (err) {
+        if (removedDoc) {
+          setProjectDocuments((prev) => {
+            const newDocs = [...prev]
+            newDocs.splice(removedIndex, 0, removedDoc)
+            return newDocs
+          })
+        }
+
         const message =
           err instanceof Error ? err.message : 'Failed to remove document'
         setError(message)
         throw err
       }
     },
-    [activeProject],
+    [activeProject, projectDocuments],
   )
 
   const refreshDocuments = useCallback(async () => {
