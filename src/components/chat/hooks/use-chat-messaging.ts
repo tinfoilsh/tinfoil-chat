@@ -338,6 +338,8 @@ export function useChatMessaging({
           createdAt: new Date(),
           isLocalOnly: currentChat.isLocalOnly || !isCloudSyncEnabled(),
           pendingSave: true,
+          projectId:
+            isProjectMode && activeProject ? activeProject.id : undefined,
         }
 
         // Update state immediately for instant UI feedback

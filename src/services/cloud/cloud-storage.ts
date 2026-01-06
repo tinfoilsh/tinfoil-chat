@@ -130,6 +130,7 @@ export class CloudStorageService {
         conversationId: chatId,
         data: JSON.stringify(encrypted),
         metadata,
+        projectId: chat.projectId,
       }),
     })
 
