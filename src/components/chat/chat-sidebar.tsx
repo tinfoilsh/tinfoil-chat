@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { CiFloppyDisk } from 'react-icons/ci'
+import { IoChatbubblesOutline } from 'react-icons/io5'
 import { PiSignIn } from 'react-icons/pi'
 import { CONSTANTS } from './constants'
 
@@ -226,6 +227,9 @@ export function ChatSidebar({
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(false)
   const [isCreatingProject, setIsCreatingProject] = useState(false)
+  const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(true)
+  const [isChatListScrolled, setIsChatListScrolled] = useState(false)
+  const chatListRef = useRef<HTMLDivElement>(null)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -493,6 +497,19 @@ export function ChatSidebar({
     }
   }, [isClient])
 
+  useEffect(() => {
+    const chatList = chatListRef.current
+    if (!chatList) return
+
+    const handleScroll = () => {
+      setIsChatListScrolled(chatList.scrollTop > 0)
+    }
+
+    handleScroll()
+    chatList.addEventListener('scroll', handleScroll)
+    return () => chatList.removeEventListener('scroll', handleScroll)
+  }, [isChatHistoryExpanded])
+
   const getChatSortTimestamp = useCallback((chat: Chat) => {
     const createdValue =
       chat.createdAt instanceof Date
@@ -621,7 +638,7 @@ export function ChatSidebar({
         style={{ maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px` }}
       >
         {/* Header */}
-        <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
+        <div className="flex h-16 flex-none items-center justify-between p-4">
           <Link
             href="https://www.tinfoil.sh"
             title="Home"
@@ -796,154 +813,158 @@ export function ChatSidebar({
           )}
 
           {/* Projects dropdown - only show for premium users with cloud sync */}
-          <div className="relative z-10 flex-none">
-            {isSignedIn && cloudSyncEnabled && isPremium && (
-              <div className="mx-2">
-                <button
-                  onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-lg border p-3 text-sm',
-                    isDarkMode ? 'bg-surface-chat' : 'bg-white',
-                    isProjectMode
-                      ? isDarkMode
-                        ? 'border-emerald-500/60 text-emerald-400'
-                        : 'border-emerald-500/60 text-emerald-600'
-                      : isDarkMode
-                        ? 'border-border-strong text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                        : 'border-border-subtle text-content-secondary hover:border-border-strong hover:bg-white',
-                  )}
-                >
-                  <FolderIcon className="h-5 w-5 shrink-0" />
-                  <span className="flex-1 truncate text-left leading-5">
+          {isSignedIn && cloudSyncEnabled && isPremium && (
+            <div className="relative z-10 flex-none border-y border-border-subtle">
+              <button
+                onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
+                className={cn(
+                  'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  isProjectMode
+                    ? isDarkMode
+                      ? 'text-emerald-400'
+                      : 'text-emerald-600'
+                    : isDarkMode
+                      ? 'text-content-secondary hover:bg-surface-chat'
+                      : 'text-content-secondary hover:bg-white',
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <FolderIcon className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">
                     {isProjectMode && activeProjectName
                       ? activeProjectName
                       : 'Projects'}
                   </span>
-                  {isProjectsExpanded ? (
-                    <ChevronDownIcon className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <ChevronRightIcon className="h-4 w-4 shrink-0" />
-                  )}
-                </button>
-
-                {/* Expanded projects list */}
-                {isProjectsExpanded && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="mt-1 space-y-1"
-                  >
-                    {/* Create new project button */}
-                    {onCreateProject && (
-                      <button
-                        onClick={async () => {
-                          setIsCreatingProject(true)
-                          try {
-                            await onCreateProject()
-                            if (windowWidth < MOBILE_BREAKPOINT) {
-                              setIsOpen(false)
-                            }
-                          } finally {
-                            setIsCreatingProject(false)
-                          }
-                        }}
-                        disabled={isCreatingProject}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-                          isDarkMode
-                            ? 'text-emerald-400 hover:bg-surface-chat'
-                            : 'text-emerald-600 hover:bg-surface-sidebar',
-                          isCreatingProject && 'cursor-not-allowed opacity-50',
-                        )}
-                      >
-                        {isCreatingProject ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                        ) : (
-                          <FolderPlusIcon className="h-4 w-4 shrink-0" />
-                        )}
-                        <span className="truncate">
-                          {isCreatingProject
-                            ? 'Creating...'
-                            : 'Create New Project'}
-                        </span>
-                      </button>
-                    )}
-
-                    {/* Projects list */}
-                    {projectsLoading && projects.length === 0 ? (
-                      <div className="px-3 py-2 text-center">
-                        <div className="mx-auto h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                      </div>
-                    ) : projects.length === 0 ? (
-                      <div className="px-3 py-2 text-center text-xs text-content-muted">
-                        No projects yet
-                      </div>
-                    ) : (
-                      <>
-                        {projects.map((project) => (
-                          <button
-                            key={project.id}
-                            onClick={async () => {
-                              if (onEnterProject) {
-                                await onEnterProject(project.id)
-                                if (windowWidth < MOBILE_BREAKPOINT) {
-                                  setIsOpen(false)
-                                }
-                              }
-                            }}
-                            className={cn(
-                              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                              isDarkMode
-                                ? 'text-content-secondary hover:bg-surface-chat'
-                                : 'text-content-secondary hover:bg-surface-sidebar',
-                            )}
-                          >
-                            <FolderIcon className="h-4 w-4 shrink-0 text-content-muted" />
-                            <span className="truncate">{project.name}</span>
-                          </button>
-                        ))}
-
-                        {/* Load more button */}
-                        {hasMoreProjects && (
-                          <button
-                            onClick={() => loadMoreProjects()}
-                            disabled={projectsLoading}
-                            className={cn(
-                              'w-full rounded-lg px-3 py-2 text-center text-xs transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:text-content-secondary'
-                                : 'text-content-muted hover:text-content-secondary',
-                              projectsLoading &&
-                                'cursor-not-allowed opacity-50',
-                            )}
-                          >
-                            {projectsLoading ? 'Loading...' : 'Load more'}
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </motion.div>
+                </span>
+                {isProjectsExpanded ? (
+                  <ChevronDownIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronRightIcon className="h-4 w-4" />
                 )}
-              </div>
-            )}
-          </div>
+              </button>
 
-          {/* Chat History Header */}
-          <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
-            <div className="flex items-center justify-between">
-              <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
-                Chat History
-              </h3>
+              {/* Expanded projects list */}
+              {isProjectsExpanded && (
+                <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
+                  {/* Create new project button */}
+                  {onCreateProject && (
+                    <button
+                      onClick={async () => {
+                        setIsCreatingProject(true)
+                        try {
+                          await onCreateProject()
+                          if (windowWidth < MOBILE_BREAKPOINT) {
+                            setIsOpen(false)
+                          }
+                        } finally {
+                          setIsCreatingProject(false)
+                        }
+                      }}
+                      disabled={isCreatingProject}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                        isDarkMode
+                          ? 'text-emerald-400 hover:bg-surface-chat'
+                          : 'text-emerald-600 hover:bg-surface-sidebar',
+                        isCreatingProject && 'cursor-not-allowed opacity-50',
+                      )}
+                    >
+                      {isCreatingProject ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                      ) : (
+                        <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {isCreatingProject
+                          ? 'Creating...'
+                          : 'Create New Project'}
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Projects list */}
+                  {projectsLoading && projects.length === 0 ? (
+                    <div className="px-3 py-2 text-center">
+                      <div className="mx-auto h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                    </div>
+                  ) : projects.length === 0 ? (
+                    <div className="px-3 py-2 text-center text-xs text-content-muted">
+                      No projects yet
+                    </div>
+                  ) : (
+                    <>
+                      {projects.map((project) => (
+                        <button
+                          key={project.id}
+                          onClick={async () => {
+                            if (onEnterProject) {
+                              await onEnterProject(project.id)
+                              if (windowWidth < MOBILE_BREAKPOINT) {
+                                setIsOpen(false)
+                              }
+                            }
+                          }}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                            isDarkMode
+                              ? 'text-content-secondary hover:bg-surface-chat'
+                              : 'text-content-secondary hover:bg-surface-sidebar',
+                          )}
+                        >
+                          <FolderIcon className="h-4 w-4 shrink-0 text-content-muted" />
+                          <span className="truncate">{project.name}</span>
+                        </button>
+                      ))}
+
+                      {/* Load more button */}
+                      {hasMoreProjects && (
+                        <button
+                          onClick={() => loadMoreProjects()}
+                          disabled={projectsLoading}
+                          className={cn(
+                            'w-full rounded-lg px-3 py-2 text-center text-xs transition-colors',
+                            isDarkMode
+                              ? 'text-content-muted hover:text-content-secondary'
+                              : 'text-content-muted hover:text-content-secondary',
+                            projectsLoading && 'cursor-not-allowed opacity-50',
+                          )}
+                        >
+                          {projectsLoading ? 'Loading...' : 'Load more'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Chats Header */}
+          <div className="relative z-10 flex-none">
+            <button
+              onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
+              className={cn(
+                'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                isDarkMode
+                  ? 'text-content-secondary hover:bg-surface-chat'
+                  : 'text-content-secondary hover:bg-white',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <IoChatbubblesOutline className="h-4 w-4" />
+                <span className="truncate font-aeonik font-medium">Chats</span>
+              </span>
               <div className="flex items-center gap-1">
                 {onEncryptionKeyClick &&
                   isSignedIn &&
                   cloudSyncEnabled &&
                   activeTab === 'cloud' && (
-                    <button
-                      onClick={onEncryptionKeyClick}
-                      className={`rounded-lg p-1.5 transition-all duration-200 ${
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onEncryptionKeyClick()
+                      }}
+                      className={`rounded p-1 transition-all duration-200 ${
                         isDarkMode
                           ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
                           : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
@@ -951,12 +972,15 @@ export function ChatSidebar({
                       title="Manage encryption key"
                     >
                       <KeyIcon className="h-4 w-4" />
-                    </button>
+                    </span>
                   )}
                 {chats.length > 0 && (
-                  <button
-                    onClick={() => downloadChats(chats)}
-                    className={`rounded-lg p-1.5 transition-all duration-200 ${
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      downloadChats(chats)
+                    }}
+                    className={`rounded p-1 transition-all duration-200 ${
                       isDarkMode
                         ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
                         : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
@@ -964,183 +988,203 @@ export function ChatSidebar({
                     title="Download all chats as ZIP"
                   >
                     <ArrowDownTrayIcon className="h-4 w-4" />
-                  </button>
+                  </span>
+                )}
+                {isChatHistoryExpanded ? (
+                  <ChevronDownIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronRightIcon className="h-4 w-4" />
                 )}
               </div>
-            </div>
+            </button>
 
-            {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
-            {isSignedIn && cloudSyncEnabled && (
-              <div className="mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
-                <button
-                  onClick={() => setActiveTab('cloud')}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
-                    activeTab === 'cloud'
-                      ? isDarkMode
-                        ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                        : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                      : 'border-transparent text-content-muted hover:text-content-secondary'
-                  }`}
-                >
-                  <CloudIcon className="h-3.5 w-3.5" />
-                  Cloud
-                </button>
-                <button
-                  onClick={() => setActiveTab('local')}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
-                    activeTab === 'local'
-                      ? isDarkMode
-                        ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                        : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                      : 'border-transparent text-content-muted hover:text-content-secondary'
-                  }`}
-                >
-                  <CiFloppyDisk className="h-3.5 w-3.5" />
-                  Local
-                </button>
-              </div>
+            {/* Expanded Chats content */}
+            {isChatHistoryExpanded && (
+              <>
+                {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
+                {isSignedIn && cloudSyncEnabled && (
+                  <div className="mx-4 mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
+                    <button
+                      onClick={() => setActiveTab('cloud')}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
+                        activeTab === 'cloud'
+                          ? isDarkMode
+                            ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                            : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
+                          : 'border-transparent text-content-muted hover:text-content-secondary'
+                      }`}
+                    >
+                      <CloudIcon className="h-3.5 w-3.5" />
+                      Cloud
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('local')}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
+                        activeTab === 'local'
+                          ? isDarkMode
+                            ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                            : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
+                          : 'border-transparent text-content-muted hover:text-content-secondary'
+                      }`}
+                    >
+                      <CiFloppyDisk className="h-3.5 w-3.5" />
+                      Local
+                    </button>
+                  </div>
+                )}
+
+                <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
+                  {!isSignedIn ? (
+                    'Your chats are stored temporarily in this browser tab.'
+                  ) : !cloudSyncEnabled || activeTab === 'local' ? (
+                    "Local chats are stored only on this device and won't sync."
+                  ) : (
+                    <>
+                      Your chats are encrypted and synced to the cloud. The
+                      encryption key is only stored on this browser and never
+                      sent to Tinfoil.
+                    </>
+                  )}
+                </div>
+              </>
             )}
-
-            <div className="font-base mt-1 min-h-[52px] font-aeonik-fono text-xs text-content-muted">
-              {!isSignedIn ? (
-                'Your chats are stored temporarily in this browser tab.'
-              ) : !cloudSyncEnabled || activeTab === 'local' ? (
-                "Local chats are stored only on this device and won't sync."
-              ) : (
-                <>
-                  Your chats are encrypted and synced to the cloud. The
-                  encryption key is only stored on this browser and never sent
-                  to Tinfoil.
-                </>
-              )}
-            </div>
           </div>
 
           {/* Scrollable Chat List */}
-          <div className="relative z-10 flex-1 overflow-y-auto">
-            <div className="space-y-2 p-2">
-              {isClient &&
-                sortedChats.length === 0 &&
-                activeTab === 'local' && (
-                  <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                    <p className="text-sm text-content-muted">
-                      No local chats yet
-                    </p>
-                    <p className="mt-1 text-xs text-content-muted">
-                      Disable cloud sync in settings to create local-only chats
-                    </p>
-                  </div>
-                )}
-              {isClient &&
-                sortedChats.map((chat) => (
-                  <div
-                    key={
-                      chat.id || `blank-${chat.isLocalOnly ? 'local' : 'cloud'}`
-                    }
-                    className="relative"
-                  >
-                    <div
-                      onClick={() => {
-                        // Open encryption key modal for encrypted chats
-                        if (chat.decryptionFailed) {
-                          if (onEncryptionKeyClick) {
-                            onEncryptionKeyClick()
-                          }
-                          return
-                        }
-
-                        // For blank chats, we need to pass a special identifier
-                        // that includes the isLocalOnly flag since they have empty IDs
-                        if (chat.isBlankChat) {
-                          handleChatSelect(
-                            chat.isLocalOnly ? 'blank-local' : 'blank-cloud',
-                          )
-                        } else {
-                          handleChatSelect(chat.id)
-                        }
-
-                        // Only close sidebar on mobile
-                        if (windowWidth < MOBILE_BREAKPOINT) {
-                          setIsOpen(false)
-                        }
-                      }}
-                      className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
-                        chat.decryptionFailed
-                          ? onEncryptionKeyClick
-                            ? isDarkMode
-                              ? 'cursor-pointer border-border-strong bg-surface-sidebar hover:border-gray-600 hover:bg-surface-chat'
-                              : 'cursor-pointer border-border-subtle bg-surface-sidebar hover:border-gray-400 hover:bg-surface-sidebar'
-                            : isDarkMode
-                              ? 'cursor-not-allowed border-border-strong bg-surface-sidebar opacity-60'
-                              : 'cursor-not-allowed border-border-subtle bg-surface-sidebar opacity-60'
-                          : chat.isBlankChat
-                            ? currentChat?.isBlankChat &&
-                              chat.isLocalOnly === currentChat.isLocalOnly
-                              ? isDarkMode
-                                ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
-                                : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
-                              : isDarkMode
-                                ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                                : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
-                            : currentChat?.id === chat.id
-                              ? isDarkMode
-                                ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
-                                : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
-                              : isDarkMode
-                                ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                                : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
-                      }`}
-                    >
-                      {/* Chat item content */}
-                      <ChatListItem
-                        chat={chat}
-                        isEditing={editingChatId === chat.id}
-                        editingTitle={editingTitle}
-                        setEditingTitle={setEditingTitle}
-                        updateChatTitle={updateChatTitle}
-                        setEditingChatId={setEditingChatId}
-                        setDeletingChatId={setDeletingChatId}
-                        isDarkMode={isDarkMode}
-                      />
-                    </div>
-                    {/* Delete confirmation */}
-                    {deletingChatId === chat.id && (
-                      <DeleteConfirmation
-                        chatId={chat.id}
-                        onDelete={deleteChat}
-                        onCancel={() => setDeletingChatId(null)}
-                        isDarkMode={isDarkMode}
-                      />
-                    )}
-                  </div>
-                ))}
-
-              {/* Load More button - only for remote chats */}
-              {shouldShowLoadMore && (
-                <button
-                  onClick={() => loadMoreChats()}
-                  disabled={isLoadingMore}
-                  className={`w-full rounded-lg border border-border-subtle p-3 text-center text-sm font-medium transition-colors ${
-                    isDarkMode
-                      ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80 disabled:bg-surface-chat disabled:text-content-muted'
-                      : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar/80 disabled:bg-surface-sidebar disabled:text-content-muted'
-                  }`}
-                >
-                  {isLoadingMore ? 'Loading...' : 'Load More'}
-                </button>
+          {isChatHistoryExpanded && (
+            <div
+              ref={chatListRef}
+              className={cn(
+                'relative z-10 flex-1 overflow-y-auto',
+                isChatListScrolled && 'border-t border-border-subtle',
               )}
+            >
+              <div className="space-y-2 p-2">
+                {isClient &&
+                  sortedChats.length === 0 &&
+                  activeTab === 'local' && (
+                    <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                      <p className="text-sm text-content-muted">
+                        No local chats yet
+                      </p>
+                      <p className="mt-1 text-xs text-content-muted">
+                        Disable cloud sync in settings to create local-only
+                        chats
+                      </p>
+                    </div>
+                  )}
+                {isClient &&
+                  sortedChats.map((chat) => (
+                    <div
+                      key={
+                        chat.id ||
+                        `blank-${chat.isLocalOnly ? 'local' : 'cloud'}`
+                      }
+                      className="relative"
+                    >
+                      <div
+                        onClick={() => {
+                          // Open encryption key modal for encrypted chats
+                          if (chat.decryptionFailed) {
+                            if (onEncryptionKeyClick) {
+                              onEncryptionKeyClick()
+                            }
+                            return
+                          }
 
-              {/* Show "No more chats" message when we've loaded everything */}
-              {isSignedIn &&
-                !shouldShowLoadMore &&
-                !hasMoreRemote &&
-                hasAttemptedLoadMore && (
-                  <div className="w-full rounded-lg p-3 text-center text-sm text-content-muted">
-                    No more chats
-                  </div>
+                          // For blank chats, we need to pass a special identifier
+                          // that includes the isLocalOnly flag since they have empty IDs
+                          if (chat.isBlankChat) {
+                            handleChatSelect(
+                              chat.isLocalOnly ? 'blank-local' : 'blank-cloud',
+                            )
+                          } else {
+                            handleChatSelect(chat.id)
+                          }
+
+                          // Only close sidebar on mobile
+                          if (windowWidth < MOBILE_BREAKPOINT) {
+                            setIsOpen(false)
+                          }
+                        }}
+                        className={`group flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left text-sm ${
+                          chat.decryptionFailed
+                            ? onEncryptionKeyClick
+                              ? isDarkMode
+                                ? 'cursor-pointer border-border-strong bg-surface-sidebar hover:border-gray-600 hover:bg-surface-chat'
+                                : 'cursor-pointer border-border-subtle bg-surface-sidebar hover:border-gray-400 hover:bg-surface-sidebar'
+                              : isDarkMode
+                                ? 'cursor-not-allowed border-border-strong bg-surface-sidebar opacity-60'
+                                : 'cursor-not-allowed border-border-subtle bg-surface-sidebar opacity-60'
+                            : chat.isBlankChat
+                              ? currentChat?.isBlankChat &&
+                                chat.isLocalOnly === currentChat.isLocalOnly
+                                ? isDarkMode
+                                  ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
+                                  : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
+                                : isDarkMode
+                                  ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                                  : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                              : currentChat?.id === chat.id
+                                ? isDarkMode
+                                  ? 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-surface-chat text-white'
+                                  : 'cursor-pointer rounded-lg border border-brand-accent-light/60 bg-white text-content-primary'
+                                : isDarkMode
+                                  ? 'cursor-pointer border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
+                                  : 'cursor-pointer border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                        }`}
+                      >
+                        {/* Chat item content */}
+                        <ChatListItem
+                          chat={chat}
+                          isEditing={editingChatId === chat.id}
+                          editingTitle={editingTitle}
+                          setEditingTitle={setEditingTitle}
+                          updateChatTitle={updateChatTitle}
+                          setEditingChatId={setEditingChatId}
+                          setDeletingChatId={setDeletingChatId}
+                          isDarkMode={isDarkMode}
+                        />
+                      </div>
+                      {/* Delete confirmation */}
+                      {deletingChatId === chat.id && (
+                        <DeleteConfirmation
+                          chatId={chat.id}
+                          onDelete={deleteChat}
+                          onCancel={() => setDeletingChatId(null)}
+                          isDarkMode={isDarkMode}
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                {/* Load More button - only for remote chats */}
+                {shouldShowLoadMore && (
+                  <button
+                    onClick={() => loadMoreChats()}
+                    disabled={isLoadingMore}
+                    className={`w-full rounded-lg border border-border-subtle p-3 text-center text-sm font-medium transition-colors ${
+                      isDarkMode
+                        ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80 disabled:bg-surface-chat disabled:text-content-muted'
+                        : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar/80 disabled:bg-surface-sidebar disabled:text-content-muted'
+                    }`}
+                  >
+                    {isLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
                 )}
+
+                {/* Show "No more chats" message when we've loaded everything */}
+                {isSignedIn &&
+                  !shouldShowLoadMore &&
+                  !hasMoreRemote &&
+                  hasAttemptedLoadMore && (
+                    <div className="w-full rounded-lg p-3 text-center text-sm text-content-muted">
+                      No more chats
+                    </div>
+                  )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* App Store button for iOS users */}
           {isClient && isIOS && (
@@ -1170,7 +1214,7 @@ export function ChatSidebar({
           )}
 
           {/* Terms and privacy policy */}
-          <div className="relative z-10 flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
+          <div className="relative z-10 mt-auto flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
             <p className="text-center text-xs leading-relaxed text-content-secondary">
               By using this service, you agree to Tinfoil&apos;s{' '}
               <Link
