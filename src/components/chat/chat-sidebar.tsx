@@ -180,7 +180,16 @@ export function ChatSidebar({
   onCreateProject,
 }: ChatSidebarProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [isProjectsExpanded, setIsProjectsExpanded] = useState(false)
+  const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const shouldExpand = sessionStorage.getItem('expandProjectsOnMount')
+      if (shouldExpand === 'true') {
+        sessionStorage.removeItem('expandProjectsOnMount')
+        return true
+      }
+    }
+    return false
+  })
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(true)
   const [isChatListScrolled, setIsChatListScrolled] = useState(false)

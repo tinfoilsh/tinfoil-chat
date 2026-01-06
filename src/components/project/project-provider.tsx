@@ -195,6 +195,9 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     setProjectDocuments([])
     setError(null)
 
+    // Signal to ChatSidebar that projects should be expanded
+    sessionStorage.setItem('expandProjectsOnMount', 'true')
+
     logInfo('Exited project mode', {
       component: 'ProjectProvider',
       action: 'exitProjectMode',
