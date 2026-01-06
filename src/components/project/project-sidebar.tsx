@@ -840,22 +840,22 @@ export function ProjectSidebar({
                         }
                       }}
                       className={cn(
-                        'group flex w-full cursor-pointer items-center justify-between rounded-lg border px-3 py-3 text-left text-sm',
+                        'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
                         chat.isBlankChat
                           ? !currentChatId
                             ? isDarkMode
-                              ? 'border-brand-accent-light/60 bg-surface-chat text-white'
-                              : 'border-brand-accent-light/60 bg-white text-content-primary'
+                              ? 'bg-surface-chat text-white'
+                              : 'bg-white text-content-primary'
                             : isDarkMode
-                              ? 'border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar'
+                              ? 'text-content-secondary hover:bg-surface-chat'
+                              : 'text-content-secondary hover:bg-surface-sidebar'
                           : currentChatId === chat.id
                             ? isDarkMode
-                              ? 'border-brand-accent-light/60 bg-surface-chat text-white'
-                              : 'border-brand-accent-light/60 bg-white text-content-primary'
+                              ? 'bg-surface-chat text-white'
+                              : 'bg-white text-content-primary'
                             : isDarkMode
-                              ? 'border-border-strong bg-surface-sidebar text-content-secondary hover:border-border-strong/80 hover:bg-surface-chat'
-                              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:border-border-strong hover:bg-surface-sidebar',
+                              ? 'text-content-secondary hover:bg-surface-chat'
+                              : 'text-content-secondary hover:bg-surface-sidebar',
                       )}
                     >
                       <div className="min-w-0 flex-1 pr-2">
