@@ -33,11 +33,12 @@ function getDomainName(url: string): string {
 function CitationPill({ url }: { url: string }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const sanitizedHref = sanitizeUrl(url)
   const domain = getDomainName(url)
 
   return (
     <a
-      href={url}
+      href={sanitizedHref}
       target="_blank"
       rel="noopener noreferrer"
       className="bg-surface-secondary hover:bg-surface-tertiary mx-0.5 inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 align-baseline text-xs text-content-secondary transition-colors"
