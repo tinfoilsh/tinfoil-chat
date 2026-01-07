@@ -195,14 +195,8 @@ export function SettingsSidebar({
       // Set default language if not already set
       const savedLanguage = localStorage.getItem('userLanguage')
       if (!savedLanguage) {
-        // Get user's locale and set as default
-        const userLocale = navigator.language || 'en-US'
-        const languageName =
-          new Intl.DisplayNames([userLocale], { type: 'language' }).of(
-            userLocale.split('-')[0],
-          ) || 'English'
-        setLanguage(languageName)
-        localStorage.setItem('userLanguage', languageName)
+        setLanguage('English')
+        localStorage.setItem('userLanguage', 'English')
       }
     }
   }, [isClient, loadSettingsFromStorage])
@@ -378,21 +372,15 @@ export function SettingsSidebar({
     setProfession('')
     setSelectedTraits([])
     setAdditionalContext('')
-    // Reset language to user's locale
-    const userLocale = navigator.language || 'en-US'
-    const languageName =
-      new Intl.DisplayNames([userLocale], { type: 'language' }).of(
-        userLocale.split('-')[0],
-      ) || 'English'
-    setLanguage(languageName)
+    setLanguage('English')
 
     if (isClient) {
       localStorage.removeItem('userNickname')
       localStorage.removeItem('userProfession')
       localStorage.removeItem('userTraits')
       localStorage.removeItem('userAdditionalContext')
-      localStorage.setItem('userLanguage', languageName)
-      saveLanguageSetting(languageName)
+      localStorage.setItem('userLanguage', 'English')
+      saveLanguageSetting('English')
       savePersonalizationSettings({
         nickname: '',
         profession: '',
