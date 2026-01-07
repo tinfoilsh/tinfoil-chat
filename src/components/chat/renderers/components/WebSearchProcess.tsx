@@ -1,4 +1,5 @@
 import type { WebSearchState } from '@/components/chat/types'
+import { sanitizeUrl } from '@braintree/sanitize-url'
 import { memo, useState } from 'react'
 
 const BOUNCE_DELAYS = ['0ms', '150ms', '300ms', '450ms', '600ms']
@@ -199,7 +200,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
               {webSearch.sources!.map((source, index) => (
                 <a
                   key={`${source.url}-${index}`}
-                  href={source.url}
+                  href={sanitizeUrl(source.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:bg-surface-secondary/50 flex items-start gap-3 rounded-lg px-3 py-2 text-sm text-content-primary transition-colors"
