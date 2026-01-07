@@ -699,6 +699,7 @@ export function ChatInput({
                 id="upload-button"
                 type="button"
                 onClick={triggerFileInput}
+                aria-label="Upload document"
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
               >
                 <DocumentIcon className="h-5 w-5" />
