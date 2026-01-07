@@ -672,16 +672,20 @@ export function ChatInterface({
   useEffect(() => {
     localStorage.setItem('webSearchEnabled', String(webSearchEnabled))
 
+    let cancelled = false
     const updateVerification = async () => {
       try {
         const { getTinfoilClient, getWebSearchClient } = await import(
           '@/services/inference/tinfoil-client'
         )
+        if (cancelled) return
         const client = webSearchEnabled
           ? await getWebSearchClient()
           : await getTinfoilClient()
         await client.ready()
+        if (cancelled) return
         const doc = await (client as any).getVerificationDocument?.()
+        if (cancelled) return
         if (doc) {
           setVerificationDocument(doc)
           if (doc.securityVerified !== undefined) {
@@ -690,6 +694,7 @@ export function ChatInterface({
           }
         }
       } catch (error) {
+        if (cancelled) return
         logError('Failed to update verification for web search toggle', error, {
           component: 'ChatInterface',
           action: 'updateVerification',
@@ -697,6 +702,9 @@ export function ChatInterface({
       }
     }
     updateVerification()
+    return () => {
+      cancelled = true
+    }
   }, [webSearchEnabled, setVerificationComplete, setVerificationSuccess])
 
   // Effect to handle window resize and enforce single sidebar rule
