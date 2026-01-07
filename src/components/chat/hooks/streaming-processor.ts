@@ -398,7 +398,12 @@ export async function processStreamingResponse(
               (_: string, num: string) => {
                 const index = parseInt(num, 10) - 1
                 const source = collectedSources[index]
-                return source ? `[](#cite-${num}|${source.url})` : ''
+                if (!source) return ''
+                // Encode parentheses in URL to prevent breaking markdown link syntax
+                const encodedUrl = source.url
+                  .replace(/\(/g, '%28')
+                  .replace(/\)/g, '%29')
+                return `[](#cite-${num}|${encodedUrl})`
               },
             )
           }
