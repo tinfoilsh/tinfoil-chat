@@ -713,6 +713,8 @@ export function ChatInput({
                   id="web-search-button"
                   type="button"
                   onClick={onWebSearchToggle}
+                  aria-label="Web search"
+                  aria-pressed={webSearchEnabled}
                   className={cn(
                     'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
                     webSearchEnabled
