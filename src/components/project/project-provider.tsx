@@ -113,14 +113,6 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       setLoadingProject({ id: projectId, name: projectName || 'Loading...' })
 
       try {
-        // Refresh the token before fetching to avoid expired token errors
-        if (getToken) {
-          const freshToken = await getToken({ skipCache: true })
-          if (freshToken) {
-            projectStorage.setTokenGetter(async () => freshToken)
-          }
-        }
-
         const project = await projectStorage.getProject(projectId)
         if (!project) {
           throw new Error('Project not found')
@@ -187,7 +179,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         setLoadingProject(null)
       }
     },
-    [getToken],
+    [],
   )
 
   const exitProjectMode = useCallback(() => {
