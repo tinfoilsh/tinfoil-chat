@@ -497,9 +497,6 @@ export function SettingsSidebar({
       setCloudSyncEnabledState(false)
       setCloudSyncEnabled(false)
 
-      // Clear encryption key to prevent auto-enable on refresh
-      localStorage.removeItem('tinfoil-encryption-key')
-
       // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
       localStorage.setItem('cloudSyncExplicitlyDisabled', 'true')
 
