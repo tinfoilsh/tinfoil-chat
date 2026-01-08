@@ -25,12 +25,12 @@ export function formatRelativeTime(date: Date): string {
   }
 
   const weeks = Math.floor(days / 7)
-  if (weeks < 4) {
+  if (weeks < 5) {
     return `${weeks}w ago`
   }
 
   const months = Math.floor(days / 30)
-  if (months < 12) {
+  if (months < 13) {
     return `${months}mo ago`
   }
 
