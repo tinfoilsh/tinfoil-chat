@@ -68,7 +68,7 @@ export function DeleteConfirmation({
             duration: 0.15,
           },
         }}
-        className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg"
+        className="absolute inset-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg"
       >
         {content}
       </motion.div>
@@ -76,7 +76,7 @@ export function DeleteConfirmation({
   }
 
   return (
-    <div className="absolute inset-x-0 top-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
+    <div className="absolute inset-0 z-50 flex gap-2 rounded-md bg-surface-sidebar p-2 shadow-lg">
       {content}
     </div>
   )
