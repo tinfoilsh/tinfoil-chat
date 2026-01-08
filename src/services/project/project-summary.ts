@@ -122,6 +122,21 @@ export async function updateProjectSummary({
       }
     }
 
+    if (sseBuffer.startsWith('data: ')) {
+      const data = sseBuffer.slice(6)
+      if (data !== '[DONE]') {
+        try {
+          const parsed = JSON.parse(data)
+          const content = parsed.choices?.[0]?.delta?.content
+          if (content) {
+            summary += content
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+
     logInfo('Project summary updated', {
       component: 'ProjectSummary',
       action: 'updateProjectSummary',
