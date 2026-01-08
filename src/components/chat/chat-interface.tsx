@@ -1339,6 +1339,9 @@ export function ChatInterface({
           onEncryptionKeyClick={
             isSignedIn ? handleOpenEncryptionKeyModal : undefined
           }
+          onCloudSyncSetupClick={
+            isSignedIn ? handleOpenCloudSyncSetup : undefined
+          }
           onChatsUpdated={reloadChats}
           isProjectMode={isProjectMode}
           activeProjectName={activeProject?.name}

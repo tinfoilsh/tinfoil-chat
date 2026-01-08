@@ -57,6 +57,7 @@ type ChatSidebarProps = {
   isClient: boolean
   isPremium?: boolean
   onEncryptionKeyClick?: () => void
+  onCloudSyncSetupClick?: () => void
   onChatsUpdated?: () => void
   verificationComplete?: boolean
   verificationSuccess?: boolean
@@ -177,6 +178,7 @@ export function ChatSidebar({
   isClient,
   isPremium = true,
   onEncryptionKeyClick,
+  onCloudSyncSetupClick,
   onChatsUpdated,
   isProjectMode,
   activeProjectName,
@@ -850,8 +852,12 @@ export function ChatSidebar({
                       </p>
                       <button
                         onClick={() => {
-                          setCloudSyncEnabledSetting(true)
-                          setCloudSyncEnabled(true)
+                          if (onCloudSyncSetupClick) {
+                            onCloudSyncSetupClick()
+                          } else {
+                            setCloudSyncEnabledSetting(true)
+                            setCloudSyncEnabled(true)
+                          }
                         }}
                         className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-950/20 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                       >
