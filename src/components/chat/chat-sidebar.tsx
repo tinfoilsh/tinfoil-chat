@@ -674,10 +674,10 @@ export function ChatSidebar({
                 Access chat history and sync across devices.
               </p>
               <SignInButton mode="modal">
-                <button className="relative flex w-full items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                <span className="relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
                   <PiSignIn className="h-4 w-4" />
                   Sign in or sign up
-                </button>
+                </span>
               </SignInButton>
             </div>
           )}
@@ -967,10 +967,18 @@ export function ChatSidebar({
               !isChatHistoryExpanded && 'border-b',
             )}
           >
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setIsChatHistoryExpanded(!isChatHistoryExpanded)
+                }
+              }}
               className={cn(
-                'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                 isDarkMode
                   ? 'text-content-secondary hover:bg-surface-chat'
                   : 'text-content-secondary hover:bg-white',
@@ -1024,7 +1032,7 @@ export function ChatSidebar({
                   <ChevronRightIcon className="h-4 w-4" />
                 )}
               </div>
-            </button>
+            </div>
 
             {/* Expanded Chats content */}
             {isChatHistoryExpanded && (
