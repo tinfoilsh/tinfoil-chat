@@ -146,7 +146,8 @@ export function ChatListItem({
   const timestamp = getTimestamp()
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onSelect}
       className={cn(
         'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
@@ -325,6 +326,6 @@ export function ChatListItem({
           </div>
         </div>
       )}
-    </div>
+    </button>
   )
 }
