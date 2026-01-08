@@ -75,13 +75,13 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
               summary: newSummary,
             })
             setActiveProject((prev) =>
-              prev
+              prev && prev.id === activeProject.id
                 ? {
                     ...prev,
                     summary: newSummary,
                     updatedAt: new Date().toISOString(),
                   }
-                : null,
+                : prev,
             )
 
             logInfo('Project summary updated successfully', {
