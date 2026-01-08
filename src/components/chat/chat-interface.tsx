@@ -676,9 +676,16 @@ export function ChatInterface({
 
   // Handler for creating a new project with a random name
   const handleCreateProject = useCallback(async () => {
-    const name = generateProjectName()
-    const project = await createProject({ name, description: '' })
-    await enterProjectMode(project.id)
+    try {
+      const name = generateProjectName()
+      const project = await createProject({ name, description: '' })
+      await enterProjectMode(project.id)
+    } catch (error) {
+      logError('Failed to create project', error, {
+        component: 'ChatInterface',
+        action: 'handleCreateProject',
+      })
+    }
   }, [createProject, enterProjectMode])
 
   // Don't automatically create new chats - let the chat state handle initialization
