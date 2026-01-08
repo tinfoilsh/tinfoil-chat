@@ -276,6 +276,13 @@ export function ProjectSidebar({
               async (content) => {
                 try {
                   await uploadDocument(file, content)
+                } catch {
+                  toast({
+                    title: 'Upload failed',
+                    description:
+                      'Failed to upload the document. Please try again.',
+                    variant: 'destructive',
+                  })
                 } finally {
                   setUploadingFiles((prev) =>
                     prev.filter((f) => f.id !== uploadIds[i]),
@@ -333,6 +340,13 @@ export function ProjectSidebar({
               async (content) => {
                 try {
                   await uploadDocument(file, content)
+                } catch {
+                  toast({
+                    title: 'Upload failed',
+                    description:
+                      'Failed to upload the document. Please try again.',
+                    variant: 'destructive',
+                  })
                 } finally {
                   setUploadingFiles((prev) =>
                     prev.filter((f) => f.id !== uploadIds[i]),
