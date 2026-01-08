@@ -853,7 +853,7 @@ export function ChatSidebar({
                       <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
                     </div>
                   ) : projects.length === 0 ? (
-                    <div className="px-3 py-2 text-center text-xs text-content-muted">
+                    <div className="px-3 py-2 text-xs text-content-muted">
                       No projects yet
                     </div>
                   ) : (
