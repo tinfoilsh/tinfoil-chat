@@ -783,7 +783,7 @@ export function ProjectSidebar({
                           Drop files here or click to upload
                         </p>
                         <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
-                          PDF, TXT, MD, DOCX, XLSX, PPTX
+                          PDF, TXT, MD, DOCX, XLSX, PPTX, HTML, CSV, images
                         </p>
                       </>
                     )}
