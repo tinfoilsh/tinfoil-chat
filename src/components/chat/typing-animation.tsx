@@ -20,14 +20,21 @@ export function TypingAnimation({
   const [currentText, setCurrentText] = useState(fromText)
   const [showCursor, setShowCursor] = useState(true)
   const [phase, setPhase] = useState<'deleting' | 'typing'>('deleting')
+  const [isComplete, setIsComplete] = useState(false)
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout
-    let completionTimeoutId: NodeJS.Timeout
+    if (isComplete) return
 
     const cursorInterval = setInterval(() => {
       setShowCursor((prev) => !prev)
     }, 424)
+
+    return () => clearInterval(cursorInterval)
+  }, [isComplete])
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout
+    let completionTimeoutId: NodeJS.Timeout
 
     if (phase === 'deleting') {
       if (currentText.length > 0) {
@@ -49,7 +56,7 @@ export function TypingAnimation({
           64 + Math.random() * 32,
         )
       } else {
-        clearInterval(cursorInterval)
+        setIsComplete(true)
         completionTimeoutId = setTimeout(() => {
           onComplete()
         }, 400)
@@ -59,7 +66,6 @@ export function TypingAnimation({
     return () => {
       clearTimeout(timeoutId)
       clearTimeout(completionTimeoutId)
-      clearInterval(cursorInterval)
     }
   }, [currentText, phase, toText, onComplete])
 
