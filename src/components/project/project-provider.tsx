@@ -45,6 +45,8 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     if (isSignedIn && getToken && !initializingRef.current) {
       initializingRef.current = true
       projectStorage.setTokenGetter(getToken)
+    } else if (!isSignedIn) {
+      initializingRef.current = false
     }
   }, [isSignedIn, getToken])
 
