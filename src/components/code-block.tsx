@@ -351,9 +351,19 @@ const MarkdownPreview = ({
   </div>
 )
 
-const stripTypeAnnotations = (code: string): string => {
+const stripModuleSyntax = (code: string): string => {
   return (
     code
+      // Remove import statements entirely
+      .replace(/^import\s+.*?['"];?\s*$/gm, '')
+      // Remove `export { ... }` statements entirely
+      .replace(/^export\s+\{[^}]*\}\s*(from\s+['"][^'"]*['"])?\s*;?\s*$/gm, '')
+      // Remove `export * from` statements entirely
+      .replace(/^export\s+\*\s+from\s+['"][^'"]*['"];?\s*$/gm, '')
+      // Remove `export default` (leave the declaration)
+      .replace(/^export\s+default\s+/gm, '')
+      // Remove `export` keyword from declarations (export const, export function, etc.)
+      .replace(/^export\s+/gm, '')
       // Remove type annotations after colons (e.g., `: string`, `: number[]`, `: void`)
       .replace(/:\s*[A-Za-z_$][\w$]*(?:<[^>]+>)?(?:\[\])?(?=\s*[,)=;{\n])/g, '')
       // Remove generic type parameters on functions (e.g., `<T>`, `<T, U>`)
@@ -390,7 +400,7 @@ const JavaScriptPreview = ({ code }: { code: string }) => {
   }, [instanceId])
 
   const iframeSrc = useMemo(() => {
-    const strippedCode = stripTypeAnnotations(code)
+    const strippedCode = stripModuleSyntax(code)
     const jsonEscapedCode = JSON.stringify(strippedCode).replace(
       /<\/script>/gi,
       '<\\/script>',
@@ -858,7 +868,7 @@ export const CodeBlock = memo(function CodeBlock({
           />
         </div>
       )}
-      <div className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      <div className="absolute right-2 top-2 z-10 hidden gap-1 group-hover:flex">
         {isMarkdown && viewMode === 'preview' && (
           <>
             <div className="group/md relative">
@@ -868,7 +878,7 @@ export const CodeBlock = memo(function CodeBlock({
               >
                 <BsFiletypeMd className="h-5 w-5 text-content-muted" />
               </button>
-              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/md:opacity-100">
+              <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary shadow-sm group-hover/md:block">
                 .md
               </span>
             </div>
@@ -882,7 +892,7 @@ export const CodeBlock = memo(function CodeBlock({
                   className={`h-5 w-5 ${isGeneratingPdf ? 'animate-pulse' : ''} text-content-muted`}
                 />
               </button>
-              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/pdf:opacity-100">
+              <span className="pointer-events-none absolute -top-8 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary shadow-sm group-hover/pdf:block">
                 {isGeneratingPdf ? 'Generating...' : 'PDF'}
               </span>
             </div>
@@ -923,7 +933,7 @@ export const CodeBlock = memo(function CodeBlock({
               </svg>
             )}
           </button>
-          <span className="pointer-events-none absolute -top-8 right-0 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
+          <span className="pointer-events-none absolute -top-8 right-0 hidden whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary shadow-sm group-hover/copy:block">
             {copied ? 'Copied!' : 'Copy'}
           </span>
         </div>
