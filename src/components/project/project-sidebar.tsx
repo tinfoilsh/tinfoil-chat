@@ -185,6 +185,13 @@ export function ProjectSidebar({
         description: editedDescription,
         systemInstructions: editedInstructions,
       })
+    } catch {
+      toast({
+        title: 'Failed to save project settings',
+        description:
+          'The project settings could not be saved. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setIsSaving(false)
     }
@@ -205,6 +212,12 @@ export function ProjectSidebar({
           name: editingProjectName.trim(),
         })
         setEditedName(editingProjectName.trim())
+      } catch {
+        toast({
+          title: 'Failed to save project name',
+          description: 'The project name could not be saved. Please try again.',
+          variant: 'destructive',
+        })
       } finally {
         setIsSaving(false)
       }
@@ -226,6 +239,12 @@ export function ProjectSidebar({
     try {
       await deleteProject(project.id)
       onExitProject()
+    } catch {
+      toast({
+        title: 'Failed to delete project',
+        description: 'The project could not be deleted. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setIsDeleting(false)
       setShowDeleteConfirm(false)
