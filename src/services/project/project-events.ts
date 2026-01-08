@@ -1,3 +1,5 @@
+import { logError } from '@/utils/error-handling'
+
 type ProjectSummaryUpdateEvent = {
   type: 'summary-update-needed'
   projectId: string
@@ -29,7 +31,17 @@ class ProjectEventsEmitter {
   emit<T extends ProjectEvent>(event: T): void {
     const handlers = this.handlers.get(event.type)
     if (handlers) {
-      handlers.forEach((handler) => handler(event))
+      handlers.forEach((handler) => {
+        try {
+          handler(event)
+        } catch (error) {
+          logError('Project event handler failed', error, {
+            component: 'ProjectEventsEmitter',
+            action: 'emit',
+            metadata: { eventType: event.type },
+          })
+        }
+      })
     }
   }
 }
