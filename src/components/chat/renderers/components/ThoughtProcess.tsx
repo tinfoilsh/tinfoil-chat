@@ -48,7 +48,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const isUserScrollingRef = useRef<boolean>(false)
   const [thoughtSummary, setThoughtSummary] = useState<string>('')
   const summaryGenerationRef = useRef<Promise<void> | null>(null)
-  const lastThoughtsRef = useRef<string>('')
   const isMountedRef = useRef<boolean>(true)
 
   const handleToggle = () => {
@@ -93,16 +92,16 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         const generatedSummary =
           completion.choices?.[0]?.message?.content?.trim() || ''
         const cleaned = generatedSummary
-          .toLowerCase()
           .replace(/[".]/g, '')
           .replace(
-            /\b(my|your|yours|mine|our|ours|their|theirs|his|her|hers)\b/g,
+            /\b(my|your|yours|mine|our|ours|their|theirs|his|her|hers)\b/gi,
             '',
           )
           .replace(/\s+/g, ' ')
           .trim()
-        if (isMountedRef.current && cleaned) {
-          setThoughtSummary(cleaned)
+        const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+        if (isMountedRef.current && capitalized) {
+          setThoughtSummary(capitalized)
         }
       } catch (error) {
         logError('Failed to generate thought summary', error, {
@@ -119,7 +118,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
   useEffect(() => {
     if (!isThinking) {
-      lastThoughtsRef.current = ''
       setThoughtSummary('')
       return
     }
@@ -127,26 +125,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
     if (!thoughts.trim()) return
 
     const MIN_CONTENT_WORDS = 20
-    const MIN_NEW_CONTENT_WORDS = 50
-
     const totalWords = thoughts.split(/\s+/).filter(Boolean).length
     if (totalWords < MIN_CONTENT_WORDS) return
 
-    const newContent = thoughts.slice(lastThoughtsRef.current.length)
-    const newWordCount = newContent.split(/\s+/).filter(Boolean).length
-    if (
-      newWordCount < MIN_NEW_CONTENT_WORDS &&
-      lastThoughtsRef.current.length > 0
-    ) {
-      return
-    }
-
     if (summaryGenerationRef.current) return
 
-    lastThoughtsRef.current = thoughts
-
     summaryGenerationRef.current = generateSummary(
-      newContent,
+      thoughts,
       isMountedRef,
     ).finally(() => {
       summaryGenerationRef.current = null
