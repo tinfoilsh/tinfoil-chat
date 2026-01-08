@@ -687,8 +687,13 @@ export function ChatInterface({
         component: 'ChatInterface',
         action: 'handleCreateProject',
       })
+      toast({
+        title: 'Failed to create project',
+        description: 'Please try again.',
+        variant: 'destructive',
+      })
     }
-  }, [createProject, enterProjectMode])
+  }, [createProject, enterProjectMode, toast])
 
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
