@@ -1,6 +1,9 @@
 import { API_BASE_URL, PAGINATION } from '@/config'
 import { useProjects } from '@/hooks/use-projects'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import {
+  isCloudSyncEnabled,
+  setCloudSyncEnabled as setCloudSyncEnabledSetting,
+} from '@/utils/cloud-sync-settings'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -777,8 +780,8 @@ export function ChatSidebar({
             <div className="relative z-10 border-b border-border-subtle" />
           )}
 
-          {/* Projects dropdown - only show for premium users with cloud sync */}
-          {isSignedIn && cloudSyncEnabled && isPremium && (
+          {/* Projects dropdown - show for premium users */}
+          {isSignedIn && isPremium && (
             <div className="relative z-10 flex-none border-t border-border-subtle">
               <button
                 onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
@@ -811,99 +814,124 @@ export function ChatSidebar({
               {/* Expanded projects list */}
               {isProjectsExpanded && (
                 <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
-                  {/* Create new project button */}
-                  {onCreateProject && (
-                    <button
-                      onClick={async () => {
-                        setIsCreatingProject(true)
-                        try {
-                          await onCreateProject()
-                          if (windowWidth < MOBILE_BREAKPOINT) {
-                            setIsOpen(false)
-                          }
-                        } finally {
-                          setIsCreatingProject(false)
-                        }
-                      }}
-                      disabled={isCreatingProject}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-                        isDarkMode
-                          ? 'text-emerald-400 hover:bg-surface-chat'
-                          : 'text-emerald-600 hover:bg-surface-sidebar',
-                        isCreatingProject && 'cursor-not-allowed opacity-50',
-                      )}
-                    >
-                      {isCreatingProject ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-                      ) : (
-                        <FolderPlusIcon className="h-4 w-4 shrink-0" />
-                      )}
-                      <span className="truncate">
-                        {isCreatingProject
-                          ? 'Creating...'
-                          : 'Create New Project'}
-                      </span>
-                    </button>
-                  )}
-
-                  {/* Projects list */}
-                  {projectsLoading && projects.length === 0 ? (
-                    <div className="flex justify-center px-3 py-2">
-                      <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
-                    </div>
-                  ) : projects.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-content-muted">
-                      No projects yet
+                  {/* Cloud sync disabled message */}
+                  {!cloudSyncEnabled ? (
+                    <div className="px-3 py-2">
+                      <p className="text-xs text-content-muted">
+                        Projects require cloud sync to be enabled.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setCloudSyncEnabledSetting(true)
+                          setCloudSyncEnabled(true)
+                        }}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-950/20 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                      >
+                        <CloudIcon className="h-3.5 w-3.5" />
+                        Enable Cloud Sync
+                      </button>
                     </div>
                   ) : (
                     <>
-                      {projects.map((project) => (
+                      {/* Create new project button */}
+                      {onCreateProject && (
                         <button
-                          key={project.id}
                           onClick={async () => {
-                            if (onEnterProject) {
-                              await onEnterProject(project.id, project.name)
+                            setIsCreatingProject(true)
+                            try {
+                              await onCreateProject()
                               if (windowWidth < MOBILE_BREAKPOINT) {
                                 setIsOpen(false)
                               }
+                            } finally {
+                              setIsCreatingProject(false)
                             }
                           }}
+                          disabled={isCreatingProject}
                           className={cn(
-                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
                             isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-chat'
-                              : 'text-content-secondary hover:bg-surface-sidebar',
+                              ? 'text-emerald-400 hover:bg-surface-chat'
+                              : 'text-emerald-600 hover:bg-surface-sidebar',
+                            isCreatingProject &&
+                              'cursor-not-allowed opacity-50',
                           )}
                         >
-                          <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
-                          <div className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate leading-5">
-                              {project.name}
-                            </span>
-                            <span className="text-xs text-content-muted">
-                              Updated{' '}
-                              {formatRelativeTime(new Date(project.updatedAt))}
-                            </span>
-                          </div>
+                          {isCreatingProject ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                          ) : (
+                            <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                          )}
+                          <span className="truncate">
+                            {isCreatingProject
+                              ? 'Creating...'
+                              : 'Create New Project'}
+                          </span>
                         </button>
-                      ))}
+                      )}
 
-                      {/* Load more button */}
-                      {hasMoreProjects && (
-                        <button
-                          onClick={() => loadMoreProjects()}
-                          disabled={projectsLoading}
-                          className={cn(
-                            'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
-                            isDarkMode
-                              ? 'border-border-strong text-content-muted hover:text-content-secondary'
-                              : 'border-border-subtle text-content-muted hover:text-content-secondary',
-                            projectsLoading && 'cursor-not-allowed opacity-50',
+                      {/* Projects list */}
+                      {projectsLoading && projects.length === 0 ? (
+                        <div className="flex justify-center px-3 py-2">
+                          <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
+                        </div>
+                      ) : projects.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-content-muted">
+                          No projects yet
+                        </div>
+                      ) : (
+                        <>
+                          {projects.map((project) => (
+                            <button
+                              key={project.id}
+                              onClick={async () => {
+                                if (onEnterProject) {
+                                  await onEnterProject(project.id, project.name)
+                                  if (windowWidth < MOBILE_BREAKPOINT) {
+                                    setIsOpen(false)
+                                  }
+                                }
+                              }}
+                              className={cn(
+                                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                                isDarkMode
+                                  ? 'text-content-secondary hover:bg-surface-chat'
+                                  : 'text-content-secondary hover:bg-surface-sidebar',
+                              )}
+                            >
+                              <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                              <div className="flex min-w-0 flex-1 flex-col">
+                                <span className="truncate leading-5">
+                                  {project.name}
+                                </span>
+                                <span className="text-xs text-content-muted">
+                                  Updated{' '}
+                                  {formatRelativeTime(
+                                    new Date(project.updatedAt),
+                                  )}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+
+                          {/* Load more button */}
+                          {hasMoreProjects && (
+                            <button
+                              onClick={() => loadMoreProjects()}
+                              disabled={projectsLoading}
+                              className={cn(
+                                'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
+                                isDarkMode
+                                  ? 'border-border-strong text-content-muted hover:text-content-secondary'
+                                  : 'border-border-subtle text-content-muted hover:text-content-secondary',
+                                projectsLoading &&
+                                  'cursor-not-allowed opacity-50',
+                              )}
+                            >
+                              {projectsLoading ? 'Loading...' : 'Load more'}
+                            </button>
                           )}
-                        >
-                          {projectsLoading ? 'Loading...' : 'Load more'}
-                        </button>
+                        </>
                       )}
                     </>
                   )}
