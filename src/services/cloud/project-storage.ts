@@ -93,12 +93,14 @@ export class ProjectStorageService {
       throw new Error(`Failed to create project: ${response.statusText}`)
     }
 
+    const responseData = await response.json()
+
     return {
       id: projectId,
       ...projectData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      syncVersion: 1,
+      createdAt: responseData.createdAt,
+      updatedAt: responseData.updatedAt,
+      syncVersion: responseData.syncVersion,
     }
   }
 
