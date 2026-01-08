@@ -9,7 +9,9 @@ import { useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   Bars3Icon,
+  ChatBubbleLeftRightIcon,
   Cog6ToothIcon,
+  FolderIcon,
   PlusIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
@@ -1106,18 +1108,60 @@ export function ChatInterface({
         }}
       />
 
-      {/* Sidebar toggle button - visible when left sidebar is closed, hidden when open */}
+      {/* Sidebar toggle buttons - visible when left sidebar is closed, hidden when open */}
       {!isSidebarOpen &&
         !(
           windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
           (isVerifierSidebarOpen || isSettingsSidebarOpen)
-        ) && (
+        ) &&
+        (isSignedIn && isPremium ? (
+          <div className="fixed left-4 top-4 z-50 flex flex-col gap-2">
+            {/* Projects button */}
+            <div className="group relative">
+              <button
+                className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+                onClick={() => {
+                  sessionStorage.setItem('sidebarExpandSection', 'projects')
+                  setIsSidebarOpen(true)
+                  if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+                    setIsVerifierSidebarOpen(false)
+                    setIsSettingsSidebarOpen(false)
+                  }
+                }}
+              >
+                <FolderIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Projects
+              </span>
+            </div>
+            {/* Chats button */}
+            <div className="group relative">
+              <button
+                className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+                onClick={() => {
+                  sessionStorage.setItem('sidebarExpandSection', 'chats')
+                  setIsSidebarOpen(true)
+                  if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+                    setIsVerifierSidebarOpen(false)
+                    setIsSettingsSidebarOpen(false)
+                  }
+                }}
+              >
+                <ChatBubbleLeftRightIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Chats{' '}
+                <span className="ml-1.5 text-content-muted">{modKey}.</span>
+              </span>
+            </div>
+          </div>
+        ) : (
           <div className="group relative">
             <button
               className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
               onClick={() => {
                 setIsSidebarOpen(true)
-                // If window is narrow, close right sidebars when opening left sidebar
                 if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
                   setIsVerifierSidebarOpen(false)
                   setIsSettingsSidebarOpen(false)
@@ -1132,7 +1176,7 @@ export function ChatInterface({
               <span className="ml-1.5 text-content-muted">{modKey}.</span>
             </span>
           </div>
-        )}
+        ))}
 
       {/* Right side toggle buttons */}
       {!(

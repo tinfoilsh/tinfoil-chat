@@ -191,11 +191,23 @@ export function ChatSidebar({
         sessionStorage.removeItem('expandProjectsOnMount')
         return true
       }
+      const expandSection = sessionStorage.getItem('sidebarExpandSection')
+      if (expandSection === 'projects') {
+        return true
+      }
     }
     return false
   })
   const [isCreatingProject, setIsCreatingProject] = useState(false)
-  const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(true)
+  const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const expandSection = sessionStorage.getItem('sidebarExpandSection')
+      if (expandSection === 'projects') {
+        return false
+      }
+    }
+    return true
+  })
   const [isChatListScrolled, setIsChatListScrolled] = useState(false)
   const chatListRef = useRef<HTMLDivElement>(null)
   const [windowWidth, setWindowWidth] = useState(
@@ -364,6 +376,21 @@ export function ChatSidebar({
   useEffect(() => {
     setIsInitialLoad(false)
   }, [])
+
+  // Handle sidebar expand section when sidebar opens
+  useEffect(() => {
+    if (isOpen) {
+      const expandSection = sessionStorage.getItem('sidebarExpandSection')
+      if (expandSection === 'projects') {
+        setIsProjectsExpanded(true)
+        setIsChatHistoryExpanded(false)
+      } else if (expandSection === 'chats') {
+        setIsProjectsExpanded(false)
+        setIsChatHistoryExpanded(true)
+      }
+      sessionStorage.removeItem('sidebarExpandSection')
+    }
+  }, [isOpen])
 
   // Initialize cloudStorage with token getter when component mounts
   useEffect(() => {
@@ -1071,9 +1098,9 @@ export function ChatSidebar({
 
                 <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
                   {!isSignedIn ? (
-                    'Your chats are stored temporarily in this browser tab.'
+                    'Your chats are stored temporarily in this browser tab. Create an account for persistent storage.'
                   ) : !cloudSyncEnabled || activeTab === 'local' ? (
-                    "Local chats are stored only on this device and won't sync."
+                    "Local chats are stored only on this device and won't sync across devices."
                   ) : (
                     <>
                       Your chats are encrypted and synced to the cloud. The
