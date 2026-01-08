@@ -156,7 +156,7 @@ export function ChatListItem({
           : isSelected
             ? isDarkMode
               ? 'bg-surface-chat text-white'
-              : 'bg-white text-content-primary'
+              : 'bg-gray-200 text-content-primary'
             : isDarkMode
               ? 'text-content-secondary hover:bg-surface-chat'
               : 'text-content-secondary hover:bg-surface-sidebar',
