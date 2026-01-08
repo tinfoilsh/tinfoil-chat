@@ -696,7 +696,7 @@ export function ProjectSidebar({
                   ) : (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-950/40"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 dark:border-red-500/30 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40"
                     >
                       <TrashIcon className="h-3.5 w-3.5" />
                       Delete Project
