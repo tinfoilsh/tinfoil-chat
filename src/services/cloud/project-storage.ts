@@ -309,15 +309,17 @@ export class ProjectStorageService {
       throw new Error(`Failed to upload document: ${response.statusText}`)
     }
 
+    const data = await response.json()
+
     return {
       id: documentId,
       projectId,
       filename,
       contentType,
       sizeBytes: new TextEncoder().encode(content).length,
-      syncVersion: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      syncVersion: data.syncVersion,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
       content,
     }
   }
@@ -342,10 +344,10 @@ export class ProjectStorageService {
         throw new Error(`Failed to get document: ${response.statusText}`)
       }
 
-      const encrypted = await response.json()
+      const data = await response.json()
 
       await encryptionService.initialize()
-      const decrypted = (await encryptionService.decrypt(encrypted)) as {
+      const decrypted = (await encryptionService.decrypt(data.content)) as {
         content: string
         filename?: string
         contentType?: string
@@ -357,9 +359,9 @@ export class ProjectStorageService {
         filename: decrypted.filename || '',
         contentType: decrypted.contentType || '',
         sizeBytes: new TextEncoder().encode(decrypted.content).length,
-        syncVersion: 1,
-        createdAt: '',
-        updatedAt: '',
+        syncVersion: data.syncVersion,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
         content: decrypted.content,
       }
     } catch (error) {
