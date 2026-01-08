@@ -29,6 +29,7 @@ export function DeleteConfirmation({
           e.stopPropagation()
           onCancel()
         }}
+        autoFocus
       >
         Cancel
       </button>
@@ -43,7 +44,6 @@ export function DeleteConfirmation({
           e.stopPropagation()
           onConfirm()
         }}
-        autoFocus
       >
         Delete
       </button>
