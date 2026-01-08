@@ -1291,7 +1291,12 @@ export function ChatInterface({
           onChatsUpdated={reloadChats}
           isProjectMode={isProjectMode}
           activeProjectName={activeProject?.name}
-          onEnterProject={enterProjectMode}
+          onEnterProject={async (projectId, projectName) => {
+            // Create a new blank chat before entering project mode
+            // This prevents the current chat from being associated with the project
+            createNewChat(false, true)
+            await enterProjectMode(projectId, projectName)
+          }}
           onCreateProject={handleCreateProject}
         />
       )}
