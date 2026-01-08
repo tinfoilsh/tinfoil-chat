@@ -33,6 +33,8 @@ export function TypingAnimation({
   }, [isComplete])
 
   useEffect(() => {
+    if (isComplete) return
+
     let timeoutId: NodeJS.Timeout
     let completionTimeoutId: NodeJS.Timeout
 
@@ -67,7 +69,7 @@ export function TypingAnimation({
       clearTimeout(timeoutId)
       clearTimeout(completionTimeoutId)
     }
-  }, [currentText, phase, toText, onComplete])
+  }, [currentText, phase, toText, onComplete, isComplete])
 
   return (
     <span className="inline-flex items-baseline">
