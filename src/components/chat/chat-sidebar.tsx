@@ -16,6 +16,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { CiFloppyDisk } from 'react-icons/ci'
+import { FaLock } from 'react-icons/fa6'
 import { IoChatbubblesOutline } from 'react-icons/io5'
 import { PiSignIn, PiSpinner } from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
@@ -894,21 +895,40 @@ export function ChatSidebar({
                               }}
                               className={cn(
                                 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                                isDarkMode
-                                  ? 'text-content-secondary hover:bg-surface-chat'
-                                  : 'text-content-secondary hover:bg-surface-sidebar',
+                                project.decryptionFailed
+                                  ? 'cursor-default'
+                                  : isDarkMode
+                                    ? 'text-content-secondary hover:bg-surface-chat'
+                                    : 'text-content-secondary hover:bg-surface-sidebar',
                               )}
+                              disabled={project.decryptionFailed}
                             >
-                              <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                              {project.decryptionFailed ? (
+                                <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
+                              ) : (
+                                <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                              )}
                               <div className="flex min-w-0 flex-1 flex-col">
-                                <span className="truncate leading-5">
+                                <span
+                                  className={cn(
+                                    'truncate leading-5',
+                                    project.decryptionFailed &&
+                                      'text-orange-500',
+                                  )}
+                                >
                                   {project.name}
                                 </span>
-                                <span className="text-xs text-content-muted">
-                                  Updated{' '}
-                                  {formatRelativeTime(
-                                    new Date(project.updatedAt),
+                                <span
+                                  className={cn(
+                                    'text-xs',
+                                    project.decryptionFailed
+                                      ? 'text-red-500'
+                                      : 'text-content-muted',
                                   )}
+                                >
+                                  {project.decryptionFailed
+                                    ? 'Failed to decrypt: wrong key'
+                                    : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
                                 </span>
                               </div>
                             </button>

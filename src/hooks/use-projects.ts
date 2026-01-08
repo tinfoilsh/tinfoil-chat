@@ -99,6 +99,7 @@ export function useProjects(
               createdAt: item.createdAt,
               updatedAt: item.updatedAt,
               syncVersion: item.syncVersion,
+              decryptionFailed: true,
             }
           }
         }),
@@ -187,6 +188,7 @@ export function useProjects(
               createdAt: item.createdAt,
               updatedAt: item.updatedAt,
               syncVersion: item.syncVersion,
+              decryptionFailed: true,
             }
           }
         }),

@@ -12,6 +12,7 @@ export interface Project {
   createdAt: string
   updatedAt: string
   syncVersion: number
+  decryptionFailed?: boolean
 }
 
 export interface ProjectDocument {
