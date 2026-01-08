@@ -1,4 +1,5 @@
 import { FiArrowUp } from '@/components/icons/lazy-icons'
+import { useProject } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { useToast } from '@/hooks/use-toast'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
@@ -6,6 +7,7 @@ import { logError } from '@/utils/error-handling'
 import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
 import {
   DocumentIcon,
+  FolderIcon,
   MicrophoneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
@@ -57,6 +59,7 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const documentsScrollRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+  const { isProjectMode, activeProject } = useProject()
 
   // --- Speech-to-text state ---
   const [isRecording, setIsRecording] = useState(false)
@@ -327,408 +330,423 @@ export function ChatInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <div
-        className={cn(
-          'rounded-xl border border-border-subtle bg-surface-chat p-4 shadow-md transition-colors',
-          isDragOver && 'ring-2 ring-emerald-400/60',
-        )}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          className="hidden"
-          accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
-        />
-
-        {processedDocuments && processedDocuments.length > 0 && (
-          <div
-            ref={documentsScrollRef}
-            className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4"
-          >
-            {processedDocuments.map((doc) => {
-              const getPreviewText = (content?: string) => {
-                if (!content) return null
-                const lines = content.split('\n').filter((line) => {
-                  const trimmed = line.trim()
-                  if (!trimmed) return false
-                  if (trimmed.startsWith('# ')) return false
-                  return true
-                })
-                return lines.slice(0, 2).join('\n')
-              }
-              const preview = getPreviewText(doc.content)
-
-              return (
-                <div
-                  key={doc.id}
-                  className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
-                >
-                  {removeDocument && !doc.isUploading && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeDocument(doc.id)
-                      }}
-                      className={cn(
-                        'absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100',
-                        'bg-surface-chat text-content-secondary shadow-sm hover:bg-surface-chat-background hover:text-content-primary',
-                      )}
-                      aria-label="Remove document"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-3 w-3"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    {doc.imageData ? (
-                      <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
-                        <img
-                          src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
-                          alt={doc.name}
-                          className="h-full w-full object-cover"
-                        />
-                        {doc.isUploading && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
-                            <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
-                          </div>
-                        )}
-                      </div>
-                    ) : doc.isUploading ? (
-                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
-                        <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
-                      </div>
-                    ) : (
-                      <MacFileIcon
-                        filename={doc.name}
-                        size={18}
-                        isDarkMode={isDarkMode}
-                        compact
-                      />
-                    )}
-                    <span className="truncate text-sm font-medium text-content-primary">
-                      {doc.name}
-                    </span>
-                  </div>
-
-                  {preview && !doc.isUploading && (
-                    <div className="mt-2 line-clamp-2 text-xs text-content-muted">
-                      {preview}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+      <div className="relative">
+        {/* Project tab - manila folder style */}
+        {isProjectMode && activeProject && (
+          <div className="mb-[-1px] flex justify-end pr-4">
+            <div className="inline-flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1">
+              <FolderIcon className="h-3 w-3 text-content-secondary" />
+              <span className="text-xs font-medium text-content-secondary">
+                {activeProject.name}
+              </span>
+            </div>
           </div>
         )}
+        <div
+          className={cn(
+            'rounded-xl border border-border-subtle bg-surface-chat p-4 shadow-md transition-colors',
+            isDragOver && 'ring-2 ring-emerald-400/60',
+          )}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
+          />
 
-        <textarea
-          id="chat-input"
-          ref={inputRef}
-          value={input}
-          autoFocus
-          onFocus={handleInputFocus}
-          onChange={(e) => {
-            setInput(e.target.value)
-            e.target.style.height = inputMinHeight
-            e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
-          }}
-          onPaste={handlePaste}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab') {
-              const textarea = e.currentTarget
-              const cursorPosition = textarea.selectionStart
-              const textBeforeCursor = input.slice(0, cursorPosition)
-              const lastLineStart = textBeforeCursor.lastIndexOf('\n') + 1
-              const currentLine = textBeforeCursor.slice(lastLineStart)
+          {processedDocuments && processedDocuments.length > 0 && (
+            <div
+              ref={documentsScrollRef}
+              className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4"
+            >
+              {processedDocuments.map((doc) => {
+                const getPreviewText = (content?: string) => {
+                  if (!content) return null
+                  const lines = content.split('\n').filter((line) => {
+                    const trimmed = line.trim()
+                    if (!trimmed) return false
+                    if (trimmed.startsWith('# ')) return false
+                    return true
+                  })
+                  return lines.slice(0, 2).join('\n')
+                }
+                const preview = getPreviewText(doc.content)
 
-              // Check if we're on a list line
-              const listMatch = currentLine.match(
-                /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+(?!\[[ x]\])/,
-              )
+                return (
+                  <div
+                    key={doc.id}
+                    className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
+                  >
+                    {removeDocument && !doc.isUploading && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeDocument(doc.id)
+                        }}
+                        className={cn(
+                          'absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100',
+                          'bg-surface-chat text-content-secondary shadow-sm hover:bg-surface-chat-background hover:text-content-primary',
+                        )}
+                        aria-label="Remove document"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-3 w-3"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                    )}
 
-              if (listMatch) {
-                e.preventDefault()
-                const textAfterCursor = input.slice(cursorPosition)
+                    <div className="flex items-center gap-2">
+                      {doc.imageData ? (
+                        <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
+                          <img
+                            src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
+                            alt={doc.name}
+                            className="h-full w-full object-cover"
+                          />
+                          {doc.isUploading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
+                              <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
+                            </div>
+                          )}
+                        </div>
+                      ) : doc.isUploading ? (
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
+                          <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
+                        </div>
+                      ) : (
+                        <MacFileIcon
+                          filename={doc.name}
+                          size={18}
+                          isDarkMode={isDarkMode}
+                          compact
+                        />
+                      )}
+                      <span className="truncate text-sm font-medium text-content-primary">
+                        {doc.name}
+                      </span>
+                    </div>
 
-                if (e.shiftKey) {
-                  // Shift+Tab: decrease indent (remove 4 spaces or exit list)
-                  const dedentMatch = currentLine.match(/^    /)
-                  if (dedentMatch) {
-                    // Has 4+ spaces, remove 4 spaces
-                    const newText =
-                      input.slice(0, lastLineStart) +
-                      currentLine.slice(4) +
-                      textAfterCursor
+                    {preview && !doc.isUploading && (
+                      <div className="mt-2 line-clamp-2 text-xs text-content-muted">
+                        {preview}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-                    setInput(newText)
+          <textarea
+            id="chat-input"
+            ref={inputRef}
+            value={input}
+            autoFocus
+            onFocus={handleInputFocus}
+            onChange={(e) => {
+              setInput(e.target.value)
+              e.target.style.height = inputMinHeight
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
+            }}
+            onPaste={handlePaste}
+            onKeyDown={(e) => {
+              if (e.key === 'Tab') {
+                const textarea = e.currentTarget
+                const cursorPosition = textarea.selectionStart
+                const textBeforeCursor = input.slice(0, cursorPosition)
+                const lastLineStart = textBeforeCursor.lastIndexOf('\n') + 1
+                const currentLine = textBeforeCursor.slice(lastLineStart)
 
-                    setTimeout(() => {
-                      textarea.selectionStart = textarea.selectionEnd =
-                        Math.max(lastLineStart, cursorPosition - 4)
-                    }, 0)
-                  } else {
-                    // Single indent level - remove the bullet/marker entirely
-                    const contentMatch = currentLine.match(
-                      /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+(.*)$/,
-                    )
-                    if (contentMatch) {
-                      const [, , , content] = contentMatch
+                // Check if we're on a list line
+                const listMatch = currentLine.match(
+                  /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+(?!\[[ x]\])/,
+                )
+
+                if (listMatch) {
+                  e.preventDefault()
+                  const textAfterCursor = input.slice(cursorPosition)
+
+                  if (e.shiftKey) {
+                    // Shift+Tab: decrease indent (remove 4 spaces or exit list)
+                    const dedentMatch = currentLine.match(/^    /)
+                    if (dedentMatch) {
+                      // Has 4+ spaces, remove 4 spaces
                       const newText =
                         input.slice(0, lastLineStart) +
-                        content +
+                        currentLine.slice(4) +
                         textAfterCursor
 
                       setInput(newText)
 
                       setTimeout(() => {
                         textarea.selectionStart = textarea.selectionEnd =
-                          lastLineStart + content.length
+                          Math.max(lastLineStart, cursorPosition - 4)
                       }, 0)
+                    } else {
+                      // Single indent level - remove the bullet/marker entirely
+                      const contentMatch = currentLine.match(
+                        /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+(.*)$/,
+                      )
+                      if (contentMatch) {
+                        const [, , , content] = contentMatch
+                        const newText =
+                          input.slice(0, lastLineStart) +
+                          content +
+                          textAfterCursor
+
+                        setInput(newText)
+
+                        setTimeout(() => {
+                          textarea.selectionStart = textarea.selectionEnd =
+                            lastLineStart + content.length
+                        }, 0)
+                      }
                     }
+                  } else {
+                    // Tab: increase indent (add 4 spaces)
+                    const newText =
+                      input.slice(0, lastLineStart) +
+                      '    ' +
+                      currentLine +
+                      textAfterCursor
+
+                    setInput(newText)
+
+                    setTimeout(() => {
+                      textarea.selectionStart = textarea.selectionEnd =
+                        cursorPosition + 4
+                    }, 0)
                   }
-                } else {
-                  // Tab: increase indent (add 4 spaces)
-                  const newText =
-                    input.slice(0, lastLineStart) +
-                    '    ' +
-                    currentLine +
-                    textAfterCursor
-
-                  setInput(newText)
-
-                  setTimeout(() => {
-                    textarea.selectionStart = textarea.selectionEnd =
-                      cursorPosition + 4
-                  }, 0)
                 }
-              }
-            } else if (e.key === ' ') {
-              const textarea = e.currentTarget
-              const cursorPosition = textarea.selectionStart
-              const textBeforeCursor = input.slice(0, cursorPosition)
-              const lastLineStart = textBeforeCursor.lastIndexOf('\n') + 1
-              const currentLine = textBeforeCursor.slice(lastLineStart)
+              } else if (e.key === ' ') {
+                const textarea = e.currentTarget
+                const cursorPosition = textarea.selectionStart
+                const textBeforeCursor = input.slice(0, cursorPosition)
+                const lastLineStart = textBeforeCursor.lastIndexOf('\n') + 1
+                const currentLine = textBeforeCursor.slice(lastLineStart)
 
-              // Check if the line starts with * or - or + (for bullets)
-              const bulletMatch = currentLine.match(/^(\s*)([-*+])$/)
+                // Check if the line starts with * or - or + (for bullets)
+                const bulletMatch = currentLine.match(/^(\s*)([-*+])$/)
 
-              if (bulletMatch) {
-                e.preventDefault()
-                const [, indent] = bulletMatch
-                const textAfterCursor = input.slice(cursorPosition)
-
-                // Replace the marker with a bullet point and add space with indentation
-                // Extra space after bullet to align with numbered lists
-                const newText =
-                  input.slice(0, lastLineStart) +
-                  indent +
-                  '  \u2022  ' +
-                  textAfterCursor
-
-                setInput(newText)
-
-                setTimeout(() => {
-                  textarea.selectionStart = textarea.selectionEnd =
-                    lastLineStart + indent.length + 5
-                }, 0)
-              } else {
-                // Check if the line starts with a number (for numbered lists)
-                const numberMatch = currentLine.match(/^(\s*)(\d+\.)$/)
-
-                if (numberMatch) {
+                if (bulletMatch) {
                   e.preventDefault()
-                  const [, indent, marker] = numberMatch
+                  const [, indent] = bulletMatch
                   const textAfterCursor = input.slice(cursorPosition)
 
-                  // Just add a space after the number marker (no extra indentation)
+                  // Replace the marker with a bullet point and add space with indentation
+                  // Extra space after bullet to align with numbered lists
                   const newText =
                     input.slice(0, lastLineStart) +
                     indent +
-                    marker +
-                    ' ' +
+                    '  \u2022  ' +
                     textAfterCursor
 
                   setInput(newText)
 
                   setTimeout(() => {
                     textarea.selectionStart = textarea.selectionEnd =
-                      lastLineStart + indent.length + marker.length + 1
-                  }, 0)
-                }
-              }
-            } else if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              if (loadingState === 'idle') {
-                handleSubmit(e)
-              }
-            } else if (e.key === 'Enter' && e.shiftKey) {
-              const textarea = e.currentTarget
-              const cursorPosition = textarea.selectionStart
-              const textBeforeCursor = input.slice(0, cursorPosition)
-              const lastLineStart = textBeforeCursor.lastIndexOf('\n') + 1
-              const currentLine = textBeforeCursor.slice(lastLineStart)
-
-              // Match list markers: •, -, *, +, 1.
-              const listMarkerMatch = currentLine.match(
-                /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+/,
-              )
-
-              if (!listMarkerMatch) {
-                setTimeout(() => {
-                  textarea.style.height = inputMinHeight
-                  textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
-                  textarea.scrollTop = textarea.scrollHeight
-                }, 0)
-              } else if (listMarkerMatch) {
-                e.preventDefault()
-                const [fullMatch, indent, marker] = listMarkerMatch
-
-                const contentAfterMarker = currentLine
-                  .slice(fullMatch.length)
-                  .trim()
-
-                if (!contentAfterMarker) {
-                  // Empty list item - exit the list
-                  const textAfterCursor = input.slice(cursorPosition)
-                  const newText =
-                    input.slice(0, lastLineStart) + indent + textAfterCursor
-
-                  setInput(newText)
-
-                  setTimeout(() => {
-                    textarea.selectionStart = textarea.selectionEnd =
-                      lastLineStart + indent.length
+                      lastLineStart + indent.length + 5
                   }, 0)
                 } else {
-                  // Continue the list
-                  const textAfterCursor = input.slice(cursorPosition)
-                  let newMarker = marker
+                  // Check if the line starts with a number (for numbered lists)
+                  const numberMatch = currentLine.match(/^(\s*)(\d+\.)$/)
 
-                  // Increment numbered lists (handle with or without leading spaces)
-                  const numberMatch = marker.match(/^(\s*)(\d+\.)$/)
                   if (numberMatch) {
-                    const [, markerIndent, number] = numberMatch
-                    const currentNumber = parseInt(number)
-                    newMarker = `${markerIndent}${currentNumber + 1}.`
+                    e.preventDefault()
+                    const [, indent, marker] = numberMatch
+                    const textAfterCursor = input.slice(cursorPosition)
+
+                    // Just add a space after the number marker (no extra indentation)
+                    const newText =
+                      input.slice(0, lastLineStart) +
+                      indent +
+                      marker +
+                      ' ' +
+                      textAfterCursor
+
+                    setInput(newText)
+
+                    setTimeout(() => {
+                      textarea.selectionStart = textarea.selectionEnd =
+                        lastLineStart + indent.length + marker.length + 1
+                    }, 0)
                   }
+                }
+              } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (loadingState === 'idle') {
+                  handleSubmit(e)
+                }
+              } else if (e.key === 'Enter' && e.shiftKey) {
+                const textarea = e.currentTarget
+                const cursorPosition = textarea.selectionStart
+                const textBeforeCursor = input.slice(0, cursorPosition)
+                const lastLineStart = textBeforeCursor.lastIndexOf('\n') + 1
+                const currentLine = textBeforeCursor.slice(lastLineStart)
 
-                  const newText =
-                    textBeforeCursor +
-                    '\n' +
-                    indent +
-                    newMarker +
-                    ' ' +
-                    textAfterCursor
+                // Match list markers: •, -, *, +, 1.
+                const listMarkerMatch = currentLine.match(
+                  /^(\s*)(\s*\u2022\s+|[-*+]|\s*\d+\.)\s+/,
+                )
 
-                  setInput(newText)
-
-                  const newCursorPos =
-                    cursorPosition + 1 + indent.length + newMarker.length + 1
-
+                if (!listMarkerMatch) {
                   setTimeout(() => {
                     textarea.style.height = inputMinHeight
                     textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
-                    textarea.selectionStart = textarea.selectionEnd =
-                      newCursorPos
                     textarea.scrollTop = textarea.scrollHeight
                   }, 0)
+                } else if (listMarkerMatch) {
+                  e.preventDefault()
+                  const [fullMatch, indent, marker] = listMarkerMatch
+
+                  const contentAfterMarker = currentLine
+                    .slice(fullMatch.length)
+                    .trim()
+
+                  if (!contentAfterMarker) {
+                    // Empty list item - exit the list
+                    const textAfterCursor = input.slice(cursorPosition)
+                    const newText =
+                      input.slice(0, lastLineStart) + indent + textAfterCursor
+
+                    setInput(newText)
+
+                    setTimeout(() => {
+                      textarea.selectionStart = textarea.selectionEnd =
+                        lastLineStart + indent.length
+                    }, 0)
+                  } else {
+                    // Continue the list
+                    const textAfterCursor = input.slice(cursorPosition)
+                    let newMarker = marker
+
+                    // Increment numbered lists (handle with or without leading spaces)
+                    const numberMatch = marker.match(/^(\s*)(\d+\.)$/)
+                    if (numberMatch) {
+                      const [, markerIndent, number] = numberMatch
+                      const currentNumber = parseInt(number)
+                      newMarker = `${markerIndent}${currentNumber + 1}.`
+                    }
+
+                    const newText =
+                      textBeforeCursor +
+                      '\n' +
+                      indent +
+                      newMarker +
+                      ' ' +
+                      textAfterCursor
+
+                    setInput(newText)
+
+                    const newCursorPos =
+                      cursorPosition + 1 + indent.length + newMarker.length + 1
+
+                    setTimeout(() => {
+                      textarea.style.height = inputMinHeight
+                      textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
+                      textarea.selectionStart = textarea.selectionEnd =
+                        newCursorPos
+                      textarea.scrollTop = textarea.scrollHeight
+                    }, 0)
+                  }
                 }
+              } else if (e.key === 'Escape' && loadingState === 'loading') {
+                e.preventDefault()
+                cancelGeneration()
               }
-            } else if (e.key === 'Escape' && loadingState === 'loading') {
-              e.preventDefault()
-              cancelGeneration()
+            }}
+            placeholder={
+              hasMessages ? 'Reply to Tin...' : "What's on your mind?"
             }
-          }}
-          placeholder={hasMessages ? 'Reply to Tin...' : "What's on your mind?"}
-          rows={1}
-          className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
-          style={{
-            minHeight: inputMinHeight,
-            maxHeight: '240px',
-          }}
-        />
+            rows={1}
+            className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
+            style={{
+              minHeight: inputMinHeight,
+              maxHeight: '240px',
+            }}
+          />
 
-        <div className="mt-3 flex items-center justify-between">
-          <button
-            id="upload-button"
-            type="button"
-            onClick={triggerFileInput}
-            className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-            title="Upload document"
-          >
-            <DocumentIcon className="h-5 w-5" />
-          </button>
+          <div className="mt-3 flex items-center justify-between">
+            <button
+              id="upload-button"
+              type="button"
+              onClick={triggerFileInput}
+              className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+              title="Upload document"
+            >
+              <DocumentIcon className="h-5 w-5" />
+            </button>
 
-          <div className="flex items-center gap-2">
-            {modelSelectorButton && <div>{modelSelectorButton}</div>}
-            {isPremium && audioModel && (
+            <div className="flex items-center gap-2">
+              {modelSelectorButton && <div>{modelSelectorButton}</div>}
+              {isPremium && audioModel && (
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={cn(
+                    'rounded-lg p-1.5 disabled:opacity-50',
+                    isRecording
+                      ? 'animate-pulse text-red-500'
+                      : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
+                  )}
+                  title={
+                    isRecording
+                      ? 'Stop recording'
+                      : isConverting
+                        ? 'Converting to WAV...'
+                        : 'Start recording'
+                  }
+                  disabled={isTranscribing || isConverting}
+                >
+                  {isRecording ? (
+                    <StopIcon className="h-5 w-5" />
+                  ) : isTranscribing || isConverting ? (
+                    <PiSpinner className="h-5 w-5 animate-spin text-current" />
+                  ) : (
+                    <MicrophoneIcon className="h-5 w-5" />
+                  )}
+                </button>
+              )}
               <button
+                id="send-button"
                 type="button"
-                onClick={isRecording ? stopRecording : startRecording}
-                className={cn(
-                  'rounded-lg p-1.5 disabled:opacity-50',
-                  isRecording
-                    ? 'animate-pulse text-red-500'
-                    : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
-                )}
-                title={
-                  isRecording
-                    ? 'Stop recording'
-                    : isConverting
-                      ? 'Converting to WAV...'
-                      : 'Start recording'
+                onClick={(e) => {
+                  if (loadingState === 'loading' || loadingState === 'retrying') {
+                    e.preventDefault()
+                    cancelGeneration()
+                  } else {
+                    handleSubmit(e)
+                  }
+                }}
+                className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
+                disabled={
+                  loadingState !== 'loading' &&
+                  loadingState !== 'retrying' &&
+                  (isTranscribing || isConverting)
                 }
-                disabled={isTranscribing || isConverting}
               >
-                {isRecording ? (
-                  <StopIcon className="h-5 w-5" />
-                ) : isTranscribing || isConverting ? (
-                  <PiSpinner className="h-5 w-5 animate-spin text-current" />
+                {loadingState === 'loading' || loadingState === 'retrying' ? (
+                  <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
                 ) : (
-                  <MicrophoneIcon className="h-5 w-5" />
+                  <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
                 )}
               </button>
-            )}
-            <button
-              id="send-button"
-              type="button"
-              onClick={(e) => {
-                if (loadingState === 'loading' || loadingState === 'retrying') {
-                  e.preventDefault()
-                  cancelGeneration()
-                } else {
-                  handleSubmit(e)
-                }
-              }}
-              className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
-              disabled={
-                loadingState !== 'loading' &&
-                loadingState !== 'retrying' &&
-                (isTranscribing || isConverting)
-              }
-            >
-              {loadingState === 'loading' || loadingState === 'retrying' ? (
-                <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
-              ) : (
-                <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
-              )}
-            </button>
+            </div>
           </div>
         </div>
       </div>
