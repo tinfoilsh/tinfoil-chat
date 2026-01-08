@@ -921,9 +921,6 @@ export function ChatSidebar({
                               onClick={async () => {
                                 if (onEnterProject) {
                                   await onEnterProject(project.id, project.name)
-                                  if (windowWidth < MOBILE_BREAKPOINT) {
-                                    setIsOpen(false)
-                                  }
                                 }
                               }}
                               className={cn(
