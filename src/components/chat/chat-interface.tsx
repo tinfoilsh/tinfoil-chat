@@ -1552,6 +1552,8 @@ export function ChatInterface({
             await reloadChats()
             // Also retry profile decryption with the new key
             await retryProfileDecryption()
+            // Notify projects to retry decryption
+            window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
           }
         }}
         isDarkMode={isDarkMode}
@@ -1580,6 +1582,8 @@ export function ChatInterface({
             if (syncResult) {
               await retryProfileDecryption()
               await reloadChats()
+              // Notify projects to retry decryption
+              window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
             }
             setShowCloudSyncSetupModal(false)
           }}

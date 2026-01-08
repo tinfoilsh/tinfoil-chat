@@ -231,6 +231,26 @@ export function useProjects(
     }
   }, [isSignedIn])
 
+  // Listen for encryption key changes to retry decryption
+  useEffect(() => {
+    const handleKeyChange = () => {
+      // Only refresh if we have projects that failed decryption
+      const hasFailedDecryption = projects.some((p) => p.decryptionFailed)
+      if (hasFailedDecryption && isSignedIn) {
+        logInfo('Encryption key changed, refreshing projects', {
+          component: 'useProjects',
+          action: 'encryptionKeyChanged',
+        })
+        refresh()
+      }
+    }
+
+    window.addEventListener('encryptionKeyChanged', handleKeyChange)
+    return () => {
+      window.removeEventListener('encryptionKeyChanged', handleKeyChange)
+    }
+  }, [projects, isSignedIn, refresh])
+
   return {
     projects,
     loading,
