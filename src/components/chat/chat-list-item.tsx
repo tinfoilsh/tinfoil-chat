@@ -146,9 +146,16 @@ export function ChatListItem({
   const timestamp = getTimestamp()
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
       className={cn(
         'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
         chat.decryptionFailed
@@ -326,6 +333,6 @@ export function ChatListItem({
           </div>
         </div>
       )}
-    </button>
+    </div>
   )
 }
