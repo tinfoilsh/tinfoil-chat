@@ -749,12 +749,17 @@ export function ProjectSidebar({
               <div className="max-h-64 overflow-y-auto px-2 py-2">
                 {/* Drag and drop zone - at top */}
                 <div
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() =>
+                    !contextLoading && fileInputRef.current?.click()
+                  }
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   className={cn(
-                    'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
+                    'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
+                    contextLoading
+                      ? 'cursor-not-allowed opacity-50'
+                      : 'cursor-pointer',
                     projectDocuments.length > 0 || uploadingFiles.length > 0
                       ? 'mb-2 py-3'
                       : 'py-6',
