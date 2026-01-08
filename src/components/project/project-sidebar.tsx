@@ -803,10 +803,10 @@ export function ProjectSidebar({
                   {projectDocuments.length === 0 &&
                     uploadingFiles.length === 0 && (
                       <>
-                        <p className="font-aeonik-fono text-xs text-content-muted">
+                        <p className="text-center font-aeonik-fono text-xs text-content-muted">
                           Drop files here or click to upload
                         </p>
-                        <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
+                        <p className="mt-1 text-center font-aeonik-fono text-[10px] text-content-muted">
                           PDF, TXT, MD, DOCX, XLSX, PPTX, HTML, CSV, images
                         </p>
                       </>
