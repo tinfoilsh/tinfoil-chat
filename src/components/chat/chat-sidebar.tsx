@@ -985,7 +985,8 @@ export function ChatSidebar({
                   isSignedIn &&
                   cloudSyncEnabled &&
                   activeTab === 'cloud' && (
-                    <span
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         onEncryptionKeyClick()
@@ -998,10 +999,11 @@ export function ChatSidebar({
                       title="Manage encryption key"
                     >
                       <KeyIcon className="h-4 w-4" />
-                    </span>
+                    </button>
                   )}
                 {chats.length > 0 && (
-                  <span
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       downloadChats(chats)
@@ -1014,7 +1016,7 @@ export function ChatSidebar({
                     title="Download all chats as ZIP"
                   >
                     <ArrowDownTrayIcon className="h-4 w-4" />
-                  </span>
+                  </button>
                 )}
                 {isChatHistoryExpanded ? (
                   <ChevronDownIcon className="h-4 w-4" />
