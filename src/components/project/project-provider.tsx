@@ -127,11 +127,12 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
           },
         )
 
+        await encryptionService.initialize()
+
         const documents: ProjectDocument[] = await Promise.all(
           documentsResponse.documents.map(async (doc) => {
             if (doc.content) {
               try {
-                await encryptionService.initialize()
                 const decrypted = (await encryptionService.decrypt(
                   JSON.parse(doc.content),
                 )) as { content: string; filename: string; contentType: string }
