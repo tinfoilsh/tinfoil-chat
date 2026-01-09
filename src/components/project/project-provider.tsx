@@ -338,7 +338,6 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       setError(null)
 
       const removedDoc = projectDocuments.find((doc) => doc.id === docId)
-      const removedIndex = projectDocuments.findIndex((doc) => doc.id === docId)
 
       setProjectDocuments((prev) => prev.filter((doc) => doc.id !== docId))
 
@@ -352,11 +351,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         })
       } catch (err) {
         if (removedDoc) {
-          setProjectDocuments((prev) => {
-            const newDocs = [...prev]
-            newDocs.splice(removedIndex, 0, removedDoc)
-            return newDocs
-          })
+          setProjectDocuments((prev) => [...prev, removedDoc])
         }
 
         const message =
