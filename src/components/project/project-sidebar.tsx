@@ -921,6 +921,7 @@ export function ProjectSidebar({
               currentChatIsBlank={!currentChatId}
               isDarkMode={isDarkMode}
               isLoading={isLoading}
+              enableTitleAnimation={true}
               animatedDeleteConfirmation={false}
               onSelectChat={(chatId) => {
                 if (chatId.startsWith('blank-') || chatId === '') {
