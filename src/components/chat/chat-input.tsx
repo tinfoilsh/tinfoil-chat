@@ -331,10 +331,10 @@ export function ChatInput({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">
-        {/* Project tab - manila folder style */}
+        {/* Project tab - manila folder style, absolutely positioned */}
         {isProjectMode && activeProject && (
-          <div className="mb-[-1px] flex justify-end pr-4">
-            <div className="inline-flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1">
+          <div className="pointer-events-none absolute -top-[25px] right-4 z-10">
+            <div className="pointer-events-auto inline-flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1">
               <FolderIcon className="h-3 w-3 text-content-secondary" />
               <span className="text-xs font-medium text-content-secondary">
                 {activeProject.name}
