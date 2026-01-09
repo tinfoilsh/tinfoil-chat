@@ -44,12 +44,15 @@ export async function updateProjectSummary({
       return null
     }
 
+    const replacements: Record<string, string> = {
+      '{CURRENT_SUMMARY}': currentSummary || '(No previous summary)',
+      '{USER_MESSAGE}': userMessage.slice(0, 2000),
+      '{ASSISTANT_RESPONSE}': assistantResponse.slice(0, 2000),
+    }
     const prompt = SUMMARY_UPDATE_PROMPT.replace(
-      '{CURRENT_SUMMARY}',
-      currentSummary || '(No previous summary)',
+      /\{CURRENT_SUMMARY\}|\{USER_MESSAGE\}|\{ASSISTANT_RESPONSE\}/g,
+      (match) => replacements[match],
     )
-      .replace('{USER_MESSAGE}', userMessage.slice(0, 2000))
-      .replace('{ASSISTANT_RESPONSE}', assistantResponse.slice(0, 2000))
 
     const { sendChatStream } = await import(
       '@/services/inference/inference-client'
