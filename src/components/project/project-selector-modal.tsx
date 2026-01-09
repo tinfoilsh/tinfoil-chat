@@ -279,7 +279,12 @@ export function ProjectSelectorModal({
 
                     {error && (
                       <div className="rounded-md border border-red-500/20 bg-red-500/10 p-2">
-                        <p className="text-xs text-red-600 dark:text-red-400">
+                        <p
+                          className={cn(
+                            'text-xs',
+                            isDarkMode ? 'text-red-400' : 'text-red-600',
+                          )}
+                        >
                           {error}
                         </p>
                       </div>
