@@ -36,7 +36,6 @@ export function TypingAnimation({
     if (isComplete) return
 
     let timeoutId: NodeJS.Timeout
-    let completionTimeoutId: NodeJS.Timeout
 
     if (phase === 'deleting') {
       if (currentText.length > 0) {
@@ -59,17 +58,23 @@ export function TypingAnimation({
         )
       } else {
         setIsComplete(true)
-        completionTimeoutId = setTimeout(() => {
-          onComplete()
-        }, 400)
       }
     }
 
     return () => {
       clearTimeout(timeoutId)
-      clearTimeout(completionTimeoutId)
     }
-  }, [currentText, phase, toText, onComplete, isComplete])
+  }, [currentText, phase, toText, isComplete])
+
+  useEffect(() => {
+    if (!isComplete) return
+
+    const timeoutId = setTimeout(() => {
+      onComplete()
+    }, 400)
+
+    return () => clearTimeout(timeoutId)
+  }, [isComplete, onComplete])
 
   return (
     <span className="inline-flex items-baseline">
