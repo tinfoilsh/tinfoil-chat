@@ -44,6 +44,10 @@ class ProjectEventsEmitter {
       })
     }
   }
+
+  clear(): void {
+    this.handlers.clear()
+  }
 }
 
 export const projectEvents = new ProjectEventsEmitter()
