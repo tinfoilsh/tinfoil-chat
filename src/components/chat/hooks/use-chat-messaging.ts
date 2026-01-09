@@ -121,6 +121,7 @@ export function useChatMessaging({
   const thinkingStartTimeRef = useRef<number | null>(null)
   const titleGeneratedRef = useRef(false)
   const generatedTitleRef = useRef<string | null>(null)
+  const earlyTitlePromiseRef = useRef<Promise<void> | null>(null)
 
   // Helper to calculate thinking duration and reset timer
   const getThinkingDuration = () => {
@@ -313,6 +314,7 @@ export function useChatMessaging({
       if (isFirstMessage) {
         titleGeneratedRef.current = false
         generatedTitleRef.current = null
+        earlyTitlePromiseRef.current = null
       }
 
       // Handle blank chat conversion: create chat immediately with temp ID, get server ID async
@@ -595,7 +597,7 @@ export function useChatMessaging({
         })
 
         // Callback for early title generation when word threshold is reached
-        const handleEarlyTitleGeneration = async (content: string) => {
+        const handleEarlyTitleGeneration = (content: string) => {
           if (titleGeneratedRef.current) return
 
           const titleModel = models.find((m) => m.type === 'title')
@@ -604,42 +606,47 @@ export function useChatMessaging({
           titleGeneratedRef.current = true
           const chatId = currentChatIdRef.current
 
-          try {
-            const titleMessages = [{ role: 'assistant', content }]
-            const generatedTitle = await generateTitle(
-              titleMessages,
-              titleModel.modelName,
-            )
+          // Store the promise so we can await it before final save
+          earlyTitlePromiseRef.current = (async () => {
+            try {
+              const titleMessages = [{ role: 'assistant', content }]
+              const generatedTitle = await generateTitle(
+                titleMessages,
+                titleModel.modelName,
+              )
 
-            if (generatedTitle && generatedTitle !== 'Untitled') {
-              logInfo('[handleQuery] Early title generated successfully', {
+              if (generatedTitle && generatedTitle !== 'Untitled') {
+                logInfo('[handleQuery] Early title generated successfully', {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.earlyTitleGenComplete',
+                  metadata: { chatId, title: generatedTitle },
+                })
+
+                // Store in ref so final save can use it
+                generatedTitleRef.current = generatedTitle
+
+                setCurrentChat((prev) =>
+                  prev.id === chatId
+                    ? { ...prev, title: generatedTitle }
+                    : prev,
+                )
+                setChats((prevChats) =>
+                  prevChats.map((c) =>
+                    c.id === chatId ? { ...c, title: generatedTitle } : c,
+                  ),
+                )
+              } else {
+                // Reset flag to allow fallback title generation at end of stream
+                titleGeneratedRef.current = false
+              }
+            } catch (error) {
+              logError('Early title generation error', error, {
                 component: 'useChatMessaging',
-                action: 'handleQuery.earlyTitleGenComplete',
-                metadata: { chatId, title: generatedTitle },
+                action: 'generateTitle.early',
               })
-
-              // Store in ref so final save can use it
-              generatedTitleRef.current = generatedTitle
-
-              setCurrentChat((prev) =>
-                prev.id === chatId ? { ...prev, title: generatedTitle } : prev,
-              )
-              setChats((prevChats) =>
-                prevChats.map((c) =>
-                  c.id === chatId ? { ...c, title: generatedTitle } : c,
-                ),
-              )
-            } else {
-              // Reset flag to allow fallback title generation at end of stream
               titleGeneratedRef.current = false
             }
-          } catch (error) {
-            logError('Early title generation error', error, {
-              component: 'useChatMessaging',
-              action: 'generateTitle.early',
-            })
-            titleGeneratedRef.current = false
-          }
+          })()
         }
 
         const assistantMessage = await processStreamingResponse(response, {
@@ -704,6 +711,11 @@ export function useChatMessaging({
           // Always save the response, using the current chat ID from the ref
           // which has been updated to the server ID if one was generated
           const finalMessages = [...updatedMessages, assistantMessage]
+
+          // Wait for early title generation to complete if it's in progress
+          if (earlyTitlePromiseRef.current) {
+            await earlyTitlePromiseRef.current
+          }
 
           if (
             isFirstMessage &&
