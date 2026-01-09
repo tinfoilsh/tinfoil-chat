@@ -204,7 +204,7 @@ export function ProjectSidebar({
   ])
 
   const handleSaveProjectName = useCallback(async () => {
-    if (!project) return
+    if (!project || isSaving) return
     if (editingProjectName.trim() && editingProjectName !== project.name) {
       setIsSaving(true)
       try {
@@ -223,7 +223,7 @@ export function ProjectSidebar({
       }
     }
     setIsEditingProjectName(false)
-  }, [editingProjectName, project, updateProject])
+  }, [editingProjectName, isSaving, project, updateProject])
 
   const handleNameAnimationComplete = useCallback(() => {
     if (project) {
