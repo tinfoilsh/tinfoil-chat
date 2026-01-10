@@ -242,6 +242,9 @@ export class CloudSyncService {
                 decryptError instanceof Error &&
                 decryptError.message.includes('DATA_CORRUPTED')
 
+              // Preserve projectId from local chat if it exists
+              const localChat = await indexedDBStorage.getChat(remoteChat.id)
+
               downloadedChat = {
                 id: remoteChat.id,
                 title: 'Encrypted',
@@ -261,6 +264,8 @@ export class CloudSyncService {
                 syncedAt: Date.now(),
                 locallyModified: false,
                 syncVersion: 1,
+                // Preserve project association from local chat
+                projectId: localChat?.projectId,
               } as StoredChat
             }
           } else {
@@ -280,6 +285,13 @@ export class CloudSyncService {
               downloadedChat.syncedAt = Date.now()
               downloadedChat.locallyModified = false
               downloadedChat.syncVersion = downloadedChat.syncVersion || 1
+              // Preserve project association from local chat if decryption failed
+              if (downloadedChat.decryptionFailed) {
+                const localChat = await indexedDBStorage.getChat(remoteChat.id)
+                if (localChat?.projectId) {
+                  downloadedChat.projectId = localChat.projectId
+                }
+              }
             }
           }
 
@@ -715,6 +727,8 @@ export class CloudSyncService {
                   syncedAt: Date.now(),
                   locallyModified: false,
                   syncVersion: 1,
+                  // Preserve project association from local chat
+                  projectId: localChat?.projectId,
                 } as StoredChat
               }
             } else {
@@ -736,6 +750,10 @@ export class CloudSyncService {
                 downloadedChat.syncedAt = Date.now()
                 downloadedChat.locallyModified = false
                 downloadedChat.syncVersion = downloadedChat.syncVersion || 1
+                // Preserve project association from local chat if decryption failed
+                if (downloadedChat.decryptionFailed && localChat?.projectId) {
+                  downloadedChat.projectId = localChat.projectId
+                }
               }
             }
 
