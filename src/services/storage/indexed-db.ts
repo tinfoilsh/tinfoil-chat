@@ -168,18 +168,25 @@ export class IndexedDBStorage {
               : msg.timestamp,
         }))
 
+        // Determine if the chat content has changed compared to existing version
+        const hasContentChanges = existingChat
+          ? existingChat.messages.length !== messagesForStorage.length ||
+            existingChat.updatedAt !== chat.updatedAt ||
+            existingChat.title !== chat.title
+          : false
+
         const storedChat: StoredChat = {
           ...chat,
           messages: messagesForStorage as any,
           lastAccessedAt: Date.now(),
           syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
-          locallyModified:
-            (chat as StoredChat).locallyModified !== undefined
-              ? (chat as StoredChat).locallyModified
-              : existingChat
-                ? existingChat.messages.length !== messagesForStorage.length ||
-                  existingChat.updatedAt !== chat.updatedAt
-                : true,
+          // For existing chats: mark as modified if content changed, or preserve existing modified state
+          // This ensures modified chats are always picked up for sync even if they were
+          // loaded with locallyModified: false from a previous sync
+          // For new chats: use provided value or default to true
+          locallyModified: existingChat
+            ? hasContentChanges || existingChat.locallyModified === true
+            : ((chat as StoredChat).locallyModified ?? true),
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
