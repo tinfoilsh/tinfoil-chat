@@ -149,8 +149,10 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             </div>
           )}
           {isSearching ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Searching the web...</span>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="shrink-0 text-sm font-medium">
+                Searching the web...
+              </span>
               {webSearch.query && (
                 <span className="truncate text-sm opacity-70">
                   &quot;{webSearch.query}&quot;
@@ -158,7 +160,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
               )}
             </div>
           ) : (
-            <span className="text-sm leading-5">
+            <span className="min-w-0 truncate text-sm leading-5">
               <span className="font-medium opacity-70">Searched the web</span>
               {webSearch.query && (
                 <span className="font-normal opacity-70">
