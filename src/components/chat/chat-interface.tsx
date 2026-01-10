@@ -248,6 +248,7 @@ export function ChatInterface({
     isProjectMode,
     activeProject,
     enterProjectMode,
+    exitProjectMode,
     createProject,
     loadingProject,
   } = useProject()
@@ -1146,6 +1147,9 @@ export function ChatInterface({
                 className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
                 onClick={() => {
                   sessionStorage.setItem('sidebarExpandSection', 'chats')
+                  if (isProjectMode) {
+                    exitProjectMode()
+                  }
                   setIsSidebarOpen(true)
                   if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
                     setIsVerifierSidebarOpen(false)
