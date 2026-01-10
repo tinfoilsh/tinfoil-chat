@@ -1121,7 +1121,7 @@ export function ChatInterface({
           (isVerifierSidebarOpen || isSettingsSidebarOpen)
         ) &&
         (isSignedIn && isPremium ? (
-          <div className="fixed left-4 top-4 z-50 flex flex-col gap-2">
+          <div className="fixed left-4 top-4 z-50 flex flex-row gap-2 md:flex-col">
             {/* Projects button */}
             <div className="group relative">
               <button
