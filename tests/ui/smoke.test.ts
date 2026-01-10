@@ -181,7 +181,7 @@ test.describe('Smoke Tests', () => {
     await expect(verifiedText).toBeVisible({ timeout: 15000 })
   })
 
-  test('can expand verification details and see proof button', async ({
+  test('can expand verification details and proof button opens sidebar', async ({
     page,
   }) => {
     await page.goto('/')
@@ -206,25 +206,8 @@ test.describe('Smoke Tests', () => {
     // Should show "See verification proof" button
     const proofButton = verificationArea.getByText('See verification proof')
     await expect(proofButton).toBeVisible({ timeout: 5000 })
-  })
 
-  test('verification proof button opens sidebar', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
-
-    const verificationArea = page.locator('#verification-status')
-
-    // Wait for verification to complete
-    const verifiedText = verificationArea.getByText('Privacy Verified')
-    await expect(verifiedText).toBeVisible({ timeout: 15000 })
-
-    // Expand the details
-    const expandButton = page.locator('#verification-expand')
-    await expandButton.click()
-
-    // Click "See verification proof"
-    const proofButton = verificationArea.getByText('See verification proof')
-    await expect(proofButton).toBeVisible({ timeout: 5000 })
+    // Click "See verification proof" to open the sidebar
     await proofButton.click()
 
     // Verification sidebar should appear (it contains an iframe to verification-center.tinfoil.sh)
