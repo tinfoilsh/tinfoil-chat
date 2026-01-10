@@ -240,6 +240,7 @@ export function ChatSidebar({
     loading: projectsLoading,
     hasMore: hasMoreProjects,
     loadMore: loadMoreProjects,
+    refresh: refreshProjects,
   } = useProjects({ autoLoad: isSignedIn && cloudSyncEnabled && isPremium })
 
   // Cloud pagination state via hook
@@ -387,13 +388,14 @@ export function ChatSidebar({
       if (expandSection === 'projects') {
         setIsProjectsExpanded(true)
         setIsChatHistoryExpanded(false)
+        refreshProjects()
       } else if (expandSection === 'chats') {
         setIsProjectsExpanded(false)
         setIsChatHistoryExpanded(true)
       }
       sessionStorage.removeItem('sidebarExpandSection')
     }
-  }, [isOpen])
+  }, [isOpen, refreshProjects])
 
   // Initialize cloudStorage with token getter when component mounts
   useEffect(() => {
