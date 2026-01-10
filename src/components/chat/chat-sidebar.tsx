@@ -15,10 +15,11 @@ import {
   FolderPlusIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import { AiOutlineCloudSync } from 'react-icons/ai'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
 import { IoChatbubblesOutline } from 'react-icons/io5'
-import { PiSignIn, PiSpinner } from 'react-icons/pi'
+import { PiFolder, PiMicrophone, PiSignIn, PiSparkle, PiSpinner } from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
@@ -677,42 +678,8 @@ export function ChatSidebar({
         {/* Main sidebar content */}
         <div className="relative flex h-full flex-col overflow-hidden">
           <TextureGrid />
-          {/* Message for non-signed-in users */}
-          {!isSignedIn && (
-            <div
-              className={`relative z-10 m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
-                highlightBox === 'signin'
-                  ? isDarkMode
-                    ? 'border-emerald-400/50 bg-emerald-900/30'
-                    : 'border-emerald-500/50 bg-emerald-100/60'
-                  : isDarkMode
-                    ? 'border-emerald-500/30 bg-emerald-950/20'
-                    : 'border-emerald-500/30 bg-emerald-50/50'
-              }`}
-              style={{
-                animation:
-                  highlightBox === 'signin'
-                    ? 'subtlePulse 1.2s ease-in-out infinite'
-                    : undefined,
-              }}
-            >
-              <h4 className="mb-1 text-sm font-semibold text-content-primary">
-                Sign in to unlock full features
-              </h4>
-              <p className="mb-3 text-sm text-content-secondary">
-                Access chat history and sync across devices.
-              </p>
-              <SignInButton mode="modal">
-                <span className="relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
-                  <PiSignIn className="h-4 w-4" />
-                  Sign in or sign up
-                </span>
-              </SignInButton>
-            </div>
-          )}
-
-          {/* Message for signed-in non-premium users */}
-          {isSignedIn && !isPremium && (
+          {/* Message for non-premium users (signed in or not) */}
+          {!isPremium && (
             <div
               className={`relative z-10 m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
                 highlightBox === 'premium'
@@ -736,77 +703,87 @@ export function ChatSidebar({
                 </h4>
                 <div className="space-y-2.5">
                   <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <svg
-                      className="h-4 w-4 flex-shrink-0 text-content-muted"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                      />
-                    </svg>
+                    <PiMicrophone className="h-4 w-4 flex-shrink-0 text-content-muted" />
                     <span>Speech-to-text voice input</span>
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <svg
-                      className="h-4 w-4 flex-shrink-0 text-content-muted"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                      />
-                    </svg>
-                    <span>Premium AI models</span>
+                    <PiSparkle className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                    <span>Selection of premium AI models</span>
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-content-secondary">
-                    <svg
-                      className="h-4 w-4 flex-shrink-0 text-content-muted"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                      />
-                    </svg>
-                    <span>Faster response times</span>
+                    <PiFolder className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                    <span>Create projects to chat with files</span>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-content-secondary">
+                    <AiOutlineCloudSync className="h-4 w-4 flex-shrink-0 text-content-muted" />
+                    <span>Cloud backups and device sync</span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleUpgradeToPro()
-                  }}
-                  disabled={upgradeLoading}
-                  className={`mt-4 w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90 ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
-                >
-                  {upgradeLoading ? 'Redirecting…' : 'Subscribe to premium'}
-                </button>
-                {upgradeError && (
-                  <p className="mt-2 text-xs text-destructive">
-                    {upgradeError}
-                  </p>
-                )}
+                <div className="mt-4">
+                  {isSignedIn ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleUpgradeToPro()
+                        }}
+                        disabled={upgradeLoading}
+                        className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
+                          isDarkMode
+                            ? 'text-emerald-400 hover:text-emerald-300'
+                            : 'text-emerald-600 hover:text-emerald-500'
+                        } ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                      >
+                        {upgradeLoading ? 'Redirecting…' : 'Subscribe'}
+                        {!upgradeLoading && (
+                          <svg
+                            className="h-3 w-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                      {upgradeError && (
+                        <p className="mt-2 text-xs text-destructive">
+                          {upgradeError}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <SignInButton mode="modal">
+                        <span className="relative block w-full cursor-pointer rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                          Subscribe
+                        </span>
+                      </SignInButton>
+                      <p className="text-center text-xs text-content-secondary">
+                        Already subscribed?{' '}
+                        <SignInButton mode="modal">
+                          <span className="cursor-pointer underline hover:text-content-primary">
+                            Log in
+                          </span>
+                        </SignInButton>
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
           {/* Divider after boxes */}
-          {(!isSignedIn || (isSignedIn && !isPremium)) && (
+          {!isPremium && (
             <div className="relative z-10 border-b border-border-subtle" />
           )}
 
