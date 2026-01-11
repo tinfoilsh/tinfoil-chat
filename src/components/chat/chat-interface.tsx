@@ -87,7 +87,6 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
-  onExitProject?: () => void
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -157,7 +156,6 @@ export function ChatInterface({
   minHeight,
   inputMinHeight = '28px',
   isDarkMode: propIsDarkMode,
-  onExitProject,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn } = useAuth()
@@ -716,6 +714,12 @@ export function ChatInterface({
     }
   }, [createProject, enterProjectMode, toast])
 
+  // Handler for exiting project mode - creates a new chat and exits
+  const handleExitProject = useCallback(() => {
+    createNewChat(false, true)
+    exitProjectMode()
+  }, [createNewChat, exitProjectMode])
+
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
 
@@ -1168,7 +1172,7 @@ export function ChatInterface({
                 onClick={() => {
                   sessionStorage.setItem('sidebarExpandSection', 'chats')
                   if (isProjectMode) {
-                    exitProjectMode()
+                    handleExitProject()
                   }
                   setIsSidebarOpen(true)
                   if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
@@ -1314,7 +1318,7 @@ export function ChatInterface({
           setIsOpen={setIsSidebarOpen}
           project={activeProject}
           isDarkMode={isDarkMode}
-          onExitProject={onExitProject ?? (() => {})}
+          onExitProject={handleExitProject}
           onNewChat={() => createNewChat(false, true)}
           onSelectChat={handleChatSelect}
           currentChatId={currentChat?.id}
@@ -1340,7 +1344,7 @@ export function ChatInterface({
           projectName={loadingProject.name}
           isLoading={true}
           isDarkMode={isDarkMode}
-          onExitProject={onExitProject ?? (() => {})}
+          onExitProject={handleExitProject}
           onNewChat={() => {}}
           onSelectChat={() => {}}
           isClient={isClient}
