@@ -294,6 +294,62 @@ export function useCloudSync() {
     await cloudSync.backupChat(chatId)
   }, [])
 
+  // Sync chats for a specific project
+  const syncProjectChats = useCallback(async (projectId: string) => {
+    if (!isCloudSyncEnabled()) {
+      logInfo('Cloud sync is disabled, skipping project chat sync', {
+        component: 'useCloudSync',
+        action: 'syncProjectChats',
+      })
+      return { uploaded: 0, downloaded: 0, errors: [] }
+    }
+
+    if (syncingRef.current) {
+      logInfo('Sync request blocked - sync already in progress', {
+        component: 'useCloudSync',
+        action: 'syncProjectChats',
+      })
+      return { uploaded: 0, downloaded: 0, errors: [] }
+    }
+
+    syncingRef.current = true
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, syncing: true }))
+    }
+
+    try {
+      const result = await cloudSync.syncProjectChats(projectId)
+
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          syncing: false,
+          lastSyncTime: Date.now(),
+        }))
+      }
+
+      if (result.downloaded > 0) {
+        logInfo(
+          `Project chat sync completed: downloaded=${result.downloaded}`,
+          {
+            component: 'useCloudSync',
+            action: 'syncProjectChats',
+            metadata: { projectId, result },
+          },
+        )
+      }
+
+      return result
+    } catch (error) {
+      if (isMountedRef.current) {
+        setState((prev) => ({ ...prev, syncing: false }))
+      }
+      throw error
+    } finally {
+      syncingRef.current = false
+    }
+  }, [])
+
   // Retry decryption for failed chats
   const retryDecryptionWithNewKey = useCallback(
     (options?: { runInBackground?: boolean }) => {
@@ -418,6 +474,7 @@ export function useCloudSync() {
     ...state,
     syncChats,
     smartSyncChats,
+    syncProjectChats,
     backupChat,
     setEncryptionKey,
     retryDecryptionWithNewKey,

@@ -211,9 +211,13 @@ export class CloudStorageService {
       params.append('includeContent', 'true')
     }
 
+    // Add cache-busting parameter to avoid stale CDN/browser cache
+    params.append('_t', Date.now().toString())
+
     const url = `${API_BASE_URL}/api/chats/list${params.toString() ? `?${params.toString()}` : ''}`
     const response = await fetch(url, {
       headers: await this.getHeaders(),
+      cache: 'no-store',
     })
 
     if (!response.ok) {
@@ -256,8 +260,11 @@ export class CloudStorageService {
   }
 
   async getChatSyncStatus(): Promise<ChatSyncStatus> {
-    const response = await fetch(`${API_BASE_URL}/api/chats/sync-status`, {
+    // Add cache-busting parameter to avoid stale CDN/browser cache
+    const url = `${API_BASE_URL}/api/chats/sync-status?_t=${Date.now()}`
+    const response = await fetch(url, {
       headers: await this.getHeaders(),
+      cache: 'no-store',
     })
 
     if (!response.ok) {
@@ -290,10 +297,13 @@ export class CloudStorageService {
     if (options.includeContent) {
       params.append('includeContent', 'true')
     }
+    // Add cache-busting parameter to avoid stale CDN/browser cache
+    params.append('_t', Date.now().toString())
 
     const url = `${API_BASE_URL}/api/chats/updated-since?${params.toString()}`
     const response = await fetch(url, {
       headers: await this.getHeaders(),
+      cache: 'no-store',
     })
 
     if (!response.ok) {

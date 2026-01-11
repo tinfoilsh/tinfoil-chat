@@ -170,6 +170,7 @@ export function ChatInterface({
     syncing,
     syncChats,
     smartSyncChats,
+    syncProjectChats,
     encryptionKey,
     isFirstTimeUser,
     setEncryptionKey,
@@ -590,22 +591,35 @@ export function ChatInterface({
 
   // Sync chats when user signs in and periodically
   // Profile sync is handled separately by useProfileSync hook
+  // Context-aware: syncs personal chats when not in project mode, project chats when in project mode
   useEffect(() => {
     if (!isSignedIn) return
 
-    // Initial sync on page load/refresh - do a full sync to ensure we have all data
-    syncChats()
+    // Initial sync based on current mode
+    const initialSync =
+      isProjectMode && activeProject
+        ? () => syncProjectChats(activeProject.id)
+        : () => syncChats()
+
+    initialSync()
       .then(() => reloadChats())
       .catch((error) => {
         logError('Failed to sync chats on page load', error, {
           component: 'ChatInterface',
           action: 'initialSync',
+          metadata: { isProjectMode, projectId: activeProject?.id },
         })
       })
 
     // Use smart sync at regular intervals - checks sync status first to reduce bandwidth
+    // Syncs project chats when in project mode, personal chats otherwise
     const interval = setInterval(() => {
-      smartSyncChats()
+      const periodicSync =
+        isProjectMode && activeProject
+          ? () => syncProjectChats(activeProject.id)
+          : () => smartSyncChats()
+
+      periodicSync()
         .then((result) => {
           // Only reload chats if something was actually synced
           if (result.uploaded > 0 || result.downloaded > 0) {
@@ -616,12 +630,21 @@ export function ChatInterface({
           logError('Failed to sync chats (periodic)', error, {
             component: 'ChatInterface',
             action: 'periodicSync',
+            metadata: { isProjectMode, projectId: activeProject?.id },
           })
         })
     }, CLOUD_SYNC.CHAT_SYNC_INTERVAL)
 
     return () => clearInterval(interval)
-  }, [isSignedIn, syncChats, smartSyncChats, reloadChats])
+  }, [
+    isSignedIn,
+    isProjectMode,
+    activeProject,
+    syncChats,
+    smartSyncChats,
+    syncProjectChats,
+    reloadChats,
+  ])
 
   // Handler for opening verifier sidebar
   const handleOpenVerifierSidebar = () => {
