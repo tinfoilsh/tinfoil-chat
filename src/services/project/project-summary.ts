@@ -1,33 +1,27 @@
 import { logError, logInfo } from '@/utils/error-handling'
 
-const SUMMARY_UPDATE_PROMPT = `You are maintaining a rolling summary of a project's conversation history.
-
-Current summary:
-{CURRENT_SUMMARY}
-
-Latest exchange:
-User: {USER_MESSAGE}
-Assistant: {ASSISTANT_RESPONSE}
-
-Update the summary to incorporate any new important information from this exchange.
-Keep it concise (3-5 sentences max). Focus on:
-- Key decisions made
-- Important facts/context established
-- Outstanding questions or next steps
-
-Return only the updated summary text, nothing else.`
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 interface UpdateSummaryParams {
   currentSummary: string
-  userMessage: string
-  assistantResponse: string
+  chatHistory: ChatMessage[]
   getToken: () => Promise<string | null>
+}
+
+function formatChatHistory(chatHistory: ChatMessage[]): string {
+  return chatHistory
+    .map(
+      (msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`,
+    )
+    .join('\n\n')
 }
 
 export async function updateProjectSummary({
   currentSummary,
-  userMessage,
-  assistantResponse,
+  chatHistory,
   getToken,
 }: UpdateSummaryParams): Promise<string | null> {
   try {
@@ -44,23 +38,32 @@ export async function updateProjectSummary({
       return null
     }
 
-    const replacements: Record<string, string> = {
-      '{CURRENT_SUMMARY}': currentSummary || '(No previous summary)',
-      '{USER_MESSAGE}': userMessage.slice(0, 2000),
-      '{ASSISTANT_RESPONSE}': assistantResponse.slice(0, 2000),
-    }
-    const prompt = SUMMARY_UPDATE_PROMPT.replace(
-      /\{CURRENT_SUMMARY\}|\{USER_MESSAGE\}|\{ASSISTANT_RESPONSE\}/g,
-      (match) => replacements[match],
-    )
-
     const { sendChatStream } = await import(
       '@/services/inference/inference-client'
     )
-    const { getAIModels } = await import('@/config/models')
+    const { getAIModels, getMemoryPrompt } = await import('@/config/models')
+
+    const memoryPromptTemplate = await getMemoryPrompt()
+    if (!memoryPromptTemplate) {
+      logError('No memory prompt available', new Error('No memory prompt'), {
+        component: 'ProjectSummary',
+        action: 'updateProjectSummary',
+      })
+      return null
+    }
+
+    const formattedHistory = formatChatHistory(chatHistory)
+    const replacements: Record<string, string> = {
+      '{CURRENT_SUMMARY}': currentSummary || '(No previous memory)',
+      '{CHAT_HISTORY}': formattedHistory,
+    }
+    const prompt = memoryPromptTemplate.replace(
+      /\{CURRENT_SUMMARY\}|\{CHAT_HISTORY\}/g,
+      (match) => replacements[match],
+    )
 
     const models = await getAIModels(true)
-    const summaryModel = models.find((m) => m.type === 'title') || models[0]
+    const summaryModel = models.find((m) => m.paid === false) || models[0]
 
     if (!summaryModel) {
       logError('No model available for summary update', new Error('No model'), {

@@ -126,3 +126,23 @@ export const getSystemPromptAndRules = async (): Promise<{
     }
   }
 }
+
+// Fetch memory prompt from the API
+export const getMemoryPrompt = async (): Promise<string> => {
+  try {
+    const url = `${API_BASE_URL}/api/config/memory-prompt`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch memory prompt: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data.memoryPrompt
+  } catch (error) {
+    logError('Failed to fetch memory prompt', error, {
+      component: 'getMemoryPrompt',
+    })
+    return ''
+  }
+}

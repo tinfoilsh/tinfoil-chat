@@ -839,18 +839,16 @@ export function useChatMessaging({
           }
 
           // Trigger project summary update if in project mode
-          if (isProjectMode && activeProject && userMessage) {
-            const lastUserContent = userMessage.content || ''
-            const lastAssistantContent = assistantMessage.content || ''
-
-            if (lastUserContent && lastAssistantContent) {
-              projectEvents.emit({
-                type: 'summary-update-needed',
-                projectId: activeProject.id,
-                userMessage: lastUserContent,
-                assistantResponse: lastAssistantContent,
-              })
-            }
+          if (isProjectMode && activeProject && finalMessages.length > 0) {
+            const chatHistory = finalMessages.map((msg) => ({
+              role: msg.role,
+              content: msg.content || '',
+            }))
+            projectEvents.emit({
+              type: 'summary-update-needed',
+              projectId: activeProject.id,
+              chatHistory,
+            })
           }
         } else {
           logWarning('No assistant content to save after streaming', {

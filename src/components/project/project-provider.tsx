@@ -67,8 +67,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         try {
           const newSummary = await updateSummaryWithLLM({
             currentSummary: activeProject.summary || '',
-            userMessage: event.userMessage,
-            assistantResponse: event.assistantResponse,
+            chatHistory: event.chatHistory,
             getToken,
           })
 

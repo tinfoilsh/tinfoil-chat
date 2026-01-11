@@ -1,10 +1,14 @@
 import { logError } from '@/utils/error-handling'
 
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 type ProjectSummaryUpdateEvent = {
   type: 'summary-update-needed'
   projectId: string
-  userMessage: string
-  assistantResponse: string
+  chatHistory: ChatMessage[]
 }
 
 type ProjectEvent = ProjectSummaryUpdateEvent
