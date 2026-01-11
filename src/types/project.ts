@@ -41,6 +41,7 @@ export interface ProjectChat {
 export interface ProjectChatListResponse {
   chats: ProjectChat[]
   hasMore?: boolean
+  nextCursor?: string
 }
 
 export interface ProjectChatSyncStatus {

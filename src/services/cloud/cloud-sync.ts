@@ -1708,137 +1708,155 @@ export class CloudSyncService {
         return await this.syncProjectChats(projectId)
       }
 
-      // Fetch only chats updated since our last sync
-      let updatedChats
-      try {
-        updatedChats = await projectStorage.getProjectChatsUpdatedSince(
-          projectId,
-          { since: cachedStatus.lastUpdated },
-        )
-      } catch (error) {
-        logError(
-          'Failed to get updated project chats, falling back to full sync',
-          error,
-          {
-            component: 'CloudSync',
-            action: 'syncProjectChatsChanged',
-            metadata: { projectId },
-          },
-        )
-        return await this.syncProjectChats(projectId)
-      }
-
-      const remoteChats = updatedChats.chats || []
-
-      if (remoteChats.length === 0) {
-        logInfo('No project chats updated since last sync', {
-          component: 'CloudSync',
-          action: 'syncProjectChatsChanged',
-          metadata: { projectId, since: cachedStatus.lastUpdated },
-        })
-        // Update the cached status
-        try {
-          const newStatus =
-            await projectStorage.getProjectChatsSyncStatus(projectId)
-          this.saveProjectSyncStatus(projectId, newStatus)
-        } catch (statusError) {
-          logError('Failed to update project sync status', statusError, {
-            component: 'CloudSync',
-            action: 'syncProjectChatsChanged',
-            metadata: { projectId },
-          })
-        }
-        return result
-      }
-
-      logInfo(`Syncing ${remoteChats.length} changed project chats`, {
-        component: 'CloudSync',
-        action: 'syncProjectChatsChanged',
-        metadata: { projectId, since: cachedStatus.lastUpdated },
-      })
-
       // Initialize encryption service once before processing
       await encryptionService.initialize()
 
-      // Process updated remote chats
+      // Fetch and process chats updated since our last sync, with pagination
       const savedIds: string[] = []
-      for (const remoteChat of remoteChats) {
-        // Skip if this chat was recently deleted
-        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
-          continue
-        }
+      let cursorId: string | undefined
+      let hasMore = true
+      let isFirstPage = true
 
+      while (hasMore) {
+        let updatedChats
         try {
-          let downloadedChat: StoredChat | null = null
-
-          if (remoteChat.content) {
-            const encrypted = JSON.parse(remoteChat.content)
-
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              downloadedChat = {
-                ...decrypted,
-                projectId,
-              } as StoredChat
-            } catch (decryptError) {
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-
-              // Preserve projectId from local chat if it exists
-              const localChat = await indexedDBStorage.getChat(remoteChat.id)
-
-              downloadedChat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                updatedAt: ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-                projectId: localChat?.projectId || projectId,
-              } as StoredChat
-            }
-          }
-
-          if (downloadedChat) {
-            downloadedChat.createdAt = ensureValidISODate(
-              downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.updatedAt = ensureValidISODate(
-              downloadedChat.updatedAt ?? downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.lastAccessedAt = Date.now()
-            downloadedChat.syncedAt = Date.now()
-            downloadedChat.locallyModified = false
-            downloadedChat.projectId = projectId
-
-            await indexedDBStorage.saveChat(downloadedChat)
-            await indexedDBStorage.markAsSynced(
-              downloadedChat.id,
-              downloadedChat.syncVersion || 0,
-            )
-            savedIds.push(downloadedChat.id)
-            result.downloaded++
-          }
-        } catch (error) {
-          result.errors.push(
-            `Failed to process project chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+          updatedChats = await projectStorage.getProjectChatsUpdatedSince(
+            projectId,
+            { since: cachedStatus.lastUpdated, cursorId },
           )
+        } catch (error) {
+          logError(
+            'Failed to get updated project chats, falling back to full sync',
+            error,
+            {
+              component: 'CloudSync',
+              action: 'syncProjectChatsChanged',
+              metadata: { projectId },
+            },
+          )
+          return await this.syncProjectChats(projectId)
         }
+
+        const remoteChats = updatedChats.chats || []
+
+        if (isFirstPage && remoteChats.length === 0) {
+          logInfo('No project chats updated since last sync', {
+            component: 'CloudSync',
+            action: 'syncProjectChatsChanged',
+            metadata: { projectId, since: cachedStatus.lastUpdated },
+          })
+          // Update the cached status
+          try {
+            const newStatus =
+              await projectStorage.getProjectChatsSyncStatus(projectId)
+            this.saveProjectSyncStatus(projectId, newStatus)
+          } catch (statusError) {
+            logError('Failed to update project sync status', statusError, {
+              component: 'CloudSync',
+              action: 'syncProjectChatsChanged',
+              metadata: { projectId },
+            })
+          }
+          return result
+        }
+
+        if (isFirstPage) {
+          logInfo(`Syncing changed project chats`, {
+            component: 'CloudSync',
+            action: 'syncProjectChatsChanged',
+            metadata: {
+              projectId,
+              since: cachedStatus.lastUpdated,
+              firstPageCount: remoteChats.length,
+              hasMore: updatedChats.hasMore,
+            },
+          })
+        }
+        isFirstPage = false
+
+        // Process this page of remote chats
+        for (const remoteChat of remoteChats) {
+          // Skip if this chat was recently deleted
+          if (deletedChatsTracker.isDeleted(remoteChat.id)) {
+            continue
+          }
+
+          try {
+            let downloadedChat: StoredChat | null = null
+
+            if (remoteChat.content) {
+              const encrypted = JSON.parse(remoteChat.content)
+
+              try {
+                const decrypted = await encryptionService.decrypt(encrypted)
+                downloadedChat = {
+                  ...decrypted,
+                  projectId,
+                } as StoredChat
+              } catch (decryptError) {
+                const isCorrupted =
+                  decryptError instanceof Error &&
+                  decryptError.message.includes('DATA_CORRUPTED')
+
+                // Preserve projectId from local chat if it exists
+                const localChat = await indexedDBStorage.getChat(remoteChat.id)
+
+                downloadedChat = {
+                  id: remoteChat.id,
+                  title: 'Encrypted',
+                  messages: [],
+                  createdAt: ensureValidISODate(
+                    remoteChat.createdAt,
+                    remoteChat.id,
+                  ),
+                  updatedAt: ensureValidISODate(
+                    remoteChat.updatedAt ?? remoteChat.createdAt,
+                    remoteChat.id,
+                  ),
+                  lastAccessedAt: Date.now(),
+                  decryptionFailed: true,
+                  dataCorrupted: isCorrupted,
+                  encryptedData: remoteChat.content,
+                  syncedAt: Date.now(),
+                  locallyModified: false,
+                  syncVersion: 1,
+                  projectId: localChat?.projectId || projectId,
+                } as StoredChat
+              }
+            }
+
+            if (downloadedChat) {
+              downloadedChat.createdAt = ensureValidISODate(
+                downloadedChat.createdAt,
+                downloadedChat.id,
+              )
+              downloadedChat.updatedAt = ensureValidISODate(
+                downloadedChat.updatedAt ?? downloadedChat.createdAt,
+                downloadedChat.id,
+              )
+              downloadedChat.lastAccessedAt = Date.now()
+              downloadedChat.syncedAt = Date.now()
+              downloadedChat.locallyModified = false
+              downloadedChat.projectId = projectId
+
+              await indexedDBStorage.saveChat(downloadedChat)
+              await indexedDBStorage.markAsSynced(
+                downloadedChat.id,
+                downloadedChat.syncVersion || 0,
+              )
+              savedIds.push(downloadedChat.id)
+              result.downloaded++
+            }
+          } catch (error) {
+            result.errors.push(
+              `Failed to process project chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        }
+
+        // Check if there are more pages
+        hasMore = updatedChats.hasMore === true
+        cursorId = updatedChats.nextCursor
       }
 
       if (savedIds.length > 0) {

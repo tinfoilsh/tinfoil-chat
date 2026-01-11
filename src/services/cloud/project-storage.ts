@@ -470,10 +470,13 @@ export class ProjectStorageService {
 
   async getProjectChatsUpdatedSince(
     projectId: string,
-    options: { since: string },
+    options: { since: string; cursorId?: string },
   ): Promise<ProjectChatListResponse> {
     const params = new URLSearchParams()
     params.append('since', options.since)
+    if (options.cursorId) {
+      params.append('cursor_id', options.cursorId)
+    }
     params.append('_t', Date.now().toString())
 
     const url = `${API_BASE_URL}/api/projects/${projectId}/chats/updated-since?${params.toString()}`
