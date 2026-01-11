@@ -2,6 +2,7 @@ import type {
   CreateProjectData,
   Project,
   ProjectChatListResponse,
+  ProjectChatSyncStatus,
   ProjectData,
   ProjectDocument,
   ProjectDocumentListResponse,
@@ -444,6 +445,47 @@ export class ProjectStorageService {
 
     if (!response.ok) {
       throw new Error(`Failed to list project chats: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
+  async getProjectChatsSyncStatus(
+    projectId: string,
+  ): Promise<ProjectChatSyncStatus> {
+    const url = `${API_BASE_URL}/api/projects/${projectId}/chats/sync-status?_t=${Date.now()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get project chats sync status: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
+  async getProjectChatsUpdatedSince(
+    projectId: string,
+    options: { since: string },
+  ): Promise<ProjectChatListResponse> {
+    const params = new URLSearchParams()
+    params.append('since', options.since)
+    params.append('_t', Date.now().toString())
+
+    const url = `${API_BASE_URL}/api/projects/${projectId}/chats/updated-since?${params.toString()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get project chats updated since: ${response.statusText}`,
+      )
     }
 
     return response.json()

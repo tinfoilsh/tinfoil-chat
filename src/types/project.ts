@@ -40,6 +40,12 @@ export interface ProjectChat {
 
 export interface ProjectChatListResponse {
   chats: ProjectChat[]
+  hasMore?: boolean
+}
+
+export interface ProjectChatSyncStatus {
+  count: number
+  lastUpdated: string | null
 }
 
 export interface ProjectData {

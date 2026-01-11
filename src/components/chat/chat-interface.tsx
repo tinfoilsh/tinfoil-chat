@@ -614,12 +614,9 @@ export function ChatInterface({
     // Use smart sync at regular intervals - checks sync status first to reduce bandwidth
     // Syncs project chats when in project mode, personal chats otherwise
     const interval = setInterval(() => {
-      const periodicSync =
-        isProjectMode && activeProject
-          ? () => syncProjectChats(activeProject.id)
-          : () => smartSyncChats()
-
-      periodicSync()
+      const projectId =
+        isProjectMode && activeProject ? activeProject.id : undefined
+      smartSyncChats(projectId)
         .then((result) => {
           // Only reload chats if something was actually synced
           if (result.uploaded > 0 || result.downloaded > 0) {

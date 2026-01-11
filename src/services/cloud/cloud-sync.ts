@@ -29,6 +29,8 @@ export interface SyncStatusResult {
 }
 
 const SYNC_STATUS_STORAGE_KEY = 'tinfoil-chat-sync-status'
+const PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX =
+  'tinfoil-project-chat-sync-status-'
 
 export class CloudSyncService {
   private isSyncing = false
@@ -36,6 +38,7 @@ export class CloudSyncService {
   private pendingUploads: Map<string, () => Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
   private lastSyncStatus: ChatSyncStatus | null = null
+  private projectSyncStatus: Map<string, ChatSyncStatus> = new Map()
 
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
@@ -68,8 +71,46 @@ export class CloudSyncService {
     }
   }
 
-  // Check if sync is needed by comparing local and remote sync status
-  async checkSyncStatus(): Promise<SyncStatusResult> {
+  // Load cached project sync status from localStorage
+  private loadCachedProjectSyncStatus(
+    projectId: string,
+  ): ChatSyncStatus | null {
+    if (typeof window === 'undefined') return null
+    try {
+      const cached = localStorage.getItem(
+        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
+      )
+      if (cached) {
+        return JSON.parse(cached)
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null
+  }
+
+  // Save project sync status to localStorage
+  private saveProjectSyncStatus(
+    projectId: string,
+    status: ChatSyncStatus,
+  ): void {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(
+        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
+        JSON.stringify(status),
+      )
+      this.projectSyncStatus.set(projectId, status)
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  /**
+   * Check if sync is needed by comparing local and remote sync status.
+   * @param projectId - Optional project ID. If provided, checks project chat sync status.
+   */
+  async checkSyncStatus(projectId?: string): Promise<SyncStatusResult> {
     if (!(await cloudStorage.isAuthenticated())) {
       return { needsSync: false, reason: 'no_changes' }
     }
@@ -77,12 +118,20 @@ export class CloudSyncService {
     try {
       // First check if we have local unsynced changes
       const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
-      const chatsNeedingUpload = unsyncedChats.filter(
-        (chat) =>
+      const chatsNeedingUpload = unsyncedChats.filter((chat) => {
+        // Filter by project if specified
+        if (projectId) {
+          if (chat.projectId !== projectId) return false
+        } else {
+          // For regular chats, exclude project chats
+          if (chat.projectId) return false
+        }
+        return (
           !(chat as any).isBlankChat &&
           !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly,
-      )
+          !chat.isLocalOnly
+        )
+      })
 
       if (chatsNeedingUpload.length > 0) {
         return {
@@ -92,10 +141,15 @@ export class CloudSyncService {
       }
 
       // Fetch remote sync status
-      const remoteStatus = await cloudStorage.getChatSyncStatus()
+      const remoteStatus = projectId
+        ? await projectStorage.getProjectChatsSyncStatus(projectId)
+        : await cloudStorage.getChatSyncStatus()
 
       // Get cached status
-      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+      const cachedStatus = projectId
+        ? this.projectSyncStatus.get(projectId) ||
+          this.loadCachedProjectSyncStatus(projectId)
+        : this.lastSyncStatus || this.loadCachedSyncStatus()
 
       // If no cached status, we need a full sync
       if (!cachedStatus) {
@@ -111,6 +165,7 @@ export class CloudSyncService {
         component: 'CloudSync',
         action: 'checkSyncStatus.compare',
         metadata: {
+          projectId,
           remoteCount: remoteStatus.count,
           cachedCount: cachedStatus.count,
           remoteLastUpdated: remoteStatus.lastUpdated,
@@ -149,6 +204,7 @@ export class CloudSyncService {
       logError('Failed to check sync status', error, {
         component: 'CloudSync',
         action: 'checkSyncStatus',
+        metadata: { projectId },
       })
       return { needsSync: true, reason: 'error' }
     }
@@ -829,19 +885,23 @@ export class CloudSyncService {
     return result
   }
 
-  // Smart sync: check status first and only sync if needed
-  async smartSync(): Promise<SyncResult> {
+  /**
+   * Smart sync: check status first and only sync if needed.
+   * @param projectId - Optional project ID. If provided, syncs project chats.
+   */
+  async smartSync(projectId?: string): Promise<SyncResult> {
     if (this.isSyncing) {
       throw new Error('Sync already in progress')
     }
 
-    const status = await this.checkSyncStatus()
+    const status = await this.checkSyncStatus(projectId)
 
     if (!status.needsSync) {
       logInfo('Smart sync: no changes detected, skipping sync', {
         component: 'CloudSync',
         action: 'smartSync',
         metadata: {
+          projectId,
           reason: status.reason,
           remoteCount: status.remoteCount,
         },
@@ -853,6 +913,7 @@ export class CloudSyncService {
       component: 'CloudSync',
       action: 'smartSync',
       metadata: {
+        projectId,
         reason: status.reason,
         remoteCount: status.remoteCount,
         remoteLastUpdated: status.remoteLastUpdated,
@@ -860,12 +921,18 @@ export class CloudSyncService {
     })
 
     // If we have a cached lastUpdated, use delta sync; otherwise fall back to full sync
-    const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+    const cachedStatus = projectId
+      ? this.projectSyncStatus.get(projectId) ||
+        this.loadCachedProjectSyncStatus(projectId)
+      : this.lastSyncStatus || this.loadCachedSyncStatus()
+
     if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
-      return this.syncChangedChats()
+      return projectId
+        ? this.syncProjectChatsChanged(projectId)
+        : this.syncChangedChats()
     }
 
-    return this.syncAllChats()
+    return projectId ? this.syncProjectChats(projectId) : this.syncAllChats()
   }
 
   // Check if currently syncing
@@ -1564,6 +1631,23 @@ export class CloudSyncService {
           errors: result.errors.length,
         },
       })
+
+      // Update cached sync status after successful sync
+      try {
+        const newStatus =
+          await projectStorage.getProjectChatsSyncStatus(projectId)
+        this.saveProjectSyncStatus(projectId, newStatus)
+      } catch (statusError) {
+        logError(
+          'Failed to update project sync status after full sync',
+          statusError,
+          {
+            component: 'CloudSync',
+            action: 'syncProjectChats',
+            metadata: { projectId },
+          },
+        )
+      }
     } catch (error) {
       result.errors.push(
         `Failed to sync project chats: ${error instanceof Error ? error.message : String(error)}`,
@@ -1573,6 +1657,210 @@ export class CloudSyncService {
         action: 'syncProjectChats',
         metadata: { projectId },
       })
+    }
+
+    return result
+  }
+
+  /**
+   * Perform a delta sync for project chats - only fetch chats that changed since last sync.
+   */
+  async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
+    const result: SyncResult = {
+      uploaded: 0,
+      downloaded: 0,
+      errors: [],
+    }
+
+    if (!(await cloudStorage.isAuthenticated())) {
+      return result
+    }
+
+    try {
+      // First, backup any unsynced local project chats
+      const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
+      const projectChatsToSync = unsyncedChats.filter(
+        (chat) =>
+          chat.projectId === projectId &&
+          !(chat as any).isBlankChat &&
+          !streamingTracker.isStreaming(chat.id) &&
+          !chat.isLocalOnly,
+      )
+
+      for (const chat of projectChatsToSync) {
+        try {
+          await this.backupChat(chat.id)
+          result.uploaded++
+        } catch (error) {
+          result.errors.push(
+            `Failed to backup project chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
+
+      // Get cached sync status to determine what changed
+      const cachedStatus =
+        this.projectSyncStatus.get(projectId) ||
+        this.loadCachedProjectSyncStatus(projectId)
+
+      if (!cachedStatus?.lastUpdated) {
+        // No cached status, fall back to full sync
+        return await this.syncProjectChats(projectId)
+      }
+
+      // Fetch only chats updated since our last sync
+      let updatedChats
+      try {
+        updatedChats = await projectStorage.getProjectChatsUpdatedSince(
+          projectId,
+          { since: cachedStatus.lastUpdated },
+        )
+      } catch (error) {
+        logError(
+          'Failed to get updated project chats, falling back to full sync',
+          error,
+          {
+            component: 'CloudSync',
+            action: 'syncProjectChatsChanged',
+            metadata: { projectId },
+          },
+        )
+        return await this.syncProjectChats(projectId)
+      }
+
+      const remoteChats = updatedChats.chats || []
+
+      if (remoteChats.length === 0) {
+        logInfo('No project chats updated since last sync', {
+          component: 'CloudSync',
+          action: 'syncProjectChatsChanged',
+          metadata: { projectId, since: cachedStatus.lastUpdated },
+        })
+        // Update the cached status
+        try {
+          const newStatus =
+            await projectStorage.getProjectChatsSyncStatus(projectId)
+          this.saveProjectSyncStatus(projectId, newStatus)
+        } catch (statusError) {
+          logError('Failed to update project sync status', statusError, {
+            component: 'CloudSync',
+            action: 'syncProjectChatsChanged',
+            metadata: { projectId },
+          })
+        }
+        return result
+      }
+
+      logInfo(`Syncing ${remoteChats.length} changed project chats`, {
+        component: 'CloudSync',
+        action: 'syncProjectChatsChanged',
+        metadata: { projectId, since: cachedStatus.lastUpdated },
+      })
+
+      // Initialize encryption service once before processing
+      await encryptionService.initialize()
+
+      // Process updated remote chats
+      const savedIds: string[] = []
+      for (const remoteChat of remoteChats) {
+        // Skip if this chat was recently deleted
+        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
+          continue
+        }
+
+        try {
+          let downloadedChat: StoredChat | null = null
+
+          if (remoteChat.content) {
+            const encrypted = JSON.parse(remoteChat.content)
+
+            try {
+              const decrypted = await encryptionService.decrypt(encrypted)
+              downloadedChat = {
+                ...decrypted,
+                projectId,
+              } as StoredChat
+            } catch (decryptError) {
+              const isCorrupted =
+                decryptError instanceof Error &&
+                decryptError.message.includes('DATA_CORRUPTED')
+
+              // Preserve projectId from local chat if it exists
+              const localChat = await indexedDBStorage.getChat(remoteChat.id)
+
+              downloadedChat = {
+                id: remoteChat.id,
+                title: 'Encrypted',
+                messages: [],
+                createdAt: ensureValidISODate(
+                  remoteChat.createdAt,
+                  remoteChat.id,
+                ),
+                updatedAt: ensureValidISODate(
+                  remoteChat.updatedAt ?? remoteChat.createdAt,
+                  remoteChat.id,
+                ),
+                lastAccessedAt: Date.now(),
+                decryptionFailed: true,
+                dataCorrupted: isCorrupted,
+                encryptedData: remoteChat.content,
+                syncedAt: Date.now(),
+                locallyModified: false,
+                syncVersion: 1,
+                projectId: localChat?.projectId || projectId,
+              } as StoredChat
+            }
+          }
+
+          if (downloadedChat) {
+            downloadedChat.createdAt = ensureValidISODate(
+              downloadedChat.createdAt,
+              downloadedChat.id,
+            )
+            downloadedChat.updatedAt = ensureValidISODate(
+              downloadedChat.updatedAt ?? downloadedChat.createdAt,
+              downloadedChat.id,
+            )
+            downloadedChat.lastAccessedAt = Date.now()
+            downloadedChat.syncedAt = Date.now()
+            downloadedChat.locallyModified = false
+            downloadedChat.projectId = projectId
+
+            await indexedDBStorage.saveChat(downloadedChat)
+            await indexedDBStorage.markAsSynced(
+              downloadedChat.id,
+              downloadedChat.syncVersion || 0,
+            )
+            savedIds.push(downloadedChat.id)
+            result.downloaded++
+          }
+        } catch (error) {
+          result.errors.push(
+            `Failed to process project chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+      }
+
+      if (savedIds.length > 0) {
+        chatEvents.emit({ reason: 'sync', ids: savedIds })
+      }
+
+      // Update cached sync status
+      try {
+        const newStatus =
+          await projectStorage.getProjectChatsSyncStatus(projectId)
+        this.saveProjectSyncStatus(projectId, newStatus)
+      } catch (statusError) {
+        logError('Failed to update project sync status', statusError, {
+          component: 'CloudSync',
+          action: 'syncProjectChatsChanged',
+          metadata: { projectId },
+        })
+      }
+    } catch (error) {
+      result.errors.push(
+        `Project chat sync failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
 
     return result

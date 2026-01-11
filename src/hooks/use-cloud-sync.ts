@@ -233,12 +233,16 @@ export function useCloudSync() {
     }
   }, [])
 
-  // Smart sync: checks sync status first and only syncs if changes detected
-  const smartSyncChats = useCallback(async () => {
+  /**
+   * Smart sync: checks sync status first and only syncs if changes detected.
+   * @param projectId - Optional project ID. If provided, syncs project chats.
+   */
+  const smartSyncChats = useCallback(async (projectId?: string) => {
     if (!isCloudSyncEnabled()) {
       logInfo('Cloud sync is disabled, skipping smart sync', {
         component: 'useCloudSync',
         action: 'smartSyncChats',
+        metadata: { projectId },
       })
       return { uploaded: 0, downloaded: 0, errors: [] }
     }
@@ -247,6 +251,7 @@ export function useCloudSync() {
       logInfo('Smart sync request blocked - sync already in progress', {
         component: 'useCloudSync',
         action: 'smartSyncChats',
+        metadata: { projectId },
       })
       return { uploaded: 0, downloaded: 0, errors: [] }
     }
@@ -257,7 +262,7 @@ export function useCloudSync() {
     }
 
     try {
-      const result = await cloudSync.smartSync()
+      const result = await cloudSync.smartSync(projectId)
 
       if (isMountedRef.current) {
         setState((prev) => ({
@@ -273,7 +278,7 @@ export function useCloudSync() {
           {
             component: 'useCloudSync',
             action: 'smartSyncChats',
-            metadata: { result },
+            metadata: { projectId, result },
           },
         )
       }
@@ -294,7 +299,7 @@ export function useCloudSync() {
     await cloudSync.backupChat(chatId)
   }, [])
 
-  // Sync chats for a specific project
+  // Sync chats for a specific project (full sync)
   const syncProjectChats = useCallback(async (projectId: string) => {
     if (!isCloudSyncEnabled()) {
       logInfo('Cloud sync is disabled, skipping project chat sync', {
