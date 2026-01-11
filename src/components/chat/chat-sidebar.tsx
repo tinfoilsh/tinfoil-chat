@@ -793,7 +793,13 @@ export function ChatSidebar({
           {isSignedIn && isPremium && (
             <div className="relative z-10 flex-none border-t border-border-subtle">
               <button
-                onClick={() => setIsProjectsExpanded(!isProjectsExpanded)}
+                onClick={() => {
+                  const newExpanded = !isProjectsExpanded
+                  setIsProjectsExpanded(newExpanded)
+                  if (newExpanded && projects.length === 0) {
+                    refreshProjects()
+                  }
+                }}
                 className={cn(
                   'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                   isProjectMode
