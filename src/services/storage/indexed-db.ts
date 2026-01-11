@@ -172,7 +172,8 @@ export class IndexedDBStorage {
         const hasContentChanges = existingChat
           ? existingChat.messages.length !== messagesForStorage.length ||
             existingChat.updatedAt !== chat.updatedAt ||
-            existingChat.title !== chat.title
+            existingChat.title !== chat.title ||
+            existingChat.projectId !== (chat as StoredChat).projectId
           : false
 
         const storedChat: StoredChat = {
