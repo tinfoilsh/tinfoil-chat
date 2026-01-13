@@ -2,12 +2,16 @@
 
 import type { Chat } from '@/components/chat/types'
 import { cn } from '@/components/ui/utils'
+import type { Fact } from '@/types/memory'
 import {
   ArrowLeftIcon,
+  ChevronDownIcon,
   DocumentTextIcon,
   PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LuBrain } from 'react-icons/lu'
 import { useProject } from './project-context'
 import { ProjectDocumentUpload } from './project-document-upload'
 
@@ -30,8 +34,65 @@ export function ProjectSidebarContent({
   onExitProject,
   isPremium,
 }: ProjectSidebarContentProps) {
-  const { activeProject, projectDocuments, removeDocument, loading } =
-    useProject()
+  const {
+    activeProject,
+    projectDocuments,
+    removeDocument,
+    updateProjectMemory,
+    loading,
+  } = useProject()
+
+  const [memoryExpanded, setMemoryExpanded] = useState(false)
+  const [memoryText, setMemoryText] = useState('')
+  const [memoryEdited, setMemoryEdited] = useState(false)
+
+  const memoryFacts = useMemo(
+    () => activeProject?.memory || [],
+    [activeProject?.memory],
+  )
+  const activeProjectId = activeProject?.id
+
+  useEffect(() => {
+    if (activeProjectId && !memoryEdited) {
+      setMemoryText(memoryFacts.map((f) => f.fact).join('\n'))
+    }
+  }, [activeProjectId, memoryFacts, memoryEdited])
+
+  const handleMemoryChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setMemoryText(e.target.value)
+      setMemoryEdited(true)
+    },
+    [],
+  )
+
+  const handleMemorySave = useCallback(async () => {
+    if (!memoryEdited || !activeProject) return
+
+    const newLines = memoryText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+
+    const existingFacts = activeProject.memory || []
+    const existingByFact = new Map(existingFacts.map((f) => [f.fact, f]))
+
+    const updatedFacts: Fact[] = newLines.map((line) => {
+      const existing = existingByFact.get(line)
+      if (existing) {
+        return existing
+      }
+      return {
+        fact: line,
+        date: new Date().toISOString(),
+        category: 'other',
+        confidence: 1,
+      }
+    })
+
+    await updateProjectMemory(updatedFacts)
+    setMemoryEdited(false)
+  }, [memoryEdited, memoryText, activeProject, updateProjectMemory])
 
   if (!activeProject) return null
 
@@ -174,18 +235,54 @@ export function ProjectSidebarContent({
         <ProjectDocumentUpload isDarkMode={isDarkMode} isPremium={isPremium} />
       </div>
 
-      {/* Project memory preview */}
-      {activeProject.memory && activeProject.memory.length > 0 && (
-        <div className="flex-none border-t border-border-subtle p-3">
-          <h4 className="mb-1 font-aeonik text-xs font-medium text-content-secondary">
-            Project Memory ({activeProject.memory.length} facts)
-          </h4>
-          <p className="line-clamp-3 font-aeonik-fono text-xs text-content-muted">
-            {activeProject.memory
-              .slice(0, 3)
-              .map((f) => f.fact)
-              .join(' • ')}
-          </p>
+      {/* Memory section */}
+      {memoryFacts.length > 0 && (
+        <div className="flex-none border-t border-border-subtle">
+          <button
+            onClick={() => setMemoryExpanded(!memoryExpanded)}
+            className={cn(
+              'flex w-full items-center justify-between p-3 text-left transition-colors',
+              isDarkMode ? 'hover:bg-surface-chat' : 'hover:bg-surface-sidebar',
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <LuBrain className="h-4 w-4 text-content-muted" />
+              <h4 className="font-aeonik text-xs font-medium text-content-secondary">
+                Memory
+              </h4>
+              <span className="font-aeonik-fono text-xs text-content-muted">
+                ({memoryFacts.length})
+              </span>
+            </div>
+            <ChevronDownIcon
+              className={cn(
+                'h-4 w-4 text-content-muted transition-transform',
+                memoryExpanded && 'rotate-180',
+              )}
+            />
+          </button>
+
+          {memoryExpanded && (
+            <div className="px-3 pb-3">
+              <textarea
+                value={memoryText}
+                onChange={handleMemoryChange}
+                onBlur={handleMemorySave}
+                placeholder="No memory facts yet..."
+                rows={6}
+                className={cn(
+                  'w-full resize-none rounded-md border px-2 py-1.5 font-aeonik-fono text-xs',
+                  isDarkMode
+                    ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                    : 'border-border-subtle bg-white text-content-primary placeholder:text-content-muted',
+                  'focus:outline-none focus:ring-1 focus:ring-emerald-500',
+                )}
+              />
+              <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
+                One fact per line. Changes save on blur.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
