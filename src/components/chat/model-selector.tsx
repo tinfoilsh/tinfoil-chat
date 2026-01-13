@@ -127,7 +127,9 @@ export function ModelSelector({
   // Premium users: show only premium models
   // Free users: show all models (free models enabled, premium models disabled)
   const displayModels = models.filter((model) => {
-    if (model.type !== 'chat' || model.chat !== true) return false
+    const isChatOrCodeModel =
+      (model.type === 'chat' || model.type === 'code') && model.chat === true
+    if (!isChatOrCodeModel) return false
 
     // For premium users, only show premium models
     if (isPremium && !model.paid) {
