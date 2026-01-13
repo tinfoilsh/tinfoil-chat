@@ -343,3 +343,38 @@ export async function sendChatStream(
     'FETCH_ERROR',
   )
 }
+
+export interface StructuredCompletionParams {
+  model: BaseModel
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+  jsonSchema: object
+  signal?: AbortSignal
+}
+
+export async function sendStructuredCompletion<T>(
+  params: StructuredCompletionParams,
+): Promise<T> {
+  const { model, messages, jsonSchema, signal } = params
+
+  const client = await getTinfoilClient()
+  await client.ready()
+
+  const response = await client.chat.completions.create(
+    {
+      model: model.modelName,
+      messages,
+      stream: false,
+      extra_body: {
+        guided_json: jsonSchema,
+      },
+    },
+    { signal },
+  )
+
+  const content = response.choices[0]?.message?.content
+  if (!content) {
+    throw new Error('No content in structured completion response')
+  }
+
+  return JSON.parse(content) as T
+}
