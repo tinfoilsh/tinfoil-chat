@@ -13,9 +13,8 @@ interface UpdateSummaryParams {
 
 function formatChatHistory(chatHistory: ChatMessage[]): string {
   return chatHistory
-    .map(
-      (msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`,
-    )
+    .filter((msg) => msg.role === 'user')
+    .map((msg) => `User: ${msg.content}`)
     .join('\n\n')
 }
 
