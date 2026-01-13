@@ -1,8 +1,16 @@
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CONSTANTS } from './chat/constants'
+
+function isOnline(): boolean {
+  return typeof navigator !== 'undefined' ? navigator.onLine : true
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 type VerifierSidebarProps = {
   isOpen: boolean
@@ -28,45 +36,99 @@ export function VerifierSidebar({
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [isReady, setIsReady] = useState(false)
   const [verificationDocument, setVerificationDocument] = useState<any>(null)
+  const retryCountRef = useRef(0)
+  const isRetryingRef = useRef(false)
 
   const fetchVerificationDocument = useCallback(async () => {
-    try {
-      const client = await getTinfoilClient()
-      await (client as any).ready?.()
-    } catch (error) {
-      logError('Tinfoil client verification failed', error, {
-        component: 'VerifierSidebar',
-        action: 'fetchVerificationDocument',
-      })
+    // Prevent concurrent retry attempts
+    if (isRetryingRef.current) return
+    isRetryingRef.current = true
+    retryCountRef.current = 0
+
+    const attemptFetch = async (): Promise<boolean> => {
+      // Check internet connection
+      if (!isOnline()) {
+        logInfo('No internet connection, waiting to retry verification', {
+          component: 'VerifierSidebar',
+          action: 'fetchVerificationDocument',
+          metadata: { attempt: retryCountRef.current + 1 },
+        })
+        return false
+      }
+
+      try {
+        const client = await getTinfoilClient()
+        await (client as any).ready?.()
+      } catch (error) {
+        logError('Tinfoil client verification failed', error, {
+          component: 'VerifierSidebar',
+          action: 'fetchVerificationDocument',
+          metadata: { attempt: retryCountRef.current + 1 },
+        })
+        return false
+      }
+
+      try {
+        const client = await getTinfoilClient()
+        const doc = await (client as any).getVerificationDocument?.()
+        if (doc) {
+          setVerificationDocument(doc)
+          if (isReady && iframeRef.current) {
+            iframeRef.current.contentWindow?.postMessage(
+              {
+                type: 'TINFOIL_VERIFICATION_DOCUMENT',
+                document: doc,
+              },
+              '*',
+            )
+          }
+          if (onVerificationUpdate) {
+            onVerificationUpdate(doc)
+          }
+          if (doc.securityVerified !== undefined) {
+            onVerificationComplete(doc.securityVerified)
+            return true
+          }
+        }
+        return false
+      } catch (error) {
+        logError('Failed to fetch verification document', error, {
+          component: 'VerifierSidebar',
+          action: 'fetchVerificationDocument',
+          metadata: { attempt: retryCountRef.current + 1 },
+        })
+        return false
+      }
     }
 
-    try {
-      const client = await getTinfoilClient()
-      const doc = await (client as any).getVerificationDocument?.()
-      if (doc) {
-        setVerificationDocument(doc)
-        if (isReady && iframeRef.current) {
-          iframeRef.current.contentWindow?.postMessage(
-            {
-              type: 'TINFOIL_VERIFICATION_DOCUMENT',
-              document: doc,
-            },
-            '*',
-          )
-        }
-        if (onVerificationUpdate) {
-          onVerificationUpdate(doc)
-        }
-        if (doc.securityVerified !== undefined) {
-          onVerificationComplete(doc.securityVerified)
-        }
-      }
-    } catch (error) {
-      logError('Failed to fetch verification document', error, {
+    // Try initial fetch
+    let success = await attemptFetch()
+
+    // Retry with exponential backoff if initial attempt failed
+    while (
+      !success &&
+      retryCountRef.current < CONSTANTS.VERIFICATION_MAX_RETRIES
+    ) {
+      retryCountRef.current++
+      const backoffDelay =
+        CONSTANTS.VERIFICATION_RETRY_DELAY_MS *
+        Math.pow(1.5, retryCountRef.current - 1)
+
+      logInfo('Retrying verification fetch', {
         component: 'VerifierSidebar',
         action: 'fetchVerificationDocument',
+        metadata: {
+          attempt: retryCountRef.current,
+          maxRetries: CONSTANTS.VERIFICATION_MAX_RETRIES,
+          delayMs: backoffDelay,
+        },
       })
+
+      await delay(backoffDelay)
+      success = await attemptFetch()
     }
+
+    isRetryingRef.current = false
   }, [isReady, onVerificationUpdate, onVerificationComplete])
 
   // Handle messages from iframe

@@ -27,4 +27,9 @@ export const CONSTANTS = {
   TITLE_GENERATION_WORD_THRESHOLD: 100, // Words needed to trigger early title generation during streaming
   TITLE_GENERATION_PROMPT: `Generate a concise, descriptive title of minimum 2 words, maximum 5 words for the following text. NEVER output markdown.`,
   THOUGHT_SUMMARY_GENERATION_PROMPT: `Generate a summary sentence of minimum 5 words, maximum 15 words summarizing the following text. NEVER output markdown.`,
+  // Retry settings
+  VERIFICATION_MAX_RETRIES: 5,
+  VERIFICATION_RETRY_DELAY_MS: 2000, // Base delay between retries (exponential backoff)
+  MESSAGE_SEND_MAX_RETRIES: 6,
+  MESSAGE_SEND_RETRY_DELAY_MS: 1000, // Base delay between retries (exponential backoff)
 } as const
