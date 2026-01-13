@@ -28,7 +28,7 @@ export type Chat = {
   pendingSave?: boolean
 }
 
-export type LoadingState = 'idle' | 'loading' | 'streaming'
+export type LoadingState = 'idle' | 'loading' | 'streaming' | 'retrying'
 
 export type AIModel = string
 

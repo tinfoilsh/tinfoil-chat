@@ -709,7 +709,7 @@ export function ChatInput({
               id="send-button"
               type="button"
               onClick={(e) => {
-                if (loadingState === 'loading') {
+                if (loadingState === 'loading' || loadingState === 'retrying') {
                   e.preventDefault()
                   cancelGeneration()
                 } else {
@@ -718,10 +718,12 @@ export function ChatInput({
               }}
               className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
               disabled={
-                loadingState !== 'loading' && (isTranscribing || isConverting)
+                loadingState !== 'loading' &&
+                loadingState !== 'retrying' &&
+                (isTranscribing || isConverting)
               }
             >
-              {loadingState === 'loading' ? (
+              {loadingState === 'loading' || loadingState === 'retrying' ? (
                 <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
               ) : (
                 <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
@@ -731,13 +733,19 @@ export function ChatInput({
         </div>
       </div>
 
-      {hasMessages && (
+      {loadingState === 'retrying' ? (
+        <div className="text-center">
+          <p className="text-xs text-content-muted">
+            Connection issue. Retrying...
+          </p>
+        </div>
+      ) : hasMessages ? (
         <div className="text-center">
           <p className="text-xs text-content-muted">
             AI can make mistakes. Verify important information.
           </p>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
