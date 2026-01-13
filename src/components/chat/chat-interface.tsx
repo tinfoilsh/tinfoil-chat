@@ -34,6 +34,10 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
+import {
+  getProjectUploadPreference,
+  setProjectUploadPreference,
+} from '@/utils/project-upload-preference'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
@@ -65,6 +69,13 @@ const CloudSyncSetupModal = dynamic(
   () =>
     import('../modals/cloud-sync-setup-modal').then(
       (m) => m.CloudSyncSetupModal,
+    ),
+  { ssr: false },
+)
+const AddToProjectContextModal = dynamic(
+  () =>
+    import('../modals/add-to-project-context-modal').then(
+      (m) => m.AddToProjectContextModal,
     ),
   { ssr: false },
 )
@@ -212,6 +223,10 @@ export function ChatInterface({
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
+  // State for add-to-project-context modal
+  const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null)
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -251,6 +266,7 @@ export function ChatInterface({
     exitProjectMode,
     createProject,
     loadingProject,
+    uploadDocument: uploadProjectDocument,
   } = useProject()
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
@@ -735,13 +751,11 @@ export function ChatInterface({
     }
   }
 
-  // Document upload handler wrapper
-  const handleFileUpload = useCallback(
+  // Helper to process file and add to chat attachments
+  const processFileForChat = useCallback(
     async (file: File) => {
-      // Create a temporary document entry with uploading status
       const tempDocId = Math.random().toString(36).substring(2, 9)
 
-      // Add placeholder document that shows as uploading
       setProcessedDocuments((prev) => [
         ...prev,
         {
@@ -760,14 +774,12 @@ export function ChatInterface({
             selectedModelDetails?.contextWindow,
           )
 
-          // Check if adding would exceed context window
           const existingTokens = processedDocuments.reduce(
             (total, doc) => total + estimateTokenCount(doc.content),
             0,
           )
 
           if (existingTokens + newDocTokens > contextLimit) {
-            // Remove the document if it would exceed the context limit
             setProcessedDocuments((prev) =>
               prev.filter((doc) => doc.id !== tempDocId),
             )
@@ -782,7 +794,6 @@ export function ChatInterface({
             return
           }
 
-          // Replace the placeholder with the actual document
           setProcessedDocuments((prev) => {
             return prev.map((doc) =>
               doc.id === tempDocId
@@ -791,14 +802,13 @@ export function ChatInterface({
                     name: file.name,
                     time: new Date(),
                     content,
-                    imageData, // Store imageData in live session
+                    imageData,
                   }
                 : doc,
             )
           })
         },
-        (error, documentId) => {
-          // On error, remove the placeholder document
+        (error) => {
           setProcessedDocuments((prev) =>
             prev.filter((doc) => doc.id !== tempDocId),
           )
@@ -818,6 +828,88 @@ export function ChatInterface({
       selectedModelDetails?.contextWindow,
       toast,
     ],
+  )
+
+  // Helper to process file and add to project context
+  const addFileToProjectContext = useCallback(
+    async (file: File) => {
+      await handleDocumentUpload(
+        file,
+        async (content) => {
+          try {
+            await uploadProjectDocument(file, content)
+
+            // Open sidebar and expand documents section
+            sessionStorage.setItem('expandProjectDocuments', 'true')
+            setIsSidebarOpen(true)
+          } catch {
+            toast({
+              title: 'Upload failed',
+              description: 'Failed to add document to project context.',
+              variant: 'destructive',
+              position: 'top-left',
+            })
+          }
+        },
+        (error) => {
+          toast({
+            title: 'Processing failed',
+            description: error.message || 'Failed to process document',
+            variant: 'destructive',
+            position: 'top-left',
+          })
+        },
+      )
+    },
+    [handleDocumentUpload, uploadProjectDocument, toast, setIsSidebarOpen],
+  )
+
+  // Handler for modal confirmation
+  const handleAddToProjectConfirm = useCallback(
+    async (addToProject: boolean, rememberChoice: boolean) => {
+      if (rememberChoice) {
+        setProjectUploadPreference(addToProject ? 'project' : 'chat')
+      }
+
+      if (pendingUploadFile) {
+        if (addToProject) {
+          await addFileToProjectContext(pendingUploadFile)
+        } else {
+          await processFileForChat(pendingUploadFile)
+        }
+      }
+
+      setPendingUploadFile(null)
+      setShowAddToProjectModal(false)
+    },
+    [pendingUploadFile, addFileToProjectContext, processFileForChat],
+  )
+
+  // Document upload handler wrapper
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      // Check if in project mode
+      if (isProjectMode && activeProject) {
+        const preference = getProjectUploadPreference()
+
+        if (preference === 'project') {
+          await addFileToProjectContext(file)
+          return
+        } else if (preference === 'chat') {
+          await processFileForChat(file)
+          return
+        } else {
+          // No preference saved - show dialog
+          setPendingUploadFile(file)
+          setShowAddToProjectModal(true)
+          return
+        }
+      }
+
+      // Not in project mode - use normal chat flow
+      await processFileForChat(file)
+    },
+    [isProjectMode, activeProject, addFileToProjectContext, processFileForChat],
   )
 
   // Handler for removing documents
@@ -1687,6 +1779,19 @@ export function ChatInterface({
           initialCloudSyncEnabled={true}
         />
       )}
+
+      {/* Add to Project Context Modal */}
+      <AddToProjectContextModal
+        isOpen={showAddToProjectModal}
+        onClose={() => {
+          setPendingUploadFile(null)
+          setShowAddToProjectModal(false)
+        }}
+        onConfirm={handleAddToProjectConfirm}
+        fileName={pendingUploadFile?.name ?? ''}
+        projectName={activeProject?.name ?? ''}
+        isDarkMode={isDarkMode}
+      />
     </div>
   )
 }
