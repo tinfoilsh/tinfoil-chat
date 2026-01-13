@@ -36,6 +36,16 @@ export async function extractFacts(params: {
 }): Promise<ExtractFactsResult> {
   const { currentMemory, messages, signal } = params
 
+  logInfo('Starting fact extraction', {
+    component: 'FactExtractor',
+    action: 'extractFacts',
+    metadata: {
+      totalMessages: messages.length,
+      currentFactsCount: currentMemory.facts.length,
+      lastProcessedTimestamp: currentMemory.lastProcessedTimestamp,
+    },
+  })
+
   const lastProcessed = currentMemory.lastProcessedTimestamp
     ? new Date(currentMemory.lastProcessedTimestamp)
     : null
@@ -45,6 +55,15 @@ export async function extractFacts(params: {
     if (countWords(msg.content || '') < MIN_WORD_COUNT) return false
     if (lastProcessed && msg.timestamp <= lastProcessed) return false
     return true
+  })
+
+  logInfo('Filtered messages for extraction', {
+    component: 'FactExtractor',
+    action: 'extractFacts',
+    metadata: {
+      newMessagesCount: newMessages.length,
+      userMessagesTotal: messages.filter((m) => m.role === 'user').length,
+    },
   })
 
   if (newMessages.length === 0) {
@@ -57,9 +76,16 @@ export async function extractFacts(params: {
     logError('No model available for fact extraction', new Error('No model'), {
       component: 'FactExtractor',
       action: 'extractFacts',
+      metadata: { modelsCount: models.length },
     })
     return { facts: [], processedCount: 0 }
   }
+
+  logInfo('Using model for fact extraction', {
+    component: 'FactExtractor',
+    action: 'extractFacts',
+    metadata: { modelName: freeModel.modelName },
+  })
 
   const promptTemplate = await getMemoryPrompt()
   if (!promptTemplate) {
@@ -73,6 +99,12 @@ export async function extractFacts(params: {
     )
     return { facts: [], processedCount: 0 }
   }
+
+  logInfo('Got memory prompt template', {
+    component: 'FactExtractor',
+    action: 'extractFacts',
+    metadata: { promptLength: promptTemplate.length },
+  })
 
   const formattedMessages = newMessages.map((m) => ({
     content: m.content || '',
