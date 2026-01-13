@@ -166,6 +166,17 @@ export function ProjectSidebar({
     refreshDocuments()
   }, [refreshDocuments])
 
+  // Expand documents section when signal is set (from file upload to project context)
+  useEffect(() => {
+    if (isOpen) {
+      const shouldExpandDocs = sessionStorage.getItem('expandProjectDocuments')
+      if (shouldExpandDocs === 'true') {
+        setDocumentsExpanded(true)
+        sessionStorage.removeItem('expandProjectDocuments')
+      }
+    }
+  }, [isOpen])
+
   useEffect(() => {
     if (isClient) {
       const handleResize = () => {
