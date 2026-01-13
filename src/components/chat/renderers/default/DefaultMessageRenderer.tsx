@@ -302,11 +302,11 @@ const DefaultMessageComponent = ({
                   )}
                 />
                 <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-content-muted">
-                    <InformationCircleIcon className="h-4 w-4" />
+                  <div className="hidden items-center gap-2 text-sm text-content-muted sm:flex">
+                    <InformationCircleIcon className="h-4 w-4 shrink-0" />
                     <span>All messages after this point will be removed</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-1 justify-end gap-2">
                     <button
                       onClick={handleCancelEdit}
                       className="rounded-lg px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
