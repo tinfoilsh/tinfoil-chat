@@ -66,15 +66,16 @@ function isRetryableError(error: unknown): boolean {
     return true
   }
 
-  // Default to retrying for unknown errors (network issues often don't have clear types)
-  return true
+  // Default to not retrying - only explicitly identified conditions should trigger retries
+  // This prevents unnecessary retries for client errors (4xx) which won't succeed on retry
+  return false
 }
 
 export interface SendChatStreamParams {
   model: BaseModel
   systemPrompt: string
   rules?: string
-  onRetry?: (attempt: number, maxRetries: number) => void
+  onRetry?: (attempt: number, maxRetries: number, error?: string) => void
   updatedMessages: Message[]
   maxMessages: number
   signal: AbortSignal
@@ -179,7 +180,7 @@ export async function sendChatStream(
             },
           })
 
-          onRetry?.(attempt + 1, maxRetries)
+          onRetry?.(attempt + 1, maxRetries, anyErr?.message)
 
           await delay(backoffDelay)
           continue
