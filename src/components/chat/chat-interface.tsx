@@ -176,6 +176,14 @@ export function ChatInterface({
   // Use reasoning effort hook for gpt-oss models
   const { reasoningEffort, setReasoningEffort } = useReasoningEffort()
 
+  // Detect platform for keyboard shortcut display
+  const isMac = useMemo(() => {
+    if (typeof navigator === 'undefined') return true
+    return /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  }, [])
+  const modKey = isMac ? '⌘' : 'Ctrl+'
+  const shiftKey = isMac ? '⇧' : 'Shift+'
+
   // Use custom system prompt hook
   const { effectiveSystemPrompt, processedRules } = useCustomSystemPrompt(
     systemPrompt,
@@ -1047,7 +1055,8 @@ export function ChatInterface({
               <Bars3Icon className="h-5 w-5" />
             </button>
             <span className="pointer-events-none fixed left-4 top-16 z-50 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-              Open sidebar <span className="ml-1.5 text-content-muted">⌘.</span>
+              Open sidebar{' '}
+              <span className="ml-1.5 text-content-muted">{modKey}.</span>
             </span>
           </div>
         )}
@@ -1095,7 +1104,11 @@ export function ChatInterface({
                 'bg-surface-chat-background text-content-primary shadow-sm',
               )}
             >
-              New chat <span className="ml-1.5 text-content-muted">⇧⌘O</span>
+              New chat{' '}
+              <span className="ml-1.5 text-content-muted">
+                {shiftKey}
+                {modKey}O
+              </span>
             </span>
           </div>
 
