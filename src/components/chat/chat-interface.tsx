@@ -488,7 +488,7 @@ export function ChatInterface({
       // Cmd+. (or Ctrl+.) to toggle sidebar
       if ((e.metaKey || e.ctrlKey) && e.key === '.') {
         e.preventDefault()
-        setIsSidebarOpen(!isSidebarOpen)
+        setIsSidebarOpen((prev) => !prev)
         return
       }
 
@@ -508,12 +508,7 @@ export function ChatInterface({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    isSidebarOpen,
-    setIsSidebarOpen,
-    currentChat?.messages?.length,
-    createNewChat,
-  ])
+  }, [setIsSidebarOpen, currentChat?.messages?.length, createNewChat])
 
   // Get the selected model details
   const selectedModelDetails = models.find(
@@ -1231,6 +1226,8 @@ export function ChatInterface({
           isSignedIn ? handleOpenCloudSyncSetup : undefined
         }
         onChatsUpdated={reloadChats}
+        isSignedIn={isSignedIn}
+        isPremium={isPremium}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}

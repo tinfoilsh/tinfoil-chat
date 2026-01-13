@@ -12,7 +12,7 @@ interface UseUIStateReturn {
   isDarkMode: boolean
   windowWidth: number
   messagesEndRef: React.RefObject<HTMLDivElement>
-  setIsSidebarOpen: (isOpen: boolean) => void
+  setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>
   toggleTheme: () => void
   openAndExpandVerifier: () => void
   handleInputFocus: () => void

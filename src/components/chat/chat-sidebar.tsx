@@ -747,42 +747,21 @@ export function ChatSidebar({
                     <span>Faster response times</span>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleUpgradeToPro()
-                    }}
-                    disabled={upgradeLoading}
-                    className={`inline-flex items-center gap-1 text-sm font-medium transition-colors ${
-                      isDarkMode
-                        ? 'text-emerald-400 hover:text-emerald-300'
-                        : 'text-emerald-600 hover:text-emerald-500'
-                    } ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
-                  >
-                    {upgradeLoading ? 'Redirecting…' : 'Subscribe to premium'}
-                    {!upgradeLoading && (
-                      <svg
-                        className="h-3 w-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                  {upgradeError && (
-                    <p className="mt-2 text-xs text-destructive">
-                      {upgradeError}
-                    </p>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleUpgradeToPro()
+                  }}
+                  disabled={upgradeLoading}
+                  className={`mt-4 w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90 ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                >
+                  {upgradeLoading ? 'Redirecting…' : 'Subscribe to premium'}
+                </button>
+                {upgradeError && (
+                  <p className="mt-2 text-xs text-destructive">
+                    {upgradeError}
+                  </p>
+                )}
               </div>
             </div>
           )}

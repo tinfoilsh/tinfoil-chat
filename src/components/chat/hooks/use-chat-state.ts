@@ -32,7 +32,7 @@ interface UseChatStateReturn {
 
   // Setters
   setInput: (input: string) => void
-  setIsSidebarOpen: (isOpen: boolean) => void
+  setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>
   setIsInitialLoad: (isLoading: boolean) => void
   setVerificationComplete: (complete: boolean) => void
   setVerificationSuccess: (success: boolean) => void

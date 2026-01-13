@@ -1,6 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
+import { API_BASE_URL } from '@/config'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
@@ -8,6 +9,7 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
+import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   CloudArrowUpIcon,
   Cog6ToothIcon,
@@ -30,6 +32,8 @@ type SettingsSidebarProps = {
   onEncryptionKeyClick?: () => void
   onCloudSyncSetupClick?: () => void
   onChatsUpdated?: () => void
+  isSignedIn?: boolean
+  isPremium?: boolean
 }
 
 export function SettingsSidebar({
@@ -42,7 +46,11 @@ export function SettingsSidebar({
   onEncryptionKeyClick,
   onCloudSyncSetupClick,
   onChatsUpdated,
+  isSignedIn,
+  isPremium,
 }: SettingsSidebarProps) {
+  const { getToken } = useAuth()
+  const { user } = useUser()
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
   )
@@ -64,6 +72,10 @@ export function SettingsSidebar({
 
   // Cloud sync setting
   const [cloudSyncEnabled, setCloudSyncEnabledState] = useState<boolean>(false)
+
+  // Upgrade state
+  const [upgradeLoading, setUpgradeLoading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
   // Available personality traits
   const availableTraits = [
@@ -530,6 +542,46 @@ export function SettingsSidebar({
     }
   }
 
+  const handleUpgradeToPro = useCallback(async () => {
+    if (!getToken) {
+      return
+    }
+
+    setUpgradeError(null)
+    setUpgradeLoading(true)
+    try {
+      const token = await getToken()
+      if (!token) {
+        throw new Error('No authentication token available')
+      }
+
+      const returnUrl = encodeURIComponent(window.location.origin)
+      const response = await fetch(
+        `${API_BASE_URL}/api/billing/chat-checkout-link?returnUrl=${returnUrl}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to generate checkout link')
+      }
+
+      const data = await response.json()
+      if (!data?.url) {
+        throw new Error('Checkout link unavailable')
+      }
+
+      window.location.href = data.url as string
+    } catch {
+      setUpgradeError('Failed to start checkout. Please try again later.')
+    } finally {
+      setUpgradeLoading(false)
+    }
+  }, [getToken])
+
   return (
     <>
       {/* Settings sidebar */}
@@ -569,7 +621,59 @@ export function SettingsSidebar({
         <div className="relative flex-1 overflow-y-auto p-4">
           <TextureGrid />
           <div className="relative z-10 space-y-6">
-            {/* Encrypted Cloud Sync section - moved to top */}
+            {/* Account section */}
+            <div>
+              {isSignedIn ? (
+                <div
+                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <UserButton
+                      appearance={{
+                        elements: {
+                          avatarBox: 'w-10 h-10',
+                        },
+                      }}
+                    />
+                    <div>
+                      <div className="font-aeonik text-sm font-medium text-content-primary">
+                        {user?.firstName
+                          ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+                          : user?.emailAddresses?.[0]?.emailAddress || 'User'}
+                      </div>
+                      <div className="text-xs text-content-muted">
+                        {isPremium
+                          ? 'Premium subscription active'
+                          : 'Free tier'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <SignInButton mode="modal">
+                  <button className="w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                    Sign in
+                  </button>
+                </SignInButton>
+              )}
+              {isSignedIn && !isPremium && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleUpgradeToPro()
+                  }}
+                  disabled={upgradeLoading}
+                  className={`mt-2 w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90 ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
+                >
+                  {upgradeLoading ? 'Redirecting…' : 'Subscribe to premium'}
+                </button>
+              )}
+              {upgradeError && (
+                <p className="mt-2 text-xs text-destructive">{upgradeError}</p>
+              )}
+            </div>
+
+            {/* Encrypted Cloud Sync section */}
             {onEncryptionKeyClick && (
               <div>
                 <h3
