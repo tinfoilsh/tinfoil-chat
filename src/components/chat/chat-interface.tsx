@@ -18,6 +18,7 @@ import {
 import { PiSpinner } from 'react-icons/pi'
 
 import {
+  ProjectModeBanner,
   ProjectSidebar,
   useProject,
   useProjectSystemPrompt,
@@ -1458,6 +1459,14 @@ export function ChatInterface({
         }}
       >
         <div className="relative flex h-full flex-col bg-surface-chat-background">
+          {/* Project Mode Banner */}
+          {isProjectMode && activeProject && (
+            <ProjectModeBanner
+              projectName={activeProject.name}
+              isDarkMode={isDarkMode}
+            />
+          )}
+
           {/* Decryption Progress Banner */}
           {decryptionProgress && decryptionProgress.isDecrypting && (
             <div className="border-b border-border-subtle bg-surface-chat px-4 py-2 text-content-secondary">
