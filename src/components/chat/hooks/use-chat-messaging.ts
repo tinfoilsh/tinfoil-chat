@@ -51,6 +51,7 @@ interface UseChatMessagingProps {
 interface UseChatMessagingReturn {
   input: string
   loadingState: LoadingState
+  retryInfo: { attempt: number; maxRetries: number; error?: string } | null
   inputRef: React.RefObject<HTMLTextAreaElement>
   isThinking: boolean
   isWaitingForResponse: boolean
@@ -101,6 +102,11 @@ export function useChatMessaging({
 
   const [input, setInput] = useState('')
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
+  const [retryInfo, setRetryInfo] = useState<{
+    attempt: number
+    maxRetries: number
+    error?: string
+  } | null>(null)
   const [abortController, setAbortController] =
     useState<AbortController | null>(null)
   const [isThinking, setIsThinking] = useState(false)
@@ -169,6 +175,7 @@ export function useChatMessaging({
       setAbortController(null)
     }
     setLoadingState('idle')
+    setRetryInfo(null)
     setIsThinking(false)
     setIsWaitingForResponse(false)
     thinkingStartTimeRef.current = null
@@ -572,8 +579,9 @@ export function useChatMessaging({
           model,
           systemPrompt: baseSystemPrompt,
           rules,
-          onRetry: () => {
+          onRetry: (attempt, maxRetries, error) => {
             setLoadingState('retrying')
+            setRetryInfo({ attempt, maxRetries, error })
           },
           updatedMessages,
           maxMessages,
@@ -855,6 +863,7 @@ export function useChatMessaging({
       } finally {
         // Ensure loading state is reset regardless of where failure occurs
         setLoadingState('idle')
+        setRetryInfo(null)
         setAbortController(null)
       }
     },
@@ -934,6 +943,7 @@ export function useChatMessaging({
   return {
     input,
     loadingState,
+    retryInfo,
     inputRef,
     isThinking,
     isWaitingForResponse,

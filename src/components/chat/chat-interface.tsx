@@ -370,6 +370,7 @@ export function ChatInterface({
     currentChat,
     input,
     loadingState,
+    retryInfo,
     inputRef,
     isClient,
     isSidebarOpen,
@@ -1243,6 +1244,7 @@ export function ChatInterface({
                 input={input}
                 setInput={setInput}
                 loadingState={loadingState}
+                retryInfo={retryInfo}
                 cancelGeneration={cancelGeneration}
                 inputRef={inputRef}
                 handleInputFocus={handleInputFocus}

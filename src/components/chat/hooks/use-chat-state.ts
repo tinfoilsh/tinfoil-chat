@@ -14,6 +14,7 @@ interface UseChatStateReturn {
   currentChat: Chat
   input: string
   loadingState: LoadingState
+  retryInfo: { attempt: number; maxRetries: number; error?: string } | null
   inputRef: React.RefObject<HTMLTextAreaElement>
   isClient: boolean
   isSidebarOpen: boolean
@@ -148,6 +149,7 @@ export function useChatState({
   const {
     input,
     loadingState,
+    retryInfo,
     inputRef,
     isThinking,
     isWaitingForResponse,
@@ -246,6 +248,7 @@ export function useChatState({
     currentChat,
     input,
     loadingState,
+    retryInfo,
     inputRef,
     isClient,
     isSidebarOpen,

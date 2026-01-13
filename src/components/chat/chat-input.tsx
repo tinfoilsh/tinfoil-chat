@@ -733,19 +733,13 @@ export function ChatInput({
         </div>
       </div>
 
-      {loadingState === 'retrying' ? (
-        <div className="text-center">
-          <p className="text-xs text-content-muted">
-            Connection issue. Retrying...
-          </p>
-        </div>
-      ) : hasMessages ? (
+      {hasMessages && (
         <div className="text-center">
           <p className="text-xs text-content-muted">
             AI can make mistakes. Verify important information.
           </p>
         </div>
-      ) : null}
+      )}
     </div>
   )
 }

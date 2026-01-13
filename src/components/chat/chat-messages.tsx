@@ -32,6 +32,7 @@ type ChatMessagesProps = {
   input?: string
   setInput?: (value: string) => void
   loadingState?: any
+  retryInfo?: { attempt: number; maxRetries: number; error?: string } | null
   cancelGeneration?: () => void
   inputRef?: React.RefObject<HTMLTextAreaElement>
   handleInputFocus?: () => void
@@ -176,24 +177,47 @@ const ChatMessage = memo(
 // Loading indicator with EXACT same structure as collapsed ThoughtProcess
 const LoadingMessage = memo(function LoadingMessage({
   isDarkMode,
+  isRetrying = false,
+  retryInfo,
 }: {
   isDarkMode: boolean
+  isRetrying?: boolean
+  retryInfo?: { attempt: number; maxRetries: number; error?: string } | null
 }) {
+  const getRetryMessage = () => {
+    if (!retryInfo) return 'Connection issue. Retrying...'
+
+    const { attempt, maxRetries, error } = retryInfo
+    let errorType = 'Connection issue'
+
+    if (error) {
+      const lowerError = error.toLowerCase()
+      if (lowerError.includes('network') || lowerError.includes('fetch')) {
+        errorType = 'Network error'
+      } else if (
+        lowerError.includes('timeout') ||
+        lowerError.includes('timed out')
+      ) {
+        errorType = 'Request timeout'
+      } else if (lowerError.includes('rate limit') || error.includes('429')) {
+        errorType = 'Rate limited'
+      } else if (lowerError.includes('server') || error.includes('500')) {
+        errorType = 'Server error'
+      }
+    }
+
+    return `${errorType}. Attempting retry (${attempt} of ${maxRetries})...`
+  }
+
   return (
-    <div className="no-scroll-anchoring group mb-6 flex w-full flex-col items-start">
-      <div className="w-full px-4 py-2">
-        <div className="mb-2 w-full">
-          {/* EXACT same structure as ThoughtProcess container */}
-          <div className={`mb-2 mt-2 rounded-lg bg-transparent`}>
-            <div className="flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-secondary">
-              <div className="flex items-center gap-2">
-                <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
-              </div>
-              {/* Empty div for the chevron space to match layout */}
-              <div className="h-5 w-5" />
-            </div>
-          </div>
-        </div>
+    <div className="no-scroll-anchoring group mb-6 flex w-full flex-col items-start px-4">
+      <div className="flex items-center gap-3">
+        <LoadingDots isThinking={false} isDarkMode={isDarkMode} />
+        {isRetrying && (
+          <span className="text-sm text-content-secondary">
+            {getRetryMessage()}
+          </span>
+        )}
       </div>
     </div>
   )
@@ -246,6 +270,7 @@ export function ChatMessages({
   input,
   setInput,
   loadingState,
+  retryInfo,
   cancelGeneration,
   inputRef,
   handleInputFocus,
@@ -443,7 +468,13 @@ export function ChatMessages({
           onRegenerateMessage={onRegenerateMessage}
         />
       ))}
-      {showLoadingPlaceholder && <LoadingMessage isDarkMode={isDarkMode} />}
+      {showLoadingPlaceholder && (
+        <LoadingMessage
+          isDarkMode={isDarkMode}
+          isRetrying={loadingState === 'retrying'}
+          retryInfo={retryInfo}
+        />
+      )}
       {/* Spacer allows scrollIntoView to bring user message to top of viewport */}
       {showSpacer && (
         <div
