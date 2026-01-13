@@ -20,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { useCallback, useEffect, useState } from 'react'
+import { PiSignIn } from 'react-icons/pi'
 import { CONSTANTS } from './constants'
 
 type SettingsSidebarProps = {
@@ -651,8 +652,9 @@ export function SettingsSidebar({
                 </div>
               ) : (
                 <SignInButton mode="modal">
-                  <button className="w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
-                    Sign in
+                  <button className="flex w-full items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                    <PiSignIn className="h-4 w-4" />
+                    Sign in or sign up
                   </button>
                 </SignInButton>
               )}
