@@ -3,12 +3,14 @@
  * Projects are containers with custom system instructions, documents, and project-specific chats
  */
 
+import type { Fact } from './memory'
+
 export interface Project {
   id: string
   name: string
   description: string
   systemInstructions: string
-  summary: string
+  memory: Fact[]
   createdAt: string
   updatedAt: string
   syncVersion: number
@@ -53,7 +55,7 @@ export interface ProjectData {
   name: string
   description: string
   systemInstructions: string
-  summary: string
+  memory: Fact[]
 }
 
 export interface CreateProjectData {
@@ -66,7 +68,7 @@ export interface UpdateProjectData {
   name?: string
   description?: string
   systemInstructions?: string
-  summary?: string
+  memory?: Fact[]
 }
 
 export interface ProjectListResponse {
@@ -113,7 +115,7 @@ export interface ProjectContextUsage {
     filename: string
     tokens: number
   }>
-  summary: number
+  memory: number
   totalUsed: number
   modelLimit: number
   availableForChat: number

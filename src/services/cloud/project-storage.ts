@@ -75,7 +75,7 @@ export class ProjectStorageService {
       name: data.name,
       description: data.description || '',
       systemInstructions: data.systemInstructions || '',
-      summary: '',
+      memory: [],
     }
 
     await encryptionService.initialize()
@@ -119,7 +119,7 @@ export class ProjectStorageService {
       description: data.description ?? existing.description,
       systemInstructions:
         data.systemInstructions ?? existing.systemInstructions,
-      summary: data.summary ?? existing.summary,
+      memory: data.memory ?? existing.memory,
     }
 
     await encryptionService.initialize()
@@ -168,7 +168,7 @@ export class ProjectStorageService {
         name: decrypted.name,
         description: decrypted.description,
         systemInstructions: decrypted.systemInstructions,
-        summary: decrypted.summary,
+        memory: decrypted.memory || [],
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
         syncVersion: data.syncVersion,
