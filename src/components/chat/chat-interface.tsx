@@ -474,6 +474,39 @@ export function ChatInterface({
     }
   }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+. (or Ctrl+.) to toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault()
+        setIsSidebarOpen(!isSidebarOpen)
+        return
+      }
+
+      // Shift+Cmd+O (or Shift+Ctrl+O) for new chat
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === 'o'
+      ) {
+        e.preventDefault()
+        if (currentChat?.messages?.length !== 0) {
+          createNewChat()
+        }
+        return
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    isSidebarOpen,
+    setIsSidebarOpen,
+    currentChat?.messages?.length,
+    createNewChat,
+  ])
+
   // Get the selected model details
   const selectedModelDetails = models.find(
     (model) => model.modelName === selectedModel,
@@ -998,19 +1031,25 @@ export function ChatInterface({
           windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
           (isVerifierSidebarOpen || isSettingsSidebarOpen)
         ) && (
-          <button
-            className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
-            onClick={() => {
-              setIsSidebarOpen(true)
-              // If window is narrow, close right sidebars when opening left sidebar
-              if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-                setIsVerifierSidebarOpen(false)
-                setIsSettingsSidebarOpen(false)
-              }
-            }}
-          >
-            <Bars3Icon className="h-5 w-5" />
-          </button>
+          <div className="group relative">
+            <button
+              className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+              onClick={() => {
+                setIsSidebarOpen(true)
+                // If window is narrow, close right sidebars when opening left sidebar
+                if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+                  setIsVerifierSidebarOpen(false)
+                  setIsSettingsSidebarOpen(false)
+                }
+              }}
+              aria-label="Open sidebar"
+            >
+              <Bars3Icon className="h-5 w-5" />
+            </button>
+            <span className="pointer-events-none fixed left-4 top-16 z-50 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+              Open sidebar <span className="ml-1.5 text-content-muted">⌘.</span>
+            </span>
+          </div>
         )}
 
       {/* Right side toggle buttons */}
@@ -1056,7 +1095,7 @@ export function ChatInterface({
                 'bg-surface-chat-background text-content-primary shadow-sm',
               )}
             >
-              New chat
+              New chat <span className="ml-1.5 text-content-muted">⇧⌘O</span>
             </span>
           </div>
 
