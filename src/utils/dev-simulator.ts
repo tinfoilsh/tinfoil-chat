@@ -26,6 +26,13 @@ export interface SimulatorPattern {
   thinkingDurationMs?: number
   streamDelayMs?: number
   chunkSize?: number
+  failCount?: number // Number of times to fail before succeeding (for retry testing)
+}
+
+// Track failure counts per session for retry testing
+// -1 means ready to start a new failure sequence, 0 means all failures done (success state)
+const retryTestState = {
+  failuresRemaining: -1,
 }
 
 // Predefined test patterns
@@ -144,6 +151,23 @@ The streaming should work smoothly without any thinking indicator.`,
     thinkingDurationMs: 500,
     streamDelayMs: 10,
     chunkSize: 20,
+  },
+
+  'test retry': {
+    thoughts: 'Processing after recovery...',
+    content: `Success! The retry mechanism worked correctly.
+
+This response only appears after the system automatically retried the request. The first 3 attempts failed with simulated network errors, demonstrating:
+
+1. The "Connection issue. Retrying..." message appears to the user
+2. The system automatically retries with exponential backoff
+3. Once successful, the response streams normally
+
+You can test this again by typing "test retry" to reset the failure counter.`,
+    thinkingDurationMs: 1000,
+    streamDelayMs: 30,
+    chunkSize: 10,
+    failCount: 3, // Fail 3 times before succeeding
   },
 
   'test edge case': {
@@ -438,6 +462,36 @@ export function getSimulatorPattern(query: string): SimulatorPattern {
     ...DEFAULT_PATTERN,
     content: DEFAULT_PATTERN.content.replace('{query}', query),
   }
+}
+
+// Check if retry test should fail (and update state)
+export function shouldRetryTestFail(query: string): boolean {
+  const lowerQuery = query.toLowerCase()
+
+  // Only applies to "test retry" pattern
+  if (!lowerQuery.includes('test retry')) {
+    return false
+  }
+
+  const pattern = SIMULATOR_PATTERNS['test retry']
+  if (!pattern?.failCount) {
+    return false
+  }
+
+  // Reset counter when starting a new test sequence (-1 is the sentinel for "ready to reset")
+  if (retryTestState.failuresRemaining === -1) {
+    retryTestState.failuresRemaining = pattern.failCount
+  }
+
+  // Check if we should fail
+  if (retryTestState.failuresRemaining > 0) {
+    retryTestState.failuresRemaining--
+    return true
+  }
+
+  // All failures exhausted - succeed and reset for next test sequence
+  retryTestState.failuresRemaining = -1
+  return false
 }
 
 // Simulate streaming with thinking support
