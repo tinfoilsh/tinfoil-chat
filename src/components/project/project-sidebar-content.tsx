@@ -236,55 +236,64 @@ export function ProjectSidebarContent({
       </div>
 
       {/* Memory section */}
-      {memoryFacts.length > 0 && (
-        <div className="flex-none border-t border-border-subtle">
-          <button
-            onClick={() => setMemoryExpanded(!memoryExpanded)}
-            className={cn(
-              'flex w-full items-center justify-between p-3 text-left transition-colors',
-              isDarkMode ? 'hover:bg-surface-chat' : 'hover:bg-surface-sidebar',
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <LuBrain className="h-4 w-4 text-content-muted" />
-              <h4 className="font-aeonik text-xs font-medium text-content-secondary">
-                Memory
-              </h4>
+      <div className="flex-none border-t border-border-subtle">
+        <button
+          onClick={() => setMemoryExpanded(!memoryExpanded)}
+          className={cn(
+            'flex w-full items-center justify-between p-3 text-left transition-colors',
+            isDarkMode ? 'hover:bg-surface-chat' : 'hover:bg-surface-sidebar',
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <LuBrain className="h-4 w-4 text-content-muted" />
+            <h4 className="font-aeonik text-xs font-medium text-content-secondary">
+              Memory
+            </h4>
+            {memoryFacts.length > 0 && (
               <span className="font-aeonik-fono text-xs text-content-muted">
                 ({memoryFacts.length})
               </span>
-            </div>
-            <ChevronDownIcon
-              className={cn(
-                'h-4 w-4 text-content-muted transition-transform',
-                memoryExpanded && 'rotate-180',
-              )}
-            />
-          </button>
+            )}
+          </div>
+          <ChevronDownIcon
+            className={cn(
+              'h-4 w-4 text-content-muted transition-transform',
+              memoryExpanded && 'rotate-180',
+            )}
+          />
+        </button>
 
-          {memoryExpanded && (
-            <div className="px-3 pb-3">
-              <textarea
-                value={memoryText}
-                onChange={handleMemoryChange}
-                onBlur={handleMemorySave}
-                placeholder="No memory facts yet..."
-                rows={6}
-                className={cn(
-                  'w-full resize-none rounded-md border px-2 py-1.5 font-aeonik-fono text-xs',
-                  isDarkMode
-                    ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                    : 'border-border-subtle bg-white text-content-primary placeholder:text-content-muted',
-                  'focus:outline-none focus:ring-1 focus:ring-emerald-500',
-                )}
-              />
-              <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
-                One fact per line. Changes save on blur.
+        {memoryExpanded && (
+          <div className="px-3 pb-3">
+            {memoryFacts.length === 0 ? (
+              <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
+                No memory yet. Memory will appear here as you have
+                conversations.
               </p>
-            </div>
-          )}
-        </div>
-      )}
+            ) : (
+              <>
+                <textarea
+                  value={memoryText}
+                  onChange={handleMemoryChange}
+                  onBlur={handleMemorySave}
+                  placeholder="Add facts about this project (one per line)..."
+                  rows={6}
+                  className={cn(
+                    'w-full resize-none rounded-md border px-2 py-1.5 font-aeonik-fono text-xs',
+                    isDarkMode
+                      ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                      : 'border-border-subtle bg-white text-content-primary placeholder:text-content-muted',
+                    'focus:outline-none focus:ring-1 focus:ring-emerald-500',
+                  )}
+                />
+                <p className="mt-1 font-aeonik-fono text-[10px] text-content-muted">
+                  One fact per line. Changes save on blur.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
