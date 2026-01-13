@@ -73,6 +73,7 @@ export interface SendChatStreamParams {
   model: BaseModel
   systemPrompt: string
   rules?: string
+  onRetry?: (attempt: number, maxRetries: number) => void
   updatedMessages: Message[]
   maxMessages: number
   signal: AbortSignal
@@ -86,6 +87,7 @@ export async function sendChatStream(
     model,
     systemPrompt,
     rules,
+    onRetry,
     updatedMessages,
     maxMessages,
     signal,
@@ -254,6 +256,9 @@ export async function sendChatStream(
             error: anyErr?.message,
           },
         })
+
+        // Notify caller that we're retrying
+        onRetry?.(attempt + 1, maxRetries)
 
         await delay(backoffDelay)
         continue

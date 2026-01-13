@@ -572,6 +572,9 @@ export function useChatMessaging({
           model,
           systemPrompt: baseSystemPrompt,
           rules,
+          onRetry: () => {
+            setLoadingState('retrying')
+          },
           updatedMessages,
           maxMessages,
           signal: controller.signal,
