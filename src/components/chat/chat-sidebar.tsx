@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { CiFloppyDisk } from 'react-icons/ci'
+import { PiSignIn } from 'react-icons/pi'
 import { CONSTANTS } from './constants'
 
 import { TextureGrid } from '@/components/texture-grid'
@@ -665,8 +666,9 @@ export function ChatSidebar({
                 Access chat history and sync across devices.
               </p>
               <SignInButton mode="modal">
-                <button className="relative w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
-                  Sign in
+                <button className="relative flex w-full items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                  <PiSignIn className="h-4 w-4" />
+                  Sign in or sign up
                 </button>
               </SignInButton>
             </div>
