@@ -909,7 +909,7 @@ export function ChatSidebar({
                                 }
                               }}
                               className={cn(
-                                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                                'flex w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:border-border-subtle',
                                 project.decryptionFailed
                                   ? 'cursor-default'
                                   : isDarkMode

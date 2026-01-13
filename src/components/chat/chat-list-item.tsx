@@ -157,7 +157,7 @@ export function ChatListItem({
         }
       }}
       className={cn(
-        'group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors',
+        'group flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:border-border-subtle',
         chat.decryptionFailed
           ? 'text-content-muted hover:bg-surface-chat'
           : isSelected
