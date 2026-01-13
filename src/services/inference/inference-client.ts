@@ -6,6 +6,7 @@ import {
 } from '@/components/chat/hooks/use-reasoning-effort'
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
+import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { ChatQueryBuilder } from './chat-query-builder'
 import { getTinfoilClient } from './tinfoil-client'
@@ -104,50 +105,102 @@ export async function sendChatStream(
       maxMessages,
     })
 
-    try {
-      const response = await fetch(simulatorUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: model.modelName,
-          messages,
-          stream: true,
-        }),
-        signal,
-      })
+    // Get the last user message for retry test check
+    const lastUserMessage = updatedMessages
+      .filter((m) => m.role === 'user')
+      .pop()
+    const queryText = lastUserMessage?.content || ''
 
-      if (!response.ok) {
-        if (response.status === 404) {
+    let lastError: unknown = null
+    const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (signal.aborted) {
+        throw new DOMException('Aborted', 'AbortError')
+      }
+
+      try {
+        // Check if this is a retry test that should fail
+        if (shouldRetryTestFail(queryText)) {
+          throw new Error('Simulated network error for retry testing')
+        }
+
+        const response = await fetch(simulatorUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model.modelName,
+            messages,
+            stream: true,
+          }),
+          signal,
+        })
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new ChatError(
+              'Dev simulator is only available in development environment',
+              'FETCH_ERROR',
+            )
+          }
           throw new ChatError(
-            'Dev simulator is only available in development environment',
+            `Server returned ${response.status}: ${response.statusText}`,
             'FETCH_ERROR',
           )
         }
-        throw new ChatError(
-          `Server returned ${response.status}: ${response.statusText}`,
-          'FETCH_ERROR',
-        )
-      }
 
-      return response
-    } catch (err: unknown) {
-      const anyErr = err as any
-      if (
-        (typeof DOMException !== 'undefined' &&
-          anyErr instanceof DOMException &&
-          anyErr.name === 'AbortError') ||
-        anyErr?.name === 'AbortError'
-      ) {
-        throw err
-      }
+        return response
+      } catch (err: unknown) {
+        lastError = err
+        const anyErr = err as any
 
-      if (err instanceof ChatError) {
-        throw err
-      }
+        if (
+          (typeof DOMException !== 'undefined' &&
+            anyErr instanceof DOMException &&
+            anyErr.name === 'AbortError') ||
+          anyErr?.name === 'AbortError'
+        ) {
+          throw err
+        }
 
-      const msg = anyErr?.message || 'Unknown network error'
-      throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
+        // Check if we should retry
+        if (attempt < maxRetries && isRetryableError(err)) {
+          const backoffDelay =
+            CONSTANTS.MESSAGE_SEND_RETRY_DELAY_MS * Math.pow(2, attempt)
+
+          logInfo('Retrying dev simulator request', {
+            component: 'inference-client',
+            action: 'sendChatStream.devSimulator',
+            metadata: {
+              attempt: attempt + 1,
+              maxRetries,
+              delayMs: backoffDelay,
+              error: anyErr?.message,
+            },
+          })
+
+          onRetry?.(attempt + 1, maxRetries)
+
+          await delay(backoffDelay)
+          continue
+        }
+
+        if (err instanceof ChatError) {
+          throw err
+        }
+
+        const msg = anyErr?.message || 'Unknown network error'
+        throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
+      }
     }
+
+    // Fallback if loop completes without returning
+    const anyErr = lastError as any
+    const msg = anyErr?.message || 'Unknown network error'
+    throw new ChatError(
+      `Network request failed after ${maxRetries} retries: ${msg}`,
+      'FETCH_ERROR',
+    )
   }
 
   const messages = ChatQueryBuilder.buildMessages({
