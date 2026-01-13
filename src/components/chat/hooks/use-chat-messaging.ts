@@ -838,16 +838,12 @@ export function useChatMessaging({
             })
           }
 
-          // Trigger project summary update if in project mode
+          // Trigger project memory update if in project mode
           if (isProjectMode && activeProject && finalMessages.length > 0) {
-            const chatHistory = finalMessages.map((msg) => ({
-              role: msg.role,
-              content: msg.content || '',
-            }))
             projectEvents.emit({
-              type: 'summary-update-needed',
+              type: 'memory-update-needed',
               projectId: activeProject.id,
-              chatHistory,
+              messages: finalMessages,
             })
           }
         } else {

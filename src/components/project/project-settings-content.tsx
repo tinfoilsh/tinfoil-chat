@@ -239,9 +239,9 @@ export function ProjectSettingsContent({
           )}
 
           <div className="flex justify-between">
-            <span className="text-content-muted">Project Summary</span>
+            <span className="text-content-muted">Project Memory</span>
             <span className="font-aeonik-fono text-content-secondary">
-              {formatTokenCount(contextUsage.summary)} tokens
+              {formatTokenCount(contextUsage.memory)} tokens
             </span>
           </div>
 
@@ -274,8 +274,8 @@ export function ProjectSettingsContent({
         )}
       </div>
 
-      {/* Project Summary (read-only) */}
-      {activeProject.summary && (
+      {/* Project Memory (read-only) */}
+      {activeProject.memory && activeProject.memory.length > 0 && (
         <div>
           <label
             className={cn(
@@ -283,10 +283,10 @@ export function ProjectSettingsContent({
               'text-content-secondary',
             )}
           >
-            Project Summary
+            Project Memory
           </label>
           <p className="mb-2 font-aeonik-fono text-xs text-content-muted">
-            Auto-generated summary of project conversations
+            Facts learned from project conversations
           </p>
           <div
             className={cn(
@@ -296,7 +296,12 @@ export function ProjectSettingsContent({
                 : 'border-border-subtle bg-surface-sidebar text-content-primary',
             )}
           >
-            {activeProject.summary}
+            {activeProject.memory.map((fact, index) => (
+              <div key={index} className="mb-1 last:mb-0">
+                <span className="text-content-muted">[{fact.category}]</span>{' '}
+                {fact.fact}
+              </div>
+            ))}
           </div>
         </div>
       )}

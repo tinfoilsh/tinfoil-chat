@@ -364,11 +364,13 @@ export async function sendStructuredCompletion<T>(
       model: model.modelName,
       messages,
       stream: false,
-      extra_body: {
+    },
+    {
+      signal,
+      body: {
         guided_json: jsonSchema,
       },
     },
-    { signal },
   )
 
   const content = response.choices[0]?.message?.content

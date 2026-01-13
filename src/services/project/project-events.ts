@@ -1,17 +1,13 @@
+import type { Message } from '@/components/chat/types'
 import { logError } from '@/utils/error-handling'
 
-type ChatMessage = {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-type ProjectSummaryUpdateEvent = {
-  type: 'summary-update-needed'
+type ProjectMemoryUpdateEvent = {
+  type: 'memory-update-needed'
   projectId: string
-  chatHistory: ChatMessage[]
+  messages: Message[]
 }
 
-type ProjectEvent = ProjectSummaryUpdateEvent
+type ProjectEvent = ProjectMemoryUpdateEvent
 
 type EventHandler<T extends ProjectEvent> = (event: T) => void
 

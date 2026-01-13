@@ -174,14 +174,17 @@ export function ProjectSidebarContent({
         <ProjectDocumentUpload isDarkMode={isDarkMode} isPremium={isPremium} />
       </div>
 
-      {/* Project summary preview */}
-      {activeProject.summary && (
+      {/* Project memory preview */}
+      {activeProject.memory && activeProject.memory.length > 0 && (
         <div className="flex-none border-t border-border-subtle p-3">
           <h4 className="mb-1 font-aeonik text-xs font-medium text-content-secondary">
-            Project Summary
+            Project Memory ({activeProject.memory.length} facts)
           </h4>
           <p className="line-clamp-3 font-aeonik-fono text-xs text-content-muted">
-            {activeProject.summary}
+            {activeProject.memory
+              .slice(0, 3)
+              .map((f) => f.fact)
+              .join(' • ')}
           </p>
         </div>
       )}

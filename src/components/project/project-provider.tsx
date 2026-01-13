@@ -1,9 +1,10 @@
 'use client'
 
+import { useMemory } from '@/hooks/use-memory'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { projectEvents } from '@/services/project/project-events'
-import { updateProjectSummary as updateSummaryWithLLM } from '@/services/project/project-summary'
+import type { Fact, MemoryState } from '@/types/memory'
 import type {
   CreateProjectData,
   Project,
@@ -50,62 +51,68 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     }
   }, [isSignedIn, getToken])
 
+  // Memory callbacks for useMemory hook
+  const memoryCallbacks = useMemo(
+    () => ({
+      onSave: async (memory: MemoryState) => {
+        if (!activeProject) return
+        await projectStorage.updateProject(activeProject.id, {
+          memory: memory.facts,
+        })
+        setActiveProject((prev) =>
+          prev && prev.id === activeProject.id
+            ? {
+                ...prev,
+                memory: memory.facts,
+                updatedAt: new Date().toISOString(),
+              }
+            : prev,
+        )
+      },
+      onLoad: async (): Promise<MemoryState> => {
+        return {
+          facts: activeProject?.memory || [],
+          lastProcessedTimestamp: null,
+        }
+      },
+    }),
+    [activeProject],
+  )
+
+  const { processMessages, loadMemory } = useMemory({
+    callbacks: memoryCallbacks,
+    enabled: !!activeProject,
+  })
+
+  // Load memory when project changes
+  const activeProjectId = activeProject?.id
   useEffect(() => {
-    if (!activeProject || !getToken) return
+    if (activeProjectId) {
+      loadMemory()
+    }
+  }, [activeProjectId, loadMemory])
+
+  // Listen for memory update events
+  useEffect(() => {
+    if (!activeProject) return
 
     const unsubscribe = projectEvents.on(
-      'summary-update-needed',
+      'memory-update-needed',
       async (event) => {
         if (event.projectId !== activeProject.id) return
 
-        logInfo('Processing summary update event', {
+        logInfo('Processing memory update event', {
           component: 'ProjectProvider',
-          action: 'summaryUpdateEvent',
+          action: 'memoryUpdateEvent',
           metadata: { projectId: event.projectId },
         })
 
-        try {
-          const newSummary = await updateSummaryWithLLM({
-            currentSummary: activeProject.summary || '',
-            chatHistory: event.chatHistory,
-            getToken,
-          })
-
-          if (newSummary) {
-            await projectStorage.updateProject(activeProject.id, {
-              summary: newSummary,
-            })
-            setActiveProject((prev) =>
-              prev && prev.id === activeProject.id
-                ? {
-                    ...prev,
-                    summary: newSummary,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : prev,
-            )
-
-            logInfo('Project summary updated successfully', {
-              component: 'ProjectProvider',
-              action: 'summaryUpdateComplete',
-              metadata: {
-                projectId: activeProject.id,
-                summaryLength: newSummary.length,
-              },
-            })
-          }
-        } catch (error) {
-          logError('Failed to update project summary', error, {
-            component: 'ProjectProvider',
-            action: 'summaryUpdateEvent',
-            metadata: { projectId: event.projectId },
-          })
-        }
+        await processMessages(event.messages)
       },
     )
 
     return unsubscribe
-  }, [activeProject, getToken])
+  }, [activeProject, processMessages])
 
   const enterProjectMode = useCallback(
     async (projectId: string, projectName?: string) => {
@@ -241,7 +248,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
                   description: data.description ?? prev.description,
                   systemInstructions:
                     data.systemInstructions ?? prev.systemInstructions,
-                  summary: data.summary ?? prev.summary,
+                  memory: data.memory ?? prev.memory,
                   updatedAt: new Date().toISOString(),
                 }
               : null,
@@ -415,11 +422,11 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     }
   }, [activeProject])
 
-  const updateProjectSummary = useCallback(
-    async (summary: string) => {
+  const updateProjectMemory = useCallback(
+    async (memory: Fact[]) => {
       if (!activeProject) return
 
-      await updateProject(activeProject.id, { summary })
+      await updateProject(activeProject.id, { memory })
     },
     [activeProject, updateProject],
   )
@@ -435,7 +442,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         return {
           systemInstructions: 0,
           documents: [],
-          summary: 0,
+          memory: 0,
           totalUsed: 0,
           modelLimit: modelContextLimit,
           availableForChat: modelContextLimit,
@@ -445,7 +452,10 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       const instructionsTokens = estimateTokenCount(
         activeProject.systemInstructions,
       )
-      const summaryTokens = estimateTokenCount(activeProject.summary)
+      const memoryText = activeProject.memory
+        ?.map((f) => `${f.category}: ${f.fact}`)
+        .join('\n')
+      const memoryTokens = estimateTokenCount(memoryText)
 
       const documentTokens = projectDocuments.map((doc) => ({
         filename: doc.filename,
@@ -456,12 +466,12 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         (sum, d) => sum + d.tokens,
         0,
       )
-      const totalUsed = instructionsTokens + totalDocumentTokens + summaryTokens
+      const totalUsed = instructionsTokens + totalDocumentTokens + memoryTokens
 
       return {
         systemInstructions: instructionsTokens,
         documents: documentTokens,
-        summary: summaryTokens,
+        memory: memoryTokens,
         totalUsed,
         modelLimit: modelContextLimit,
         availableForChat: Math.max(0, modelContextLimit - totalUsed),
@@ -486,7 +496,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       uploadDocument,
       removeDocument,
       refreshDocuments,
-      updateProjectSummary,
+      updateProjectMemory,
       getProjectSystemPrompt,
       getContextUsage,
     }),
@@ -505,7 +515,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       uploadDocument,
       removeDocument,
       refreshDocuments,
-      updateProjectSummary,
+      updateProjectMemory,
       getProjectSystemPrompt,
       getContextUsage,
     ],

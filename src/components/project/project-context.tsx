@@ -1,5 +1,6 @@
 'use client'
 
+import type { Fact } from '@/types/memory'
 import type {
   CreateProjectData,
   Project,
@@ -30,7 +31,7 @@ export interface ProjectContextValue {
   uploadDocument: (file: File, content: string) => Promise<ProjectDocument>
   removeDocument: (docId: string) => Promise<void>
   refreshDocuments: () => Promise<void>
-  updateProjectSummary: (summary: string) => Promise<void>
+  updateProjectMemory: (memory: Fact[]) => Promise<void>
 
   getProjectSystemPrompt: () => string
   getContextUsage: (modelContextLimit: number) => ProjectContextUsage
@@ -74,9 +75,31 @@ export function buildProjectContext(
     }
   }
 
-  if (project.summary) {
-    context += `\n### Project Context (from previous conversations)\n${project.summary}\n`
+  if (project.memory && project.memory.length > 0) {
+    context += `\n### User Memory (from previous conversations)\n`
+    context += formatMemoryFacts(project.memory)
   }
 
   return context
+}
+
+function formatMemoryFacts(facts: Fact[]): string {
+  const byCategory = facts.reduce(
+    (acc, fact) => {
+      if (!acc[fact.category]) acc[fact.category] = []
+      acc[fact.category].push(fact)
+      return acc
+    },
+    {} as Record<string, Fact[]>,
+  )
+
+  let output = ''
+  for (const [category, categoryFacts] of Object.entries(byCategory)) {
+    output += `**${category}**\n`
+    for (const fact of categoryFacts) {
+      output += `- ${fact.fact}\n`
+    }
+    output += '\n'
+  }
+  return output.trim()
 }
