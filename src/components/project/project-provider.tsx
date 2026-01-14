@@ -21,6 +21,7 @@ import {
   type LoadingProject,
   ProjectContext,
   type ProjectContextValue,
+  type UploadingFile,
 } from './project-context'
 
 interface ProjectProviderProps {
@@ -38,6 +39,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     null,
   )
   const [error, setError] = useState<string | null>(null)
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
   const initializingRef = useRef(false)
 
   const isProjectMode = activeProject !== null
@@ -435,6 +437,14 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     [activeProject, updateProject],
   )
 
+  const addUploadingFile = useCallback((file: UploadingFile) => {
+    setUploadingFiles((prev) => [...prev, file])
+  }, [])
+
+  const removeUploadingFile = useCallback((id: string) => {
+    setUploadingFiles((prev) => prev.filter((f) => f.id !== id))
+  }, [])
+
   const getProjectSystemPrompt = useCallback((): string => {
     if (!activeProject) return ''
     return buildProjectContext(activeProject, projectDocuments)
@@ -492,6 +502,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       loading,
       loadingProject,
       error,
+      uploadingFiles,
       enterProjectMode,
       exitProjectMode,
       createProject,
@@ -501,6 +512,8 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       removeDocument,
       refreshDocuments,
       updateProjectMemory,
+      addUploadingFile,
+      removeUploadingFile,
       getProjectSystemPrompt,
       getContextUsage,
     }),
@@ -511,6 +524,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       loading,
       loadingProject,
       error,
+      uploadingFiles,
       enterProjectMode,
       exitProjectMode,
       createProject,
@@ -520,6 +534,8 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       removeDocument,
       refreshDocuments,
       updateProjectMemory,
+      addUploadingFile,
+      removeUploadingFile,
       getProjectSystemPrompt,
       getContextUsage,
     ],

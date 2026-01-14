@@ -101,6 +101,9 @@ export function ProjectSidebar({
     deleteProject,
     refreshDocuments,
     loading: contextLoading,
+    uploadingFiles: contextUploadingFiles,
+    addUploadingFile,
+    removeUploadingFile,
   } = useProject()
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader(isPremium)
@@ -129,9 +132,6 @@ export function ProjectSidebar({
   const [editingProjectName, setEditingProjectName] = useState(
     project?.name ?? '',
   )
-  const [uploadingFiles, setUploadingFiles] = useState<
-    { id: string; name: string; size: number }[]
-  >([])
 
   const [displayProjectName, setDisplayProjectName] = useState(
     project?.name ?? '',
@@ -332,14 +332,13 @@ export function ProjectSidebar({
       const fileArray = Array.from(files)
       const uploadIds = fileArray.map(() => crypto.randomUUID())
 
-      setUploadingFiles((prev) => [
-        ...prev,
-        ...fileArray.map((file, i) => ({
+      fileArray.forEach((file, i) => {
+        addUploadingFile({
           id: uploadIds[i],
           name: file.name,
           size: file.size,
-        })),
-      ])
+        })
+      })
 
       await Promise.all(
         fileArray.map(async (file, i) => {
@@ -357,9 +356,7 @@ export function ProjectSidebar({
                     variant: 'destructive',
                   })
                 } finally {
-                  setUploadingFiles((prev) =>
-                    prev.filter((f) => f.id !== uploadIds[i]),
-                  )
+                  removeUploadingFile(uploadIds[i])
                   resolve()
                 }
               },
@@ -369,9 +366,7 @@ export function ProjectSidebar({
                   description: error.message,
                   variant: 'destructive',
                 })
-                setUploadingFiles((prev) =>
-                  prev.filter((f) => f.id !== uploadIds[i]),
-                )
+                removeUploadingFile(uploadIds[i])
                 resolve()
               },
             )
@@ -381,7 +376,7 @@ export function ProjectSidebar({
 
       e.target.value = ''
     },
-    [uploadDocument, processDocument],
+    [uploadDocument, processDocument, addUploadingFile, removeUploadingFile],
   )
 
   const handleDrop = useCallback(
@@ -396,14 +391,13 @@ export function ProjectSidebar({
       const fileArray = Array.from(files)
       const uploadIds = fileArray.map(() => crypto.randomUUID())
 
-      setUploadingFiles((prev) => [
-        ...prev,
-        ...fileArray.map((file, i) => ({
+      fileArray.forEach((file, i) => {
+        addUploadingFile({
           id: uploadIds[i],
           name: file.name,
           size: file.size,
-        })),
-      ])
+        })
+      })
 
       await Promise.all(
         fileArray.map(async (file, i) => {
@@ -421,9 +415,7 @@ export function ProjectSidebar({
                     variant: 'destructive',
                   })
                 } finally {
-                  setUploadingFiles((prev) =>
-                    prev.filter((f) => f.id !== uploadIds[i]),
-                  )
+                  removeUploadingFile(uploadIds[i])
                   resolve()
                 }
               },
@@ -433,9 +425,7 @@ export function ProjectSidebar({
                   description: error.message,
                   variant: 'destructive',
                 })
-                setUploadingFiles((prev) =>
-                  prev.filter((f) => f.id !== uploadIds[i]),
-                )
+                removeUploadingFile(uploadIds[i])
                 resolve()
               },
             )
@@ -443,7 +433,7 @@ export function ProjectSidebar({
         }),
       )
     },
-    [uploadDocument, processDocument],
+    [uploadDocument, processDocument, addUploadingFile, removeUploadingFile],
   )
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -848,7 +838,8 @@ export function ProjectSidebar({
                     contextLoading
                       ? 'cursor-not-allowed opacity-50'
                       : 'cursor-pointer',
-                    projectDocuments.length > 0 || uploadingFiles.length > 0
+                    projectDocuments.length > 0 ||
+                      contextUploadingFiles.length > 0
                       ? 'mb-2 py-3'
                       : 'py-6',
                     isDraggingOver
@@ -864,13 +855,13 @@ export function ProjectSidebar({
                     className={cn(
                       'h-5 w-5',
                       projectDocuments.length === 0 &&
-                        uploadingFiles.length === 0 &&
+                        contextUploadingFiles.length === 0 &&
                         'mb-2 h-6 w-6',
                       isDarkMode ? 'text-content-muted' : 'text-content-muted',
                     )}
                   />
                   {projectDocuments.length === 0 &&
-                    uploadingFiles.length === 0 && (
+                    contextUploadingFiles.length === 0 && (
                       <>
                         <p className="text-center font-aeonik-fono text-xs text-content-muted">
                           Drop files here or click to upload
@@ -883,10 +874,11 @@ export function ProjectSidebar({
                 </div>
 
                 {/* Document list */}
-                {(projectDocuments.length > 0 || uploadingFiles.length > 0) && (
+                {(projectDocuments.length > 0 ||
+                  contextUploadingFiles.length > 0) && (
                   <div className="space-y-1">
                     {/* Uploading placeholder documents - newest at top */}
-                    {[...uploadingFiles].reverse().map((file) => (
+                    {[...contextUploadingFiles].reverse().map((file) => (
                       <div
                         key={file.id}
                         className={cn(

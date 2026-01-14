@@ -267,6 +267,8 @@ export function ChatInterface({
     createProject,
     loadingProject,
     uploadDocument: uploadProjectDocument,
+    addUploadingFile,
+    removeUploadingFile,
   } = useProject()
   const { effectiveSystemPrompt: finalSystemPrompt } = useProjectSystemPrompt({
     baseSystemPrompt: effectiveSystemPrompt,
@@ -833,15 +835,24 @@ export function ChatInterface({
   // Helper to process file and add to project context
   const addFileToProjectContext = useCallback(
     async (file: File) => {
+      const uploadId = crypto.randomUUID()
+
+      // Add to shared uploading state so sidebar shows progress
+      addUploadingFile({
+        id: uploadId,
+        name: file.name,
+        size: file.size,
+      })
+
+      // Open sidebar and expand documents section immediately
+      sessionStorage.setItem('expandProjectDocuments', 'true')
+      setIsSidebarOpen(true)
+
       await handleDocumentUpload(
         file,
         async (content) => {
           try {
             await uploadProjectDocument(file, content)
-
-            // Open sidebar and expand documents section
-            sessionStorage.setItem('expandProjectDocuments', 'true')
-            setIsSidebarOpen(true)
           } catch {
             toast({
               title: 'Upload failed',
@@ -849,6 +860,8 @@ export function ChatInterface({
               variant: 'destructive',
               position: 'top-left',
             })
+          } finally {
+            removeUploadingFile(uploadId)
           }
         },
         (error) => {
@@ -858,10 +871,18 @@ export function ChatInterface({
             variant: 'destructive',
             position: 'top-left',
           })
+          removeUploadingFile(uploadId)
         },
       )
     },
-    [handleDocumentUpload, uploadProjectDocument, toast, setIsSidebarOpen],
+    [
+      handleDocumentUpload,
+      uploadProjectDocument,
+      toast,
+      setIsSidebarOpen,
+      addUploadingFile,
+      removeUploadingFile,
+    ],
   )
 
   // Handler for modal confirmation

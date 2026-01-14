@@ -15,6 +15,12 @@ export interface LoadingProject {
   name: string
 }
 
+export interface UploadingFile {
+  id: string
+  name: string
+  size: number
+}
+
 export interface ProjectContextValue {
   activeProject: Project | null
   isProjectMode: boolean
@@ -22,6 +28,7 @@ export interface ProjectContextValue {
   loading: boolean
   loadingProject: LoadingProject | null
   error: string | null
+  uploadingFiles: UploadingFile[]
 
   enterProjectMode: (projectId: string, projectName?: string) => Promise<void>
   exitProjectMode: () => void
@@ -32,6 +39,8 @@ export interface ProjectContextValue {
   removeDocument: (docId: string) => Promise<void>
   refreshDocuments: () => Promise<void>
   updateProjectMemory: (memory: Fact[]) => Promise<void>
+  addUploadingFile: (file: UploadingFile) => void
+  removeUploadingFile: (id: string) => void
 
   getProjectSystemPrompt: () => string
   getContextUsage: (modelContextLimit: number) => ProjectContextUsage
