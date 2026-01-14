@@ -62,6 +62,8 @@ interface UseChatStateReturn {
   reloadChats: () => Promise<void>
   editMessage: (messageIndex: number, newContent: string) => void
   regenerateMessage: (messageIndex: number) => void
+  initialChatDecryptionFailed: boolean
+  clearInitialChatDecryptionFailed: () => void
 }
 
 export function useChatState({
@@ -113,6 +115,8 @@ export function useChatState({
     setIsInitialLoad,
     isInitialLoad,
     reloadChats,
+    initialChatDecryptionFailed,
+    clearInitialChatDecryptionFailed,
   } = useChatStorage({
     storeHistory,
     scrollToBottom,
@@ -290,5 +294,7 @@ export function useChatState({
     reloadChats,
     editMessage,
     regenerateMessage,
+    initialChatDecryptionFailed,
+    clearInitialChatDecryptionFailed,
   }
 }
