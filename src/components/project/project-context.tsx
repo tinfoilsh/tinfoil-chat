@@ -84,10 +84,11 @@ export function buildProjectContext(
     }
   }
 
-  if (project.memory && project.memory.length > 0) {
-    context += `\n### User Memory (from previous conversations)\n`
-    context += formatMemoryFacts(project.memory)
-  }
+  // Project memory is currently disabled - uncomment to re-enable
+  // if (project.memory && project.memory.length > 0) {
+  //   context += `\n### User Memory (from previous conversations)\n`
+  //   context += formatMemoryFacts(project.memory)
+  // }
 
   return context
 }

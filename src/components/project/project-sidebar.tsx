@@ -950,90 +950,94 @@ export function ProjectSidebar({
             )}
           </div>
 
-          {/* Memory Section */}
-          <div className="relative z-10 flex-none border-b border-border-subtle">
-            <button
-              onClick={() => !isLoading && setMemoryExpanded(!memoryExpanded)}
-              disabled={isLoading}
-              className={cn(
-                'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                isLoading
-                  ? 'cursor-default opacity-50'
-                  : isDarkMode
-                    ? 'text-content-secondary hover:bg-surface-chat'
-                    : 'text-content-secondary hover:bg-white',
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <PiLightbulbFilamentThin className="h-4 w-4" />
-                <span className="font-aeonik font-medium">Project memory</span>
-              </span>
-              {memoryExpanded && !isLoading ? (
-                <ChevronUpIcon className="h-4 w-4" />
-              ) : (
-                <ChevronDownIcon className="h-4 w-4" />
-              )}
-            </button>
-
-            {memoryExpanded && !isLoading && (
-              <div className="px-4 pb-3 pt-2">
-                {(project?.memory?.length ?? 0) === 0 ? (
-                  <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
-                    No memory yet. Memory will appear here as you have
-                    conversations.
-                  </p>
-                ) : (
-                  <>
-                    <textarea
-                      value={memoryText}
-                      onChange={handleMemoryChange}
-                      placeholder="Facts about this project (one per line)..."
-                      rows={6}
-                      className={cn(
-                        'w-full resize-none rounded-md border px-3 py-2 font-aeonik-fono text-xs',
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                          : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                        'focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                      )}
-                    />
-                    {memoryEdited && (
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={handleMemorySave}
-                          className={cn(
-                            'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
-                            'bg-emerald-600 text-white hover:bg-emerald-700',
-                          )}
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => {
-                            setMemoryText(
-                              (project?.memory || [])
-                                .map((f) => f.fact)
-                                .join('\n\n'),
-                            )
-                            setMemoryEdited(false)
-                          }}
-                          className={cn(
-                            'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
-                            isDarkMode
-                              ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
-                              : 'bg-surface-sidebar text-content-primary hover:bg-white',
-                            'border border-border-subtle',
-                          )}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-                  </>
+          {/* Memory Section - currently disabled, set to true to re-enable */}
+          {false && (
+            <div className="relative z-10 flex-none border-b border-border-subtle">
+              <button
+                onClick={() => !isLoading && setMemoryExpanded(!memoryExpanded)}
+                disabled={isLoading}
+                className={cn(
+                  'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  isLoading
+                    ? 'cursor-default opacity-50'
+                    : isDarkMode
+                      ? 'text-content-secondary hover:bg-surface-chat'
+                      : 'text-content-secondary hover:bg-white',
                 )}
-              </div>
-            )}
-          </div>
+              >
+                <span className="flex items-center gap-2">
+                  <PiLightbulbFilamentThin className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">
+                    Project memory
+                  </span>
+                </span>
+                {memoryExpanded && !isLoading ? (
+                  <ChevronUpIcon className="h-4 w-4" />
+                ) : (
+                  <ChevronDownIcon className="h-4 w-4" />
+                )}
+              </button>
+
+              {memoryExpanded && !isLoading && (
+                <div className="px-4 pb-3 pt-2">
+                  {(project?.memory?.length ?? 0) === 0 ? (
+                    <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
+                      No memory yet. Memory will appear here as you have
+                      conversations.
+                    </p>
+                  ) : (
+                    <>
+                      <textarea
+                        value={memoryText}
+                        onChange={handleMemoryChange}
+                        placeholder="Facts about this project (one per line)..."
+                        rows={6}
+                        className={cn(
+                          'w-full resize-none rounded-md border px-3 py-2 font-aeonik-fono text-xs',
+                          isDarkMode
+                            ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                            : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                          'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                        )}
+                      />
+                      {memoryEdited && (
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={handleMemorySave}
+                            className={cn(
+                              'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
+                              'bg-emerald-600 text-white hover:bg-emerald-700',
+                            )}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setMemoryText(
+                                (project?.memory || [])
+                                  .map((f) => f.fact)
+                                  .join('\n\n'),
+                              )
+                              setMemoryEdited(false)
+                            }}
+                            className={cn(
+                              'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
+                              isDarkMode
+                                ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
+                                : 'bg-surface-sidebar text-content-primary hover:bg-white',
+                              'border border-border-subtle',
+                            )}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Chat History Header */}
           <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">

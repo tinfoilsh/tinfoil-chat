@@ -19,7 +19,6 @@ import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
 import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
-import { projectEvents } from '@/services/project/project-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
@@ -563,15 +562,16 @@ export function useChatMessaging({
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = currentChatIdRef.current
 
+      // Project memory is currently disabled - uncomment to re-enable
       // Trigger project memory update in parallel with streaming (if in project mode)
       // Uses updatedChat.projectId to avoid race condition if user switches projects during streaming
-      if (updatedChat.projectId && updatedMessages.length > 0) {
-        projectEvents.emit({
-          type: 'memory-update-needed',
-          projectId: updatedChat.projectId,
-          messages: updatedMessages,
-        })
-      }
+      // if (updatedChat.projectId && updatedMessages.length > 0) {
+      //   projectEvents.emit({
+      //     type: 'memory-update-needed',
+      //     projectId: updatedChat.projectId,
+      //     messages: updatedMessages,
+      //   })
+      // }
 
       try {
         const model = models.find((m) => m.modelName === effectiveModel)
