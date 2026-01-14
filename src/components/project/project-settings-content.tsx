@@ -297,9 +297,8 @@ export function ProjectSettingsContent({
             )}
           >
             {activeProject.memory.map((fact, index) => (
-              <div key={index} className="mb-1 last:mb-0">
-                <span className="text-content-muted">[{fact.category}]</span>{' '}
-                {fact.fact}
+              <div key={index} className="mb-2 last:mb-0">
+                - {fact.fact}
               </div>
             ))}
           </div>

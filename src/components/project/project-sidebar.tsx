@@ -27,7 +27,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
-import { LuBrain } from 'react-icons/lu'
+import { PiLightbulbFilamentThin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
@@ -208,7 +208,7 @@ export function ProjectSidebar({
   const projectMemory = project?.memory
   useEffect(() => {
     if (projectId && !memoryEdited) {
-      setMemoryText((projectMemory || []).map((f) => f.fact).join('\n'))
+      setMemoryText((projectMemory || []).map((f) => f.fact).join('\n\n'))
     }
   }, [projectId, projectMemory, memoryEdited])
 
@@ -973,8 +973,8 @@ export function ProjectSidebar({
               )}
             >
               <span className="flex items-center gap-2">
-                <LuBrain className="h-4 w-4" />
-                <span className="font-aeonik font-medium">Memory</span>
+                <PiLightbulbFilamentThin className="h-4 w-4" />
+                <span className="font-aeonik font-medium">Project memory</span>
               </span>
               {memoryExpanded && !isLoading ? (
                 <ChevronUpIcon className="h-4 w-4" />
@@ -1021,7 +1021,7 @@ export function ProjectSidebar({
                             setMemoryText(
                               (project?.memory || [])
                                 .map((f) => f.fact)
-                                .join('\n'),
+                                .join('\n\n'),
                             )
                             setMemoryEdited(false)
                           }}
