@@ -192,7 +192,6 @@ export function ChatSidebar({
     if (typeof window !== 'undefined') {
       const shouldExpand = sessionStorage.getItem('expandProjectsOnMount')
       if (shouldExpand === 'true') {
-        sessionStorage.removeItem('expandProjectsOnMount')
         return true
       }
       const expandSection = sessionStorage.getItem('sidebarExpandSection')
@@ -205,6 +204,13 @@ export function ChatSidebar({
   const [isCreatingProject, setIsCreatingProject] = useState(false)
   const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
+      const shouldExpandProjects = sessionStorage.getItem(
+        'expandProjectsOnMount',
+      )
+      if (shouldExpandProjects === 'true') {
+        sessionStorage.removeItem('expandProjectsOnMount')
+        return false
+      }
       const expandSection = sessionStorage.getItem('sidebarExpandSection')
       if (expandSection === 'projects') {
         return false
