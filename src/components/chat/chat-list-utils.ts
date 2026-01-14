@@ -30,7 +30,7 @@ export function formatRelativeTime(date: Date): string {
   }
 
   const months = Math.floor(days / 30)
-  if (months < 13) {
+  if (months < 12) {
     return `${months}mo ago`
   }
 
