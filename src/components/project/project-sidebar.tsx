@@ -542,15 +542,29 @@ export function ProjectSidebar({
           >
             <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
           </Link>
-          {isSignedIn && (
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: 'w-8 h-8',
-                },
-              }}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {/* Encryption key button */}
+            {isSignedIn && onEncryptionKeyClick && (
+              <button
+                type="button"
+                onClick={onEncryptionKeyClick}
+                className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
+                title="Encryption key"
+              >
+                <KeyIcon className="h-5 w-5" />
+              </button>
+            )}
+            {/* User button for signed-in users */}
+            {isSignedIn && (
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8',
+                  },
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Main sidebar content */}
@@ -1041,26 +1055,9 @@ export function ProjectSidebar({
 
           {/* Chat History Header */}
           <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
-            <div className="flex items-center justify-between">
-              <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
-                Project Chats
-              </h3>
-              {onEncryptionKeyClick && isSignedIn && (
-                <button
-                  type="button"
-                  onClick={onEncryptionKeyClick}
-                  className={cn(
-                    'rounded p-1 transition-all duration-200',
-                    isDarkMode
-                      ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
-                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                  )}
-                  title="Manage encryption key"
-                >
-                  <KeyIcon className="h-4 w-4" />
-                </button>
-              )}
-            </div>
+            <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
+              Project Chats
+            </h3>
             <p className="font-aeonik-fono text-xs text-content-muted">
               Chats in this project share context and documents.
             </p>
