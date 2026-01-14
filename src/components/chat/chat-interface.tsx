@@ -871,16 +871,19 @@ export function ChatInterface({
         setProjectUploadPreference(addToProject ? 'project' : 'chat')
       }
 
-      if (pendingUploadFile) {
-        if (addToProject) {
-          await addFileToProjectContext(pendingUploadFile)
-        } else {
-          await processFileForChat(pendingUploadFile)
-        }
-      }
-
+      // Capture file and close modal immediately
+      const fileToUpload = pendingUploadFile
       setPendingUploadFile(null)
       setShowAddToProjectModal(false)
+
+      // Then process upload (UI will show upload progress)
+      if (fileToUpload) {
+        if (addToProject) {
+          await addFileToProjectContext(fileToUpload)
+        } else {
+          await processFileForChat(fileToUpload)
+        }
+      }
     },
     [pendingUploadFile, addFileToProjectContext, processFileForChat],
   )
