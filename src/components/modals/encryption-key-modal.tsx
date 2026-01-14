@@ -46,6 +46,13 @@ export function EncryptionKeyModal({
     }
   }, [])
 
+  // Reset QR code expansion state when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsQRCodeExpanded(false)
+    }
+  }, [isOpen])
+
   const handleCopyKey = async () => {
     if (!encryptionKey) return
 
