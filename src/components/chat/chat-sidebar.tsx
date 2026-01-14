@@ -234,9 +234,9 @@ export function ChatSidebar({
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
 
-  const isMac = useMemo(() => {
-    if (typeof navigator === 'undefined') return false
-    return /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
   }, [])
   const modKey = isMac ? '⌘' : 'Ctrl+'
 

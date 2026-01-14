@@ -24,7 +24,7 @@ import {
   PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import { LuBrain } from 'react-icons/lu'
 import { CONSTANTS } from '../chat/constants'
@@ -140,9 +140,9 @@ export function ProjectSidebar({
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const isMac = useMemo(() => {
-    if (typeof navigator === 'undefined') return false
-    return /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
   }, [])
   const modKey = isMac ? '⌘' : 'Ctrl+'
 
