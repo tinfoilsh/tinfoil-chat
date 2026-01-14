@@ -1239,23 +1239,36 @@ export function ChatInterface({
         ) &&
         (isSignedIn && isPremium ? (
           <div className="fixed left-4 top-4 z-50 flex flex-row gap-2 md:flex-col">
-            {/* Projects button */}
-            <div className="group relative">
+            {/* New chat button - first on desktop, last on mobile */}
+            <div className="group relative order-last md:order-first">
               <button
-                className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
-                onClick={() => {
-                  sessionStorage.setItem('sidebarExpandSection', 'projects')
-                  setIsSidebarOpen(true)
-                  if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-                    setIsVerifierSidebarOpen(false)
-                    setIsSettingsSidebarOpen(false)
-                  }
-                }}
+                className={cn(
+                  'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
+                  'bg-surface-chat-background text-content-secondary',
+                  currentChat?.messages?.length === 0
+                    ? 'cursor-not-allowed text-content-muted opacity-50'
+                    : 'hover:bg-surface-chat hover:text-content-primary',
+                )}
+                onClick={() => createNewChat()}
+                aria-label="Create new chat"
+                disabled={currentChat?.messages?.length === 0}
               >
-                <FolderIcon className="h-5 w-5" />
+                <PlusIcon className="h-5 w-5" />
               </button>
-              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                Projects
+              <span
+                className={cn(
+                  'pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle px-2 py-1 text-xs opacity-0 transition-opacity',
+                  currentChat?.messages?.length === 0
+                    ? 'opacity-0'
+                    : 'group-hover:opacity-100',
+                  'bg-surface-chat-background text-content-primary shadow-sm',
+                )}
+              >
+                New chat{' '}
+                <span className="ml-1.5 text-content-muted">
+                  {shiftKey}
+                  {modKey}O
+                </span>
               </span>
             </div>
             {/* Chats button */}
@@ -1279,6 +1292,25 @@ export function ChatInterface({
               <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                 Chats{' '}
                 <span className="ml-1.5 text-content-muted">{modKey}.</span>
+              </span>
+            </div>
+            {/* Projects button */}
+            <div className="group relative">
+              <button
+                className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+                onClick={() => {
+                  sessionStorage.setItem('sidebarExpandSection', 'projects')
+                  setIsSidebarOpen(true)
+                  if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+                    setIsVerifierSidebarOpen(false)
+                    setIsSettingsSidebarOpen(false)
+                  }
+                }}
+              >
+                <FolderIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Projects
               </span>
             </div>
           </div>
@@ -1322,39 +1354,6 @@ export function ChatInterface({
                 : '16px',
           }}
         >
-          {/* New chat button */}
-          <div className="group relative">
-            <button
-              className={cn(
-                'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
-                'bg-surface-chat-background text-content-secondary',
-                currentChat?.messages?.length === 0
-                  ? 'cursor-not-allowed text-content-muted opacity-50'
-                  : 'hover:bg-surface-chat hover:text-content-primary',
-              )}
-              onClick={() => createNewChat()}
-              aria-label="Create new chat"
-              disabled={currentChat?.messages?.length === 0}
-            >
-              <PlusIcon className="h-5 w-5" />
-            </button>
-            <span
-              className={cn(
-                'pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle px-2 py-1 text-xs opacity-0 transition-opacity',
-                currentChat?.messages?.length === 0
-                  ? 'opacity-0'
-                  : 'group-hover:opacity-100',
-                'bg-surface-chat-background text-content-primary shadow-sm',
-              )}
-            >
-              New chat{' '}
-              <span className="ml-1.5 text-content-muted">
-                {shiftKey}
-                {modKey}O
-              </span>
-            </span>
-          </div>
-
           {/* Settings toggle button */}
           <div className="group relative">
             <button
