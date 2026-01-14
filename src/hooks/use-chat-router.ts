@@ -6,6 +6,7 @@ interface UseChatRouterReturn {
   initialProjectId: string | null
   isRouterReady: boolean
   updateUrlForChat: (chatId: string, projectId?: string) => void
+  updateUrlForProject: (projectId: string) => void
   clearUrl: () => void
 }
 
@@ -50,6 +51,21 @@ export function useChatRouter(): UseChatRouterReturn {
     }
   }, [])
 
+  // Update URL when in project mode with blank chat
+  const updateUrlForProject = useCallback((projectId: string) => {
+    if (typeof window === 'undefined') return
+
+    const newPath = `/project/${projectId}`
+
+    if (window.location.pathname !== newPath) {
+      window.history.replaceState(
+        { ...window.history.state, as: newPath, url: newPath },
+        '',
+        newPath,
+      )
+    }
+  }, [])
+
   // Clear URL when going to blank/new chat
   const clearUrl = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -68,6 +84,7 @@ export function useChatRouter(): UseChatRouterReturn {
     initialProjectId,
     isRouterReady,
     updateUrlForChat,
+    updateUrlForProject,
     clearUrl,
   }
 }
