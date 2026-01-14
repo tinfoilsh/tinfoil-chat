@@ -6,7 +6,7 @@ import {
 import { useChatRouter } from '@/hooks/use-chat-router'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
-import { useAuth, useUser } from '@clerk/nextjs'
+import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   Bars3Icon,
@@ -1237,6 +1237,44 @@ export function ChatInterface({
 
   // Removed all automatic scroll behaviors during streaming. Scrolling now only occurs
   // via the explicit button or when a chat is loaded/switched.
+
+  // Show sign-in required message when accessing a chat URL while not signed in
+  if ((initialChatId || initialProjectId) && !isSignedIn) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-surface-chat-background px-4 font-aeonik">
+        <div className="max-w-md text-center">
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-surface-chat p-4">
+              <svg
+                className="h-8 w-8 text-content-secondary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                />
+              </svg>
+            </div>
+          </div>
+          <h2 className="mb-3 text-xl font-semibold text-content-primary">
+            Sign in required
+          </h2>
+          <p className="mb-6 text-content-secondary">
+            You need to sign in to access this chat.
+          </p>
+          <SignInButton mode="modal">
+            <button className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90">
+              Sign in
+            </button>
+          </SignInButton>
+        </div>
+      </div>
+    )
+  }
 
   // Show loading state while critical config is loading. Do not block on subscription.
   if (isLoadingConfig) {
