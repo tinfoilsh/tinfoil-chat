@@ -126,6 +126,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     async (projectId: string, projectName?: string) => {
       setLoading(true)
       setError(null)
+      setUploadingFiles([])
       setLoadingProject({ id: projectId, name: projectName || 'Loading...' })
 
       try {
@@ -202,6 +203,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   const exitProjectMode = useCallback(() => {
     setActiveProject(null)
     setProjectDocuments([])
+    setUploadingFiles([])
     setError(null)
 
     // Signal to ChatSidebar that projects should be expanded
