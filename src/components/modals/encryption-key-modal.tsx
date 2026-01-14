@@ -33,6 +33,7 @@ export function EncryptionKeyModal({
   const [isUpdating, setIsUpdating] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
   const { toast } = useToast()
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
