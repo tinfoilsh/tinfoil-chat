@@ -169,11 +169,17 @@ export async function extractFacts(params: {
       signal,
     })
 
-    const addCount = result.operations.filter((o) => o.action === 'add').length
-    const updateCount = result.operations.filter(
+    // Filter out invalid operations (model may return invalid action types)
+    const validActions = ['add', 'update', 'delete'] as const
+    const validOperations = result.operations.filter((op) =>
+      validActions.includes(op.action as (typeof validActions)[number]),
+    )
+
+    const addCount = validOperations.filter((o) => o.action === 'add').length
+    const updateCount = validOperations.filter(
       (o) => o.action === 'update',
     ).length
-    const deleteCount = result.operations.filter(
+    const deleteCount = validOperations.filter(
       (o) => o.action === 'delete',
     ).length
 
@@ -182,7 +188,7 @@ export async function extractFacts(params: {
       action: 'extractFacts',
       metadata: {
         relevantMessagesCount: relevantMessages.length,
-        operationsCount: result.operations.length,
+        operationsCount: validOperations.length,
         addCount,
         updateCount,
         deleteCount,
@@ -190,7 +196,7 @@ export async function extractFacts(params: {
     })
 
     return {
-      operations: result.operations,
+      operations: validOperations,
       processedCount: newUserMessages.length,
     }
   } catch (error) {
