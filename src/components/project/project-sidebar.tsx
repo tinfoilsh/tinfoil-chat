@@ -234,6 +234,7 @@ export function ProjectSidebar({
         return existing
       }
       return {
+        id: crypto.randomUUID(),
         fact: line,
         date: new Date().toISOString(),
         category: 'other',

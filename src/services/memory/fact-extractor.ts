@@ -1,9 +1,14 @@
 import type { Message } from '@/components/chat/types'
 import { getAIModels, getMemoryPrompt } from '@/config/models'
 import { sendStructuredCompletion } from '@/services/inference/inference-client'
-import type { ExtractFactsResult, Fact, MemoryState } from '@/types/memory'
+import type {
+  ExtractFactsResult,
+  Fact,
+  FactOperation,
+  MemoryState,
+} from '@/types/memory'
 import {
-  FACT_EXTRACTION_SCHEMA,
+  FACT_OPERATIONS_SCHEMA,
   MAX_FACTS,
   MIN_WORD_COUNT,
 } from '@/types/memory'
@@ -13,20 +18,33 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
 }
 
-function formatFacts(facts: Fact[]): string {
+function formatFactsWithIds(facts: Fact[]): string {
   if (facts.length === 0) return '(No previous facts)'
   return facts
     .map(
       (f) =>
-        `- [${f.category}] ${f.fact} (confidence: ${f.confidence}, date: ${f.date})`,
+        `[id: ${f.id}] [${f.category}] ${f.fact} (confidence: ${f.confidence}, date: ${f.date})`,
     )
     .join('\n')
 }
 
-function formatMessages(
-  messages: Array<{ content: string; timestamp: string }>,
+function formatConversation(
+  messages: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: string
+  }>,
 ): string {
-  return messages.map((m) => `[${m.timestamp}] User: ${m.content}`).join('\n\n')
+  return messages
+    .map((m) => {
+      const role = m.role === 'user' ? 'User' : 'Assistant'
+      return `[${m.timestamp}] ${role}: ${m.content}`
+    })
+    .join('\n\n')
+}
+
+function generateFactId(): string {
+  return crypto.randomUUID()
 }
 
 export async function extractFacts(params: {
@@ -50,24 +68,34 @@ export async function extractFacts(params: {
     ? new Date(currentMemory.lastProcessedTimestamp)
     : null
 
-  const newMessages = messages.filter((msg) => {
-    if (msg.role !== 'user') return false
-    if (countWords(msg.content || '') < MIN_WORD_COUNT) return false
+  // Include both user and assistant messages for full conversation context
+  const relevantMessages = messages.filter((msg) => {
+    // Skip system messages
+    if (msg.role !== 'user' && msg.role !== 'assistant') return false
+    // Skip messages already processed
     if (lastProcessed && msg.timestamp <= lastProcessed) return false
+    // For user messages, require minimum word count
+    if (msg.role === 'user' && countWords(msg.content || '') < MIN_WORD_COUNT) {
+      return false
+    }
     return true
   })
+
+  // Check if there are any new user messages to process
+  const newUserMessages = relevantMessages.filter((m) => m.role === 'user')
 
   logInfo('Filtered messages for extraction', {
     component: 'FactExtractor',
     action: 'extractFacts',
     metadata: {
-      newMessagesCount: newMessages.length,
+      relevantMessagesCount: relevantMessages.length,
+      newUserMessagesCount: newUserMessages.length,
       userMessagesTotal: messages.filter((m) => m.role === 'user').length,
     },
   })
 
-  if (newMessages.length === 0) {
-    return { facts: [], processedCount: 0 }
+  if (newUserMessages.length === 0) {
+    return { operations: [], processedCount: 0 }
   }
 
   const models = await getAIModels(true)
@@ -82,7 +110,7 @@ export async function extractFacts(params: {
       action: 'extractFacts',
       metadata: { modelsCount: models.length },
     })
-    return { facts: [], processedCount: 0 }
+    return { operations: [], processedCount: 0 }
   }
 
   logInfo('Using model for fact extraction', {
@@ -101,7 +129,7 @@ export async function extractFacts(params: {
         action: 'extractFacts',
       },
     )
-    return { facts: [], processedCount: 0 }
+    return { operations: [], processedCount: 0 }
   }
 
   logInfo('Got memory prompt template', {
@@ -110,61 +138,110 @@ export async function extractFacts(params: {
     metadata: { promptLength: promptTemplate.length },
   })
 
-  const formattedMessages = newMessages.map((m) => ({
+  // Format conversation with both user and assistant messages
+  const formattedConversation = relevantMessages.map((m) => ({
+    role: m.role as 'user' | 'assistant',
     content: m.content || '',
     timestamp: m.timestamp.toISOString(),
   }))
 
   const prompt = promptTemplate
-    .replace('{CURRENT_FACTS}', formatFacts(currentMemory.facts))
-    .replace('{NEW_MESSAGES}', formatMessages(formattedMessages))
+    .replace('{CURRENT_FACTS}', formatFactsWithIds(currentMemory.facts))
+    .replace(
+      '{CONVERSATION_CONTEXT}',
+      formatConversation(formattedConversation),
+    )
 
   try {
-    const result = await sendStructuredCompletion<{ facts: Fact[] }>({
+    const result = await sendStructuredCompletion<{
+      operations: FactOperation[]
+    }>({
       model: structuredModel,
       messages: [
         {
           role: 'system',
           content:
-            'Extract factoids from user messages. Output valid JSON only.',
+            'Analyze conversation and manage user facts. Output valid JSON only.',
         },
         { role: 'user', content: prompt },
       ],
-      jsonSchema: FACT_EXTRACTION_SCHEMA,
+      jsonSchema: FACT_OPERATIONS_SCHEMA,
       signal,
     })
 
-    logInfo('Extracted facts from messages', {
+    const addCount = result.operations.filter((o) => o.action === 'add').length
+    const updateCount = result.operations.filter(
+      (o) => o.action === 'update',
+    ).length
+    const deleteCount = result.operations.filter(
+      (o) => o.action === 'delete',
+    ).length
+
+    logInfo('Extracted fact operations from messages', {
       component: 'FactExtractor',
       action: 'extractFacts',
       metadata: {
-        newMessagesCount: newMessages.length,
-        extractedFactsCount: result.facts.length,
+        relevantMessagesCount: relevantMessages.length,
+        operationsCount: result.operations.length,
+        addCount,
+        updateCount,
+        deleteCount,
       },
     })
 
     return {
-      facts: result.facts,
-      processedCount: newMessages.length,
+      operations: result.operations,
+      processedCount: newUserMessages.length,
     }
   } catch (error) {
     logError('Failed to extract facts', error, {
       component: 'FactExtractor',
       action: 'extractFacts',
     })
-    return { facts: [], processedCount: 0 }
+    return { operations: [], processedCount: 0 }
   }
 }
 
-export function mergeFacts(existing: Fact[], newFacts: Fact[]): Fact[] {
-  const merged = [...existing, ...newFacts]
+export function applyFactOperations(
+  existing: Fact[],
+  operations: FactOperation[],
+): Fact[] {
+  let facts = [...existing]
 
-  if (merged.length > MAX_FACTS) {
-    merged.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    )
-    return merged.slice(0, MAX_FACTS)
+  for (const op of operations) {
+    switch (op.action) {
+      case 'add': {
+        const newFact: Fact = {
+          id: generateFactId(),
+          ...op.fact,
+        }
+        facts.push(newFact)
+        break
+      }
+      case 'update': {
+        const index = facts.findIndex((f) => f.id === op.factId)
+        if (index !== -1) {
+          facts[index] = {
+            ...facts[index],
+            ...op.updates,
+          }
+        }
+        break
+      }
+      case 'delete': {
+        facts = facts.filter((f) => f.id !== op.factId)
+        break
+      }
+    }
   }
 
-  return merged
+  // Enforce MAX_FACTS limit, keeping newest facts
+  if (facts.length > MAX_FACTS) {
+    facts.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    )
+    return facts.slice(0, MAX_FACTS)
+  }
+
+  return facts
 }

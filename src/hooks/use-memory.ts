@@ -1,5 +1,8 @@
 import type { Message } from '@/components/chat/types'
-import { extractFacts, mergeFacts } from '@/services/memory/fact-extractor'
+import {
+  applyFactOperations,
+  extractFacts,
+} from '@/services/memory/fact-extractor'
 import type { Fact, MemoryCallbacks, MemoryState } from '@/types/memory'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useCallback, useRef, useState } from 'react'
@@ -55,8 +58,11 @@ export function useMemory({
           messages,
         })
 
-        if (result.facts.length > 0) {
-          const mergedFacts = mergeFacts(memory.facts, result.facts)
+        if (result.operations.length > 0) {
+          const updatedFacts = applyFactOperations(
+            memory.facts,
+            result.operations,
+          )
 
           const userMessages = messages.filter((m) => m.role === 'user')
           const latestTimestamp =
@@ -67,7 +73,7 @@ export function useMemory({
               : null
 
           const newMemory: MemoryState = {
-            facts: mergedFacts,
+            facts: updatedFacts,
             lastProcessedTimestamp:
               latestTimestamp?.toISOString() || memory.lastProcessedTimestamp,
           }
@@ -75,12 +81,25 @@ export function useMemory({
           await callbacks.onSave(newMemory)
           setMemory(newMemory)
 
-          logInfo('Memory updated with new facts', {
+          const addCount = result.operations.filter(
+            (o) => o.action === 'add',
+          ).length
+          const updateCount = result.operations.filter(
+            (o) => o.action === 'update',
+          ).length
+          const deleteCount = result.operations.filter(
+            (o) => o.action === 'delete',
+          ).length
+
+          logInfo('Memory updated with operations', {
             component: 'useMemory',
             action: 'processMessages',
             metadata: {
-              newFactsCount: result.facts.length,
-              totalFactsCount: mergedFacts.length,
+              operationsCount: result.operations.length,
+              addCount,
+              updateCount,
+              deleteCount,
+              totalFactsCount: updatedFacts.length,
             },
           })
         }
