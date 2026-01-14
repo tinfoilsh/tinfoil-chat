@@ -1451,6 +1451,7 @@ export function ChatInterface({
               isBlankChat: c.isBlankChat,
             }))}
           deleteChat={deleteChat}
+          updateChatTitle={updateChatTitle}
           onEncryptionKeyClick={
             isSignedIn ? handleOpenEncryptionKeyModal : undefined
           }
