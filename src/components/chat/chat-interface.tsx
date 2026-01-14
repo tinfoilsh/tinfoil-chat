@@ -281,7 +281,7 @@ export function ChatInterface({
   })
 
   // URL routing for deep links
-  const { updateUrlForChat, clearUrl } = useChatRouter()
+  const { updateUrlForChat, updateUrlForProject, clearUrl } = useChatRouter()
 
   // Initialize renderers on mount
   useEffect(() => {
@@ -526,12 +526,18 @@ export function ChatInterface({
 
   // Sync URL with current chat state
   useEffect(() => {
-    // Don't update URL during initial load or if chat is blank
+    // Don't update URL during initial load
     if (isInitialLoad) return
     // Don't clear URL when showing decryption failed screen
     if (initialChatDecryptionFailed) return
+
     if (currentChat.isBlankChat) {
-      clearUrl()
+      // In project mode, show /project/[projectId] for blank chats
+      if (isProjectMode && activeProject?.id) {
+        updateUrlForProject(activeProject.id)
+      } else {
+        clearUrl()
+      }
       return
     }
 
@@ -555,6 +561,7 @@ export function ChatInterface({
     isInitialLoad,
     initialChatDecryptionFailed,
     updateUrlForChat,
+    updateUrlForProject,
     clearUrl,
   ])
 
