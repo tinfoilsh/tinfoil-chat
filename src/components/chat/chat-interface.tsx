@@ -977,18 +977,23 @@ export function ChatInterface({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Don't proceed if there's no input text
-    if (!input.trim()) {
+    // Filter out documents that are still uploading
+    const completedDocuments = processedDocuments.filter(
+      (doc) => !doc.isUploading,
+    )
+
+    // Use default message if no input but documents are attached
+    const messageText =
+      input.trim() ||
+      (completedDocuments.length > 0 ? CONSTANTS.DOCUMENT_ONLY_MESSAGE : '')
+
+    // Don't proceed if there's no input text and no documents
+    if (!messageText) {
       return
     }
 
     // Don't auto-scroll here - let the message append handler do it
     // This prevents the dip when thoughts start streaming
-
-    // Filter out documents that are still uploading
-    const completedDocuments = processedDocuments.filter(
-      (doc) => !doc.isUploading,
-    )
 
     // If we have completed documents, create a message with their content
     const docContent =
@@ -1018,8 +1023,8 @@ export function ChatInterface({
             )
         : undefined
 
-    // Call handleQuery with the input, document content, document names, and image data
-    handleQuery(input, docContent, documentNames, imageData)
+    // Call handleQuery with the message, document content, document names, and image data
+    handleQuery(messageText, docContent, documentNames, imageData)
 
     // Only remove the completed documents from the state
     const remainingDocuments = processedDocuments.filter(

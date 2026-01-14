@@ -589,7 +589,11 @@ export function ChatInput({
                 }
               } else if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                if (loadingState === 'idle') {
+                const hasDocuments =
+                  processedDocuments &&
+                  processedDocuments.some((doc) => !doc.isUploading)
+                const hasInput = input.trim().length > 0
+                if (loadingState === 'idle' && (hasInput || hasDocuments)) {
                   handleSubmit(e)
                 }
               } else if (e.key === 'Enter' && e.shiftKey) {
@@ -726,18 +730,31 @@ export function ChatInput({
                 id="send-button"
                 type="button"
                 onClick={(e) => {
-                  if (loadingState === 'loading' || loadingState === 'retrying') {
+                  if (
+                    loadingState === 'loading' ||
+                    loadingState === 'retrying'
+                  ) {
                     e.preventDefault()
                     cancelGeneration()
                   } else {
-                    handleSubmit(e)
+                    const hasDocuments =
+                      processedDocuments &&
+                      processedDocuments.some((doc) => !doc.isUploading)
+                    const hasInput = input.trim().length > 0
+                    if (hasInput || hasDocuments) {
+                      handleSubmit(e)
+                    }
                   }
                 }}
                 className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
                 disabled={
                   loadingState !== 'loading' &&
                   loadingState !== 'retrying' &&
-                  (isTranscribing || isConverting)
+                  (isTranscribing ||
+                    isConverting ||
+                    (!input.trim() &&
+                      (!processedDocuments ||
+                        !processedDocuments.some((doc) => !doc.isUploading))))
                 }
               >
                 {loadingState === 'loading' || loadingState === 'retrying' ? (

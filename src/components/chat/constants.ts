@@ -32,4 +32,6 @@ export const CONSTANTS = {
   VERIFICATION_RETRY_DELAY_MS: 2000, // Base delay between retries (exponential backoff)
   MESSAGE_SEND_MAX_RETRIES: 6,
   MESSAGE_SEND_RETRY_DELAY_MS: 1000, // Base delay between retries (exponential backoff)
+  // Default message when sending a document without text
+  DOCUMENT_ONLY_MESSAGE: "Let's chat about this document.",
 } as const
