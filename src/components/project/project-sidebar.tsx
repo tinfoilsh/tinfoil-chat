@@ -11,6 +11,7 @@ import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { toast } from '@/hooks/use-toast'
 import { projectStorage } from '@/services/cloud/project-storage'
+import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
 import { useAuth, UserButton } from '@clerk/nextjs'
 import {
@@ -26,6 +27,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { LuBrain } from 'react-icons/lu'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
@@ -93,6 +95,7 @@ export function ProjectSidebar({
     uploadDocument,
     removeDocument,
     updateProject,
+    updateProjectMemory,
     deleteProject,
     refreshDocuments,
     loading: contextLoading,
@@ -104,7 +107,10 @@ export function ProjectSidebar({
   )
   const [settingsExpanded, setSettingsExpanded] = useState(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
+  const [memoryExpanded, setMemoryExpanded] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [memoryText, setMemoryText] = useState('')
+  const [memoryEdited, setMemoryEdited] = useState(false)
 
   const [editedName, setEditedName] = useState(project?.name ?? '')
   const [editedDescription, setEditedDescription] = useState(
@@ -186,6 +192,51 @@ export function ProjectSidebar({
       return () => window.removeEventListener('resize', handleResize)
     }
   }, [isClient])
+
+  // Sync memory text with project memory
+  const projectId = project?.id
+  const projectMemory = project?.memory
+  useEffect(() => {
+    if (projectId && !memoryEdited) {
+      setMemoryText((projectMemory || []).map((f) => f.fact).join('\n'))
+    }
+  }, [projectId, projectMemory, memoryEdited])
+
+  const handleMemoryChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setMemoryText(e.target.value)
+      setMemoryEdited(true)
+    },
+    [],
+  )
+
+  const handleMemorySave = useCallback(async () => {
+    if (!memoryEdited || !project) return
+
+    const newLines = memoryText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+
+    const existingFacts = project.memory || []
+    const existingByFact = new Map(existingFacts.map((f) => [f.fact, f]))
+
+    const updatedFacts: Fact[] = newLines.map((line) => {
+      const existing = existingByFact.get(line)
+      if (existing) {
+        return existing
+      }
+      return {
+        fact: line,
+        date: new Date().toISOString(),
+        category: 'other',
+        confidence: 1,
+      }
+    })
+
+    await updateProjectMemory(updatedFacts)
+    setMemoryEdited(false)
+  }, [memoryEdited, memoryText, project, updateProjectMemory])
 
   const handleSaveSettings = useCallback(async () => {
     if (!project) return
@@ -752,7 +803,7 @@ export function ProjectSidebar({
           </div>
 
           {/* Documents Section - moved below settings */}
-          <div className="relative z-10 mb-3 flex-none border-b border-border-subtle">
+          <div className="relative z-10 flex-none border-b border-border-subtle">
             <button
               onClick={() =>
                 !isLoading && setDocumentsExpanded(!documentsExpanded)
@@ -909,6 +960,96 @@ export function ProjectSidebar({
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Memory Section */}
+          <div className="relative z-10 flex-none border-b border-border-subtle">
+            <button
+              onClick={() => !isLoading && setMemoryExpanded(!memoryExpanded)}
+              disabled={isLoading}
+              className={cn(
+                'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                isLoading
+                  ? 'cursor-default opacity-50'
+                  : isDarkMode
+                    ? 'text-content-secondary hover:bg-surface-chat'
+                    : 'text-content-secondary hover:bg-white',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <LuBrain className="h-4 w-4" />
+                <span className="font-aeonik font-medium">Memory</span>
+                {!isLoading && (project?.memory?.length ?? 0) > 0 && (
+                  <span className="font-aeonik-fono text-xs text-content-muted">
+                    ({project?.memory?.length})
+                  </span>
+                )}
+              </span>
+              {memoryExpanded && !isLoading ? (
+                <ChevronUpIcon className="h-4 w-4" />
+              ) : (
+                <ChevronDownIcon className="h-4 w-4" />
+              )}
+            </button>
+
+            {memoryExpanded && !isLoading && (
+              <div className="px-4 pb-3">
+                {(project?.memory?.length ?? 0) === 0 ? (
+                  <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
+                    No memory yet. Memory will appear here as you have
+                    conversations.
+                  </p>
+                ) : (
+                  <>
+                    <textarea
+                      value={memoryText}
+                      onChange={handleMemoryChange}
+                      placeholder="Facts about this project (one per line)..."
+                      rows={6}
+                      className={cn(
+                        'w-full resize-none rounded-md border px-3 py-2 font-aeonik-fono text-xs',
+                        isDarkMode
+                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                          : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                        'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                      )}
+                    />
+                    {memoryEdited && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={handleMemorySave}
+                          className={cn(
+                            'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
+                            'bg-emerald-600 text-white hover:bg-emerald-700',
+                          )}
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => {
+                            setMemoryText(
+                              (project?.memory || [])
+                                .map((f) => f.fact)
+                                .join('\n'),
+                            )
+                            setMemoryEdited(false)
+                          }}
+                          className={cn(
+                            'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
+                              : 'bg-surface-sidebar text-content-primary hover:bg-white',
+                            'border border-border-subtle',
+                          )}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
