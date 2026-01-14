@@ -3,6 +3,7 @@ import {
   getSystemPromptAndRules,
   type BaseModel,
 } from '@/config/models'
+import { useChatRouter } from '@/hooks/use-chat-router'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth, useUser } from '@clerk/nextjs'
@@ -99,6 +100,8 @@ type ChatInterfaceProps = {
   minHeight?: string
   inputMinHeight?: string
   isDarkMode?: boolean
+  initialChatId?: string | null
+  initialProjectId?: string | null
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -168,6 +171,8 @@ export function ChatInterface({
   minHeight,
   inputMinHeight = '28px',
   isDarkMode: propIsDarkMode,
+  initialChatId,
+  initialProjectId,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn } = useAuth()
@@ -274,6 +279,9 @@ export function ChatInterface({
     baseSystemPrompt: effectiveSystemPrompt,
     baseRules: processedRules,
   })
+
+  // URL routing for deep links
+  const { updateUrlForChat, clearUrl } = useChatRouter()
 
   // Initialize renderers on mount
   useEffect(() => {
@@ -511,7 +519,39 @@ export function ChatInterface({
     // Scroll user message to top of viewport when sending
     scrollToBottom: scrollUserMessageToTop,
     reasoningEffort,
+    initialChatId,
   })
+
+  // Sync URL with current chat state
+  useEffect(() => {
+    // Don't update URL during initial load or if chat is blank
+    if (isInitialLoad) return
+    if (currentChat.isBlankChat) {
+      clearUrl()
+      return
+    }
+
+    // Update URL based on whether we're in project mode
+    if (isProjectMode && activeProject?.id) {
+      updateUrlForChat(currentChat.id, activeProject.id)
+    } else if (currentChat.projectId) {
+      // Chat belongs to a project but we're not in project mode yet
+      // Use the chat's projectId for the URL
+      updateUrlForChat(currentChat.id, currentChat.projectId)
+    } else {
+      // Regular chat, no project
+      updateUrlForChat(currentChat.id)
+    }
+  }, [
+    currentChat.id,
+    currentChat.isBlankChat,
+    currentChat.projectId,
+    isProjectMode,
+    activeProject?.id,
+    isInitialLoad,
+    updateUrlForChat,
+    clearUrl,
+  ])
 
   // Initialize tinfoil client once when page loads
   useEffect(() => {

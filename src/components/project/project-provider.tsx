@@ -26,9 +26,13 @@ import {
 
 interface ProjectProviderProps {
   children: React.ReactNode
+  initialProjectId?: string | null
 }
 
-export function ProjectProvider({ children }: ProjectProviderProps) {
+export function ProjectProvider({
+  children,
+  initialProjectId,
+}: ProjectProviderProps) {
   const { getToken, isSignedIn } = useAuth()
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>(
@@ -41,6 +45,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
   const [error, setError] = useState<string | null>(null)
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
   const initializingRef = useRef(false)
+  const initialProjectLoadedRef = useRef(false)
 
   const isProjectMode = activeProject !== null
 
@@ -199,6 +204,19 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
     },
     [],
   )
+
+  // Load initial project from URL if provided
+  useEffect(() => {
+    if (
+      initialProjectId &&
+      isSignedIn &&
+      !initialProjectLoadedRef.current &&
+      !activeProject
+    ) {
+      initialProjectLoadedRef.current = true
+      enterProjectMode(initialProjectId)
+    }
+  }, [initialProjectId, isSignedIn, activeProject, enterProjectMode])
 
   const exitProjectMode = useCallback(() => {
     setActiveProject(null)
