@@ -462,7 +462,7 @@ ${generatedKey.replace('key_', '')}
             />
           </button>
           {isQRCodeExpanded && (
-            <div className="flex justify-center border-t border-border-subtle bg-surface-card p-3">
+            <div className="flex justify-center rounded-b-lg border-t border-border-subtle bg-surface-card p-3">
               <QRCode
                 value={generatedKey}
                 size={160}
