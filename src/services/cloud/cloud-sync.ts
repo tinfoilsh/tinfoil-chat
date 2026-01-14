@@ -1479,6 +1479,11 @@ export class CloudSyncService {
    * This fetches project-specific chats using the /api/projects/{projectId}/chats endpoint.
    */
   async syncProjectChats(projectId: string): Promise<SyncResult> {
+    if (this.isSyncing) {
+      throw new Error('Sync already in progress')
+    }
+
+    this.isSyncing = true
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -1486,6 +1491,7 @@ export class CloudSyncService {
     }
 
     if (!(await cloudStorage.isAuthenticated())) {
+      this.isSyncing = false
       return result
     }
 
@@ -1657,6 +1663,8 @@ export class CloudSyncService {
         action: 'syncProjectChats',
         metadata: { projectId },
       })
+    } finally {
+      this.isSyncing = false
     }
 
     return result
@@ -1666,6 +1674,11 @@ export class CloudSyncService {
    * Perform a delta sync for project chats - only fetch chats that changed since last sync.
    */
   async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
+    if (this.isSyncing) {
+      throw new Error('Sync already in progress')
+    }
+
+    this.isSyncing = true
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -1673,6 +1686,7 @@ export class CloudSyncService {
     }
 
     if (!(await cloudStorage.isAuthenticated())) {
+      this.isSyncing = false
       return result
     }
 
@@ -1705,6 +1719,7 @@ export class CloudSyncService {
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync
+        this.isSyncing = false
         return await this.syncProjectChats(projectId)
       }
 
@@ -1734,6 +1749,7 @@ export class CloudSyncService {
               metadata: { projectId },
             },
           )
+          this.isSyncing = false
           return await this.syncProjectChats(projectId)
         }
 
@@ -1879,6 +1895,8 @@ export class CloudSyncService {
       result.errors.push(
         `Project chat sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
+    } finally {
+      this.isSyncing = false
     }
 
     return result
