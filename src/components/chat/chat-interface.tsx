@@ -1428,6 +1428,9 @@ export function ChatInterface({
               isBlankChat: c.isBlankChat,
             }))}
           deleteChat={deleteChat}
+          onEncryptionKeyClick={
+            isSignedIn ? handleOpenEncryptionKeyModal : undefined
+          }
         />
       ) : loadingProject ? (
         <ProjectSidebar

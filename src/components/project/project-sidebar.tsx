@@ -21,6 +21,7 @@ import {
   Cog6ToothIcon,
   DocumentIcon,
   DocumentPlusIcon,
+  KeyIcon,
   PencilSquareIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
@@ -56,6 +57,7 @@ interface ProjectSidebarProps {
   isPremium?: boolean
   chats?: ProjectChat[]
   deleteChat?: (chatId: string) => void
+  onEncryptionKeyClick?: () => void
 }
 
 function formatFileSize(bytes: number): string {
@@ -87,6 +89,7 @@ export function ProjectSidebar({
   isPremium,
   chats: chatsProp,
   deleteChat,
+  onEncryptionKeyClick,
 }: ProjectSidebarProps) {
   const { getToken, isSignedIn } = useAuth()
   const {
@@ -1042,9 +1045,26 @@ export function ProjectSidebar({
 
           {/* Chat History Header */}
           <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
-            <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
-              Project Chats
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="truncate font-aeonik-fono text-sm font-medium text-content-primary">
+                Project Chats
+              </h3>
+              {onEncryptionKeyClick && isSignedIn && (
+                <button
+                  type="button"
+                  onClick={onEncryptionKeyClick}
+                  className={cn(
+                    'rounded p-1 transition-all duration-200',
+                    isDarkMode
+                      ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
+                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                  )}
+                  title="Manage encryption key"
+                >
+                  <KeyIcon className="h-4 w-4" />
+                </button>
+              )}
+            </div>
             <p className="font-aeonik-fono text-xs text-content-muted">
               Chats in this project share context and documents.
             </p>
