@@ -151,6 +151,8 @@ export function ChatListItem({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => {
+        // Only handle events originating on the row itself, not bubbled from nested buttons
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onSelect()
