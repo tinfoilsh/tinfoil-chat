@@ -1,5 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
-
 import { useToast } from '@/hooks/use-toast'
 import { TINFOIL_COLORS } from '@/theme/colors'
 import { Dialog, Transition } from '@headlessui/react'
@@ -7,6 +5,7 @@ import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
   CheckIcon,
+  ChevronDownIcon,
   ClipboardDocumentIcon,
   KeyIcon,
   XMarkIcon,
@@ -318,18 +317,29 @@ ${encryptionKey.replace('key_', '')}
                       id="current-key-description"
                       className="mt-1.5 hidden text-xs text-content-muted sm:mt-2 sm:block"
                     >
-                      Keep this key safe. You'll need it to decrypt your chats
-                      on other devices.
+                      Save this key securely. You&apos;ll need it to access your
+                      chats and projects on other devices.
                     </p>
 
-                    {/* QR Code Section - Desktop Only */}
+                    {/* QR Code Section - Collapsible */}
                     {encryptionKey && (
-                      <div className="mt-4 hidden sm:block">
-                        <div className="flex flex-col items-center rounded-lg border border-border-subtle bg-surface-chat p-4">
-                          <div className="rounded-lg bg-surface-card p-3">
+                      <div className="mt-3 hidden rounded-lg border border-border-subtle sm:block">
+                        <button
+                          onClick={() => setIsQRCodeExpanded(!isQRCodeExpanded)}
+                          className="flex w-full items-center justify-between p-3 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/50"
+                        >
+                          <span>Key QR Code</span>
+                          <ChevronDownIcon
+                            className={`h-4 w-4 transition-transform ${
+                              isQRCodeExpanded ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+                        {isQRCodeExpanded && (
+                          <div className="flex justify-center rounded-b-lg border-t border-border-subtle bg-surface-card p-3">
                             <QRCode
                               value={encryptionKey}
-                              size={180}
+                              size={160}
                               level="H"
                               bgColor={
                                 isDarkMode
@@ -343,10 +353,7 @@ ${encryptionKey.replace('key_', '')}
                               }
                             />
                           </div>
-                          <p className="mt-3 text-xs text-content-muted">
-                            Scan to transfer key to another device
-                          </p>
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -360,88 +367,69 @@ ${encryptionKey.replace('key_', '')}
                       id="sync-key-description"
                       className="mb-2 text-xs text-content-muted sm:mb-3"
                     >
-                      Restore your key from a backup or sync with another
-                      device.
+                      Enter or import your existing encryption key.
                     </p>
 
-                    {/* Drag and Drop Zone */}
                     <div
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                      className={`mb-3 rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
-                        isDragging
-                          ? 'border-brand-accent-light bg-brand-accent-light/10'
-                          : 'border-border-subtle bg-surface-chat'
-                      }`}
+                      className="space-y-2"
                     >
-                      <ArrowUpTrayIcon
-                        className={`mx-auto h-8 w-8 ${
-                          isDragging
-                            ? 'text-brand-accent-light'
-                            : 'text-content-muted'
-                        }`}
-                      />
-                      <p
-                        className={`mt-2 text-xs sm:text-sm ${
-                          isDragging
-                            ? 'text-brand-accent-light'
-                            : 'text-content-muted'
-                        }`}
-                      >
-                        {isDragging
-                          ? 'Drop your PEM file here'
-                          : 'Drag and drop a PEM file here'}
-                      </p>
-                      {!isDragging && (
-                        <>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".pem"
-                            onChange={handleFileSelect}
-                            className="hidden"
-                          />
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="mt-3 rounded-md border border-border-subtle bg-surface-input px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-input/80 sm:text-sm"
-                          >
-                            Choose File
-                          </button>
-                        </>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          value={inputKey}
+                          onChange={(e) => setInputKey(e.target.value)}
+                          placeholder="Enter encryption key (e.g., key_abc123...)"
+                          autoComplete="off"
+                          aria-label="Encryption key input"
+                          aria-describedby="sync-key-description"
+                          aria-invalid={isUpdating ? 'false' : undefined}
+                          className={`flex-1 rounded-lg border bg-surface-input px-2 py-1.5 text-xs text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light sm:px-3 sm:py-2 sm:text-sm ${
+                            isDragging
+                              ? 'border-brand-accent-light'
+                              : 'border-border-subtle'
+                          }`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleUpdateKey()
+                            }
+                          }}
+                        />
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pem"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-colors hover:bg-surface-chat/80"
+                          title="Upload PEM file"
+                        >
+                          <ArrowUpTrayIcon className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={handleUpdateKey}
+                          disabled={isUpdating || !inputKey.trim()}
+                          aria-label="Update encryption key"
+                          aria-busy={isUpdating}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm ${
+                            isUpdating || !inputKey.trim()
+                              ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                              : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
+                          }`}
+                        >
+                          {isUpdating ? 'Updating...' : 'Update'}
+                        </button>
+                      </div>
+                      {isDragging && (
+                        <p className="text-center text-sm text-brand-accent-light">
+                          Drop your PEM file here
+                        </p>
                       )}
-                    </div>
-
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <input
-                        type="password"
-                        value={inputKey}
-                        onChange={(e) => setInputKey(e.target.value)}
-                        placeholder="Enter encryption key (e.g., key_abc123...)"
-                        autoComplete="off"
-                        aria-label="Encryption key input"
-                        aria-describedby="sync-key-description"
-                        aria-invalid={isUpdating ? 'false' : undefined}
-                        className="w-full rounded-lg border border-border-subtle bg-surface-input px-2 py-1.5 text-xs text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light sm:flex-1 sm:px-3 sm:py-2 sm:text-sm"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleUpdateKey()
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={handleUpdateKey}
-                        disabled={isUpdating || !inputKey.trim()}
-                        aria-label="Update encryption key"
-                        aria-busy={isUpdating}
-                        className={`w-full rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:w-auto sm:px-4 sm:py-2 sm:text-sm ${
-                          isUpdating || !inputKey.trim()
-                            ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                            : 'bg-emerald-500 text-white hover:bg-emerald-600'
-                        }`}
-                      >
-                        {isUpdating ? 'Updating...' : 'Update'}
-                      </button>
                     </div>
                   </div>
                 </div>
