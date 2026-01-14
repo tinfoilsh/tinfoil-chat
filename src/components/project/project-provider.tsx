@@ -245,21 +245,19 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       try {
         await projectStorage.updateProject(id, data)
 
-        if (activeProject && activeProject.id === id) {
-          setActiveProject((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  name: data.name ?? prev.name,
-                  description: data.description ?? prev.description,
-                  systemInstructions:
-                    data.systemInstructions ?? prev.systemInstructions,
-                  memory: data.memory ?? prev.memory,
-                  updatedAt: new Date().toISOString(),
-                }
-              : null,
-          )
-        }
+        setActiveProject((prev) =>
+          prev && prev.id === id
+            ? {
+                ...prev,
+                name: data.name ?? prev.name,
+                description: data.description ?? prev.description,
+                systemInstructions:
+                  data.systemInstructions ?? prev.systemInstructions,
+                memory: data.memory ?? prev.memory,
+                updatedAt: new Date().toISOString(),
+              }
+            : prev,
+        )
 
         logInfo('Updated project', {
           component: 'ProjectProvider',
@@ -273,7 +271,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
         throw err
       }
     },
-    [activeProject],
+    [],
   )
 
   const deleteProject = useCallback(
