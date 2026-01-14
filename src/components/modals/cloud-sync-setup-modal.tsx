@@ -8,7 +8,9 @@ import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
   CheckIcon,
+  ChevronDownIcon,
   CloudArrowUpIcon,
+  DocumentDuplicateIcon,
   KeyIcon,
   LockClosedIcon,
   XMarkIcon,
@@ -42,6 +44,7 @@ export function CloudSyncSetupModal({
   const [isProcessing, setIsProcessing] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
   const { toast } = useToast()
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -285,21 +288,24 @@ ${generatedKey.replace('key_', '')}
   const renderIntroStep = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-center">
-        <div className="rounded-full bg-brand-accent-light/20 p-3">
-          <CloudArrowUpIcon className="h-8 w-8 text-brand-accent-light" />
+        <div className="rounded-full bg-content-muted/20 p-3">
+          <CloudArrowUpIcon className="h-8 w-8 text-content-secondary" />
         </div>
       </div>
 
+      <p className="text-center text-xs font-medium uppercase tracking-wide text-content-muted">
+        Step 1
+      </p>
       <h2 className="text-center text-2xl font-bold">Enable Cloud Sync?</h2>
 
-      <p className="text-center text-sm text-content-secondary">
-        Cloud sync allows you to securely backup and access your chats across
-        multiple devices with end-to-end encryption.
+      <p className="text-sm text-content-secondary">
+        Cloud sync enables encrypted syncing of chats and projects across your
+        devices.
       </p>
 
       <div className="space-y-3">
         <div className="flex items-start space-x-3">
-          <LockClosedIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-brand-accent-light" />
+          <LockClosedIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-content-secondary" />
           <div>
             <p className="text-sm font-medium text-content-primary">
               End-to-End Encrypted
@@ -311,7 +317,7 @@ ${generatedKey.replace('key_', '')}
         </div>
 
         <div className="flex items-start space-x-3">
-          <KeyIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-brand-accent-light" />
+          <KeyIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-content-secondary" />
           <div>
             <p className="text-sm font-medium text-content-primary">
               You Control Your Key
@@ -324,13 +330,8 @@ ${generatedKey.replace('key_', '')}
       </div>
 
       <div className="flex items-center justify-between rounded-lg border border-border-subtle bg-surface-chat p-3">
-        <div>
-          <div className="text-sm font-medium text-content-secondary">
-            Enable Cloud Sync
-          </div>
-          <div className="text-xs text-content-muted">
-            Turn off to keep all chats local only
-          </div>
+        <div className="text-sm font-medium text-content-secondary">
+          Enable Cloud Sync
         </div>
         <label className="relative inline-flex cursor-pointer items-center">
           <input
@@ -362,53 +363,39 @@ ${generatedKey.replace('key_', '')}
 
   const renderGenerateOrRestoreStep = () => (
     <div className="space-y-4">
-      <h2 className="text-center text-xl font-bold">Setup Encryption</h2>
+      <p className="text-center text-xs font-medium uppercase tracking-wide text-content-muted">
+        Step 2
+      </p>
+      <h2 className="text-center text-xl font-bold">Encryption Key</h2>
 
-      <p className="text-center text-sm text-content-secondary">
-        Choose whether to generate a new encryption key or restore an existing
-        one from another device.
+      <p className="text-sm text-content-secondary">
+        Generate a new encryption key for this device. Your existing chats will
+        be encrypted and synced.
       </p>
 
-      <div className="space-y-3">
+      <button
+        onClick={() => setCurrentStep('restore-key')}
+        disabled={isProcessing}
+        className="w-full rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+      >
+        Restore existing key instead
+      </button>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setCurrentStep('intro')}
+          className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+        >
+          Back
+        </button>
         <button
           onClick={handleGenerateKey}
           disabled={isProcessing}
-          className="flex w-full items-start space-x-3 rounded-lg border border-border-subtle p-4 text-left transition-colors hover:bg-surface-chat/80"
+          className="flex-1 rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
         >
-          <KeyIcon className="mt-0.5 h-6 w-6 flex-shrink-0 text-brand-accent-light" />
-          <div className="flex-1">
-            <p className="font-medium text-content-primary">Generate New Key</p>
-            <p className="text-xs text-content-muted">
-              Create a new encryption key for this device. Your existing chats
-              will be encrypted and synced.
-            </p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setCurrentStep('restore-key')}
-          disabled={isProcessing}
-          className="flex w-full items-start space-x-3 rounded-lg border border-border-subtle p-4 text-left transition-colors hover:bg-surface-chat/80"
-        >
-          <ArrowDownTrayIcon className="mt-0.5 h-6 w-6 flex-shrink-0 text-emerald-400" />
-          <div className="flex-1">
-            <p className="font-medium text-content-primary">
-              Restore Existing Key
-            </p>
-            <p className="text-xs text-content-muted">
-              Use an encryption key from another device to sync your existing
-              chats.
-            </p>
-          </div>
+          {isProcessing ? 'Generating...' : 'Generate Key'}
         </button>
       </div>
-
-      <button
-        onClick={() => setCurrentStep('intro')}
-        className="w-full rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-      >
-        Back
-      </button>
     </div>
   )
 
@@ -420,47 +407,62 @@ ${generatedKey.replace('key_', '')}
         </div>
       </div>
 
-      <h2 className="text-center text-xl font-bold">
-        Encryption Key Generated
-      </h2>
+      <h2 className="text-center text-xl font-bold">Success!</h2>
 
       <p className="text-center text-sm text-content-secondary">
-        Save this key securely. You&apos;ll need it to access your chats on
-        other devices.
+        Save this key securely. You&apos;ll need it to access your chats and
+        projects on other devices.
       </p>
 
       <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
         {generatedKey && (
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <code className="font-mono text-xs text-brand-accent-light">
-                {generatedKey.substring(0, 30)}...
-              </code>
-              <div className="flex gap-2">
-                <button
-                  onClick={downloadKeyAsPEM}
-                  className="rounded-lg bg-surface-chat p-2 text-content-primary transition-all hover:bg-surface-chat/80"
-                >
-                  <ArrowDownTrayIcon className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={handleCopyKey}
-                  className={`rounded-lg p-2 transition-all ${
-                    isCopied
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                  }`}
-                >
-                  {isCopied ? (
-                    <CheckIcon className="h-4 w-4" />
-                  ) : (
-                    <ArrowUpTrayIcon className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+          <div className="flex items-center justify-between">
+            <code className="font-mono text-xs text-brand-accent-light">
+              {generatedKey.substring(0, 30)}...
+            </code>
+            <div className="flex gap-2">
+              <button
+                onClick={downloadKeyAsPEM}
+                className="rounded-lg bg-surface-chat p-2 text-content-primary transition-all hover:bg-surface-chat/80"
+                title="Download as PEM file"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={handleCopyKey}
+                className={`rounded-lg p-2 transition-all ${
+                  isCopied
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                }`}
+                title="Copy to clipboard"
+              >
+                {isCopied ? (
+                  <CheckIcon className="h-4 w-4" />
+                ) : (
+                  <DocumentDuplicateIcon className="h-4 w-4" />
+                )}
+              </button>
             </div>
+          </div>
+        )}
+      </div>
 
-            <div className="mt-3 flex justify-center rounded-lg bg-surface-card p-3">
+      {generatedKey && (
+        <div className="rounded-lg border border-border-subtle">
+          <button
+            onClick={() => setIsQRCodeExpanded(!isQRCodeExpanded)}
+            className="flex w-full items-center justify-between p-3 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/50"
+          >
+            <span>Key QR Code</span>
+            <ChevronDownIcon
+              className={`h-4 w-4 transition-transform ${
+                isQRCodeExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+          {isQRCodeExpanded && (
+            <div className="flex justify-center border-t border-border-subtle bg-surface-card p-3">
               <QRCode
                 value={generatedKey}
                 size={160}
@@ -477,16 +479,9 @@ ${generatedKey.replace('key_', '')}
                 }
               />
             </div>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-        <p className="text-xs text-amber-600 dark:text-amber-400">
-          <strong>Important:</strong> Store this key safely. Without it, you
-          won&apos;t be able to decrypt your chats on other devices.
-        </p>
-      </div>
+          )}
+        </div>
+      )}
 
       <button
         onClick={handleComplete}
@@ -502,65 +497,50 @@ ${generatedKey.replace('key_', '')}
       <h2 className="text-center text-xl font-bold">Restore Encryption Key</h2>
 
       <p className="text-center text-sm text-content-secondary">
-        Enter or import your encryption key from another device.
+        Enter or import your existing encryption key.
       </p>
 
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors ${
-          isDragging
-            ? 'border-brand-accent-light bg-brand-accent-light/10'
-            : 'border-border-subtle bg-surface-chat'
-        }`}
+        className="space-y-2"
       >
-        <ArrowUpTrayIcon
-          className={`mx-auto h-8 w-8 ${
-            isDragging ? 'text-brand-accent-light' : 'text-content-muted'
-          }`}
-        />
-        <p
-          className={`mt-2 text-sm ${
-            isDragging ? 'text-brand-accent-light' : 'text-content-muted'
-          }`}
-        >
-          {isDragging
-            ? 'Drop your PEM file here'
-            : 'Drag and drop a PEM file here'}
-        </p>
-        {!isDragging && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pem"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-3 rounded-md border border-border-subtle bg-surface-input px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-input/80"
-            >
-              Choose File
-            </button>
-          </>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={inputKey}
+            onChange={(e) => setInputKey(e.target.value)}
+            placeholder="Enter encryption key (e.g., key_abc123...)"
+            className={`flex-1 rounded-lg border bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light ${
+              isDragging ? 'border-brand-accent-light' : 'border-border-subtle'
+            }`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleRestoreKey()
+              }
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pem"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-colors hover:bg-surface-chat/80"
+            title="Upload PEM file"
+          >
+            <ArrowUpTrayIcon className="h-5 w-5" />
+          </button>
+        </div>
+        {isDragging && (
+          <p className="text-center text-sm text-brand-accent-light">
+            Drop your PEM file here
+          </p>
         )}
-      </div>
-
-      <div className="space-y-2">
-        <input
-          type="password"
-          value={inputKey}
-          onChange={(e) => setInputKey(e.target.value)}
-          placeholder="Enter encryption key (e.g., key_abc123...)"
-          className="w-full rounded-lg border border-border-subtle bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              handleRestoreKey()
-            }
-          }}
-        />
       </div>
 
       <div className="flex gap-2">
