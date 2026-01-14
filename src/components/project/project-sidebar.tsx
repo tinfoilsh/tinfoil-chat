@@ -188,6 +188,8 @@ export function ProjectSidebar({
       const handleResize = () => {
         setWindowWidth(window.innerWidth)
       }
+      // Set initial width on mount
+      handleResize()
       window.addEventListener('resize', handleResize)
       return () => window.removeEventListener('resize', handleResize)
     }
