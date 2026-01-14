@@ -25,32 +25,12 @@ export function TextureGrid({ className = '' }: { className?: string }) {
     }
   }, [])
 
-  const columnWidth = 2
-  const cellHeight = 2
-  const columnGap = 5
+  const size = 16
+  const strokeColor = isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'
 
-  const generatePattern = () => {
-    const rects: string[] = []
-
-    for (let col = 0; col < 30; col++) {
-      const x = col * columnGap
-
-      for (let row = 0; row < 40; row++) {
-        const y = row * cellHeight
-        const opacity = row % 2 === 0 ? 0.067 : 0
-
-        if (opacity > 0) {
-          rects.push(
-            `<rect x="${x}" y="${y}" width="${columnWidth}" height="${cellHeight}" fill="rgba(156, 163, 175, ${opacity})" />`,
-          )
-        }
-      }
-    }
-
-    return rects.join('')
-  }
-
-  const svgPattern = `<svg xmlns="http://www.w3.org/2000/svg" width="${30 * columnGap}" height="${40 * cellHeight}">${generatePattern()}</svg>`
+  const svgPattern = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+    <path d="M ${size} 0 L 0 0 0 ${size}" fill="none" stroke="${strokeColor}" stroke-width="1" />
+  </svg>`
   const encodedSvg = `data:image/svg+xml,${encodeURIComponent(svgPattern)}`
 
   return (
@@ -59,7 +39,6 @@ export function TextureGrid({ className = '' }: { className?: string }) {
       style={{
         backgroundImage: `url("${encodedSvg}")`,
         backgroundRepeat: 'repeat',
-        opacity: isDarkMode ? 0.5 : 1,
       }}
     />
   )
