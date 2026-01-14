@@ -683,7 +683,9 @@ export function ChatInput({
                 cancelGeneration()
               }
             }}
-            placeholder={hasMessages ? 'Reply to Tin...' : "What's on your mind?"}
+            placeholder={
+              hasMessages ? 'Reply to Tin...' : "What's on your mind?"
+            }
             rows={1}
             className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
             style={{
@@ -692,113 +694,121 @@ export function ChatInput({
             }}
           />
 
-        <div className="mt-3 flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <div className="group relative">
-              <button
-                id="upload-button"
-                type="button"
-                onClick={triggerFileInput}
-                aria-label="Upload document"
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-              >
-                <DocumentIcon className="h-5 w-5" />
-              </button>
-              <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                Upload document
-              </span>
-            </div>
-            {onWebSearchToggle && (
+          <div className="mt-3 flex items-center justify-between">
+            <div className="flex items-center gap-1">
               <div className="group relative">
                 <button
-                  id="web-search-button"
+                  id="upload-button"
                   type="button"
-                  onClick={onWebSearchToggle}
-                  aria-label="Web search"
-                  aria-pressed={webSearchEnabled}
-                  className={cn(
-                    'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
-                    webSearchEnabled
-                      ? cn(
-                          'px-2',
-                          isDarkMode
-                            ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                            : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                        )
-                      : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                  )}
+                  onClick={triggerFileInput}
+                  aria-label="Upload document"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
                 >
-                  {webSearchEnabled ? (
-                    <PiGlobe className="h-5 w-5" />
-                  ) : (
-                    <PiGlobeX className="h-5 w-5" />
-                  )}
-                  {webSearchEnabled && (
-                    <span className="text-xs font-medium leading-none">
-                      Web Search
+                  <DocumentIcon className="h-5 w-5" />
+                </button>
+                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  Upload document
+                </span>
+              </div>
+              {onWebSearchToggle && (
+                <div className="group relative">
+                  <button
+                    id="web-search-button"
+                    type="button"
+                    onClick={onWebSearchToggle}
+                    aria-label="Web search"
+                    aria-pressed={webSearchEnabled}
+                    className={cn(
+                      'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
+                      webSearchEnabled
+                        ? cn(
+                            'px-2',
+                            isDarkMode
+                              ? 'bg-brand-accent-light/20 text-brand-accent-light'
+                              : 'bg-brand-accent-dark/20 text-brand-accent-dark',
+                          )
+                        : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                    )}
+                  >
+                    {webSearchEnabled ? (
+                      <PiGlobe className="h-5 w-5" />
+                    ) : (
+                      <PiGlobeX className="h-5 w-5" />
+                    )}
+                    {webSearchEnabled && (
+                      <span className="text-xs font-medium leading-none">
+                        Web Search
+                      </span>
+                    )}
+                  </button>
+                  {!webSearchEnabled && (
+                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                      Web search
                     </span>
                   )}
-                </button>
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
 
-          <div className="flex items-center gap-2">
-            {modelSelectorButton && <div>{modelSelectorButton}</div>}
-            {isPremium && audioModel && (
+            <div className="flex items-center gap-2">
+              {modelSelectorButton && <div>{modelSelectorButton}</div>}
+              {isPremium && audioModel && (
+                <button
+                  type="button"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={cn(
+                    'rounded-lg p-1.5 disabled:opacity-50',
+                    isRecording
+                      ? 'animate-pulse text-red-500'
+                      : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
+                  )}
+                  title={
+                    isRecording
+                      ? 'Stop recording'
+                      : isConverting
+                        ? 'Converting to WAV...'
+                        : 'Start recording'
+                  }
+                  disabled={isTranscribing || isConverting}
+                >
+                  {isRecording ? (
+                    <StopIcon className="h-5 w-5" />
+                  ) : isTranscribing || isConverting ? (
+                    <PiSpinner className="h-5 w-5 animate-spin text-current" />
+                  ) : (
+                    <MicrophoneIcon className="h-5 w-5" />
+                  )}
+                </button>
+              )}
               <button
+                id="send-button"
                 type="button"
-                onClick={isRecording ? stopRecording : startRecording}
-                className={cn(
-                  'rounded-lg p-1.5 disabled:opacity-50',
-                  isRecording
-                    ? 'animate-pulse text-red-500'
-                    : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
-                )}
-                title={
-                  isRecording
-                    ? 'Stop recording'
-                    : isConverting
-                      ? 'Converting to WAV...'
-                      : 'Start recording'
+                onClick={(e) => {
+                  if (
+                    loadingState === 'loading' ||
+                    loadingState === 'retrying'
+                  ) {
+                    e.preventDefault()
+                    cancelGeneration()
+                  } else {
+                    handleSubmit(e)
+                  }
+                }}
+                className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
+                disabled={
+                  loadingState !== 'loading' &&
+                  loadingState !== 'retrying' &&
+                  (isTranscribing || isConverting)
                 }
-                disabled={isTranscribing || isConverting}
               >
-                {isRecording ? (
-                  <StopIcon className="h-5 w-5" />
-                ) : isTranscribing || isConverting ? (
-                  <PiSpinner className="h-5 w-5 animate-spin text-current" />
+                {loadingState === 'loading' || loadingState === 'retrying' ? (
+                  <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
                 ) : (
-                  <MicrophoneIcon className="h-5 w-5" />
+                  <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
                 )}
               </button>
-            )}
-            <button
-              id="send-button"
-              type="button"
-              onClick={(e) => {
-                if (loadingState === 'loading' || loadingState === 'retrying') {
-                  e.preventDefault()
-                  cancelGeneration()
-                } else {
-                  handleSubmit(e)
-                }
-              }}
-              className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
-              disabled={
-                loadingState !== 'loading' &&
-                loadingState !== 'retrying' &&
-                (isTranscribing || isConverting)
-              }
-            >
-              {loadingState === 'loading' || loadingState === 'retrying' ? (
-                <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
-              ) : (
-                <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
-              )}
-            </button>
+            </div>
           </div>
-        </div>
         </div>
       </div>
 
