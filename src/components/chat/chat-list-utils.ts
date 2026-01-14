@@ -29,11 +29,11 @@ export function formatRelativeTime(date: Date): string {
     return `${weeks}w ago`
   }
 
-  const months = Math.floor(days / 30)
-  if (months < 12) {
-    return `${months}mo ago`
+  if (days >= 365) {
+    const years = Math.floor(days / 365)
+    return `${years}y ago`
   }
 
-  const years = Math.floor(days / 365)
-  return `${years}y ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
 }
