@@ -71,8 +71,12 @@ export async function extractFacts(params: {
   }
 
   const models = await getAIModels(true)
-  const freeModel = models.find((m) => m.paid === false) || models[0]
-  if (!freeModel) {
+  // Structured outputs require a model that supports it - use gpt-oss-120b specifically
+  const structuredModel =
+    models.find((m) => m.modelName === 'gpt-oss-120b') ||
+    models.find((m) => m.paid === false) ||
+    models[0]
+  if (!structuredModel) {
     logError('No model available for fact extraction', new Error('No model'), {
       component: 'FactExtractor',
       action: 'extractFacts',
@@ -84,7 +88,7 @@ export async function extractFacts(params: {
   logInfo('Using model for fact extraction', {
     component: 'FactExtractor',
     action: 'extractFacts',
-    metadata: { modelName: freeModel.modelName },
+    metadata: { modelName: structuredModel.modelName },
   })
 
   const promptTemplate = await getMemoryPrompt()
@@ -117,7 +121,7 @@ export async function extractFacts(params: {
 
   try {
     const result = await sendStructuredCompletion<{ facts: Fact[] }>({
-      model: freeModel,
+      model: structuredModel,
       messages: [
         {
           role: 'system',

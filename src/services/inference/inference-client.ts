@@ -347,7 +347,7 @@ export async function sendChatStream(
 export interface StructuredCompletionParams {
   model: BaseModel
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
-  jsonSchema: object
+  jsonSchema: Record<string, unknown>
   signal?: AbortSignal
 }
 
@@ -364,12 +364,16 @@ export async function sendStructuredCompletion<T>(
       model: model.modelName,
       messages,
       stream: false,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'response',
+          schema: jsonSchema,
+        },
+      },
     },
     {
       signal,
-      body: {
-        guided_json: jsonSchema,
-      },
     },
   )
 
