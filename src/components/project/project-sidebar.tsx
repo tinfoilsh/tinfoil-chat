@@ -57,6 +57,7 @@ interface ProjectSidebarProps {
   isPremium?: boolean
   chats?: ProjectChat[]
   deleteChat?: (chatId: string) => void
+  updateChatTitle?: (chatId: string, newTitle: string) => void
   onEncryptionKeyClick?: () => void
 }
 
@@ -89,6 +90,7 @@ export function ProjectSidebar({
   isPremium,
   chats: chatsProp,
   deleteChat,
+  updateChatTitle,
   onEncryptionKeyClick,
 }: ProjectSidebarProps) {
   const { getToken, isSignedIn } = useAuth()
@@ -1080,6 +1082,7 @@ export function ProjectSidebar({
                   handleChatSelect(chatId)
                 }
               }}
+              onUpdateTitle={updateChatTitle}
               onDeleteChat={handleDeleteChat}
             />
           </div>
