@@ -35,6 +35,8 @@ interface UseChatStorageReturn {
   setIsInitialLoad: (loading: boolean) => void
   isInitialLoad: boolean
   reloadChats: () => Promise<void>
+  initialChatDecryptionFailed: boolean
+  clearInitialChatDecryptionFailed: () => void
 }
 
 export function useChatStorage({
@@ -45,6 +47,8 @@ export function useChatStorage({
   const { isSignedIn, getToken } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const initialChatLoadedRef = useRef(false)
+  const [initialChatDecryptionFailed, setInitialChatDecryptionFailed] =
+    useState(false)
 
   // Initialize with blank chats for both modes
   const [chats, setChats] = useState<Chat[]>(() => {
@@ -393,6 +397,11 @@ export function useChatStorage({
 
         setCurrentChat(chat)
 
+        // Track if the initial URL-loaded chat failed to decrypt
+        if (chat.decryptionFailed) {
+          setInitialChatDecryptionFailed(true)
+        }
+
         logInfo('Loaded chat from URL', {
           component: 'useChatStorage',
           metadata: { chatId, decryptionFailed: chat.decryptionFailed },
@@ -420,6 +429,11 @@ export function useChatStorage({
     }
   }, [initialChatId, isSignedIn, isInitialLoad, loadChatById])
 
+  // Clear the decryption failed state (called after entering correct key)
+  const clearInitialChatDecryptionFailed = useCallback(() => {
+    setInitialChatDecryptionFailed(false)
+  }, [])
+
   return {
     chats,
     currentChat,
@@ -433,5 +447,7 @@ export function useChatStorage({
     setIsInitialLoad,
     isInitialLoad,
     reloadChats,
+    initialChatDecryptionFailed,
+    clearInitialChatDecryptionFailed,
   }
 }

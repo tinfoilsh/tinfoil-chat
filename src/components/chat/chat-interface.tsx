@@ -175,7 +175,7 @@ export function ChatInterface({
   initialProjectId,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
   const { user } = useUser()
   const { chat_subscription_active, isLoading: subscriptionLoading } =
     useSubscriptionStatus()
@@ -509,6 +509,8 @@ export function ChatInterface({
     reloadChats,
     editMessage,
     regenerateMessage,
+    initialChatDecryptionFailed,
+    clearInitialChatDecryptionFailed,
   } = useChatState({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
@@ -526,6 +528,8 @@ export function ChatInterface({
   useEffect(() => {
     // Don't update URL during initial load or if chat is blank
     if (isInitialLoad) return
+    // Don't clear URL when showing decryption failed screen
+    if (initialChatDecryptionFailed) return
     if (currentChat.isBlankChat) {
       clearUrl()
       return
@@ -549,6 +553,7 @@ export function ChatInterface({
     isProjectMode,
     activeProject?.id,
     isInitialLoad,
+    initialChatDecryptionFailed,
     updateUrlForChat,
     clearUrl,
   ])
@@ -1243,8 +1248,17 @@ export function ChatInterface({
   // Removed all automatic scroll behaviors during streaming. Scrolling now only occurs
   // via the explicit button or when a chat is loaded/switched.
 
+  // Show loading while auth is still loading for URL-based access
+  if ((initialChatId || initialProjectId) && !isAuthLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface-chat-background">
+        <PiSpinner className="h-10 w-10 animate-spin text-content-secondary" />
+      </div>
+    )
+  }
+
   // Show sign-in required message when accessing a chat URL while not signed in
-  if ((initialChatId || initialProjectId) && !isSignedIn) {
+  if ((initialChatId || initialProjectId) && isAuthLoaded && !isSignedIn) {
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-surface-chat-background px-4 font-aeonik">
         <div className="max-w-md text-center">
@@ -1286,6 +1300,46 @@ export function ChatInterface({
     return (
       <div className="flex h-screen items-center justify-center bg-surface-chat-background">
         <PiSpinner className="h-10 w-10 animate-spin text-content-secondary" />
+      </div>
+    )
+  }
+
+  // Show decryption failed message when accessing a chat that couldn't be decrypted
+  if (initialChatId && initialChatDecryptionFailed) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-surface-chat-background px-4 font-aeonik">
+        <div className="max-w-md text-center">
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-surface-chat p-4">
+              <svg
+                className="h-8 w-8 text-orange-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+                />
+              </svg>
+            </div>
+          </div>
+          <h2 className="mb-3 text-xl font-semibold text-content-primary">
+            Unable to decrypt chat
+          </h2>
+          <p className="mb-6 text-content-secondary">
+            This chat was encrypted with a different key. You can update the key
+            in settings.
+          </p>
+          <button
+            onClick={() => clearInitialChatDecryptionFailed()}
+            className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90"
+          >
+            Done
+          </button>
+        </div>
       </div>
     )
   }
