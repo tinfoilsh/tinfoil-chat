@@ -993,7 +993,7 @@ export function ProjectSidebar({
             </button>
 
             {memoryExpanded && !isLoading && (
-              <div className="px-4 pb-3">
+              <div className="px-4 pb-3 pt-2">
                 {(project?.memory?.length ?? 0) === 0 ? (
                   <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
                     No memory yet. Memory will appear here as you have
