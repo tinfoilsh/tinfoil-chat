@@ -16,7 +16,6 @@ import type { Project } from '@/types/project'
 import { useAuth, UserButton } from '@clerk/nextjs'
 import {
   ArrowLeftIcon,
-  Bars3Icon,
   ChevronDownIcon,
   ChevronUpIcon,
   Cog6ToothIcon,
@@ -24,9 +23,9 @@ import {
   DocumentPlusIcon,
   PencilSquareIcon,
   TrashIcon,
-  XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import { LuBrain } from 'react-icons/lu'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
@@ -140,6 +139,12 @@ export function ProjectSidebar({
   const prevProjectNameRef = useRef(project?.name ?? '')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const isMac = useMemo(() => {
+    if (typeof navigator === 'undefined') return false
+    return /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  }, [])
+  const modKey = isMac ? '⌘' : 'Ctrl+'
 
   useEffect(() => {
     if (getToken) {
@@ -543,33 +548,15 @@ export function ProjectSidebar({
           >
             <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
           </Link>
-          <div className="flex items-center gap-3">
-            {isSignedIn && (
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8',
-                  },
-                }}
-              />
-            )}
-            <button
-              className="hidden items-center justify-center rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-all duration-200 hover:bg-surface-chat/80 md:flex"
-              onClick={() => setIsOpen(!isOpen)}
-            >
-              {isOpen ? (
-                <XMarkIcon className="h-5 w-5" />
-              ) : (
-                <Bars3Icon className="h-5 w-5" />
-              )}
-            </button>
-            <button
-              className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-all duration-200 hover:bg-surface-chat/80 md:hidden"
-              onClick={() => setIsOpen(false)}
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
-          </div>
+          {isSignedIn && (
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: 'w-8 h-8',
+                },
+              }}
+            />
+          )}
         </div>
 
         {/* Main sidebar content */}
@@ -1111,6 +1098,37 @@ export function ProjectSidebar({
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Close button on the right edge - outside overflow-hidden container */}
+      <div
+        className="group fixed top-8 z-40 -translate-y-1/2 transition-all duration-200 ease-in-out"
+        style={{
+          left: isOpen
+            ? `min(85vw, ${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px)`
+            : `calc(min(85vw, ${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px) - 100%)`,
+        }}
+      >
+        <button
+          onClick={() => setIsOpen(false)}
+          className={cn(
+            'rounded-r-lg border border-l-0 p-2 transition-colors',
+            isDarkMode
+              ? 'border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-surface-chat hover:text-content-primary'
+              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-white hover:text-content-primary',
+          )}
+        >
+          <HiOutlineChevronDoubleLeft className="h-4 w-4" />
+        </button>
+        <span
+          className={cn(
+            'pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
+            !isOpen && 'hidden',
+          )}
+        >
+          Close sidebar{' '}
+          <span className="ml-1.5 text-content-muted">{modKey}.</span>
+        </span>
       </div>
 
       {/* Mobile overlay */}
