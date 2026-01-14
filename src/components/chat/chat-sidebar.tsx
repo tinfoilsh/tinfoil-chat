@@ -1229,6 +1229,7 @@ export function ChatSidebar({
       >
         <button
           onClick={() => setIsOpen(false)}
+          aria-label="Close sidebar"
           className={cn(
             'rounded-r-lg border border-l-0 p-2 transition-colors',
             isDarkMode
