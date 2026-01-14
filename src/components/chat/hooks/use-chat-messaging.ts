@@ -563,6 +563,16 @@ export function useChatMessaging({
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = currentChatIdRef.current
 
+      // Trigger project memory update in parallel with streaming (if in project mode)
+      // Uses updatedChat.projectId to avoid race condition if user switches projects during streaming
+      if (updatedChat.projectId && updatedMessages.length > 0) {
+        projectEvents.emit({
+          type: 'memory-update-needed',
+          projectId: updatedChat.projectId,
+          messages: updatedMessages,
+        })
+      }
+
       try {
         const model = models.find((m) => m.modelName === effectiveModel)
         if (!model) {
@@ -835,15 +845,6 @@ export function useChatMessaging({
                 chatId,
                 isLocalOnly: chatToSave.isLocalOnly,
               },
-            })
-          }
-
-          // Trigger project memory update if in project mode
-          if (isProjectMode && activeProject && finalMessages.length > 0) {
-            projectEvents.emit({
-              type: 'memory-update-needed',
-              projectId: activeProject.id,
-              messages: finalMessages,
             })
           }
         } else {

@@ -982,11 +982,6 @@ export function ProjectSidebar({
               <span className="flex items-center gap-2">
                 <LuBrain className="h-4 w-4" />
                 <span className="font-aeonik font-medium">Memory</span>
-                {!isLoading && (project?.memory?.length ?? 0) > 0 && (
-                  <span className="font-aeonik-fono text-xs text-content-muted">
-                    ({project?.memory?.length})
-                  </span>
-                )}
               </span>
               {memoryExpanded && !isLoading ? (
                 <ChevronUpIcon className="h-4 w-4" />
