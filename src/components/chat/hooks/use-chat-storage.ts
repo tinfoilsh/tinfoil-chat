@@ -1,7 +1,8 @@
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { chatEvents } from '@/services/storage/chat-events'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CONSTANTS } from '../constants'
 import type { Chat } from '../types'
 import {
@@ -18,6 +19,7 @@ interface UseChatStorageProps {
   storeHistory: boolean
   scrollToBottom?: () => void
   beforeSwitchChat?: () => Promise<void>
+  initialChatId?: string | null
 }
 
 interface UseChatStorageReturn {
@@ -38,9 +40,11 @@ interface UseChatStorageReturn {
 export function useChatStorage({
   storeHistory,
   beforeSwitchChat,
+  initialChatId,
 }: UseChatStorageProps): UseChatStorageReturn {
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, getToken } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const initialChatLoadedRef = useRef(false)
 
   // Initialize with blank chats for both modes
   const [chats, setChats] = useState<Chat[]>(() => {
@@ -95,6 +99,11 @@ export function useChatStorage({
 
       // Update current chat if needed
       setCurrentChat((prev) => {
+        // Don't interfere if we're in the middle of switching chats
+        if (isSwitchingChatRef.current) {
+          return prev
+        }
+
         // Preserve blank chats as-is
         if (prev.isBlankChat) {
           return prev
@@ -180,9 +189,11 @@ export function useChatStorage({
 
         setChats(finalChats)
 
-        // Preserve current chat if it has messages (e.g., from URL hash)
+        // Preserve current chat if it has messages (e.g., from URL hash) or if we're switching
         setCurrentChat((prev) =>
-          prev.messages.length > 0 ? prev : finalChats[0],
+          isSwitchingChatRef.current || prev.messages.length > 0
+            ? prev
+            : finalChats[0],
         )
       } catch (error) {
         logError('Failed to load initial chats', error, {
@@ -280,6 +291,9 @@ export function useChatStorage({
     [storeHistory, currentChat?.id, persistenceManager],
   )
 
+  // Track when we're in the middle of switching chats to prevent reloadChats from interfering
+  const isSwitchingChatRef = useRef(false)
+
   // Switch to a different chat
   const switchChat = useCallback(
     async (chat: Chat) => {
@@ -288,12 +302,14 @@ export function useChatStorage({
         await beforeSwitchChat()
       }
 
+      isSwitchingChatRef.current = true
       setCurrentChat(chat)
       setIsInitialLoad(true)
 
       // Brief delay to show loading state
       setTimeout(() => {
         setIsInitialLoad(false)
+        isSwitchingChatRef.current = false
       }, CONSTANTS.CHAT_INIT_DELAY_MS)
     },
     [beforeSwitchChat],
@@ -322,6 +338,87 @@ export function useChatStorage({
     },
     [chats, switchChat],
   )
+
+  // Load a specific chat by ID from URL
+  const loadChatById = useCallback(
+    async (chatId: string) => {
+      // First check if chat already exists in local state
+      const existingChat = chats.find((c) => c.id === chatId)
+      if (existingChat) {
+        switchChat(existingChat)
+        return
+      }
+
+      // Chat not in local state, try to fetch from cloud
+      if (!isSignedIn || !getToken) {
+        logError('Cannot load chat: user not signed in', null, {
+          component: 'useChatStorage',
+          metadata: { chatId },
+        })
+        return
+      }
+
+      try {
+        cloudStorage.setTokenGetter(getToken)
+        const downloadedChat = await cloudStorage.downloadChat(chatId)
+
+        if (!downloadedChat) {
+          logError('Chat not found', null, {
+            component: 'useChatStorage',
+            metadata: { chatId },
+          })
+          return
+        }
+
+        // Convert StoredChat to Chat type
+        const chat: Chat = {
+          id: downloadedChat.id,
+          title: downloadedChat.title,
+          messages: downloadedChat.messages,
+          createdAt: new Date(downloadedChat.createdAt),
+          syncedAt: downloadedChat.syncedAt,
+          locallyModified: downloadedChat.locallyModified,
+          decryptionFailed: downloadedChat.decryptionFailed,
+          projectId: downloadedChat.projectId,
+        }
+
+        // Add to chats list and select it
+        setChats((prev) => {
+          // Don't add if it already exists
+          if (prev.some((c) => c.id === chatId)) {
+            return prev
+          }
+          return sortChats([...prev, chat])
+        })
+
+        setCurrentChat(chat)
+
+        logInfo('Loaded chat from URL', {
+          component: 'useChatStorage',
+          metadata: { chatId, decryptionFailed: chat.decryptionFailed },
+        })
+      } catch (error) {
+        logError('Failed to load chat by ID', error, {
+          component: 'useChatStorage',
+          metadata: { chatId },
+        })
+      }
+    },
+    [chats, isSignedIn, getToken, switchChat],
+  )
+
+  // Load initial chat from URL if provided
+  useEffect(() => {
+    if (
+      initialChatId &&
+      isSignedIn &&
+      !initialChatLoadedRef.current &&
+      !isInitialLoad
+    ) {
+      initialChatLoadedRef.current = true
+      loadChatById(initialChatId)
+    }
+  }, [initialChatId, isSignedIn, isInitialLoad, loadChatById])
 
   return {
     chats,

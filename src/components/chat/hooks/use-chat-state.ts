@@ -73,6 +73,7 @@ export function useChatState({
   subscriptionLoading = false,
   scrollToBottom,
   reasoningEffort,
+  initialChatId,
 }: {
   systemPrompt: string
   rules?: string
@@ -82,6 +83,7 @@ export function useChatState({
   subscriptionLoading?: boolean
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
+  initialChatId?: string | null
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -120,6 +122,7 @@ export function useChatState({
         await cancelGenerationRef.current()
       }
     },
+    initialChatId,
   })
 
   // Create ref to store cancelGeneration function
