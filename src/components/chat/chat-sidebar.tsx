@@ -652,16 +652,29 @@ export function ChatSidebar({
           >
             <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
           </Link>
-          {/* User button for signed-in users */}
-          {isSignedIn && (
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: 'w-8 h-8',
-                },
-              }}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {/* Encryption key button */}
+            {isSignedIn && cloudSyncEnabled && (
+              <button
+                type="button"
+                onClick={onEncryptionKeyClick}
+                className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
+                title="Encryption key"
+              >
+                <KeyIcon className="h-5 w-5" />
+              </button>
+            )}
+            {/* User button for signed-in users */}
+            {isSignedIn && (
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8',
+                  },
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Main sidebar content */}
@@ -805,26 +818,6 @@ export function ChatSidebar({
                 <span className="truncate font-aeonik font-medium">Chats</span>
               </span>
               <div className="flex items-center gap-1">
-                {onEncryptionKeyClick &&
-                  isSignedIn &&
-                  cloudSyncEnabled &&
-                  activeTab === 'cloud' && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onEncryptionKeyClick()
-                      }}
-                      className={`rounded p-1 transition-all duration-200 ${
-                        isDarkMode
-                          ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
-                          : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                      }`}
-                      title="Manage encryption key"
-                    >
-                      <KeyIcon className="h-4 w-4" />
-                    </button>
-                  )}
                 {chats.length > 0 && (
                   <button
                     type="button"

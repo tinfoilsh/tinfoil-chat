@@ -239,7 +239,9 @@ ${encryptionKey.replace('key_', '')}
                 >
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <KeyIcon className="h-4 w-4 text-content-primary sm:h-5 sm:w-5" />
-                    <span className="text-sm sm:text-base">Encryption Key</span>
+                    <span className="text-sm sm:text-base">
+                      Personal Encryption Key
+                    </span>
                   </div>
                   <button
                     onClick={onClose}
@@ -254,7 +256,7 @@ ${encryptionKey.replace('key_', '')}
                   {/* Current Key Section */}
                   <div className="mb-4 sm:mb-6">
                     <h4 className="mb-1.5 text-xs font-medium text-content-secondary sm:mb-2 sm:text-sm">
-                      Your Current Key
+                      Current Encryption Key
                     </h4>
                     <div
                       className="rounded-lg border border-border-subtle bg-surface-chat p-2 sm:p-3"
@@ -381,7 +383,7 @@ ${encryptionKey.replace('key_', '')}
                           type="password"
                           value={inputKey}
                           onChange={(e) => setInputKey(e.target.value)}
-                          placeholder="Enter encryption key (e.g., key_abc123...)"
+                          placeholder="Enter new key (e.g., key_abc123...)"
                           autoComplete="off"
                           aria-label="Encryption key input"
                           aria-describedby="sync-key-description"
