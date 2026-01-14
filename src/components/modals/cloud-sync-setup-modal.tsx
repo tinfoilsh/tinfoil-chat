@@ -516,7 +516,7 @@ ${generatedKey.replace('key_', '')}
               isDragging ? 'border-brand-accent-light' : 'border-border-subtle'
             }`}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isProcessing) {
                 handleRestoreKey()
               }
             }}

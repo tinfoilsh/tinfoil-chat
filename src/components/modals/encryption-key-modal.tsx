@@ -394,7 +394,7 @@ ${encryptionKey.replace('key_', '')}
                               : 'border-border-subtle'
                           }`}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
+                            if (e.key === 'Enter' && !isUpdating) {
                               handleUpdateKey()
                             }
                           }}
