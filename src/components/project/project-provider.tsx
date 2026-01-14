@@ -48,6 +48,12 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       projectStorage.setTokenGetter(getToken)
     } else if (!isSignedIn) {
       initializingRef.current = false
+      // Clear all user-specific state on logout to prevent data leaking across sessions
+      setActiveProject(null)
+      setProjectDocuments([])
+      setError(null)
+      setLoading(false)
+      setLoadingProject(null)
     }
   }, [isSignedIn, getToken])
 

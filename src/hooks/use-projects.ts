@@ -32,6 +32,11 @@ export function useProjects(
     string | undefined
   >()
   const initializedRef = useRef(false)
+  const isSignedInRef = useRef(isSignedIn)
+
+  useEffect(() => {
+    isSignedInRef.current = isSignedIn
+  }, [isSignedIn])
 
   useEffect(() => {
     if (isSignedIn && getToken) {
@@ -105,6 +110,11 @@ export function useProjects(
         }),
       )
 
+      // Re-check auth state after async operations - user may have logged out
+      if (!isSignedInRef.current) {
+        return
+      }
+
       setProjects(decryptedProjects)
       setHasMore(response.hasMore)
       setContinuationToken(response.nextContinuationToken)
@@ -118,6 +128,10 @@ export function useProjects(
         },
       })
     } catch (err) {
+      // Don't set error state if user logged out during the request
+      if (!isSignedInRef.current) {
+        return
+      }
       const message =
         err instanceof Error ? err.message : 'Failed to load projects'
       setError(message)
@@ -194,10 +208,19 @@ export function useProjects(
         }),
       )
 
+      // Re-check auth state after async operations - user may have logged out
+      if (!isSignedInRef.current) {
+        return
+      }
+
       setProjects((prev) => [...prev, ...decryptedProjects])
       setHasMore(response.hasMore)
       setContinuationToken(response.nextContinuationToken)
     } catch (err) {
+      // Don't set error state if user logged out during the request
+      if (!isSignedInRef.current) {
+        return
+      }
       const message =
         err instanceof Error ? err.message : 'Failed to load more projects'
       setError(message)
