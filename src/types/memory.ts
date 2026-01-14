@@ -42,30 +42,47 @@ export const FACT_OPERATIONS_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: {
-          action: { type: 'string', enum: ['add', 'update', 'delete'] },
-          fact: {
-            type: 'object',
+        oneOf: [
+          {
             properties: {
-              fact: { type: 'string' },
-              date: { type: 'string' },
-              category: { type: 'string' },
-              confidence: { type: 'number' },
+              action: { type: 'string', const: 'add' },
+              fact: {
+                type: 'object',
+                properties: {
+                  fact: { type: 'string' },
+                  date: { type: 'string' },
+                  category: { type: 'string' },
+                  confidence: { type: 'number' },
+                },
+                required: ['fact', 'date', 'category', 'confidence'],
+              },
             },
-            required: ['fact', 'date', 'category', 'confidence'],
+            required: ['action', 'fact'],
           },
-          factId: { type: 'string' },
-          updates: {
-            type: 'object',
+          {
             properties: {
-              fact: { type: 'string' },
-              category: { type: 'string' },
-              confidence: { type: 'number' },
+              action: { type: 'string', const: 'update' },
+              factId: { type: 'string' },
+              updates: {
+                type: 'object',
+                properties: {
+                  fact: { type: 'string' },
+                  category: { type: 'string' },
+                  confidence: { type: 'number' },
+                },
+              },
             },
+            required: ['action', 'factId', 'updates'],
           },
-          reason: { type: 'string' },
-        },
-        required: ['action'],
+          {
+            properties: {
+              action: { type: 'string', const: 'delete' },
+              factId: { type: 'string' },
+              reason: { type: 'string' },
+            },
+            required: ['action', 'factId', 'reason'],
+          },
+        ],
       },
     },
   },
