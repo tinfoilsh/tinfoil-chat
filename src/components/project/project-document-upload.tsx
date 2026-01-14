@@ -92,6 +92,7 @@ export function ProjectDocumentUpload({
       />
 
       <button
+        type="button"
         onClick={handleClick}
         disabled={isUploading}
         className={cn(
