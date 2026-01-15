@@ -176,6 +176,13 @@ export class IndexedDBStorage {
             existingChat.projectId !== (chat as StoredChat).projectId
           : false
 
+        // Never mark chats that failed to decrypt as locally modified.
+        // These are placeholder chats with empty messages that should NOT be uploaded.
+        // If we set locallyModified: true, they would overwrite real encrypted data on the server.
+        const isFailedDecryption =
+          (chat as StoredChat).decryptionFailed === true ||
+          !!(chat as StoredChat).encryptedData
+
         const storedChat: StoredChat = {
           ...chat,
           messages: messagesForStorage as any,
@@ -185,9 +192,12 @@ export class IndexedDBStorage {
           // This ensures modified chats are always picked up for sync even if they were
           // loaded with locallyModified: false from a previous sync
           // For new chats: use provided value or default to true
-          locallyModified: existingChat
-            ? hasContentChanges || existingChat.locallyModified === true
-            : ((chat as StoredChat).locallyModified ?? true),
+          // IMPORTANT: Never mark failed-to-decrypt chats as modified - they are placeholders
+          locallyModified: isFailedDecryption
+            ? false
+            : existingChat
+              ? hasContentChanges || existingChat.locallyModified === true
+              : ((chat as StoredChat).locallyModified ?? true),
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
