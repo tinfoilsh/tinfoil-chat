@@ -1093,8 +1093,17 @@ export function ChatSidebar({
                       ) : (
                         <>
                           {projects.map((project) => (
-                            <div
+                            <button
                               key={project.id}
+                              onClick={async () => {
+                                if (
+                                  onEnterProject &&
+                                  !project.decryptionFailed
+                                ) {
+                                  await onEnterProject(project.id, project.name)
+                                }
+                              }}
+                              disabled={project.decryptionFailed}
                               className={cn(
                                 'group flex w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:border-border-subtle',
                                 project.decryptionFailed
@@ -1104,50 +1113,34 @@ export function ChatSidebar({
                                     : 'text-content-secondary hover:bg-surface-sidebar',
                               )}
                             >
-                              <button
-                                onClick={async () => {
-                                  if (
-                                    onEnterProject &&
-                                    !project.decryptionFailed
-                                  ) {
-                                    await onEnterProject(
-                                      project.id,
-                                      project.name,
-                                    )
-                                  }
-                                }}
-                                className="flex min-w-0 flex-1 items-start gap-2 text-left"
-                                disabled={project.decryptionFailed}
-                              >
-                                {project.decryptionFailed ? (
-                                  <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
-                                ) : (
-                                  <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
-                                )}
-                                <div className="flex min-w-0 flex-1 flex-col">
-                                  <span
-                                    className={cn(
-                                      'truncate leading-5',
-                                      project.decryptionFailed &&
-                                        'text-orange-500',
-                                    )}
-                                  >
-                                    {project.name}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      'text-xs',
-                                      project.decryptionFailed
-                                        ? 'text-red-500'
-                                        : 'text-content-muted',
-                                    )}
-                                  >
-                                    {project.decryptionFailed
-                                      ? 'Failed to decrypt: wrong key'
-                                      : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
-                                  </span>
-                                </div>
-                              </button>
+                              {project.decryptionFailed ? (
+                                <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
+                              ) : (
+                                <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                              )}
+                              <div className="flex min-w-0 flex-1 flex-col text-left">
+                                <span
+                                  className={cn(
+                                    'truncate leading-5',
+                                    project.decryptionFailed &&
+                                      'text-orange-500',
+                                  )}
+                                >
+                                  {project.name}
+                                </span>
+                                <span
+                                  className={cn(
+                                    'text-xs',
+                                    project.decryptionFailed
+                                      ? 'text-red-500'
+                                      : 'text-content-muted',
+                                  )}
+                                >
+                                  {project.decryptionFailed
+                                    ? 'Failed to decrypt: wrong key'
+                                    : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
+                                </span>
+                              </div>
                               {project.decryptionFailed && (
                                 <button
                                   onClick={async (e) => {
@@ -1179,7 +1172,7 @@ export function ChatSidebar({
                                   )}
                                 </button>
                               )}
-                            </div>
+                            </button>
                           ))}
 
                           {/* Load more button */}
