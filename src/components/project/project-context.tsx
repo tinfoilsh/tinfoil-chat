@@ -30,7 +30,10 @@ export interface ProjectContextValue {
   error: string | null
   uploadingFiles: UploadingFile[]
 
-  enterProjectMode: (projectId: string, projectName?: string) => Promise<void>
+  enterProjectMode: (
+    projectId: string,
+    projectName?: string,
+  ) => Promise<boolean>
   exitProjectMode: () => void
   createProject: (data: CreateProjectData) => Promise<Project>
   updateProject: (id: string, data: UpdateProjectData) => Promise<void>

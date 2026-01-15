@@ -55,6 +55,7 @@ export function ProjectProvider({
       projectStorage.setTokenGetter(getToken)
     } else if (!isSignedIn) {
       initializingRef.current = false
+      initialProjectLoadedRef.current = false
       // Clear all user-specific state on logout to prevent data leaking across sessions
       setActiveProject(null)
       setProjectDocuments([])
@@ -128,7 +129,7 @@ export function ProjectProvider({
   }, [activeProject, processMessages])
 
   const enterProjectMode = useCallback(
-    async (projectId: string, projectName?: string) => {
+    async (projectId: string, projectName?: string): Promise<boolean> => {
       setLoading(true)
       setError(null)
       setUploadingFiles([])
@@ -188,6 +189,7 @@ export function ProjectProvider({
           action: 'enterProjectMode',
           metadata: { projectId, documentCount: documents.length },
         })
+        return true
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Failed to load project'
@@ -197,6 +199,7 @@ export function ProjectProvider({
           action: 'enterProjectMode',
           metadata: { projectId },
         })
+        return false
       } finally {
         setLoading(false)
         setLoadingProject(null)
@@ -214,7 +217,11 @@ export function ProjectProvider({
       !activeProject
     ) {
       initialProjectLoadedRef.current = true
-      enterProjectMode(initialProjectId)
+      enterProjectMode(initialProjectId).then((success) => {
+        if (!success) {
+          initialProjectLoadedRef.current = false
+        }
+      })
     }
   }, [initialProjectId, isSignedIn, activeProject, enterProjectMode])
 
