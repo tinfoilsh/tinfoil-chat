@@ -297,6 +297,16 @@ export function useChatStorage({
 
   // Track when we're in the middle of switching chats to prevent reloadChats from interfering
   const isSwitchingChatRef = useRef(false)
+  const switchChatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup switch chat timer on unmount
+  useEffect(() => {
+    return () => {
+      if (switchChatTimerRef.current) {
+        clearTimeout(switchChatTimerRef.current)
+      }
+    }
+  }, [])
 
   // Switch to a different chat
   const switchChat = useCallback(
@@ -306,14 +316,20 @@ export function useChatStorage({
         await beforeSwitchChat()
       }
 
+      // Clear any pending timer from a previous switch
+      if (switchChatTimerRef.current) {
+        clearTimeout(switchChatTimerRef.current)
+      }
+
       isSwitchingChatRef.current = true
       setCurrentChat(chat)
       setIsInitialLoad(true)
 
       // Brief delay to show loading state
-      setTimeout(() => {
+      switchChatTimerRef.current = setTimeout(() => {
         setIsInitialLoad(false)
         isSwitchingChatRef.current = false
+        switchChatTimerRef.current = null
       }, CONSTANTS.CHAT_INIT_DELAY_MS)
     },
     [beforeSwitchChat],
