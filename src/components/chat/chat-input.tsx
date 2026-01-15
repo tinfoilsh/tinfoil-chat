@@ -593,7 +593,12 @@ export function ChatInput({
                   processedDocuments &&
                   processedDocuments.some((doc) => !doc.isUploading)
                 const hasInput = input.trim().length > 0
-                if (loadingState === 'idle' && (hasInput || hasDocuments)) {
+                if (
+                  loadingState === 'idle' &&
+                  !isTranscribing &&
+                  !isConverting &&
+                  (hasInput || hasDocuments)
+                ) {
                   handleSubmit(e)
                 }
               } else if (e.key === 'Enter' && e.shiftKey) {
