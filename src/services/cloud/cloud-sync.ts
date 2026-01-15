@@ -597,13 +597,17 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Filter out blank chats, streaming chats, and local-only chats
+      // Filter out blank chats, streaming chats, local-only chats, and failed-decryption placeholders
       // Note: temp ID chats are allowed - uploadChat will generate server IDs for them
+      // IMPORTANT: Never upload chats that failed to decrypt - they are placeholders with empty
+      // messages that would overwrite real encrypted data on the server
       const chatsToSync = unsyncedChats.filter(
         (chat) =>
           !(chat as any).isBlankChat &&
           !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly,
+          !chat.isLocalOnly &&
+          !chat.decryptionFailed &&
+          !chat.encryptedData,
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
