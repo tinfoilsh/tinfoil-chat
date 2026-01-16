@@ -142,6 +142,8 @@ export function ProjectSidebar({
   const [animationFromName, setAnimationFromName] = useState('')
   const [animationToName, setAnimationToName] = useState('')
   const prevProjectNameRef = useRef(project?.name ?? '')
+  // Track manual edits to skip animation when the project prop updates
+  const skipNextAnimationRef = useRef(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -164,10 +166,12 @@ export function ProjectSidebar({
       setEditedInstructions(project.systemInstructions)
       setEditingProjectName(project.name)
 
-      if (
+      const shouldAnimate =
         prevProjectNameRef.current !== project.name &&
-        prevProjectNameRef.current !== ''
-      ) {
+        prevProjectNameRef.current !== '' &&
+        !skipNextAnimationRef.current
+
+      if (shouldAnimate) {
         setAnimationFromName(prevProjectNameRef.current)
         setAnimationToName(project.name)
         setIsAnimatingName(true)
@@ -175,6 +179,7 @@ export function ProjectSidebar({
         setDisplayProjectName(project.name)
         prevProjectNameRef.current = project.name
       }
+      skipNextAnimationRef.current = false
     }
   }, [project])
 
@@ -282,16 +287,17 @@ export function ProjectSidebar({
     if (!project || isSaving) return
     if (editingProjectName.trim() && editingProjectName !== project.name) {
       setIsSaving(true)
-      // Update prevProjectNameRef before saving to skip animation on manual edit
       const newName = editingProjectName.trim()
-      prevProjectNameRef.current = newName
-      setDisplayProjectName(newName)
+      // Skip animation when the project prop updates after save
+      skipNextAnimationRef.current = true
       try {
         await updateProject(project.id, {
           name: newName,
         })
         setEditedName(newName)
       } catch {
+        // Reset the skip flag on failure since no update will occur
+        skipNextAnimationRef.current = false
         toast({
           title: 'Failed to save project name',
           description: 'The project name could not be saved. Please try again.',
