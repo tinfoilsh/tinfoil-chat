@@ -23,6 +23,15 @@ function isTableSeparator(line: string): boolean {
   return /^\|[\s\-:|]+\|$/.test(trimmed) && trimmed.includes('-')
 }
 
+// Check if a line looks like a table header (| col1 | col2 | col3 |)
+function looksLikeTableHeader(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('|')) return false
+  // A header should have at least 2 pipes (| col |) and contain text
+  const pipeCount = (trimmed.match(/\|/g) || []).length
+  return pipeCount >= 2 && /\|[^|]+\|/.test(trimmed)
+}
+
 // Extract table boundaries from content
 // Returns { tableStart, tableEnd, isComplete } where isComplete means we've seen content after the table
 // A valid table needs: header row, separator row, and at least one data row
@@ -37,6 +46,7 @@ function findTableBoundaries(
   let inTable = false
   let tableRowCount = 0
   let hasSeparator = false
+  let firstTableLine = ''
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -49,6 +59,7 @@ function findTableBoundaries(
       tableStart = charIndex
       tableRowCount = 1
       hasSeparator = isTableSeparator(line)
+      firstTableLine = line
     } else if (inTable && startsWithPipe) {
       // Continuing table
       tableRowCount++
@@ -67,6 +78,7 @@ function findTableBoundaries(
         tableStart = -1
         tableRowCount = 0
         hasSeparator = false
+        firstTableLine = ''
       }
     }
 
@@ -82,6 +94,13 @@ function findTableBoundaries(
   // If we have a potential table starting with at least header + separator,
   // show the placeholder during streaming
   if (inTable && hasSeparator && tableRowCount >= 2) {
+    tableEnd = content.length
+    return { tableStart, tableEnd, isComplete: false }
+  }
+
+  // If we have just a header row that looks like a table, show placeholder early
+  // This prevents the header from briefly showing before the separator arrives
+  if (inTable && tableRowCount === 1 && looksLikeTableHeader(firstTableLine)) {
     tableEnd = content.length
     return { tableStart, tableEnd, isComplete: false }
   }
