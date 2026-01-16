@@ -1,31 +1,25 @@
-import { motion } from 'framer-motion'
 import { memo } from 'react'
 
 export const LoadingDots = memo(function LoadingDots({
   isThinking = false,
-  isDarkMode = false,
 }: {
   isThinking?: boolean
-  isDarkMode?: boolean
 }) {
-  void isDarkMode
+  const dotColor = isThinking ? 'currentColor' : 'hsl(var(--content-secondary))'
+
   return (
-    <div className="flex items-center gap-1.5 px-1">
-      {[0, 0.2, 0.4].map((delay, i) => (
-        <motion.div
-          key={i}
-          className={`h-1 w-1 rounded-full ${
-            isThinking ? 'bg-current' : 'bg-content-secondary'
-          }`}
-          animate={{ scale: [0.5, 1, 0.5], opacity: [0.25, 1, 0.25] }}
-          transition={{
-            duration: 1,
-            delay,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        />
-      ))}
-    </div>
+    <div
+      style={
+        {
+          height: '5px',
+          aspectRatio: '5',
+          '--_g': `no-repeat radial-gradient(farthest-side,${dotColor} 94%,transparent)`,
+          background: 'var(--_g),var(--_g),var(--_g),var(--_g)',
+          backgroundSize: '20% 100%',
+          animation:
+            'loading-dots-position .75s infinite alternate, loading-dots-flip 1.5s infinite alternate',
+        } as React.CSSProperties
+      }
+    />
   )
 })

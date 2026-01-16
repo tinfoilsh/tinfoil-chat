@@ -281,7 +281,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Thinking</span>
-                  <LoadingDots isThinking={true} isDarkMode={isDarkMode} />
+                  <LoadingDots isThinking={true} />
                 </div>
               )}
             </div>

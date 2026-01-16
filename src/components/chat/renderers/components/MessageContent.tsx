@@ -250,9 +250,7 @@ export const MessageContent = memo(function MessageContent({
       >
         {sanitizedContent}
       </ReactMarkdown>
-      {showMarkdownTablePlaceholder && (
-        <GeneratingTable isDarkMode={isDarkMode} />
-      )}
+      {showMarkdownTablePlaceholder && <GeneratingTable />}
     </div>
   )
 })
