@@ -5,8 +5,9 @@ import {
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { GeneratingTable } from './GeneratingTable'
 import { useMathPlugins } from './use-math-plugins'
 
 interface MessageContentProps {
@@ -14,6 +15,32 @@ interface MessageContentProps {
   isDarkMode: boolean
   isUser?: boolean
   isStreaming?: boolean
+}
+
+// Check if content has an incomplete markdown code block with a table inside
+function hasStreamingMarkdownTableCodeBlock(content: string): boolean {
+  // Look for ```markdown or ```md that's incomplete (no closing ```)
+  const markdownBlockMatch = content.match(/```(?:markdown|md)\n([\s\S]*)$/)
+  if (!markdownBlockMatch) return false
+
+  const blockContent = markdownBlockMatch[1]
+  // Check if block is incomplete (no closing ```)
+  if (blockContent.includes('```')) return false
+
+  // Check if there's a table inside (header + separator)
+  const lines = blockContent.split('\n')
+  let hasHeader = false
+  let hasSeparator = false
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      hasHeader = true
+    }
+    if (/^\|[\s\-:|]+\|$/.test(trimmed) && trimmed.includes('-')) {
+      hasSeparator = true
+    }
+  }
+  return hasHeader && hasSeparator
 }
 
 export const MessageContent = memo(function MessageContent({
@@ -26,6 +53,12 @@ export const MessageContent = memo(function MessageContent({
   const preprocessed = preprocessMarkdown(content)
   const processedContent = processLatexTags(preprocessed)
   const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
+
+  // Detect if we're streaming a markdown code block with a table
+  const showMarkdownTablePlaceholder = useMemo(() => {
+    if (!isStreaming) return false
+    return hasStreamingMarkdownTableCodeBlock(content)
+  }, [isStreaming, content])
 
   // For user messages, render as plain text without markdown processing
   if (isUser) {
@@ -84,6 +117,15 @@ export const MessageContent = memo(function MessageContent({
               const match = /language-([\w+#-]+)/.exec(className)
               const language = match ? match[1] : 'text'
               const code = String(codeProps?.children || '').replace(/\n$/, '')
+
+              // If this is a markdown code block with a table during streaming,
+              // don't render it - the placeholder is rendered outside ReactMarkdown
+              if (
+                showMarkdownTablePlaceholder &&
+                (language === 'markdown' || language === 'md')
+              ) {
+                return null
+              }
 
               return (
                 <CodeBlock
@@ -208,6 +250,9 @@ export const MessageContent = memo(function MessageContent({
       >
         {sanitizedContent}
       </ReactMarkdown>
+      {showMarkdownTablePlaceholder && (
+        <GeneratingTable isDarkMode={isDarkMode} />
+      )}
     </div>
   )
 })

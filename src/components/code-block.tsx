@@ -8,7 +8,6 @@ import {
   oneDark,
   oneLight,
 } from 'react-syntax-highlighter/dist/cjs/styles/prism'
-import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { CONSTANTS } from './chat/constants'
 
@@ -345,7 +344,31 @@ const MarkdownPreview = ({
   contentRef: React.RefObject<HTMLDivElement>
 }) => (
   <div ref={contentRef} className="prose prose-sm max-w-none dark:prose-invert">
-    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        table: ({ children, ...props }) => (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" {...props}>
+              {children}
+            </table>
+          </div>
+        ),
+        th: ({ children, ...props }) => (
+          <th
+            className="bg-surface-secondary border border-border-subtle px-3 py-2 text-left"
+            {...props}
+          >
+            {children}
+          </th>
+        ),
+        td: ({ children, ...props }) => (
+          <td className="border border-border-subtle px-3 py-2" {...props}>
+            {children}
+          </td>
+        ),
+      }}
+    >
       {code}
     </ReactMarkdown>
   </div>

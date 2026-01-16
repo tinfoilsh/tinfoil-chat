@@ -56,6 +56,7 @@ interface UseChatMessagingReturn {
   inputRef: React.RefObject<HTMLTextAreaElement>
   isThinking: boolean
   isWaitingForResponse: boolean
+  isStreaming: boolean
   setInput: (input: string) => void
   handleSubmit: (e: React.FormEvent) => void
   handleQuery: (
@@ -113,6 +114,7 @@ export function useChatMessaging({
     useState<AbortController | null>(null)
   const [isThinking, setIsThinking] = useState(false)
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const currentChatIdRef = useRef<string>(currentChat?.id || '')
@@ -287,6 +289,7 @@ export function useChatMessaging({
       setAbortController(controller)
       setLoadingState('loading')
       setIsWaitingForResponse(true)
+      setIsStreaming(true)
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
@@ -669,6 +672,7 @@ export function useChatMessaging({
           thinkingStartTimeRef,
           setIsThinking,
           setIsWaitingForResponse,
+          setIsStreaming,
           updateChatWithHistoryCheck,
           setChats,
           setCurrentChat,
@@ -856,6 +860,7 @@ export function useChatMessaging({
       } catch (error) {
         // Ensure UI loading flags are reset on pre-stream errors
         setIsWaitingForResponse(false)
+        setIsStreaming(false)
         setLoadingState('idle')
         setIsThinking(false)
         isStreamingRef.current = false
@@ -976,6 +981,7 @@ export function useChatMessaging({
     inputRef,
     isThinking,
     isWaitingForResponse,
+    isStreaming,
     setInput,
     handleSubmit,
     handleQuery,

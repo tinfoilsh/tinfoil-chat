@@ -24,6 +24,7 @@ export interface StreamingContext {
   thinkingStartTimeRef: React.MutableRefObject<number | null>
   setIsThinking: (val: boolean) => void
   setIsWaitingForResponse: (val: boolean) => void
+  setIsStreaming: (val: boolean) => void
   updateChatWithHistoryCheck: (
     setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
     chatSnapshot: Chat,
@@ -577,6 +578,7 @@ export async function processStreamingResponse(
   } finally {
     ctx.setLoadingState('idle')
     ctx.isStreamingRef.current = false
+    ctx.setIsStreaming(false)
     // End streaming for both the original ID and current ID (in case ID changed)
     if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
     if (

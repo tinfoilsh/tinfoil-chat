@@ -493,6 +493,7 @@ export function ChatInterface({
     verificationComplete,
     verificationSuccess,
     isWaitingForResponse,
+    isStreaming,
     selectedModel,
     hasValidatedModel,
     expandedLabel,
@@ -1815,6 +1816,7 @@ export function ChatInterface({
                 openAndExpandVerifier={modifiedOpenAndExpandVerifier}
                 setIsSidebarOpen={setIsSidebarOpen}
                 isWaitingForResponse={isWaitingForResponse}
+                isStreamingResponse={isStreaming}
                 isPremium={isPremium}
                 models={models}
                 subscriptionLoading={subscriptionLoading}
