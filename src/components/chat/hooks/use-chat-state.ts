@@ -25,6 +25,7 @@ interface UseChatStateReturn {
   verificationComplete: boolean
   verificationSuccess: boolean
   isWaitingForResponse: boolean
+  isStreaming: boolean
   selectedModel: AIModel
   hasValidatedModel: boolean
   expandedLabel: LabelType
@@ -165,6 +166,7 @@ export function useChatState({
     inputRef,
     isThinking,
     isWaitingForResponse,
+    isStreaming,
     setInput,
     handleSubmit,
     handleQuery,
@@ -271,6 +273,7 @@ export function useChatState({
     verificationComplete,
     verificationSuccess,
     isWaitingForResponse,
+    isStreaming,
     selectedModel,
     hasValidatedModel,
     expandedLabel,

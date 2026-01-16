@@ -24,6 +24,7 @@ type ChatMessagesProps = {
   openAndExpandVerifier: () => void
   setIsSidebarOpen?: (isOpen: boolean) => void
   isWaitingForResponse?: boolean
+  isStreamingResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
@@ -262,6 +263,7 @@ export function ChatMessages({
   openAndExpandVerifier,
   setIsSidebarOpen,
   isWaitingForResponse = false,
+  isStreamingResponse = false,
   isPremium,
   models,
   subscriptionLoading,
@@ -460,7 +462,7 @@ export function ChatMessages({
           model={currentModel}
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
-          isStreaming={i === liveMessages.length - 1 && isWaitingForResponse}
+          isStreaming={i === liveMessages.length - 1 && isStreamingResponse}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
           titleModelName={titleModelName}
