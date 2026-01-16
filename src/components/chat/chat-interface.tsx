@@ -179,6 +179,9 @@ export function ChatInterface({
   const { toast } = useToast()
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
   const { user } = useUser()
+
+  // Track whether we've loaded the initial chat from URL (to prevent URL flickering)
+  const initialUrlChatLoadedRef = useRef(false)
   const { chat_subscription_active, isLoading: subscriptionLoading } =
     useSubscriptionStatus()
 
@@ -545,6 +548,36 @@ export function ChatInterface({
     // Don't clear URL when showing decryption failed screen
     if (initialChatDecryptionFailed) return
 
+    // Track when we've successfully loaded the initial chat from URL
+    if (initialChatId && currentChat.id === initialChatId) {
+      initialUrlChatLoadedRef.current = true
+    }
+
+    // In local-only mode, a blank "new chat" should live at `/` (not `/chat/local`)
+    // so it never depends on host routing for that path.
+    if (currentChat.isLocalOnly && currentChat.isBlankChat) {
+      clearUrl()
+      return
+    }
+
+    // Local-only chats get /chat/local/[chatId] URLs (regardless of sign-in status)
+    if (currentChat.isLocalOnly) {
+      updateUrlForLocalChat(currentChat.id)
+      return
+    }
+
+    // For local chat URLs that are still loading, don't clear the URL yet
+    // (the chat will be loaded from IndexedDB and set as currentChat)
+    // Only apply this guard if we haven't yet loaded the initial chat from URL
+    if (
+      isLocalChatUrl &&
+      currentChat.isBlankChat &&
+      initialChatId &&
+      !initialUrlChatLoadedRef.current
+    ) {
+      return
+    }
+
     // Non-signed-in users don't get URLs (their chats are temporary sessionStorage)
     if (!isSignedIn) {
       clearUrl()
@@ -558,12 +591,6 @@ export function ChatInterface({
       } else {
         clearUrl()
       }
-      return
-    }
-
-    // Local-only chats get /chat/local/[chatId] URLs
-    if (currentChat.isLocalOnly) {
-      updateUrlForLocalChat(currentChat.id)
       return
     }
 
@@ -588,6 +615,8 @@ export function ChatInterface({
     isInitialLoad,
     initialChatDecryptionFailed,
     isSignedIn,
+    isLocalChatUrl,
+    initialChatId,
     updateUrlForChat,
     updateUrlForLocalChat,
     updateUrlForProject,
