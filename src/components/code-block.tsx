@@ -347,23 +347,23 @@ const MarkdownPreview = ({
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        table: ({ children, ...props }) => (
+        table: ({ node, children, ...props }: any) => (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse" {...props}>
+            <table {...props} className="w-full border-collapse">
               {children}
             </table>
           </div>
         ),
-        th: ({ children, ...props }) => (
+        th: ({ node, children, ...props }: any) => (
           <th
-            className="bg-surface-secondary border border-border-subtle px-3 py-2 text-left"
             {...props}
+            className="bg-surface-secondary border border-border-subtle px-3 py-2 text-left"
           >
             {children}
           </th>
         ),
-        td: ({ children, ...props }) => (
-          <td className="border border-border-subtle px-3 py-2" {...props}>
+        td: ({ node, children, ...props }: any) => (
+          <td {...props} className="border border-border-subtle px-3 py-2">
             {children}
           </td>
         ),
