@@ -1,6 +1,6 @@
 import type { WebSearchState } from '@/components/chat/types'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 
 const BOUNCE_DELAYS = ['0ms', '150ms', '300ms', '450ms', '600ms']
 
@@ -64,23 +64,37 @@ function FadeInFavicon({
   url,
   className,
   style,
-  isSearching,
+  showPlaceholder,
   index,
+  onLoad,
+  onError,
 }: {
   url: string
   className: string
   style?: React.CSSProperties
-  isSearching?: boolean
+  showPlaceholder?: boolean
   index?: number
+  onLoad?: () => void
+  onError?: () => void
 }) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
+
+  const handleLoad = () => {
+    setLoaded(true)
+    onLoad?.()
+  }
+
+  const handleError = () => {
+    setError(true)
+    onError?.()
+  }
 
   if (error) return null
 
   return (
     <div className="relative" style={style}>
-      {isSearching && !loaded && (
+      {showPlaceholder && !loaded && (
         <BouncingPlaceholder
           index={index ?? 0}
           style={{ position: 'absolute' }}
@@ -90,8 +104,8 @@ function FadeInFavicon({
         src={getFaviconUrl(url)}
         alt=""
         className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={() => setLoaded(true)}
-        onError={() => setError(true)}
+        onLoad={handleLoad}
+        onError={handleError}
       />
     </div>
   )
@@ -103,6 +117,24 @@ export const WebSearchProcess = memo(function WebSearchProcess({
   const [isExpanded, setIsExpanded] = useState(false)
   const isSearching = webSearch.status === 'searching'
   const hasSources = webSearch.sources && webSearch.sources.length > 0
+  const sourcesToShow = webSearch.sources?.slice(0, 5) ?? []
+
+  // Track which favicons have loaded/errored (by index)
+  const [loadedFavicons, setLoadedFavicons] = useState<Set<number>>(new Set())
+
+  // Show placeholders if still searching OR if not all favicons have loaded yet
+  const allFaviconsReady =
+    sourcesToShow.length > 0 && loadedFavicons.size >= sourcesToShow.length
+  const showPlaceholders = isSearching || !allFaviconsReady
+
+  const handleFaviconLoad = useCallback((index: number) => {
+    setLoadedFavicons((prev) => new Set(prev).add(index))
+  }, [])
+
+  const handleFaviconError = useCallback((index: number) => {
+    // Treat errors as "ready" so we don't wait forever
+    setLoadedFavicons((prev) => new Set(prev).add(index))
+  }, [])
 
   const handleToggle = () => {
     if (hasSources) {
@@ -125,14 +157,16 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {hasSources && (
             <div className="flex shrink-0 items-center">
-              {webSearch.sources!.slice(0, 5).map((source, index) => (
+              {sourcesToShow.map((source, index) => (
                 <FadeInFavicon
                   key={`${source.url}-${index}`}
                   url={source.url}
                   className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
                   style={{ marginLeft: index === 0 ? 0 : -6 }}
-                  isSearching={isSearching}
+                  showPlaceholder={showPlaceholders}
                   index={index}
+                  onLoad={() => handleFaviconLoad(index)}
+                  onError={() => handleFaviconError(index)}
                 />
               ))}
             </div>
