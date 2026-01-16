@@ -1,9 +1,11 @@
 'use client'
 
 import {
+  CheckIcon,
   CloudArrowUpIcon,
   PencilSquareIcon,
   TrashIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useRef, useState } from 'react'
 import { CiFloppyDisk } from 'react-icons/ci'
@@ -175,17 +177,35 @@ export function ChatListItem({
         {isEditing ? (
           <form
             onSubmit={handleSubmit}
-            className="w-full"
+            className="flex w-full items-center gap-2"
             onClick={(e) => e.stopPropagation()}
           >
             <input
-              className="w-full rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="min-w-0 flex-1 rounded bg-surface-sidebar px-2 py-1 text-sm text-content-primary focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={editingTitle}
               onChange={(e) => onTitleChange(e.target.value)}
               onKeyDown={handleKeyDown}
               autoFocus
               onClick={(e) => e.stopPropagation()}
             />
+            <button
+              type="submit"
+              className="ml-auto flex-shrink-0 rounded p-1 text-green-500 transition-colors hover:bg-green-500/10"
+              title="Save"
+            >
+              <CheckIcon className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCancelEdit()
+              }}
+              className="flex-shrink-0 rounded p-1 text-content-muted transition-colors hover:bg-surface-chat hover:text-content-secondary"
+              title="Cancel"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
           </form>
         ) : (
           <>
