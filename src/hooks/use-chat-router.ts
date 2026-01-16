@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 interface UseChatRouterReturn {
   initialChatId: string | null
   initialProjectId: string | null
+  isLocalChatUrl: boolean
   isRouterReady: boolean
   updateUrlForChat: (chatId: string, projectId?: string) => void
+  updateUrlForLocalChat: (chatId: string) => void
   updateUrlForProject: (projectId: string) => void
   clearUrl: () => void
 }
@@ -23,6 +25,10 @@ export function useChatRouter(): UseChatRouterReturn {
     router.isReady && typeof router.query.projectId === 'string'
       ? router.query.projectId
       : null
+
+  // Detect if current URL is a local chat URL
+  const isLocalChatUrl =
+    router.isReady && router.pathname === '/chat/local/[chatId]'
 
   // Mark router as ready
   useEffect(() => {
@@ -42,6 +48,21 @@ export function useChatRouter(): UseChatRouterReturn {
       : `/chat/${chatId}`
 
     // Only update if path actually changed
+    if (window.location.pathname !== newPath) {
+      window.history.replaceState(
+        { ...window.history.state, as: newPath, url: newPath },
+        '',
+        newPath,
+      )
+    }
+  }, [])
+
+  // Update URL for local-only chats
+  const updateUrlForLocalChat = useCallback((chatId: string) => {
+    if (typeof window === 'undefined') return
+
+    const newPath = `/chat/local/${chatId}`
+
     if (window.location.pathname !== newPath) {
       window.history.replaceState(
         { ...window.history.state, as: newPath, url: newPath },
@@ -82,8 +103,10 @@ export function useChatRouter(): UseChatRouterReturn {
   return {
     initialChatId,
     initialProjectId,
+    isLocalChatUrl,
     isRouterReady,
     updateUrlForChat,
+    updateUrlForLocalChat,
     updateUrlForProject,
     clearUrl,
   }

@@ -20,6 +20,7 @@ interface UseChatStorageProps {
   scrollToBottom?: () => void
   beforeSwitchChat?: () => Promise<void>
   initialChatId?: string | null
+  isLocalChatUrl?: boolean
 }
 
 interface UseChatStorageReturn {
@@ -37,18 +38,21 @@ interface UseChatStorageReturn {
   reloadChats: () => Promise<void>
   initialChatDecryptionFailed: boolean
   clearInitialChatDecryptionFailed: () => void
+  localChatNotFound: boolean
 }
 
 export function useChatStorage({
   storeHistory,
   beforeSwitchChat,
   initialChatId,
+  isLocalChatUrl = false,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn, getToken } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const initialChatLoadedRef = useRef(false)
   const [initialChatDecryptionFailed, setInitialChatDecryptionFailed] =
     useState(false)
+  const [localChatNotFound, setLocalChatNotFound] = useState(false)
 
   // Initialize with blank chats for both modes
   const [chats, setChats] = useState<Chat[]>(() => {
@@ -361,11 +365,25 @@ export function useChatStorage({
 
   // Load a specific chat by ID from URL
   const loadChatById = useCallback(
-    async (chatId: string) => {
+    async (chatId: string, isLocalUrl: boolean) => {
+      // Reset not found state when attempting to load a new chat
+      setLocalChatNotFound(false)
+
       // First check if chat already exists in local state
       const existingChat = chats.find((c) => c.id === chatId)
       if (existingChat) {
         switchChat(existingChat)
+        return
+      }
+
+      // For local chat URLs, the chat should be in local state (IndexedDB)
+      // If not found, it means the chat was deleted
+      if (isLocalUrl) {
+        logError('Local chat not found', null, {
+          component: 'useChatStorage',
+          metadata: { chatId },
+        })
+        setLocalChatNotFound(true)
         return
       }
 
@@ -434,16 +452,30 @@ export function useChatStorage({
 
   // Load initial chat from URL if provided
   useEffect(() => {
+    // For local chat URLs: load after initial load completes (chat should be in IndexedDB)
     if (
       initialChatId &&
+      isLocalChatUrl &&
+      !initialChatLoadedRef.current &&
+      !isInitialLoad
+    ) {
+      initialChatLoadedRef.current = true
+      loadChatById(initialChatId, true)
+      return
+    }
+
+    // For cloud chat URLs: require sign-in
+    if (
+      initialChatId &&
+      !isLocalChatUrl &&
       isSignedIn &&
       !initialChatLoadedRef.current &&
       !isInitialLoad
     ) {
       initialChatLoadedRef.current = true
-      loadChatById(initialChatId)
+      loadChatById(initialChatId, false)
     }
-  }, [initialChatId, isSignedIn, isInitialLoad, loadChatById])
+  }, [initialChatId, isSignedIn, isInitialLoad, loadChatById, isLocalChatUrl])
 
   // Clear the decryption failed state (called after entering correct key)
   const clearInitialChatDecryptionFailed = useCallback(() => {
@@ -465,5 +497,6 @@ export function useChatStorage({
     reloadChats,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
+    localChatNotFound,
   }
 }

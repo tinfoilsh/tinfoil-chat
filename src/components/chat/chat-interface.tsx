@@ -102,6 +102,7 @@ type ChatInterfaceProps = {
   isDarkMode?: boolean
   initialChatId?: string | null
   initialProjectId?: string | null
+  isLocalChatUrl?: boolean
 }
 
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
@@ -173,6 +174,7 @@ export function ChatInterface({
   isDarkMode: propIsDarkMode,
   initialChatId,
   initialProjectId,
+  isLocalChatUrl: isLocalChatUrlProp,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
@@ -281,7 +283,16 @@ export function ChatInterface({
   })
 
   // URL routing for deep links
-  const { updateUrlForChat, updateUrlForProject, clearUrl } = useChatRouter()
+  const {
+    updateUrlForChat,
+    updateUrlForLocalChat,
+    updateUrlForProject,
+    clearUrl,
+    isLocalChatUrl: isLocalChatUrlFromRouter,
+  } = useChatRouter()
+
+  // Combine prop and router detection for local chat URL
+  const isLocalChatUrl = isLocalChatUrlProp || isLocalChatUrlFromRouter
 
   // Initialize renderers on mount
   useEffect(() => {
@@ -511,6 +522,7 @@ export function ChatInterface({
     regenerateMessage,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
+    localChatNotFound,
   } = useChatState({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
@@ -522,6 +534,7 @@ export function ChatInterface({
     scrollToBottom: scrollUserMessageToTop,
     reasoningEffort,
     initialChatId,
+    isLocalChatUrl,
   })
 
   // Sync URL with current chat state
@@ -541,6 +554,12 @@ export function ChatInterface({
       return
     }
 
+    // Local-only chats use /chat/local/[chatId] URL pattern
+    if (currentChat.isLocalOnly) {
+      updateUrlForLocalChat(currentChat.id)
+      return
+    }
+
     // Update URL based on whether we're in project mode
     if (isProjectMode && activeProject?.id) {
       updateUrlForChat(currentChat.id, activeProject.id)
@@ -555,12 +574,14 @@ export function ChatInterface({
   }, [
     currentChat.id,
     currentChat.isBlankChat,
+    currentChat.isLocalOnly,
     currentChat.projectId,
     isProjectMode,
     activeProject?.id,
     isInitialLoad,
     initialChatDecryptionFailed,
     updateUrlForChat,
+    updateUrlForLocalChat,
     updateUrlForProject,
     clearUrl,
   ])
@@ -1345,6 +1366,36 @@ export function ChatInterface({
             className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90"
           >
             Done
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Show local chat not found message when accessing a local chat URL that doesn't exist
+  if (isLocalChatUrl && localChatNotFound) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-surface-chat-background px-4 font-aeonik">
+        <div className="max-w-md text-center">
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-surface-chat p-4">
+              <ChatBubbleLeftRightIcon className="h-8 w-8 text-content-secondary" />
+            </div>
+          </div>
+          <h2 className="mb-3 text-xl font-semibold text-content-primary">
+            Chat not found
+          </h2>
+          <p className="mb-6 text-content-secondary">
+            This local chat may have been deleted from your browser.
+          </p>
+          <button
+            onClick={() => {
+              clearUrl()
+              window.location.href = '/'
+            }}
+            className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90"
+          >
+            Start new chat
           </button>
         </div>
       </div>
