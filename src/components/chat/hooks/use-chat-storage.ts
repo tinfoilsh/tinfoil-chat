@@ -1,5 +1,6 @@
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { chatEvents } from '@/services/storage/chat-events'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -376,11 +377,12 @@ export function useChatStorage({
         return
       }
 
-      // For local chat URLs, try loading directly from IndexedDB
-      // This avoids race conditions where chats state hasn't updated yet
+      // For local chat URLs, load directly from IndexedDB (chatStorage)
+      // This avoids race conditions and ensures we check the right storage
+      // (loadChats routes to sessionStorage when not signed in, but local chats are in IndexedDB)
       if (isLocalUrl) {
         try {
-          const loadedChats = await loadChats(storeHistory && !!isSignedIn)
+          const loadedChats = await chatStorage.getAllChats()
           const chatFromStorage = loadedChats.find((c) => c.id === chatId)
           if (chatFromStorage) {
             setChats((prev) => {
@@ -467,7 +469,7 @@ export function useChatStorage({
         })
       }
     },
-    [chats, isSignedIn, getToken, switchChat, storeHistory],
+    [chats, isSignedIn, getToken, switchChat],
   )
 
   // Load initial chat from URL if provided
