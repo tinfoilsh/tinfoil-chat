@@ -12,6 +12,7 @@ import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
+import { WebSearchProcess } from '../components/WebSearchProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
 const DefaultMessageComponent = ({
@@ -183,6 +184,15 @@ const DefaultMessageComponent = ({
         />
       )}
 
+      {/* Show web search for assistant messages - before thoughts if it started first */}
+      {!isUser && message.webSearch && message.webSearchBeforeThinking && (
+        <div className="no-scroll-anchoring w-full px-4 py-2">
+          <div className="mb-2 w-full">
+            <WebSearchProcess webSearch={message.webSearch} />
+          </div>
+        </div>
+      )}
+
       {/* Show thoughts for assistant messages */}
       {!isUser &&
         (message.isThinking ||
@@ -211,6 +221,15 @@ const DefaultMessageComponent = ({
             </div>
           </div>
         )}
+
+      {/* Show web search for assistant messages - after thoughts if it started after */}
+      {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
+        <div className="no-scroll-anchoring w-full px-4 py-2">
+          <div className="mb-2 w-full">
+            <WebSearchProcess webSearch={message.webSearch} />
+          </div>
+        </div>
+      )}
 
       {/* Message content */}
       {message.content && (

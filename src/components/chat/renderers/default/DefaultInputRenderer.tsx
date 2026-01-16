@@ -32,6 +32,8 @@ export const DefaultInputRenderer: InputRenderer = {
         removeDocument={props.removeDocument}
         isPremium={props.isPremium}
         hasMessages={props.hasMessages}
+        webSearchEnabled={props.webSearchEnabled}
+        onWebSearchToggle={props.onWebSearchToggle}
       />
     )
   },

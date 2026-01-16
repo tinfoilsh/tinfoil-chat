@@ -13,7 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PiSpinner } from 'react-icons/pi'
+import { PiGlobe, PiGlobeX, PiSpinner } from 'react-icons/pi'
 import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
 import type { ProcessedDocument } from './renderers/types'
@@ -36,6 +36,8 @@ type ChatInputProps = {
   hasMessages?: boolean
   audioModel?: string
   modelSelectorButton?: React.ReactNode
+  webSearchEnabled?: boolean
+  onWebSearchToggle?: () => void
 }
 
 export function ChatInput({
@@ -55,6 +57,8 @@ export function ChatInput({
   hasMessages,
   audioModel,
   modelSelectorButton,
+  webSearchEnabled,
+  onWebSearchToggle,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const documentsScrollRef = useRef<HTMLDivElement>(null)
@@ -619,7 +623,7 @@ export function ChatInput({
                     textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
                     textarea.scrollTop = textarea.scrollHeight
                   }, 0)
-                } else if (listMarkerMatch) {
+                } else {
                   e.preventDefault()
                   const [fullMatch, indent, marker] = listMarkerMatch
 
@@ -691,15 +695,60 @@ export function ChatInput({
           />
 
           <div className="mt-3 flex items-center justify-between">
-            <button
-              id="upload-button"
-              type="button"
-              onClick={triggerFileInput}
-              className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-              title="Upload document"
-            >
-              <DocumentIcon className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <div className="group relative">
+                <button
+                  id="upload-button"
+                  type="button"
+                  onClick={triggerFileInput}
+                  aria-label="Upload document"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                >
+                  <DocumentIcon className="h-5 w-5" />
+                </button>
+                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  Upload document
+                </span>
+              </div>
+              {onWebSearchToggle && (
+                <div className="group relative">
+                  <button
+                    id="web-search-button"
+                    type="button"
+                    onClick={onWebSearchToggle}
+                    aria-label="Web search"
+                    aria-pressed={webSearchEnabled}
+                    className={cn(
+                      'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
+                      webSearchEnabled
+                        ? cn(
+                            'px-2',
+                            isDarkMode
+                              ? 'bg-brand-accent-light/20 text-brand-accent-light'
+                              : 'bg-brand-accent-dark/20 text-brand-accent-dark',
+                          )
+                        : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
+                    )}
+                  >
+                    {webSearchEnabled ? (
+                      <PiGlobe className="h-5 w-5" />
+                    ) : (
+                      <PiGlobeX className="h-5 w-5" />
+                    )}
+                    {webSearchEnabled && (
+                      <span className="text-xs font-medium leading-none">
+                        Web Search
+                      </span>
+                    )}
+                  </button>
+                  {!webSearchEnabled && (
+                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                      Web search
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               {modelSelectorButton && <div>{modelSelectorButton}</div>}
@@ -742,24 +791,14 @@ export function ChatInput({
                     e.preventDefault()
                     cancelGeneration()
                   } else {
-                    const hasDocuments =
-                      processedDocuments &&
-                      processedDocuments.some((doc) => !doc.isUploading)
-                    const hasInput = input.trim().length > 0
-                    if (hasInput || hasDocuments) {
-                      handleSubmit(e)
-                    }
+                    handleSubmit(e)
                   }
                 }}
                 className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
                 disabled={
                   loadingState !== 'loading' &&
                   loadingState !== 'retrying' &&
-                  (isTranscribing ||
-                    isConverting ||
-                    (!input.trim() &&
-                      (!processedDocuments ||
-                        !processedDocuments.some((doc) => !doc.isUploading))))
+                  (isTranscribing || isConverting)
                 }
               >
                 {loadingState === 'loading' || loadingState === 'retrying' ? (

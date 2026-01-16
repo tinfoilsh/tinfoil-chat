@@ -93,6 +93,13 @@ const ShareModalLazy = dynamic(
   () => import('./share-modal').then((m) => m.ShareModal),
   { ssr: false },
 )
+const WebSearchIntroModal = dynamic(
+  () =>
+    import('../tutorial/WebSearchIntroModal').then(
+      (m) => m.WebSearchIntroModal,
+    ),
+  { ssr: false },
+)
 
 type ChatInterfaceProps = {
   verificationState?: any
@@ -233,6 +240,12 @@ export function ChatInterface({
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
   const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null)
+
+  // State for web search toggle (persisted in localStorage)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('webSearchEnabled') === 'true'
+  })
 
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
@@ -536,6 +549,7 @@ export function ChatInterface({
     reasoningEffort,
     initialChatId,
     isLocalChatUrl,
+    webSearchEnabled,
   })
 
   // Sync URL with current chat state
@@ -624,6 +638,45 @@ export function ChatInterface({
     }
     initTinfoil()
   }, [setVerificationComplete, setVerificationSuccess])
+
+  // Update verification document when web search toggle changes
+  useEffect(() => {
+    localStorage.setItem('webSearchEnabled', String(webSearchEnabled))
+
+    let cancelled = false
+    const updateVerification = async () => {
+      try {
+        const { getTinfoilClient, getWebSearchClient } = await import(
+          '@/services/inference/tinfoil-client'
+        )
+        if (cancelled) return
+        const client = webSearchEnabled
+          ? await getWebSearchClient()
+          : await getTinfoilClient()
+        await client.ready()
+        if (cancelled) return
+        const doc = await (client as any).getVerificationDocument?.()
+        if (cancelled) return
+        if (doc) {
+          setVerificationDocument(doc)
+          if (doc.securityVerified !== undefined) {
+            setVerificationComplete(true)
+            setVerificationSuccess(doc.securityVerified)
+          }
+        }
+      } catch (error) {
+        if (cancelled) return
+        logError('Failed to update verification for web search toggle', error, {
+          component: 'ChatInterface',
+          action: 'updateVerification',
+        })
+      }
+    }
+    updateVerification()
+    return () => {
+      cancelled = true
+    }
+  }, [webSearchEnabled, setVerificationComplete, setVerificationSuccess])
 
   // Effect to handle window resize and enforce single sidebar rule
   useEffect(() => {
@@ -1846,6 +1899,8 @@ export function ChatInterface({
                 onEditMessage={editMessage}
                 onRegenerateMessage={regenerateMessage}
                 showScrollButton={showScrollButton}
+                webSearchEnabled={webSearchEnabled}
+                onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
               />
             </div>
           </div>
@@ -1936,6 +1991,10 @@ export function ChatInterface({
                     audioModel={
                       models.find((m) => m.type === 'audio')?.modelName
                     }
+                    webSearchEnabled={webSearchEnabled}
+                    onWebSearchToggle={() =>
+                      setWebSearchEnabled((prev) => !prev)
+                    }
                   />
                 </form>
 
@@ -2022,6 +2081,10 @@ export function ChatInterface({
         fileName={pendingUploadFile?.name ?? ''}
         projectName={activeProject?.name ?? ''}
         isDarkMode={isDarkMode}
+      />
+
+      <WebSearchIntroModal
+        onEnableWebSearch={() => setWebSearchEnabled(true)}
       />
     </div>
   )

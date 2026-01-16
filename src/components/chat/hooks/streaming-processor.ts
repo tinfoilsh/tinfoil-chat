@@ -12,7 +12,13 @@
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { logError } from '@/utils/error-handling'
 import { CONSTANTS } from '../constants'
-import type { Chat, Message } from '../types'
+import type {
+  Annotation,
+  Chat,
+  Message,
+  WebSearchSource,
+  WebSearchState,
+} from '../types'
 
 export interface StreamingContext {
   updatedChat: Chat
@@ -134,6 +140,12 @@ export async function processStreamingResponse(
     let sseBuffer = ''
     let isUsingReasoningFormat = false
     let earlyTitleTriggered = false
+    let webSearchState: WebSearchState | undefined = undefined
+    let collectedSources: WebSearchSource[] = []
+    let collectedAnnotations: Annotation[] = []
+    let searchReasoning = ''
+    let webSearchStarted = false
+    let thinkingStarted = false
 
     // Helper to check word count and trigger early title generation
     const checkForEarlyTitleGeneration = (content: string) => {
@@ -214,6 +226,7 @@ export async function processStreamingResponse(
 
         if (isFirstChunk && initialContentBuffer.trim()) {
           assistantMessage = {
+            ...assistantMessage,
             role: 'assistant',
             content: initialContentBuffer.trim(),
             timestamp: assistantMessage?.timestamp || new Date(),
@@ -238,6 +251,7 @@ export async function processStreamingResponse(
 
           assistantMessage = isUsingReasoningFormat
             ? {
+                ...assistantMessage,
                 role: 'assistant',
                 content: '',
                 thoughts: thoughtsBuffer.trim(),
@@ -246,6 +260,7 @@ export async function processStreamingResponse(
                 thinkingDuration,
               }
             : {
+                ...assistantMessage,
                 role: 'assistant',
                 content: thoughtsBuffer.trim(),
                 timestamp: assistantMessage?.timestamp || new Date(),
@@ -285,6 +300,122 @@ export async function processStreamingResponse(
           const jsonData = line.replace(/^data:\s*/i, '')
           const json = JSON.parse(jsonData)
 
+          // Handle web_search_call events
+          if (json.type === 'web_search_call') {
+            const searchQuery = json.action?.query
+            const searchStatus = json.status
+
+            if (searchStatus === 'in_progress' && searchQuery) {
+              if (!webSearchStarted) {
+                webSearchStarted = true
+              }
+              webSearchState = {
+                query: searchQuery,
+                status: 'searching',
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+                webSearchBeforeThinking: !thinkingStarted,
+              }
+              if (isSameChat()) {
+                const chatId = ctx.currentChatIdRef.current
+                const messageToSave = assistantMessage as Message
+                const newMessages = [...ctx.updatedMessages, messageToSave]
+                ctx.updateChatWithHistoryCheck(
+                  ctx.setChats,
+                  { ...ctx.updatedChat, id: chatId },
+                  ctx.setCurrentChat,
+                  chatId,
+                  newMessages,
+                  false,
+                  true,
+                )
+                ctx.setIsWaitingForResponse(false)
+              }
+            } else if (searchStatus === 'completed' && webSearchState) {
+              webSearchState = {
+                query: webSearchState.query,
+                status: 'completed',
+                sources: webSearchState.sources,
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+              }
+              if (isSameChat()) {
+                scheduleStreamingUpdate()
+              }
+            }
+            continue
+          }
+
+          // Handle search_reasoning field
+          const deltaSearchReasoning =
+            json.choices?.[0]?.delta?.search_reasoning
+          if (deltaSearchReasoning) {
+            searchReasoning += deltaSearchReasoning
+            assistantMessage = {
+              ...assistantMessage,
+              searchReasoning,
+            }
+          }
+
+          // Handle url_citation annotations
+          const annotations = json.choices?.[0]?.delta?.annotations
+          if (annotations && Array.isArray(annotations)) {
+            for (const annotation of annotations) {
+              if (
+                annotation.type === 'url_citation' &&
+                annotation.url_citation
+              ) {
+                const { title, url, content, published_date } =
+                  annotation.url_citation
+                if (
+                  url &&
+                  !collectedSources.some((source) => source.url === url)
+                ) {
+                  collectedSources.push({
+                    title: title || url,
+                    url,
+                    text: content,
+                    publishedDate: published_date,
+                  })
+                  collectedAnnotations.push({
+                    type: 'url_citation',
+                    url_citation: {
+                      title: title || url,
+                      url,
+                      content,
+                      published_date,
+                    },
+                  })
+                }
+              }
+            }
+            if (collectedSources.length > 0) {
+              // Update webSearchState with sources if it exists
+              if (webSearchState) {
+                webSearchState = {
+                  query: webSearchState.query,
+                  status: webSearchState.status,
+                  sources: [...collectedSources],
+                }
+                assistantMessage = {
+                  ...assistantMessage,
+                  webSearch: webSearchState,
+                  annotations: [...collectedAnnotations],
+                }
+              } else {
+                // Store annotations even without webSearchState
+                assistantMessage = {
+                  ...assistantMessage,
+                  annotations: [...collectedAnnotations],
+                }
+              }
+            }
+          }
+
           const deltaReasoningContent =
             json.choices?.[0]?.delta?.reasoning_content
           const messageReasoningContent =
@@ -299,6 +430,24 @@ export async function processStreamingResponse(
             json.choices?.[0]?.delta?.reasoning_content ||
             ''
           let content = json.choices?.[0]?.delta?.content || ''
+          // Replace citation markers with special citation links (only when we have sources)
+          if (collectedSources.length > 0) {
+            // OpenAI-style citations: 【1】 or 【1†L1-L15】
+            // Replace with markdown link using #cite-N fragment to identify as citation
+            content = content.replace(
+              /【(\d+)[^】]*】/g,
+              (_: string, num: string) => {
+                const index = parseInt(num, 10) - 1
+                const source = collectedSources[index]
+                if (!source) return ''
+                // Encode parentheses in URL to prevent breaking markdown link syntax
+                const encodedUrl = source.url
+                  .replace(/\(/g, '%28')
+                  .replace(/\)/g, '%29')
+                return `[](#cite-${num}|${encodedUrl})`
+              },
+            )
+          }
 
           if (
             hasReasoningContent &&
@@ -307,6 +456,7 @@ export async function processStreamingResponse(
           ) {
             isUsingReasoningFormat = true
             isInThinkingMode = true
+            thinkingStarted = true
             ctx.setIsThinking(true)
             ctx.thinkingStartTimeRef.current = Date.now()
             assistantMessage = {
@@ -410,6 +560,7 @@ export async function processStreamingResponse(
                 initialContentBuffer = ''
                 if (content.includes('<think>')) {
                   isInThinkingMode = true
+                  thinkingStarted = true
                   ctx.setIsThinking(true)
                   ctx.thinkingStartTimeRef.current = Date.now()
                   content = content.replace(/^[\s\S]*?<think>/, '')
