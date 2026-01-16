@@ -218,7 +218,7 @@ const DefaultMessageComponent = ({
           {/* Hide message when editing for user messages */}
           {!(isUser && isEditing) && (
             <div
-              className={`w-full py-2 ${isUser ? 'flex justify-end px-4' : 'px-4'}`}
+              className={`w-full ${isUser ? 'flex justify-end px-4 pb-8 pt-2' : 'px-4 py-2'}`}
             >
               <div
                 className={cn(
@@ -326,9 +326,9 @@ const DefaultMessageComponent = ({
             </div>
           )}
 
-          {/* Action bar for user messages - absolute positioned to not affect layout */}
+          {/* Action bar for user messages */}
           {isUser && !isEditing && (
-            <div className="pointer-events-none absolute bottom-0 right-0 flex translate-y-full items-center justify-end gap-1 px-4 pt-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+            <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4 opacity-0 transition-opacity group-hover:opacity-100">
               {formattedDate && (
                 <div className="group/date relative">
                   <span className="px-2 py-1 text-sm text-content-muted">
