@@ -376,9 +376,29 @@ export function useChatStorage({
         return
       }
 
-      // For local chat URLs, the chat should be in local state (IndexedDB)
-      // If not found, it means the chat was deleted
+      // For local chat URLs, try loading directly from IndexedDB
+      // This avoids race conditions where chats state hasn't updated yet
       if (isLocalUrl) {
+        try {
+          const loadedChats = await loadChats(storeHistory && !!isSignedIn)
+          const chatFromStorage = loadedChats.find((c) => c.id === chatId)
+          if (chatFromStorage) {
+            setChats((prev) => {
+              if (prev.some((c) => c.id === chatId)) {
+                return prev
+              }
+              return sortChats([...prev, chatFromStorage])
+            })
+            setCurrentChat(chatFromStorage)
+            return
+          }
+        } catch (error) {
+          logError('Failed to load local chat from storage', error, {
+            component: 'useChatStorage',
+            metadata: { chatId },
+          })
+        }
+
         logError('Local chat not found', null, {
           component: 'useChatStorage',
           metadata: { chatId },
@@ -447,7 +467,7 @@ export function useChatStorage({
         })
       }
     },
-    [chats, isSignedIn, getToken, switchChat],
+    [chats, isSignedIn, getToken, switchChat, storeHistory],
   )
 
   // Load initial chat from URL if provided
