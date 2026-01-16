@@ -893,7 +893,7 @@ export const CodeBlock = memo(function CodeBlock({
   }
 
   return (
-    <div className="group relative my-4 overflow-x-auto overflow-y-visible">
+    <div className="group relative my-4">
       {canShowPreview && codeIsWorthPreviewing && (
         <div className="absolute left-2 top-2 z-10">
           <ViewModeToggle
