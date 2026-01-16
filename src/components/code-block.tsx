@@ -860,15 +860,16 @@ export const CodeBlock = memo(function CodeBlock({
     if (!markdownRef.current || isGeneratingPdf) return
 
     setIsGeneratingPdf(true)
-    try {
-      // Temporarily remove overflow clipping so html2canvas captures full table width
-      const overflowElements = markdownRef.current.querySelectorAll(
-        '.overflow-x-auto',
-      ) as NodeListOf<HTMLElement>
-      overflowElements.forEach((el) => {
-        el.style.overflow = 'visible'
-      })
 
+    // Temporarily remove overflow clipping so html2canvas captures full table width
+    const overflowElements = markdownRef.current.querySelectorAll(
+      '.overflow-x-auto',
+    ) as NodeListOf<HTMLElement>
+    overflowElements.forEach((el) => {
+      el.style.overflow = 'visible'
+    })
+
+    try {
       const html2pdf = (await import('html2pdf.js')).default
       await html2pdf()
         .set({
@@ -880,14 +881,13 @@ export const CodeBlock = memo(function CodeBlock({
         })
         .from(markdownRef.current)
         .save()
-
+    } catch {
+      toast({ title: 'Failed to generate PDF', variant: 'destructive' })
+    } finally {
       // Restore overflow for UI scrolling
       overflowElements.forEach((el) => {
         el.style.overflow = ''
       })
-    } catch {
-      toast({ title: 'Failed to generate PDF', variant: 'destructive' })
-    } finally {
       setIsGeneratingPdf(false)
     }
   }
