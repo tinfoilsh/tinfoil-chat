@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '../ui/utils'
 import {
   type ChatItemData,
@@ -60,6 +60,21 @@ export function ChatList({
   const [editingChatId, setEditingChatId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null)
+  // Track chat IDs that were manually edited - skip animation for these
+  const [manuallyEditedChatId, setManuallyEditedChatId] = useState<
+    string | null
+  >(null)
+
+  // Clear the manually edited flag after the title update has propagated
+  useEffect(
+    () => {
+      if (manuallyEditedChatId) {
+        setManuallyEditedChatId(null)
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intentionally only depends on chats
+    [chats],
+  )
 
   const isSelected = (chat: ChatItemData): boolean => {
     if (chat.isBlankChat) {
@@ -93,6 +108,8 @@ export function ChatList({
 
   const handleSaveTitle = (chatId: string) => {
     if (editingTitle.trim() && onUpdateTitle) {
+      // Mark this chat as manually edited to skip animation
+      setManuallyEditedChatId(chatId)
       onUpdateTitle(chatId, editingTitle.trim())
     }
     setEditingChatId(null)
@@ -142,7 +159,9 @@ export function ChatList({
             isDarkMode={isDarkMode}
             showEncryptionStatus={showEncryptionStatus}
             showSyncStatus={showSyncStatus}
-            enableTitleAnimation={enableTitleAnimation}
+            enableTitleAnimation={
+              enableTitleAnimation && manuallyEditedChatId !== chat.id
+            }
             onSelect={() => handleSelect(chat)}
             onStartEdit={() => handleStartEdit(chat)}
             onTitleChange={setEditingTitle}

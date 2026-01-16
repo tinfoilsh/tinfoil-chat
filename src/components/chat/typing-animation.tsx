@@ -43,7 +43,7 @@ export function TypingAnimation({
           () => {
             setCurrentText((prev) => prev.slice(0, -1))
           },
-          40 + Math.random() * 24,
+          20 + Math.random() * 12,
         )
       } else {
         setPhase('typing')
@@ -54,7 +54,7 @@ export function TypingAnimation({
           () => {
             setCurrentText(toText.slice(0, currentText.length + 1))
           },
-          64 + Math.random() * 32,
+          28 + Math.random() * 16,
         )
       } else {
         setIsComplete(true)
@@ -71,7 +71,7 @@ export function TypingAnimation({
 
     const timeoutId = setTimeout(() => {
       onComplete()
-    }, 400)
+    }, 200)
 
     return () => clearTimeout(timeoutId)
   }, [isComplete, onComplete])
