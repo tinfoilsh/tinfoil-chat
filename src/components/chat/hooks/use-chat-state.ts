@@ -64,6 +64,7 @@ interface UseChatStateReturn {
   regenerateMessage: (messageIndex: number) => void
   initialChatDecryptionFailed: boolean
   clearInitialChatDecryptionFailed: () => void
+  localChatNotFound: boolean
 }
 
 export function useChatState({
@@ -76,6 +77,7 @@ export function useChatState({
   scrollToBottom,
   reasoningEffort,
   initialChatId,
+  isLocalChatUrl = false,
 }: {
   systemPrompt: string
   rules?: string
@@ -86,6 +88,7 @@ export function useChatState({
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   initialChatId?: string | null
+  isLocalChatUrl?: boolean
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -117,6 +120,7 @@ export function useChatState({
     reloadChats,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
+    localChatNotFound,
   } = useChatStorage({
     storeHistory,
     scrollToBottom,
@@ -127,6 +131,7 @@ export function useChatState({
       }
     },
     initialChatId,
+    isLocalChatUrl,
   })
 
   // Create ref to store cancelGeneration function
@@ -296,5 +301,6 @@ export function useChatState({
     regenerateMessage,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
+    localChatNotFound,
   }
 }
