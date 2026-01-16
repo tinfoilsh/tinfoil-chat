@@ -292,7 +292,7 @@ const ChunkRenderer = memo(
 
     // If this is an incomplete table during streaming, show placeholder
     if (isTable && !chunk.isComplete && isStreaming) {
-      return <GeneratingTable isDarkMode={isDarkMode} />
+      return <GeneratingTable />
     }
 
     // Render content, with fade-in animation for tables that just completed
