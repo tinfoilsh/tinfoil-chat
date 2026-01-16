@@ -1,8 +1,10 @@
 import { useUser } from '@clerk/nextjs'
 import { Dialog, Transition } from '@headlessui/react'
+import { ChevronDownIcon } from '@heroicons/react/24/outline'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { BsIncognito } from 'react-icons/bs'
-import { PiGlobe } from 'react-icons/pi'
+import { PiArrowsLeftRight, PiGlobe, PiMonitor } from 'react-icons/pi'
 
 const STORAGE_KEY = 'has_seen_web_search_intro'
 const METADATA_KEY = 'has_seen_web_search_intro'
@@ -17,6 +19,7 @@ export function WebSearchIntroModal({
   const { user, isLoaded } = useUser()
   const [isOpen, setIsOpen] = useState(false)
   const [isReady, setIsReady] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   useEffect(() => {
     if (!isLoaded) return
@@ -93,9 +96,15 @@ export function WebSearchIntroModal({
             >
               <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-2xl bg-surface-card p-6 text-left align-middle shadow-xl transition-all">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-center">
-                    <div className="rounded-full bg-brand-accent-dark/20 p-3">
-                      <PiGlobe className="h-8 w-8 text-brand-accent-dark dark:text-white" />
+                  <div className="flex items-center justify-center space-x-4">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-subtle bg-surface-chat">
+                      <PiMonitor className="h-8 w-8 text-brand-accent-dark dark:text-content-primary" />
+                    </div>
+                    <div className="flex items-center">
+                      <PiArrowsLeftRight className="h-6 w-6 text-content-muted" />
+                    </div>
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-subtle bg-surface-chat">
+                      <PiGlobe className="h-8 w-8 text-brand-accent-dark dark:text-content-primary" />
                     </div>
                   </div>
 
@@ -103,26 +112,46 @@ export function WebSearchIntroModal({
                     Introducing Private Web Search
                   </h2>
 
-                  <div className="space-y-3 text-center text-sm text-content-secondary">
+                  <div className="space-y-3 text-left text-sm text-content-secondary">
                     <p>
                       Your conversations can now be augmented with real-time web
                       search results.
                     </p>
-                    <div className="rounded-xl border border-border-subtle bg-surface-chat p-4 text-left">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-content-primary/10">
-                          <BsIncognito className="h-3 w-3 text-content-primary" />
+                    <div className="overflow-hidden rounded-xl border border-border-subtle bg-surface-chat text-left">
+                      <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="flex w-full items-center justify-between p-4 transition-colors hover:bg-content-primary/5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <BsIncognito className="h-5 w-5 text-content-primary" />
+                          <span className="text-sm font-medium text-content-primary">
+                            Anonymous queries
+                          </span>
                         </div>
-                        <span className="text-sm font-medium text-content-primary">
-                          Anonymous queries
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-content-secondary">
-                        Search queries are sent to third-party providers (Exa,
-                        DuckDuckGo, Bing) without exposing your IP address or
-                        identity. Only an anonymized query is sent and Tinfoil{' '}
-                        <b>never</b> sees your search queries.
-                      </p>
+                        <ChevronDownIcon
+                          className={`h-4 w-4 text-content-muted transition-transform duration-200 ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            className="overflow-hidden"
+                          >
+                            <p className="px-4 pb-4 text-sm text-content-secondary">
+                              Tinfoil <b>never</b> sees your search queries.{' '}
+                              Search queries are sent to web search providers
+                              (Exa, DuckDuckGo, Bing) without exposing your IP
+                              address or identity.
+                            </p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
