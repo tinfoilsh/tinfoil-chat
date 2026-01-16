@@ -981,6 +981,34 @@ export const CodeBlock = memo(function CodeBlock({
           isDarkMode={isDarkMode}
           markdownRef={markdownRef}
         />
+      ) : isMarkdown ? (
+        <pre
+          className="font-mono text-sm"
+          style={{
+            borderRadius: '0.5rem',
+            margin: 0,
+            padding:
+              canShowPreview && codeIsWorthPreviewing
+                ? '3rem 1rem 1rem'
+                : '1rem',
+            background: isDarkMode
+              ? `hsl(var(--surface-chat-background))`
+              : `hsl(var(--surface-card))`,
+            border: isDarkMode
+              ? '1px solid rgb(31 41 55)'
+              : '1px solid rgb(229 231 235)',
+            overflowX: 'auto',
+            overflowY: 'visible',
+            maxWidth: '100%',
+            whiteSpace: 'pre',
+            tabSize: 4,
+            color: isDarkMode
+              ? 'hsl(var(--content-primary))'
+              : 'hsl(var(--content-primary))',
+          }}
+        >
+          {code}
+        </pre>
       ) : (
         <SyntaxHighlighter
           language={language}
