@@ -545,6 +545,12 @@ export function ChatInterface({
     // Don't clear URL when showing decryption failed screen
     if (initialChatDecryptionFailed) return
 
+    // Non-signed-in users don't get URLs (their chats are temporary sessionStorage)
+    if (!isSignedIn) {
+      clearUrl()
+      return
+    }
+
     if (currentChat.isBlankChat) {
       // In project mode, show /project/[projectId] for blank chats
       if (isProjectMode && activeProject?.id) {
@@ -555,7 +561,7 @@ export function ChatInterface({
       return
     }
 
-    // Local-only chats use /chat/local/[chatId] URL pattern
+    // Local-only chats get /chat/local/[chatId] URLs
     if (currentChat.isLocalOnly) {
       updateUrlForLocalChat(currentChat.id)
       return
@@ -581,6 +587,7 @@ export function ChatInterface({
     activeProject?.id,
     isInitialLoad,
     initialChatDecryptionFailed,
+    isSignedIn,
     updateUrlForChat,
     updateUrlForLocalChat,
     updateUrlForProject,
