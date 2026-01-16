@@ -261,7 +261,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       <button
         type="button"
         onClick={handleToggle}
-        className="hover:bg-surface-secondary/50 flex h-10 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
+        className="hover:bg-surface-secondary/50 flex h-12 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {isThinking ? (
