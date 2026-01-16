@@ -147,7 +147,8 @@ function splitIntoChunks(
       const lastTripleBacktick = remaining.lastIndexOf('```')
       if (lastTripleBacktick > 0) {
         const beforeCode = remaining.substring(0, lastTripleBacktick)
-        processContentForTables(beforeCode, currentPos, chunks, isStreaming)
+        // Content before the incomplete code block is complete
+        processContentForTables(beforeCode, currentPos, chunks, false)
       }
       chunks.push({
         id: `code-incomplete-${currentPos + (lastTripleBacktick > 0 ? lastTripleBacktick : 0)}`,
