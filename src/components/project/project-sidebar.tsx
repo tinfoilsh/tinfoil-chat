@@ -282,11 +282,15 @@ export function ProjectSidebar({
     if (!project || isSaving) return
     if (editingProjectName.trim() && editingProjectName !== project.name) {
       setIsSaving(true)
+      // Update prevProjectNameRef before saving to skip animation on manual edit
+      const newName = editingProjectName.trim()
+      prevProjectNameRef.current = newName
+      setDisplayProjectName(newName)
       try {
         await updateProject(project.id, {
-          name: editingProjectName.trim(),
+          name: newName,
         })
-        setEditedName(editingProjectName.trim())
+        setEditedName(newName)
       } catch {
         toast({
           title: 'Failed to save project name',
