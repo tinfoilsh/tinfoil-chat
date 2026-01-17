@@ -21,9 +21,16 @@ interface UseUIStateReturn {
 const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
+const SIDEBAR_OPEN_KEY = 'sidebarOpen'
+
 export function useUIState(): UseUIStateReturn {
   const [isClient, setIsClient] = useState(false)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(SIDEBAR_OPEN_KEY) === 'true'
+    }
+    return false
+  })
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
@@ -100,6 +107,11 @@ export function useUIState(): UseUIStateReturn {
       }
     }
   }, [isClient])
+
+  // Persist sidebar open state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(SIDEBAR_OPEN_KEY, isSidebarOpen ? 'true' : 'false')
+  }, [isSidebarOpen])
 
   // Toggle dark mode
   const toggleTheme = useCallback(() => {

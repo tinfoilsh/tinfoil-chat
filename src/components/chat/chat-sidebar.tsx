@@ -198,6 +198,10 @@ export function ChatSidebar({
       if (expandSection === 'projects') {
         return true
       }
+      const stored = sessionStorage.getItem('sidebarProjectsExpanded')
+      if (stored !== null) {
+        return stored === 'true'
+      }
     }
     return false
   })
@@ -214,6 +218,10 @@ export function ChatSidebar({
       const expandSection = sessionStorage.getItem('sidebarExpandSection')
       if (expandSection === 'projects') {
         return false
+      }
+      const stored = sessionStorage.getItem('sidebarChatHistoryExpanded')
+      if (stored !== null) {
+        return stored === 'true'
       }
     }
     return true
@@ -286,6 +294,22 @@ export function ChatSidebar({
   useEffect(() => {
     sessionStorage.setItem('chatSidebarActiveTab', activeTab)
   }, [activeTab])
+
+  // Persist projects expanded state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(
+      'sidebarProjectsExpanded',
+      isProjectsExpanded ? 'true' : 'false',
+    )
+  }, [isProjectsExpanded])
+
+  // Persist chat history expanded state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(
+      'sidebarChatHistoryExpanded',
+      isChatHistoryExpanded ? 'true' : 'false',
+    )
+  }, [isChatHistoryExpanded])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
