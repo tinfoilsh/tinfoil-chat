@@ -4,12 +4,33 @@
  * Preserves code blocks and inline code to avoid breaking examples.
  */
 export function preprocessMarkdown(content: string): string {
+  // First, fix inline fenced code blocks inside table rows.
+  // These look like ```lang\ncode``` on a single line (with literal \n, not newlines)
+  // and break table parsing. Convert them to inline code.
+  let processed = content.replace(
+    /^(\|.*?)```\w*\\n(.+?)```(.*\|)$/gm,
+    (match, before, code, after) => {
+      // Replace literal \n with spaces and wrap in single backticks
+      const cleanedCode = code.replace(/\\n/g, ' ').trim()
+      return `${before}\`${cleanedCode}\`${after}`
+    },
+  )
+
+  // Also handle cases where the code block spans multiple cells or has no \n
+  processed = processed.replace(
+    /^(\|.*?)```\w*\s*([^`\n]+?)```(.*\|)$/gm,
+    (match, before, code, after) => {
+      const cleanedCode = code.trim()
+      return `${before}\`${cleanedCode}\`${after}`
+    },
+  )
+
   // Extract code blocks and inline code to protect them
   const codeBlocks: string[] = []
   const inlineCode: string[] = []
 
   // Protect fenced code blocks (```...```)
-  let processed = content.replace(/```[\s\S]*?```/g, (match) => {
+  processed = processed.replace(/```[\s\S]*?```/g, (match) => {
     codeBlocks.push(match)
     return `__CODE_BLOCK_${codeBlocks.length - 1}__`
   })
