@@ -1,7 +1,9 @@
 import { useToast } from '@/hooks/use-toast'
+import { compressToBase64, type ShareableChatData } from '@/utils/compression'
 import {
   CheckIcon,
   DocumentDuplicateIcon,
+  LinkIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useRef, useState } from 'react'
@@ -15,6 +17,8 @@ type ShareModalProps = {
   isDarkMode: boolean
   isSidebarOpen?: boolean
   isRightSidebarOpen?: boolean
+  chatTitle?: string
+  chatCreatedAt?: Date
 }
 
 export function ShareModal({
@@ -24,9 +28,12 @@ export function ShareModal({
   isDarkMode,
   isSidebarOpen = false,
   isRightSidebarOpen = false,
+  chatTitle,
+  chatCreatedAt,
 }: ShareModalProps) {
   const { toast } = useToast()
   const [isCopied, setIsCopied] = useState(false)
+  const [isLinkCopied, setIsLinkCopied] = useState(false)
   const contentRef = useRef<HTMLPreElement>(null)
 
   // Handle keyboard shortcuts
@@ -131,6 +138,54 @@ export function ShareModal({
     }
   }
 
+  const handleShareLink = async () => {
+    try {
+      const shareableData: ShareableChatData = {
+        v: 1,
+        title: chatTitle || 'Shared Chat',
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          documentContent: m.documentContent,
+          documents: m.documents,
+          timestamp:
+            m.timestamp instanceof Date
+              ? m.timestamp.getTime()
+              : typeof m.timestamp === 'string'
+                ? Date.parse(m.timestamp)
+                : m.timestamp,
+          thoughts: m.thoughts,
+          thinkingDuration: m.thinkingDuration,
+          isError: m.isError,
+        })),
+        createdAt: chatCreatedAt ? chatCreatedAt.getTime() : Date.now(),
+      }
+
+      const compressed = compressToBase64(shareableData)
+      if (!compressed) {
+        toast({
+          title: 'Share failed',
+          description: 'Failed to create share link',
+          variant: 'destructive',
+          position: 'top-left',
+        })
+        return
+      }
+
+      const shareUrl = `${window.location.origin}/share#${compressed}`
+      await navigator.clipboard.writeText(shareUrl)
+      setIsLinkCopied(true)
+      setTimeout(() => setIsLinkCopied(false), 2000)
+    } catch (error) {
+      toast({
+        title: 'Share failed',
+        description: 'Failed to create share link',
+        variant: 'destructive',
+        position: 'top-left',
+      })
+    }
+  }
+
   const markdown = convertToMarkdown()
 
   // Calculate the positioning to center within the chat area
@@ -194,6 +249,22 @@ export function ShareModal({
             className="rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
           >
             Close
+          </button>
+          <button
+            onClick={handleShareLink}
+            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+          >
+            {isLinkCopied ? (
+              <>
+                <CheckIcon className="h-4 w-4" />
+                Link Copied!
+              </>
+            ) : (
+              <>
+                <LinkIcon className="h-4 w-4" />
+                Copy Share Link
+              </>
+            )}
           </button>
           <button
             onClick={handleCopy}
