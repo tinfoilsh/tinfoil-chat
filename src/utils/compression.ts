@@ -2,6 +2,97 @@ import { logError, logWarning } from '@/utils/error-handling'
 import pako from 'pako'
 
 /**
+ * Shareable chat data structure for URL encoding
+ */
+export type ShareableChatData = {
+  v: 1
+  title: string
+  messages: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    documentContent?: string
+    documents?: Array<{ name: string }>
+    timestamp: number
+    thoughts?: string
+    thinkingDuration?: number
+    isError?: boolean
+  }>
+  createdAt: number
+}
+
+/**
+ * Compress an object to gzipped base64 string
+ * Returns null if compression fails
+ */
+export function compressToBase64(data: object): string | null {
+  try {
+    const jsonString = JSON.stringify(data)
+    const compressed = pako.gzip(jsonString)
+    const binaryString = Array.from(compressed)
+      .map((byte) => String.fromCharCode(byte))
+      .join('')
+    return btoa(binaryString)
+  } catch (error) {
+    logError('Failed to compress data', error, {
+      component: 'CompressionUtil',
+      action: 'compressToBase64',
+    })
+    return null
+  }
+}
+
+/**
+ * Parse and validate shareable chat data from JSON string
+ * Returns null if parsing fails or data is invalid
+ */
+export function parseShareableChatData(
+  jsonString: string,
+): ShareableChatData | null {
+  try {
+    const data = JSON.parse(jsonString)
+
+    if (
+      typeof data !== 'object' ||
+      data === null ||
+      data.v !== 1 ||
+      typeof data.title !== 'string' ||
+      !Array.isArray(data.messages) ||
+      typeof data.createdAt !== 'number'
+    ) {
+      logWarning('Invalid shareable chat data structure', {
+        component: 'CompressionUtil',
+        action: 'parseShareableChatData',
+      })
+      return null
+    }
+
+    for (const msg of data.messages) {
+      if (
+        typeof msg !== 'object' ||
+        msg === null ||
+        (msg.role !== 'user' && msg.role !== 'assistant') ||
+        typeof msg.content !== 'string' ||
+        typeof msg.timestamp !== 'number'
+      ) {
+        logWarning('Invalid message in shareable chat data', {
+          component: 'CompressionUtil',
+          action: 'parseShareableChatData',
+        })
+        return null
+      }
+    }
+
+    return data as ShareableChatData
+  } catch (error) {
+    logError('Failed to parse shareable chat data', error, {
+      component: 'CompressionUtil',
+      action: 'parseShareableChatData',
+    })
+    return null
+  }
+}
+
+/**
  * Safely decompress gzipped base64 data with validation
  * Returns null if decompression fails or data is corrupted
  */
