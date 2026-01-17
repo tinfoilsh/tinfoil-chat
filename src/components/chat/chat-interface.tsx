@@ -1768,6 +1768,8 @@ export function ChatInterface({
           (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
           windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
+        chatTitle={currentChat?.title}
+        chatCreatedAt={currentChat?.createdAt}
       />
 
       {/* Settings Sidebar */}
