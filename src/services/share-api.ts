@@ -39,10 +39,13 @@ export async function uploadSharedChat(
   chatId: string,
   encryptedData: Uint8Array,
 ): Promise<void> {
+  const body = new ArrayBuffer(encryptedData.length)
+  new Uint8Array(body).set(encryptedData)
+
   const response = await fetch(`${API_BASE_URL}/api/shares/${chatId}`, {
     method: 'PUT',
     headers: await getAuthHeaders(),
-    body: encryptedData,
+    body,
   })
 
   if (!response.ok) {
