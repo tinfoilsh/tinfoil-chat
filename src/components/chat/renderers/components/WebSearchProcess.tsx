@@ -116,6 +116,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
 }: WebSearchProcessProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isSearching = webSearch.status === 'searching'
+  const isFailed = webSearch.status === 'failed'
   const hasSources = webSearch.sources && webSearch.sources.length > 0
   const sourcesToShow = webSearch.sources?.slice(0, 5) ?? []
 
@@ -193,6 +194,16 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                 </span>
               )}
             </div>
+          ) : isFailed ? (
+            <span className="min-w-0 truncate text-sm leading-5">
+              <span className="font-medium opacity-70">Search failed</span>
+              {webSearch.query && (
+                <span className="font-normal opacity-70">
+                  {' '}
+                  for &quot;{webSearch.query}&quot;
+                </span>
+              )}
+            </span>
           ) : (
             <span className="min-w-0 truncate text-sm leading-5">
               <span className="font-medium opacity-70">Searched the web</span>
