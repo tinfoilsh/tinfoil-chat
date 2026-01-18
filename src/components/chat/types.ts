@@ -19,7 +19,7 @@ export type WebSearchSource = {
 
 export type WebSearchState = {
   query?: string
-  status: 'searching' | 'completed'
+  status: 'searching' | 'completed' | 'failed'
   sources?: WebSearchSource[]
 }
 
