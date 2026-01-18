@@ -2,8 +2,8 @@ import { cn } from '@/components/ui/utils'
 import { type BaseModel } from '@/config/models'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useCallback, useState } from 'react'
+import { IoShareOutline } from 'react-icons/io5'
 import { PiSpeedometerLight, PiSpinner } from 'react-icons/pi'
-import { RxCopy } from 'react-icons/rx'
 import {
   isReasoningModel,
   type ReasoningEffort,
@@ -249,17 +249,17 @@ export function ChatControls({
           )}
         </button>
 
-        {/* Copy button - only show when there are messages */}
+        {/* Share button - only show when there are messages */}
         {onShareClick && hasMessages && (
           <button
             type="button"
             onClick={onShareClick}
             className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
-            title="Copy"
+            title="Share"
           >
-            <RxCopy className="h-5 w-5 text-content-secondary" />
+            <IoShareOutline className="h-5 w-5 text-content-secondary" />
             {!isCompactMode && (
-              <span className="text-xs text-content-secondary">Copy</span>
+              <span className="text-xs text-content-secondary">Share</span>
             )}
           </button>
         )}
