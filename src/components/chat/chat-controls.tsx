@@ -1,9 +1,7 @@
 import { cn } from '@/components/ui/utils'
 import { type BaseModel } from '@/config/models'
 import { useAuth, useClerk } from '@clerk/nextjs'
-import { ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { useCallback, useState } from 'react'
-import { IoWarningOutline } from 'react-icons/io5'
 import { PiSpeedometerLight, PiSpinner } from 'react-icons/pi'
 import { RxCopy } from 'react-icons/rx'
 import {
@@ -89,7 +87,7 @@ export function ChatControls({
       <div className="mb-2 flex items-center gap-2">
         <div className="flex gap-2">
           <div className="flex items-center gap-1.5 rounded-lg px-2 py-1">
-            <IoWarningOutline className="h-5 w-5 text-red-500" />
+            <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
             <span className="text-xs text-red-500">Model not found</span>
           </div>
         </div>
@@ -236,9 +234,9 @@ export function ChatControls({
           {!verificationComplete ? (
             <PiSpinner className="h-5 w-5 animate-spin text-content-primary" />
           ) : verificationSuccess ? (
-            <ShieldCheckIcon className="lock-close-animation h-5 w-5 text-emerald-500" />
+            <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_1px_rgba(16,185,129,0.6)]" />
           ) : (
-            <IoWarningOutline className="h-5 w-5 text-red-500" />
+            <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.6)]" />
           )}
           {!isCompactMode && (
             <span className="text-xs text-content-secondary">

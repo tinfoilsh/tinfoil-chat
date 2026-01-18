@@ -1,10 +1,6 @@
-import {
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/outline'
+import { CheckCircleIcon } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
-import { memo, useEffect, useState } from 'react'
+import { memo, useState } from 'react'
 import { PiSpinner } from 'react-icons/pi'
 
 type VerificationStep = {
@@ -36,7 +32,6 @@ export const VerificationStatusDisplay = memo(
     verificationDocument,
     isCompact = false,
   }: VerificationStatusDisplayProps) {
-    const [isAnimating, setIsAnimating] = useState(false)
     const [isExpanded, setIsExpanded] = useState(false)
 
     // Convert verification document to steps
@@ -106,15 +101,6 @@ export const VerificationStatusDisplay = memo(
     const isComplete = verificationDocument?.securityVerified === true
     const hasError = verificationDocument?.securityVerified === false
 
-    // Control animation based on loading state
-    useEffect(() => {
-      if (isLoading) {
-        setIsAnimating(true)
-      } else {
-        setIsAnimating(false)
-      }
-    }, [isLoading])
-
     const getStepIcon = (status: VerificationStep['status']) => {
       switch (status) {
         case 'success':
@@ -182,26 +168,9 @@ export const VerificationStatusDisplay = memo(
           >
             <div className="flex items-center gap-2">
               {hasError ? (
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.6)]" />
               ) : isComplete ? (
-                <motion.div
-                  animate={
-                    isAnimating
-                      ? {
-                          rotate: [0, 5, -5, 0],
-                        }
-                      : {}
-                  }
-                  transition={{
-                    duration: 2,
-                    repeat: isAnimating ? Infinity : 0,
-                    repeatDelay: 1,
-                  }}
-                >
-                  <ShieldCheckIcon
-                    className={`h-5 w-5 ${isDarkMode ? 'text-emerald-500' : 'text-brand-accent-dark'}`}
-                  />
-                </motion.div>
+                <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_1px_rgba(16,185,129,0.6)]" />
               ) : (
                 <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
               )}
@@ -295,32 +264,11 @@ export const VerificationStatusDisplay = memo(
           {/* Header */}
           <div className="mb-1 flex items-center gap-2 md:mb-3">
             {hasError ? (
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+              <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.6)]" />
+            ) : isComplete ? (
+              <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_1px_rgba(16,185,129,0.6)]" />
             ) : (
-              <motion.div
-                animate={
-                  isAnimating
-                    ? {
-                        rotate: [0, 5, -5, 0],
-                      }
-                    : {}
-                }
-                transition={{
-                  duration: 2,
-                  repeat: isAnimating ? Infinity : 0,
-                  repeatDelay: 1,
-                }}
-              >
-                <ShieldCheckIcon
-                  className={`h-5 w-5 ${
-                    isComplete
-                      ? 'text-emerald-500'
-                      : isDarkMode
-                        ? 'text-gray-400'
-                        : 'text-gray-500'
-                  }`}
-                />
-              </motion.div>
+              <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
             )}
             <h3
               className={`text-xs font-medium ${
