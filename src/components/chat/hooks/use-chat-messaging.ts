@@ -605,7 +605,9 @@ export function useChatMessaging({
 
         if (
           assistantMessage &&
-          (assistantMessage.content || assistantMessage.thoughts)
+          (assistantMessage.content ||
+            assistantMessage.thoughts ||
+            assistantMessage.webSearch)
         ) {
           const chatId = currentChatIdRef.current
 
