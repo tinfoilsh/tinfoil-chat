@@ -1,5 +1,11 @@
 import { useToast } from '@/hooks/use-toast'
-import { compressToBase64, type ShareableChatData } from '@/utils/compression'
+import { uploadSharedChat } from '@/services/share-api'
+import type { ShareableChatData } from '@/utils/compression'
+import {
+  encryptForShare,
+  exportKeyToBase64url,
+  generateShareKey,
+} from '@/utils/share-encryption'
 import {
   CheckIcon,
   DocumentDuplicateIcon,
@@ -19,6 +25,7 @@ type ShareModalProps = {
   isRightSidebarOpen?: boolean
   chatTitle?: string
   chatCreatedAt?: Date
+  chatId?: string
 }
 
 export function ShareModal({
@@ -30,10 +37,12 @@ export function ShareModal({
   isRightSidebarOpen = false,
   chatTitle,
   chatCreatedAt,
+  chatId,
 }: ShareModalProps) {
   const { toast } = useToast()
   const [isCopied, setIsCopied] = useState(false)
   const [isLinkCopied, setIsLinkCopied] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const contentRef = useRef<HTMLPreElement>(null)
 
   // Handle keyboard shortcuts
@@ -139,6 +148,17 @@ export function ShareModal({
   }
 
   const handleShareLink = async () => {
+    if (!chatId) {
+      toast({
+        title: 'Share failed',
+        description: 'Chat must be saved before sharing',
+        variant: 'destructive',
+        position: 'top-left',
+      })
+      return
+    }
+
+    setIsUploading(true)
     try {
       const shareableData: ShareableChatData = {
         v: 1,
@@ -161,18 +181,16 @@ export function ShareModal({
         createdAt: chatCreatedAt ? chatCreatedAt.getTime() : Date.now(),
       }
 
-      const compressed = compressToBase64(shareableData)
-      if (!compressed) {
-        toast({
-          title: 'Share failed',
-          description: 'Failed to create share link',
-          variant: 'destructive',
-          position: 'top-left',
-        })
-        return
-      }
+      // Generate throwaway key and encrypt
+      const key = await generateShareKey()
+      const encrypted = await encryptForShare(shareableData, key)
+      const keyBase64url = await exportKeyToBase64url(key)
 
-      const shareUrl = `${window.location.origin}/share#${compressed}`
+      // Upload encrypted data to server
+      await uploadSharedChat(chatId, encrypted)
+
+      // Build share URL with key in fragment
+      const shareUrl = `${window.location.origin}/share/${chatId}#${keyBase64url}`
       await navigator.clipboard.writeText(shareUrl)
       setIsLinkCopied(true)
       setTimeout(() => setIsLinkCopied(false), 2000)
@@ -183,6 +201,8 @@ export function ShareModal({
         variant: 'destructive',
         position: 'top-left',
       })
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -252,12 +272,18 @@ export function ShareModal({
           </button>
           <button
             onClick={handleShareLink}
-            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+            disabled={isUploading || !chatId}
+            className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLinkCopied ? (
               <>
                 <CheckIcon className="h-4 w-4" />
                 Link Copied!
+              </>
+            ) : isUploading ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-content-secondary border-t-transparent" />
+                Uploading...
               </>
             ) : (
               <>
