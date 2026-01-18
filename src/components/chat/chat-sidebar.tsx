@@ -1,9 +1,12 @@
 import { API_BASE_URL, PAGINATION } from '@/config'
 import { useProjects } from '@/hooks/use-projects'
+import { encryptionService } from '@/services/encryption/encryption-service'
+import { chatStorage } from '@/services/storage/chat-storage'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled as setCloudSyncEnabledSetting,
 } from '@/utils/cloud-sync-settings'
+import { logInfo } from '@/utils/error-handling'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -613,6 +616,64 @@ export function ChatSidebar({
     })
   }, [chats, getChatSortTimestamp, activeTab, isSignedIn, cloudSyncEnabled])
 
+  const handleCloudSyncToggle = async (enabled: boolean) => {
+    if (enabled) {
+      // Check if encryption key exists
+      if (!encryptionService.getKey()) {
+        // Turn on the toggle visually (but don't persist yet)
+        setCloudSyncEnabled(true)
+
+        // Show the cloud sync setup modal
+        if (onCloudSyncSetupClick) {
+          onCloudSyncSetupClick()
+        }
+        return
+      }
+
+      // If key exists, proceed with enabling
+      setCloudSyncEnabled(true)
+      setCloudSyncEnabledSetting(true)
+
+      // Clear the explicit disable flag when re-enabling
+      localStorage.removeItem('cloudSyncExplicitlyDisabled')
+    } else {
+      // Disabling cloud sync
+      setCloudSyncEnabled(false)
+      setCloudSyncEnabledSetting(false)
+
+      // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
+      localStorage.setItem('cloudSyncExplicitlyDisabled', 'true')
+
+      try {
+        const deletedCount = await chatStorage.deleteAllNonLocalChats()
+        logInfo(
+          `Deleted ${deletedCount} synced chats when disabling cloud sync`,
+          {
+            component: 'ChatSidebar',
+            action: 'handleCloudSyncToggle',
+          },
+        )
+        if (deletedCount > 0 && onChatsUpdated) {
+          onChatsUpdated()
+        }
+      } catch (error) {
+        logInfo('Failed to delete synced chats', {
+          component: 'ChatSidebar',
+          action: 'handleCloudSyncToggle',
+          metadata: { error },
+        })
+      }
+    }
+
+    if (isClient) {
+      window.dispatchEvent(
+        new CustomEvent('cloudSyncSettingChanged', {
+          detail: { enabled },
+        }),
+      )
+    }
+  }
+
   const handleUpgradeToPro = useCallback(async () => {
     if (!getToken) {
       return
@@ -915,19 +976,46 @@ export function ChatSidebar({
                   </div>
                 )}
 
-                <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
-                  {!isSignedIn ? (
-                    'Your chats are stored temporarily in this browser tab. Create an account for persistent storage.'
-                  ) : !cloudSyncEnabled || activeTab === 'local' ? (
-                    "Local chats are stored only on this device and won't sync across devices."
-                  ) : (
-                    <>
-                      Your chats are encrypted and synced to the cloud. The
-                      encryption key is only stored on this browser and never
-                      sent to Tinfoil.
-                    </>
-                  )}
-                </div>
+                {/* Description text - show when NOT displaying the cloud sync box */}
+                {(!isSignedIn || cloudSyncEnabled) && (
+                  <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
+                    {!isSignedIn ? (
+                      'Your chats are stored temporarily in this browser tab. Create an account for persistent storage.'
+                    ) : activeTab === 'local' ? (
+                      "Local chats are stored only on this device and won't sync across devices."
+                    ) : (
+                      <>
+                        Your chats are encrypted and synced to the cloud. The
+                        encryption key is only stored on this browser and never
+                        sent to Tinfoil.
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Cloud Sync Toggle - show when signed in and cloud sync is OFF */}
+                {isSignedIn && !cloudSyncEnabled && (
+                  <div
+                    className={`mx-4 my-3 rounded-lg border border-border-subtle px-3 py-2 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-aeonik text-sm font-medium text-content-secondary">
+                        Cloud Sync
+                      </div>
+                      <label className="relative inline-flex cursor-pointer items-center">
+                        <input
+                          type="checkbox"
+                          checked={cloudSyncEnabled}
+                          onChange={(e) =>
+                            handleCloudSyncToggle(e.target.checked)
+                          }
+                          className="peer sr-only"
+                        />
+                        <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                      </label>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
