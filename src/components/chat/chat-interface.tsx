@@ -1770,6 +1770,7 @@ export function ChatInterface({
         }
         chatTitle={currentChat?.title}
         chatCreatedAt={currentChat?.createdAt}
+        chatId={currentChat?.id}
       />
 
       {/* Settings Sidebar */}
