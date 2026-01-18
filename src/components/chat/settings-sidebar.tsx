@@ -11,7 +11,6 @@ import {
 import { logInfo } from '@/utils/error-handling'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
-  CloudArrowUpIcon,
   Cog6ToothIcon,
   KeyIcon,
   MoonIcon,
@@ -675,99 +674,6 @@ export function SettingsSidebar({
               )}
             </div>
 
-            {/* Encrypted Cloud Sync section */}
-            {onEncryptionKeyClick && (
-              <div>
-                <h3
-                  className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                >
-                  Encrypted Cloud Sync
-                </h3>
-                <div className="space-y-2">
-                  {/* Cloud Sync Toggle */}
-                  <div
-                    className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <CloudArrowUpIcon
-                          className={`mt-0.5 h-7 w-7 ${'text-content-muted'}`}
-                        />
-                        <div className="text-left">
-                          <div
-                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                          >
-                            Cloud Sync
-                          </div>
-                          <div
-                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                          >
-                            {cloudSyncEnabled
-                              ? 'End-to-end encrypted. Only you can access your chats and data.'
-                              : 'Chats and settings are stored locally only'}
-                          </div>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex cursor-pointer items-center">
-                        <input
-                          type="checkbox"
-                          checked={cloudSyncEnabled}
-                          onChange={(e) =>
-                            handleCloudSyncToggle(e.target.checked)
-                          }
-                          className="peer sr-only"
-                        />
-                        <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Warning when cloud sync is disabled */}
-                  {!cloudSyncEnabled && (
-                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        <strong>Note:</strong> Cloud sync is disabled. Your
-                        chats, settings, and personalization preferences are
-                        stored locally on this browser and won't sync across
-                        devices.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Encryption Key Management - only show when cloud sync is enabled */}
-                  {cloudSyncEnabled && (
-                    <button
-                      onClick={onEncryptionKeyClick}
-                      className={`flex w-full items-start justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <KeyIcon
-                          className={`mt-0.5 h-5 w-5 ${'text-content-muted'}`}
-                        />
-                        <div className="text-left">
-                          <div
-                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                          >
-                            Encryption Key
-                          </div>
-                          <div
-                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                          >
-                            Manage your chat encryption key
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={`self-center text-sm ${'text-content-muted'}`}
-                      >
-                        →
-                      </div>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Appearance section */}
             <div>
               <h3
@@ -1118,6 +1024,82 @@ export function SettingsSidebar({
                 </div>
               </div>
             </div>
+
+            {/* Encrypted Cloud Sync section */}
+            {onEncryptionKeyClick && (
+              <div>
+                <h3
+                  className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                >
+                  Encrypted Cloud Sync
+                </h3>
+                <div className="space-y-2">
+                  {/* Cloud Sync Toggle */}
+                  <div
+                    className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div
+                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                        >
+                          Cloud Sync
+                        </div>
+                        <div
+                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                        >
+                          {cloudSyncEnabled
+                            ? 'End-to-end encrypted. Only you can access your chats and data.'
+                            : 'Turn on Cloud Sync to back up and access your data across devices.'}
+                        </div>
+                      </div>
+                      <label className="relative inline-flex cursor-pointer items-center">
+                        <input
+                          type="checkbox"
+                          checked={cloudSyncEnabled}
+                          onChange={(e) =>
+                            handleCloudSyncToggle(e.target.checked)
+                          }
+                          className="peer sr-only"
+                        />
+                        <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Encryption Key Management - only show when cloud sync is enabled */}
+                  {cloudSyncEnabled && (
+                    <button
+                      onClick={onEncryptionKeyClick}
+                      className={`flex w-full items-start justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <KeyIcon
+                          className={`mt-0.5 h-5 w-5 ${'text-content-muted'}`}
+                        />
+                        <div className="text-left">
+                          <div
+                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                          >
+                            Encryption Key
+                          </div>
+                          <div
+                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                          >
+                            Manage your chat encryption key
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={`self-center text-sm ${'text-content-muted'}`}
+                      >
+                        →
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
