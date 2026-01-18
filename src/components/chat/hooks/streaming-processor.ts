@@ -305,6 +305,19 @@ export async function processStreamingResponse(
               if (isSameChat()) {
                 scheduleStreamingUpdate()
               }
+            } else if (searchStatus === 'failed' && webSearchState) {
+              webSearchState = {
+                query: webSearchState.query,
+                status: 'failed',
+                sources: [],
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+              }
+              if (isSameChat()) {
+                scheduleStreamingUpdate()
+              }
             }
             continue
           }
