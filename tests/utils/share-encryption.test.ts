@@ -4,6 +4,7 @@ import {
   exportKeyToBase64url,
   generateShareKey,
   importKeyFromBase64url,
+  type EncryptedShareData,
 } from '@/utils/share-encryption'
 import { describe, expect, it } from 'vitest'
 
@@ -85,22 +86,28 @@ describe('share-encryption', () => {
   })
 
   describe('encryptForShare', () => {
-    it('should encrypt data to Uint8Array', async () => {
+    it('should encrypt data to EncryptedShareData format', async () => {
       const key = await generateShareKey()
       const data = { message: 'hello world' }
       const encrypted = await encryptForShare(data, key)
 
-      expect(encrypted).toBeInstanceOf(Uint8Array)
-      expect(encrypted.length).toBeGreaterThan(12) // At least IV + some ciphertext
+      expect(encrypted).toHaveProperty('v', 1)
+      expect(encrypted).toHaveProperty('iv')
+      expect(encrypted).toHaveProperty('ct')
+      expect(typeof encrypted.iv).toBe('string')
+      expect(typeof encrypted.ct).toBe('string')
     })
 
-    it('should prepend IV to ciphertext', async () => {
+    it('should produce valid base64 for iv and ct', async () => {
       const key = await generateShareKey()
       const data = { test: 'data' }
       const encrypted = await encryptForShare(data, key)
 
-      // IV is 12 bytes, so total should be > 12
-      expect(encrypted.length).toBeGreaterThan(12)
+      // IV should be 12 bytes = 16 base64 chars
+      expect(encrypted.iv.length).toBe(16)
+      // Both should be valid base64
+      expect(() => atob(encrypted.iv)).not.toThrow()
+      expect(() => atob(encrypted.ct)).not.toThrow()
     })
 
     it('should produce different ciphertext for same data (random IV)', async () => {
@@ -110,14 +117,30 @@ describe('share-encryption', () => {
       const encrypted2 = await encryptForShare(data, key)
 
       // IVs should be different, so ciphertexts should differ
-      expect(encrypted1).not.toEqual(encrypted2)
+      expect(encrypted1.iv).not.toBe(encrypted2.iv)
+      expect(encrypted1.ct).not.toBe(encrypted2.ct)
     })
 
     it('should handle empty objects', async () => {
       const key = await generateShareKey()
       const encrypted = await encryptForShare({}, key)
-      expect(encrypted).toBeInstanceOf(Uint8Array)
-      expect(encrypted.length).toBeGreaterThan(12)
+      expect(encrypted.v).toBe(1)
+      expect(encrypted.iv).toBeDefined()
+      expect(encrypted.ct).toBeDefined()
+    })
+
+    it('should compress data with gzip', async () => {
+      const key = await generateShareKey()
+      // Create repetitive data that compresses well
+      const data = { content: 'hello '.repeat(1000) }
+      const encrypted = await encryptForShare(data, key)
+
+      // Version should be 1
+      expect(encrypted.v).toBe(1)
+
+      // Ciphertext (base64) size should be much smaller than raw JSON due to compression
+      const rawJsonSize = JSON.stringify(data).length
+      expect(encrypted.ct.length).toBeLessThan(rawJsonSize)
     })
 
     it('should handle complex nested data', async () => {
@@ -130,7 +153,9 @@ describe('share-encryption', () => {
         metadata: { title: 'Test Chat', createdAt: 1234567890 },
       }
       const encrypted = await encryptForShare(data, key)
-      expect(encrypted).toBeInstanceOf(Uint8Array)
+      expect(encrypted.v).toBe(1)
+      expect(encrypted.iv).toBeDefined()
+      expect(encrypted.ct).toBeDefined()
     })
 
     it('should handle unicode content', async () => {
@@ -155,12 +180,37 @@ describe('share-encryption', () => {
       expect(decrypted).toEqual(originalData)
     })
 
-    it('should return null for invalid ciphertext (too short)', async () => {
+    it('should return null for missing iv', async () => {
       const key = await generateShareKey()
       const keyBase64 = await exportKeyToBase64url(key)
-      const tooShort = new Uint8Array(10) // Less than IV length
+      const invalidData = { v: 1, ct: 'abc' } as EncryptedShareData
 
-      const result = await decryptShare(tooShort, keyBase64)
+      const result = await decryptShare(invalidData, keyBase64)
+      expect(result).toBeNull()
+    })
+
+    it('should return null for missing ct', async () => {
+      const key = await generateShareKey()
+      const keyBase64 = await exportKeyToBase64url(key)
+      const invalidData = { v: 1, iv: 'abc' } as EncryptedShareData
+
+      const result = await decryptShare(invalidData, keyBase64)
+      expect(result).toBeNull()
+    })
+
+    it('should return null for unsupported version', async () => {
+      const key = await generateShareKey()
+      const keyBase64 = await exportKeyToBase64url(key)
+      const data = { test: 'data' }
+      const encrypted = await encryptForShare(data, key)
+
+      // Change version to unsupported value
+      const invalidData = {
+        ...encrypted,
+        v: 99,
+      } as unknown as EncryptedShareData
+
+      const result = await decryptShare(invalidData, keyBase64)
       expect(result).toBeNull()
     })
 
@@ -170,11 +220,12 @@ describe('share-encryption', () => {
       const data = { test: 'data' }
       const encrypted = await encryptForShare(data, key)
 
-      // Corrupt the ciphertext
-      encrypted[15] = encrypted[15] ^ 0xff
-      encrypted[20] = encrypted[20] ^ 0xff
+      // Corrupt the ciphertext by changing some characters
+      const corruptedCt =
+        encrypted.ct.substring(0, 10) + 'XXXX' + encrypted.ct.substring(14)
+      const corruptedData = { ...encrypted, ct: corruptedCt }
 
-      const result = await decryptShare(encrypted, keyBase64)
+      const result = await decryptShare(corruptedData, keyBase64)
       expect(result).toBeNull()
     })
 
