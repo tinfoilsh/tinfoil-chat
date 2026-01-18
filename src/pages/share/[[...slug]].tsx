@@ -1,18 +1,24 @@
+'use client'
+
 import { initializeRenderers } from '@/components/chat/renderers/client'
 import { SharedChatView } from '@/components/chat/shared-chat-view'
 import { getAIModels, type BaseModel } from '@/config/models'
+import { fetchSharedChat } from '@/services/share-api'
 import {
-  parseShareableChatData,
-  safeDecompress,
+  validateShareableChatData,
   type ShareableChatData,
 } from '@/utils/compression'
+import { decryptShare } from '@/utils/share-encryption'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 
 type LoadingState = 'loading' | 'error' | 'success'
 
 export default function SharePage() {
+  const router = useRouter()
   const [loadingState, setLoadingState] = useState<LoadingState>('loading')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [chatData, setChatData] = useState<ShareableChatData | null>(null)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [model, setModel] = useState<BaseModel | null>(null)
@@ -44,39 +50,70 @@ export default function SharePage() {
   }, [])
 
   useEffect(() => {
+    if (!router.isReady) return
+
     const loadData = async () => {
-      const hash = window.location.hash.slice(1)
-      if (!hash) {
+      const slug = router.query.slug
+      const parts =
+        typeof slug === 'string' ? [slug] : Array.isArray(slug) ? slug : []
+      const chatId = parts[0]
+
+      if (!chatId) {
+        setErrorMessage('No chat ID provided')
         setLoadingState('error')
         return
       }
 
-      const decompressed = safeDecompress(hash)
-      if (!decompressed) {
+      const keyBase64url = window.location.hash.slice(1)
+      if (!keyBase64url) {
+        setErrorMessage('Missing decryption key')
         setLoadingState('error')
         return
       }
 
-      const parsed = parseShareableChatData(decompressed)
-      if (!parsed) {
-        setLoadingState('error')
-        return
-      }
+      try {
+        const encryptedData = await fetchSharedChat(chatId)
+        const decrypted = await decryptShare(encryptedData, keyBase64url)
 
-      const models = await getAIModels(false)
-      const chatModel = models.find((m) => m.type === 'chat') || models[0]
-      if (!chatModel) {
-        setLoadingState('error')
-        return
-      }
+        if (!decrypted) {
+          setErrorMessage('Failed to decrypt chat data')
+          setLoadingState('error')
+          return
+        }
 
-      setChatData(parsed)
-      setModel(chatModel)
-      setLoadingState('success')
+        const parsed = validateShareableChatData(decrypted)
+        if (!parsed) {
+          setErrorMessage('Invalid chat data format')
+          setLoadingState('error')
+          return
+        }
+
+        const models = await getAIModels(false)
+        const chatModel = models.find((m) => m.type === 'chat') || models[0]
+        if (!chatModel) {
+          setErrorMessage('Failed to load model configuration')
+          setLoadingState('error')
+          return
+        }
+
+        setChatData(parsed)
+        setModel(chatModel)
+        setLoadingState('success')
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === 'Shared chat not found'
+        ) {
+          setErrorMessage('This shared chat does not exist or has been deleted')
+        } else {
+          setErrorMessage('Failed to load shared chat')
+        }
+        setLoadingState('error')
+      }
     }
 
     loadData()
-  }, [])
+  }, [router.isReady, router.query.slug])
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString(undefined, {
@@ -106,7 +143,8 @@ export default function SharePage() {
             Invalid Share Link
           </h1>
           <p className="mt-2 text-content-secondary">
-            This share link is invalid or has been corrupted.
+            {errorMessage ||
+              'This share link is invalid or has been corrupted.'}
           </p>
           <Link
             href="/"

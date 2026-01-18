@@ -42,6 +42,49 @@ export function compressToBase64(data: object): string | null {
 }
 
 /**
+ * Validate shareable chat data structure
+ * Returns null if data is invalid
+ */
+export function validateShareableChatData(
+  data: unknown,
+): ShareableChatData | null {
+  if (
+    typeof data !== 'object' ||
+    data === null ||
+    (data as Record<string, unknown>).v !== 1 ||
+    typeof (data as Record<string, unknown>).title !== 'string' ||
+    !Array.isArray((data as Record<string, unknown>).messages) ||
+    typeof (data as Record<string, unknown>).createdAt !== 'number'
+  ) {
+    logWarning('Invalid shareable chat data structure', {
+      component: 'CompressionUtil',
+      action: 'validateShareableChatData',
+    })
+    return null
+  }
+
+  const typedData = data as Record<string, unknown>
+  for (const msg of typedData.messages as unknown[]) {
+    if (
+      typeof msg !== 'object' ||
+      msg === null ||
+      ((msg as Record<string, unknown>).role !== 'user' &&
+        (msg as Record<string, unknown>).role !== 'assistant') ||
+      typeof (msg as Record<string, unknown>).content !== 'string' ||
+      typeof (msg as Record<string, unknown>).timestamp !== 'number'
+    ) {
+      logWarning('Invalid message in shareable chat data', {
+        component: 'CompressionUtil',
+        action: 'validateShareableChatData',
+      })
+      return null
+    }
+  }
+
+  return data as ShareableChatData
+}
+
+/**
  * Parse and validate shareable chat data from JSON string
  * Returns null if parsing fails or data is invalid
  */
@@ -50,39 +93,7 @@ export function parseShareableChatData(
 ): ShareableChatData | null {
   try {
     const data = JSON.parse(jsonString)
-
-    if (
-      typeof data !== 'object' ||
-      data === null ||
-      data.v !== 1 ||
-      typeof data.title !== 'string' ||
-      !Array.isArray(data.messages) ||
-      typeof data.createdAt !== 'number'
-    ) {
-      logWarning('Invalid shareable chat data structure', {
-        component: 'CompressionUtil',
-        action: 'parseShareableChatData',
-      })
-      return null
-    }
-
-    for (const msg of data.messages) {
-      if (
-        typeof msg !== 'object' ||
-        msg === null ||
-        (msg.role !== 'user' && msg.role !== 'assistant') ||
-        typeof msg.content !== 'string' ||
-        typeof msg.timestamp !== 'number'
-      ) {
-        logWarning('Invalid message in shareable chat data', {
-          component: 'CompressionUtil',
-          action: 'parseShareableChatData',
-        })
-        return null
-      }
-    }
-
-    return data as ShareableChatData
+    return validateShareableChatData(data)
   } catch (error) {
     logError('Failed to parse shareable chat data', error, {
       component: 'CompressionUtil',
