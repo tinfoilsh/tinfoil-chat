@@ -1,8 +1,18 @@
 import { logError } from '@/utils/error-handling'
+import pako from 'pako'
 
 const ALGORITHM = 'AES-GCM'
 const KEY_LENGTH = 256
-const IV_LENGTH = 12
+
+/**
+ * Encrypted share data format (stored on server as JSON)
+ * Matches the pattern used by EncryptionService for regular chat storage
+ */
+export interface EncryptedShareData {
+  v: 1 // Format version
+  iv: string // Base64 encoded IV
+  ct: string // Base64 encoded ciphertext (of gzipped JSON)
+}
 
 /**
  * Generate a throwaway AES-256 key for share encryption
@@ -50,40 +60,52 @@ export async function importKeyFromBase64url(
 
 /**
  * Encrypt data for sharing
- * Returns IV prepended to ciphertext as Uint8Array
+ * Returns JSON structure: { v: 1, iv: base64, ct: base64 }
+ * Plaintext is gzipped JSON for compression
  */
 export async function encryptForShare(
   data: object,
   key: CryptoKey,
-): Promise<Uint8Array> {
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH))
-  const encoded = new TextEncoder().encode(JSON.stringify(data))
+): Promise<EncryptedShareData> {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const jsonString = JSON.stringify(data)
+  const compressed = pako.gzip(jsonString)
 
   const ciphertext = await crypto.subtle.encrypt(
     { name: ALGORITHM, iv },
     key,
-    encoded,
+    compressed,
   )
 
-  // Prepend IV to ciphertext
-  const result = new Uint8Array(iv.length + ciphertext.byteLength)
-  result.set(iv, 0)
-  result.set(new Uint8Array(ciphertext), iv.length)
-
-  return result
+  return {
+    v: 1,
+    iv: uint8ArrayToBase64(iv),
+    ct: uint8ArrayToBase64(new Uint8Array(ciphertext)),
+  }
 }
 
 /**
- * Decrypt shared data
- * Expects IV prepended to ciphertext
+ * Decrypt shared data from JSON format
  */
 export async function decryptShare(
-  ciphertext: Uint8Array,
+  data: EncryptedShareData,
   keyBase64url: string,
 ): Promise<object | null> {
   try {
-    if (ciphertext.length <= IV_LENGTH) {
-      logError('Ciphertext too short', new Error('Invalid ciphertext length'), {
+    if (data.v !== 1) {
+      logError(
+        'Unsupported share format version',
+        new Error(`Unknown version: ${data.v}`),
+        {
+          component: 'ShareEncryption',
+          action: 'decryptShare',
+        },
+      )
+      return null
+    }
+
+    if (!data.iv || !data.ct) {
+      logError('Missing iv or ct', new Error('Invalid share data'), {
         component: 'ShareEncryption',
         action: 'decryptShare',
       })
@@ -91,16 +113,26 @@ export async function decryptShare(
     }
 
     const key = await importKeyFromBase64url(keyBase64url)
-    const iv = ciphertext.slice(0, IV_LENGTH)
-    const encryptedData = ciphertext.slice(IV_LENGTH)
+    const iv = base64ToUint8Array(data.iv)
+    const ciphertext = base64ToUint8Array(data.ct)
 
     const decrypted = await crypto.subtle.decrypt(
-      { name: ALGORITHM, iv },
+      {
+        name: ALGORITHM,
+        iv: iv.buffer.slice(
+          iv.byteOffset,
+          iv.byteOffset + iv.byteLength,
+        ) as ArrayBuffer,
+      },
       key,
-      encryptedData,
+      ciphertext.buffer.slice(
+        ciphertext.byteOffset,
+        ciphertext.byteOffset + ciphertext.byteLength,
+      ) as ArrayBuffer,
     )
 
-    const jsonString = new TextDecoder().decode(decrypted)
+    // Decompress gzipped data
+    const jsonString = pako.ungzip(new Uint8Array(decrypted), { to: 'string' })
     return JSON.parse(jsonString)
   } catch (error) {
     logError('Failed to decrypt share', error, {
@@ -109,4 +141,27 @@ export async function decryptShare(
     })
     return null
   }
+}
+
+/**
+ * Convert Uint8Array to base64 string
+ */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+/**
+ * Convert base64 string to Uint8Array
+ */
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
 }

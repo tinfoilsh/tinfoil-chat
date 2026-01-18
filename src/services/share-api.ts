@@ -1,4 +1,5 @@
 import { logError } from '@/utils/error-handling'
+import type { EncryptedShareData } from '@/utils/share-encryption'
 import { isTokenValid } from '@/utils/token-validation'
 
 const API_BASE_URL =
@@ -28,7 +29,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 
   return {
     Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/octet-stream',
+    'Content-Type': 'application/json',
   }
 }
 
@@ -37,15 +38,12 @@ async function getAuthHeaders(): Promise<HeadersInit> {
  */
 export async function uploadSharedChat(
   chatId: string,
-  encryptedData: Uint8Array,
+  encryptedData: EncryptedShareData,
 ): Promise<void> {
-  const body = new ArrayBuffer(encryptedData.length)
-  new Uint8Array(body).set(encryptedData)
-
   const response = await fetch(`${API_BASE_URL}/api/shares/${chatId}`, {
     method: 'PUT',
     headers: await getAuthHeaders(),
-    body,
+    body: JSON.stringify(encryptedData),
   })
 
   if (!response.ok) {
@@ -63,7 +61,9 @@ export async function uploadSharedChat(
  * Fetch encrypted shared chat data from the server
  * This endpoint is public - no authentication required
  */
-export async function fetchSharedChat(chatId: string): Promise<Uint8Array> {
+export async function fetchSharedChat(
+  chatId: string,
+): Promise<EncryptedShareData> {
   const response = await fetch(`${API_BASE_URL}/api/shares/${chatId}`, {
     method: 'GET',
   })
@@ -75,6 +75,5 @@ export async function fetchSharedChat(chatId: string): Promise<Uint8Array> {
     throw new Error(`Failed to fetch shared chat: ${response.status}`)
   }
 
-  const arrayBuffer = await response.arrayBuffer()
-  return new Uint8Array(arrayBuffer)
+  return response.json()
 }
