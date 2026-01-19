@@ -30,6 +30,8 @@ export function ModelSelector({
   // Track images that have loaded
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const menuRef = useRef<HTMLDivElement>(null)
+  // Track if user is scrolling to prevent accidental selection on touch end
+  const isScrollingRef = useRef(false)
 
   // Start with sensible defaults based on preferred positioning
   const [dynamicStyles, setDynamicStyles] = useState<{
@@ -85,16 +87,20 @@ export function ModelSelector({
         useAbove = true
       }
 
+      // On mobile, use a smaller max height to ensure scrollability
+      const isMobile = window.innerWidth < 768
+      const maxHeightCap = isMobile ? 300 : window.innerHeight * 0.7
+
       if (useAbove) {
         setDynamicStyles({
-          maxHeight: `${Math.min(Math.max(0, spaceAbove), window.innerHeight * 0.7)}px`,
+          maxHeight: `${Math.min(Math.max(0, spaceAbove), maxHeightCap)}px`,
           bottom: '100%',
           top: undefined,
         })
       } else {
         // Position below
         setDynamicStyles({
-          maxHeight: `${Math.min(Math.max(0, spaceBelow), window.innerHeight * 0.7)}px`,
+          maxHeight: `${Math.min(Math.max(0, spaceBelow), maxHeightCap)}px`,
           top: '100%',
           bottom: undefined,
         })
@@ -155,6 +161,16 @@ export function ModelSelector({
         ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
         ...(dynamicStyles.top && { top: dynamicStyles.top }),
       }}
+      onTouchStart={(e) => {
+        e.stopPropagation()
+        isScrollingRef.current = false
+      }}
+      onTouchMove={(e) => {
+        e.stopPropagation()
+        isScrollingRef.current = true
+      }}
+      onTouchEnd={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {displayModels.map((model) => {
         const isAvailable = isModelAvailable(model, isPremium)
@@ -201,8 +217,12 @@ export function ModelSelector({
               }
             }}
             onTouchEnd={(e) => {
-              e.preventDefault()
               e.stopPropagation()
+              // Don't select if user was scrolling
+              if (isScrollingRef.current) {
+                return
+              }
+              e.preventDefault()
               if (isAvailable) {
                 onSelect(model.modelName as AIModel)
               } else if (isPremiumModel && !isPremium && onPremiumModelClick) {
