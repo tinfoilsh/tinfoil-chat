@@ -24,6 +24,60 @@ const DB_NAME = 'tinfoil-chat'
 export const DB_VERSION = 1
 const CHATS_STORE = 'chats'
 
+function hashString(input: string): string {
+  // Small, deterministic 32-bit hash for change detection
+  let hash = 5381
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 33) ^ input.charCodeAt(i)
+  }
+  // Unsigned hex string
+  return (hash >>> 0).toString(16)
+}
+
+/**
+ * Computes a stable fingerprint for a chat's meaningful content.
+ * Used to decide if a chat is "locally modified" (and should be re-uploaded).
+ *
+ * Intentionally ignores `updatedAt` so we don't treat "save time changed" as a content change.
+ * Avoids hashing huge blobs (documentContent/image base64) by hashing or summarizing those fields.
+ */
+export function chatContentFingerprint(chat: {
+  title?: string
+  projectId?: string
+  messages?: any[]
+}): string {
+  const messages = (chat.messages || []).map((m) => ({
+    role: m.role,
+    content: m.content,
+    thoughts: m.thoughts,
+    isThinking: m.isThinking,
+    thinkingDuration: m.thinkingDuration,
+    isError: m.isError,
+    timestamp: m.timestamp,
+    documents: m.documents,
+    documentContentHash:
+      typeof m.documentContent === 'string'
+        ? hashString(m.documentContent)
+        : null,
+    documentContentLength:
+      typeof m.documentContent === 'string' ? m.documentContent.length : 0,
+    imageData:
+      Array.isArray(m.imageData) && m.imageData.length > 0
+        ? m.imageData.map((img: any) => ({
+            mimeType: img?.mimeType,
+            base64Length:
+              typeof img?.base64 === 'string' ? img.base64.length : 0,
+          }))
+        : [],
+  }))
+
+  return JSON.stringify({
+    title: chat.title ?? '',
+    projectId: chat.projectId ?? null,
+    messages,
+  })
+}
+
 export class IndexedDBStorage {
   private db: IDBDatabase | null = null
   private saveQueue: Promise<void> = Promise.resolve()
@@ -168,12 +222,19 @@ export class IndexedDBStorage {
               : msg.timestamp,
         }))
 
-        // Determine if the chat content has changed compared to existing version
+        // Determine if the chat's meaningful content has changed compared to existing version.
+        // NOTE: We intentionally ignore `updatedAt` so we don't create sync churn from timestamps.
         const hasContentChanges = existingChat
-          ? existingChat.messages.length !== messagesForStorage.length ||
-            existingChat.updatedAt !== chat.updatedAt ||
-            existingChat.title !== chat.title ||
-            existingChat.projectId !== (chat as StoredChat).projectId
+          ? chatContentFingerprint({
+              title: existingChat.title,
+              projectId: existingChat.projectId,
+              messages: existingChat.messages,
+            }) !==
+            chatContentFingerprint({
+              title: chat.title,
+              projectId: (chat as StoredChat).projectId,
+              messages: messagesForStorage,
+            })
           : false
 
         // Never mark chats that failed to decrypt as locally modified.
