@@ -2,9 +2,15 @@ import { logError } from '@/utils/error-handling'
 
 export type ChatChangeReason = 'save' | 'delete' | 'sync' | 'pagination'
 
+export interface ChatIdChange {
+  from: string
+  to: string
+}
+
 export interface ChatChangedEvent {
   reason: ChatChangeReason
   ids?: string[]
+  idChanges?: ChatIdChange[]
 }
 
 type Listener = (event: ChatChangedEvent) => void

@@ -561,7 +561,11 @@ export class CloudSyncService {
         await indexedDBStorage.deleteChat(chatId)
         await indexedDBStorage.saveChat({ ...chat, id: newId })
         // Notify UI about the ID change so it can reload
-        chatEvents.emit({ reason: 'sync', ids: [newId] })
+        chatEvents.emit({
+          reason: 'sync',
+          ids: [newId],
+          idChanges: [{ from: chatId, to: newId }],
+        })
         chatId = newId
       }
 
@@ -660,7 +664,11 @@ export class CloudSyncService {
             await indexedDBStorage.deleteChat(chat.id)
             await indexedDBStorage.saveChat({ ...chat, id: newId })
             // Notify UI about the ID change so it can reload
-            chatEvents.emit({ reason: 'sync', ids: [newId] })
+            chatEvents.emit({
+              reason: 'sync',
+              ids: [newId],
+              idChanges: [{ from: chat.id, to: newId }],
+            })
             finalId = newId
           }
 

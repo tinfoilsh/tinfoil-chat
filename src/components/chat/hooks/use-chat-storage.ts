@@ -173,6 +173,21 @@ export function useChatStorage({
   useEffect(() => {
     const cleanup = chatEvents.on((event) => {
       if (event.reason === 'sync' || event.reason === 'pagination') {
+        // Apply ID changes eagerly to avoid temp/server ID mismatch races before reload
+        if (event.idChanges && event.idChanges.length > 0) {
+          const idMap = new Map(event.idChanges.map((c) => [c.from, c.to]))
+
+          setChats((prevChats) =>
+            prevChats.map((c) =>
+              idMap.has(c.id) ? { ...c, id: idMap.get(c.id)! } : c,
+            ),
+          )
+
+          setCurrentChat((prev) =>
+            idMap.has(prev.id) ? { ...prev, id: idMap.get(prev.id)! } : prev,
+          )
+        }
+
         reloadChats()
       }
     })
