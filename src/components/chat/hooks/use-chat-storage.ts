@@ -129,6 +129,12 @@ export function useChatStorage({
 
         // Only reset to a different chat if it doesn't exist AND has no messages
         if (!currentChatExists) {
+          // Avoid resetting during the "new chat" window where IDs/state can be in flux
+          // (e.g., temp id before server id, or before initial save completes).
+          if (prev.id.startsWith('temp-') || prev.pendingSave) {
+            return prev
+          }
+
           const cloudBlank = createBlankChat(false)
           const localBlank = createBlankChat(true)
           const finalChats = sortChats([
