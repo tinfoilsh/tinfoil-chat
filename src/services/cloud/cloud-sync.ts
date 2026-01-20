@@ -40,6 +40,24 @@ export class CloudSyncService {
   private lastSyncStatus: ChatSyncStatus | null = null
   private projectSyncStatus: Map<string, ChatSyncStatus> = new Map()
 
+  constructor() {
+    // Listen for storage changes from other tabs to invalidate sync status cache
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        if (e.key === SYNC_STATUS_STORAGE_KEY) {
+          // Another tab updated sync status, invalidate our cache
+          this.lastSyncStatus = null
+        } else if (e.key?.startsWith(PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX)) {
+          // Another tab updated project sync status, invalidate that project's cache
+          const projectId = e.key.slice(
+            PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX.length,
+          )
+          this.projectSyncStatus.delete(projectId)
+        }
+      })
+    }
+  }
+
   // Set token getter for API calls
   setTokenGetter(getToken: () => Promise<string | null>) {
     cloudStorage.setTokenGetter(getToken)
