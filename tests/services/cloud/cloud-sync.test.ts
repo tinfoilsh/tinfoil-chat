@@ -66,6 +66,7 @@ vi.mock('@/services/storage/chat-events', () => ({
 describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.removeItem('tinfoil-chat-sync-status')
     mockSaveChat.mockResolvedValue(undefined)
     mockMarkAsSynced.mockResolvedValue(undefined)
     mockDeleteChat.mockResolvedValue(undefined)
