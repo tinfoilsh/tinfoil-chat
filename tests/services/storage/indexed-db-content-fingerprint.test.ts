@@ -3,16 +3,22 @@ import { describe, expect, it } from 'vitest'
 
 describe('chatContentFingerprint', () => {
   it('ignores updatedAt differences (not part of fingerprint input)', () => {
-    const base = {
+    const fp1 = chatContentFingerprint({
       title: 'T',
       projectId: undefined,
+      updatedAt: '2024-01-01T00:00:00Z',
       messages: [
         { role: 'user', content: 'hi', timestamp: '2024-01-01T00:00:00Z' },
       ],
-    }
-
-    const fp1 = chatContentFingerprint(base)
-    const fp2 = chatContentFingerprint({ ...base })
+    })
+    const fp2 = chatContentFingerprint({
+      title: 'T',
+      projectId: undefined,
+      updatedAt: '2024-12-31T23:59:59Z',
+      messages: [
+        { role: 'user', content: 'hi', timestamp: '2024-01-01T00:00:00Z' },
+      ],
+    })
     expect(fp1).toBe(fp2)
   })
 
