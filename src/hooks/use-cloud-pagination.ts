@@ -149,9 +149,21 @@ export function useCloudPagination(
 
     try {
       let tokenToUse = nextToken
+
+      // If we don't have a token yet, fetch the first page (newest chats) first
       if (!tokenToUse && !initializedRef.current) {
-        const init = await cloudStorage.listChats({ limit: pageSize })
-        tokenToUse = init.nextContinuationToken
+        // Fetch and store page 1 - don't just get the token and skip to page 2!
+        const firstPageResult = await cloudSync.fetchAndStorePage({
+          limit: pageSize,
+          // No continuation token = fetch first page
+        })
+
+        // Set up state for subsequent pages
+        setNextToken(firstPageResult.nextToken)
+        setHasMore(!!firstPageResult.nextToken)
+        initializedRef.current = true
+
+        return firstPageResult
       }
 
       if (!tokenToUse) {
