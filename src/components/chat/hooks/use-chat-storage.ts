@@ -106,56 +106,26 @@ export function useChatStorage({
         return finalChats
       })
 
-      // Update current chat if needed
+      // Update current chat metadata only - NEVER switch to a different chat.
+      // Chat switching should only happen through explicit user actions.
+      // This prevents race conditions in Safari PWA where timing differences
+      // could cause unexpected chat resets.
       setCurrentChat((prev) => {
-        // Don't interfere if we're in the middle of switching chats
-        if (isSwitchingChatRef.current) {
+        if (isSwitchingChatRef.current || prev.isBlankChat) {
           return prev
         }
 
-        // Preserve blank chats as-is
-        if (prev.isBlankChat) {
-          return prev
-        }
-
-        // Preserve current chat if it has messages (handles session/temp/URL hash chats)
-        const hasMessages = prev.messages.length > 0
-        if (hasMessages) {
-          return prev
-        }
-
-        // Check if current chat exists in loaded chats
-        const currentChatExists = loadedChats.some((c) => c.id === prev.id)
-
-        // Only reset to a different chat if it doesn't exist AND has no messages
-        if (!currentChatExists) {
-          // Avoid resetting during the "new chat" window where IDs/state can be in flux
-          // (e.g., temp id before server id, or before initial save completes).
-          if (prev.id.startsWith('temp-') || prev.pendingSave) {
-            return prev
-          }
-
-          const cloudBlank = createBlankChat(false)
-          const localBlank = createBlankChat(true)
-          const finalChats = sortChats([
-            cloudBlank,
-            localBlank,
-            ...loadedChats.filter((c) => !c.isBlankChat),
-          ])
-          return finalChats.length > 0 ? finalChats[0] : prev
-        }
-
-        // Update current chat if it was modified and is not a blank chat
-        if (!prev.isBlankChat) {
-          const updatedCurrentChat = loadedChats.find((c) => c.id === prev.id)
-          if (updatedCurrentChat) {
-            // Only update if actually changed
-            if (
-              prev.messages.length !== updatedCurrentChat.messages.length ||
-              prev.syncedAt !== updatedCurrentChat.syncedAt ||
-              prev.title !== updatedCurrentChat.title
-            ) {
-              return updatedCurrentChat
+        // Only update metadata (syncedAt, title) if the same chat exists in storage
+        const existingChat = loadedChats.find((c) => c.id === prev.id)
+        if (existingChat) {
+          if (
+            prev.syncedAt !== existingChat.syncedAt ||
+            prev.title !== existingChat.title
+          ) {
+            return {
+              ...prev,
+              syncedAt: existingChat.syncedAt,
+              title: existingChat.title,
             }
           }
         }
@@ -219,9 +189,10 @@ export function useChatStorage({
 
         setChats(finalChats)
 
-        // Preserve current chat if it has messages (e.g., from URL hash) or if we're switching
+        // Only set current chat to first loaded chat if we're on a blank chat.
+        // Never reset a non-blank chat - prevents Safari PWA timing issues.
         setCurrentChat((prev) =>
-          isSwitchingChatRef.current || prev.messages.length > 0
+          isSwitchingChatRef.current || !prev.isBlankChat
             ? prev
             : finalChats[0],
         )
