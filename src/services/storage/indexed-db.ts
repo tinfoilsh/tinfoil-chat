@@ -65,6 +65,8 @@ export function chatContentFingerprint(chat: {
       Array.isArray(m.imageData) && m.imageData.length > 0
         ? m.imageData.map((img: any) => ({
             mimeType: img?.mimeType,
+            base64Hash:
+              typeof img?.base64 === 'string' ? hashString(img.base64) : null,
             base64Length:
               typeof img?.base64 === 'string' ? img.base64.length : 0,
           }))
