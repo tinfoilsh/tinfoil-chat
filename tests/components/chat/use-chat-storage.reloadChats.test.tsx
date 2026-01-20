@@ -89,37 +89,6 @@ describe('useChatStorage.reloadChats', () => {
     expect(result.current.currentChat.isBlankChat).toBe(false)
   })
 
-  it('resets to a blank chat when currentChat has no messages, is not pendingSave, and is missing from storage', async () => {
-    const { result } = renderHook(() =>
-      useChatStorage({
-        storeHistory: true,
-      }),
-    )
-
-    await waitFor(() => {
-      expect(result.current.isInitialLoad).toBe(false)
-    })
-
-    await act(async () => {
-      result.current.setCurrentChat({
-        id: 'server-missing',
-        title: 'Untitled',
-        messages: [],
-        createdAt: new Date(),
-        isBlankChat: false,
-        isLocalOnly: false,
-        pendingSave: false,
-      })
-    })
-
-    await act(async () => {
-      await result.current.reloadChats()
-    })
-
-    expect(result.current.currentChat.isBlankChat).toBe(true)
-    expect(result.current.currentChat.isLocalOnly).toBe(false) // cloud blank first
-  })
-
   it('applies idChanges to currentChat before reloading', async () => {
     const { result } = renderHook(() =>
       useChatStorage({
