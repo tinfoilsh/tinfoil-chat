@@ -1242,6 +1242,16 @@ export class CloudSyncService {
           // Skip blank chats
           if (chat.isBlankChat) continue
 
+          // Never upload local-only chats
+          if (chat.isLocalOnly) {
+            logInfo('Skipping local-only chat during re-encryption', {
+              component: 'CloudSync',
+              action: 'reencryptAndUploadChats',
+              metadata: { chatId: chat.id },
+            })
+            continue
+          }
+
           // Skip chats that failed to decrypt
           if (chat.decryptionFailed) {
             logInfo('Skipping chat that failed to decrypt', {
