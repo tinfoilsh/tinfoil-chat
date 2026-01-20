@@ -530,44 +530,7 @@ export class CloudSyncService {
         return
       }
 
-      const newId = await cloudStorage.uploadChat(chat)
-
-      // If uploadChat returned null, it means ID generation failed - skip for now
-      if (newId === null && chat.id.startsWith('temp-')) {
-        return
-      }
-
-      // If the ID changed (temp ID was replaced with server ID), update IndexedDB
-      if (newId && newId !== chatId) {
-        // Re-check that the temp ID still exists - it may have been updated by another flow
-        const stillExists = await indexedDBStorage.getChat(chatId)
-        if (!stillExists) {
-          logInfo(
-            'Chat was already updated by another flow, skipping IndexedDB update',
-            {
-              component: 'CloudSync',
-              action: 'backupChat',
-              metadata: { oldId: chatId, newId },
-            },
-          )
-          return
-        }
-
-        logInfo('Chat ID changed during upload, updating local storage', {
-          component: 'CloudSync',
-          action: 'backupChat',
-          metadata: { oldId: chatId, newId },
-        })
-        await indexedDBStorage.deleteChat(chatId)
-        await indexedDBStorage.saveChat({ ...chat, id: newId })
-        // Notify UI about the ID change so it can reload
-        chatEvents.emit({
-          reason: 'sync',
-          ids: [newId],
-          idChanges: [{ from: chatId, to: newId }],
-        })
-        chatId = newId
-      }
+      await cloudStorage.uploadChat(chat)
 
       // Mark as synced with incremented version
       const newVersion = (chat.syncVersion || 0) + 1
@@ -631,49 +594,10 @@ export class CloudSyncService {
             return
           }
 
-          const newId = await cloudStorage.uploadChat(chat)
-
-          // If uploadChat returned null, it means ID generation failed - skip for now
-          if (newId === null && chat.id.startsWith('temp-')) {
-            return
-          }
-
-          let finalId = chat.id
-
-          // If the ID changed (temp ID was replaced with server ID), update IndexedDB
-          if (newId && newId !== chat.id) {
-            // Re-check that the temp ID still exists - it may have been updated by another flow
-            const stillExists = await indexedDBStorage.getChat(chat.id)
-            if (!stillExists) {
-              logInfo(
-                'Chat was already updated by another flow, skipping IndexedDB update',
-                {
-                  component: 'CloudSync',
-                  action: 'backupUnsyncedChats',
-                  metadata: { oldId: chat.id, newId },
-                },
-              )
-              return
-            }
-
-            logInfo('Chat ID changed during upload, updating local storage', {
-              component: 'CloudSync',
-              action: 'backupUnsyncedChats',
-              metadata: { oldId: chat.id, newId },
-            })
-            await indexedDBStorage.deleteChat(chat.id)
-            await indexedDBStorage.saveChat({ ...chat, id: newId })
-            // Notify UI about the ID change so it can reload
-            chatEvents.emit({
-              reason: 'sync',
-              ids: [newId],
-              idChanges: [{ from: chat.id, to: newId }],
-            })
-            finalId = newId
-          }
+          await cloudStorage.uploadChat(chat)
 
           const newVersion = (chat.syncVersion || 0) + 1
-          await indexedDBStorage.markAsSynced(finalId, newVersion)
+          await indexedDBStorage.markAsSynced(chat.id, newVersion)
           result.uploaded++
         } catch (error) {
           result.errors.push(
@@ -1299,35 +1223,10 @@ export class CloudSyncService {
             await indexedDBStorage.saveChat(chatToReencrypt)
 
             // Upload to cloud (will be encrypted with new key)
-            const newId = await cloudStorage.uploadChat(chatToReencrypt)
-
-            // If uploadChat returned null, it means ID generation failed - skip
-            if (newId === null && chatToReencrypt.id.startsWith('temp-')) {
-              continue
-            }
-
-            let finalId = chatToReencrypt.id
-
-            // If the ID changed (temp ID was replaced with server ID), update IndexedDB
-            if (newId && newId !== chatToReencrypt.id) {
-              // Re-check that the temp ID still exists - it may have been updated by another flow
-              const stillExists = await indexedDBStorage.getChat(
-                chatToReencrypt.id,
-              )
-              if (!stillExists) {
-                continue
-              }
-
-              await indexedDBStorage.deleteChat(chatToReencrypt.id)
-              chatToReencrypt = { ...chatToReencrypt, id: newId }
-              await indexedDBStorage.saveChat(chatToReencrypt)
-              // Notify UI about the ID change so it can reload
-              chatEvents.emit({ reason: 'sync', ids: [newId] })
-              finalId = newId
-            }
+            await cloudStorage.uploadChat(chatToReencrypt)
 
             await indexedDBStorage.markAsSynced(
-              finalId,
+              chatToReencrypt.id,
               chatToReencrypt.syncVersion || 0,
             )
             result.uploaded++
@@ -1337,7 +1236,7 @@ export class CloudSyncService {
               component: 'CloudSync',
               action: 'reencryptAndUploadChats',
               metadata: {
-                chatId: finalId,
+                chatId: chatToReencrypt.id,
                 syncVersion: chatToReencrypt.syncVersion,
               },
             })

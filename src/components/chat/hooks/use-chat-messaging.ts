@@ -607,19 +607,14 @@ export function useChatMessaging({
           const chatId = currentChatIdRef.current
 
           // If user navigated away during streaming, don't save to the new chat
-          // Note: chatId might have changed from temp ID to server ID, which is expected
-          const originalChatId = updatedChat.id
-          const isSameChat =
-            chatId === originalChatId || originalChatId.startsWith('temp-')
-
-          if (!isSameChat) {
+          if (chatId !== updatedChat.id) {
             logInfo(
               '[handleQuery] User navigated away during streaming, skipping save',
               {
                 component: 'useChatMessaging',
                 action: 'handleQuery.navigationDuringStream',
                 metadata: {
-                  originalChatId,
+                  streamingChatId: updatedChat.id,
                   currentChatId: chatId,
                 },
               },
