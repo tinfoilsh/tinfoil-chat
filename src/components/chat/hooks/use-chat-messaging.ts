@@ -23,6 +23,7 @@ import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
+import { generateReverseId } from '@/utils/reverse-id'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CONSTANTS } from '../constants'
@@ -319,7 +320,7 @@ export function useChatMessaging({
         earlyTitlePromiseRef.current = null
       }
 
-      // Handle blank chat conversion: create chat immediately with temp ID, get server ID async
+      // Handle blank chat conversion: create chat immediately with server-valid ID
       if (isBlankChat && storeHistory) {
         logInfo('[handleQuery] Converting blank chat to real chat', {
           component: 'useChatMessaging',
@@ -330,12 +331,13 @@ export function useChatMessaging({
           },
         })
 
-        // Create chat immediately with temporary ID for instant UI update
-        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        // Generate an ID that matches backend expectations: {reverseTimestamp}_{uuid}
+        // This avoids temp→server ID rewrite races (URL/currentChat mismatches).
+        const { id: chatId } = generateReverseId()
         updatedMessages = userMessage ? [userMessage] : []
         updatedChat = {
           ...currentChat,
-          id: tempId,
+          id: chatId,
           title: 'Untitled',
           messages: updatedMessages,
           isBlankChat: false,
@@ -347,7 +349,7 @@ export function useChatMessaging({
         }
 
         // Update state immediately for instant UI feedback
-        currentChatIdRef.current = tempId
+        currentChatIdRef.current = chatId
         setCurrentChat(updatedChat)
 
         // Replace the blank chat with the new real chat
@@ -375,118 +377,33 @@ export function useChatMessaging({
           setTimeout(() => scrollToBottom(), 50)
         }
 
-        // Get server ID in background and update when ready
-        cloudStorage
-          .generateConversationId()
-          .then((result) => {
-            if (result) {
-              const serverChatId = result.conversationId
-              logInfo('[handleQuery] Got server ID, updating chat', {
-                component: 'useChatMessaging',
-                action: 'handleQuery.serverIdReceived',
-                metadata: {
-                  tempId,
-                  serverId: serverChatId,
-                  isLocalOnly: updatedChat.isLocalOnly,
-                },
-              })
-
-              // Update refs
-              currentChatIdRef.current = serverChatId
-
-              // Update state - derive from current state to preserve streaming updates
-              let savedChatWithServerId: Chat | undefined
-              setCurrentChat((prev) => {
-                if (prev.id === tempId) {
-                  const updated = { ...prev, id: serverChatId }
-                  savedChatWithServerId = updated
-                  return updated
-                }
-                return prev
-              })
-              setChats((prevChats) =>
-                prevChats.map((c) =>
-                  c.id === tempId ? { ...c, id: serverChatId } : c,
-                ),
-              )
-
-              // Save with server ID - savedChatWithServerId is guaranteed to be set by now
-              if (savedChatWithServerId) {
-                const chatToSave = savedChatWithServerId
-                logInfo('[handleQuery] Saving chat with server ID', {
-                  component: 'useChatMessaging',
-                  action: 'handleQuery.savingWithServerId',
-                  metadata: {
-                    id: serverChatId,
-                    isLocalOnly: chatToSave.isLocalOnly,
-                  },
-                })
-
-                chatStorage
-                  .saveChatAndSync(chatToSave)
-                  .then(() => {
-                    logInfo('[handleQuery] Chat saved successfully', {
-                      component: 'useChatMessaging',
-                      action: 'handleQuery.chatSaved',
-                      metadata: {
-                        id: serverChatId,
-                      },
-                    })
-                    // Clear pendingSave flag
-                    setChats((prevChats) =>
-                      prevChats.map((c) =>
-                        c.id === serverChatId
-                          ? { ...c, pendingSave: false }
-                          : c,
-                      ),
-                    )
-                    setCurrentChat((prev) =>
-                      prev.id === serverChatId
-                        ? { ...prev, pendingSave: false }
-                        : prev,
-                    )
-                  })
-                  .catch((error) => {
-                    logError('[handleQuery] Failed to save chat', error, {
-                      component: 'useChatMessaging',
-                      action: 'handleQuery.saveChatError',
-                      metadata: {
-                        id: serverChatId,
-                      },
-                    })
-                    // Clear pendingSave flag even on error
-                    setChats((prevChats) =>
-                      prevChats.map((c) =>
-                        c.id === serverChatId
-                          ? { ...c, pendingSave: false }
-                          : c,
-                      ),
-                    )
-                    setCurrentChat((prev) =>
-                      prev.id === serverChatId
-                        ? { ...prev, pendingSave: false }
-                        : prev,
-                    )
-                  })
-              }
-            }
-          })
-          .catch((error) => {
-            logError('Failed to get server ID for blank chat', error, {
-              component: 'useChatMessaging',
-              action: 'handleQuery.serverIdError',
-              metadata: {
-                tempId,
-              },
-            })
-            // Clear pendingSave flag on error
+        // Save immediately (and sync if applicable). ID is already server-valid.
+        chatStorage
+          .saveChatAndSync(updatedChat)
+          .then(() => {
             setChats((prevChats) =>
               prevChats.map((c) =>
-                c.id === tempId ? { ...c, pendingSave: false } : c,
+                c.id === chatId ? { ...c, pendingSave: false } : c,
               ),
             )
             setCurrentChat((prev) =>
-              prev.id === tempId ? { ...prev, pendingSave: false } : prev,
+              prev.id === chatId ? { ...prev, pendingSave: false } : prev,
+            )
+          })
+          .catch((error) => {
+            logError('[handleQuery] Failed to save new chat', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery.initialSaveError',
+              metadata: { chatId },
+            })
+            // Clear pendingSave flag even on error (keeps chat usable locally)
+            setChats((prevChats) =>
+              prevChats.map((c) =>
+                c.id === chatId ? { ...c, pendingSave: false } : c,
+              ),
+            )
+            setCurrentChat((prev) =>
+              prev.id === chatId ? { ...prev, pendingSave: false } : prev,
             )
           })
       } else if (isBlankChat && !storeHistory) {
