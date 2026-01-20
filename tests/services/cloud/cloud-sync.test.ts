@@ -219,6 +219,7 @@ describe('CloudSyncService', () => {
       expect(mockChatEventsEmit).toHaveBeenCalledWith({
         reason: 'sync',
         ids: ['server-999'],
+        idChanges: [{ from: 'temp-123', to: 'server-999' }],
       })
 
       // After rotation, mark the new ID as synced with incremented version
