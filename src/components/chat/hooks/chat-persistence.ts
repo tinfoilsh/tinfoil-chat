@@ -38,6 +38,7 @@ export function createUpdateChatWithHistoryCheck({
 
     // Only update messages and set isBlankChat based on message count
     // Keep all other properties from chatSnapshot (including title, isLocalOnly, etc.)
+    // IMPORTANT: Preserve title from current state to avoid race with early title generation
     const updatedChat: Chat = {
       ...chatSnapshot,
       id: chatId,
@@ -46,11 +47,22 @@ export function createUpdateChatWithHistoryCheck({
     }
 
     setChats((prevChats) => {
-      return prevChats.map((c) => (c.id === chatId ? updatedChat : c))
+      return prevChats.map((c) => {
+        if (c.id === chatId) {
+          return {
+            ...updatedChat,
+            title: c.title, // Preserve title from state (may have been updated by early title gen)
+          }
+        }
+        return c
+      })
     })
 
     if (isCurrentChat) {
-      setCurrentChat(updatedChat)
+      setCurrentChat((prev) => ({
+        ...updatedChat,
+        title: prev.title, // Preserve title from state (may have been updated by early title gen)
+      }))
     }
 
     if (storeHistory) {
