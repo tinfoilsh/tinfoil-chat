@@ -318,6 +318,23 @@ export async function processStreamingResponse(
               if (isSameChat()) {
                 scheduleStreamingUpdate()
               }
+            } else if (searchStatus === 'blocked') {
+              if (!webSearchStarted) {
+                webSearchStarted = true
+              }
+              webSearchState = {
+                query: searchQuery,
+                status: 'blocked',
+                reason: json.reason,
+              }
+              assistantMessage = {
+                ...assistantMessage,
+                webSearch: webSearchState,
+                webSearchBeforeThinking: !thinkingStarted,
+              }
+              if (isSameChat()) {
+                scheduleStreamingUpdate()
+              }
             }
             continue
           }
