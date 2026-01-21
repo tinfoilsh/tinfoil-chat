@@ -117,6 +117,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
   const [isExpanded, setIsExpanded] = useState(false)
   const isSearching = webSearch.status === 'searching'
   const isFailed = webSearch.status === 'failed'
+  const isBlocked = webSearch.status === 'blocked'
   const hasSources = webSearch.sources && webSearch.sources.length > 0
   const sourcesToShow = webSearch.sources?.slice(0, 5) ?? []
 
@@ -149,13 +150,17 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         type="button"
         onClick={handleToggle}
         disabled={!hasSources}
-        className={`flex min-h-10 w-full items-center justify-between rounded-lg px-4 py-2 text-left text-content-primary transition-colors ${
+        className={`flex min-h-10 w-full justify-between rounded-lg px-4 py-2 text-left text-content-primary transition-colors ${
+          isBlocked ? 'items-start' : 'items-center'
+        } ${
           hasSources
             ? 'hover:bg-surface-secondary/50 cursor-pointer'
             : 'cursor-default'
         }`}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div
+          className={`flex min-w-0 flex-1 gap-3 ${isBlocked ? 'items-start' : 'items-center'}`}
+        >
           {hasSources && (
             <div className="flex shrink-0 items-center">
               {sourcesToShow.map((source, index) => (
@@ -202,6 +207,13 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                   {' '}
                   for &quot;{webSearch.query}&quot;
                 </span>
+              )}
+            </span>
+          ) : isBlocked ? (
+            <span className="min-w-0 text-sm leading-5 opacity-50">
+              <span className="font-medium">Web search blocked</span>
+              {webSearch.reason && (
+                <span className="font-normal"> — {webSearch.reason}</span>
               )}
             </span>
           ) : (
