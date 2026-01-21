@@ -638,99 +638,32 @@ export function useChatMessaging({
           // which has been updated to the server ID if one was generated
           const finalMessages = [...updatedMessages, assistantMessage]
 
-          // Wait for early title generation to complete if it's in progress
-          if (earlyTitlePromiseRef.current) {
-            await earlyTitlePromiseRef.current
-          }
-
-          if (
-            isFirstMessage &&
-            updatedChat.title === 'Untitled' &&
-            models.length > 0 &&
-            !titleGeneratedRef.current
-          ) {
-            logInfo('[handleQuery] Generating title for new chat', {
-              component: 'useChatMessaging',
-              action: 'handleQuery.titleGenStart',
-              metadata: {
-                chatId,
-              },
-            })
-            try {
-              const titleModel = models.find((m) => m.type === 'title')
-
-              if (titleModel) {
-                const titleMessages = finalMessages.map((msg) => ({
-                  role: msg.role,
-                  content: msg.content || '',
-                }))
-                const generatedTitle = await generateTitle(
-                  titleMessages,
-                  titleModel.modelName,
-                )
-                if (generatedTitle && generatedTitle !== 'Untitled') {
-                  logInfo('[handleQuery] Title generated successfully', {
-                    component: 'useChatMessaging',
-                    action: 'handleQuery.titleGenComplete',
-                    metadata: {
-                      chatId,
-                      title: generatedTitle,
-                    },
-                  })
-                  updatedChat = {
-                    ...updatedChat,
-                    title: generatedTitle,
-                    id: chatId,
-                  }
-
-                  // Update state immediately with the new title
-                  setCurrentChat((prev) =>
-                    prev.id === chatId
-                      ? { ...prev, title: generatedTitle }
-                      : prev,
-                  )
-                  setChats((prevChats) =>
-                    prevChats.map((c) =>
-                      c.id === chatId ? { ...c, title: generatedTitle } : c,
-                    ),
-                  )
-                }
-              } else {
-                logWarning('No title model found for title generation', {
-                  component: 'useChatMessaging',
-                  action: 'generateTitle',
-                })
-              }
-            } catch (error) {
-              logError('Title generation error', error, {
-                component: 'useChatMessaging',
-                action: 'generateTitle',
-              })
-            }
-          }
-
-          // Update the chat object with the correct ID and messages before saving
-          // Use early-generated title if available
-          const finalTitle = generatedTitleRef.current || updatedChat.title
+          // Get current best title (early-generated or default)
+          const currentTitle = generatedTitleRef.current || updatedChat.title
           const chatToSave = {
             ...updatedChat,
             id: chatId,
-            title: finalTitle,
+            title: currentTitle,
             messages: finalMessages,
-            pendingSave: false, // Clear pendingSave flag in final save
+            pendingSave: false,
           }
 
-          logInfo('[handleQuery] Saving final chat state', {
-            component: 'useChatMessaging',
-            action: 'handleQuery.finalSave',
-            metadata: {
-              chatId,
-              isLocalOnly: chatToSave.isLocalOnly,
-              title: chatToSave.title,
-              messageCount: finalMessages.length,
-              storeHistory,
+          // IMMEDIATELY save chat content to IndexedDB to prevent data loss
+          // Title generation happens async afterward
+          logInfo(
+            '[handleQuery] Saving chat content immediately after stream',
+            {
+              component: 'useChatMessaging',
+              action: 'handleQuery.immediateSave',
+              metadata: {
+                chatId,
+                isLocalOnly: chatToSave.isLocalOnly,
+                title: chatToSave.title,
+                messageCount: finalMessages.length,
+                storeHistory,
+              },
             },
-          })
+          )
 
           updateChatWithHistoryCheck(
             setChats,
@@ -741,27 +674,190 @@ export function useChatMessaging({
             false,
           )
 
-          // Trigger cloud sync for non-local chats after saving
-          // This ensures the complete chat (with title) is synced
-          if (!chatToSave.isLocalOnly) {
-            import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
-              cloudSync.backupChat(chatId).catch((error) => {
-                logError('Failed to sync chat after completion', error, {
+          // Check if we need to generate a title
+          const needsTitleGeneration =
+            isFirstMessage &&
+            currentTitle === 'Untitled' &&
+            models.length > 0 &&
+            !titleGeneratedRef.current
+
+          if (needsTitleGeneration) {
+            // Title generation happens async, doesn't block the save
+            ;(async () => {
+              // Wait for early title if in progress
+              if (earlyTitlePromiseRef.current) {
+                await earlyTitlePromiseRef.current
+                // Check if early title succeeded
+                if (
+                  generatedTitleRef.current &&
+                  generatedTitleRef.current !== 'Untitled'
+                ) {
+                  const earlyTitle = generatedTitleRef.current
+
+                  // Update state with early title first (so updateChatWithHistoryCheck preserves it)
+                  setCurrentChat((prev) =>
+                    prev.id === chatId ? { ...prev, title: earlyTitle } : prev,
+                  )
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === chatId ? { ...c, title: earlyTitle } : c,
+                    ),
+                  )
+
+                  // Save again with the early title
+                  const chatWithTitle = {
+                    ...chatToSave,
+                    title: earlyTitle,
+                  }
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    chatWithTitle,
+                    setCurrentChat,
+                    chatId,
+                    finalMessages,
+                    false,
+                  )
+                  if (!updatedChat.isLocalOnly) {
+                    const { cloudSync } = await import(
+                      '@/services/cloud/cloud-sync'
+                    )
+                    cloudSync.backupChat(chatId).catch((error) => {
+                      logError('Failed to sync chat after title', error, {
+                        component: 'useChatMessaging',
+                        action: 'handleQuery',
+                        metadata: { chatId },
+                      })
+                    })
+                  }
+                  return
+                }
+              }
+
+              // Generate fallback title
+              try {
+                const titleModel = models.find((m) => m.type === 'title')
+                if (!titleModel) {
+                  logWarning('No title model found for title generation', {
+                    component: 'useChatMessaging',
+                    action: 'generateTitle',
+                  })
+                  // No title model, just sync what we have
+                  if (!updatedChat.isLocalOnly) {
+                    const { cloudSync } = await import(
+                      '@/services/cloud/cloud-sync'
+                    )
+                    cloudSync.backupChat(chatId).catch((error) => {
+                      logError('Failed to sync chat', error, {
+                        component: 'useChatMessaging',
+                        action: 'handleQuery',
+                        metadata: { chatId },
+                      })
+                    })
+                  }
+                  return
+                }
+
+                logInfo('[handleQuery] Generating title for new chat', {
                   component: 'useChatMessaging',
-                  action: 'handleQuery',
+                  action: 'handleQuery.titleGenStart',
                   metadata: { chatId },
                 })
-              })
-            })
+
+                const titleMessages = finalMessages.map((msg) => ({
+                  role: msg.role,
+                  content: msg.content || '',
+                }))
+                const generatedTitle = await generateTitle(
+                  titleMessages,
+                  titleModel.modelName,
+                )
+
+                if (generatedTitle && generatedTitle !== 'Untitled') {
+                  logInfo('[handleQuery] Title generated successfully', {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery.titleGenComplete',
+                    metadata: { chatId, title: generatedTitle },
+                  })
+
+                  // Update state with new title
+                  setCurrentChat((prev) =>
+                    prev.id === chatId
+                      ? { ...prev, title: generatedTitle }
+                      : prev,
+                  )
+                  setChats((prevChats) =>
+                    prevChats.map((c) =>
+                      c.id === chatId ? { ...c, title: generatedTitle } : c,
+                    ),
+                  )
+
+                  // Save again with the generated title
+                  const chatWithTitle = { ...chatToSave, title: generatedTitle }
+                  updateChatWithHistoryCheck(
+                    setChats,
+                    chatWithTitle,
+                    setCurrentChat,
+                    chatId,
+                    finalMessages,
+                    false,
+                  )
+                }
+
+                // Cloud sync after title generation (with or without new title)
+                if (!updatedChat.isLocalOnly) {
+                  const { cloudSync } = await import(
+                    '@/services/cloud/cloud-sync'
+                  )
+                  cloudSync.backupChat(chatId).catch((error) => {
+                    logError('Failed to sync chat after title', error, {
+                      component: 'useChatMessaging',
+                      action: 'handleQuery',
+                      metadata: { chatId },
+                    })
+                  })
+                }
+              } catch (error) {
+                logError('Title generation error', error, {
+                  component: 'useChatMessaging',
+                  action: 'generateTitle',
+                })
+                // Still sync even if title gen failed
+                if (!updatedChat.isLocalOnly) {
+                  const { cloudSync } = await import(
+                    '@/services/cloud/cloud-sync'
+                  )
+                  cloudSync.backupChat(chatId).catch((error) => {
+                    logError('Failed to sync chat', error, {
+                      component: 'useChatMessaging',
+                      action: 'handleQuery',
+                      metadata: { chatId },
+                    })
+                  })
+                }
+              }
+            })()
           } else {
-            logInfo('[handleQuery] Skipping cloud sync for local-only chat', {
-              component: 'useChatMessaging',
-              action: 'handleQuery.skipCloudSync',
-              metadata: {
-                chatId,
-                isLocalOnly: chatToSave.isLocalOnly,
-              },
-            })
+            // No title generation needed, sync now
+            if (!chatToSave.isLocalOnly) {
+              import('@/services/cloud/cloud-sync').then(({ cloudSync }) => {
+                cloudSync.backupChat(chatId).catch((error) => {
+                  logError('Failed to sync chat after completion', error, {
+                    component: 'useChatMessaging',
+                    action: 'handleQuery',
+                    metadata: { chatId },
+                  })
+                })
+              })
+            } else {
+              logInfo('[handleQuery] Skipping cloud sync for local-only chat', {
+                component: 'useChatMessaging',
+                action: 'handleQuery.skipCloudSync',
+                metadata: {
+                  chatId,
+                  isLocalOnly: chatToSave.isLocalOnly,
+                },
+              })
+            }
           }
         } else {
           logWarning('No assistant content to save after streaming', {
