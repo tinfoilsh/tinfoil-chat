@@ -1,4 +1,5 @@
-export const WEB_SEARCH_ENCLAVE_URL = 'https://websearch.tinfoil.sh'
+export const WEB_SEARCH_ENCLAVE_URL =
+  'https://websearch.tinfoil.functions.tinfoil.sh'
 
 export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
