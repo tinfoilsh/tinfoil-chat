@@ -126,7 +126,7 @@ export default function SharePage() {
   if (loadingState === 'loading') {
     return (
       <div
-        className={`flex min-h-screen items-center justify-center ${isDarkMode ? 'bg-surface-chat-background' : 'bg-white'}`}
+        className={`flex min-h-screen items-center justify-center font-aeonik ${isDarkMode ? 'bg-surface-chat-background' : 'bg-white'}`}
       >
         <div className="text-content-secondary">Loading shared chat...</div>
       </div>
@@ -136,7 +136,7 @@ export default function SharePage() {
   if (loadingState === 'error' || !chatData || !model) {
     return (
       <div
-        className={`flex min-h-screen items-center justify-center ${isDarkMode ? 'bg-surface-chat-background' : 'bg-white'}`}
+        className={`flex min-h-screen items-center justify-center font-aeonik ${isDarkMode ? 'bg-surface-chat-background' : 'bg-white'}`}
       >
         <div className="text-center">
           <h1 className="text-2xl font-bold text-content-primary">
@@ -159,7 +159,7 @@ export default function SharePage() {
 
   return (
     <div
-      className={`flex min-h-screen flex-col ${isDarkMode ? 'bg-surface-chat-background' : 'bg-white'}`}
+      className={`flex min-h-screen flex-col font-aeonik ${isDarkMode ? 'bg-surface-chat-background' : 'bg-white'}`}
     >
       <header className="border-b border-border-subtle px-6 py-4">
         <div className="mx-auto max-w-3xl">
