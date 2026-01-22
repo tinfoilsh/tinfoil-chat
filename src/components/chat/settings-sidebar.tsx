@@ -73,6 +73,9 @@ export function SettingsSidebar({
   // Cloud sync setting
   const [cloudSyncEnabled, setCloudSyncEnabledState] = useState<boolean>(false)
 
+  // Web Search PII check setting
+  const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(false)
+
   // Upgrade state
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
@@ -197,6 +200,10 @@ export function SettingsSidebar({
 
     // Load cloud sync setting
     setCloudSyncEnabledState(isCloudSyncEnabled())
+
+    // Load PII check setting
+    const savedPiiCheck = localStorage.getItem('piiCheckEnabled')
+    setPiiCheckEnabled(savedPiiCheck === 'true')
   }, [defaultSystemPrompt])
 
   // Initial load settings from localStorage
@@ -1020,6 +1027,59 @@ export function SettingsSidebar({
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Web Search section */}
+            <div>
+              <h3
+                className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+              >
+                Web Search
+              </h3>
+              <div className="space-y-2">
+                <div
+                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="mr-3 flex-1">
+                      <div
+                        className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                      >
+                        Automatic PII Detection and Blocking
+                      </div>
+                      <div
+                        className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                      >
+                        When web search is enabled, queries that contain PII
+                        will automatically be blocked.
+                      </div>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        checked={piiCheckEnabled}
+                        onChange={(e) => {
+                          const newValue = e.target.checked
+                          setPiiCheckEnabled(newValue)
+                          if (isClient) {
+                            localStorage.setItem(
+                              'piiCheckEnabled',
+                              newValue.toString(),
+                            )
+                            window.dispatchEvent(
+                              new CustomEvent('piiCheckEnabledChanged', {
+                                detail: { enabled: newValue },
+                              }),
+                            )
+                          }
+                        }}
+                        className="peer sr-only"
+                      />
+                      <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                    </label>
                   </div>
                 </div>
               </div>

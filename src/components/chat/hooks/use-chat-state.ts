@@ -80,6 +80,7 @@ export function useChatState({
   initialChatId,
   isLocalChatUrl = false,
   webSearchEnabled,
+  piiCheckEnabled,
 }: {
   systemPrompt: string
   rules?: string
@@ -92,6 +93,7 @@ export function useChatState({
   initialChatId?: string | null
   isLocalChatUrl?: boolean
   webSearchEnabled?: boolean
+  piiCheckEnabled?: boolean
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
 
@@ -190,6 +192,7 @@ export function useChatState({
     scrollToBottom,
     reasoningEffort,
     webSearchEnabled,
+    piiCheckEnabled,
   })
 
   // Update ref with cancelGeneration function

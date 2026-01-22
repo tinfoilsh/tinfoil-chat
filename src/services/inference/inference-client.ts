@@ -81,6 +81,7 @@ export interface SendChatStreamParams {
   signal: AbortSignal
   reasoningEffort?: ReasoningEffort
   webSearchEnabled?: boolean
+  piiCheckEnabled?: boolean
 }
 
 export async function sendChatStream(
@@ -96,6 +97,7 @@ export async function sendChatStream(
     signal,
     reasoningEffort,
     webSearchEnabled,
+    piiCheckEnabled,
   } = params
 
   if (model.modelName === 'dev-simulator') {
@@ -256,7 +258,11 @@ export async function sendChatStream(
         requestBody.reasoning_effort = reasoningEffort
       }
       if (webSearchEnabled) {
-        requestBody.tools = [{ type: 'web_search' }]
+        const tools: Array<{ type: string }> = [{ type: 'web_search' }]
+        if (piiCheckEnabled) {
+          tools.push({ type: 'pii_check' })
+        }
+        requestBody.tools = tools
       }
 
       const stream = await (client.chat.completions.create as Function)(
