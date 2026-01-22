@@ -250,6 +250,12 @@ export function ChatInterface({
     return localStorage.getItem('webSearchEnabled') === 'true'
   })
 
+  // PII check setting (controlled from settings sidebar, defaults to off)
+  const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('piiCheckEnabled') === 'true'
+  })
+
   // State for tracking processed documents
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
@@ -553,6 +559,7 @@ export function ChatInterface({
     initialChatId,
     isLocalChatUrl,
     webSearchEnabled,
+    piiCheckEnabled,
   })
 
   // Sync URL with current chat state
@@ -706,6 +713,25 @@ export function ChatInterface({
       cancelled = true
     }
   }, [webSearchEnabled, setVerificationComplete, setVerificationSuccess])
+
+  // Listen for PII check setting changes from settings sidebar
+  useEffect(() => {
+    const handlePiiCheckChange = (event: CustomEvent<{ enabled: boolean }>) => {
+      setPiiCheckEnabled(event.detail.enabled)
+    }
+
+    window.addEventListener(
+      'piiCheckEnabledChanged',
+      handlePiiCheckChange as EventListener,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'piiCheckEnabledChanged',
+        handlePiiCheckChange as EventListener,
+      )
+    }
+  }, [])
 
   // Effect to handle window resize and enforce single sidebar rule
   useEffect(() => {

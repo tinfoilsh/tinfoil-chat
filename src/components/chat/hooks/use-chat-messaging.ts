@@ -49,6 +49,7 @@ interface UseChatMessagingProps {
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   webSearchEnabled?: boolean
+  piiCheckEnabled?: boolean
 }
 
 interface UseChatMessagingReturn {
@@ -89,6 +90,7 @@ export function useChatMessaging({
   scrollToBottom,
   reasoningEffort,
   webSearchEnabled,
+  piiCheckEnabled,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { getToken, isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
@@ -527,6 +529,7 @@ export function useChatMessaging({
           signal: controller.signal,
           reasoningEffort,
           webSearchEnabled,
+          piiCheckEnabled,
         })
 
         // Callback for early title generation when word threshold is reached
@@ -929,6 +932,7 @@ export function useChatMessaging({
       isProjectMode,
       activeProject,
       webSearchEnabled,
+      piiCheckEnabled,
     ],
   )
 
