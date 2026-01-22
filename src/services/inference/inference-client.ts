@@ -246,15 +246,21 @@ export async function sendChatStream(
         : await getTinfoilClient()
       await client.ready()
 
-      const stream = await client.chat.completions.create(
-        {
-          model: model.modelName,
-          messages,
-          stream: true,
-          // Only include reasoning_effort for gpt-oss models
-          ...(isReasoningModel(model.modelName) &&
-            reasoningEffort && { reasoning_effort: reasoningEffort }),
-        },
+      // Build request body - tools is a custom extension for our web search proxy
+      const requestBody: Record<string, unknown> = {
+        model: model.modelName,
+        messages,
+        stream: true,
+      }
+      if (isReasoningModel(model.modelName) && reasoningEffort) {
+        requestBody.reasoning_effort = reasoningEffort
+      }
+      if (webSearchEnabled) {
+        requestBody.tools = [{ type: 'web_search' }]
+      }
+
+      const stream = await (client.chat.completions.create as Function)(
+        requestBody,
         { signal },
       )
 
