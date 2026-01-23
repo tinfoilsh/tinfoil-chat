@@ -3,6 +3,7 @@ import { useClerk, useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { ChatInput } from './chat-input'
+import { CONSTANTS } from './constants'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
@@ -177,7 +178,11 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   isPremium={isPremium}
                   hasMessages={false}
                   audioModel={
-                    models?.find((m) => m.type === 'audio')?.modelName
+                    (
+                      models?.find(
+                        (m) => m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL,
+                      ) || models?.find((m) => m.type === 'audio')
+                    )?.modelName
                   }
                   modelSelectorButton={
                     models &&

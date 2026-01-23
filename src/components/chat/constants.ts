@@ -10,8 +10,10 @@ export const CONSTANTS = {
   // Maximum number of messages to include in the context window (user can override in settings)
   MAX_PROMPT_MESSAGES: 75,
   MAX_PROMPT_MESSAGES_LIMIT: 200,
-  // Voice recording timeout in milliseconds (30 seconds)
-  RECORDING_TIMEOUT_MS: 30000,
+  // Voice recording timeout in milliseconds (10 minutes)
+  RECORDING_TIMEOUT_MS: 600000,
+  // Default audio model for voice transcription
+  DEFAULT_AUDIO_MODEL: 'voxtral-small-24b',
   // Copy button timeout in milliseconds (2 seconds)
   COPY_TIMEOUT_MS: 2000,
   // Chat initialization delay in milliseconds
