@@ -250,10 +250,11 @@ export function ChatInterface({
     return localStorage.getItem('webSearchEnabled') === 'true'
   })
 
-  // PII check setting (controlled from settings sidebar, defaults to off)
+  // PII check setting (controlled from settings sidebar, defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('piiCheckEnabled') === 'true'
+    if (typeof window === 'undefined') return true
+    const saved = localStorage.getItem('piiCheckEnabled')
+    return saved === null ? true : saved === 'true'
   })
 
   // State for tracking processed documents
