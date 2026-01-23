@@ -11,6 +11,7 @@ import {
 import { logInfo } from '@/utils/error-handling'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
+  ChevronDownIcon,
   Cog6ToothIcon,
   KeyIcon,
   MoonIcon,
@@ -73,8 +74,12 @@ export function SettingsSidebar({
   // Cloud sync setting
   const [cloudSyncEnabled, setCloudSyncEnabledState] = useState<boolean>(false)
 
-  // Web Search PII check setting
-  const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(false)
+  // Web Search PII check setting (defaults to on)
+  const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
+
+  // Advanced settings dropdown state
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] =
+    useState<boolean>(false)
 
   // Upgrade state
   const [upgradeLoading, setUpgradeLoading] = useState(false)
@@ -201,9 +206,9 @@ export function SettingsSidebar({
     // Load cloud sync setting
     setCloudSyncEnabledState(isCloudSyncEnabled())
 
-    // Load PII check setting
+    // Load PII check setting (defaults to true if not set)
     const savedPiiCheck = localStorage.getItem('piiCheckEnabled')
-    setPiiCheckEnabled(savedPiiCheck === 'true')
+    setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
   }, [defaultSystemPrompt])
 
   // Initial load settings from localStorage
@@ -802,92 +807,6 @@ export function SettingsSidebar({
                   </div>
                 </div>
 
-                {/* Custom System Prompt Settings */}
-                <div
-                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div
-                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                        >
-                          Custom System Prompt
-                        </div>
-                        <div
-                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                        >
-                          Override the default system prompt
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="relative inline-flex cursor-pointer items-center">
-                          <input
-                            type="checkbox"
-                            checked={isUsingCustomPrompt}
-                            onChange={(e) =>
-                              handleToggleCustomPrompt(e.target.checked)
-                            }
-                            className="peer sr-only"
-                          />
-                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                        </label>
-                      </div>
-                    </div>
-
-                    {isUsingCustomPrompt && (
-                      <div className="space-y-2">
-                        <textarea
-                          value={stripSystemTags(customSystemPrompt)}
-                          onChange={(e) =>
-                            handleCustomPromptChange(e.target.value)
-                          }
-                          onBlur={handleCustomPromptBlur}
-                          placeholder="Enter your custom system prompt..."
-                          rows={6}
-                          className={`w-full resize-none rounded-md border px-3 py-2 font-mono text-sm ${
-                            isDarkMode
-                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
-                          } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                        />
-                        <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
-                          <div
-                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                          >
-                            <span
-                              className={`font-aeonik font-medium ${
-                                isDarkMode
-                                  ? 'text-emerald-400'
-                                  : 'text-emerald-600'
-                              }`}
-                            >
-                              Tip:
-                            </span>{' '}
-                            Use placeholders like {'{USER_PREFERENCES}'},{' '}
-                            {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'}, and{' '}
-                            {'{TIMEZONE}'} to tell the model about your
-                            preferences, timezone, and the current time and
-                            date.
-                          </div>
-                        </div>
-                        <div className="flex justify-center">
-                          <button
-                            onClick={handleRestoreDefaultPrompt}
-                            className={`rounded-md px-3 py-1.5 text-xs transition-all ${
-                              isDarkMode
-                                ? 'text-red-400 hover:text-red-300'
-                                : 'text-red-600 hover:text-red-500'
-                            } hover:underline`}
-                          >
-                            Restore default prompt
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 {/* Personalization Settings */}
                 <div
                   className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
@@ -1032,59 +951,6 @@ export function SettingsSidebar({
               </div>
             </div>
 
-            {/* Web Search section */}
-            <div>
-              <h3
-                className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-              >
-                Web Search
-              </h3>
-              <div className="space-y-2">
-                <div
-                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="mr-3 flex-1">
-                      <div
-                        className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                      >
-                        Automatic PII Detection and Blocking
-                      </div>
-                      <div
-                        className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                      >
-                        When web search is enabled, queries that contain PII
-                        will automatically be blocked.
-                      </div>
-                    </div>
-                    <label className="relative inline-flex cursor-pointer items-center">
-                      <input
-                        type="checkbox"
-                        checked={piiCheckEnabled}
-                        onChange={(e) => {
-                          const newValue = e.target.checked
-                          setPiiCheckEnabled(newValue)
-                          if (isClient) {
-                            localStorage.setItem(
-                              'piiCheckEnabled',
-                              newValue.toString(),
-                            )
-                            window.dispatchEvent(
-                              new CustomEvent('piiCheckEnabledChanged', {
-                                detail: { enabled: newValue },
-                              }),
-                            )
-                          }
-                        }}
-                        className="peer sr-only"
-                      />
-                      <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Encrypted Cloud Sync section */}
             {onEncryptionKeyClick && (
               <div>
@@ -1160,6 +1026,170 @@ export function SettingsSidebar({
                 </div>
               </div>
             )}
+
+            {/* Advanced Settings section */}
+            <div>
+              <button
+                onClick={() => setAdvancedSettingsOpen(!advancedSettingsOpen)}
+                className="flex w-full items-center justify-between"
+              >
+                <h3
+                  className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                >
+                  Advanced Settings
+                </h3>
+                <ChevronDownIcon
+                  className={`h-4 w-4 text-content-muted transition-transform ${advancedSettingsOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {advancedSettingsOpen && (
+                <div className="mt-3 space-y-4">
+                  {/* Custom System Prompt */}
+                  <div>
+                    <h4
+                      className={`mb-2 font-aeonik text-xs font-medium ${'text-content-muted'}`}
+                    >
+                      AI Settings
+                    </h4>
+                    <div
+                      className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div
+                              className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                            >
+                              Custom System Prompt
+                            </div>
+                            <div
+                              className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                            >
+                              Override the default system prompt
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="relative inline-flex cursor-pointer items-center">
+                              <input
+                                type="checkbox"
+                                checked={isUsingCustomPrompt}
+                                onChange={(e) =>
+                                  handleToggleCustomPrompt(e.target.checked)
+                                }
+                                className="peer sr-only"
+                              />
+                              <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                            </label>
+                          </div>
+                        </div>
+
+                        {isUsingCustomPrompt && (
+                          <div className="space-y-2">
+                            <textarea
+                              value={stripSystemTags(customSystemPrompt)}
+                              onChange={(e) =>
+                                handleCustomPromptChange(e.target.value)
+                              }
+                              onBlur={handleCustomPromptBlur}
+                              placeholder="Enter your custom system prompt..."
+                              rows={6}
+                              className={`w-full resize-none rounded-md border px-3 py-2 font-mono text-sm ${
+                                isDarkMode
+                                  ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                                  : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
+                              } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                            />
+                            <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
+                              <div
+                                className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                              >
+                                <span
+                                  className={`font-aeonik font-medium ${
+                                    isDarkMode
+                                      ? 'text-emerald-400'
+                                      : 'text-emerald-600'
+                                  }`}
+                                >
+                                  Tip:
+                                </span>{' '}
+                                Use placeholders like {'{USER_PREFERENCES}'},{' '}
+                                {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'}, and{' '}
+                                {'{TIMEZONE}'} to tell the model about your
+                                preferences, timezone, and the current time and
+                                date.
+                              </div>
+                            </div>
+                            <div className="flex justify-center">
+                              <button
+                                onClick={handleRestoreDefaultPrompt}
+                                className={`rounded-md px-3 py-1.5 text-xs transition-all ${
+                                  isDarkMode
+                                    ? 'text-red-400 hover:text-red-300'
+                                    : 'text-red-600 hover:text-red-500'
+                                } hover:underline`}
+                              >
+                                Restore default prompt
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Web Search PII Detection */}
+                  <div>
+                    <h4
+                      className={`mb-2 font-aeonik text-xs font-medium ${'text-content-muted'}`}
+                    >
+                      Web Search
+                    </h4>
+                    <div
+                      className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="mr-3 flex-1">
+                          <div
+                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                          >
+                            Automatic PII Detection and Blocking
+                          </div>
+                          <div
+                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                          >
+                            When web search is enabled, queries that contain PII
+                            will automatically be blocked.
+                          </div>
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={piiCheckEnabled}
+                            onChange={(e) => {
+                              const newValue = e.target.checked
+                              setPiiCheckEnabled(newValue)
+                              if (isClient) {
+                                localStorage.setItem(
+                                  'piiCheckEnabled',
+                                  newValue.toString(),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent('piiCheckEnabledChanged', {
+                                    detail: { enabled: newValue },
+                                  }),
+                                )
+                              }
+                            }}
+                            className="peer sr-only"
+                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
