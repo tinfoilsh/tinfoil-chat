@@ -144,10 +144,18 @@ export function WebSearchIntroModal({
                             className="overflow-hidden"
                           >
                             <p className="px-4 pb-4 text-sm text-content-secondary">
-                              Tinfoil <b>never</b> sees your search queries.{' '}
-                              Search queries are sent to web search providers
-                              (Exa, DuckDuckGo, Bing) without exposing your IP
-                              address or identity.
+                              Tinfoil <b>never</b> sees your search queries.
+                              Search queries are sent to our third-party search
+                              provider (Exa) without exposing your IP address or
+                              identity.
+                              <a
+                                href="https://tinfoil.sh/blog/2026-01-22-private-ai-web-search"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 block text-brand-accent-dark hover:underline"
+                              >
+                                Learn more about our web search architecture
+                              </a>
                             </p>
                           </motion.div>
                         )}
