@@ -676,44 +676,10 @@ export function ChatInterface({
     initTinfoil()
   }, [setVerificationComplete, setVerificationSuccess])
 
-  // Update verification document when web search toggle changes
+  // Persist web search toggle to localStorage
   useEffect(() => {
     localStorage.setItem('webSearchEnabled', String(webSearchEnabled))
-
-    let cancelled = false
-    const updateVerification = async () => {
-      try {
-        const { getTinfoilClient, getWebSearchClient } = await import(
-          '@/services/inference/tinfoil-client'
-        )
-        if (cancelled) return
-        const client = webSearchEnabled
-          ? await getWebSearchClient()
-          : await getTinfoilClient()
-        await client.ready()
-        if (cancelled) return
-        const doc = await (client as any).getVerificationDocument?.()
-        if (cancelled) return
-        if (doc) {
-          setVerificationDocument(doc)
-          if (doc.securityVerified !== undefined) {
-            setVerificationComplete(true)
-            setVerificationSuccess(doc.securityVerified)
-          }
-        }
-      } catch (error) {
-        if (cancelled) return
-        logError('Failed to update verification for web search toggle', error, {
-          component: 'ChatInterface',
-          action: 'updateVerification',
-        })
-      }
-    }
-    updateVerification()
-    return () => {
-      cancelled = true
-    }
-  }, [webSearchEnabled, setVerificationComplete, setVerificationSuccess])
+  }, [webSearchEnabled])
 
   // Listen for PII check setting changes from settings sidebar
   useEffect(() => {
