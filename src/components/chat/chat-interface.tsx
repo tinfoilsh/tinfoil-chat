@@ -2098,7 +2098,11 @@ export function ChatInterface({
                       currentChat?.messages && currentChat.messages.length > 0
                     }
                     audioModel={
-                      models.find((m) => m.type === 'audio')?.modelName
+                      (
+                        models.find(
+                          (m) => m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL,
+                        ) || models.find((m) => m.type === 'audio')
+                      )?.modelName
                     }
                     modelSelectorButton={
                       models.length > 0 &&
