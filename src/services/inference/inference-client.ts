@@ -9,7 +9,7 @@ import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { getTinfoilClient, getWebSearchClient } from './tinfoil-client'
+import { getTinfoilClient } from './tinfoil-client'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -243,9 +243,7 @@ export async function sendChatStream(
     }
 
     try {
-      const client = webSearchEnabled
-        ? await getWebSearchClient()
-        : await getTinfoilClient()
+      const client = await getTinfoilClient()
       await client.ready()
 
       // Build request body - tools is a custom extension for our web search proxy
