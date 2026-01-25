@@ -28,7 +28,9 @@ import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { migrationEvents } from '@/services/storage/migration-events'
 import {
   isCloudSyncEnabled,
@@ -894,6 +896,48 @@ export function ChatInterface({
     createNewChat(false, true)
     exitProjectMode()
   }, [createNewChat, exitProjectMode])
+
+  // Handler for moving a chat to a project via drag and drop
+  const handleMoveChatToProject = useCallback(
+    async (chatId: string, projectId: string) => {
+      try {
+        // Update local storage first (optimistic)
+        await indexedDBStorage.updateChatProject(chatId, projectId)
+
+        // Update cloud storage
+        await cloudStorage.updateChatProject(chatId, projectId)
+
+        // Reload chats to update the UI
+        await reloadChats()
+
+        // If the moved chat was the current chat, create a new blank chat
+        if (currentChat.id === chatId) {
+          createNewChat(false, true)
+        }
+
+        toast({
+          title: 'Chat moved to project',
+          description: 'The chat has been moved successfully.',
+        })
+      } catch (error) {
+        logError('Failed to move chat to project', error, {
+          component: 'ChatInterface',
+          action: 'handleMoveChatToProject',
+          metadata: { chatId, projectId },
+        })
+
+        // Rollback: reload chats to restore original state
+        await reloadChats()
+
+        toast({
+          title: 'Failed to move chat',
+          description: 'Please try again.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [currentChat.id, createNewChat, reloadChats, toast],
+  )
 
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
@@ -1783,6 +1827,7 @@ export function ChatInterface({
             await enterProjectMode(projectId, projectName)
           }}
           onCreateProject={handleCreateProject}
+          onMoveChatToProject={handleMoveChatToProject}
         />
       )}
 

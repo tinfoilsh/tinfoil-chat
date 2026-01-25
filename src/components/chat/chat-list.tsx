@@ -29,11 +29,14 @@ interface ChatListProps {
   showSyncStatus?: boolean
   enableTitleAnimation?: boolean
   animatedDeleteConfirmation?: boolean
+  isDraggable?: boolean
   onSelectChat: (chatId: string) => void
   onAfterSelect?: () => void
   onUpdateTitle?: (chatId: string, title: string) => void
   onDeleteChat: (chatId: string) => void
   onEncryptionKeyClick?: () => void
+  onDragStart?: (chatId: string) => void
+  onDragEnd?: () => void
   loadMoreButton?: React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -49,11 +52,14 @@ export function ChatList({
   showSyncStatus = false,
   enableTitleAnimation = false,
   animatedDeleteConfirmation = true,
+  isDraggable = false,
   onSelectChat,
   onAfterSelect,
   onUpdateTitle,
   onDeleteChat,
   onEncryptionKeyClick,
+  onDragStart,
+  onDragEnd,
   loadMoreButton,
   emptyState,
 }: ChatListProps) {
@@ -162,12 +168,17 @@ export function ChatList({
             enableTitleAnimation={
               enableTitleAnimation && manuallyEditedChatId !== chat.id
             }
+            isDraggable={
+              isDraggable && !chat.isBlankChat && !chat.decryptionFailed
+            }
             onSelect={() => handleSelect(chat)}
             onStartEdit={() => handleStartEdit(chat)}
             onTitleChange={setEditingTitle}
             onSaveTitle={() => handleSaveTitle(chat.id)}
             onCancelEdit={handleCancelEdit}
             onRequestDelete={() => setDeletingChatId(chat.id)}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           />
           {deletingChatId === chat.id && (
             <DeleteConfirmation
