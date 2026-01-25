@@ -73,6 +73,7 @@ type ChatSidebarProps = {
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
+  onRemoveChatFromProject?: (chatId: string) => Promise<void>
 }
 
 // Add this constant at the top of the file
@@ -191,6 +192,7 @@ export function ChatSidebar({
   onEnterProject,
   onCreateProject,
   onMoveChatToProject,
+  onRemoveChatFromProject,
 }: ChatSidebarProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
@@ -259,6 +261,7 @@ export function ChatSidebar({
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(
     null,
   )
+  const [isDropTargetChatHistory, setIsDropTargetChatHistory] = useState(false)
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -911,11 +914,43 @@ export function ChatSidebar({
                   setIsChatHistoryExpanded(!isChatHistoryExpanded)
                 }
               }}
+              onDragOver={(e) => {
+                const chatId = e.dataTransfer.types.includes(
+                  'application/x-chat-id',
+                )
+                if (chatId && onRemoveChatFromProject) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setIsDropTargetChatHistory(true)
+                }
+              }}
+              onDragEnter={(e) => {
+                const chatId = e.dataTransfer.types.includes(
+                  'application/x-chat-id',
+                )
+                if (chatId && onRemoveChatFromProject) {
+                  e.preventDefault()
+                  setIsDropTargetChatHistory(true)
+                }
+              }}
+              onDragLeave={() => {
+                setIsDropTargetChatHistory(false)
+              }}
+              onDrop={async (e) => {
+                e.preventDefault()
+                const chatId = e.dataTransfer.getData('application/x-chat-id')
+                if (chatId && onRemoveChatFromProject) {
+                  await onRemoveChatFromProject(chatId)
+                }
+                setIsDropTargetChatHistory(false)
+              }}
               className={cn(
                 'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                isDarkMode
-                  ? 'text-content-secondary hover:bg-surface-chat'
-                  : 'text-content-secondary hover:bg-white',
+                isDropTargetChatHistory
+                  ? 'border border-emerald-400 bg-emerald-400/10'
+                  : isDarkMode
+                    ? 'text-content-secondary hover:bg-surface-chat'
+                    : 'text-content-secondary hover:bg-white',
               )}
             >
               <span className="flex items-center gap-2">

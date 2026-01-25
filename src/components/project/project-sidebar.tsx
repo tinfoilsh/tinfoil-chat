@@ -59,6 +59,7 @@ interface ProjectSidebarProps {
   deleteChat?: (chatId: string) => void
   updateChatTitle?: (chatId: string, newTitle: string) => void
   onEncryptionKeyClick?: () => void
+  onRemoveChatFromProject?: (chatId: string) => Promise<void>
 }
 
 function formatFileSize(bytes: number): string {
@@ -92,6 +93,7 @@ export function ProjectSidebar({
   deleteChat,
   updateChatTitle,
   onEncryptionKeyClick,
+  onRemoveChatFromProject,
 }: ProjectSidebarProps) {
   const { getToken, isSignedIn } = useAuth()
   const {
@@ -1085,6 +1087,7 @@ export function ProjectSidebar({
               isLoading={isLoading}
               enableTitleAnimation={true}
               animatedDeleteConfirmation={false}
+              isDraggable={!!onRemoveChatFromProject}
               onSelectChat={(chatId) => {
                 if (chatId.startsWith('blank-') || chatId === '') {
                   handleNewChat()

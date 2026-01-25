@@ -939,6 +939,48 @@ export function ChatInterface({
     [currentChat.id, createNewChat, reloadChats, toast],
   )
 
+  // Handler for removing a chat from a project via drag and drop
+  const handleRemoveChatFromProject = useCallback(
+    async (chatId: string) => {
+      try {
+        // Update local storage first (optimistic)
+        await indexedDBStorage.updateChatProject(chatId, null)
+
+        // Update cloud storage
+        await cloudStorage.updateChatProject(chatId, null)
+
+        // Reload chats to update the UI
+        await reloadChats()
+
+        // If the removed chat was the current chat, create a new blank chat
+        if (currentChat.id === chatId) {
+          createNewChat(false, true)
+        }
+
+        toast({
+          title: 'Chat removed from project',
+          description: 'The chat is now in your main chat list.',
+        })
+      } catch (error) {
+        logError('Failed to remove chat from project', error, {
+          component: 'ChatInterface',
+          action: 'handleRemoveChatFromProject',
+          metadata: { chatId },
+        })
+
+        // Rollback: reload chats to restore original state
+        await reloadChats()
+
+        toast({
+          title: 'Failed to remove chat',
+          description: 'Please try again.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [currentChat.id, createNewChat, reloadChats, toast],
+  )
+
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
 
@@ -1777,6 +1819,7 @@ export function ChatInterface({
           onEncryptionKeyClick={
             isSignedIn ? handleOpenEncryptionKeyModal : undefined
           }
+          onRemoveChatFromProject={handleRemoveChatFromProject}
         />
       ) : loadingProject ? (
         <ProjectSidebar
@@ -1828,6 +1871,7 @@ export function ChatInterface({
           }}
           onCreateProject={handleCreateProject}
           onMoveChatToProject={handleMoveChatToProject}
+          onRemoveChatFromProject={handleRemoveChatFromProject}
         />
       )}
 
