@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
@@ -14,9 +13,12 @@ import { SignInButton, UserButton, useUser } from '@clerk/nextjs'
 import {
   ChevronDownIcon,
   Cog6ToothIcon,
+  CreditCardIcon,
   KeyIcon,
   MoonIcon,
   SunIcon,
+  UserCircleIcon,
+  UserIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
@@ -62,7 +64,7 @@ export function SettingsSidebar({
   const [selectedTraits, setSelectedTraits] = useState<string[]>([])
   const [additionalContext, setAdditionalContext] = useState<string>('')
   const [isUsingPersonalization, setIsUsingPersonalization] =
-    useState<boolean>(false)
+    useState<boolean>(true)
 
   // Language setting (separate from personalization)
   const [language, setLanguage] = useState<string>('')
@@ -77,9 +79,17 @@ export function SettingsSidebar({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
-  // Advanced settings dropdown state
-  const [advancedSettingsOpen, setAdvancedSettingsOpen] =
-    useState<boolean>(false)
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<
+    'general' | 'personalization' | 'account'
+  >('general')
+
+  // Advanced settings collapsed state
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
+
+  // Placeholder animation state
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [placeholderVisible, setPlaceholderVisible] = useState(true)
 
   // Upgrade state
   const [upgradeLoading, setUpgradeLoading] = useState(false)
@@ -117,11 +127,21 @@ export function SettingsSidebar({
     'Data scientist',
   ]
 
-  // Use a cycling placeholder based on current time
-  const getCurrentPlaceholder = () => {
-    const index = Math.floor(Date.now() / 2000) % professionPlaceholders.length
-    return professionPlaceholders[index]
-  }
+  // Cycle through profession placeholders with fade animation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderVisible(false)
+      setTimeout(() => {
+        setPlaceholderIndex(
+          (prev) => (prev + 1) % professionPlaceholders.length,
+        )
+        setPlaceholderVisible(true)
+      }, 150)
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [professionPlaceholders.length])
+
+  const getCurrentPlaceholder = () => professionPlaceholders[placeholderIndex]
 
   // Available languages for dropdown
   const availableLanguages = [
@@ -587,163 +607,321 @@ export function SettingsSidebar({
     }
   }, [])
 
+  // Billing state
+  const [billingLoading, setBillingLoading] = useState(false)
+
+  const handleManageBilling = useCallback(async () => {
+    if (!getToken) return
+
+    setBillingLoading(true)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error('No authentication token available')
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/billing/subscriptions`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      if (!response.ok) throw new Error('Failed to fetch subscriptions')
+
+      const data = await response.json()
+      const chatSubscription = data.subscriptions?.find(
+        (sub: { product_name: string; manage_url: string }) =>
+          sub.product_name?.toLowerCase().includes('chat'),
+      )
+
+      if (chatSubscription?.manage_url) {
+        window.location.href = chatSubscription.manage_url
+      } else {
+        setUpgradeError('No active subscription found')
+      }
+    } catch {
+      setUpgradeError('Failed to load billing. Please try again.')
+    } finally {
+      setBillingLoading(false)
+    }
+  }, [getToken])
+
+  if (!isOpen) return null
+
+  const navItems = [
+    { id: 'general' as const, label: 'General', icon: Cog6ToothIcon },
+    {
+      id: 'personalization' as const,
+      label: 'Personalization',
+      icon: UserIcon,
+    },
+    { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
+  ]
+
   return (
-    <>
-      {/* Settings sidebar */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Modal overlay */}
+      <div
+        className="fixed inset-0 bg-black/50"
+        onClick={() => setIsOpen(false)}
+      />
+
+      {/* Settings modal */}
       <motion.div
-        initial={false}
-        animate={{
-          x: isOpen ? 0 : '100%',
-        }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
         transition={{
           type: 'spring',
-          damping: 30,
+          damping: 25,
           stiffness: 300,
         }}
         className={cn(
-          'fixed right-0 top-0 z-50 flex h-full w-[85vw] flex-col overflow-hidden border-l font-aeonik',
+          'relative z-10 flex h-[80vh] w-[90vw] max-w-4xl overflow-hidden rounded-xl border font-aeonik shadow-xl',
           'border-border-subtle bg-surface-sidebar text-content-primary',
         )}
-        style={{ maxWidth: `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px` }}
       >
-        {/* Header */}
-        <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
-          <div className="flex items-center gap-2">
-            <Cog6ToothIcon className="h-6 w-6 text-content-primary" />
-            <h2 className="font-aeonik text-lg font-semibold text-content-primary">
-              Settings
-            </h2>
+        {/* Left sidebar navigation */}
+        <div className="flex w-56 flex-none flex-col border-r border-border-subtle">
+          {/* Close button */}
+          <div className="flex h-14 items-center px-4">
+            <button
+              onClick={() => setIsOpen(false)}
+              className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            onClick={() => setIsOpen(false)}
-            className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
-          >
-            <XMarkIcon className="h-5 w-5" />
-          </button>
+
+          {/* Navigation items */}
+          <nav className="flex-1 px-3 py-2">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  activeTab === item.id
+                    ? 'bg-surface-chat text-content-primary'
+                    : 'text-content-secondary hover:bg-surface-chat/50',
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </button>
+            ))}
+          </nav>
         </div>
 
-        {/* Settings content */}
-        <div className="relative flex-1 overflow-y-auto p-4">
-          <TextureGrid />
-          <div className="relative z-10 space-y-6">
-            {/* Account section */}
-            <div>
-              {isSignedIn ? (
-                <div
-                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <UserButton
-                      appearance={{
-                        elements: {
-                          avatarBox: 'w-10 h-10',
-                        },
-                      }}
-                    />
-                    <div>
-                      <div className="font-aeonik text-sm font-medium text-content-primary">
-                        {user?.firstName
-                          ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
-                          : user?.emailAddresses?.[0]?.emailAddress || 'User'}
-                      </div>
-                      <div className="text-xs text-content-muted">
-                        {isPremium
-                          ? 'Premium subscription active'
-                          : 'Free tier'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <SignInButton mode="modal">
-                  <button className="flex w-full items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
-                    <PiSignIn className="h-4 w-4" />
-                    Sign in or sign up
-                  </button>
-                </SignInButton>
-              )}
-              {isSignedIn && !isPremium && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleUpgradeToPro()
-                  }}
-                  disabled={upgradeLoading}
-                  className={`mt-2 w-full rounded-md bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90 ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
-                >
-                  {upgradeLoading ? 'Redirecting…' : 'Subscribe to premium'}
-                </button>
-              )}
-              {upgradeError && (
-                <p className="mt-2 text-xs text-destructive">{upgradeError}</p>
-              )}
-            </div>
+        {/* Right content area */}
+        <div className="flex flex-1 flex-col">
+          {/* Header */}
+          <div className="flex h-14 items-center border-b border-border-subtle px-6">
+            <h2 className="font-aeonik text-lg font-semibold text-content-primary">
+              {navItems.find((item) => item.id === activeTab)?.label}
+            </h2>
+          </div>
 
-            {/* Appearance section */}
-            <div>
-              <h3
-                className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-              >
-                Appearance
-              </h3>
-              <div className="space-y-2">
-                <div
-                  className={`flex items-center justify-between rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
-                  <div>
+          {/* Content */}
+          <div className="relative flex-1 overflow-y-auto p-6">
+            <TextureGrid />
+            <div className="relative z-10 space-y-6">
+              {/* General Tab */}
+              {activeTab === 'general' && (
+                <>
+                  {/* Appearance */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Appearance
+                    </h3>
                     <div
-                      className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
+                      className={cn(
+                        'flex items-center justify-between rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
                     >
-                      Theme
-                    </div>
-                    <div
-                      className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                    >
-                      Choose between light and dark mode
+                      <div>
+                        <div className="font-aeonik text-sm font-medium text-content-primary">
+                          Theme
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Choose between light and dark mode
+                        </div>
+                      </div>
+                      <button
+                        id="theme-toggle"
+                        onClick={handleThemeToggle}
+                        className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
+                      >
+                        {isDarkMode ? (
+                          <SunIcon className="h-5 w-5" />
+                        ) : (
+                          <MoonIcon className="h-5 w-5" />
+                        )}
+                      </button>
                     </div>
                   </div>
-                  <button
-                    id="theme-toggle"
-                    onClick={handleThemeToggle}
-                    className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
-                  >
-                    {isDarkMode ? (
-                      <SunIcon className="h-5 w-5" />
-                    ) : (
-                      <MoonIcon className="h-5 w-5" />
+
+                  {/* Encrypted Cloud Sync */}
+                  {onEncryptionKeyClick && (
+                    <div className="space-y-3">
+                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                        Encrypted Cloud Sync
+                      </h3>
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-4',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-aeonik text-sm font-medium text-content-primary">
+                              Cloud Sync
+                            </div>
+                            <div className="font-aeonik-fono text-xs text-content-muted">
+                              {cloudSyncEnabled
+                                ? 'End-to-end encrypted. Only you can access your chats and data.'
+                                : 'Turn on Cloud Sync to back up and access your data across devices.'}
+                            </div>
+                          </div>
+                          <label className="relative inline-flex cursor-pointer items-center">
+                            <input
+                              type="checkbox"
+                              checked={cloudSyncEnabled}
+                              onChange={(e) =>
+                                handleCloudSyncToggle(e.target.checked)
+                              }
+                              className="peer sr-only"
+                            />
+                            <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                          </label>
+                        </div>
+                      </div>
+
+                      {cloudSyncEnabled && (
+                        <button
+                          onClick={onEncryptionKeyClick}
+                          className={cn(
+                            'flex w-full items-start justify-between rounded-lg border border-border-subtle p-4 transition-colors hover:bg-surface-chat',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <KeyIcon className="mt-0.5 h-5 w-5 text-content-muted" />
+                            <div className="text-left">
+                              <div className="font-aeonik text-sm font-medium text-content-primary">
+                                Encryption Key
+                              </div>
+                              <div className="font-aeonik-fono text-xs text-content-muted">
+                                Manage your chat encryption key
+                              </div>
+                            </div>
+                          </div>
+                          <div className="self-center text-sm text-content-muted">
+                            →
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Advanced Settings */}
+                  <div className="space-y-3">
+                    <button
+                      onClick={() =>
+                        setAdvancedSettingsOpen(!advancedSettingsOpen)
+                      }
+                      className="flex w-full items-center justify-between"
+                    >
+                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                        Advanced Settings
+                      </h3>
+                      <ChevronDownIcon
+                        className={cn(
+                          'h-4 w-4 text-content-muted transition-transform',
+                          advancedSettingsOpen && 'rotate-180',
+                        )}
+                      />
+                    </button>
+
+                    {advancedSettingsOpen && (
+                      <div className="space-y-4">
+                        {/* Web Search */}
+                        <div
+                          className={cn(
+                            'rounded-lg border border-border-subtle p-4',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          )}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="mr-3 flex-1">
+                              <div className="font-aeonik text-sm font-medium text-content-primary">
+                                Automatic PII Detection
+                              </div>
+                              <div className="font-aeonik-fono text-xs text-content-muted">
+                                When web search is enabled, queries containing
+                                personal information will be blocked.
+                              </div>
+                            </div>
+                            <label className="relative inline-flex cursor-pointer items-center">
+                              <input
+                                type="checkbox"
+                                checked={piiCheckEnabled}
+                                onChange={(e) => {
+                                  const newValue = e.target.checked
+                                  setPiiCheckEnabled(newValue)
+                                  if (isClient) {
+                                    localStorage.setItem(
+                                      'piiCheckEnabled',
+                                      newValue.toString(),
+                                    )
+                                    window.dispatchEvent(
+                                      new CustomEvent(
+                                        'piiCheckEnabledChanged',
+                                        {
+                                          detail: { enabled: newValue },
+                                        },
+                                      ),
+                                    )
+                                  }
+                                }}
+                                className="peer sr-only"
+                              />
+                              <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
                     )}
-                  </button>
-                </div>
-              </div>
-            </div>
+                  </div>
+                </>
+              )}
 
-            {/* Chat Settings */}
-            <div>
-              <h3
-                className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-              >
-                Chat Settings
-              </h3>
-              <div className="space-y-2">
-                <div
-                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="mr-3 flex-1">
-                      <div
-                        className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                      >
-                        Messages in Context
+              {/* Personalization Tab */}
+              {activeTab === 'personalization' && (
+                <>
+                  {/* Messages in Context */}
+                  <div
+                    className={cn(
+                      'rounded-lg border border-border-subtle p-4',
+                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                    )}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="mr-3 flex-1">
+                        <div className="font-aeonik text-sm font-medium text-content-primary">
+                          Messages in Context
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Maximum number of recent messages sent to the model
+                          (1-
+                          {CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT}). Longer
+                          contexts increase network usage and slow down
+                          responses.
+                        </div>
                       </div>
-                      <div
-                        className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                      >
-                        Maximum number of recent messages sent to the model (1-
-                        {CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT}). Longer contexts
-                        increase network usage and slow down responses.
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
                       <input
                         type="number"
                         min="1"
@@ -755,445 +933,413 @@ export function SettingsSidebar({
                             handleMaxMessagesChange(value)
                           }
                         }}
-                        className={`w-16 rounded-md border px-2 py-1 text-center text-sm ${
+                        className={cn(
+                          'w-16 rounded-md border px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
                           isDarkMode
                             ? 'border-border-strong bg-surface-chat text-content-secondary'
-                            : 'border-border-subtle bg-surface-sidebar text-content-primary'
-                        } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                            : 'border-border-subtle bg-surface-sidebar text-content-primary',
+                        )}
                       />
                     </div>
                   </div>
-                </div>
 
-                {/* Language Setting */}
-                <div
-                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
-                  <div className="space-y-2">
-                    <div>
-                      <div
-                        className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                      >
-                        Response Language
+                  {/* Response Language */}
+                  <div
+                    className={cn(
+                      'rounded-lg border border-border-subtle p-4',
+                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                    )}
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <div className="font-aeonik text-sm font-medium text-content-primary">
+                          Response Language
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Language for AI responses
+                        </div>
                       </div>
-                      <div
-                        className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
+                      <select
+                        value={language}
+                        onChange={(e) => handleLanguageChange(e.target.value)}
+                        className={cn(
+                          'w-full rounded-md border py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                          isDarkMode
+                            ? 'border-border-strong bg-surface-chat text-content-secondary'
+                            : 'border-border-subtle bg-surface-sidebar text-content-primary',
+                        )}
                       >
-                        Language for AI responses
-                      </div>
+                        {availableLanguages.map((lang) => (
+                          <option key={lang} value={lang}>
+                            {lang}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <select
-                      value={language}
-                      onChange={(e) => handleLanguageChange(e.target.value)}
-                      className={`w-full rounded-md border py-2 pl-3 pr-8 text-sm ${
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary'
-                          : 'border-border-subtle bg-surface-sidebar text-content-primary'
-                      } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                    >
-                      {availableLanguages.map((lang) => (
-                        <option key={lang} value={lang}>
-                          {lang}
-                        </option>
-                      ))}
-                    </select>
                   </div>
-                </div>
 
-                {/* Personalization Settings */}
-                <div
-                  className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                >
+                  {/* Personalization Fields (always visible) */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div
-                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                        >
-                          Personalization
-                        </div>
-                        <div
-                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                        >
-                          Customize the AI's behavior and responses
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="relative inline-flex cursor-pointer items-center">
-                          <input
-                            type="checkbox"
-                            checked={isUsingPersonalization}
-                            onChange={(e) =>
-                              handleTogglePersonalization(e.target.checked)
-                            }
-                            className="peer sr-only"
-                          />
-                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      About You
+                    </h3>
+
+                    <div
+                      className={cn(
+                        'space-y-4 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      {/* Nickname */}
+                      <div>
+                        <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
+                          How should Tin call you?
                         </label>
+                        <input
+                          type="text"
+                          value={nickname}
+                          onChange={(e) => handleNicknameChange(e.target.value)}
+                          placeholder="Nickname"
+                          className={cn(
+                            'w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                            isDarkMode
+                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                          )}
+                        />
                       </div>
-                    </div>
 
-                    {isUsingPersonalization && (
-                      <div className="space-y-4">
-                        {/* Nickname Field */}
-                        <div>
-                          <label
-                            className={`mb-1 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
-                          >
-                            How should Tin call you?
-                          </label>
-                          <input
-                            type="text"
-                            value={nickname}
-                            onChange={(e) =>
-                              handleNicknameChange(e.target.value)
-                            }
-                            placeholder="Nickname"
-                            className={`w-full rounded-md border px-3 py-2 text-sm ${
-                              isDarkMode
-                                ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                                : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
-                            } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                          />
-                        </div>
-
-                        {/* Profession Field */}
-                        <div>
-                          <label
-                            className={`mb-1 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
-                          >
-                            What do you do?
-                          </label>
+                      {/* Profession */}
+                      <div>
+                        <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
+                          What do you do?
+                        </label>
+                        <div className="relative">
                           <input
                             type="text"
                             value={profession}
                             onChange={(e) =>
                               handleProfessionChange(e.target.value)
                             }
-                            placeholder={getCurrentPlaceholder()}
-                            className={`w-full rounded-md border px-3 py-2 text-sm ${
+                            className={cn(
+                              'w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
                               isDarkMode
-                                ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                                : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
-                            } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                                ? 'border-border-strong bg-surface-chat text-content-secondary'
+                                : 'border-border-subtle bg-surface-sidebar text-content-primary',
+                            )}
                           />
-                        </div>
-
-                        {/* Traits Selection */}
-                        <div>
-                          <label
-                            className={`mb-2 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
-                          >
-                            What conversational traits should Tin have?
-                          </label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {availableTraits.map((trait) => (
-                              <button
-                                key={trait}
-                                onClick={() => handleTraitToggle(trait)}
-                                className={`rounded-full px-2 py-1 text-xs transition-colors ${
-                                  selectedTraits.includes(trait)
-                                    ? 'bg-brand-accent-light text-brand-accent-dark'
-                                    : isDarkMode
-                                      ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat'
-                                      : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar'
-                                }`}
-                              >
-                                {selectedTraits.includes(trait) ? '✓ ' : '+ '}
-                                {trait}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Additional Context */}
-                        <div>
-                          <label
-                            className={`mb-1 block font-aeonik text-xs font-medium ${'text-content-secondary'}`}
-                          >
-                            Anything else Tin should know about you?
-                          </label>
-                          <textarea
-                            value={additionalContext}
-                            onChange={(e) =>
-                              handleContextChange(e.target.value)
-                            }
-                            placeholder="Interests and other preferences you'd like Tin to know about you."
-                            rows={3}
-                            className={`w-full resize-none rounded-md border px-3 py-2 text-sm ${
-                              isDarkMode
-                                ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                                : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
-                            } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                          />
-                        </div>
-
-                        {/* Reset Button */}
-                        <div className="flex items-center justify-between">
-                          <button
-                            onClick={handleResetPersonalization}
-                            className="rounded border border-border-subtle bg-surface-chat px-2 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-                          >
-                            Reset all fields
-                          </button>
+                          {!profession && (
+                            <span
+                              className={cn(
+                                'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-content-muted transition-opacity duration-150',
+                                placeholderVisible
+                                  ? 'opacity-100'
+                                  : 'opacity-0',
+                              )}
+                            >
+                              {getCurrentPlaceholder()}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Encrypted Cloud Sync section */}
-            {onEncryptionKeyClick && (
-              <div>
-                <h3
-                  className={`mb-3 font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                >
-                  Encrypted Cloud Sync
-                </h3>
-                <div className="space-y-2">
-                  {/* Cloud Sync Toggle */}
-                  <div
-                    className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                  >
-                    <div className="flex items-start justify-between">
+                      {/* Traits */}
                       <div>
-                        <div
-                          className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                        >
-                          Cloud Sync
-                        </div>
-                        <div
-                          className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                        >
-                          {cloudSyncEnabled
-                            ? 'End-to-end encrypted. Only you can access your chats and data.'
-                            : 'Turn on Cloud Sync to back up and access your data across devices.'}
+                        <label className="mb-2 block font-aeonik text-xs font-medium text-content-secondary">
+                          What conversational traits should Tin have?
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {availableTraits.map((trait) => (
+                            <button
+                              key={trait}
+                              onClick={() => handleTraitToggle(trait)}
+                              className={cn(
+                                'rounded-full px-2 py-1 text-xs transition-colors',
+                                selectedTraits.includes(trait)
+                                  ? 'bg-brand-accent-light text-brand-accent-dark'
+                                  : isDarkMode
+                                    ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat'
+                                    : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar',
+                              )}
+                            >
+                              {selectedTraits.includes(trait) ? '✓ ' : '+ '}
+                              {trait}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <label className="relative inline-flex cursor-pointer items-center">
-                        <input
-                          type="checkbox"
-                          checked={cloudSyncEnabled}
-                          onChange={(e) =>
-                            handleCloudSyncToggle(e.target.checked)
-                          }
-                          className="peer sr-only"
+
+                      {/* Additional Context */}
+                      <div>
+                        <label className="mb-1 block font-aeonik text-xs font-medium text-content-secondary">
+                          Anything else Tin should know about you?
+                        </label>
+                        <textarea
+                          value={additionalContext}
+                          onChange={(e) => handleContextChange(e.target.value)}
+                          placeholder="Interests and other preferences you'd like Tin to know about you."
+                          rows={3}
+                          className={cn(
+                            'w-full resize-none rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                            isDarkMode
+                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                          )}
                         />
-                        <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                      </label>
+                      </div>
+
+                      {/* Reset Button */}
+                      <button
+                        onClick={handleResetPersonalization}
+                        className="rounded border border-border-subtle bg-surface-chat px-2 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+                      >
+                        Reset all fields
+                      </button>
                     </div>
                   </div>
 
-                  {/* Encryption Key Management - only show when cloud sync is enabled */}
-                  {cloudSyncEnabled && (
-                    <button
-                      onClick={onEncryptionKeyClick}
-                      className={`flex w-full items-start justify-between rounded-lg border border-border-subtle p-3 transition-colors hover:bg-surface-chat ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <KeyIcon
-                          className={`mt-0.5 h-5 w-5 ${'text-content-muted'}`}
-                        />
-                        <div className="text-left">
-                          <div
-                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                          >
-                            Encryption Key
-                          </div>
-                          <div
-                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                          >
-                            Manage your chat encryption key
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={`self-center text-sm ${'text-content-muted'}`}
-                      >
-                        →
-                      </div>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Advanced Settings section */}
-            <div>
-              <button
-                onClick={() => setAdvancedSettingsOpen(!advancedSettingsOpen)}
-                className="flex w-full items-center justify-between"
-              >
-                <h3
-                  className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                >
-                  Advanced Settings
-                </h3>
-                <ChevronDownIcon
-                  className={`h-4 w-4 text-content-muted transition-transform ${advancedSettingsOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-              {advancedSettingsOpen && (
-                <div className="mt-3 space-y-4">
                   {/* Custom System Prompt */}
-                  <div>
-                    <h4
-                      className={`mb-2 font-aeonik text-xs font-medium ${'text-content-muted'}`}
-                    >
-                      AI Settings
-                    </h4>
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Custom System Prompt
+                    </h3>
+
                     <div
-                      className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                      className={cn(
+                        'rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
                     >
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div
-                              className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                            >
-                              Custom System Prompt
-                            </div>
-                            <div
-                              className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                            >
-                              Override the default system prompt
-                            </div>
+                        <div className="flex items-start justify-between">
+                          <div className="font-aeonik-fono text-xs text-content-muted">
+                            Override the default system prompt to customize how
+                            Tin behaves.
                           </div>
-                          <div className="flex items-center gap-2">
-                            <label className="relative inline-flex cursor-pointer items-center">
-                              <input
-                                type="checkbox"
-                                checked={isUsingCustomPrompt}
-                                onChange={(e) =>
-                                  handleToggleCustomPrompt(e.target.checked)
-                                }
-                                className="peer sr-only"
-                              />
-                              <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                            </label>
+                          <label className="relative inline-flex cursor-pointer items-center">
+                            <input
+                              type="checkbox"
+                              checked={isUsingCustomPrompt}
+                              onChange={(e) =>
+                                handleToggleCustomPrompt(e.target.checked)
+                              }
+                              className="peer sr-only"
+                            />
+                            <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                          </label>
+                        </div>
+                        <textarea
+                          value={stripSystemTags(customSystemPrompt)}
+                          onChange={(e) =>
+                            handleCustomPromptChange(e.target.value)
+                          }
+                          onBlur={handleCustomPromptBlur}
+                          placeholder="Enter your custom system prompt..."
+                          rows={6}
+                          onFocus={() => {
+                            if (!isUsingCustomPrompt) {
+                              handleToggleCustomPrompt(true)
+                            }
+                          }}
+                          className={cn(
+                            'w-full resize-none rounded-md border px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                            isDarkMode
+                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                          )}
+                        />
+                        <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
+                          <div className="font-aeonik-fono text-xs text-content-muted">
+                            <span
+                              className={cn(
+                                'font-aeonik font-medium',
+                                isDarkMode
+                                  ? 'text-emerald-400'
+                                  : 'text-emerald-600',
+                              )}
+                            >
+                              Tip:
+                            </span>{' '}
+                            Use placeholders like {'{USER_PREFERENCES}'},{' '}
+                            {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'}, and{' '}
+                            {'{TIMEZONE}'} to tell the model about your
+                            preferences, timezone, and the current time and
+                            date.
                           </div>
                         </div>
-
                         {isUsingCustomPrompt && (
-                          <div className="space-y-2">
-                            <textarea
-                              value={stripSystemTags(customSystemPrompt)}
-                              onChange={(e) =>
-                                handleCustomPromptChange(e.target.value)
-                              }
-                              onBlur={handleCustomPromptBlur}
-                              placeholder="Enter your custom system prompt..."
-                              rows={6}
-                              className={`w-full resize-none rounded-md border px-3 py-2 font-mono text-sm ${
+                          <div className="flex justify-center">
+                            <button
+                              onClick={handleRestoreDefaultPrompt}
+                              className={cn(
+                                'rounded-md px-3 py-1.5 text-xs transition-all hover:underline',
                                 isDarkMode
-                                  ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                                  : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted'
-                              } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                            />
-                            <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
-                              <div
-                                className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                              >
-                                <span
-                                  className={`font-aeonik font-medium ${
-                                    isDarkMode
-                                      ? 'text-emerald-400'
-                                      : 'text-emerald-600'
-                                  }`}
-                                >
-                                  Tip:
-                                </span>{' '}
-                                Use placeholders like {'{USER_PREFERENCES}'},{' '}
-                                {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'}, and{' '}
-                                {'{TIMEZONE}'} to tell the model about your
-                                preferences, timezone, and the current time and
-                                date.
-                              </div>
-                            </div>
-                            <div className="flex justify-center">
-                              <button
-                                onClick={handleRestoreDefaultPrompt}
-                                className={`rounded-md px-3 py-1.5 text-xs transition-all ${
-                                  isDarkMode
-                                    ? 'text-red-400 hover:text-red-300'
-                                    : 'text-red-600 hover:text-red-500'
-                                } hover:underline`}
-                              >
-                                Restore default prompt
-                              </button>
-                            </div>
+                                  ? 'text-red-400 hover:text-red-300'
+                                  : 'text-red-600 hover:text-red-500',
+                              )}
+                            >
+                              Restore default prompt
+                            </button>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
+                </>
+              )}
 
-                  {/* Web Search PII Detection */}
-                  <div>
-                    <h4
-                      className={`mb-2 font-aeonik text-xs font-medium ${'text-content-muted'}`}
-                    >
-                      Web Search
-                    </h4>
-                    <div
-                      className={`rounded-lg border border-border-subtle p-3 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="mr-3 flex-1">
-                          <div
-                            className={`font-aeonik text-sm font-medium ${'text-content-secondary'}`}
-                          >
-                            Automatic PII Detection and Blocking
-                          </div>
-                          <div
-                            className={`font-aeonik-fono text-xs ${'text-content-muted'}`}
-                          >
-                            When web search is enabled, queries that contain PII
-                            will automatically be blocked.
+              {/* Account Tab */}
+              {activeTab === 'account' && (
+                <>
+                  {isSignedIn ? (
+                    <>
+                      {/* User Info */}
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-4',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        <div className="flex items-center gap-4">
+                          <UserButton
+                            appearance={{
+                              elements: {
+                                avatarBox: 'w-12 h-12',
+                              },
+                            }}
+                          />
+                          <div>
+                            <div className="font-aeonik text-base font-medium text-content-primary">
+                              {user?.firstName
+                                ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+                                : user?.emailAddresses?.[0]?.emailAddress ||
+                                  'User'}
+                            </div>
+                            <div className="text-sm text-content-muted">
+                              {user?.emailAddresses?.[0]?.emailAddress}
+                            </div>
                           </div>
                         </div>
-                        <label className="relative inline-flex cursor-pointer items-center">
-                          <input
-                            type="checkbox"
-                            checked={piiCheckEnabled}
-                            onChange={(e) => {
-                              const newValue = e.target.checked
-                              setPiiCheckEnabled(newValue)
-                              if (isClient) {
-                                localStorage.setItem(
-                                  'piiCheckEnabled',
-                                  newValue.toString(),
-                                )
-                                window.dispatchEvent(
-                                  new CustomEvent('piiCheckEnabledChanged', {
-                                    detail: { enabled: newValue },
-                                  }),
-                                )
-                              }
+                      </div>
+
+                      {/* Subscription Status */}
+                      <div className="space-y-3">
+                        <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                          Subscription
+                        </h3>
+                        <div
+                          className={cn(
+                            'rounded-lg border border-border-subtle p-4',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-aeonik text-sm font-medium text-content-primary">
+                                {isPremium ? 'Premium' : 'Free Tier'}
+                              </div>
+                              <div className="font-aeonik-fono text-xs text-content-muted">
+                                {isPremium
+                                  ? 'You have access to all premium features'
+                                  : 'Upgrade to unlock premium features'}
+                              </div>
+                            </div>
+                            <div
+                              className={cn(
+                                'rounded-full px-3 py-1 text-xs font-medium',
+                                isPremium
+                                  ? 'bg-emerald-500/20 text-emerald-500'
+                                  : 'bg-content-muted/20 text-content-muted',
+                              )}
+                            >
+                              {isPremium ? 'Active' : 'Free'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isPremium ? (
+                          <button
+                            onClick={() => {
+                              void handleManageBilling()
                             }}
-                            className="peer sr-only"
-                          />
-                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                        </label>
+                            disabled={billingLoading}
+                            className={cn(
+                              'flex w-full items-center justify-between rounded-lg border border-border-subtle p-4 transition-colors hover:bg-surface-chat',
+                              isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                              billingLoading && 'cursor-not-allowed opacity-70',
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <CreditCardIcon className="h-5 w-5 text-content-muted" />
+                              <div className="text-left">
+                                <div className="font-aeonik text-sm font-medium text-content-primary">
+                                  Manage Billing
+                                </div>
+                                <div className="font-aeonik-fono text-xs text-content-muted">
+                                  Update payment method, view invoices
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-sm text-content-muted">
+                              {billingLoading ? '...' : '→'}
+                            </div>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleUpgradeToPro()
+                            }}
+                            disabled={upgradeLoading}
+                            className={cn(
+                              'w-full rounded-md bg-brand-accent-dark px-4 py-3 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90',
+                              upgradeLoading && 'cursor-not-allowed opacity-70',
+                            )}
+                          >
+                            {upgradeLoading
+                              ? 'Redirecting…'
+                              : 'Subscribe to Premium'}
+                          </button>
+                        )}
+
+                        {upgradeError && (
+                          <p className="text-xs text-destructive">
+                            {upgradeError}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-4">
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-6 text-center',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        <UserCircleIcon className="mx-auto h-12 w-12 text-content-muted" />
+                        <h3 className="mt-3 font-aeonik text-base font-medium text-content-primary">
+                          Sign in to your account
+                        </h3>
+                        <p className="mt-1 text-sm text-content-muted">
+                          Sign in to sync your settings and access premium
+                          features
+                        </p>
+                        <SignInButton mode="modal">
+                          <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-brand-accent-dark px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
+                            <PiSignIn className="h-4 w-4" />
+                            Sign in or sign up
+                          </button>
+                        </SignInButton>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
       </motion.div>
-
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-    </>
+    </div>
   )
 }
