@@ -14,8 +14,9 @@ import {
   Cog6ToothIcon,
   FolderIcon,
   PlusIcon,
-  ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
+import { HiOutlineShieldExclamation } from 'react-icons/hi2'
+import { IoShieldCheckmarkOutline } from 'react-icons/io5'
 import { PiSpinner } from 'react-icons/pi'
 
 import {
@@ -1016,17 +1017,6 @@ export function ChatInterface({
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
 
-  // Modified openAndExpandVerifier to use the right sidebar
-  const modifiedOpenAndExpandVerifier = () => {
-    // Always open the verifier sidebar when called
-    const newState = !isVerifierSidebarOpen
-    handleSetVerifierSidebarOpen(newState)
-    // Close settings sidebar when opening verifier
-    if (newState) {
-      setIsSettingsSidebarOpen(false)
-    }
-  }
-
   // Helper to process file and add to chat attachments
   const processFileForChat = useCallback(
     async (file: File) => {
@@ -1825,7 +1815,7 @@ export function ChatInterface({
           <div className="group relative">
             <button
               className={cn(
-                'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
+                'relative flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
                 'bg-surface-chat-background text-content-secondary hover:bg-surface-chat hover:text-content-primary',
                 isVerifierSidebarOpen &&
                   'cursor-default bg-surface-chat text-content-muted hover:text-content-muted',
@@ -1838,7 +1828,13 @@ export function ChatInterface({
               }
               aria-pressed={isVerifierSidebarOpen}
             >
-              <ShieldCheckIcon className="h-5 w-5" />
+              {!verificationComplete ? (
+                <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
+              ) : verificationSuccess ? (
+                <IoShieldCheckmarkOutline className="h-5 w-5 text-emerald-500" />
+              ) : (
+                <HiOutlineShieldExclamation className="h-5 w-5 text-red-500" />
+              )}
             </button>
             <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
               {isVerifierSidebarOpen ? 'Close verification' : 'Verification'}
@@ -2052,14 +2048,12 @@ export function ChatInterface({
                 messages={currentChat?.messages || []}
                 isDarkMode={isDarkMode}
                 chatId={currentChat.id}
-                openAndExpandVerifier={modifiedOpenAndExpandVerifier}
                 setIsSidebarOpen={setIsSidebarOpen}
                 isWaitingForResponse={isWaitingForResponse}
                 isStreamingResponse={isStreaming}
                 isPremium={isPremium}
                 models={models}
                 subscriptionLoading={subscriptionLoading}
-                verificationState={verificationDocument}
                 onSubmit={handleSubmit}
                 input={input}
                 setInput={setInput}
@@ -2124,9 +2118,6 @@ export function ChatInterface({
                 >
                   {/* Labels - Model selection only for premium users */}
                   <ChatControls
-                    verificationComplete={verificationComplete}
-                    verificationSuccess={verificationSuccess}
-                    openAndExpandVerifier={modifiedOpenAndExpandVerifier}
                     setIsSidebarOpen={setIsSidebarOpen}
                     expandedLabel={expandedLabel}
                     handleLabelClick={handleLabelClick}

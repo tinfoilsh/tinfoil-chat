@@ -6,16 +6,13 @@ import { ChatInput } from './chat-input'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
-import { VerificationStatusDisplay } from './verification-status-display'
 
 interface WelcomeScreenProps {
   isDarkMode: boolean
-  openAndExpandVerifier: () => void
   setIsSidebarOpen?: (isOpen: boolean) => void
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  verificationState?: any
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -39,12 +36,10 @@ interface WelcomeScreenProps {
 
 export const WelcomeScreen = memo(function WelcomeScreen({
   isDarkMode,
-  openAndExpandVerifier,
   setIsSidebarOpen,
   isPremium,
   models,
   subscriptionLoading,
-  verificationState,
   onSubmit,
   input,
   setInput,
@@ -273,25 +268,6 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                 />
               </motion.div>
             )}
-
-            {/* Verification Status Display */}
-            <motion.div
-              className="no-scroll-anchoring mt-8"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{
-                duration: 0.5,
-                ease: 'easeOut',
-                delay: 0.5,
-              }}
-            >
-              <VerificationStatusDisplay
-                isDarkMode={isDarkMode}
-                onOpenVerifier={openAndExpandVerifier}
-                verificationDocument={verificationState}
-                isCompact={true}
-              />
-            </motion.div>
           </div>
         </div>
       </div>

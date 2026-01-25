@@ -21,14 +21,12 @@ type ChatMessagesProps = {
   isDarkMode: boolean
   chatId: string
   messagesEndRef?: React.RefObject<HTMLDivElement>
-  openAndExpandVerifier: () => void
   setIsSidebarOpen?: (isOpen: boolean) => void
   isWaitingForResponse?: boolean
   isStreamingResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
   subscriptionLoading?: boolean
-  verificationState?: any
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -262,14 +260,12 @@ export function ChatMessages({
   messages,
   isDarkMode,
   chatId,
-  openAndExpandVerifier,
   setIsSidebarOpen,
   isWaitingForResponse = false,
   isStreamingResponse = false,
   isPremium,
   models,
   subscriptionLoading,
-  verificationState,
   onSubmit,
   input,
   setInput,
@@ -387,12 +383,10 @@ export function ChatMessages({
         <div className="w-full max-w-4xl px-8">
           <WelcomeScreen
             isDarkMode={isDarkMode}
-            openAndExpandVerifier={openAndExpandVerifier}
             setIsSidebarOpen={setIsSidebarOpen}
             isPremium={isPremium}
             models={models}
             subscriptionLoading={subscriptionLoading}
-            verificationState={verificationState}
             onSubmit={onSubmit}
             input={input}
             setInput={setInput}
