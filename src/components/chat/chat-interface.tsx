@@ -1866,6 +1866,7 @@ export function ChatInterface({
             onAddChatToProject={(chatId) =>
               handleMoveChatToProject(chatId, activeProject.id)
             }
+            onSettingsClick={handleOpenSettingsSidebar}
           />
         ) : loadingProject ? (
           <ProjectSidebar
@@ -1881,6 +1882,7 @@ export function ChatInterface({
             onSelectChat={() => {}}
             isClient={isClient}
             isPremium={isPremium}
+            onSettingsClick={handleOpenSettingsSidebar}
           />
         ) : (
           <ChatSidebar
