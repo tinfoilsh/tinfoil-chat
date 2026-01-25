@@ -1,6 +1,7 @@
 export const CONSTANTS = {
   LOADING_TIMEOUT: 500,
   MOBILE_BREAKPOINT: 768,
+  INPUT_MIN_HEIGHT: '28px',
   SINGLE_SIDEBAR_BREAKPOINT: 1024, // Below this width, only one sidebar can be open at a time
   MAX_MESSAGES: 100,
   MAX_MESSAGE_LENGTH: 4000,

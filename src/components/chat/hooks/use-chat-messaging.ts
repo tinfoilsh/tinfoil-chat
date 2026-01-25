@@ -287,7 +287,7 @@ export function useChatMessaging({
 
       // Reset textarea height
       if (inputRef.current) {
-        inputRef.current.style.height = 'auto'
+        inputRef.current.style.height = CONSTANTS.INPUT_MIN_HEIGHT
       }
 
       const controller = new AbortController()
