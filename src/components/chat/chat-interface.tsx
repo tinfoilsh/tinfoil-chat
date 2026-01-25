@@ -30,6 +30,7 @@ import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { migrationEvents } from '@/services/storage/migration-events'
 import {
@@ -981,6 +982,62 @@ export function ChatInterface({
     [currentChat.id, createNewChat, reloadChats, toast],
   )
 
+  // Handler for converting a local-only chat to cloud chat via drag and drop
+  const handleConvertChatToCloud = useCallback(
+    async (chatId: string) => {
+      try {
+        await chatStorage.convertChatToCloud(chatId)
+        await reloadChats()
+
+        toast({
+          title: 'Chat moved to cloud',
+          description: 'The chat will now sync across your devices.',
+        })
+      } catch (error) {
+        logError('Failed to convert chat to cloud', error, {
+          component: 'ChatInterface',
+          action: 'handleConvertChatToCloud',
+          metadata: { chatId },
+        })
+
+        toast({
+          title: 'Failed to move chat to cloud',
+          description: 'Please try again.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [reloadChats, toast],
+  )
+
+  // Handler for converting a cloud chat to local-only via drag and drop
+  const handleConvertChatToLocal = useCallback(
+    async (chatId: string) => {
+      try {
+        await chatStorage.convertChatToLocal(chatId)
+        await reloadChats()
+
+        toast({
+          title: 'Chat moved to local',
+          description: 'The chat is now only stored on this device.',
+        })
+      } catch (error) {
+        logError('Failed to convert chat to local', error, {
+          component: 'ChatInterface',
+          action: 'handleConvertChatToLocal',
+          metadata: { chatId },
+        })
+
+        toast({
+          title: 'Failed to move chat to local',
+          description: 'Please try again.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [reloadChats, toast],
+  )
+
   // Don't automatically create new chats - let the chat state handle initialization
   // This effect has been removed to prevent unnecessary chat creation
 
@@ -1872,6 +1929,8 @@ export function ChatInterface({
           onCreateProject={handleCreateProject}
           onMoveChatToProject={handleMoveChatToProject}
           onRemoveChatFromProject={handleRemoveChatFromProject}
+          onConvertChatToCloud={handleConvertChatToCloud}
+          onConvertChatToLocal={handleConvertChatToLocal}
         />
       )}
 

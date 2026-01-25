@@ -74,6 +74,8 @@ type ChatSidebarProps = {
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
   onRemoveChatFromProject?: (chatId: string) => Promise<void>
+  onConvertChatToCloud?: (chatId: string) => Promise<void>
+  onConvertChatToLocal?: (chatId: string) => Promise<void>
 }
 
 // Add this constant at the top of the file
@@ -193,6 +195,8 @@ export function ChatSidebar({
   onCreateProject,
   onMoveChatToProject,
   onRemoveChatFromProject,
+  onConvertChatToCloud,
+  onConvertChatToLocal,
 }: ChatSidebarProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
@@ -262,6 +266,9 @@ export function ChatSidebar({
     null,
   )
   const [isDropTargetChatHistory, setIsDropTargetChatHistory] = useState(false)
+  const [dropTargetTab, setDropTargetTab] = useState<'cloud' | 'local' | null>(
+    null,
+  )
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -991,26 +998,108 @@ export function ChatSidebar({
                   <div className="mx-4 mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
                     <button
                       onClick={() => setActiveTab('cloud')}
-                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
-                        activeTab === 'cloud'
-                          ? isDarkMode
-                            ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                            : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                          : 'border-transparent text-content-muted hover:text-content-secondary'
-                      }`}
+                      onDragOver={(e) => {
+                        if (
+                          e.dataTransfer.types.includes(
+                            'application/x-chat-id',
+                          ) &&
+                          onConvertChatToCloud
+                        ) {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                          setDropTargetTab('cloud')
+                        }
+                      }}
+                      onDragEnter={(e) => {
+                        if (
+                          e.dataTransfer.types.includes(
+                            'application/x-chat-id',
+                          ) &&
+                          onConvertChatToCloud
+                        ) {
+                          e.preventDefault()
+                          setDropTargetTab('cloud')
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dropTargetTab === 'cloud') {
+                          setDropTargetTab(null)
+                        }
+                      }}
+                      onDrop={async (e) => {
+                        e.preventDefault()
+                        const chatId = e.dataTransfer.getData(
+                          'application/x-chat-id',
+                        )
+                        if (chatId && onConvertChatToCloud) {
+                          await onConvertChatToCloud(chatId)
+                        }
+                        setDropTargetTab(null)
+                      }}
+                      className={cn(
+                        'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
+                        dropTargetTab === 'cloud'
+                          ? 'border-emerald-400 bg-emerald-400/10'
+                          : activeTab === 'cloud'
+                            ? isDarkMode
+                              ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                              : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
+                            : 'border-transparent text-content-muted hover:text-content-secondary',
+                      )}
                     >
                       <CloudIcon className="h-3.5 w-3.5" />
                       Cloud
                     </button>
                     <button
                       onClick={() => setActiveTab('local')}
-                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all ${
-                        activeTab === 'local'
-                          ? isDarkMode
-                            ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                            : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                          : 'border-transparent text-content-muted hover:text-content-secondary'
-                      }`}
+                      onDragOver={(e) => {
+                        if (
+                          e.dataTransfer.types.includes(
+                            'application/x-chat-id',
+                          ) &&
+                          onConvertChatToLocal
+                        ) {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                          setDropTargetTab('local')
+                        }
+                      }}
+                      onDragEnter={(e) => {
+                        if (
+                          e.dataTransfer.types.includes(
+                            'application/x-chat-id',
+                          ) &&
+                          onConvertChatToLocal
+                        ) {
+                          e.preventDefault()
+                          setDropTargetTab('local')
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dropTargetTab === 'local') {
+                          setDropTargetTab(null)
+                        }
+                      }}
+                      onDrop={async (e) => {
+                        e.preventDefault()
+                        const chatId = e.dataTransfer.getData(
+                          'application/x-chat-id',
+                        )
+                        if (chatId && onConvertChatToLocal) {
+                          await onConvertChatToLocal(chatId)
+                        }
+                        setDropTargetTab(null)
+                      }}
+                      className={cn(
+                        'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
+                        dropTargetTab === 'local'
+                          ? 'border-emerald-400 bg-emerald-400/10'
+                          : activeTab === 'local'
+                            ? isDarkMode
+                              ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
+                              : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
+                            : 'border-transparent text-content-muted hover:text-content-secondary',
+                      )}
                     >
                       <CiFloppyDisk className="h-3.5 w-3.5" />
                       Local
