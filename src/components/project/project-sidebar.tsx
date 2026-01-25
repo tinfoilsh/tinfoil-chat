@@ -13,7 +13,7 @@ import { cn } from '@/components/ui/utils'
 import { toast } from '@/hooks/use-toast'
 import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
-import { useAuth, UserButton } from '@clerk/nextjs'
+import { useAuth } from '@clerk/nextjs'
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
@@ -62,6 +62,7 @@ interface ProjectSidebarProps {
   onEncryptionKeyClick?: () => void
   onRemoveChatFromProject?: (chatId: string) => Promise<string>
   onAddChatToProject?: (chatId: string) => Promise<void>
+  onSettingsClick?: () => void
 }
 
 function formatFileSize(bytes: number): string {
@@ -98,6 +99,7 @@ export function ProjectSidebar({
   onEncryptionKeyClick,
   onRemoveChatFromProject,
   onAddChatToProject,
+  onSettingsClick,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
   const { setDraggingChat, clearDragState } = useDrag()
@@ -570,16 +572,15 @@ export function ProjectSidebar({
                 <KeyIcon className="h-5 w-5" />
               </button>
             )}
-            {/* User button for signed-in users */}
-            {isSignedIn && (
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8',
-                  },
-                }}
-              />
-            )}
+            {/* Settings button */}
+            <button
+              type="button"
+              onClick={onSettingsClick}
+              className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
+              title="Settings"
+            >
+              <Cog6ToothIcon className="h-5 w-5" />
+            </button>
           </div>
         </div>
 
