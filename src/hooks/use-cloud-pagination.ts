@@ -1,5 +1,4 @@
 import { CLOUD_SYNC, PAGINATION } from '@/config'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
@@ -118,14 +117,12 @@ export function useCloudPagination(
         }
       }
 
-      const result = await cloudStorage.listChats({ limit: pageSize })
-      setNextToken(result.nextContinuationToken)
-      setHasMore(!!result.nextContinuationToken)
+      // Don't set pagination state here - let loadMore() handle fetching page 1
+      // This ensures we don't skip page 1 when loadMore() is called
       setHasAttempted(false)
-      initializedRef.current = true
       return {
-        hasMore: !!result.nextContinuationToken,
-        nextToken: result.nextContinuationToken,
+        hasMore: false,
+        nextToken: undefined,
         deletedIds,
       }
     } catch (error) {
