@@ -261,6 +261,30 @@ export class ChatStorageService {
       }),
     )
   }
+
+  async convertChatToCloud(chatId: string): Promise<void> {
+    await this.initialize()
+
+    // Update local storage to mark as cloud chat
+    await indexedDBStorage.updateChatLocalOnly(chatId, false)
+
+    // Trigger cloud backup
+    await cloudSync.backupChat(chatId)
+
+    chatEvents.emit({ reason: 'save', ids: [chatId] })
+  }
+
+  async convertChatToLocal(chatId: string): Promise<void> {
+    await this.initialize()
+
+    // Update local storage to mark as local-only
+    await indexedDBStorage.updateChatLocalOnly(chatId, true)
+
+    // Delete from cloud
+    await cloudSync.deleteFromCloud(chatId)
+
+    chatEvents.emit({ reason: 'save', ids: [chatId] })
+  }
 }
 
 export const chatStorage = new ChatStorageService()

@@ -510,6 +510,19 @@ export class IndexedDBStorage {
       await this.saveChatInternal(chat)
     }
   }
+
+  async updateChatLocalOnly(
+    chatId: string,
+    isLocalOnly: boolean,
+  ): Promise<void> {
+    const chat = await this.getChatInternal(chatId)
+    if (chat) {
+      chat.isLocalOnly = isLocalOnly
+      chat.locallyModified = true
+      chat.updatedAt = new Date().toISOString()
+      await this.saveChatInternal(chat)
+    }
+  }
 }
 
 export const indexedDBStorage = new IndexedDBStorage()
