@@ -705,7 +705,13 @@ export function ChatSidebar({
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [shouldShowLoadMore, isLoadingMore, isSignedIn, loadMoreChats])
+  }, [
+    shouldShowLoadMore,
+    isLoadingMore,
+    isSignedIn,
+    loadMoreChats,
+    isChatHistoryExpanded,
+  ])
 
   const getChatSortTimestamp = useCallback((chat: Chat) => {
     const createdValue =
