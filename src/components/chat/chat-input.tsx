@@ -403,7 +403,7 @@ export function ChatInput({
         )}
         <div
           className={cn(
-            'rounded-xl border border-border-subtle bg-surface-chat p-4 shadow-md transition-colors',
+            'rounded-4xl border border-border-subtle bg-surface-chat p-4 shadow-md transition-colors',
             isDragOver && 'ring-2 ring-emerald-400/60',
           )}
           onDragOver={handleDragOver}
