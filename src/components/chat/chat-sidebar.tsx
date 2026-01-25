@@ -7,12 +7,13 @@ import {
   setCloudSyncEnabled as setCloudSyncEnabledSetting,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
-import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
+import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CloudIcon,
+  Cog6ToothIcon,
   FolderIcon,
   FolderPlusIcon,
   TrashIcon,
@@ -78,6 +79,7 @@ type ChatSidebarProps = {
   onRemoveChatFromProject?: (chatId: string) => Promise<string>
   onConvertChatToCloud?: (chatId: string) => Promise<string>
   onConvertChatToLocal?: (chatId: string) => Promise<string>
+  onSettingsClick?: () => void
 }
 
 // Add this constant at the top of the file
@@ -316,6 +318,7 @@ export function ChatSidebar({
   onRemoveChatFromProject,
   onConvertChatToCloud,
   onConvertChatToLocal,
+  onSettingsClick,
 }: ChatSidebarProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
@@ -931,16 +934,15 @@ export function ChatSidebar({
                 <KeyIcon className="h-5 w-5" />
               </button>
             )}
-            {/* User button for signed-in users */}
-            {isSignedIn && (
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8',
-                  },
-                }}
-              />
-            )}
+            {/* Settings button */}
+            <button
+              type="button"
+              onClick={onSettingsClick}
+              className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
+              title="Settings"
+            >
+              <Cog6ToothIcon className="h-5 w-5" />
+            </button>
           </div>
         </div>
 
