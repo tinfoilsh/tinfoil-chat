@@ -1783,9 +1783,7 @@ export function ChatInterface({
               windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
                 ? isVerifierSidebarOpen
                   ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
-                  : isSettingsSidebarOpen
-                    ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX + 24}px`
-                    : '16px'
+                  : '16px'
                 : '16px',
           }}
         >
@@ -1988,9 +1986,7 @@ export function ChatInterface({
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
               ? isVerifierSidebarOpen
                 ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
-                : isSettingsSidebarOpen
-                  ? `${CONSTANTS.SETTINGS_SIDEBAR_WIDTH_PX}px`
-                  : '0'
+                : '0'
               : '0',
           bottom: 0,
           left:
