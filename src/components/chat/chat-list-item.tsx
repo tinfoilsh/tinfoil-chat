@@ -54,12 +54,15 @@ interface ChatListItemProps {
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
   enableTitleAnimation?: boolean
+  isDraggable?: boolean
   onSelect: () => void
   onStartEdit: () => void
   onTitleChange: (title: string) => void
   onSaveTitle: () => void
   onCancelEdit: () => void
   onRequestDelete: () => void
+  onDragStart?: (chatId: string) => void
+  onDragEnd?: () => void
 }
 
 export function ChatListItem({
@@ -71,17 +74,21 @@ export function ChatListItem({
   showEncryptionStatus = false,
   showSyncStatus = false,
   enableTitleAnimation = false,
+  isDraggable = false,
   onSelect,
   onStartEdit,
   onTitleChange,
   onSaveTitle,
   onCancelEdit,
   onRequestDelete,
+  onDragStart,
+  onDragEnd,
 }: ChatListItemProps) {
   const [displayTitle, setDisplayTitle] = useState(chat.title)
   const [isAnimating, setIsAnimating] = useState(false)
   const [animationFromTitle, setAnimationFromTitle] = useState('')
   const [animationToTitle, setAnimationToTitle] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
   const prevTitleRef = useRef(chat.title)
 
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
@@ -133,6 +140,23 @@ export function ChatListItem({
     onRequestDelete()
   }
 
+  const handleDragStart = (e: React.DragEvent) => {
+    if (!isDraggable) {
+      e.preventDefault()
+      return
+    }
+    setIsDragging(true)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', chat.id)
+    e.dataTransfer.setData('application/x-chat-id', chat.id)
+    onDragStart?.(chat.id)
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+    onDragEnd?.()
+  }
+
   const getTimestamp = (): Date | null => {
     if (chat.updatedAt) {
       return new Date(chat.updatedAt)
@@ -151,6 +175,7 @@ export function ChatListItem({
     <div
       role="button"
       tabIndex={0}
+      draggable={isDraggable}
       onClick={onSelect}
       onKeyDown={(e) => {
         // Only handle events originating on the row itself, not bubbled from nested buttons
@@ -160,8 +185,12 @@ export function ChatListItem({
           onSelect()
         }
       }}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       className={cn(
-        'group flex w-full cursor-pointer items-center justify-between rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:border-border-subtle',
+        'group flex w-full items-center justify-between rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:border-border-subtle',
+        isDraggable ? 'cursor-grab' : 'cursor-pointer',
+        isDragging && 'opacity-50',
         chat.decryptionFailed
           ? 'text-content-muted hover:bg-surface-chat'
           : isSelected
