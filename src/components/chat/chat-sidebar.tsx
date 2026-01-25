@@ -180,7 +180,8 @@ async function downloadProjects(
         const sanitizedName = project.name
           .replace(/[^a-z0-9]/gi, '_')
           .toLowerCase()
-        const projectFolder = zip.folder(sanitizedName)
+        const folderName = `${sanitizedName}_${project.id.slice(0, 8)}`
+        const projectFolder = zip.folder(folderName)
         if (!projectFolder) return
 
         // Create project info markdown
