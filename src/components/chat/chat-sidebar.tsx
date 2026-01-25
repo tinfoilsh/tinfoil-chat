@@ -39,8 +39,8 @@ import { projectStorage } from '@/services/cloud/project-storage'
 import { type StoredChat } from '@/services/storage/indexed-db'
 import { getConversationTimestampFromId } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
-import { KeyIcon } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BsKey } from 'react-icons/bs'
 import { Link } from '../link'
 import { Logo } from '../logo'
 import type { Chat } from './types'
@@ -926,24 +926,32 @@ export function ChatSidebar({
           <div className="flex items-center gap-2">
             {/* Encryption key button */}
             {isSignedIn && cloudSyncEnabled && (
-              <button
-                type="button"
-                onClick={onEncryptionKeyClick}
-                className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
-                title="Encryption key"
-              >
-                <KeyIcon className="h-5 w-5" />
-              </button>
+              <div className="group relative">
+                <button
+                  type="button"
+                  onClick={onEncryptionKeyClick}
+                  className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
+                >
+                  <BsKey className="h-5 w-5" />
+                </button>
+                <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  Encryption key
+                </span>
+              </div>
             )}
             {/* Settings button */}
-            <button
-              type="button"
-              onClick={onSettingsClick}
-              className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
-              title="Settings"
-            >
-              <Cog6ToothIcon className="h-5 w-5" />
-            </button>
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={onSettingsClick}
+                className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
+              >
+                <Cog6ToothIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Settings
+              </span>
+            </div>
           </div>
         </div>
 

@@ -1,9 +1,11 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
+import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { TINFOIL_COLORS } from '@/theme/colors'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
@@ -11,11 +13,14 @@ import {
 import { logInfo } from '@/utils/error-handling'
 import { SignInButton, UserButton, useUser } from '@clerk/nextjs'
 import {
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   ChatBubbleLeftRightIcon,
+  CheckIcon,
   ChevronDownIcon,
+  ClipboardDocumentIcon,
   Cog6ToothIcon,
   CreditCardIcon,
-  KeyIcon,
   MoonIcon,
   SunIcon,
   UserCircleIcon,
@@ -23,8 +28,10 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BsKey } from 'react-icons/bs'
 import { PiSignIn } from 'react-icons/pi'
+import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
 
 type SettingsSidebarProps = {
@@ -34,11 +41,12 @@ type SettingsSidebarProps = {
   toggleTheme: () => void
   isClient: boolean
   defaultSystemPrompt?: string
-  onEncryptionKeyClick?: () => void
   onCloudSyncSetupClick?: () => void
   onChatsUpdated?: () => void
   isSignedIn?: boolean
   isPremium?: boolean
+  encryptionKey: string | null
+  onKeyChange: (key: string) => Promise<void>
 }
 
 export function SettingsSidebar({
@@ -48,16 +56,27 @@ export function SettingsSidebar({
   toggleTheme,
   isClient,
   defaultSystemPrompt = '',
-  onEncryptionKeyClick,
   onCloudSyncSetupClick,
   onChatsUpdated,
   isSignedIn,
   isPremium,
+  encryptionKey,
+  onKeyChange,
 }: SettingsSidebarProps) {
   const { user } = useUser()
+  const { toast } = useToast()
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
   )
+
+  // Encryption key management state
+  const [inputKey, setInputKey] = useState('')
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Structured personalization fields
   const [nickname, setNickname] = useState<string>('')
@@ -82,7 +101,7 @@ export function SettingsSidebar({
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<
-    'general' | 'chat' | 'personalization' | 'account'
+    'general' | 'chat' | 'personalization' | 'encryption' | 'account'
   >('general')
 
   // Advanced settings collapsed state
@@ -648,6 +667,176 @@ export function SettingsSidebar({
     }
   }, [getToken])
 
+  // Cleanup copy timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Reset QR code expansion state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsQRCodeExpanded(false)
+    }
+  }, [isOpen])
+
+  const handleCopyKey = async () => {
+    if (!encryptionKey) return
+
+    try {
+      await navigator.clipboard.writeText(encryptionKey)
+      setIsCopied(true)
+
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+
+      copyTimeoutRef.current = setTimeout(() => {
+        setIsCopied(false)
+        copyTimeoutRef.current = null
+      }, 2000)
+    } catch {
+      toast({
+        title: 'Failed to copy',
+        description: 'Could not copy encryption key to clipboard',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleUpdateKey = async () => {
+    if (!inputKey.trim()) {
+      toast({
+        title: 'Invalid key',
+        description: 'Please enter a valid encryption key',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsUpdating(true)
+    try {
+      await onKeyChange(inputKey)
+      toast({
+        title: 'Key updated',
+        description: 'Your encryption key has been updated successfully',
+      })
+      setInputKey('')
+    } catch {
+      toast({
+        title: 'Invalid key',
+        description: 'The encryption key you entered is invalid',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const downloadKeyAsPEM = () => {
+    if (!encryptionKey) return
+
+    const pemContent = `-----BEGIN TINFOIL CHAT ENCRYPTION KEY-----
+${encryptionKey.replace('key_', '')}
+-----END TINFOIL CHAT ENCRYPTION KEY-----`
+
+    const blob = new Blob([pemContent], { type: 'application/x-pem-file' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tinfoil-chat-key-${new Date().toISOString().split('T')[0]}.pem`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const extractKeyFromPEM = (pemContent: string): string | null => {
+    const lines = pemContent.split('\n')
+    const startIndex = lines.findIndex((line) =>
+      line.includes('BEGIN TINFOIL CHAT ENCRYPTION KEY'),
+    )
+    const endIndex = lines.findIndex((line) =>
+      line.includes('END TINFOIL CHAT ENCRYPTION KEY'),
+    )
+
+    if (startIndex !== -1 && endIndex !== -1 && startIndex < endIndex) {
+      const keyLines = lines.slice(startIndex + 1, endIndex)
+      const keyContent = keyLines.join('').trim()
+      return keyContent ? `key_${keyContent}` : null
+    }
+
+    return null
+  }
+
+  const handleFileImport = useCallback(
+    async (file: File) => {
+      try {
+        const content = await file.text()
+        const extractedKey = extractKeyFromPEM(content)
+
+        if (extractedKey) {
+          setInputKey(extractedKey)
+        } else {
+          toast({
+            title: 'Invalid file',
+            description: 'Could not extract encryption key from the PEM file',
+            variant: 'destructive',
+          })
+        }
+      } catch {
+        toast({
+          title: 'Import failed',
+          description: 'Failed to read the PEM file',
+          variant: 'destructive',
+        })
+      }
+    },
+    [toast],
+  )
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+
+      const files = Array.from(e.dataTransfer.files)
+      const pemFile = files.find((file) => file.name.endsWith('.pem'))
+
+      if (pemFile) {
+        await handleFileImport(pemFile)
+      } else {
+        toast({
+          title: 'Invalid file',
+          description: 'Please drop a .pem file',
+          variant: 'destructive',
+        })
+      }
+    },
+    [handleFileImport, toast],
+  )
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      await handleFileImport(file)
+      e.target.value = ''
+    }
+  }
+
   if (!isOpen) return null
 
   const navItems = [
@@ -658,6 +847,7 @@ export function SettingsSidebar({
       label: 'Personalization',
       icon: UserIcon,
     },
+    { id: 'encryption' as const, label: 'Encryption', icon: BsKey },
     { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
   ]
 
@@ -799,70 +989,6 @@ export function SettingsSidebar({
                       </button>
                     </div>
                   </div>
-
-                  {/* Encrypted Cloud Sync */}
-                  {onEncryptionKeyClick && (
-                    <div className="space-y-3">
-                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Encrypted Cloud Sync
-                      </h3>
-                      <div
-                        className={cn(
-                          'rounded-lg border border-border-subtle p-4',
-                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                        )}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-aeonik text-sm font-medium text-content-primary">
-                              Cloud Sync
-                            </div>
-                            <div className="font-aeonik-fono text-xs text-content-muted">
-                              {cloudSyncEnabled
-                                ? 'End-to-end encrypted. Only you can access your chats and data.'
-                                : 'Turn on Cloud Sync to back up and access your data across devices.'}
-                            </div>
-                          </div>
-                          <label className="relative inline-flex cursor-pointer items-center">
-                            <input
-                              type="checkbox"
-                              checked={cloudSyncEnabled}
-                              onChange={(e) =>
-                                handleCloudSyncToggle(e.target.checked)
-                              }
-                              className="peer sr-only"
-                            />
-                            <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                          </label>
-                        </div>
-                      </div>
-
-                      {cloudSyncEnabled && (
-                        <button
-                          onClick={onEncryptionKeyClick}
-                          className={cn(
-                            'flex w-full items-start justify-between rounded-lg border border-border-subtle p-4 transition-colors hover:bg-surface-chat',
-                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <KeyIcon className="mt-0.5 h-5 w-5 text-content-muted" />
-                            <div className="text-left">
-                              <div className="font-aeonik text-sm font-medium text-content-primary">
-                                Encryption Key
-                              </div>
-                              <div className="font-aeonik-fono text-xs text-content-muted">
-                                Manage your chat encryption key
-                              </div>
-                            </div>
-                          </div>
-                          <div className="self-center text-sm text-content-muted">
-                            →
-                          </div>
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </>
               )}
 
@@ -1265,6 +1391,274 @@ export function SettingsSidebar({
                   >
                     Reset all fields
                   </button>
+                </>
+              )}
+
+              {/* Encryption Tab */}
+              {activeTab === 'encryption' && (
+                <>
+                  {/* How It Works */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      How It Works
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-medium text-emerald-500">
+                          1
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Your chats are encrypted on your device before being
+                          sent to the cloud.
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-medium text-emerald-500">
+                          2
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Only you have the encryption key. Tinfoil cannot read
+                          your messages.
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-medium text-emerald-500">
+                          3
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          To access your chats on a new device, you&apos;ll need
+                          to enter your encryption key.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cloud Sync */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Cloud Sync
+                    </h3>
+                    <div
+                      className={cn(
+                        'rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-aeonik text-sm font-medium text-content-primary">
+                            Encrypted Cloud Sync
+                          </div>
+                          <div className="font-aeonik-fono text-xs text-content-muted">
+                            {cloudSyncEnabled
+                              ? 'End-to-end encrypted. Only you can access your chats and data.'
+                              : 'Turn on Cloud Sync to back up and access your data across devices.'}
+                          </div>
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={cloudSyncEnabled}
+                            onChange={(e) =>
+                              handleCloudSyncToggle(e.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Encryption Key Management */}
+                  {cloudSyncEnabled && (
+                    <div className="space-y-3">
+                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                        Current Encryption Key
+                      </h3>
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-4',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        {encryptionKey ? (
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <code className="font-mono text-xs text-brand-accent-light">
+                                {encryptionKey.substring(0, 20)}...
+                              </code>
+                              <div className="flex gap-2">
+                                <div className="group relative">
+                                  <button
+                                    onClick={downloadKeyAsPEM}
+                                    aria-label="Download encryption key as PEM file"
+                                    className="flex items-center justify-center rounded-lg bg-surface-chat p-2 text-xs text-content-primary transition-all hover:bg-surface-chat/80"
+                                  >
+                                    <ArrowDownTrayIcon className="h-4 w-4" />
+                                  </button>
+                                  <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded bg-surface-chat px-2 py-1 text-xs text-content-primary opacity-0 transition-opacity group-hover:opacity-100">
+                                    Download
+                                  </div>
+                                </div>
+                                <div className="group relative">
+                                  <button
+                                    onClick={handleCopyKey}
+                                    aria-label={
+                                      isCopied
+                                        ? 'Key copied to clipboard'
+                                        : 'Copy encryption key to clipboard'
+                                    }
+                                    className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all ${
+                                      isCopied
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                                    }`}
+                                  >
+                                    {isCopied ? (
+                                      <CheckIcon className="h-4 w-4" />
+                                    ) : (
+                                      <ClipboardDocumentIcon className="h-4 w-4" />
+                                    )}
+                                  </button>
+                                  <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded bg-surface-chat px-2 py-1 text-xs text-content-primary opacity-0 transition-opacity group-hover:opacity-100">
+                                    {isCopied ? 'Copied!' : 'Copy'}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-content-muted">
+                            No encryption key set
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xs text-content-muted">
+                        Save this key securely. You&apos;ll need it to access
+                        your chats and projects on other devices.
+                      </p>
+
+                      {/* QR Code Section - Collapsible */}
+                      {encryptionKey && (
+                        <div className="rounded-lg border border-border-subtle">
+                          <button
+                            onClick={() =>
+                              setIsQRCodeExpanded(!isQRCodeExpanded)
+                            }
+                            className="flex w-full items-center justify-between p-3 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/50"
+                          >
+                            <span>
+                              Key QR Code (to sync from another device)
+                            </span>
+                            <ChevronDownIcon
+                              className={`h-4 w-4 transition-transform ${
+                                isQRCodeExpanded ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </button>
+                          {isQRCodeExpanded && (
+                            <div className="flex justify-center rounded-b-lg border-t border-border-subtle bg-surface-card p-3">
+                              <QRCode
+                                value={encryptionKey}
+                                size={160}
+                                level="H"
+                                bgColor={
+                                  isDarkMode
+                                    ? TINFOIL_COLORS.surface.cardDark
+                                    : TINFOIL_COLORS.surface.cardLight
+                                }
+                                fgColor={
+                                  isDarkMode
+                                    ? TINFOIL_COLORS.utility.qrForegroundDark
+                                    : TINFOIL_COLORS.utility.qrForegroundLight
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Restore or Sync Key Section */}
+                  {cloudSyncEnabled && (
+                    <div className="space-y-3">
+                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                        Restore or Update Encryption Key
+                      </h3>
+                      <p className="text-xs text-content-muted">
+                        Enter or import your existing encryption key to access
+                        your chats on this device.
+                      </p>
+
+                      <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className="space-y-2"
+                      >
+                        <div className="flex gap-2">
+                          <input
+                            type="password"
+                            value={inputKey}
+                            onChange={(e) => setInputKey(e.target.value)}
+                            placeholder="Enter key (e.g., key_abc123...)"
+                            autoComplete="off"
+                            aria-label="Encryption key input"
+                            className={cn(
+                              'flex-1 rounded-lg border bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light',
+                              isDragging
+                                ? 'border-brand-accent-light'
+                                : 'border-border-subtle',
+                            )}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !isUpdating) {
+                                handleUpdateKey()
+                              }
+                            }}
+                          />
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pem"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-colors hover:bg-surface-chat/80"
+                            title="Upload PEM file"
+                          >
+                            <ArrowUpTrayIcon className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={handleUpdateKey}
+                            disabled={isUpdating || !inputKey.trim()}
+                            aria-label="Update encryption key"
+                            className={cn(
+                              'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                              isUpdating || !inputKey.trim()
+                                ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90',
+                            )}
+                          >
+                            {isUpdating ? 'Updating...' : 'Update'}
+                          </button>
+                        </div>
+                        {isDragging && (
+                          <p className="text-center text-sm text-brand-accent-light">
+                            Drop your PEM file here
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
