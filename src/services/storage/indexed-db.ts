@@ -497,6 +497,19 @@ export class IndexedDBStorage {
       (chat) => chat.decryptionFailed && chat.encryptedData,
     )
   }
+
+  async updateChatProject(
+    chatId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    const chat = await this.getChatInternal(chatId)
+    if (chat) {
+      chat.projectId = projectId ?? undefined
+      chat.locallyModified = true
+      chat.updatedAt = new Date().toISOString()
+      await this.saveChatInternal(chat)
+    }
+  }
 }
 
 export const indexedDBStorage = new IndexedDBStorage()

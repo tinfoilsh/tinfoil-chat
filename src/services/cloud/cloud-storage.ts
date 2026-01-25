@@ -264,6 +264,24 @@ export class CloudStorageService {
     return response.json()
   }
 
+  async updateChatProject(
+    chatId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/conversation/${chatId}/project`,
+      {
+        method: 'PATCH',
+        headers: await this.getHeaders(),
+        body: JSON.stringify({ projectId }),
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Failed to update chat project: ${response.statusText}`)
+    }
+  }
+
   async getChatsUpdatedSince(options: {
     since: string
     includeContent?: boolean
