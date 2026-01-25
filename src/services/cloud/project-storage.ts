@@ -12,43 +12,19 @@ import type {
   UpdateProjectData,
 } from '@/types/project'
 import { logError } from '@/utils/error-handling'
-import { isTokenValid } from '@/utils/token-validation'
+import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
 
 export class ProjectStorageService {
-  private getToken: (() => Promise<string | null>) | null = null
-
-  setTokenGetter(getToken: () => Promise<string | null>) {
-    this.getToken = getToken
-  }
-
   private async getHeaders(): Promise<HeadersInit> {
-    if (!this.getToken) {
-      throw new Error('Token getter not set')
-    }
-
-    const token = await this.getToken()
-    if (!token) {
-      throw new Error('Failed to get authentication token')
-    }
-
-    if (!isTokenValid(token)) {
-      throw new Error('Token is expired')
-    }
-
-    return {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    }
+    return authTokenManager.getAuthHeaders()
   }
 
   async isAuthenticated(): Promise<boolean> {
-    if (!this.getToken) return false
-    const token = await this.getToken()
-    return isTokenValid(token)
+    return authTokenManager.isAuthenticated()
   }
 
   async generateProjectId(): Promise<{

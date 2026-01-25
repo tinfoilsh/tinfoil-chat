@@ -31,7 +31,7 @@ import { useProject } from '@/components/project/project-context'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { useCloudPagination } from '@/hooks/use-cloud-pagination'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
+import { authTokenManager } from '@/services/auth'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { type StoredChat } from '@/services/storage/indexed-db'
 import { getConversationTimestampFromId } from '@/utils/chat-timestamps'
@@ -376,7 +376,7 @@ export function ChatSidebar({
     return 'cloud'
   })
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
-  const { isSignedIn, getToken } = useAuth()
+  const { isSignedIn } = useAuth()
   const { user } = useUser()
 
   const [draggingChatId, setDraggingChatId] = useState<string | null>(null)
@@ -576,17 +576,6 @@ export function ChatSidebar({
       sessionStorage.removeItem('sidebarExpandSection')
     }
   }, [isOpen, refreshProjects])
-
-  // Initialize cloudStorage with token getter when component mounts
-  useEffect(() => {
-    if (isSignedIn && getToken) {
-      // Set up token getter for cloudStorage using Clerk token
-      cloudStorage.setTokenGetter(async () => {
-        const token = await getToken()
-        return token
-      })
-    }
-  }, [isSignedIn, getToken])
 
   // Pagination initialization handled by hook/useEffect below
 
@@ -838,17 +827,10 @@ export function ChatSidebar({
   }
 
   const handleUpgradeToPro = useCallback(async () => {
-    if (!getToken) {
-      return
-    }
-
     setUpgradeError(null)
     setUpgradeLoading(true)
     try {
-      const token = await getToken()
-      if (!token) {
-        throw new Error('No authentication token available')
-      }
+      const token = await authTokenManager.getValidToken()
 
       const returnUrl = encodeURIComponent(window.location.origin)
       const response = await fetch(
@@ -875,7 +857,7 @@ export function ChatSidebar({
     } finally {
       setUpgradeLoading(false)
     }
-  }, [getToken])
+  }, [])
 
   return (
     <>

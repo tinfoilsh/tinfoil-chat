@@ -2,6 +2,7 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
+import { authTokenManager } from '@/services/auth'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
@@ -9,7 +10,7 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
-import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
+import { SignInButton, UserButton, useUser } from '@clerk/nextjs'
 import {
   ChevronDownIcon,
   Cog6ToothIcon,
@@ -50,7 +51,6 @@ export function SettingsSidebar({
   isSignedIn,
   isPremium,
 }: SettingsSidebarProps) {
-  const { getToken } = useAuth()
   const { user } = useUser()
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
@@ -555,17 +555,10 @@ export function SettingsSidebar({
   }
 
   const handleUpgradeToPro = useCallback(async () => {
-    if (!getToken) {
-      return
-    }
-
     setUpgradeError(null)
     setUpgradeLoading(true)
     try {
-      const token = await getToken()
-      if (!token) {
-        throw new Error('No authentication token available')
-      }
+      const token = await authTokenManager.getValidToken()
 
       const returnUrl = encodeURIComponent(window.location.origin)
       const response = await fetch(
@@ -592,7 +585,7 @@ export function SettingsSidebar({
     } finally {
       setUpgradeLoading(false)
     }
-  }, [getToken])
+  }, [])
 
   return (
     <>

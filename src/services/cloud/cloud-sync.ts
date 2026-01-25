@@ -58,12 +58,6 @@ export class CloudSyncService {
     }
   }
 
-  // Set token getter for API calls
-  setTokenGetter(getToken: () => Promise<string | null>) {
-    cloudStorage.setTokenGetter(getToken)
-    projectStorage.setTokenGetter(getToken)
-  }
-
   // Load cached sync status from localStorage
   private loadCachedSyncStatus(): ChatSyncStatus | null {
     if (typeof window === 'undefined') return null

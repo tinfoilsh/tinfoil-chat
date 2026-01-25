@@ -1,22 +1,17 @@
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
-import { isTokenValid } from '@/utils/token-validation'
 import { TinfoilAI } from 'tinfoil'
+import { authTokenManager } from '../auth'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
 
 let clientInstance: TinfoilAI | null = null
 let lastApiKey: string | null = null
 let cachedApiKey: string | null = null
-let getTokenFn: (() => Promise<string | null>) | null = null
 let hasSubscriptionFn: (() => boolean) | null = null
 
-export function setAuthTokenGetter(
-  getToken: () => Promise<string | null>,
-  hasSubscription?: () => boolean,
-): void {
-  getTokenFn = getToken
-  hasSubscriptionFn = hasSubscription ?? null
+export function setSubscriptionChecker(hasSubscription: () => boolean): void {
+  hasSubscriptionFn = hasSubscription
   resetTinfoilClient()
 }
 
@@ -30,8 +25,8 @@ async function fetchApiKey(): Promise<string> {
     return cachedApiKey
   }
 
-  if (!getTokenFn) {
-    logError('No auth token getter available', undefined, {
+  if (!authTokenManager.isInitialized()) {
+    logError('Auth token manager not initialized', undefined, {
       component: 'tinfoil-client',
       action: 'fetchApiKey',
     })
@@ -39,10 +34,7 @@ async function fetchApiKey(): Promise<string> {
   }
 
   try {
-    const token = await getTokenFn()
-    if (!token || !isTokenValid(token)) {
-      return PLACEHOLDER_API_KEY
-    }
+    const token = await authTokenManager.getValidToken()
 
     const response = await fetch(`${API_BASE_URL}/api/keys/chat`, {
       headers: {

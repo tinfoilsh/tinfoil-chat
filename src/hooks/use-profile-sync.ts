@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 const PROFILE_SYNC_STATUS_KEY = 'tinfoil-profile-sync-status'
 
 export function useProfileSync() {
-  const { getToken, isSignedIn } = useAuth()
+  const { isSignedIn } = useAuth()
   const hasInitialized = useRef(false)
   const syncDebounceTimer = useRef<NodeJS.Timeout | null>(null)
   const lastSyncedVersion = useRef<number>(0)
@@ -17,11 +17,6 @@ export function useProfileSync() {
   const lastSyncedProfile = useRef<ProfileData | null>(null)
   const cachedSyncStatus = useRef<ProfileSyncStatus | null>(null)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
-
-  // Set token getter when auth changes
-  useEffect(() => {
-    profileSync.setTokenGetter(getToken)
-  }, [getToken])
 
   // Load cached profile sync status
   const loadCachedSyncStatus = useCallback((): ProfileSyncStatus | null => {

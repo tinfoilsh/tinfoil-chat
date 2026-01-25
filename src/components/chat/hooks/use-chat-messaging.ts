@@ -15,9 +15,8 @@
  */
 import { useProject } from '@/components/project'
 import { type BaseModel } from '@/config/models'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { sendChatStream } from '@/services/inference/inference-client'
-import { setAuthTokenGetter } from '@/services/inference/tinfoil-client'
+import { setSubscriptionChecker } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -92,7 +91,7 @@ export function useChatMessaging({
   webSearchEnabled,
   piiCheckEnabled,
 }: UseChatMessagingProps): UseChatMessagingReturn {
-  const { getToken, isSignedIn } = useAuth()
+  const { isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
   const { isProjectMode, activeProject } = useProject()
 
@@ -102,11 +101,10 @@ export function useChatMessaging({
     isPremiumRef.current = isPremium
   }, [isPremium])
 
-  // Initialize cloudStorage and tinfoil client with token getter
+  // Initialize subscription checker for tinfoil client
   useEffect(() => {
-    cloudStorage.setTokenGetter(getToken)
-    setAuthTokenGetter(getToken, () => isPremiumRef.current)
-  }, [getToken])
+    setSubscriptionChecker(() => isPremiumRef.current)
+  }, [])
 
   const [input, setInput] = useState('')
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
