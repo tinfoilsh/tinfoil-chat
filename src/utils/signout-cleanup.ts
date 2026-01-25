@@ -86,9 +86,19 @@ export async function performSignoutCleanup(): Promise<void> {
       }
     })
 
-    // Then clear all remaining localStorage items
+    // Then clear all remaining localStorage items, preserving certain keys
     try {
+      // Preserve keys that should persist across signout
+      const hasSeenWebSearchIntro = localStorage.getItem(
+        'has_seen_web_search_intro',
+      )
+
       localStorage.clear()
+
+      // Restore preserved keys
+      if (hasSeenWebSearchIntro) {
+        localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
+      }
     } catch (error) {
       logInfo('Failed to clear all localStorage', {
         component: 'signoutCleanup',

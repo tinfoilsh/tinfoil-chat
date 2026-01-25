@@ -47,6 +47,9 @@ export function WebSearchIntroModal({
   }, [isLoaded, user])
 
   const markAsSeen = useCallback(async () => {
+    // Always set localStorage so the flag persists after signout
+    localStorage.setItem(STORAGE_KEY, 'true')
+
     if (user) {
       await user.update({
         unsafeMetadata: {
@@ -54,8 +57,6 @@ export function WebSearchIntroModal({
           [METADATA_KEY]: true,
         },
       })
-    } else {
-      localStorage.setItem(STORAGE_KEY, 'true')
     }
   }, [user])
 
