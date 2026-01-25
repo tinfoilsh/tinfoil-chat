@@ -356,6 +356,7 @@ export function ChatSidebar({
   })
   const [isChatListScrolled, setIsChatListScrolled] = useState(false)
   const chatListRef = useRef<HTMLDivElement>(null)
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -646,7 +647,7 @@ export function ChatSidebar({
   }, [isSignedIn, user?.id, onChatsUpdated, initPagination])
 
   // Load more chats from backend (delegated to CloudSync via hook)
-  const loadMoreChats = async () => {
+  const loadMoreChats = useCallback(async () => {
     try {
       if (isLoadingMore || !isSignedIn) return
       const result = await loadMorePage()
@@ -662,7 +663,7 @@ export function ChatSidebar({
         action: 'loadMoreChats',
       })
     }
-  }
+  }, [isLoadingMore, isSignedIn, loadMorePage, onChatsUpdated])
 
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
@@ -688,6 +689,34 @@ export function ChatSidebar({
     chatList.addEventListener('scroll', handleScroll)
     return () => chatList.removeEventListener('scroll', handleScroll)
   }, [isChatHistoryExpanded])
+
+  // Auto-load more chats when scrolling to bottom
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (
+          entry.isIntersecting &&
+          shouldShowLoadMore &&
+          !isLoadingMore &&
+          isSignedIn
+        ) {
+          loadMoreChats()
+        }
+      },
+      {
+        root: chatListRef.current,
+        rootMargin: '100px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [shouldShowLoadMore, isLoadingMore, isSignedIn, loadMoreChats])
 
   const getChatSortTimestamp = useCallback((chat: Chat) => {
     const createdValue =
@@ -1325,20 +1354,31 @@ export function ChatSidebar({
                   }
                   loadMoreButton={
                     <>
-                      {shouldShowLoadMore && (
-                        <button
-                          onClick={() => loadMoreChats()}
-                          disabled={isLoadingMore}
-                          className={cn(
-                            'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
-                            isDarkMode
-                              ? 'border-border-strong text-content-muted hover:text-content-secondary'
-                              : 'border-border-subtle text-content-muted hover:text-content-secondary',
-                            isLoadingMore && 'cursor-not-allowed opacity-50',
-                          )}
-                        >
-                          {isLoadingMore ? 'Loading...' : 'Load more'}
-                        </button>
+                      {/* Sentinel element for intersection observer */}
+                      <div ref={loadMoreSentinelRef} className="h-1" />
+                      {/* Shimmer placeholder while loading */}
+                      {isLoadingMore && (
+                        <div className="space-y-1 px-2">
+                          {[...Array(3)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="animate-pulse rounded-lg px-3 py-2"
+                            >
+                              <div
+                                className={cn(
+                                  'mb-1.5 h-3.5 w-3/4 rounded',
+                                  isDarkMode ? 'bg-gray-700' : 'bg-gray-200',
+                                )}
+                              />
+                              <div
+                                className={cn(
+                                  'h-3 w-1/3 rounded',
+                                  isDarkMode ? 'bg-gray-700' : 'bg-gray-200',
+                                )}
+                              />
+                            </div>
+                          ))}
+                        </div>
                       )}
                       {isSignedIn &&
                         !shouldShowLoadMore &&
