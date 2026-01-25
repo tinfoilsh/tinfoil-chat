@@ -274,10 +274,11 @@ export class ChatStorageService {
     // Mark as cloud chat (not local-only)
     await indexedDBStorage.updateChatLocalOnly(newChatId, false)
 
-    // Trigger cloud backup
-    await cloudSync.backupChat(newChatId)
-
+    // Emit event immediately so UI reflects the local change
     chatEvents.emit({ reason: 'save', ids: [newChatId] })
+
+    // Trigger cloud backup (failure shouldn't hide the local chat)
+    await cloudSync.backupChat(newChatId)
 
     return newChatId
   }
@@ -288,10 +289,11 @@ export class ChatStorageService {
     // Update local storage to mark as local-only
     await indexedDBStorage.updateChatLocalOnly(chatId, true)
 
-    // Delete from cloud
-    await cloudSync.deleteFromCloud(chatId)
-
+    // Emit event immediately so UI reflects the local change
     chatEvents.emit({ reason: 'save', ids: [chatId] })
+
+    // Delete from cloud (failure shouldn't affect local state)
+    await cloudSync.deleteFromCloud(chatId)
   }
 }
 
