@@ -16,11 +16,11 @@ import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
   ChatBubbleLeftRightIcon,
-  CheckIcon,
   ChevronDownIcon,
-  ClipboardDocumentIcon,
   Cog6ToothIcon,
   CreditCardIcon,
+  EyeIcon,
+  EyeSlashIcon,
   MoonIcon,
   SunIcon,
   UserCircleIcon,
@@ -29,7 +29,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BsKey } from 'react-icons/bs'
+import { BsKey, BsQrCode } from 'react-icons/bs'
 import { PiSignIn } from 'react-icons/pi'
 import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
@@ -75,6 +75,7 @@ export function SettingsSidebar({
   const [isCopied, setIsCopied] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
+  const [isKeyVisible, setIsKeyVisible] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1488,48 +1489,119 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       >
                         {encryptionKey ? (
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <code className="font-mono text-xs text-brand-accent-light">
-                                {encryptionKey.substring(0, 20)}...
-                              </code>
-                              <div className="flex gap-2">
-                                <div className="group relative">
-                                  <button
-                                    onClick={downloadKeyAsPEM}
-                                    aria-label="Download encryption key as PEM file"
-                                    className="flex items-center justify-center rounded-lg bg-surface-chat p-2 text-xs text-content-primary transition-all hover:bg-surface-chat/80"
-                                  >
-                                    <ArrowDownTrayIcon className="h-4 w-4" />
-                                  </button>
-                                  <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded bg-surface-chat px-2 py-1 text-xs text-content-primary opacity-0 transition-opacity group-hover:opacity-100">
-                                    Download
-                                  </div>
+                          <div className="flex w-full items-center gap-2">
+                            <div
+                              className={cn(
+                                'relative min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface-chat transition-all duration-300 ease-in-out hover:border-blue-500/50',
+                                isQRCodeExpanded ? 'p-3' : 'pr-2',
+                              )}
+                            >
+                              {/* Key display */}
+                              <div
+                                className={cn(
+                                  'flex items-center transition-all duration-300 ease-in-out',
+                                  isQRCodeExpanded
+                                    ? 'h-0 overflow-hidden opacity-0'
+                                    : 'h-auto opacity-100',
+                                )}
+                              >
+                                <div
+                                  onClick={handleCopyKey}
+                                  className="min-w-0 flex-1 cursor-pointer overflow-hidden px-3 py-2 text-left"
+                                >
+                                  <code className="block overflow-hidden whitespace-nowrap font-mono text-sm text-blue-500">
+                                    {isKeyVisible
+                                      ? encryptionKey
+                                      : `${encryptionKey.substring(0, 6)}${'•'.repeat(100)}`}
+                                  </code>
                                 </div>
-                                <div className="group relative">
+                                <div className="group relative z-10 shrink-0">
                                   <button
-                                    onClick={handleCopyKey}
-                                    aria-label={
-                                      isCopied
-                                        ? 'Key copied to clipboard'
-                                        : 'Copy encryption key to clipboard'
+                                    type="button"
+                                    onClick={() =>
+                                      setIsKeyVisible(!isKeyVisible)
                                     }
-                                    className={`flex items-center justify-center rounded-lg p-2 text-xs transition-all ${
-                                      isCopied
-                                        ? 'bg-emerald-500 text-white'
-                                        : 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                                    }`}
+                                    aria-label={
+                                      isKeyVisible ? 'Hide key' : 'Show key'
+                                    }
+                                    className="flex items-center justify-center rounded-lg p-2 text-content-muted transition-all hover:text-content-primary"
                                   >
-                                    {isCopied ? (
-                                      <CheckIcon className="h-4 w-4" />
+                                    {isKeyVisible ? (
+                                      <EyeSlashIcon className="h-4 w-4" />
                                     ) : (
-                                      <ClipboardDocumentIcon className="h-4 w-4" />
+                                      <EyeIcon className="h-4 w-4" />
                                     )}
                                   </button>
-                                  <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 transform whitespace-nowrap rounded bg-surface-chat px-2 py-1 text-xs text-content-primary opacity-0 transition-opacity group-hover:opacity-100">
-                                    {isCopied ? 'Copied!' : 'Copy'}
-                                  </div>
+                                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                    {isKeyVisible ? 'Hide key' : 'Show key'}
+                                  </span>
                                 </div>
+                              </div>
+                              {/* QR Code display */}
+                              <div
+                                className={cn(
+                                  'flex justify-center transition-all duration-300 ease-in-out',
+                                  isQRCodeExpanded
+                                    ? 'h-auto opacity-100'
+                                    : 'h-0 opacity-0',
+                                )}
+                              >
+                                {isQRCodeExpanded && (
+                                  <QRCode
+                                    value={encryptionKey}
+                                    size={140}
+                                    level="H"
+                                    bgColor={
+                                      isDarkMode
+                                        ? TINFOIL_COLORS.surface.cardDark
+                                        : TINFOIL_COLORS.surface.cardLight
+                                    }
+                                    fgColor="#3b82f6"
+                                  />
+                                )}
+                              </div>
+                              {/* Copied overlay */}
+                              <span
+                                className={`absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500 text-sm font-medium text-white transition-all ${
+                                  isCopied
+                                    ? 'opacity-100'
+                                    : 'pointer-events-none opacity-0'
+                                }`}
+                              >
+                                Copied!
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <div className="group relative">
+                                <button
+                                  onClick={() =>
+                                    setIsQRCodeExpanded(!isQRCodeExpanded)
+                                  }
+                                  aria-label="Show QR code"
+                                  className={cn(
+                                    'flex items-center justify-center rounded-lg p-2 transition-all hover:text-content-primary',
+                                    isQRCodeExpanded
+                                      ? 'text-blue-500'
+                                      : 'text-content-muted',
+                                  )}
+                                >
+                                  <BsQrCode className="h-4 w-4" />
+                                </button>
+                                <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                  QR code
+                                </span>
+                              </div>
+                              <div className="group relative">
+                                <button
+                                  onClick={downloadKeyAsPEM}
+                                  aria-label="Download encryption key as PEM file"
+                                  className="flex items-center justify-center rounded-lg p-2 text-content-muted transition-all hover:text-content-primary"
+                                >
+                                  <ArrowDownTrayIcon className="h-4 w-4" />
+                                </button>
+                                <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                  Download
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -1543,46 +1615,6 @@ ${encryptionKey.replace('key_', '')}
                         Save this key securely. You&apos;ll need it to access
                         your chats and projects on other devices.
                       </p>
-
-                      {/* QR Code Section - Collapsible */}
-                      {encryptionKey && (
-                        <div className="rounded-lg border border-border-subtle">
-                          <button
-                            onClick={() =>
-                              setIsQRCodeExpanded(!isQRCodeExpanded)
-                            }
-                            className="flex w-full items-center justify-between p-3 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/50"
-                          >
-                            <span>
-                              Key QR Code (to sync from another device)
-                            </span>
-                            <ChevronDownIcon
-                              className={`h-4 w-4 transition-transform ${
-                                isQRCodeExpanded ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </button>
-                          {isQRCodeExpanded && (
-                            <div className="flex justify-center rounded-b-lg border-t border-border-subtle bg-surface-card p-3">
-                              <QRCode
-                                value={encryptionKey}
-                                size={160}
-                                level="H"
-                                bgColor={
-                                  isDarkMode
-                                    ? TINFOIL_COLORS.surface.cardDark
-                                    : TINFOIL_COLORS.surface.cardLight
-                                }
-                                fgColor={
-                                  isDarkMode
-                                    ? TINFOIL_COLORS.utility.qrForegroundDark
-                                    : TINFOIL_COLORS.utility.qrForegroundLight
-                                }
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -1612,10 +1644,8 @@ ${encryptionKey.replace('key_', '')}
                             autoComplete="off"
                             aria-label="Encryption key input"
                             className={cn(
-                              'flex-1 rounded-lg border bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light',
-                              isDragging
-                                ? 'border-brand-accent-light'
-                                : 'border-border-subtle',
+                              'flex-1 rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
+                              isDragging && 'border-blue-400',
                             )}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && !isUpdating) {
@@ -1645,7 +1675,7 @@ ${encryptionKey.replace('key_', '')}
                               'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                               isUpdating || !inputKey.trim()
                                 ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                                : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90',
+                                : 'bg-blue-500 text-white hover:bg-blue-600',
                             )}
                           >
                             {isUpdating ? 'Updating...' : 'Update'}
