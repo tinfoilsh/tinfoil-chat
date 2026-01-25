@@ -1,5 +1,6 @@
 import { API_BASE_URL, PAGINATION } from '@/config'
 import { useProjects } from '@/hooks/use-projects'
+import { toast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
@@ -1677,13 +1678,25 @@ export function ChatSidebar({
                       ) : (
                         <>
                           {projects.map((project) => (
-                            <button
+                            <div
                               key={project.id}
+                              role="button"
+                              tabIndex={project.decryptionFailed ? -1 : 0}
                               onClick={async () => {
                                 if (project.decryptionFailed) return
 
                                 if (onEnterProject) {
                                   await onEnterProject(project.id, project.name)
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (
+                                  (e.key === 'Enter' || e.key === ' ') &&
+                                  onEnterProject &&
+                                  !project.decryptionFailed
+                                ) {
+                                  e.preventDefault()
+                                  onEnterProject(project.id, project.name)
                                 }
                               }}
                               onDragOver={(e) => {
@@ -1767,7 +1780,6 @@ export function ChatSidebar({
                                 }
                                 clearDragState()
                               }}
-                              disabled={project.decryptionFailed}
                               className={cn(
                                 'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
                                 dropTargetProjectId === project.id
@@ -1778,8 +1790,8 @@ export function ChatSidebar({
                                 project.decryptionFailed
                                   ? 'cursor-default'
                                   : isDarkMode
-                                    ? 'text-content-secondary hover:bg-surface-chat'
-                                    : 'text-content-secondary hover:bg-surface-sidebar',
+                                    ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
+                                    : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
                               )}
                             >
                               {project.decryptionFailed ? (
@@ -1819,6 +1831,15 @@ export function ChatSidebar({
                                     try {
                                       await deleteProject(project.id)
                                       await refreshProjects()
+                                    } catch (error) {
+                                      toast({
+                                        title: 'Failed to delete project',
+                                        description:
+                                          error instanceof Error
+                                            ? error.message
+                                            : 'Please try again.',
+                                        variant: 'destructive',
+                                      })
                                     } finally {
                                       setDeletingProjectId(null)
                                     }
@@ -1841,7 +1862,7 @@ export function ChatSidebar({
                                   )}
                                 </button>
                               )}
-                            </button>
+                            </div>
                           ))}
 
                           {/* Load more button */}
