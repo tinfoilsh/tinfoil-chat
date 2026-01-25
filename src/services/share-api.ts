@@ -1,36 +1,12 @@
 import { logError } from '@/utils/error-handling'
 import type { EncryptedShareData } from '@/utils/share-encryption'
-import { isTokenValid } from '@/utils/token-validation'
+import { authTokenManager } from './auth'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
 
-let tokenGetter: (() => Promise<string | null>) | null = null
-
-export function setShareApiTokenGetter(
-  getToken: () => Promise<string | null>,
-): void {
-  tokenGetter = getToken
-}
-
 async function getAuthHeaders(): Promise<HeadersInit> {
-  if (!tokenGetter) {
-    throw new Error('Token getter not set')
-  }
-
-  const token = await tokenGetter()
-  if (!token) {
-    throw new Error('Failed to get authentication token')
-  }
-
-  if (!isTokenValid(token)) {
-    throw new Error('Token is expired')
-  }
-
-  return {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  }
+  return authTokenManager.getAuthHeaders()
 }
 
 /**

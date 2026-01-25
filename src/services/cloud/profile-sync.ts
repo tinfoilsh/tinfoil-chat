@@ -1,5 +1,5 @@
 import { logError, logInfo } from '@/utils/error-handling'
-import { isTokenValid } from '@/utils/token-validation'
+import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
 import type { ProfileSyncStatus } from './cloud-storage'
 
@@ -31,38 +31,15 @@ export interface ProfileData {
 }
 
 export class ProfileSyncService {
-  private getToken: (() => Promise<string | null>) | null = null
   private cachedProfile: ProfileData | null = null
   private failedDecryptionData: string | null = null
 
-  setTokenGetter(getToken: () => Promise<string | null>) {
-    this.getToken = getToken
-  }
-
   private async getHeaders(): Promise<HeadersInit> {
-    if (!this.getToken) {
-      throw new Error('Token getter not set')
-    }
-
-    const token = await this.getToken()
-    if (!token) {
-      throw new Error('Authentication token not set')
-    }
-
-    if (!isTokenValid(token)) {
-      throw new Error('Token is expired')
-    }
-
-    return {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    }
+    return authTokenManager.getAuthHeaders()
   }
 
   async isAuthenticated(): Promise<boolean> {
-    if (!this.getToken) return false
-    const token = await this.getToken()
-    return isTokenValid(token)
+    return authTokenManager.isAuthenticated()
   }
 
   // Get profile from cloud

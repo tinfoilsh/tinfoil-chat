@@ -48,7 +48,7 @@ export function useChatStorage({
   initialChatId,
   isLocalChatUrl = false,
 }: UseChatStorageProps): UseChatStorageReturn {
-  const { isSignedIn, getToken } = useAuth()
+  const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const initialChatLoadedRef = useRef(false)
   const [initialChatDecryptionFailed, setInitialChatDecryptionFailed] =
@@ -402,7 +402,7 @@ export function useChatStorage({
       }
 
       // Chat not in local state, try to fetch from cloud
-      if (!isSignedIn || !getToken) {
+      if (!isSignedIn) {
         logError('Cannot load chat: user not signed in', null, {
           component: 'useChatStorage',
           metadata: { chatId },
@@ -411,7 +411,6 @@ export function useChatStorage({
       }
 
       try {
-        cloudStorage.setTokenGetter(getToken)
         const downloadedChat = await cloudStorage.downloadChat(chatId)
 
         if (!downloadedChat) {
@@ -461,7 +460,7 @@ export function useChatStorage({
         })
       }
     },
-    [chats, isSignedIn, getToken, switchChat],
+    [chats, isSignedIn, switchChat],
   )
 
   // Load initial chat from URL if provided

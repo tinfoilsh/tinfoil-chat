@@ -1,8 +1,7 @@
 import { CLOUD_SYNC } from '@/config'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
+import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
-import { setShareApiTokenGetter } from '@/services/share-api'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -48,11 +47,8 @@ export function useCloudSync() {
       initializingRef.current = true
 
       try {
-        // Set token getter for cloud sync, storage, and share API
-        // This ensures we get a fresh token for each request
-        cloudSync.setTokenGetter(getToken)
-        cloudStorage.setTokenGetter(getToken)
-        setShareApiTokenGetter(getToken)
+        // Initialize centralized auth token manager
+        authTokenManager.initialize(getToken)
 
         // Check if user already has a key before initializing
         const existingKey = localStorage.getItem('tinfoil-encryption-key')

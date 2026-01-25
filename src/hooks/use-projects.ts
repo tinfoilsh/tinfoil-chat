@@ -23,7 +23,7 @@ export function useProjects(
   options: UseProjectsOptions = {},
 ): UseProjectsReturn {
   const { autoLoad = true } = options
-  const { getToken, isSignedIn } = useAuth()
+  const { isSignedIn } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,12 +37,6 @@ export function useProjects(
   useEffect(() => {
     isSignedInRef.current = isSignedIn
   }, [isSignedIn])
-
-  useEffect(() => {
-    if (isSignedIn && getToken) {
-      projectStorage.setTokenGetter(getToken)
-    }
-  }, [isSignedIn, getToken])
 
   const loadProjects = useCallback(async () => {
     if (!isSignedIn) {

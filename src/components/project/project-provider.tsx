@@ -33,7 +33,7 @@ export function ProjectProvider({
   children,
   initialProjectId,
 }: ProjectProviderProps) {
-  const { getToken, isSignedIn } = useAuth()
+  const { isSignedIn } = useAuth()
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>(
     [],
@@ -50,9 +50,8 @@ export function ProjectProvider({
   const isProjectMode = activeProject !== null
 
   useEffect(() => {
-    if (isSignedIn && getToken && !initializingRef.current) {
+    if (isSignedIn && !initializingRef.current) {
       initializingRef.current = true
-      projectStorage.setTokenGetter(getToken)
     } else if (!isSignedIn) {
       initializingRef.current = false
       initialProjectLoadedRef.current = false
@@ -63,7 +62,7 @@ export function ProjectProvider({
       setLoading(false)
       setLoadingProject(null)
     }
-  }, [isSignedIn, getToken])
+  }, [isSignedIn])
 
   // Memory callbacks for useMemory hook
   const memoryCallbacks = useMemo(

@@ -10,7 +10,6 @@ import { Logo } from '@/components/logo'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { toast } from '@/hooks/use-toast'
-import { projectStorage } from '@/services/cloud/project-storage'
 import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
 import { useAuth, UserButton } from '@clerk/nextjs'
@@ -95,7 +94,7 @@ export function ProjectSidebar({
   onEncryptionKeyClick,
   onRemoveChatFromProject,
 }: ProjectSidebarProps) {
-  const { getToken, isSignedIn } = useAuth()
+  const { isSignedIn } = useAuth()
   const {
     projectDocuments,
     uploadDocument,
@@ -154,12 +153,6 @@ export function ProjectSidebar({
     setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
   }, [])
   const modKey = isMac ? '⌘' : 'Ctrl+'
-
-  useEffect(() => {
-    if (getToken) {
-      projectStorage.setTokenGetter(getToken)
-    }
-  }, [getToken])
 
   useEffect(() => {
     if (project) {
