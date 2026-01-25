@@ -427,92 +427,78 @@ export function ChatInput({
           {processedDocuments && processedDocuments.length > 0 && (
             <div
               ref={documentsScrollRef}
-              className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4"
+              className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pt-2"
             >
-              {processedDocuments.map((doc) => {
-                const getPreviewText = (content?: string) => {
-                  if (!content) return null
-                  const lines = content.split('\n').filter((line) => {
-                    const trimmed = line.trim()
-                    if (!trimmed) return false
-                    if (trimmed.startsWith('# ')) return false
-                    return true
-                  })
-                  return lines.slice(0, 2).join('\n')
-                }
-                const preview = getPreviewText(doc.content)
-
-                return (
-                  <div
-                    key={doc.id}
-                    className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
-                  >
-                    {removeDocument && !doc.isUploading && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          removeDocument(doc.id)
-                        }}
-                        className={cn(
-                          'absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100',
-                          'bg-surface-chat text-content-secondary shadow-sm hover:bg-surface-chat-background hover:text-content-primary',
-                        )}
-                        aria-label="Remove document"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-3 w-3"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </button>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      {doc.imageData ? (
-                        <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
-                          <img
-                            src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
-                            alt={doc.name}
-                            className="h-full w-full object-cover"
-                          />
-                          {doc.isUploading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
-                              <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
-                            </div>
-                          )}
-                        </div>
-                      ) : doc.isUploading ? (
-                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
-                          <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
-                        </div>
-                      ) : (
-                        <MacFileIcon
-                          filename={doc.name}
-                          size={18}
-                          isDarkMode={isDarkMode}
-                          compact
-                        />
+              {processedDocuments.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-2xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
+                >
+                  {removeDocument && !doc.isUploading && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeDocument(doc.id)
+                      }}
+                      className={cn(
+                        'absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border-[0.5px] border-white',
+                        'bg-surface-chat text-content-secondary shadow-sm hover:bg-surface-chat-background hover:text-content-primary',
                       )}
+                      aria-label="Remove document"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-3 w-3"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                  <div className="flex items-center gap-2">
+                    {doc.imageData ? (
+                      <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
+                        <img
+                          src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
+                          alt={doc.name}
+                          className="h-full w-full object-cover"
+                        />
+                        {doc.isUploading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
+                            <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
+                          </div>
+                        )}
+                      </div>
+                    ) : doc.isUploading ? (
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
+                        <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
+                      </div>
+                    ) : (
+                      <MacFileIcon
+                        filename={doc.name}
+                        size={18}
+                        isDarkMode={isDarkMode}
+                        compact
+                      />
+                    )}
+                    <div className="flex flex-col">
                       <span className="truncate text-sm font-medium text-content-primary">
                         {doc.name}
                       </span>
+                      {!doc.isUploading && (
+                        <span className="text-xs text-content-muted">
+                          {doc.imageData ? 'Image' : 'Document'}
+                        </span>
+                      )}
                     </div>
-
-                    {preview && !doc.isUploading && (
-                      <div className="mt-2 line-clamp-2 text-xs text-content-muted">
-                        {preview}
-                      </div>
-                    )}
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           )}
 
