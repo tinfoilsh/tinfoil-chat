@@ -3,7 +3,7 @@ import { type BaseModel } from '@/config/models'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useCallback, useState } from 'react'
 import { IoShareOutline } from 'react-icons/io5'
-import { PiSpeedometerLight, PiSpinner } from 'react-icons/pi'
+import { PiSpeedometerLight } from 'react-icons/pi'
 import {
   isReasoningModel,
   type ReasoningEffort,
@@ -22,9 +22,6 @@ const EFFORT_OPTIONS: {
 ]
 
 type ChatControlsProps = {
-  verificationComplete: boolean
-  verificationSuccess?: boolean
-  openAndExpandVerifier: () => void
   setIsSidebarOpen?: (isOpen: boolean) => void
   expandedLabel: LabelType
   handleLabelClick: (
@@ -45,9 +42,6 @@ type ChatControlsProps = {
 }
 
 export function ChatControls({
-  verificationComplete,
-  verificationSuccess,
-  openAndExpandVerifier,
   setIsSidebarOpen,
   expandedLabel,
   handleLabelClick,
@@ -224,30 +218,6 @@ export function ChatControls({
               )}
             </div>
           )}
-
-        {/* Verification label */}
-        <button
-          type="button"
-          onClick={openAndExpandVerifier}
-          className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-content-secondary transition-colors hover:bg-surface-chat"
-        >
-          {!verificationComplete ? (
-            <PiSpinner className="h-5 w-5 animate-spin text-content-primary" />
-          ) : verificationSuccess ? (
-            <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_1px_rgba(16,185,129,0.6)]" />
-          ) : (
-            <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.6)]" />
-          )}
-          {!isCompactMode && (
-            <span className="text-xs text-content-secondary">
-              {!verificationComplete
-                ? 'Verifying...'
-                : verificationSuccess
-                  ? 'Chat is private'
-                  : 'Verification failed'}
-            </span>
-          )}
-        </button>
 
         {/* Share button - only show when there are messages */}
         {onShareClick && hasMessages && (
