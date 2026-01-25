@@ -370,7 +370,7 @@ ${encryptionKey.replace('key_', '')}
                   {/* Update Key Section */}
                   <div>
                     <h4 className="mb-1.5 text-xs font-medium text-content-secondary sm:mb-2 sm:text-sm">
-                      Restore or Sync Encryption Key
+                      Restore or UpdateEncryption Key
                     </h4>
                     <p
                       id="sync-key-description"

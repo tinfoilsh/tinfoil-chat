@@ -1969,15 +1969,21 @@ export function ChatInterface({
         toggleTheme={toggleTheme}
         isClient={isClient}
         defaultSystemPrompt={systemPrompt}
-        onEncryptionKeyClick={
-          isSignedIn ? handleOpenEncryptionKeyModal : undefined
-        }
         onCloudSyncSetupClick={
           isSignedIn ? handleOpenCloudSyncSetup : undefined
         }
         onChatsUpdated={reloadChats}
         isSignedIn={isSignedIn}
         isPremium={isPremium}
+        encryptionKey={encryptionKey}
+        onKeyChange={async (key: string) => {
+          const syncResult = await setEncryptionKey(key)
+          if (syncResult) {
+            await reloadChats()
+            await retryProfileDecryption()
+            window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
+          }
+        }}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
