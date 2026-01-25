@@ -10,9 +10,84 @@ import {
   KeyIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { BsQrCode } from 'react-icons/bs'
 import QRCode from 'react-qr-code'
+
+const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
+
+const ScrambleText = ({
+  text,
+  className,
+  isKeyVisible,
+}: {
+  text: string | null
+  className?: string
+  isKeyVisible: boolean
+}) => {
+  const getTargetText = useCallback(
+    (isVisible: boolean) => {
+      if (!text) return ''
+      return isVisible
+        ? text
+        : `${text.substring(0, 6)}${'•'.repeat(Math.max(0, text.length - 6))}`
+    },
+    [text],
+  )
+
+  const [displayText, setDisplayText] = useState(() =>
+    getTargetText(isKeyVisible),
+  )
+  const previousText = useRef(getTargetText(isKeyVisible))
+
+  useEffect(() => {
+    if (!text) {
+      setDisplayText('')
+      return
+    }
+
+    const targetText = getTargetText(isKeyVisible)
+
+    // If the target hasn't changed, don't re-scramble
+    if (previousText.current === targetText) return
+    previousText.current = targetText
+
+    let iteration = 0
+    const maxIterations = 15 // Fixed number of steps for consistency
+
+    const interval = setInterval(() => {
+      setDisplayText(() => {
+        const result = targetText
+          .split('')
+          .map((char, index) => {
+            if (index < (iteration / maxIterations) * targetText.length) {
+              return targetText[index]
+            }
+            if (char === '•') return '•'
+            return CHARS[Math.floor(Math.random() * CHARS.length)]
+          })
+          .join('')
+        return result
+      })
+
+      iteration++
+
+      if (iteration > maxIterations) {
+        clearInterval(interval)
+        setDisplayText(targetText)
+      }
+    }, 30)
+
+    return () => clearInterval(interval)
+  }, [text, isKeyVisible, getTargetText])
+
+  return (
+    <span className={cn('inline-flex items-center', className)}>
+      <span className="truncate">{displayText}</span>
+    </span>
+  )
+}
 
 interface EncryptionKeyModalProps {
   isOpen: boolean
@@ -274,30 +349,31 @@ ${encryptionKey.replace('key_', '')}
                       aria-label="Current encryption key"
                     >
                       {encryptionKey ? (
-                        <div className="flex w-full items-center gap-2">
-                          <div
+                        <div className="flex w-full items-end gap-2">
+                          <motion.div
+                            layout="size"
+                            transition={{
+                              type: 'spring',
+                              damping: 25,
+                              stiffness: 400,
+                              mass: 0.5,
+                            }}
                             className={cn(
-                              'relative min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface-chat transition-all duration-300 ease-in-out hover:border-blue-500/50',
+                              'relative min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface-chat transition-colors duration-300 hover:border-blue-500/50',
                               isQRCodeExpanded ? 'p-3' : 'pr-2',
                             )}
                           >
-                            {/* Key display */}
-                            <div
-                              className={cn(
-                                'flex items-center transition-all duration-300 ease-in-out',
-                                isQRCodeExpanded
-                                  ? 'h-0 opacity-0'
-                                  : 'h-auto opacity-100',
-                              )}
-                            >
+                            {/* Key row (always visible) */}
+                            <div className="flex items-center">
                               <button
                                 onClick={handleCopyKey}
                                 className="min-w-0 flex-1 cursor-pointer px-3 py-2 text-left"
                               >
-                                <code className="block overflow-hidden whitespace-nowrap font-mono text-sm text-blue-500">
-                                  {isKeyVisible
-                                    ? encryptionKey
-                                    : `${encryptionKey.substring(0, 6)}${'•'.repeat(100)}`}
+                                <code className="block h-5 overflow-hidden whitespace-nowrap font-mono text-sm leading-5 text-blue-500">
+                                  <ScrambleText
+                                    text={encryptionKey}
+                                    isKeyVisible={isKeyVisible}
+                                  />
                                 </code>
                               </button>
                               <div className="group relative shrink-0">
@@ -322,16 +398,47 @@ ${encryptionKey.replace('key_', '')}
                                 </span>
                               </div>
                             </div>
-                            {/* QR Code display */}
-                            <div
-                              className={cn(
-                                'flex justify-center transition-all duration-300 ease-in-out',
-                                isQRCodeExpanded
-                                  ? 'h-auto opacity-100'
-                                  : 'h-0 opacity-0',
-                              )}
+
+                            {/* QR code (below key, pushes container open) */}
+                            <motion.div
+                              initial={false}
+                              animate={isQRCodeExpanded ? 'open' : 'closed'}
+                              variants={{
+                                open: {
+                                  height: 140,
+                                  marginTop: 12,
+                                  opacity: 1,
+                                },
+                                closed: {
+                                  height: 0,
+                                  marginTop: 0,
+                                  opacity: 0,
+                                },
+                              }}
+                              transition={{
+                                type: 'spring',
+                                damping: 25,
+                                stiffness: 400,
+                                mass: 0.5,
+                              }}
+                              className="overflow-hidden"
                             >
-                              {isQRCodeExpanded && (
+                              <motion.div
+                                initial={false}
+                                animate={
+                                  isQRCodeExpanded
+                                    ? { scale: 1 }
+                                    : { scale: 0.85 }
+                                }
+                                transition={{
+                                  type: 'spring',
+                                  damping: 25,
+                                  stiffness: 400,
+                                  mass: 0.5,
+                                }}
+                                style={{ transformOrigin: 'top' }}
+                                className="flex justify-center"
+                              >
                                 <QRCode
                                   value={encryptionKey}
                                   size={140}
@@ -343,19 +450,35 @@ ${encryptionKey.replace('key_', '')}
                                   }
                                   fgColor="#3b82f6"
                                 />
-                              )}
-                            </div>
+                              </motion.div>
+                            </motion.div>
+
                             {/* Copied overlay */}
-                            <span
-                              className={`absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500 text-sm font-medium text-white transition-all ${
-                                isCopied
-                                  ? 'opacity-100'
-                                  : 'pointer-events-none opacity-0'
-                              }`}
-                            >
-                              Copied!
-                            </span>
-                          </div>
+                            <AnimatePresence>
+                              {isCopied && (
+                                <motion.span
+                                  initial={{
+                                    opacity: 0,
+                                    filter: 'blur(4px)',
+                                    scale: 0.9,
+                                  }}
+                                  animate={{
+                                    opacity: 1,
+                                    filter: 'blur(0px)',
+                                    scale: 1,
+                                  }}
+                                  exit={{
+                                    opacity: 0,
+                                    filter: 'blur(4px)',
+                                    scale: 1.1,
+                                  }}
+                                  className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-blue-500/90 text-sm font-medium text-white backdrop-blur-sm"
+                                >
+                                  Copied!
+                                </motion.span>
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
                           <div className="flex shrink-0 items-center gap-1">
                             <div className="group relative hidden sm:block">
                               <button
