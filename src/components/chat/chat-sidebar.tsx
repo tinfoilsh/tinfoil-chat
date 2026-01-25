@@ -72,6 +72,7 @@ type ChatSidebarProps = {
   activeProjectName?: string
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
+  onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
 }
 
 // Add this constant at the top of the file
@@ -189,6 +190,7 @@ export function ChatSidebar({
   activeProjectName,
   onEnterProject,
   onCreateProject,
+  onMoveChatToProject,
 }: ChatSidebarProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
@@ -252,6 +254,11 @@ export function ChatSidebar({
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
   const { isSignedIn, getToken } = useAuth()
   const { user } = useUser()
+
+  const [draggingChatId, setDraggingChatId] = useState<string | null>(null)
+  const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(
+    null,
+  )
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -1039,6 +1046,9 @@ export function ChatSidebar({
                   showEncryptionStatus={true}
                   showSyncStatus={true}
                   enableTitleAnimation={true}
+                  isDraggable={
+                    isSignedIn && cloudSyncEnabled && !!onMoveChatToProject
+                  }
                   onSelectChat={handleChatSelect}
                   onAfterSelect={() => {
                     if (windowWidth < MOBILE_BREAKPOINT) {
@@ -1048,6 +1058,11 @@ export function ChatSidebar({
                   onUpdateTitle={updateChatTitle}
                   onDeleteChat={deleteChat}
                   onEncryptionKeyClick={onEncryptionKeyClick}
+                  onDragStart={setDraggingChatId}
+                  onDragEnd={() => {
+                    setDraggingChatId(null)
+                    setDropTargetProjectId(null)
+                  }}
                   emptyState={
                     activeTab === 'local' ? (
                       <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
@@ -1215,9 +1230,51 @@ export function ChatSidebar({
                                   await onEnterProject(project.id, project.name)
                                 }
                               }}
+                              onDragOver={(e) => {
+                                if (
+                                  draggingChatId &&
+                                  !project.decryptionFailed
+                                ) {
+                                  e.preventDefault()
+                                  e.dataTransfer.dropEffect = 'move'
+                                  setDropTargetProjectId(project.id)
+                                }
+                              }}
+                              onDragEnter={(e) => {
+                                if (
+                                  draggingChatId &&
+                                  !project.decryptionFailed
+                                ) {
+                                  e.preventDefault()
+                                  setDropTargetProjectId(project.id)
+                                }
+                              }}
+                              onDragLeave={() => {
+                                if (dropTargetProjectId === project.id) {
+                                  setDropTargetProjectId(null)
+                                }
+                              }}
+                              onDrop={async (e) => {
+                                e.preventDefault()
+                                const chatId = e.dataTransfer.getData(
+                                  'application/x-chat-id',
+                                )
+                                if (
+                                  chatId &&
+                                  onMoveChatToProject &&
+                                  !project.decryptionFailed
+                                ) {
+                                  await onMoveChatToProject(chatId, project.id)
+                                }
+                                setDraggingChatId(null)
+                                setDropTargetProjectId(null)
+                              }}
                               disabled={project.decryptionFailed}
                               className={cn(
-                                'group flex w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-left text-sm transition-colors hover:border-border-subtle',
+                                'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                                dropTargetProjectId === project.id
+                                  ? 'border-emerald-400 bg-emerald-400/10'
+                                  : 'border-transparent hover:border-border-subtle',
                                 project.decryptionFailed
                                   ? 'cursor-default'
                                   : isDarkMode
