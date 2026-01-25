@@ -671,7 +671,7 @@ export function ProjectSidebar({
                       isDarkMode
                         ? 'border-border-strong bg-surface-chat text-content-primary'
                         : 'border-border-subtle bg-white text-content-primary',
-                      'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                      'focus:outline-none focus:ring-1 focus:ring-border-strong',
                     )}
                   />
                 </form>
@@ -735,67 +735,43 @@ export function ProjectSidebar({
               <div className="px-4 py-4">
                 <div className="space-y-3">
                   {/* Description */}
-                  <div
-                    className={cn(
-                      'rounded-lg border border-border-subtle p-3',
-                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                    )}
-                  >
-                    <div className="space-y-2">
-                      <div>
-                        <div className="font-aeonik text-sm font-medium text-content-secondary">
-                          Description
-                        </div>
-                        <div className="font-aeonik-fono text-xs text-content-muted">
-                          Brief summary of this project
-                        </div>
-                      </div>
-                      <textarea
-                        value={editedDescription}
-                        onChange={(e) => setEditedDescription(e.target.value)}
-                        placeholder="Brief description..."
-                        rows={2}
-                        className={cn(
-                          'w-full resize-none rounded-md border px-3 py-2 text-sm',
-                          isDarkMode
-                            ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                            : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                          'focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                        )}
-                      />
+                  <div className="space-y-2">
+                    <div className="font-aeonik text-sm font-medium text-content-secondary">
+                      Project description
                     </div>
+                    <textarea
+                      value={editedDescription}
+                      onChange={(e) => setEditedDescription(e.target.value)}
+                      placeholder="Describe your project and goals..."
+                      rows={5}
+                      className={cn(
+                        'w-full resize-none rounded-md border px-3 py-2 text-sm',
+                        isDarkMode
+                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                          : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                        'focus:outline-none focus:ring-1 focus:ring-border-strong',
+                      )}
+                    />
                   </div>
 
-                  {/* System Instructions */}
-                  <div
-                    className={cn(
-                      'rounded-lg border border-border-subtle p-3',
-                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                    )}
-                  >
-                    <div className="space-y-2">
-                      <div>
-                        <div className="font-aeonik text-sm font-medium text-content-secondary">
-                          System Instructions
-                        </div>
-                        <div className="font-aeonik-fono text-xs text-content-muted">
-                          Custom instructions for all chats in this project
-                        </div>
-                      </div>
-                      <textarea
-                        value={editedInstructions}
-                        onChange={(e) => setEditedInstructions(e.target.value)}
-                        placeholder="Custom instructions..."
-                        rows={4}
-                        className={cn(
-                          'w-full resize-none rounded-md border px-3 py-2 font-mono text-xs',
-                          isDarkMode
-                            ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                            : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                          'focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                        )}
-                      />
+                  {/* Response Instructions */}
+                  <div className="space-y-2">
+                    <div className="font-aeonik text-sm font-medium text-content-secondary">
+                      Response instructions
                     </div>
+                    <textarea
+                      value={editedInstructions}
+                      onChange={(e) => setEditedInstructions(e.target.value)}
+                      placeholder="Specific response preferences or instructions..."
+                      rows={5}
+                      className={cn(
+                        'w-full resize-none rounded-md border px-3 py-2 text-sm',
+                        isDarkMode
+                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                          : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                        'focus:outline-none focus:ring-1 focus:ring-border-strong',
+                      )}
+                    />
                   </div>
 
                   {/* Save button */}
@@ -824,7 +800,10 @@ export function ProjectSidebar({
                           onClick={handleDeleteProject}
                           disabled={isDeleting}
                           className={cn(
-                            'flex-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50',
+                            'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                            isDarkMode
+                              ? 'bg-red-200 text-red-900 hover:bg-red-300'
+                              : 'bg-white text-red-600 hover:bg-red-50',
                             isDeleting && 'cursor-not-allowed opacity-50',
                           )}
                         >
@@ -841,7 +820,12 @@ export function ProjectSidebar({
                   ) : (
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 dark:border-red-500/30 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40"
+                      className={cn(
+                        'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+                        isDarkMode
+                          ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40'
+                          : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
+                      )}
                     >
                       <TrashIcon className="h-3.5 w-3.5" />
                       Delete Project
@@ -1064,7 +1048,7 @@ export function ProjectSidebar({
                           isDarkMode
                             ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
                             : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                          'focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                          'focus:outline-none focus:ring-1 focus:ring-border-strong',
                         )}
                       />
                       {memoryEdited && (
