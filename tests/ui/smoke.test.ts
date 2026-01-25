@@ -25,12 +25,20 @@ test.describe('Smoke Tests', () => {
     // Starts in light mode
     await expect(html).toHaveAttribute('data-theme', 'light')
 
-    // Open settings sidebar
+    // First open the sidebar (it may be collapsed)
+    const sidebarToggle = page.locator('button[aria-label="Open sidebar"]')
+    if (await sidebarToggle.isVisible()) {
+      await sidebarToggle.click()
+      // Wait for sidebar to open
+      await page.waitForTimeout(300)
+    }
+
+    // Now click the settings button inside the sidebar
     const settingsButton = page.locator('#settings-button')
     await expect(settingsButton).toBeVisible({ timeout: 10000 })
     await settingsButton.click()
 
-    // Find and click the theme toggle button
+    // Find and click the theme toggle button in the settings modal
     const themeToggle = page.locator('#theme-toggle')
     await expect(themeToggle).toBeVisible({ timeout: 5000 })
     await themeToggle.click()
@@ -142,91 +150,89 @@ test.describe('Smoke Tests', () => {
   })
 
   test('verification status display is visible', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Verification button is hidden on mobile viewports',
+    )
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationSection = page.locator('#verification-status')
-    await expect(verificationSection).toBeVisible({ timeout: 10000 })
+    const verificationButton = page.locator('#verification-status')
+    await expect(verificationButton).toBeVisible({ timeout: 10000 })
   })
 
   test('shows verifying state initially then transitions to final state', async ({
     page,
   }) => {
-    await page.goto('/')
-
-    const verificationArea = page.locator('#verification-status')
-    await expect(verificationArea).toBeVisible({ timeout: 10000 })
-
-    // Initially should show "Verifying security..." OR already be in a final state
-    // (depending on how fast the verification completes)
-    const verifyingText = verificationArea.getByText('Verifying security...')
-    const verifiedText = verificationArea.getByText('Privacy Verified')
-    const failedText = verificationArea.getByText(
-      'Security verification failed',
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Verification button is hidden on mobile viewports',
     )
 
+    await page.goto('/')
+
+    const verificationButton = page.locator('#verification-status')
+    await expect(verificationButton).toBeVisible({ timeout: 10000 })
+
+    // Initially should show a spinner (verifying) OR already be in a final state
+    // (depending on how fast the verification completes)
+    // The button contains either a spinner, checkmark, or exclamation icon
+    const spinnerIcon = verificationButton.locator('.animate-spin')
+    const checkmarkIcon = verificationButton.locator('.text-emerald-500')
+    const errorIcon = verificationButton.locator('.text-red-500')
+
     // Wait for either state to be visible initially
-    await expect(verifyingText.or(verifiedText).or(failedText)).toBeVisible({
+    await expect(spinnerIcon.or(checkmarkIcon).or(errorIcon)).toBeVisible({
       timeout: 10000,
     })
 
     // Eventually should transition to a final state (verified or failed)
-    await expect(verifiedText.or(failedText)).toBeVisible({ timeout: 15000 })
+    await expect(checkmarkIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
   })
 
-  test('verification badge shows final state text', async ({ page }) => {
+  test('verification badge shows final state icon', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Verification button is hidden on mobile viewports',
+    )
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('#verification-status')
-    await expect(verificationArea).toBeVisible({ timeout: 10000 })
+    const verificationButton = page.locator('#verification-status')
+    await expect(verificationButton).toBeVisible({ timeout: 10000 })
 
     // Wait for verification to complete (success or failure)
-    const verifiedText = verificationArea.getByText('Privacy Verified')
-    const failedText = verificationArea.getByText(
-      'Security verification failed',
-    )
-    await expect(verifiedText.or(failedText)).toBeVisible({ timeout: 15000 })
+    // Success shows emerald checkmark, failure shows red exclamation
+    const checkmarkIcon = verificationButton.locator('.text-emerald-500')
+    const errorIcon = verificationButton.locator('.text-red-500')
+    await expect(checkmarkIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
   })
 
-  test('can expand verification details and proof button opens sidebar', async ({
-    page,
-  }) => {
+  test('clicking verification button opens sidebar', async ({ page }) => {
+    test.skip(
+      page.viewportSize()?.width !== undefined &&
+        page.viewportSize()!.width < 768,
+      'Verification button is hidden on mobile viewports',
+    )
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const verificationArea = page.locator('#verification-status')
-    await expect(verificationArea).toBeVisible({ timeout: 10000 })
+    const verificationButton = page.locator('#verification-status')
+    await expect(verificationButton).toBeVisible({ timeout: 10000 })
 
     // Wait for verification to complete (success or failure)
-    const verifiedText = verificationArea.getByText('Privacy Verified')
-    const failedText = verificationArea.getByText(
-      'Security verification failed',
-    )
-    await expect(verifiedText.or(failedText)).toBeVisible({ timeout: 15000 })
+    const checkmarkIcon = verificationButton.locator('.text-emerald-500')
+    const errorIcon = verificationButton.locator('.text-red-500')
+    await expect(checkmarkIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
 
-    // Skip expansion test if verification failed (expand only works on success)
-    if (await failedText.isVisible()) {
-      test.skip()
-      return
-    }
-
-    // Click to expand the verification details
-    const expandButton = page.locator('#verification-expand')
-    await expandButton.click()
-
-    // Should show the expanded content with privacy explanation
-    const privacyExplanation = verificationArea.getByText(
-      'This conversation is private',
-    )
-    await expect(privacyExplanation).toBeVisible({ timeout: 5000 })
-
-    // Should show "See verification proof" button
-    const proofButton = verificationArea.getByText('See verification proof')
-    await expect(proofButton).toBeVisible({ timeout: 5000 })
-
-    // Click "See verification proof" to open the sidebar
-    await proofButton.click()
+    // Click the verification button to open the sidebar
+    await verificationButton.click()
 
     // Verification sidebar should appear (it contains an iframe to verification-center.tinfoil.sh)
     const sidebar = page.locator('iframe[title="Tinfoil Verification Center"]')

@@ -926,6 +926,7 @@ export function ChatSidebar({
             {/* Settings button */}
             <div className="group relative">
               <button
+                id="settings-button"
                 type="button"
                 onClick={onSettingsClick}
                 className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"

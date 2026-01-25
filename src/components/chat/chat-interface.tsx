@@ -1803,6 +1803,7 @@ export function ChatInterface({
           {/* Verifier toggle button */}
           <div className="group relative">
             <button
+              id="verification-status"
               className={cn(
                 'relative flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
                 'bg-surface-chat-background text-content-secondary hover:bg-surface-chat hover:text-content-primary',
