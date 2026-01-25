@@ -2080,7 +2080,7 @@ export function ChatInterface({
             (windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
               (currentChat?.messages && currentChat.messages.length > 0)) && (
               <div
-                className="relative flex-shrink-0 bg-surface-chat-background p-4"
+                className="relative flex-shrink-0 bg-surface-chat-background px-4 pb-4"
                 style={{
                   minHeight: '80px',
                   maxHeight: '50vh',
