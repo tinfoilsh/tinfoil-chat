@@ -1,4 +1,3 @@
-export { ChatControls } from './chat-controls'
 export { ChatInput } from './chat-input'
 export { ChatInterface } from './chat-interface'
 export * from './chat-utils'

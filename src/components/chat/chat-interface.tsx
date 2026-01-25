@@ -6,17 +6,16 @@ import {
 import { useChatRouter } from '@/hooks/use-chat-router'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
-import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
+import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   Bars3Icon,
   ChatBubbleLeftRightIcon,
-  Cog6ToothIcon,
   FolderIcon,
   PlusIcon,
 } from '@heroicons/react/24/outline'
 import { HiOutlineShieldExclamation } from 'react-icons/hi2'
-import { IoShieldCheckmarkOutline } from 'react-icons/io5'
+import { IoShareOutline, IoShieldCheckmarkOutline } from 'react-icons/io5'
 import { PiSpinner } from 'react-icons/pi'
 
 import {
@@ -45,7 +44,6 @@ import {
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
-import { ChatControls } from './chat-controls'
 import { ChatInput } from './chat-input'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
@@ -55,6 +53,7 @@ import { DragProvider } from './drag-context'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useReasoningEffort } from './hooks/use-reasoning-effort'
+import { ModelSelector } from './model-selector'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 // Lazy-load modals that aren't shown on initial load
@@ -182,7 +181,9 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
+  const { openSignIn } = useClerk()
   const { user } = useUser()
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
 
   // Track whether we've loaded the initial chat from URL (to prevent URL flickering)
   const initialUrlChatLoadedRef = useRef(false)
@@ -1788,28 +1789,18 @@ export function ChatInterface({
                 : '16px',
           }}
         >
-          {/* Settings toggle button */}
-          <div className="group relative">
+          {/* Share button - only show when there are messages */}
+          {currentChat?.messages && currentChat.messages.length > 0 && (
             <button
-              id="settings-button"
-              className={cn(
-                'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
-                'bg-surface-chat-background text-content-secondary hover:bg-surface-chat hover:text-content-primary',
-                isSettingsSidebarOpen &&
-                  'cursor-default bg-surface-chat text-content-muted hover:text-content-muted',
-              )}
-              onClick={handleOpenSettingsSidebar}
-              aria-label={
-                isSettingsSidebarOpen ? 'Close settings' : 'Open settings'
-              }
-              aria-pressed={isSettingsSidebarOpen}
+              type="button"
+              onClick={handleOpenShareModal}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-3 py-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+              aria-label="Share"
             >
-              <Cog6ToothIcon className="h-5 w-5" />
+              <IoShareOutline className="h-4 w-4" />
+              <span className="text-sm">Share</span>
             </button>
-            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-              {isSettingsSidebarOpen ? 'Close settings' : 'Settings'}
-            </span>
-          </div>
+          )}
 
           {/* Verifier toggle button */}
           <div className="group relative">
@@ -1932,6 +1923,7 @@ export function ChatInterface({
             onRemoveChatFromProject={handleRemoveChatFromProject}
             onConvertChatToCloud={handleConvertChatToCloud}
             onConvertChatToLocal={handleConvertChatToLocal}
+            onSettingsClick={handleOpenSettingsSidebar}
           />
         )}
       </DragProvider>
@@ -2116,31 +2108,6 @@ export function ChatInterface({
                   onSubmit={handleSubmit}
                   className="mx-auto max-w-3xl px-3 md:px-8"
                 >
-                  {/* Labels - Model selection only for premium users */}
-                  <ChatControls
-                    setIsSidebarOpen={setIsSidebarOpen}
-                    expandedLabel={expandedLabel}
-                    handleLabelClick={handleLabelClick}
-                    selectedModel={selectedModel}
-                    handleModelSelect={handleModelSelect}
-                    isDarkMode={isDarkMode}
-                    isPremium={isPremium}
-                    models={models}
-                    onShareClick={handleOpenShareModal}
-                    hasMessages={
-                      currentChat?.messages && currentChat.messages.length > 0
-                    }
-                    isCompactMode={
-                      windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
-                      (isSidebarOpen &&
-                        (isVerifierSidebarOpen || isSettingsSidebarOpen))
-                    }
-                    contextUsagePercentage={contextUsagePercentage}
-                    reasoningEffort={reasoningEffort}
-                    onReasoningEffortChange={setReasoningEffort}
-                  />
-
-                  {/* Input */}
                   <ChatInput
                     input={input}
                     setInput={setInput}
@@ -2160,6 +2127,93 @@ export function ChatInterface({
                     }
                     audioModel={
                       models.find((m) => m.type === 'audio')?.modelName
+                    }
+                    modelSelectorButton={
+                      models.length > 0 &&
+                      selectedModel &&
+                      handleModelSelect ? (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            data-model-selector
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleLabelClick('model', () => {})
+                            }}
+                            className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-secondary transition-colors hover:bg-surface-chat"
+                          >
+                            {(() => {
+                              const model = models.find(
+                                (m) => m.modelName === selectedModel,
+                              )
+                              if (!model) return null
+                              return (
+                                <>
+                                  <img
+                                    src={
+                                      failedImages[model.modelName]
+                                        ? '/icon.png'
+                                        : model.image === 'openai.png'
+                                          ? `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
+                                          : model.image === 'moonshot.png'
+                                            ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
+                                            : `/model-icons/${model.image}`
+                                    }
+                                    alt={model.name}
+                                    className="h-4 w-4"
+                                    onError={() =>
+                                      setFailedImages((prev) => ({
+                                        ...prev,
+                                        [model.modelName]: true,
+                                      }))
+                                    }
+                                  />
+                                  <span className="text-xs font-medium text-content-primary">
+                                    {model.name}
+                                  </span>
+                                  <svg
+                                    className="h-3 w-3 text-content-muted"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 9l-7 7-7-7"
+                                    />
+                                  </svg>
+                                </>
+                              )
+                            })()}
+                          </button>
+
+                          {expandedLabel === 'model' && (
+                            <ModelSelector
+                              selectedModel={selectedModel}
+                              onSelect={handleModelSelect}
+                              isDarkMode={isDarkMode}
+                              isPremium={isPremium}
+                              models={models}
+                              onPremiumModelClick={() => {
+                                if (!isSignedIn) {
+                                  handleLabelClick('model', () => {})
+                                  void openSignIn()
+                                  return
+                                }
+                                setIsSidebarOpen(true)
+                                window.dispatchEvent(
+                                  new CustomEvent('highlightSidebarBox', {
+                                    detail: { isPremium },
+                                  }),
+                                )
+                              }}
+                            />
+                          )}
+                        </div>
+                      ) : undefined
                     }
                     webSearchEnabled={webSearchEnabled}
                     onWebSearchToggle={() =>
