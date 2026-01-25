@@ -986,8 +986,13 @@ export function ChatInterface({
   const handleConvertChatToCloud = useCallback(
     async (chatId: string) => {
       try {
-        await chatStorage.convertChatToCloud(chatId)
+        const newChatId = await chatStorage.convertChatToCloud(chatId)
         await reloadChats()
+
+        // If the converted chat was the current chat, navigate to the new chat
+        if (currentChat.id === chatId) {
+          handleChatSelect(newChatId)
+        }
 
         toast({
           title: 'Chat moved to cloud',
@@ -1007,7 +1012,7 @@ export function ChatInterface({
         })
       }
     },
-    [reloadChats, toast],
+    [currentChat.id, handleChatSelect, reloadChats, toast],
   )
 
   // Handler for converting a cloud chat to local-only via drag and drop

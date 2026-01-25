@@ -32,6 +32,7 @@ import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { useCloudPagination } from '@/hooks/use-cloud-pagination'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
+import { projectStorage } from '@/services/cloud/project-storage'
 import { type StoredChat } from '@/services/storage/indexed-db'
 import { getConversationTimestampFromId } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
@@ -152,6 +153,122 @@ async function downloadChats(chats: Chat[]) {
       action: 'downloadChats',
     })
     alert('Failed to download chats. Please try again.')
+  }
+}
+
+// Function to download all projects as markdown files in a zip
+async function downloadProjects(
+  projects: Array<{
+    id: string
+    name: string
+    description: string
+    systemInstructions: string
+    memory: Array<{ fact: string }>
+    createdAt: string
+    updatedAt: string
+  }>,
+) {
+  if (projects.length === 0) return
+
+  try {
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+
+    // Fetch documents for each project and create folder structure
+    await Promise.all(
+      projects.map(async (project) => {
+        const sanitizedName = project.name
+          .replace(/[^a-z0-9]/gi, '_')
+          .toLowerCase()
+        const projectFolder = zip.folder(sanitizedName)
+        if (!projectFolder) return
+
+        // Create project info markdown
+        let projectInfo = `# ${project.name}\n\n`
+        projectInfo += `**Created:** ${new Date(project.createdAt).toLocaleString()}\n`
+        projectInfo += `**Updated:** ${new Date(project.updatedAt).toLocaleString()}\n\n`
+
+        if (project.description) {
+          projectInfo += `## Description\n\n${project.description}\n\n`
+        }
+
+        if (project.systemInstructions) {
+          projectInfo += `## System Instructions\n\n${project.systemInstructions}\n\n`
+        }
+
+        if (project.memory && project.memory.length > 0) {
+          projectInfo += `## Memory\n\n`
+          project.memory.forEach((item) => {
+            projectInfo += `- ${item.fact}\n`
+          })
+          projectInfo += '\n'
+        }
+
+        projectFolder.file('_project_info.md', projectInfo)
+
+        // Try to fetch documents for this project
+        try {
+          const docsResponse = await projectStorage.listDocuments(project.id, {
+            includeContent: true,
+          })
+
+          if (docsResponse.documents && docsResponse.documents.length > 0) {
+            const documentsFolder = projectFolder.folder('documents')
+            if (documentsFolder) {
+              await Promise.all(
+                docsResponse.documents.map(async (doc) => {
+                  try {
+                    const fullDoc = await projectStorage.getDocument(
+                      project.id,
+                      doc.id,
+                    )
+                    if (fullDoc && fullDoc.content) {
+                      documentsFolder.file(fullDoc.filename, fullDoc.content)
+                    }
+                  } catch {
+                    // Skip documents that fail to fetch
+                  }
+                }),
+              )
+            }
+          }
+        } catch {
+          // Skip documents if we can't fetch them
+        }
+      }),
+    )
+
+    // Add a summary file
+    const summary =
+      `# Projects Export Summary\n\n` +
+      `**Export Date:** ${new Date().toLocaleString()}\n` +
+      `**Total Projects:** ${projects.length}\n\n` +
+      `## Project List\n\n` +
+      projects
+        .map(
+          (project, index) =>
+            `${index + 1}. **${project.name}** - ${new Date(project.createdAt).toLocaleDateString()}${project.description ? `\n   ${project.description}` : ''}`,
+        )
+        .join('\n')
+
+    zip.file('_projects_summary.md', summary)
+
+    // Generate and download the zip
+    const content = await zip.generateAsync({ type: 'blob' })
+    const url = window.URL.createObjectURL(content)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tinfoil_projects_export_${new Date().toISOString().split('T')[0]}.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    logError('Failed to create projects export zip file', error, {
+      component: 'ChatSidebar',
+      action: 'downloadProjects',
+    })
+    alert('Failed to download projects. Please try again.')
   }
 }
 
@@ -966,21 +1083,25 @@ export function ChatSidebar({
               </span>
               <div className="flex items-center gap-1">
                 {chats.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      downloadChats(chats)
-                    }}
-                    className={`rounded p-1 transition-all duration-200 ${
-                      isDarkMode
-                        ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
-                        : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
-                    }`}
-                    title="Download all chats as ZIP"
-                  >
-                    <ArrowDownTrayIcon className="h-4 w-4" />
-                  </button>
+                  <div className="group relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        downloadChats(chats)
+                      }}
+                      className={`rounded p-1 transition-all duration-200 ${
+                        isDarkMode
+                          ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
+                          : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
+                      }`}
+                    >
+                      <ArrowDownTrayIcon className="h-4 w-4" />
+                    </button>
+                    <span className="pointer-events-none absolute bottom-full right-0 z-50 mb-1 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                      Download all chats
+                    </span>
+                  </div>
                 )}
                 {isChatHistoryExpanded ? (
                   <ChevronDownIcon className="h-4 w-4" />
@@ -1019,6 +1140,7 @@ export function ChatSidebar({
                         ) {
                           e.preventDefault()
                           setDropTargetTab('cloud')
+                          setActiveTab('cloud')
                         }
                       }}
                       onDragLeave={() => {
@@ -1072,6 +1194,7 @@ export function ChatSidebar({
                           onConvertChatToLocal
                         ) {
                           e.preventDefault()
+                          setActiveTab('local')
                           setDropTargetTab('local')
                         }
                       }}
@@ -1235,7 +1358,9 @@ export function ChatSidebar({
           {/* Projects dropdown - show for premium users */}
           {isSignedIn && isPremium && (
             <div className="relative z-10 flex-none border-t border-border-subtle">
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => {
                   const newExpanded = !isProjectsExpanded
                   setIsProjectsExpanded(newExpanded)
@@ -1243,8 +1368,18 @@ export function ChatSidebar({
                     refreshProjects()
                   }
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    const newExpanded = !isProjectsExpanded
+                    setIsProjectsExpanded(newExpanded)
+                    if (newExpanded && projects.length === 0) {
+                      refreshProjects()
+                    }
+                  }
+                }}
                 className={cn(
-                  'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                   isProjectMode
                     ? isDarkMode
                       ? 'text-emerald-400'
@@ -1262,12 +1397,35 @@ export function ChatSidebar({
                       : 'Projects'}
                   </span>
                 </span>
-                {isProjectsExpanded ? (
-                  <ChevronDownIcon className="h-4 w-4" />
-                ) : (
-                  <ChevronRightIcon className="h-4 w-4" />
-                )}
-              </button>
+                <div className="flex items-center gap-1">
+                  {projects.length > 0 && (
+                    <div className="group relative">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          downloadProjects(projects)
+                        }}
+                        className={`rounded p-1 transition-all duration-200 ${
+                          isDarkMode
+                            ? 'text-content-muted hover:bg-surface-chat hover:text-content-secondary'
+                            : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary'
+                        }`}
+                      >
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                      </button>
+                      <span className="pointer-events-none absolute bottom-full right-0 z-50 mb-1 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                        Download all projects
+                      </span>
+                    </div>
+                  )}
+                  {isProjectsExpanded ? (
+                    <ChevronDownIcon className="h-4 w-4" />
+                  ) : (
+                    <ChevronRightIcon className="h-4 w-4" />
+                  )}
+                </div>
+              </div>
 
               {/* Expanded projects list */}
               {isProjectsExpanded && (
