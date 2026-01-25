@@ -680,12 +680,47 @@ export function SettingsSidebar({
           stiffness: 300,
         }}
         className={cn(
-          'relative z-10 flex h-[80vh] w-[90vw] max-w-4xl overflow-hidden rounded-xl border font-aeonik shadow-xl',
+          'relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col overflow-hidden rounded-xl border font-aeonik shadow-xl md:flex-row',
           'border-border-subtle bg-surface-sidebar text-content-primary',
         )}
       >
-        {/* Left sidebar navigation */}
-        <div className="flex w-56 flex-none flex-col border-r border-border-subtle">
+        {/* Mobile header with close button and horizontal tabs */}
+        <div className="flex flex-col border-b border-border-subtle md:hidden">
+          {/* Close button row */}
+          <div className="flex h-12 items-center justify-between px-4">
+            <h2 className="font-aeonik text-base font-semibold text-content-primary">
+              {navItems.find((item) => item.id === activeTab)?.label}
+            </h2>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Horizontal tabs */}
+          <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors',
+                  activeTab === item.id
+                    ? 'bg-surface-chat text-content-primary'
+                    : 'text-content-secondary hover:bg-surface-chat/50',
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Left sidebar navigation (desktop only) */}
+        <div className="hidden w-56 flex-none flex-col border-r border-border-subtle md:flex">
           {/* Close button */}
           <div className="flex h-14 items-center px-4">
             <button
@@ -717,9 +752,9 @@ export function SettingsSidebar({
         </div>
 
         {/* Right content area */}
-        <div className="flex flex-1 flex-col">
-          {/* Header */}
-          <div className="flex h-14 items-center border-b border-border-subtle px-6">
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Header (desktop only) */}
+          <div className="hidden h-14 items-center border-b border-border-subtle px-6 md:flex">
             <h2 className="font-aeonik text-lg font-semibold text-content-primary">
               {navItems.find((item) => item.id === activeTab)?.label}
             </h2>
