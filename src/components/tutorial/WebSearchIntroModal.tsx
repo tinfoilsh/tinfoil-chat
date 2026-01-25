@@ -3,8 +3,12 @@ import { Dialog, Transition } from '@headlessui/react'
 import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { BsIncognito } from 'react-icons/bs'
-import { PiArrowsLeftRight, PiGlobe, PiMonitor } from 'react-icons/pi'
+import {
+  PiArrowsLeftRight,
+  PiGhostLight,
+  PiGlobe,
+  PiMonitor,
+} from 'react-icons/pi'
 
 const STORAGE_KEY = 'has_seen_web_search_intro'
 const METADATA_KEY = 'has_seen_web_search_intro'
@@ -98,13 +102,13 @@ export function WebSearchIntroModal({
                 <div className="space-y-4">
                   <div className="flex items-center justify-center space-x-4">
                     <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-subtle bg-surface-chat">
-                      <PiMonitor className="h-8 w-8 text-brand-accent-dark dark:text-content-primary" />
+                      <PiMonitor className="h-8 w-8 text-brand-accent-dark dark:text-white" />
                     </div>
                     <div className="flex items-center">
                       <PiArrowsLeftRight className="h-6 w-6 text-content-muted" />
                     </div>
                     <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-subtle bg-surface-chat">
-                      <PiGlobe className="h-8 w-8 text-brand-accent-dark dark:text-content-primary" />
+                      <PiGlobe className="h-8 w-8 text-brand-accent-dark dark:text-white" />
                     </div>
                   </div>
 
@@ -123,7 +127,7 @@ export function WebSearchIntroModal({
                         className="flex w-full items-center justify-between p-4 transition-colors hover:bg-content-primary/5"
                       >
                         <div className="flex items-center gap-2">
-                          <BsIncognito className="h-5 w-5 text-content-primary" />
+                          <PiGhostLight className="h-5 w-5 text-content-primary" />
                           <span className="text-sm font-medium text-content-primary">
                             Anonymous queries
                           </span>
