@@ -262,16 +262,24 @@ export class ChatStorageService {
     )
   }
 
-  async convertChatToCloud(chatId: string): Promise<void> {
+  async convertChatToCloud(chatId: string): Promise<string> {
     await this.initialize()
 
-    // Update local storage to mark as cloud chat
-    await indexedDBStorage.updateChatLocalOnly(chatId, false)
+    // Clone the chat with a new ID and fresh timestamps so it appears at the top
+    const newChatId = await indexedDBStorage.cloneChatWithNewId(chatId)
+    if (!newChatId) {
+      throw new Error('Failed to clone chat for cloud conversion')
+    }
+
+    // Mark as cloud chat (not local-only)
+    await indexedDBStorage.updateChatLocalOnly(newChatId, false)
 
     // Trigger cloud backup
-    await cloudSync.backupChat(chatId)
+    await cloudSync.backupChat(newChatId)
 
-    chatEvents.emit({ reason: 'save', ids: [chatId] })
+    chatEvents.emit({ reason: 'save', ids: [newChatId] })
+
+    return newChatId
   }
 
   async convertChatToLocal(chatId: string): Promise<void> {
