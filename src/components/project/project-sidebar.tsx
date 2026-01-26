@@ -592,6 +592,9 @@ export function ProjectSidebar({
                 if (e.dataTransfer.types.includes('application/x-chat-id')) {
                   e.preventDefault()
                   setIsExitButtonDragHover(true)
+                  if (exitHoverTimerRef.current) {
+                    clearTimeout(exitHoverTimerRef.current)
+                  }
                   exitHoverTimerRef.current = setTimeout(() => {
                     onExitProjectWhileDragging?.()
                   }, 400)
