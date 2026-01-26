@@ -395,6 +395,8 @@ export function ChatSidebar({
   } = useDrag()
 
   const [isDropTargetChatList, setIsDropTargetChatList] = useState(false)
+  const [isDropTargetProjectsHeader, setIsDropTargetProjectsHeader] =
+    useState(false)
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -1515,15 +1517,50 @@ export function ChatSidebar({
                     }
                   }
                 }}
+                onDragOver={(e) => {
+                  if (
+                    e.dataTransfer.types.includes('application/x-chat-id') &&
+                    cloudSyncEnabled
+                  ) {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setIsDropTargetProjectsHeader(true)
+                  }
+                }}
+                onDragEnter={(e) => {
+                  if (
+                    e.dataTransfer.types.includes('application/x-chat-id') &&
+                    cloudSyncEnabled
+                  ) {
+                    e.preventDefault()
+                    setIsDropTargetProjectsHeader(true)
+                    if (!isProjectsExpanded) {
+                      setIsProjectsExpanded(true)
+                      if (projects.length === 0) {
+                        refreshProjects()
+                      }
+                    }
+                  }
+                }}
+                onDragLeave={() => {
+                  setIsDropTargetProjectsHeader(false)
+                }}
+                onDrop={() => {
+                  setIsDropTargetProjectsHeader(false)
+                }}
                 className={cn(
                   'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                  isProjectMode
+                  isDropTargetProjectsHeader
                     ? isDarkMode
-                      ? 'text-emerald-400'
-                      : 'text-emerald-600'
-                    : isDarkMode
-                      ? 'text-content-secondary hover:bg-surface-chat'
-                      : 'text-content-secondary hover:bg-white',
+                      ? 'border border-white/30 bg-white/10'
+                      : 'border border-gray-400 bg-gray-200/30'
+                    : isProjectMode
+                      ? isDarkMode
+                        ? 'text-emerald-400'
+                        : 'text-emerald-600'
+                      : isDarkMode
+                        ? 'text-content-secondary hover:bg-surface-chat'
+                        : 'text-content-secondary hover:bg-white',
                 )}
               >
                 <span className="flex items-center gap-2">
