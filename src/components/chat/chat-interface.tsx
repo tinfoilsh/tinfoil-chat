@@ -88,8 +88,8 @@ const VerifierSidebarLazy = dynamic(
   () => import('../verification-sidebar').then((m) => m.VerifierSidebar),
   { ssr: false },
 )
-const SettingsSidebarLazy = dynamic(
-  () => import('./settings-sidebar').then((m) => m.SettingsSidebar),
+const SettingsModalLazy = dynamic(
+  () => import('./settings-modal').then((m) => m.SettingsModal),
   { ssr: false },
 )
 const ShareModalLazy = dynamic(
@@ -228,8 +228,8 @@ export function ChatInterface({
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
 
-  // State for settings sidebar
-  const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
+  // State for settings modal
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<
     | 'general'
     | 'chat'
@@ -263,7 +263,7 @@ export function ChatInterface({
     return localStorage.getItem('webSearchEnabled') === 'true'
   })
 
-  // PII check setting (controlled from settings sidebar, defaults to on)
+  // PII check setting (controlled from settings modal, defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
     if (typeof window === 'undefined') return true
     const saved = localStorage.getItem('piiCheckEnabled')
@@ -665,7 +665,7 @@ export function ChatInterface({
     localStorage.setItem('webSearchEnabled', String(webSearchEnabled))
   }, [webSearchEnabled])
 
-  // Listen for PII check setting changes from settings sidebar
+  // Listen for PII check setting changes from settings modal
   useEffect(() => {
     const handlePiiCheckChange = (event: CustomEvent<{ enabled: boolean }>) => {
       setPiiCheckEnabled(event.detail.enabled)
@@ -688,13 +688,13 @@ export function ChatInterface({
   useEffect(() => {
     // When window becomes narrow and both types of sidebars are open, close the right one
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-      if (isSidebarOpen && (isVerifierSidebarOpen || isSettingsSidebarOpen)) {
+      if (isSidebarOpen && (isVerifierSidebarOpen || isSettingsModalOpen)) {
         // Close right sidebars to prioritize left sidebar
         setIsVerifierSidebarOpen(false)
-        setIsSettingsSidebarOpen(false)
+        setIsSettingsModalOpen(false)
       }
     }
-  }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsSidebarOpen])
+  }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsModalOpen])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
@@ -805,7 +805,7 @@ export function ChatInterface({
     } else {
       // Open verifier and close settings if open
       handleSetVerifierSidebarOpen(true)
-      setIsSettingsSidebarOpen(false)
+      setIsSettingsModalOpen(false)
     }
   }
 
@@ -820,15 +820,15 @@ export function ChatInterface({
     }
   }
 
-  // Handler for settings sidebar
-  const handleOpenSettingsSidebar = () => {
-    if (isSettingsSidebarOpen) {
+  // Handler for settings modal
+  const handleOpenSettingsModal = () => {
+    if (isSettingsModalOpen) {
       // If already open, close it
-      setIsSettingsSidebarOpen(false)
+      setIsSettingsModalOpen(false)
     } else {
       // Open settings and close verifier if open
       setSettingsInitialTab(undefined)
-      setIsSettingsSidebarOpen(true)
+      setIsSettingsModalOpen(true)
       handleSetVerifierSidebarOpen(false)
       // If window is narrow, close left sidebar when opening settings
       if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
@@ -842,10 +842,10 @@ export function ChatInterface({
     setIsShareModalOpen(true)
   }
 
-  // Handler for encryption key button - opens settings sidebar to encryption tab
+  // Handler for encryption key button - opens settings modal to encryption tab
   const handleOpenEncryptionKeyModal = () => {
     setSettingsInitialTab('encryption')
-    setIsSettingsSidebarOpen(true)
+    setIsSettingsModalOpen(true)
     handleSetVerifierSidebarOpen(false)
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
       setIsSidebarOpen(false)
@@ -1695,7 +1695,7 @@ export function ChatInterface({
       {!isSidebarOpen &&
         !(
           windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
-          (isVerifierSidebarOpen || isSettingsSidebarOpen)
+          (isVerifierSidebarOpen || isSettingsModalOpen)
         ) &&
         (isSignedIn && isPremium ? (
           <div className="fixed left-4 top-4 z-50 flex flex-row gap-2 md:flex-col">
@@ -1743,7 +1743,7 @@ export function ChatInterface({
                   setIsSidebarOpen(true)
                   if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
                     setIsVerifierSidebarOpen(false)
-                    setIsSettingsSidebarOpen(false)
+                    setIsSettingsModalOpen(false)
                   }
                 }}
               >
@@ -1763,7 +1763,7 @@ export function ChatInterface({
                   setIsSidebarOpen(true)
                   if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
                     setIsVerifierSidebarOpen(false)
-                    setIsSettingsSidebarOpen(false)
+                    setIsSettingsModalOpen(false)
                   }
                 }}
               >
@@ -1782,7 +1782,7 @@ export function ChatInterface({
                 setIsSidebarOpen(true)
                 if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
                   setIsVerifierSidebarOpen(false)
-                  setIsSettingsSidebarOpen(false)
+                  setIsSettingsModalOpen(false)
                 }
               }}
               aria-label="Open sidebar"
@@ -1799,7 +1799,7 @@ export function ChatInterface({
       {/* Right side toggle buttons */}
       {!(
         windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
-        (isSidebarOpen || isVerifierSidebarOpen || isSettingsSidebarOpen)
+        (isSidebarOpen || isVerifierSidebarOpen || isSettingsModalOpen)
       ) && (
         <div
           className="fixed top-4 z-50 flex gap-2 transition-all duration-300"
@@ -1892,7 +1892,7 @@ export function ChatInterface({
             onAddChatToProject={(chatId) =>
               handleMoveChatToProject(chatId, activeProject.id)
             }
-            onSettingsClick={handleOpenSettingsSidebar}
+            onSettingsClick={handleOpenSettingsModal}
           />
         ) : loadingProject ? (
           <ProjectSidebar
@@ -1908,7 +1908,7 @@ export function ChatInterface({
             onSelectChat={() => {}}
             isClient={isClient}
             isPremium={isPremium}
-            onSettingsClick={handleOpenSettingsSidebar}
+            onSettingsClick={handleOpenSettingsModal}
           />
         ) : (
           <ChatSidebar
@@ -1949,7 +1949,7 @@ export function ChatInterface({
             onRemoveChatFromProject={handleRemoveChatFromProject}
             onConvertChatToCloud={handleConvertChatToCloud}
             onConvertChatToLocal={handleConvertChatToLocal}
-            onSettingsClick={handleOpenSettingsSidebar}
+            onSettingsClick={handleOpenSettingsModal}
           />
         )}
       </DragProvider>
@@ -1979,7 +1979,7 @@ export function ChatInterface({
           isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         isRightSidebarOpen={
-          (isVerifierSidebarOpen || isSettingsSidebarOpen) &&
+          (isVerifierSidebarOpen || isSettingsModalOpen) &&
           windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         chatTitle={currentChat?.title}
@@ -1987,10 +1987,10 @@ export function ChatInterface({
         chatId={currentChat?.id}
       />
 
-      {/* Settings Sidebar */}
-      <SettingsSidebarLazy
-        isOpen={isSettingsSidebarOpen}
-        setIsOpen={setIsSettingsSidebarOpen}
+      {/* Settings Modal */}
+      <SettingsModalLazy
+        isOpen={isSettingsModalOpen}
+        setIsOpen={setIsSettingsModalOpen}
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
         isClient={isClient}

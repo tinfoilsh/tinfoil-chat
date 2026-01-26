@@ -115,7 +115,7 @@ export type SettingsTab =
   | 'encryption'
   | 'account'
 
-type SettingsSidebarProps = {
+type SettingsModalProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   isDarkMode: boolean
@@ -131,7 +131,7 @@ type SettingsSidebarProps = {
   initialTab?: SettingsTab
 }
 
-export function SettingsSidebar({
+export function SettingsModal({
   isOpen,
   setIsOpen,
   isDarkMode,
@@ -145,7 +145,7 @@ export function SettingsSidebar({
   encryptionKey,
   onKeyChange,
   initialTab,
-}: SettingsSidebarProps) {
+}: SettingsModalProps) {
   const { user } = useUser()
   const { toast } = useToast()
   const [maxMessages, setMaxMessages] = useState<number>(
@@ -660,7 +660,7 @@ export function SettingsSidebar({
         logInfo(
           `Deleted ${deletedCount} synced chats when disabling cloud sync`,
           {
-            component: 'SettingsSidebar',
+            component: 'SettingsModal',
             action: 'handleCloudSyncToggle',
           },
         )
@@ -669,7 +669,7 @@ export function SettingsSidebar({
         }
       } catch (error) {
         logInfo('Failed to delete synced chats', {
-          component: 'SettingsSidebar',
+          component: 'SettingsModal',
           action: 'handleCloudSyncToggle',
           metadata: { error },
         })
