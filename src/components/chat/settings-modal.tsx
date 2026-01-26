@@ -1581,94 +1581,6 @@ ${encryptionKey.replace('key_', '')}
                     </div>
                   </div>
 
-                  {/* Custom System Prompt */}
-                  <div className="space-y-3">
-                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                      Custom System Prompt
-                    </h3>
-
-                    <div
-                      className={cn(
-                        'rounded-lg border border-border-subtle p-4',
-                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                      )}
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div className="font-aeonik-fono text-xs text-content-muted">
-                            Override the default system prompt to customize how
-                            Tin behaves.
-                          </div>
-                          <label className="relative inline-flex cursor-pointer items-center">
-                            <input
-                              type="checkbox"
-                              checked={isUsingCustomPrompt}
-                              onChange={(e) =>
-                                handleToggleCustomPrompt(e.target.checked)
-                              }
-                              className="peer sr-only"
-                            />
-                            <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                          </label>
-                        </div>
-                        <textarea
-                          value={stripSystemTags(customSystemPrompt)}
-                          onChange={(e) =>
-                            handleCustomPromptChange(e.target.value)
-                          }
-                          onBlur={handleCustomPromptBlur}
-                          placeholder="Enter your custom system prompt..."
-                          rows={6}
-                          onFocus={() => {
-                            if (!isUsingCustomPrompt) {
-                              handleToggleCustomPrompt(true)
-                            }
-                          }}
-                          className={cn(
-                            'w-full resize-none rounded-md border px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                            isDarkMode
-                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                          )}
-                        />
-                        <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
-                          <div className="font-aeonik-fono text-xs text-content-muted">
-                            <span
-                              className={cn(
-                                'font-aeonik font-medium',
-                                isDarkMode
-                                  ? 'text-emerald-400'
-                                  : 'text-emerald-600',
-                              )}
-                            >
-                              Tip:
-                            </span>{' '}
-                            Use placeholders like {'{USER_PREFERENCES}'},{' '}
-                            {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'}, and{' '}
-                            {'{TIMEZONE}'} to tell the model about your
-                            preferences, timezone, and the current time and
-                            date.
-                          </div>
-                        </div>
-                        {isUsingCustomPrompt && (
-                          <div className="flex justify-center">
-                            <button
-                              onClick={handleRestoreDefaultPrompt}
-                              className={cn(
-                                'rounded-md px-3 py-1.5 text-xs transition-all hover:underline',
-                                isDarkMode
-                                  ? 'text-red-400 hover:text-red-300'
-                                  : 'text-red-600 hover:text-red-500',
-                              )}
-                            >
-                              Restore default prompt
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Advanced Settings */}
                   <div className="space-y-3">
                     <button
@@ -1690,6 +1602,88 @@ ${encryptionKey.replace('key_', '')}
 
                     {advancedSettingsOpen && (
                       <div className="space-y-4">
+                        {/* Custom System Prompt */}
+                        <div
+                          className={cn(
+                            'rounded-lg border border-border-subtle p-4',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          )}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="font-aeonik text-sm font-medium text-content-primary">
+                                Custom System Prompt
+                              </div>
+                              <label className="relative inline-flex cursor-pointer items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isUsingCustomPrompt}
+                                  onChange={(e) =>
+                                    handleToggleCustomPrompt(e.target.checked)
+                                  }
+                                  className="peer sr-only"
+                                />
+                                <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                              </label>
+                            </div>
+                            {isUsingCustomPrompt && (
+                              <>
+                                <div className="font-aeonik-fono text-xs text-content-muted">
+                                  Override the default system prompt to
+                                  customize how Tin behaves.
+                                </div>
+                                <textarea
+                                  value={stripSystemTags(customSystemPrompt)}
+                                  onChange={(e) =>
+                                    handleCustomPromptChange(e.target.value)
+                                  }
+                                  onBlur={handleCustomPromptBlur}
+                                  placeholder="Enter your custom system prompt..."
+                                  rows={6}
+                                  className={cn(
+                                    'w-full resize-none rounded-md border px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                                    isDarkMode
+                                      ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                                      : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                                  )}
+                                />
+                                <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
+                                  <div className="font-aeonik-fono text-xs text-content-muted">
+                                    <span
+                                      className={cn(
+                                        'font-aeonik font-medium',
+                                        isDarkMode
+                                          ? 'text-emerald-400'
+                                          : 'text-emerald-600',
+                                      )}
+                                    >
+                                      Tip:
+                                    </span>{' '}
+                                    Use placeholders like {'{USER_PREFERENCES}'}
+                                    , {'{LANGUAGE}'}, {'{CURRENT_DATETIME}'},
+                                    and {'{TIMEZONE}'} to tell the model about
+                                    your preferences, timezone, and the current
+                                    time and date.
+                                  </div>
+                                </div>
+                                <div className="flex justify-center">
+                                  <button
+                                    onClick={handleRestoreDefaultPrompt}
+                                    className={cn(
+                                      'rounded-md px-3 py-1.5 text-xs transition-all hover:underline',
+                                      isDarkMode
+                                        ? 'text-red-400 hover:text-red-300'
+                                        : 'text-red-600 hover:text-red-500',
+                                    )}
+                                  >
+                                    Restore default prompt
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Web Search PII Detection */}
                         <div
                           className={cn(
