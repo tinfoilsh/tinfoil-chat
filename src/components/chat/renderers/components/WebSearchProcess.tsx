@@ -217,7 +217,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
               )}
             </span>
           ) : (
-            <span className="min-w-0 truncate text-sm leading-5">
+            <span className="min-w-0 text-sm leading-5">
               <span className="font-medium opacity-70">Searched the web</span>
               {webSearch.query && (
                 <span className="font-normal opacity-70">
