@@ -201,7 +201,7 @@ export class ChatQueryBuilder {
     }
 
     if (msg.multimodalText) {
-      textContent = `${textContent}\n\n${msg.multimodalText}`
+      textContent = `${textContent}\n\n[Treat these descriptions as if they are the raw images.]\n${msg.multimodalText}`
     }
 
     // Handle multimodal content (images)
