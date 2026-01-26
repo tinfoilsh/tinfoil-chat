@@ -144,14 +144,15 @@ export function ProjectSelectorModal({
                       onClick={() => setView('create')}
                       className={cn(
                         'mb-4 flex w-full items-center gap-3 rounded-lg border border-dashed p-4 transition-colors',
+                        'hover:border-border-default border-border-subtle text-content-secondary hover:text-content-primary',
                         isDarkMode
-                          ? 'border-emerald-500/40 text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-950/20'
-                          : 'border-emerald-500/40 text-emerald-600 hover:border-emerald-500/60 hover:bg-emerald-50/50',
+                          ? 'hover:bg-surface-chat'
+                          : 'hover:bg-surface-sidebar',
                       )}
                     >
                       <FolderPlusIcon className="h-6 w-6" />
                       <span className="font-aeonik font-medium">
-                        Create New Project
+                        New Project
                       </span>
                     </button>
 

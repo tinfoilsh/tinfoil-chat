@@ -1651,22 +1651,21 @@ export function ChatSidebar({
                           disabled={isCreatingProject}
                           className={cn(
                             'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                            'text-content-secondary hover:text-content-primary',
                             isDarkMode
-                              ? 'text-emerald-400 hover:bg-surface-chat'
-                              : 'text-emerald-600 hover:bg-surface-sidebar',
+                              ? 'hover:bg-surface-chat'
+                              : 'hover:bg-surface-sidebar',
                             isCreatingProject &&
                               'cursor-not-allowed opacity-50',
                           )}
                         >
                           {isCreatingProject ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-content-muted border-t-transparent" />
                           ) : (
                             <FolderPlusIcon className="h-4 w-4 shrink-0" />
                           )}
                           <span className="truncate">
-                            {isCreatingProject
-                              ? 'Creating...'
-                              : 'Create New Project'}
+                            {isCreatingProject ? 'Creating...' : 'New Project'}
                           </span>
                         </button>
                       )}
