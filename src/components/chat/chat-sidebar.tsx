@@ -397,6 +397,9 @@ export function ChatSidebar({
   const [isDropTargetChatList, setIsDropTargetChatList] = useState(false)
   const [isDropTargetProjectsHeader, setIsDropTargetProjectsHeader] =
     useState(false)
+  const projectHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -1706,15 +1709,39 @@ export function ChatSidebar({
                                 ) {
                                   e.preventDefault()
                                   setDropTargetProject(project.id)
+                                  if (projectHoverTimerRef.current) {
+                                    clearTimeout(projectHoverTimerRef.current)
+                                  }
+                                  projectHoverTimerRef.current = setTimeout(
+                                    () => {
+                                      onEnterProject?.(project.id, project.name)
+                                    },
+                                    400,
+                                  )
                                 }
                               }}
-                              onDragLeave={() => {
-                                if (dropTargetProjectId === project.id) {
-                                  setDropTargetProject(null)
+                              onDragLeave={(e) => {
+                                // Only clear if actually leaving the button (not just moving between children)
+                                if (
+                                  !e.currentTarget.contains(
+                                    e.relatedTarget as Node,
+                                  )
+                                ) {
+                                  if (dropTargetProjectId === project.id) {
+                                    setDropTargetProject(null)
+                                  }
+                                  if (projectHoverTimerRef.current) {
+                                    clearTimeout(projectHoverTimerRef.current)
+                                    projectHoverTimerRef.current = null
+                                  }
                                 }
                               }}
                               onDrop={async (e) => {
                                 e.preventDefault()
+                                if (projectHoverTimerRef.current) {
+                                  clearTimeout(projectHoverTimerRef.current)
+                                  projectHoverTimerRef.current = null
+                                }
                                 const chatId = e.dataTransfer.getData(
                                   'application/x-chat-id',
                                 )
