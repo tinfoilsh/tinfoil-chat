@@ -760,10 +760,7 @@ export function ChatInterface({
   ) as BaseModel | undefined
 
   // Initialize document uploader hook
-  const { handleDocumentUpload } = useDocumentUploader(
-    isPremium,
-    selectedModelDetails,
-  )
+  const { handleDocumentUpload } = useDocumentUploader(isPremium)
 
   // Sync chats when user signs in and periodically
   // Profile sync is handled separately by useProfileSync hook
