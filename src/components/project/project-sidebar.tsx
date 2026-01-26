@@ -25,6 +25,33 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  BsFile,
+  BsFiletypeCss,
+  BsFiletypeCsv,
+  BsFiletypeDoc,
+  BsFiletypeDocx,
+  BsFiletypeGif,
+  BsFiletypeHtml,
+  BsFiletypeJpg,
+  BsFiletypeJs,
+  BsFiletypeJson,
+  BsFiletypeJsx,
+  BsFiletypeMd,
+  BsFiletypeMov,
+  BsFiletypeMp3,
+  BsFiletypeMp4,
+  BsFiletypePdf,
+  BsFiletypePng,
+  BsFiletypePpt,
+  BsFiletypePptx,
+  BsFiletypeTsx,
+  BsFiletypeTxt,
+  BsFiletypeWav,
+  BsFiletypeXls,
+  BsFiletypeXlsx,
+  BsFiletypeXml,
+} from 'react-icons/bs'
 import { HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
 import { PiLightbulbFilamentThin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
@@ -76,6 +103,67 @@ function Shimmer({ className }: { className?: string }) {
       className={cn('animate-pulse rounded bg-content-muted/20', className)}
     />
   )
+}
+
+function getFileIcon(filename: string, className: string) {
+  const extension = filename.toLowerCase().split('.').pop() || ''
+
+  switch (extension) {
+    case 'pdf':
+      return <BsFiletypePdf className={className} />
+    case 'doc':
+      return <BsFiletypeDoc className={className} />
+    case 'docx':
+      return <BsFiletypeDocx className={className} />
+    case 'xls':
+      return <BsFiletypeXls className={className} />
+    case 'xlsx':
+      return <BsFiletypeXlsx className={className} />
+    case 'csv':
+      return <BsFiletypeCsv className={className} />
+    case 'ppt':
+      return <BsFiletypePpt className={className} />
+    case 'pptx':
+      return <BsFiletypePptx className={className} />
+    case 'html':
+    case 'htm':
+    case 'xhtml':
+      return <BsFiletypeHtml className={className} />
+    case 'css':
+      return <BsFiletypeCss className={className} />
+    case 'js':
+      return <BsFiletypeJs className={className} />
+    case 'jsx':
+      return <BsFiletypeJsx className={className} />
+    case 'ts':
+    case 'tsx':
+      return <BsFiletypeTsx className={className} />
+    case 'json':
+      return <BsFiletypeJson className={className} />
+    case 'md':
+      return <BsFiletypeMd className={className} />
+    case 'xml':
+      return <BsFiletypeXml className={className} />
+    case 'txt':
+      return <BsFiletypeTxt className={className} />
+    case 'png':
+      return <BsFiletypePng className={className} />
+    case 'jpg':
+    case 'jpeg':
+      return <BsFiletypeJpg className={className} />
+    case 'gif':
+      return <BsFiletypeGif className={className} />
+    case 'mp3':
+      return <BsFiletypeMp3 className={className} />
+    case 'wav':
+      return <BsFiletypeWav className={className} />
+    case 'mp4':
+      return <BsFiletypeMp4 className={className} />
+    case 'mov':
+      return <BsFiletypeMov className={className} />
+    default:
+      return <BsFile className={className} />
+  }
 }
 
 export function ProjectSidebar({
@@ -957,14 +1045,15 @@ export function ProjectSidebar({
                           isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar',
                         )}
                       >
-                        <DocumentIcon
-                          className={cn(
+                        {getFileIcon(
+                          doc.filename,
+                          cn(
                             'h-4 w-4 flex-shrink-0',
                             isDarkMode
                               ? 'text-emerald-400'
                               : 'text-emerald-600',
-                          )}
-                        />
+                          ),
+                        )}
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-aeonik-fono text-xs text-content-primary">
                             {doc.filename}
