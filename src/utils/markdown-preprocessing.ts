@@ -33,10 +33,6 @@ export function preprocessMarkdown(content: string): string {
   processed = processed.replace(/<b>([^<]*)<\/b>/gi, '**$1**')
   processed = processed.replace(/<strong>([^<]*)<\/strong>/gi, '**$1**')
 
-  // Convert <br>, <br/>, and </br> to markdown line breaks
-  processed = processed.replace(/<br\s*\/?>/gi, '  \n')
-  processed = processed.replace(/<\/br>/gi, '  \n')
-
   // Restore inline code first (they might be inside code blocks)
   processed = processed.replace(
     /__INLINE_CODE_(\d+)__/g,
