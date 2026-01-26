@@ -484,6 +484,55 @@ export function useChatMessaging({
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = currentChatIdRef.current
 
+      // Generate title immediately for first messages (based on user's message)
+      if (isFirstMessage && userMessage) {
+        const titleModel = models.find((m) => m.type === 'title')
+        if (titleModel) {
+          titleGeneratedRef.current = true
+          const chatId = currentChatIdRef.current
+          earlyTitlePromiseRef.current = (async () => {
+            try {
+              const titleMessages = [
+                { role: 'user', content: userMessage.content || '' },
+              ]
+              const generatedTitle = await generateTitle(
+                titleMessages,
+                titleModel.modelName,
+              )
+
+              if (generatedTitle && generatedTitle !== 'Untitled') {
+                logInfo('[handleQuery] Title generated from user message', {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.immediateTitleGen',
+                  metadata: { chatId, title: generatedTitle },
+                })
+
+                generatedTitleRef.current = generatedTitle
+
+                setCurrentChat((prev) =>
+                  prev.id === chatId
+                    ? { ...prev, title: generatedTitle }
+                    : prev,
+                )
+                setChats((prevChats) =>
+                  prevChats.map((c) =>
+                    c.id === chatId ? { ...c, title: generatedTitle } : c,
+                  ),
+                )
+              } else {
+                titleGeneratedRef.current = false
+              }
+            } catch (error) {
+              logError('Immediate title generation error', error, {
+                component: 'useChatMessaging',
+                action: 'generateTitle.immediate',
+              })
+              titleGeneratedRef.current = false
+            }
+          })()
+        }
+      }
+
       // Project memory is currently disabled - uncomment to re-enable
       // Trigger project memory update in parallel with streaming (if in project mode)
       // Uses updatedChat.projectId to avoid race condition if user switches projects during streaming
@@ -530,12 +579,18 @@ export function useChatMessaging({
           piiCheckEnabled,
         })
 
-        // Callback for early title generation when word threshold is reached
-        const handleEarlyTitleGeneration = (content: string) => {
+        // Callback for early title generation (fallback if immediate generation didn't run)
+        const handleEarlyTitleGeneration = (_content: string) => {
           if (titleGeneratedRef.current) return
 
           const titleModel = models.find((m) => m.type === 'title')
           if (!titleModel) return
+
+          // Find the first user message for title generation
+          const firstUserMessage = updatedMessages.find(
+            (msg) => msg.role === 'user',
+          )
+          if (!firstUserMessage?.content) return
 
           titleGeneratedRef.current = true
           const chatId = currentChatIdRef.current
@@ -543,7 +598,9 @@ export function useChatMessaging({
           // Store the promise so we can await it before final save
           earlyTitlePromiseRef.current = (async () => {
             try {
-              const titleMessages = [{ role: 'assistant', content }]
+              const titleMessages = [
+                { role: 'user', content: firstUserMessage.content || '' },
+              ]
               const generatedTitle = await generateTitle(
                 titleMessages,
                 titleModel.modelName,

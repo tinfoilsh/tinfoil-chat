@@ -10,10 +10,10 @@ export async function generateTitle(
   if (!titleModelName) return 'Untitled'
 
   try {
-    const assistantMessage = messages.find((msg) => msg.role === 'assistant')
-    if (!assistantMessage?.content) return 'Untitled'
+    const userMessage = messages.find((msg) => msg.role === 'user')
+    if (!userMessage?.content) return 'Untitled'
 
-    const words = assistantMessage.content.split(/\s+/)
+    const words = userMessage.content.split(/\s+/)
     const truncatedContent = words
       .slice(0, CONSTANTS.TITLE_GENERATION_WORD_THRESHOLD)
       .join(' ')
