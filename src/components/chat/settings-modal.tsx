@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@/config'
 import { useProjects } from '@/hooks/use-projects'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
+import { cloudSync } from '@/services/cloud/cloud-sync'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
@@ -254,6 +255,7 @@ export function SettingsModal({
 
   // Export state
   const [isExporting, setIsExporting] = useState(false)
+  const [isPreparingExport, setIsPreparingExport] = useState(false)
   const [exportType, setExportType] = useState<'chats' | 'projects' | null>(
     null,
   )
@@ -1164,6 +1166,72 @@ export function SettingsModal({
       })
     } finally {
       setIsExporting(false)
+      setExportType(null)
+    }
+  }
+
+  // Fetch all chats (including cloud) and export them
+  const handleExportAllChats = async () => {
+    setIsPreparingExport(true)
+    setExportType('chats')
+
+    try {
+      const allChats: Chat[] = []
+
+      // If cloud sync is enabled, fetch all chats with pagination
+      if (isCloudSyncEnabled() && isSignedIn) {
+        let hasMore = true
+        let continuationToken: string | undefined
+
+        while (hasMore) {
+          const result = await cloudSync.loadChatsWithPagination({
+            limit: 50,
+            continuationToken,
+            loadLocal: !continuationToken, // Only load local on first page to avoid duplicates
+          })
+
+          // Convert StoredChat to Chat
+          for (const storedChat of result.chats) {
+            allChats.push({
+              id: storedChat.id,
+              title: storedChat.title,
+              messages: storedChat.messages,
+              createdAt: new Date(storedChat.createdAt),
+              isLocalOnly: storedChat.isLocalOnly,
+              isBlankChat: (storedChat as any).isBlankChat,
+              syncedAt: storedChat.syncedAt,
+              projectId: storedChat.projectId,
+            })
+          }
+
+          hasMore = result.hasMore
+          continuationToken = result.nextToken
+        }
+      } else {
+        // For non-authenticated users, get all local chats
+        const localChats = await chatStorage.getAllChats()
+        allChats.push(...localChats)
+      }
+
+      // Filter out blank chats and chats that failed decryption
+      const exportableChats = allChats.filter(
+        (chat) =>
+          !chat.isBlankChat && chat.messages && chat.messages.length > 0,
+      )
+
+      setIsPreparingExport(false)
+      await downloadChats(exportableChats)
+    } catch (error) {
+      logError('Failed to prepare chats for export', error, {
+        component: 'SettingsModal',
+        action: 'handleExportAllChats',
+      })
+      toast({
+        title: 'Export failed',
+        description: 'Failed to prepare chats for export. Please try again.',
+        variant: 'destructive',
+      })
+      setIsPreparingExport(false)
       setExportType(null)
     }
   }
@@ -2836,11 +2904,11 @@ ${encryptionKey.replace('key_', '')}
                         format can be re-imported into Tinfoil Chat.
                       </div>
                       <button
-                        onClick={() => downloadChats(chats)}
-                        disabled={isExporting || chats.length === 0}
+                        onClick={handleExportAllChats}
+                        disabled={isExporting || isPreparingExport}
                         className={cn(
                           'flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
-                          isExporting || chats.length === 0
+                          isExporting || isPreparingExport
                             ? 'cursor-not-allowed opacity-50'
                             : 'hover:bg-surface-chat',
                           isDarkMode
@@ -2848,14 +2916,17 @@ ${encryptionKey.replace('key_', '')}
                             : 'bg-surface-sidebar text-content-primary',
                         )}
                       >
-                        {isExporting && exportType === 'chats' ? (
+                        {(isExporting || isPreparingExport) &&
+                        exportType === 'chats' ? (
                           <ArrowPathIcon className="h-4 w-4 animate-spin" />
                         ) : (
                           <GoPackageDependents className="h-4 w-4" />
                         )}
-                        {isExporting && exportType === 'chats'
-                          ? 'Exporting...'
-                          : `Export ${chats.length} Chat${chats.length !== 1 ? 's' : ''}`}
+                        {isPreparingExport && exportType === 'chats'
+                          ? 'Please wait while we prepare the export...'
+                          : isExporting && exportType === 'chats'
+                            ? 'Exporting...'
+                            : 'Export Chats'}
                       </button>
                     </div>
                   </div>
