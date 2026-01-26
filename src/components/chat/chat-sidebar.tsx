@@ -1150,7 +1150,19 @@ export function ChatSidebar({
               <>
                 {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
                 {isSignedIn && cloudSyncEnabled && (
-                  <div className="mx-4 mt-2 flex gap-1 rounded-lg bg-surface-chat p-1">
+                  <div className="relative mx-4 mt-2 flex rounded-lg bg-surface-chat p-1">
+                    {/* Sliding background indicator */}
+                    <div
+                      className={cn(
+                        'absolute inset-y-1 w-[calc(50%-4px)] rounded-md shadow-sm transition-all duration-200 ease-in-out',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        activeTab === 'cloud'
+                          ? 'translate-x-0'
+                          : 'translate-x-full',
+                      )}
+                      style={{ left: '4px' }}
+                    />
+
                     <button
                       onClick={() => setActiveTab('cloud')}
                       onDragOver={(e) => {
@@ -1202,16 +1214,16 @@ export function ChatSidebar({
                         clearDragState()
                       }}
                       className={cn(
-                        'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
+                        'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                         dropTargetTab === 'cloud'
                           ? isDarkMode
-                            ? 'border-white/30 bg-white/10'
-                            : 'border-gray-400 bg-gray-200/30'
+                            ? 'bg-white/10'
+                            : 'bg-gray-200/30'
                           : activeTab === 'cloud'
                             ? isDarkMode
-                              ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                              : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                            : 'border-transparent text-content-muted hover:text-content-secondary',
+                              ? 'text-white'
+                              : 'text-content-primary'
+                            : 'text-content-muted hover:text-content-secondary',
                       )}
                     >
                       <CloudIcon className="h-3.5 w-3.5" />
@@ -1260,16 +1272,16 @@ export function ChatSidebar({
                         clearDragState()
                       }}
                       className={cn(
-                        'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
+                        'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                         dropTargetTab === 'local'
                           ? isDarkMode
-                            ? 'border-white/30 bg-white/10'
-                            : 'border-gray-400 bg-gray-200/30'
+                            ? 'bg-white/10'
+                            : 'bg-gray-200/30'
                           : activeTab === 'local'
                             ? isDarkMode
-                              ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
-                              : 'border-brand-accent-light/60 bg-white text-content-primary shadow-sm'
-                            : 'border-transparent text-content-muted hover:text-content-secondary',
+                              ? 'text-white'
+                              : 'text-content-primary'
+                            : 'text-content-muted hover:text-content-secondary',
                       )}
                     >
                       <CiFloppyDisk className="h-3.5 w-3.5" />
