@@ -43,6 +43,7 @@ interface ChatListProps {
   onMoveToProject?: (chatId: string, projectId: string) => void
   onConvertToCloud?: (chatId: string) => void
   onConvertToLocal?: (chatId: string) => void
+  onRemoveFromProject?: (chatId: string) => void
   loadMoreButton?: React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -71,6 +72,7 @@ export function ChatList({
   onMoveToProject,
   onConvertToCloud,
   onConvertToLocal,
+  onRemoveFromProject,
   loadMoreButton,
   emptyState,
 }: ChatListProps) {
@@ -204,6 +206,11 @@ export function ChatList({
             }
             onConvertToLocal={
               onConvertToLocal ? () => onConvertToLocal(chat.id) : undefined
+            }
+            onRemoveFromProject={
+              onRemoveFromProject
+                ? () => onRemoveFromProject(chat.id)
+                : undefined
             }
           />
           {deletingChatId === chat.id && (

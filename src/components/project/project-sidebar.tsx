@@ -1137,6 +1137,7 @@ export function ProjectSidebar({
                 setDraggingChat(chatId, project?.id ?? null)
               }
               onDragEnd={() => clearDragState()}
+              onRemoveFromProject={onRemoveChatFromProject}
             />
           </div>
 
