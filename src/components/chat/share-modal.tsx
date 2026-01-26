@@ -371,16 +371,6 @@ export function ShareModal({
             </Card>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-border-subtle px-6 py-4">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   )
