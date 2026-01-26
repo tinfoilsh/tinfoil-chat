@@ -7,8 +7,6 @@ import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from './chat-events'
 import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
-import { storageMigration } from './migration'
-import { migrationEvents } from './migration-events'
 
 export class ChatStorageService {
   private initialized = false
@@ -37,44 +35,7 @@ export class ChatStorageService {
 
   private async doInitialize(): Promise<void> {
     try {
-      // Check if we need to migrate
-      const needsMigration = await storageMigration.needsMigration()
-
-      if (needsMigration) {
-        const result = await storageMigration.migrate()
-
-        if (result.success) {
-          // Clean up legacy data after successful migration
-          await storageMigration.cleanupLegacyData()
-
-          // Store migration flag to trigger sync later when auth is ready
-          if (result.migratedCount > 0) {
-            logInfo(
-              `Migration complete: ${result.migratedCount} chats migrated`,
-              { component: 'ChatStorageService', action: 'migrate' },
-            )
-            // Store a flag to indicate migration just completed
-            sessionStorage.setItem('pendingMigrationSync', 'true')
-
-            // Emit migration event
-            migrationEvents.emit({
-              type: 'migration-completed',
-              migratedCount: result.migratedCount,
-            })
-          }
-        } else {
-          logError('Migration failed', new Error(result.errors.join(', ')), {
-            component: 'ChatStorageService',
-            action: 'migrate',
-          })
-          throw new Error('Migration to IndexedDB failed')
-        }
-      }
-
-      // Initialize IndexedDB
       await indexedDBStorage.initialize()
-
-      // Initialize encryption (for cloud sync)
       await encryptionService.initialize()
     } catch (error) {
       logError('Failed to initialize chat storage', error, {

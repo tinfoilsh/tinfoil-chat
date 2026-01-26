@@ -32,7 +32,6 @@ import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
-import { migrationEvents } from '@/services/storage/migration-events'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
@@ -58,13 +57,6 @@ import { useReasoningEffort } from './hooks/use-reasoning-effort'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 // Lazy-load modals that aren't shown on initial load
-const CloudSyncIntroModal = dynamic(
-  () =>
-    import('../modals/cloud-sync-intro-modal').then(
-      (m) => m.CloudSyncIntroModal,
-    ),
-  { ssr: false },
-)
 const EncryptionKeyModal = dynamic(
   () =>
     import('../modals/encryption-key-modal').then((m) => m.EncryptionKeyModal),
@@ -237,10 +229,6 @@ export function ChatInterface({
   const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
     useState(false)
 
-  // State for cloud sync intro modal
-  const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
-    useState(false)
-
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
@@ -325,35 +313,6 @@ export function ChatInterface({
   useEffect(() => {
     initializeRenderers()
   }, [])
-
-  // Check for migration and show intro modal
-  useEffect(() => {
-    if (!isSignedIn || typeof window === 'undefined') return
-
-    // Check if user has already seen the intro
-    const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
-    if (hasSeenIntro) return
-
-    // Check if migration already happened (page refresh case)
-    const hasMigrated = sessionStorage.getItem('pendingMigrationSync')
-    if (hasMigrated === 'true') {
-      setIsCloudSyncIntroModalOpen(true)
-      localStorage.setItem('hasSeenCloudSyncIntro', 'true')
-      return
-    }
-
-    // Listen for migration event
-    const unsubscribe = migrationEvents.on('migration-completed', (event) => {
-      // Only show modal if user hasn't seen it yet
-      const hasSeenIntro = localStorage.getItem('hasSeenCloudSyncIntro')
-      if (!hasSeenIntro && event.migratedCount > 0) {
-        setIsCloudSyncIntroModalOpen(true)
-        localStorage.setItem('hasSeenCloudSyncIntro', 'true')
-      }
-    })
-
-    return unsubscribe
-  }, [isSignedIn])
 
   // Load models and system prompt immediately in parallel
   // Use cached subscription status to load the right models from the start
@@ -2254,13 +2213,6 @@ export function ChatInterface({
             window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
           }
         }}
-        isDarkMode={isDarkMode}
-      />
-
-      {/* Cloud Sync Intro Modal */}
-      <CloudSyncIntroModal
-        isOpen={isCloudSyncIntroModalOpen}
-        onClose={() => setIsCloudSyncIntroModalOpen(false)}
         isDarkMode={isDarkMode}
       />
 

@@ -1,4 +1,3 @@
-import { CLOUD_SYNC } from '@/config'
 import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -91,77 +90,6 @@ export function useCloudSync() {
             action: 'initializeSync',
           })
           return
-        }
-
-        // Check if there's a pending migration sync
-        const pendingSync = sessionStorage.getItem('pendingMigrationSync')
-        if (pendingSync === 'true') {
-          logInfo(
-            'Detected pending migration sync, triggering immediate sync',
-            {
-              component: 'useCloudSync',
-              action: 'initializeSync',
-            },
-          )
-          sessionStorage.removeItem('pendingMigrationSync')
-
-          // Wait a bit to ensure cloudSync is fully initialized
-          await new Promise((resolve) =>
-            setTimeout(resolve, CLOUD_SYNC.RETRY_DELAY),
-          )
-
-          // Use the syncChats function instead of calling syncAllChats directly
-          // This will properly manage the syncing state
-          if (!syncingRef.current) {
-            syncingRef.current = true
-            if (isMountedRef.current) {
-              setState((prev) => ({ ...prev, syncing: true }))
-            }
-
-            try {
-              const result = await cloudSync.syncAllChats()
-
-              if (isMountedRef.current) {
-                setState((prev) => ({
-                  ...prev,
-                  syncing: false,
-                  lastSyncTime: Date.now(),
-                }))
-              }
-
-              logInfo(
-                `Migration sync complete: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
-                {
-                  component: 'useCloudSync',
-                  action: 'migration-sync',
-                  metadata: { result },
-                },
-              )
-            } catch (error) {
-              if (isMountedRef.current) {
-                setState((prev) => ({ ...prev, syncing: false }))
-              }
-              if (
-                error instanceof Error &&
-                error.message.includes('Sync already in progress')
-              ) {
-                logInfo(
-                  'Migration sync skipped - another sync is already in progress',
-                  {
-                    component: 'useCloudSync',
-                    action: 'migration-sync',
-                  },
-                )
-              } else {
-                logError('Failed to sync migrated chats', error, {
-                  component: 'useCloudSync',
-                  action: 'migration-sync',
-                })
-              }
-            } finally {
-              syncingRef.current = false
-            }
-          }
         }
       } catch (error) {
         logError('Failed to initialize cloud sync', error, {
