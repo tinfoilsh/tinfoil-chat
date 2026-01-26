@@ -64,6 +64,7 @@ interface UseChatMessagingReturn {
   handleQuery: (
     query: string,
     documentContent?: string,
+    multimodalText?: string,
     documents?: Array<{ name: string }>,
     imageData?: Array<{ base64: string; mimeType: string }>,
     systemPromptOverride?: string,
@@ -262,6 +263,7 @@ export function useChatMessaging({
     async (
       query: string,
       documentContent?: string,
+      multimodalText?: string,
       documents?: Array<{ name: string }>,
       imageData?: Array<{ base64: string; mimeType: string }>,
       systemPromptOverride?: string,
@@ -303,6 +305,7 @@ export function useChatMessaging({
             role: 'user',
             content: query,
             documentContent: documentContent,
+            multimodalText: multimodalText,
             documents,
             imageData,
             timestamp: new Date(),
@@ -1016,6 +1019,7 @@ export function useChatMessaging({
       handleQuery(
         newContent,
         originalMessage.documentContent,
+        originalMessage.multimodalText,
         originalMessage.documents,
         originalMessage.imageData,
         undefined,

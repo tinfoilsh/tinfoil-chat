@@ -1130,6 +1130,7 @@ export function ChatInterface({
                     time: new Date(),
                     content,
                     imageData,
+                    isImageDescription: !!imageData,
                   }
                 : doc,
             )
@@ -1320,14 +1321,31 @@ export function ChatInterface({
     // Don't auto-scroll here - let the message append handler do it
     // This prevents the dip when thoughts start streaming
 
-    // If we have completed documents, create a message with their content
+    // Separate regular documents from image descriptions
+    const regularDocuments = completedDocuments.filter(
+      (doc) => !doc.isImageDescription,
+    )
+    const imageDescriptions = completedDocuments.filter(
+      (doc) => doc.isImageDescription,
+    )
+
+    // Document content (from PDFs, Word docs, etc.)
     const docContent =
-      completedDocuments.length > 0
-        ? completedDocuments
+      regularDocuments.length > 0
+        ? regularDocuments
             .map(
               (doc) =>
                 `Document title: ${doc.name}\nDocument contents:\n${doc.content}`,
             )
+            .filter((content) => content)
+            .join('\n\n')
+        : undefined
+
+    // Multimodal text (image descriptions from multimodal model)
+    const multimodalText =
+      imageDescriptions.length > 0
+        ? imageDescriptions
+            .map((doc) => `Image: ${doc.name}\nDescription:\n${doc.content}`)
             .filter((content) => content)
             .join('\n\n')
         : undefined
@@ -1348,8 +1366,14 @@ export function ChatInterface({
             )
         : undefined
 
-    // Call handleQuery with the message, document content, document names, and image data
-    handleQuery(messageText, docContent, documentNames, imageData)
+    // Call handleQuery with the message, document content, multimodal text, document names, and image data
+    handleQuery(
+      messageText,
+      docContent,
+      multimodalText,
+      documentNames,
+      imageData,
+    )
 
     // Only remove the completed documents from the state
     const remainingDocuments = processedDocuments.filter(

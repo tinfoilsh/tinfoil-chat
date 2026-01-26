@@ -9,6 +9,7 @@ export type ProcessedDocument = {
   content?: string
   isUploading?: boolean
   imageData?: { base64: string; mimeType: string }
+  isImageDescription?: boolean // True if content is from multimodal image description
 }
 
 export interface MessageRenderProps {
@@ -31,6 +32,7 @@ export interface InputRenderProps {
   onSubmit: (
     content: Message['content'],
     documentContent?: Message['documentContent'],
+    multimodalText?: Message['multimodalText'],
     documents?: Message['documents'],
     imageData?: Message['imageData'],
   ) => void

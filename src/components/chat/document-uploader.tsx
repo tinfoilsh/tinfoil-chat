@@ -187,7 +187,7 @@ export const useDocumentUploader = (isPremium?: boolean) => {
             imageData.base64,
             imageData.mimeType,
           )
-          onSuccess(description, documentId)
+          onSuccess(description, documentId, imageData)
           return
         } catch (error) {
           logError('Image description failed', error, {
