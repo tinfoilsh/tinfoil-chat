@@ -1,6 +1,7 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import { profileSync } from '@/services/cloud/profile-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -42,6 +43,13 @@ export async function performSignoutCleanup(): Promise<void> {
     logInfo('Reset renderer registry', {
       component: 'signoutCleanup',
       action: 'resetRendererRegistry',
+    })
+
+    // Reset tinfoil client to clear cached API key
+    resetTinfoilClient()
+    logInfo('Reset tinfoil client', {
+      component: 'signoutCleanup',
+      action: 'resetTinfoilClient',
     })
 
     // Clear profile sync cache

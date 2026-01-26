@@ -68,7 +68,7 @@ async function fetchApiKey(): Promise<string> {
   }
 }
 
-function resetTinfoilClient(): void {
+export function resetTinfoilClient(): void {
   clientInstance = null
   lastApiKey = null
   cachedApiKey = null
