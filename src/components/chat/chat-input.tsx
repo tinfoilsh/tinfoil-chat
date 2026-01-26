@@ -80,13 +80,19 @@ export function ChatInput({
   // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
   const [isDragOver, setIsDragOver] = useState(false)
 
-  // Random placeholder that stays stable during the session
-  const [placeholder] = useState(
-    () =>
+  // Random placeholder - use first one initially to avoid SSR hydration mismatch,
+  // then randomize after mount
+  const [placeholder, setPlaceholder] = useState(
+    CONSTANTS.INPUT_PLACEHOLDERS[0],
+  )
+
+  useEffect(() => {
+    setPlaceholder(
       CONSTANTS.INPUT_PLACEHOLDERS[
         Math.floor(Math.random() * CONSTANTS.INPUT_PLACEHOLDERS.length)
       ],
-  )
+    )
+  }, [])
 
   // Scroll to the end when new documents are added
   useEffect(() => {
