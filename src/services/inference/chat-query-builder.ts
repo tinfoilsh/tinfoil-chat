@@ -193,11 +193,15 @@ export class ChatQueryBuilder {
   ):
     | string
     | Array<{ type: string; text?: string; image_url?: { url: string } }> {
-    // Build text content including documents
+    // Build text content including documents and multimodal text
     let textContent = msg.content
 
     if (msg.documentContent) {
-      textContent = `${msg.content}\n\n${msg.documentContent}`
+      textContent = `${textContent}\n\n${msg.documentContent}`
+    }
+
+    if (msg.multimodalText) {
+      textContent = `${textContent}\n\n${msg.multimodalText}`
     }
 
     // Handle multimodal content (images)

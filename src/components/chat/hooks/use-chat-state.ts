@@ -43,6 +43,7 @@ interface UseChatStateReturn {
   handleQuery: (
     query: string,
     documentContent?: string,
+    multimodalText?: string,
     documents?: Array<{ name: string }>,
     imageData?: Array<{ base64: string; mimeType: string }>,
     systemPromptOverride?: string,

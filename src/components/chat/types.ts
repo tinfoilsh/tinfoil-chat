@@ -28,6 +28,7 @@ export type Message = {
   role: 'user' | 'assistant'
   content: string
   documentContent?: string // Separate field for document content
+  multimodalText?: string // Image descriptions from multimodal model
   documents?: Array<{ name: string }> // New field for document names and types
   imageData?: Array<{ base64: string; mimeType: string }> // Base64 image data for multimodal support - excluded from localStorage
   timestamp: Date
