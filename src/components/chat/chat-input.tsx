@@ -4,7 +4,11 @@ import { cn } from '@/components/ui/utils'
 import { useToast } from '@/hooks/use-toast'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
-import { convertWebMToWAV, isWebMAudioSupported } from '@/utils/preprocessing'
+import {
+  convertWebMToWAV,
+  isImageFile,
+  isWebMAudioSupported,
+} from '@/utils/preprocessing'
 import {
   DocumentIcon,
   FolderIcon,
@@ -289,10 +293,14 @@ export function ChatInput({
 
       const files = e.dataTransfer.files
       if (files && files.length > 0 && handleDocumentUpload) {
-        handleDocumentUpload(files[0])
+        const file = files[0]
+        if (!isPremium && isImageFile(file)) {
+          return
+        }
+        handleDocumentUpload(file)
       }
     },
-    [handleDocumentUpload],
+    [handleDocumentUpload, isPremium],
   )
 
   // Handle paste event for long text detection
@@ -361,7 +369,11 @@ export function ChatInput({
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
-            accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
+            accept={
+              isPremium
+                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt'
+                : '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.txt'
+            }
           />
 
           {processedDocuments && processedDocuments.length > 0 && (
