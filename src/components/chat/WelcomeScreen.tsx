@@ -100,15 +100,23 @@ export const WelcomeScreen = memo(function WelcomeScreen({
     }
   }, [user?.id])
 
-  // Determine the greeting text
+  // Determine the greeting text based on time of day
   const getGreeting = () => {
-    if (nickname) {
-      return `Hello, ${nickname}!`
+    const name = nickname || user?.firstName
+    if (!name) {
+      return 'Tinfoil Private Chat'
     }
-    if (user?.firstName) {
-      return `Hello, ${user.firstName}!`
+
+    const hour = new Date().getHours()
+    if (hour >= 5 && hour < 12) {
+      return `Good morning, ${name}!`
+    } else if (hour >= 12 && hour < 17) {
+      return `Good afternoon, ${name}!`
+    } else if (hour >= 17 && hour < 22) {
+      return `Good evening, ${name}!`
+    } else {
+      return `Up late, ${name}?`
     }
-    return 'Tinfoil Private Chat'
   }
 
   // Don't show loading skeleton - show the welcome screen immediately

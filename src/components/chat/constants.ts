@@ -35,4 +35,12 @@ export const CONSTANTS = {
   MESSAGE_SEND_RETRY_DELAY_MS: 1000, // Base delay between retries (exponential backoff)
   // Default message when sending a document without text
   DOCUMENT_ONLY_MESSAGE: "Let's chat about this document.",
+  // Placeholder messages for empty chat input
+  INPUT_PLACEHOLDERS: [
+    "What's on your mind?",
+    'Ask me anything...',
+    'How can I help you today?',
+    "Go ahead, I won't tell anyone...",
+    'Your secrets are safe with me...',
+  ],
 } as const
