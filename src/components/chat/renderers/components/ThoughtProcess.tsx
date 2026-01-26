@@ -355,6 +355,16 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                     {children}
                   </code>
                 ),
+              a: ({ children, href }: any) => (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline hover:text-blue-600"
+                >
+                  {children}
+                </a>
+              ),
             }}
           >
             {sanitizedThoughts}

@@ -20,6 +20,28 @@ import type {
   WebSearchState,
 } from '../types'
 
+/**
+ * Process citation markers (e.g. 【1】) into markdown links.
+ * Called once at stream end to store processed content.
+ */
+function processCitationMarkers(
+  content: string,
+  sources: WebSearchSource[],
+): string {
+  if (sources.length === 0) return content
+
+  return content.replace(/【(\d+)[^】]*】/g, (match, num) => {
+    const index = parseInt(num, 10) - 1
+    const source = sources[index]
+    if (!source) return match
+    const encodedUrl = source.url
+      .replace(/\(/g, '%28')
+      .replace(/\)/g, '%29')
+      .replace(/\|/g, '%7C')
+    return `[cite](#cite-${num}~${encodedUrl})`
+  })
+}
+
 export interface StreamingContext {
   updatedChat: Chat
   updatedMessages: Message[]
@@ -124,6 +146,18 @@ export async function processStreamingResponse(
       }
     }
 
+    // Process citations for display during streaming
+    const getMessageWithCitations = (): Message => {
+      const msg = assistantMessage as Message
+      if (msg.content && collectedSources.length > 0) {
+        return {
+          ...msg,
+          content: processCitationMarkers(msg.content, collectedSources),
+        }
+      }
+      return msg
+    }
+
     const scheduleStreamingUpdate = () => {
       if (rafId !== null) return
       rafId =
@@ -133,7 +167,7 @@ export async function processStreamingResponse(
               rafId = null
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
-                const messageToSave = assistantMessage as Message
+                const messageToSave = getMessageWithCitations()
                 const newMessages = [...ctx.updatedMessages, messageToSave]
 
                 ctx.updateChatWithHistoryCheck(
@@ -150,7 +184,7 @@ export async function processStreamingResponse(
           : setTimeout(() => {
               if (isSameChat()) {
                 const chatId = ctx.currentChatIdRef.current
-                const messageToSave = assistantMessage as Message
+                const messageToSave = getMessageWithCitations()
                 const newMessages = [...ctx.updatedMessages, messageToSave]
 
                 ctx.updateChatWithHistoryCheck(
@@ -360,10 +394,8 @@ export async function processStreamingResponse(
               ) {
                 const { title, url, content, published_date } =
                   annotation.url_citation
-                if (
-                  url &&
-                  !collectedSources.some((source) => source.url === url)
-                ) {
+                if (url) {
+                  // Add to collectedSources without deduplication to preserve citation index mapping
                   collectedSources.push({
                     title: title || url,
                     url,
@@ -419,24 +451,6 @@ export async function processStreamingResponse(
             json.choices?.[0]?.delta?.reasoning_content ||
             ''
           let content = json.choices?.[0]?.delta?.content || ''
-          // Replace citation markers with special citation links (only when we have sources)
-          if (collectedSources.length > 0) {
-            // OpenAI-style citations: 【1】 or 【1†L1-L15】
-            // Replace with markdown link using #cite-N fragment to identify as citation
-            content = content.replace(
-              /【(\d+)[^】]*】/g,
-              (_: string, num: string) => {
-                const index = parseInt(num, 10) - 1
-                const source = collectedSources[index]
-                if (!source) return ''
-                // Encode parentheses in URL to prevent breaking markdown link syntax
-                const encodedUrl = source.url
-                  .replace(/\(/g, '%28')
-                  .replace(/\)/g, '%29')
-                return `[](#cite-${num}|${encodedUrl})`
-              },
-            )
-          }
 
           if (
             hasReasoningContent &&
@@ -713,6 +727,17 @@ export async function processStreamingResponse(
           })
           continue
         }
+      }
+    }
+
+    // Process citation markers into links before returning
+    if (assistantMessage?.content && collectedSources.length > 0) {
+      assistantMessage = {
+        ...assistantMessage,
+        content: processCitationMarkers(
+          assistantMessage.content,
+          collectedSources,
+        ),
       }
     }
   } finally {

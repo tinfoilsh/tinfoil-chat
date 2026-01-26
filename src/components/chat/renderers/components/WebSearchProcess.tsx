@@ -1,6 +1,6 @@
 import type { WebSearchState } from '@/components/chat/types'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useCallback, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 
 const BOUNCE_DELAYS = ['0ms', '150ms', '300ms', '450ms', '600ms']
 
@@ -118,8 +118,20 @@ export const WebSearchProcess = memo(function WebSearchProcess({
   const isSearching = webSearch.status === 'searching'
   const isFailed = webSearch.status === 'failed'
   const isBlocked = webSearch.status === 'blocked'
-  const hasSources = webSearch.sources && webSearch.sources.length > 0
-  const sourcesToShow = webSearch.sources?.slice(0, 5) ?? []
+
+  // Deduplicate sources by URL for display
+  const uniqueSources = useMemo(() => {
+    if (!webSearch.sources) return []
+    const seen = new Set<string>()
+    return webSearch.sources.filter((source) => {
+      if (seen.has(source.url)) return false
+      seen.add(source.url)
+      return true
+    })
+  }, [webSearch.sources])
+
+  const hasSources = uniqueSources.length > 0
+  const sourcesToShow = uniqueSources.slice(0, 5)
 
   // Track which favicons have loaded/errored (by index)
   const [loadedFavicons, setLoadedFavicons] = useState<Set<number>>(new Set())
@@ -256,7 +268,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         >
           <div className="px-4 py-3">
             <div className="flex flex-col gap-3">
-              {webSearch.sources!.map((source, index) => (
+              {uniqueSources.map((source, index) => (
                 <a
                   key={`${source.url}-${index}`}
                   href={sanitizeUrl(source.url)}
