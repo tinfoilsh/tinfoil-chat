@@ -8,7 +8,6 @@ import { TypingAnimation } from '@/components/chat/typing-animation'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
-import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { toast } from '@/hooks/use-toast'
 import type { Fact } from '@/types/memory'
@@ -681,8 +680,6 @@ export function ProjectSidebar({
 
         {/* Main sidebar content */}
         <div className="relative flex h-full flex-col overflow-hidden">
-          <TextureGrid />
-
           {/* Project header with exit button and editable title */}
           <div className="relative z-10 flex-none p-3">
             <button
