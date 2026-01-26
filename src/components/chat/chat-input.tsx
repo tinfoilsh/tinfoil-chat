@@ -652,6 +652,13 @@ export function ChatInput({
                   }
                 }
               } else if (e.key === 'Enter' && !e.shiftKey) {
+                // On mobile, Enter should insert a newline, not submit
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(
+                  navigator.userAgent,
+                )
+                if (isMobile) {
+                  return
+                }
                 e.preventDefault()
                 const hasDocuments =
                   processedDocuments &&
