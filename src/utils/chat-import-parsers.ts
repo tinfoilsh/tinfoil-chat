@@ -86,8 +86,10 @@ export function parseChatGPTConversations(
       let currentId: string | undefined = nodeId
       let thoughts: string | undefined
       let thinkingDuration: number | undefined
+      const visited = new Set<string>()
 
-      while (currentId) {
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId)
         const node: (typeof nodeMap)[string] | undefined = nodeMap[currentId]
         if (!node) break
 
