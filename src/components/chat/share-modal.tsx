@@ -1,3 +1,4 @@
+import { TextureGrid } from '@/components/texture-grid'
 import { useToast } from '@/hooks/use-toast'
 import { uploadSharedChat } from '@/services/share-api'
 import type { ShareableChatData } from '@/utils/compression'
@@ -238,7 +239,7 @@ export function ShareModal({
 
       {/* Modal */}
       <div
-        className="relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col rounded-xl border border-border-subtle bg-surface-card shadow-xl"
+        className="relative z-10 flex h-[80vh] w-[90vw] max-w-4xl flex-col rounded-xl border border-border-subtle bg-surface-sidebar shadow-xl"
         style={{
           maxWidth: `min(896px, calc(90vw - ${leftOffset + rightOffset}px))`,
         }}
@@ -257,113 +258,118 @@ export function ShareModal({
         </div>
 
         {/* Content */}
-        <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-hidden p-6">
-          {/* Shareable Link Access Card */}
-          <div className="flex-none">
-            <Card className="overflow-hidden border-border-subtle">
-              <CardContent className="p-0">
-                <div className="flex items-start gap-4 p-4">
-                  <div className="mt-1 rounded-full bg-surface-chat p-2 text-content-secondary">
-                    {isShareEnabled ? (
-                      <GlobeAltIcon className="h-5 w-5" />
-                    ) : (
-                      <LockClosedIcon className="h-5 w-5" />
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-4">
-                    <div className="space-y-1">
-                      <h3 className="text-sm font-medium text-content-primary">
-                        {isShareEnabled ? 'Shareable link access' : 'Private'}
-                      </h3>
-                      <p className="text-sm text-content-secondary">
-                        {isShareEnabled
-                          ? 'Anyone with the link can view'
-                          : 'Only you have access'}
-                      </p>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden p-6">
+          <TextureGrid />
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col space-y-4">
+            {/* Shareable Link Access Card */}
+            <div className="flex-none">
+              <Card className="overflow-hidden border-border-subtle bg-surface-sidebar">
+                <CardContent className="p-0">
+                  <div className="flex items-start gap-4 p-4">
+                    <div className="mt-1 rounded-full bg-surface-chat p-2 text-content-secondary">
+                      {isShareEnabled ? (
+                        <GlobeAltIcon className="h-5 w-5" />
+                      ) : (
+                        <LockClosedIcon className="h-5 w-5" />
+                      )}
                     </div>
-
-                    <label className="group flex cursor-pointer items-center gap-3">
-                      <div className="relative flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={isShareEnabled}
-                          onChange={(e) => setIsShareEnabled(e.target.checked)}
-                          className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-border-subtle bg-surface-chat transition-all checked:border-brand-accent-dark checked:bg-brand-accent-dark"
-                        />
-                        <CheckIcon className="pointer-events-none absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" />
+                    <div className="flex-1 space-y-4">
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-medium text-content-primary">
+                          {isShareEnabled ? 'Shareable link access' : 'Private'}
+                        </h3>
+                        <p className="text-sm text-content-secondary">
+                          {isShareEnabled
+                            ? 'Anyone with the link can view'
+                            : 'Only you have access'}
+                        </p>
                       </div>
-                      <span className="text-sm font-medium text-content-primary">
-                        Make this conversation shareable with anyone who has the
-                        link
-                      </span>
-                    </label>
 
-                    {isShareEnabled && (
-                      <div className="flex justify-start pt-2">
-                        <button
-                          onClick={handleShareLink}
-                          disabled={isUploading || !chatId}
-                          className="flex items-center justify-center gap-2 rounded-lg bg-brand-accent-dark px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-accent-dark/90 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isLinkCopied ? (
-                            <>
-                              <CheckIcon className="h-4 w-4" />
-                              Link Copied!
-                            </>
-                          ) : isUploading ? (
-                            <>
-                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <LinkIcon className="h-4 w-4" />
-                              Create share link
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
+                      <label className="group flex cursor-pointer items-center gap-3">
+                        <div className="relative flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={isShareEnabled}
+                            onChange={(e) =>
+                              setIsShareEnabled(e.target.checked)
+                            }
+                            className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-border-subtle bg-surface-chat transition-all checked:border-brand-accent-dark checked:bg-brand-accent-dark"
+                          />
+                          <CheckIcon className="pointer-events-none absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" />
+                        </div>
+                        <span className="text-sm font-medium text-content-primary">
+                          Make this conversation shareable with anyone who has
+                          the link
+                        </span>
+                      </label>
+
+                      {isShareEnabled && (
+                        <div className="flex justify-start pt-2">
+                          <button
+                            onClick={handleShareLink}
+                            disabled={isUploading || !chatId}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-brand-accent-dark px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-accent-dark/90 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isLinkCopied ? (
+                              <>
+                                <CheckIcon className="h-4 w-4" />
+                                Link Copied!
+                              </>
+                            ) : isUploading ? (
+                              <>
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                Uploading...
+                              </>
+                            ) : (
+                              <>
+                                <LinkIcon className="h-4 w-4" />
+                                Create share link
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Raw Markdown Card */}
+            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-border-subtle bg-surface-sidebar">
+              <div className="flex flex-none items-center justify-between border-b border-border-subtle/50 p-4">
+                <h3 className="text-sm font-medium text-content-primary">
+                  Raw Markdown
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+                  >
+                    {isCopied ? (
+                      <>
+                        <CheckIcon className="h-3 w-3" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <DocumentDuplicateIcon className="h-3 w-3" />
+                        Copy to Clipboard
+                      </>
+                    )}
+                  </button>
                 </div>
-              </CardContent>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col p-4">
+                <pre
+                  ref={contentRef}
+                  className="flex-1 overflow-auto whitespace-pre-wrap font-mono text-[13px] text-content-primary"
+                >
+                  {markdown}
+                </pre>
+              </div>
             </Card>
           </div>
-
-          {/* Raw Markdown Card */}
-          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-border-subtle bg-surface-chat/30">
-            <div className="flex flex-none items-center justify-between border-b border-border-subtle/50 p-4">
-              <h3 className="text-sm font-medium text-content-primary">
-                Raw Markdown
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCopy}
-                  className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-                >
-                  {isCopied ? (
-                    <>
-                      <CheckIcon className="h-3 w-3" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <DocumentDuplicateIcon className="h-3 w-3" />
-                      Copy to Clipboard
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col bg-surface-card p-4">
-              <pre
-                ref={contentRef}
-                className="flex-1 overflow-auto whitespace-pre-wrap font-mono text-[13px] text-content-primary"
-              >
-                {markdown}
-              </pre>
-            </div>
-          </Card>
         </div>
 
         {/* Footer */}
