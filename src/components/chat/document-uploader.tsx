@@ -122,23 +122,31 @@ export const useDocumentUploader = (
         return
       }
 
-      // For image files, we need to handle both OCR and base64 encoding
-      const isImage = isImageFile(file)
-      let imageData: { base64: string; mimeType: string } | undefined
-
-      if (isImage && selectedModelDetails?.multimodal) {
-        try {
-          imageData = await scaleAndEncodeImage(file, {
-            maxWidth: 500,
-            maxHeight: 500,
-            quality: 0.9,
-          })
-        } catch (error) {
-          // If scaling fails, skip image data
-          logError('Image scaling failed', error, {
-            component: 'DocumentUploader',
-            metadata: { fileName: file.name },
-          })
+      // For image files, encode for multimodal models (don't send to Docling)
+      if (isImageFile(file)) {
+        if (selectedModelDetails?.multimodal) {
+          try {
+            const imageData = await scaleAndEncodeImage(file, {
+              maxWidth: 500,
+              maxHeight: 500,
+              quality: 0.9,
+            })
+            onSuccess('', documentId, imageData)
+            return
+          } catch (error) {
+            logError('Image scaling failed', error, {
+              component: 'DocumentUploader',
+              metadata: { fileName: file.name },
+            })
+            onError(new Error('Failed to process image'), documentId)
+            return
+          }
+        } else {
+          onError(
+            new Error('Image upload requires a model with vision capabilities'),
+            documentId,
+          )
+          return
         }
       }
 
@@ -159,7 +167,8 @@ export const useDocumentUploader = (
       formData.append('include_images', 'false')
       formData.append('do_picture_classification', 'false')
       formData.append('do_picture_description', 'false')
-      formData.append('image_export_mode', 'placeholder') // Use placeholder instead of skip for images
+      formData.append('image_export_mode', 'placeholder')
+      formData.append('do_ocr', 'false')
 
       const { endpoint, modelName } = await getDoclingModel()
 
@@ -175,7 +184,7 @@ export const useDocumentUploader = (
 
       // Handle 204 No Content response
       if (response.status === 204) {
-        onSuccess('NO TEXT CONTENT', documentId, imageData)
+        onSuccess('NO TEXT CONTENT', documentId)
         return
       }
 
@@ -202,9 +211,9 @@ export const useDocumentUploader = (
         (await response.json()) as DocumentProcessingResult
 
       if (processingResult.document && processingResult.document.md_content) {
-        onSuccess(processingResult.document.md_content, documentId, imageData)
+        onSuccess(processingResult.document.md_content, documentId)
       } else {
-        onSuccess('NO TEXT CONTENT', documentId, imageData)
+        onSuccess('NO TEXT CONTENT', documentId)
       }
     } catch (error) {
       logError('Document processing failed', error, {
