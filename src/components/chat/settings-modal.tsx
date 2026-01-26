@@ -1,4 +1,3 @@
-import type { Chat, Message } from '@/components/chat/types'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
@@ -7,6 +6,11 @@ import { authTokenManager } from '@/services/auth'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { TINFOIL_COLORS } from '@/theme/colors'
+import {
+  parseChatGPTConversations,
+  parseClaudeConversations,
+  parseClaudeProjects,
+} from '@/utils/chat-import-parsers'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
@@ -818,237 +822,10 @@ export function SettingsModal({
     return `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
   }
 
-  const parseChatGPTConversations = (
-    data: Array<{
-      title: string
-      create_time: number
-      update_time: number
-      mapping: Record<
-        string,
-        {
-          id: string
-          message?: {
-            author: { role: string }
-            content: {
-              content_type: string
-              parts?: (string | object)[]
-              // For thoughts content type
-              thoughts?: Array<{ content?: string; summary?: string }>
-            }
-            create_time?: number
-            metadata?: {
-              finished_duration_sec?: number
-            }
-          }
-          parent?: string
-          children?: string[]
-        }
-      >
-    }>,
-  ): Chat[] => {
-    const chats: Chat[] = []
-
-    for (const conversation of data) {
-      const messages: Message[] = []
-
-      // Find the root node and traverse the tree
-      const nodeMap = conversation.mapping
-      const nodeIds = Object.keys(nodeMap)
-
-      // Helper to look up parent chain for thoughts/reasoning
-      const findThoughtsInParentChain = (
-        nodeId: string,
-      ): { thoughts?: string; thinkingDuration?: number } => {
-        let currentId: string | undefined = nodeId
-        let thoughts: string | undefined
-        let thinkingDuration: number | undefined
-
-        while (currentId) {
-          const node: (typeof nodeMap)[string] | undefined = nodeMap[currentId]
-          if (!node) break
-
-          const msg = node.message
-          if (msg) {
-            const contentType = msg.content.content_type
-
-            if (contentType === 'thoughts' && msg.content.thoughts) {
-              // Extract thinking content from thoughts array
-              const thoughtTexts = msg.content.thoughts
-                .map((t) => t.content || t.summary || '')
-                .filter(Boolean)
-              if (thoughtTexts.length > 0) {
-                thoughts = thoughtTexts.join('\n\n')
-              }
-            } else if (contentType === 'reasoning_recap') {
-              // Get duration from metadata
-              if (msg.metadata?.finished_duration_sec) {
-                thinkingDuration = msg.metadata.finished_duration_sec
-              }
-            }
-          }
-
-          currentId = node.parent || undefined
-        }
-
-        return { thoughts, thinkingDuration }
-      }
-
-      // Find messages by traversing parent-child relationships
-      const visitedNodes = new Set<string>()
-      const processNode = (nodeId: string) => {
-        if (visitedNodes.has(nodeId)) return
-        visitedNodes.add(nodeId)
-
-        const node: (typeof nodeMap)[string] | undefined = nodeMap[nodeId]
-        if (!node) return
-
-        const msg = node.message
-        if (
-          msg &&
-          (msg.author.role === 'user' || msg.author.role === 'assistant') &&
-          (msg.content.content_type === 'text' ||
-            msg.content.content_type === 'multimodal_text') &&
-          msg.content.parts &&
-          msg.content.parts.length > 0
-        ) {
-          // Filter to only string parts (multimodal_text can have image objects)
-          const textParts = msg.content.parts.filter(
-            (p): p is string => typeof p === 'string',
-          )
-          const content = textParts.join('\n').trim()
-          if (content) {
-            const message: Message = {
-              role: msg.author.role as 'user' | 'assistant',
-              content,
-              timestamp: msg.create_time
-                ? new Date(msg.create_time * 1000)
-                : new Date(conversation.create_time * 1000),
-            }
-
-            // For assistant messages, check parent chain for thoughts/reasoning
-            if (msg.author.role === 'assistant') {
-              const { thoughts, thinkingDuration } =
-                findThoughtsInParentChain(nodeId)
-              if (thoughts) {
-                message.thoughts = thoughts
-              }
-              if (thinkingDuration) {
-                message.thinkingDuration = thinkingDuration
-              }
-            }
-
-            messages.push(message)
-          }
-        }
-
-        // Process children
-        if (node.children) {
-          for (const childId of node.children) {
-            processNode(childId)
-          }
-        }
-      }
-
-      // Start from root nodes (nodes without parents or with null parent)
-      for (const nodeId of nodeIds) {
-        const node = nodeMap[nodeId]
-        if (!node.parent || node.parent === 'client-created-root') {
-          processNode(nodeId)
-        }
-      }
-
-      if (messages.length > 0) {
-        chats.push({
-          id: generateChatId(),
-          title: conversation.title || 'Imported Chat',
-          messages,
-          createdAt: new Date(conversation.create_time * 1000),
-          isLocalOnly: !isCloudSyncEnabled(),
-        })
-      }
-    }
-
-    return chats
-  }
-
-  const parseClaudeConversations = (
-    data: Array<{
-      uuid: string
-      name: string
-      created_at: string
-      updated_at: string
-      chat_messages: Array<{
-        uuid: string
-        text: string
-        sender: 'human' | 'assistant'
-        created_at: string
-        content?: Array<{
-          type: string
-          thinking?: string
-          start_timestamp?: string
-          stop_timestamp?: string
-        }>
-      }>
-    }>,
-  ): Chat[] => {
-    const chats: Chat[] = []
-
-    for (const conversation of data) {
-      const messages: Message[] = []
-
-      for (const msg of conversation.chat_messages || []) {
-        if (msg.text && msg.text.trim()) {
-          const message: Message = {
-            role: msg.sender === 'human' ? 'user' : 'assistant',
-            content: msg.text.trim(),
-            timestamp: new Date(msg.created_at),
-          }
-
-          // Extract thinking from content array for assistant messages
-          if (msg.sender === 'assistant' && msg.content) {
-            const thinkingBlocks = msg.content.filter(
-              (c) => c.type === 'thinking' && c.thinking,
-            )
-
-            if (thinkingBlocks.length > 0) {
-              // Combine all thinking blocks
-              message.thoughts = thinkingBlocks
-                .map((t) => t.thinking)
-                .filter(Boolean)
-                .join('\n\n')
-
-              // Calculate total duration from first start to last stop
-              const timestamps = thinkingBlocks
-                .flatMap((t) => [t.start_timestamp, t.stop_timestamp])
-                .filter(Boolean)
-                .map((ts) => new Date(ts!).getTime())
-                .sort((a, b) => a - b)
-
-              if (timestamps.length >= 2) {
-                const durationMs =
-                  timestamps[timestamps.length - 1] - timestamps[0]
-                message.thinkingDuration = Math.round(durationMs / 1000)
-              }
-            }
-          }
-
-          messages.push(message)
-        }
-      }
-
-      if (messages.length > 0) {
-        chats.push({
-          id: generateChatId(),
-          title: conversation.name || 'Imported Chat',
-          messages,
-          createdAt: new Date(conversation.created_at),
-          isLocalOnly: !isCloudSyncEnabled(),
-        })
-      }
-    }
-
-    return chats
-  }
+  const getParseOptions = () => ({
+    generateChatId,
+    isCloudSyncEnabled: isCloudSyncEnabled(),
+  })
 
   const handleImportChatGPT = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -1068,7 +845,7 @@ export function SettingsModal({
         throw new Error('Invalid ChatGPT export format')
       }
 
-      const chats = parseChatGPTConversations(data)
+      const chats = parseChatGPTConversations(data, getParseOptions())
       setImportProgress({ current: 0, total: chats.length, type: 'chats' })
 
       let imported = 0
@@ -1140,7 +917,7 @@ export function SettingsModal({
         throw new Error('Invalid Claude export format')
       }
 
-      const chats = parseClaudeConversations(data)
+      const chats = parseClaudeConversations(data, getParseOptions())
       setImportProgress({ current: 0, total: chats.length, type: 'chats' })
 
       let imported = 0
@@ -1222,7 +999,12 @@ export function SettingsModal({
         throw new Error('Invalid Claude projects export format')
       }
 
-      setImportProgress({ current: 0, total: data.length, type: 'projects' })
+      const parsedProjects = parseClaudeProjects(data)
+      setImportProgress({
+        current: 0,
+        total: parsedProjects.length,
+        type: 'projects',
+      })
 
       let imported = 0
       const errors: string[] = []
@@ -1232,33 +1014,27 @@ export function SettingsModal({
         '@/services/cloud/project-storage'
       )
 
-      for (let i = 0; i < data.length; i++) {
-        const project = data[i]
+      for (let i = 0; i < parsedProjects.length; i++) {
+        const project = parsedProjects[i]
         try {
-          // Create the project
           const createdProject = await projectStorage.createProject({
-            name: project.name || 'Imported Project',
-            description: project.description || '',
-            systemInstructions: project.prompt_template || '',
+            name: project.name,
+            description: project.description,
+            systemInstructions: project.systemInstructions,
           })
 
-          // Upload any documents
-          if (project.docs && Array.isArray(project.docs)) {
-            for (const doc of project.docs) {
-              if (doc.content && doc.filename) {
-                try {
-                  await projectStorage.uploadDocument(
-                    createdProject.id,
-                    doc.filename,
-                    'text/markdown',
-                    doc.content,
-                  )
-                } catch {
-                  errors.push(
-                    `Failed to import document "${doc.filename}" for project "${project.name}"`,
-                  )
-                }
-              }
+          for (const doc of project.docs) {
+            try {
+              await projectStorage.uploadDocument(
+                createdProject.id,
+                doc.filename,
+                'text/markdown',
+                doc.content,
+              )
+            } catch {
+              errors.push(
+                `Failed to import document "${doc.filename}" for project "${project.name}"`,
+              )
             }
           }
 
@@ -1268,7 +1044,7 @@ export function SettingsModal({
         }
         setImportProgress({
           current: i + 1,
-          total: data.length,
+          total: parsedProjects.length,
           type: 'projects',
         })
       }
