@@ -3,7 +3,6 @@ import { Toaster } from '@/components/ui/toaster'
 import '@/styles/globals.css'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
-import { SpeedInsights } from '@vercel/speed-insights/next'
 import type { AppProps } from 'next/app'
 import { Inter } from 'next/font/google'
 import localFont from 'next/font/local'
@@ -125,7 +124,6 @@ export default function App({ Component, pageProps }: AppProps) {
       <div
         className={`${inter.variable} ${aeonikFono.variable} ${aeonik.variable} ${openDyslexic.variable}`}
       >
-        <SpeedInsights />
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
           <Component {...pageProps} />
