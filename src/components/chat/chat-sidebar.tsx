@@ -589,6 +589,8 @@ export function ChatSidebar({
 
   // Track if we just loaded more chats via pagination
   const justLoadedMoreRef = useRef(false)
+  // Track if we're waiting for newly loaded chats to render (prevents scroll jump)
+  const [pendingChatsRender, setPendingChatsRender] = useState(false)
 
   // Reset pagination when new chats are added (but not when loading more via pagination)
   useEffect(() => {
@@ -602,6 +604,7 @@ export function ChatSidebar({
       if (justLoadedMoreRef.current) {
         // This was from pagination, don't reset
         justLoadedMoreRef.current = false
+        setPendingChatsRender(false)
       } else {
         resetPagination()
           .then((result) => {
@@ -650,11 +653,13 @@ export function ChatSidebar({
       const result = await loadMorePage()
       const savedCount = result?.saved ?? 0
       justLoadedMoreRef.current = savedCount > 0
-      if (savedCount > 0 && onChatsUpdated) {
-        onChatsUpdated()
+      if (savedCount > 0) {
+        setPendingChatsRender(true)
+        onChatsUpdated?.()
       }
     } catch (error) {
       justLoadedMoreRef.current = false
+      setPendingChatsRender(false)
       logError('Failed to load more chats', error, {
         component: 'ChatSidebar',
         action: 'loadMoreChats',
@@ -1403,8 +1408,8 @@ export function ChatSidebar({
                     <>
                       {/* Sentinel element for intersection observer */}
                       <div ref={loadMoreSentinelRef} className="h-1" />
-                      {/* Shimmer placeholder while loading */}
-                      {isLoadingMore && (
+                      {/* Shimmer placeholder while loading or waiting for chats to render */}
+                      {(isLoadingMore || pendingChatsRender) && (
                         <div className="space-y-1 px-2">
                           {[...Array(3)].map((_, i) => (
                             <div
