@@ -3,6 +3,7 @@
 import { ChatList, type ChatItemData } from '@/components/chat/chat-list'
 import { formatRelativeTime } from '@/components/chat/chat-list-utils'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
+import { useDrag } from '@/components/chat/drag-context'
 import { TypingAnimation } from '@/components/chat/typing-animation'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
@@ -49,6 +50,7 @@ interface ProjectSidebarProps {
   isLoading?: boolean
   isDarkMode: boolean
   onExitProject: () => void
+  onExitProjectWhileDragging?: () => void
   onNewChat: () => void
   onSelectChat: (chatId: string) => void
   currentChatId?: string
@@ -83,6 +85,7 @@ export function ProjectSidebar({
   isLoading,
   isDarkMode,
   onExitProject,
+  onExitProjectWhileDragging,
   onNewChat,
   onSelectChat,
   currentChatId,
@@ -95,6 +98,7 @@ export function ProjectSidebar({
   onRemoveChatFromProject,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
+  const { setDraggingChat, clearDragState } = useDrag()
   const {
     projectDocuments,
     uploadDocument,
@@ -147,6 +151,8 @@ export function ProjectSidebar({
   const skipNextAnimationRef = useRef(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const exitHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isExitButtonDragHover, setIsExitButtonDragHover] = useState(false)
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -582,11 +588,43 @@ export function ProjectSidebar({
           <div className="relative z-10 flex-none p-3">
             <button
               onClick={onExitProject}
+              onDragEnter={(e) => {
+                if (e.dataTransfer.types.includes('application/x-chat-id')) {
+                  e.preventDefault()
+                  setIsExitButtonDragHover(true)
+                  exitHoverTimerRef.current = setTimeout(() => {
+                    onExitProjectWhileDragging?.()
+                  }, 400)
+                }
+              }}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('application/x-chat-id')) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                }
+              }}
+              onDragLeave={() => {
+                setIsExitButtonDragHover(false)
+                if (exitHoverTimerRef.current) {
+                  clearTimeout(exitHoverTimerRef.current)
+                  exitHoverTimerRef.current = null
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsExitButtonDragHover(false)
+                if (exitHoverTimerRef.current) {
+                  clearTimeout(exitHoverTimerRef.current)
+                  exitHoverTimerRef.current = null
+                }
+              }}
               className={cn(
                 'flex w-full items-center gap-2 rounded-lg p-2 text-sm transition-colors',
-                isDarkMode
-                  ? 'text-content-secondary hover:bg-surface-chat'
-                  : 'text-content-secondary hover:bg-surface-sidebar',
+                isExitButtonDragHover
+                  ? 'border border-emerald-400 bg-emerald-400/10'
+                  : isDarkMode
+                    ? 'text-content-secondary hover:bg-surface-chat'
+                    : 'text-content-secondary hover:bg-surface-sidebar',
               )}
             >
               <ArrowLeftIcon className="h-4 w-4" />
@@ -1090,6 +1128,10 @@ export function ProjectSidebar({
               }}
               onUpdateTitle={updateChatTitle}
               onDeleteChat={handleDeleteChat}
+              onDragStart={(chatId) =>
+                setDraggingChat(chatId, project?.id ?? null)
+              }
+              onDragEnd={() => clearDragState()}
             />
           </div>
 

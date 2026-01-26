@@ -26,6 +26,7 @@ import { PiFolder, PiMicrophone, PiSparkle, PiSpinner } from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
+import { useDrag } from './drag-context'
 
 import { useProject } from '@/components/project/project-context'
 import { TextureGrid } from '@/components/texture-grid'
@@ -380,14 +381,18 @@ export function ChatSidebar({
   const { isSignedIn } = useAuth()
   const { user } = useUser()
 
-  const [draggingChatId, setDraggingChatId] = useState<string | null>(null)
-  const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(
-    null,
-  )
-  const [isDropTargetChatHistory, setIsDropTargetChatHistory] = useState(false)
-  const [dropTargetTab, setDropTargetTab] = useState<'cloud' | 'local' | null>(
-    null,
-  )
+  const {
+    draggingChatId,
+    draggingChatFromProjectId,
+    dropTargetProjectId,
+    dropTargetTab,
+    isDropTargetChatHistory,
+    setDraggingChat,
+    setDropTargetProject,
+    setDropTargetTab,
+    setDropTargetChatHistory,
+    clearDragState,
+  } = useDrag()
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -1063,7 +1068,7 @@ export function ChatSidebar({
                 if (chatId && onRemoveChatFromProject) {
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
-                  setIsDropTargetChatHistory(true)
+                  setDropTargetChatHistory(true)
                 }
               }}
               onDragEnter={(e) => {
@@ -1072,11 +1077,11 @@ export function ChatSidebar({
                 )
                 if (chatId && onRemoveChatFromProject) {
                   e.preventDefault()
-                  setIsDropTargetChatHistory(true)
+                  setDropTargetChatHistory(true)
                 }
               }}
               onDragLeave={() => {
-                setIsDropTargetChatHistory(false)
+                setDropTargetChatHistory(false)
               }}
               onDrop={async (e) => {
                 e.preventDefault()
@@ -1084,7 +1089,7 @@ export function ChatSidebar({
                 if (chatId && onRemoveChatFromProject) {
                   await onRemoveChatFromProject(chatId)
                 }
-                setIsDropTargetChatHistory(false)
+                clearDragState()
               }}
               className={cn(
                 'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
@@ -1171,10 +1176,18 @@ export function ChatSidebar({
                         const chatId = e.dataTransfer.getData(
                           'application/x-chat-id',
                         )
-                        if (chatId && onConvertChatToCloud) {
-                          await onConvertChatToCloud(chatId)
+                        if (chatId) {
+                          if (
+                            draggingChatFromProjectId &&
+                            onRemoveChatFromProject
+                          ) {
+                            await onRemoveChatFromProject(chatId)
+                          }
+                          if (onConvertChatToCloud) {
+                            await onConvertChatToCloud(chatId)
+                          }
                         }
-                        setDropTargetTab(null)
+                        clearDragState()
                       }}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
@@ -1226,10 +1239,18 @@ export function ChatSidebar({
                         const chatId = e.dataTransfer.getData(
                           'application/x-chat-id',
                         )
-                        if (chatId && onConvertChatToLocal) {
-                          await onConvertChatToLocal(chatId)
+                        if (chatId) {
+                          if (
+                            draggingChatFromProjectId &&
+                            onRemoveChatFromProject
+                          ) {
+                            await onRemoveChatFromProject(chatId)
+                          }
+                          if (onConvertChatToLocal) {
+                            await onConvertChatToLocal(chatId)
+                          }
                         }
-                        setDropTargetTab(null)
+                        clearDragState()
                       }}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
@@ -1323,10 +1344,9 @@ export function ChatSidebar({
                   onUpdateTitle={updateChatTitle}
                   onDeleteChat={deleteChat}
                   onEncryptionKeyClick={onEncryptionKeyClick}
-                  onDragStart={setDraggingChatId}
+                  onDragStart={(chatId) => setDraggingChat(chatId, null)}
                   onDragEnd={() => {
-                    setDraggingChatId(null)
-                    setDropTargetProjectId(null)
+                    clearDragState()
                   }}
                   emptyState={
                     activeTab === 'local' ? (
@@ -1548,7 +1568,7 @@ export function ChatSidebar({
                                 ) {
                                   e.preventDefault()
                                   e.dataTransfer.dropEffect = 'move'
-                                  setDropTargetProjectId(project.id)
+                                  setDropTargetProject(project.id)
                                 }
                               }}
                               onDragEnter={(e) => {
@@ -1557,12 +1577,12 @@ export function ChatSidebar({
                                   !project.decryptionFailed
                                 ) {
                                   e.preventDefault()
-                                  setDropTargetProjectId(project.id)
+                                  setDropTargetProject(project.id)
                                 }
                               }}
                               onDragLeave={() => {
                                 if (dropTargetProjectId === project.id) {
-                                  setDropTargetProjectId(null)
+                                  setDropTargetProject(null)
                                 }
                               }}
                               onDrop={async (e) => {
@@ -1577,8 +1597,7 @@ export function ChatSidebar({
                                 ) {
                                   await onMoveChatToProject(chatId, project.id)
                                 }
-                                setDraggingChatId(null)
-                                setDropTargetProjectId(null)
+                                clearDragState()
                               }}
                               disabled={project.decryptionFailed}
                               className={cn(
