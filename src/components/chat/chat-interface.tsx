@@ -9,11 +9,9 @@ import { useToast } from '@/hooks/use-toast'
 import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
-  Bars3Icon,
   ChatBubbleLeftRightIcon,
-  FolderIcon,
-  PlusIcon,
 } from '@heroicons/react/24/outline'
+import { GoSidebarCollapse } from 'react-icons/go'
 import { HiOutlineShieldExclamation } from 'react-icons/hi2'
 import { IoShareOutline, IoShieldCheckmarkOutline } from 'react-icons/io5'
 import { PiSpinner } from 'react-icons/pi'
@@ -1671,110 +1669,28 @@ export function ChatInterface({
         }}
       />
 
-      {/* Sidebar toggle buttons - visible when left sidebar is closed, hidden when open */}
-      {!isSidebarOpen &&
-        !(
-          windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
-          (isVerifierSidebarOpen || isSettingsModalOpen)
-        ) &&
-        (isSignedIn && isPremium ? (
-          <div className="fixed left-4 top-4 z-50 flex flex-row gap-2 md:flex-col">
-            {/* New chat button - first on desktop, last on mobile */}
-            <div className="group relative order-last md:order-first">
-              <button
-                className={cn(
-                  'flex items-center justify-center gap-2 rounded-lg border border-border-subtle p-2.5 transition-all duration-200',
-                  'bg-surface-chat-background text-content-secondary',
-                  currentChat?.messages?.length === 0
-                    ? 'cursor-not-allowed text-content-muted opacity-50'
-                    : 'hover:bg-surface-chat hover:text-content-primary',
-                )}
-                onClick={() => createNewChat()}
-                aria-label="Create new chat"
-                disabled={currentChat?.messages?.length === 0}
-              >
-                <PlusIcon className="h-5 w-5" />
-              </button>
-              <span
-                className={cn(
-                  'pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle px-2 py-1 text-xs opacity-0 transition-opacity',
-                  currentChat?.messages?.length === 0
-                    ? 'opacity-0'
-                    : 'group-hover:opacity-100',
-                  'bg-surface-chat-background text-content-primary shadow-sm',
-                )}
-              >
-                New chat{' '}
-                <span className="ml-1.5 text-content-muted">
-                  {shiftKey}
-                  {modKey}O
-                </span>
-              </span>
-            </div>
-            {/* Chats button */}
-            <div className="group relative">
-              <button
-                className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
-                onClick={() => {
-                  sessionStorage.setItem('sidebarExpandSection', 'chats')
-                  if (isProjectMode) {
-                    handleExitProject()
-                  }
-                  setIsSidebarOpen(true)
-                  if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-                    setIsVerifierSidebarOpen(false)
-                    setIsSettingsModalOpen(false)
-                  }
-                }}
-              >
-                <ChatBubbleLeftRightIcon className="h-5 w-5" />
-              </button>
-              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                Chats{' '}
-                <span className="ml-1.5 text-content-muted">{modKey}.</span>
-              </span>
-            </div>
-            {/* Projects button */}
-            <div className="group relative">
-              <button
-                className="flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
-                onClick={() => {
-                  sessionStorage.setItem('sidebarExpandSection', 'projects')
-                  setIsSidebarOpen(true)
-                  if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-                    setIsVerifierSidebarOpen(false)
-                    setIsSettingsModalOpen(false)
-                  }
-                }}
-              >
-                <FolderIcon className="h-5 w-5" />
-              </button>
-              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                Projects
-              </span>
-            </div>
-          </div>
-        ) : (
+      {/* Mobile sidebar toggle - only visible on mobile when sidebar is closed */}
+      {windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
+        !isSidebarOpen &&
+        !(isVerifierSidebarOpen || isSettingsModalOpen) && (
           <div className="group relative">
             <button
               className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
               onClick={() => {
                 setIsSidebarOpen(true)
-                if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-                  setIsVerifierSidebarOpen(false)
-                  setIsSettingsModalOpen(false)
-                }
+                setIsVerifierSidebarOpen(false)
+                setIsSettingsModalOpen(false)
               }}
               aria-label="Open sidebar"
             >
-              <Bars3Icon className="h-5 w-5" />
+              <GoSidebarCollapse className="h-5 w-5" />
             </button>
             <span className="pointer-events-none fixed left-4 top-16 z-50 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
               Open sidebar{' '}
               <span className="ml-1.5 text-content-muted">{modKey}.</span>
             </span>
           </div>
-        ))}
+        )}
 
       {/* Right side toggle buttons */}
       {!(
@@ -2006,8 +1922,10 @@ export function ChatInterface({
               : '0',
           bottom: 0,
           left:
-            isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
+            windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
+              ? isSidebarOpen
+                ? `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
+                : `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`
               : '0',
           top: 0,
         }}
