@@ -1102,7 +1102,9 @@ export function ChatSidebar({
               className={cn(
                 'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                 isDropTargetChatHistory
-                  ? 'border border-emerald-400 bg-emerald-400/10'
+                  ? isDarkMode
+                    ? 'border border-white/30 bg-white/10'
+                    : 'border border-gray-400 bg-gray-200/30'
                   : isDarkMode
                     ? 'text-content-secondary hover:bg-surface-chat'
                     : 'text-content-secondary hover:bg-white',
@@ -1201,7 +1203,9 @@ export function ChatSidebar({
                       className={cn(
                         'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
                         dropTargetTab === 'cloud'
-                          ? 'border-emerald-400 bg-emerald-400/10'
+                          ? isDarkMode
+                            ? 'border-white/30 bg-white/10'
+                            : 'border-gray-400 bg-gray-200/30'
                           : activeTab === 'cloud'
                             ? isDarkMode
                               ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
@@ -1257,7 +1261,9 @@ export function ChatSidebar({
                       className={cn(
                         'flex flex-1 items-center justify-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-all',
                         dropTargetTab === 'local'
-                          ? 'border-emerald-400 bg-emerald-400/10'
+                          ? isDarkMode
+                            ? 'border-white/30 bg-white/10'
+                            : 'border-gray-400 bg-gray-200/30'
                           : activeTab === 'local'
                             ? isDarkMode
                               ? 'border-brand-accent-light/60 bg-surface-sidebar text-white shadow-sm'
@@ -1372,7 +1378,10 @@ export function ChatSidebar({
               className={cn(
                 'relative z-10 flex-1 overflow-y-auto',
                 isChatListScrolled && 'border-t border-border-subtle',
-                isDropTargetChatList && 'bg-emerald-400/5',
+                isDropTargetChatList &&
+                  (isDarkMode
+                    ? 'border border-white/30 bg-white/10'
+                    : 'border border-gray-400 bg-gray-200/30'),
               )}
             >
               {isClient && (
@@ -1700,7 +1709,9 @@ export function ChatSidebar({
                               className={cn(
                                 'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
                                 dropTargetProjectId === project.id
-                                  ? 'border-emerald-400 bg-emerald-400/10'
+                                  ? isDarkMode
+                                    ? 'border-white/30 bg-white/10'
+                                    : 'border-gray-400 bg-gray-200/30'
                                   : 'border-transparent hover:border-border-subtle',
                                 project.decryptionFailed
                                   ? 'cursor-default'

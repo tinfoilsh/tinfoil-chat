@@ -624,7 +624,9 @@ export function ProjectSidebar({
               className={cn(
                 'flex w-full items-center gap-2 rounded-lg p-2 text-sm transition-colors',
                 isExitButtonDragHover
-                  ? 'border border-emerald-400 bg-emerald-400/10'
+                  ? isDarkMode
+                    ? 'border border-white/30 bg-white/10'
+                    : 'border border-gray-400 bg-gray-200/30'
                   : isDarkMode
                     ? 'text-content-secondary hover:bg-surface-chat'
                     : 'text-content-secondary hover:bg-surface-sidebar',
