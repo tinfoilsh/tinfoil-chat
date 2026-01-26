@@ -347,7 +347,7 @@ const DefaultMessageComponent = ({
 
           {/* Action bar for user messages */}
           {isUser && !isEditing && (
-            <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4">
               {formattedDate && (
                 <div className="group/date relative">
                   <span className="px-2 py-1 text-sm text-content-muted">
