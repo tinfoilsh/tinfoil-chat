@@ -2055,12 +2055,12 @@ export function ChatInterface({
       >
         <div className="relative flex h-full flex-col bg-surface-chat-background">
           {/* Project Mode Banner */}
-          {isProjectMode && activeProject && (
+          {(isProjectMode && activeProject) || loadingProject ? (
             <ProjectModeBanner
-              projectName={activeProject.name}
+              projectName={activeProject?.name || loadingProject?.name || ''}
               isDarkMode={isDarkMode}
             />
-          )}
+          ) : null}
 
           {/* Decryption Progress Banner */}
           {decryptionProgress && decryptionProgress.isDecrypting && (
