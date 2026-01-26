@@ -2036,7 +2036,7 @@ export function ChatInterface({
               >
                 <form
                   onSubmit={handleSubmit}
-                  className="mx-auto max-w-3xl px-3 md:px-8"
+                  className="mx-auto max-w-3xl px-1 md:px-8"
                 >
                   <ChatInput
                     input={input}

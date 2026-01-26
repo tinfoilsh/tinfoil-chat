@@ -10,14 +10,19 @@ import {
   isWebMAudioSupported,
 } from '@/utils/preprocessing'
 import {
-  DocumentIcon,
   FolderIcon,
   MicrophoneIcon,
   StopIcon,
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PiGlobe, PiGlobeX, PiSpinner } from 'react-icons/pi'
+import {
+  PiGlobe,
+  PiGlobeX,
+  PiPaperclipLight,
+  PiPlusLight,
+  PiSpinner,
+} from 'react-icons/pi'
 import { MacFileIcon } from './components/mac-file-icon'
 import { CONSTANTS } from './constants'
 import type { ProcessedDocument } from './renderers/types'
@@ -79,6 +84,9 @@ export function ChatInput({
 
   // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // --- Mobile attachment menu state ---
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   // Random placeholder - use first one initially to avoid SSR hydration mismatch,
   // then randomize after mount
@@ -417,7 +425,7 @@ export function ChatInput({
         )}
         <div
           className={cn(
-            'rounded-4xl border border-border-subtle bg-surface-chat px-6 py-4 shadow-md transition-colors',
+            'rounded-3xl border border-border-subtle bg-surface-chat px-3 py-3 shadow-md transition-colors md:rounded-4xl md:px-6 md:py-4',
             isDragOver && 'ring-2 ring-emerald-400/60',
           )}
           onDragOver={handleDragOver}
@@ -441,7 +449,7 @@ export function ChatInput({
           {processedDocuments && processedDocuments.length > 0 && (
             <div
               ref={documentsScrollRef}
-              className="-mx-6 mb-3 flex gap-2 overflow-x-auto px-6 pt-2"
+              className="-mx-3 mb-3 flex gap-2 overflow-x-auto px-3 pt-2 md:-mx-6 md:px-6"
             >
               {processedDocuments.map((doc) => (
                 <div
@@ -752,16 +760,76 @@ export function ChatInput({
             }}
             placeholder={hasMessages ? 'Reply to Tin...' : placeholder}
             rows={1}
-            className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
+            className="min-h-[36px] w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none md:min-h-0"
             style={{
-              minHeight: inputMinHeight,
               maxHeight: '240px',
             }}
           />
 
           <div className="mt-3 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <div className="group relative">
+              {/* Mobile: + button with dropdown menu */}
+              <div className="relative md:hidden">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  aria-label="Attachment options"
+                  aria-expanded={isMobileMenuOpen}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                >
+                  <PiPlusLight className="h-5 w-5" />
+                </button>
+                {isMobileMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    />
+                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[180px] rounded-xl border border-border-subtle bg-surface-chat py-1.5 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerFileInput()
+                          setIsMobileMenuOpen(false)
+                        }}
+                        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
+                      >
+                        <PiPaperclipLight className="h-5 w-5 text-content-secondary" />
+                        Add files or photos
+                      </button>
+                      {onWebSearchToggle && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onWebSearchToggle()
+                            setIsMobileMenuOpen(false)
+                          }}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
+                        >
+                          <PiGlobe className="h-5 w-5 text-content-secondary" />
+                          <span className="flex-1">Web search</span>
+                          {webSearchEnabled && (
+                            <svg
+                              className="h-4 w-4 text-brand-accent-light"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Desktop: Original buttons */}
+              <div className="group relative hidden md:block">
                 <button
                   id="upload-button"
                   type="button"
@@ -769,14 +837,14 @@ export function ChatInput({
                   aria-label="Upload document"
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
                 >
-                  <DocumentIcon className="h-5 w-5" />
+                  <PiPaperclipLight className="h-5 w-5" />
                 </button>
                 <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                   Upload document
                 </span>
               </div>
               {onWebSearchToggle && (
-                <div className="group relative">
+                <div className="group relative hidden md:block">
                   <button
                     id="web-search-button"
                     type="button"
@@ -801,7 +869,7 @@ export function ChatInput({
                       <PiGlobeX className="h-5 w-5" />
                     )}
                     {webSearchEnabled && (
-                      <span className="hidden text-xs font-medium leading-none md:inline">
+                      <span className="text-xs font-medium leading-none">
                         Web Search
                       </span>
                     )}
@@ -859,7 +927,7 @@ export function ChatInput({
                     handleSubmit(e)
                   }
                 }}
-                className="group flex h-6 w-6 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50"
+                className="group flex h-10 w-10 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-6 md:w-6"
                 disabled={
                   loadingState !== 'loading' &&
                   loadingState !== 'retrying' &&
@@ -867,9 +935,9 @@ export function ChatInput({
                 }
               >
                 {loadingState === 'loading' || loadingState === 'retrying' ? (
-                  <div className="h-2.5 w-2.5 bg-button-send-foreground/80 transition-colors" />
+                  <div className="h-3.5 w-3.5 bg-button-send-foreground/80 transition-colors md:h-2.5 md:w-2.5" />
                 ) : (
-                  <FiArrowUp className="h-4 w-4 text-button-send-foreground transition-colors" />
+                  <FiArrowUp className="h-6 w-6 text-button-send-foreground transition-colors md:h-4 md:w-4" />
                 )}
               </button>
             </div>
