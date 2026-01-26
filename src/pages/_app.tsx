@@ -76,6 +76,33 @@ const aeonik = localFont({
   display: 'swap',
 })
 
+const openDyslexic = localFont({
+  src: [
+    {
+      path: '../fonts/OpenDyslexic-Regular.otf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../fonts/OpenDyslexic-Italic.otf',
+      weight: '400',
+      style: 'italic',
+    },
+    {
+      path: '../fonts/OpenDyslexic-Bold.otf',
+      weight: '700',
+      style: 'normal',
+    },
+    {
+      path: '../fonts/OpenDyslexic-BoldItalic.otf',
+      weight: '700',
+      style: 'italic',
+    },
+  ],
+  variable: '--font-opendyslexic',
+  display: 'swap',
+})
+
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <>
@@ -91,10 +118,11 @@ export default function App({ Component, pageProps }: AppProps) {
           --font-sans: ${inter.style.fontFamily};
           --font-aeonik-fono: ${aeonikFono.style.fontFamily};
           --font-aeonik: ${aeonik.style.fontFamily};
+          --font-opendyslexic: ${openDyslexic.style.fontFamily};
         }
       `}</style>
       <div
-        className={`${inter.variable} ${aeonikFono.variable} ${aeonik.variable}`}
+        className={`${inter.variable} ${aeonikFono.variable} ${aeonik.variable} ${openDyslexic.variable}`}
       >
         <SpeedInsights />
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
