@@ -10,6 +10,7 @@ import React, {
   useState,
 } from 'react'
 import { LoadingDots } from '../loading-dots'
+import { CHAT_FONT_CLASSES, useChatFont } from './hooks/use-chat-font'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { PrintableChat } from './PrintableChat'
 import { getRendererRegistry } from './renderers/client'
@@ -292,6 +293,7 @@ export function ChatMessages({
     Record<string, boolean>
   >({})
   const maxMessages = useMaxMessages()
+  const chatFont = useChatFont()
   const [showSpacer, setShowSpacer] = useState(false)
   const prevMessageCountRef = React.useRef(messages.length)
   const prevShowScrollButtonRef = React.useRef(showScrollButton)
@@ -425,7 +427,9 @@ export function ChatMessages({
   const showLoadingPlaceholder = isWaitingForResponse && !hasAssistantThinking
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-3xl px-4 pb-6 pt-24">
+    <div
+      className={`mx-auto w-full min-w-0 max-w-3xl px-4 pb-6 pt-24 ${CHAT_FONT_CLASSES[chatFont]}`}
+    >
       {/* Archived Messages - only shown if there are more than the max prompt messages */}
       {archivedMessages.length > 0 && (
         <>

@@ -188,6 +188,11 @@ export function SettingsModal({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
+  // Chat font setting
+  const [chatFont, setChatFont] = useState<
+    'default' | 'mono' | 'system' | 'dyslexic'
+  >('default')
+
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     initialTab ?? 'general',
@@ -365,6 +370,17 @@ export function SettingsModal({
     // Load PII check setting (defaults to true if not set)
     const savedPiiCheck = localStorage.getItem('piiCheckEnabled')
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
+
+    // Load chat font setting
+    const savedChatFont = localStorage.getItem('chatFont')
+    if (
+      savedChatFont === 'default' ||
+      savedChatFont === 'mono' ||
+      savedChatFont === 'system' ||
+      savedChatFont === 'dyslexic'
+    ) {
+      setChatFont(savedChatFont)
+    }
   }, [defaultSystemPrompt])
 
   // Initial load settings from localStorage
@@ -573,6 +589,20 @@ export function SettingsModal({
 
   const handleThemeToggle = () => {
     toggleTheme()
+  }
+
+  const handleChatFontChange = (
+    font: 'default' | 'mono' | 'system' | 'dyslexic',
+  ) => {
+    setChatFont(font)
+    if (isClient) {
+      localStorage.setItem('chatFont', font)
+      window.dispatchEvent(
+        new CustomEvent('chatFontChanged', {
+          detail: font,
+        }),
+      )
+    }
   }
 
   // Helper to strip <system> tags for display
@@ -1602,6 +1632,72 @@ ${encryptionKey.replace('key_', '')}
                           <MoonIcon className="h-5 w-5" />
                         )}
                       </button>
+                    </div>
+
+                    {/* Chat Font */}
+                    <div
+                      className={cn(
+                        'rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="mb-3">
+                        <div className="font-aeonik text-sm font-medium text-content-primary">
+                          Chat font
+                        </div>
+                        <div className="font-aeonik-fono text-xs text-content-muted">
+                          Choose the font for chat messages
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {(
+                          [
+                            {
+                              id: 'default',
+                              label: 'Default',
+                              fontClass: 'font-aeonik',
+                            },
+                            {
+                              id: 'mono',
+                              label: 'Mono',
+                              fontClass: 'font-aeonik-fono',
+                            },
+                            {
+                              id: 'system',
+                              label: 'System',
+                              fontClass: 'font-sans',
+                            },
+                            {
+                              id: 'dyslexic',
+                              label: 'Dyslexic friendly',
+                              fontClass: 'font-opendyslexic',
+                            },
+                          ] as const
+                        ).map((font) => (
+                          <button
+                            key={font.id}
+                            onClick={() => handleChatFontChange(font.id)}
+                            className={cn(
+                              'flex flex-col items-center gap-1 rounded-lg border p-2 transition-all',
+                              chatFont === font.id
+                                ? 'border-brand-accent-light bg-brand-accent-light/10'
+                                : 'border-border-subtle hover:border-border-strong',
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                'flex h-8 w-full items-center justify-center text-lg text-content-primary',
+                                font.fontClass,
+                              )}
+                            >
+                              Aa
+                            </div>
+                            <span className="text-[10px] text-content-secondary">
+                              {font.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </>
