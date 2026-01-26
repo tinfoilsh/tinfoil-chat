@@ -1,8 +1,10 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
+import { useProjects } from '@/hooks/use-projects'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
+import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { TINFOIL_COLORS } from '@/theme/colors'
@@ -15,7 +17,7 @@ import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
-import { logInfo } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -38,9 +40,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BsKey, BsQrCode } from 'react-icons/bs'
 import { GiParachute } from 'react-icons/gi'
+import { GoPackageDependents } from 'react-icons/go'
 import { PiSignIn } from 'react-icons/pi'
 import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
+import type { Chat } from './types'
 
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
 
@@ -122,6 +126,7 @@ export type SettingsTab =
   | 'personalization'
   | 'encryption'
   | 'import'
+  | 'export'
   | 'account'
 
 type SettingsModalProps = {
@@ -138,6 +143,7 @@ type SettingsModalProps = {
   encryptionKey: string | null
   onKeyChange: (key: string) => Promise<void>
   initialTab?: SettingsTab
+  chats?: Chat[]
 }
 
 export function SettingsModal({
@@ -154,10 +160,16 @@ export function SettingsModal({
   encryptionKey,
   onKeyChange,
   initialTab,
+  chats = [],
 }: SettingsModalProps) {
   const { getToken } = useAuth()
   const { user } = useUser()
   const { toast } = useToast()
+
+  // Projects for export functionality
+  const { projects, loading: projectsLoading } = useProjects({
+    autoLoad: isSignedIn && isPremium,
+  })
   const [maxMessages, setMaxMessages] = useState<number>(
     CONSTANTS.MAX_PROMPT_MESSAGES,
   )
@@ -240,6 +252,12 @@ export function SettingsModal({
   const chatGptFileInputRef = useRef<HTMLInputElement>(null)
   const claudeConversationsFileInputRef = useRef<HTMLInputElement>(null)
   const claudeProjectsFileInputRef = useRef<HTMLInputElement>(null)
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportType, setExportType] = useState<'chats' | 'projects' | null>(
+    null,
+  )
 
   // Available personality traits
   const availableTraits = [
@@ -1080,6 +1098,191 @@ export function SettingsModal({
     }
   }
 
+  // Export chats as conversations.json
+  const downloadChats = async (chatsToExport: Chat[]) => {
+    if (chatsToExport.length === 0) {
+      toast({
+        title: 'No chats to export',
+        description: 'You have no chats to export yet.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsExporting(true)
+    setExportType('chats')
+
+    try {
+      // Convert chats to Claude-compatible format
+      const conversations = chatsToExport.map((chat) => ({
+        uuid: chat.id,
+        name: chat.title,
+        created_at: new Date(chat.createdAt).toISOString(),
+        updated_at: new Date(chat.createdAt).toISOString(),
+        chat_messages: chat.messages.map((message, index) => ({
+          uuid: `${chat.id}_msg_${index}`,
+          text: message.content,
+          sender: message.role === 'user' ? 'human' : 'assistant',
+          created_at: new Date(message.timestamp).toISOString(),
+          ...(message.thoughts
+            ? {
+                content: [
+                  {
+                    type: 'thinking',
+                    thinking: message.thoughts,
+                  },
+                ],
+              }
+            : {}),
+        })),
+      }))
+
+      // Create and download JSON file
+      const jsonContent = JSON.stringify(conversations, null, 2)
+      const blob = new Blob([jsonContent], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'conversations.json'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: 'Export complete',
+        description: `Exported ${chatsToExport.length} conversation${chatsToExport.length !== 1 ? 's' : ''} successfully.`,
+      })
+    } catch (error) {
+      logError('Failed to create conversations export', error, {
+        component: 'SettingsModal',
+        action: 'downloadChats',
+      })
+      toast({
+        title: 'Export failed',
+        description: 'Failed to download conversations. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExporting(false)
+      setExportType(null)
+    }
+  }
+
+  // Export projects as projects.json
+  const downloadProjects = async (
+    projectsToExport: Array<{
+      id: string
+      name: string
+      description: string
+      systemInstructions: string
+      memory: Array<{ fact: string }>
+      createdAt: string
+      updatedAt: string
+    }>,
+  ) => {
+    if (projectsToExport.length === 0) {
+      toast({
+        title: 'No projects to export',
+        description: 'You have no projects to export yet.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsExporting(true)
+    setExportType('projects')
+
+    try {
+      // Fetch documents for each project and convert to Claude-compatible format
+      const projectsWithDocs = await Promise.all(
+        projectsToExport.map(async (project) => {
+          const docs: Array<{
+            uuid: string
+            filename: string
+            content: string
+            created_at: string
+          }> = []
+
+          // Try to fetch documents for this project
+          try {
+            const docsResponse = await projectStorage.listDocuments(
+              project.id,
+              {
+                includeContent: true,
+              },
+            )
+
+            if (docsResponse.documents && docsResponse.documents.length > 0) {
+              await Promise.all(
+                docsResponse.documents.map(async (doc) => {
+                  try {
+                    const fullDoc = await projectStorage.getDocument(
+                      project.id,
+                      doc.id,
+                    )
+                    if (fullDoc && fullDoc.content) {
+                      docs.push({
+                        uuid: doc.id,
+                        filename: fullDoc.filename,
+                        content: fullDoc.content,
+                        created_at: new Date().toISOString(),
+                      })
+                    }
+                  } catch {
+                    // Skip documents that fail to fetch
+                  }
+                }),
+              )
+            }
+          } catch {
+            // Skip documents if we can't fetch them
+          }
+
+          return {
+            uuid: project.id,
+            name: project.name,
+            description: project.description || undefined,
+            prompt_template: project.systemInstructions || undefined,
+            created_at: new Date(project.createdAt).toISOString(),
+            updated_at: new Date(project.updatedAt).toISOString(),
+            docs: docs.length > 0 ? docs : undefined,
+          }
+        }),
+      )
+
+      // Create and download JSON file
+      const jsonContent = JSON.stringify(projectsWithDocs, null, 2)
+      const blob = new Blob([jsonContent], { type: 'application/json' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'projects.json'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: 'Export complete',
+        description: `Exported ${projectsToExport.length} project${projectsToExport.length !== 1 ? 's' : ''} successfully.`,
+      })
+    } catch (error) {
+      logError('Failed to create projects export', error, {
+        component: 'SettingsModal',
+        action: 'downloadProjects',
+      })
+      toast({
+        title: 'Export failed',
+        description: 'Failed to download projects. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExporting(false)
+      setExportType(null)
+    }
+  }
+
   // Cleanup copy timeout on unmount
   useEffect(() => {
     return () => {
@@ -1267,8 +1470,13 @@ ${encryptionKey.replace('key_', '')}
     { id: 'encryption' as const, label: 'Encryption', icon: BsKey },
     {
       id: 'import' as const,
-      label: 'Import Conversations',
+      label: 'Import',
       icon: GiParachute,
+    },
+    {
+      id: 'export' as const,
+      label: 'Export',
+      icon: GoPackageDependents,
     },
     { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
   ]
@@ -2619,6 +2827,112 @@ ${encryptionKey.replace('key_', '')}
                           )}
                         </button>
                       </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Export Tab */}
+              {activeTab === 'export' && (
+                <>
+                  {/* Export Chats */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Export Chats
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="font-aeonik-fono text-xs text-content-muted">
+                        Export all your conversations as a JSON file. This
+                        format can be re-imported into Tinfoil Chat.
+                      </div>
+                      <button
+                        onClick={() => downloadChats(chats)}
+                        disabled={isExporting || chats.length === 0}
+                        className={cn(
+                          'flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                          isExporting || chats.length === 0
+                            ? 'cursor-not-allowed opacity-50'
+                            : 'hover:bg-surface-chat',
+                          isDarkMode
+                            ? 'bg-surface-chat text-content-primary'
+                            : 'bg-surface-sidebar text-content-primary',
+                        )}
+                      >
+                        {isExporting && exportType === 'chats' ? (
+                          <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <GoPackageDependents className="h-4 w-4" />
+                        )}
+                        {isExporting && exportType === 'chats'
+                          ? 'Exporting...'
+                          : `Export ${chats.length} Chat${chats.length !== 1 ? 's' : ''}`}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Export Projects */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Export Projects
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="font-aeonik-fono text-xs text-content-muted">
+                        Download all your projects including their settings,
+                        system instructions, memory, and documents.
+                      </div>
+                      {!isPremium ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-brand-accent-light/30 bg-brand-accent-light/10 px-3 py-2">
+                          <span className="text-xs text-content-muted">
+                            Projects are a premium feature.
+                          </span>
+                          <span className="rounded-full bg-brand-accent-light/20 px-1.5 py-0.5 text-[10px] font-medium text-brand-accent-light">
+                            Pro
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => downloadProjects(projects)}
+                          disabled={
+                            isExporting ||
+                            projects.length === 0 ||
+                            projectsLoading
+                          }
+                          className={cn(
+                            'flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isExporting ||
+                              projects.length === 0 ||
+                              projectsLoading
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          {isExporting && exportType === 'projects' ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : projectsLoading ? (
+                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <GoPackageDependents className="h-4 w-4" />
+                          )}
+                          {isExporting && exportType === 'projects'
+                            ? 'Exporting...'
+                            : projectsLoading
+                              ? 'Loading projects...'
+                              : `Export ${projects.length} Project${projects.length !== 1 ? 's' : ''}`}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </>
