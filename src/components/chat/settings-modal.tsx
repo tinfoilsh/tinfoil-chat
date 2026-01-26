@@ -799,8 +799,16 @@ export function SettingsModal({
           id: string
           message?: {
             author: { role: string }
-            content: { content_type: string; parts?: (string | object)[] }
+            content: {
+              content_type: string
+              parts?: (string | object)[]
+              // For thoughts content type
+              thoughts?: Array<{ content?: string; summary?: string }>
+            }
             create_time?: number
+            metadata?: {
+              finished_duration_sec?: number
+            }
           }
           parent?: string
           children?: string[]
@@ -817,13 +825,51 @@ export function SettingsModal({
       const nodeMap = conversation.mapping
       const nodeIds = Object.keys(nodeMap)
 
+      // Helper to look up parent chain for thoughts/reasoning
+      const findThoughtsInParentChain = (
+        nodeId: string,
+      ): { thoughts?: string; thinkingDuration?: number } => {
+        let currentId: string | undefined = nodeId
+        let thoughts: string | undefined
+        let thinkingDuration: number | undefined
+
+        while (currentId) {
+          const node: (typeof nodeMap)[string] | undefined = nodeMap[currentId]
+          if (!node) break
+
+          const msg = node.message
+          if (msg) {
+            const contentType = msg.content.content_type
+
+            if (contentType === 'thoughts' && msg.content.thoughts) {
+              // Extract thinking content from thoughts array
+              const thoughtTexts = msg.content.thoughts
+                .map((t) => t.content || t.summary || '')
+                .filter(Boolean)
+              if (thoughtTexts.length > 0) {
+                thoughts = thoughtTexts.join('\n\n')
+              }
+            } else if (contentType === 'reasoning_recap') {
+              // Get duration from metadata
+              if (msg.metadata?.finished_duration_sec) {
+                thinkingDuration = msg.metadata.finished_duration_sec
+              }
+            }
+          }
+
+          currentId = node.parent || undefined
+        }
+
+        return { thoughts, thinkingDuration }
+      }
+
       // Find messages by traversing parent-child relationships
       const visitedNodes = new Set<string>()
       const processNode = (nodeId: string) => {
         if (visitedNodes.has(nodeId)) return
         visitedNodes.add(nodeId)
 
-        const node = nodeMap[nodeId]
+        const node: (typeof nodeMap)[string] | undefined = nodeMap[nodeId]
         if (!node) return
 
         const msg = node.message
@@ -841,13 +887,27 @@ export function SettingsModal({
           )
           const content = textParts.join('\n').trim()
           if (content) {
-            messages.push({
+            const message: Message = {
               role: msg.author.role as 'user' | 'assistant',
               content,
               timestamp: msg.create_time
                 ? new Date(msg.create_time * 1000)
                 : new Date(conversation.create_time * 1000),
-            })
+            }
+
+            // For assistant messages, check parent chain for thoughts/reasoning
+            if (msg.author.role === 'assistant') {
+              const { thoughts, thinkingDuration } =
+                findThoughtsInParentChain(nodeId)
+              if (thoughts) {
+                message.thoughts = thoughts
+              }
+              if (thinkingDuration) {
+                message.thinkingDuration = thinkingDuration
+              }
+            }
+
+            messages.push(message)
           }
         }
 
@@ -892,6 +952,12 @@ export function SettingsModal({
         text: string
         sender: 'human' | 'assistant'
         created_at: string
+        content?: Array<{
+          type: string
+          thinking?: string
+          start_timestamp?: string
+          stop_timestamp?: string
+        }>
       }>
     }>,
   ): Chat[] => {
@@ -902,11 +968,41 @@ export function SettingsModal({
 
       for (const msg of conversation.chat_messages || []) {
         if (msg.text && msg.text.trim()) {
-          messages.push({
+          const message: Message = {
             role: msg.sender === 'human' ? 'user' : 'assistant',
             content: msg.text.trim(),
             timestamp: new Date(msg.created_at),
-          })
+          }
+
+          // Extract thinking from content array for assistant messages
+          if (msg.sender === 'assistant' && msg.content) {
+            const thinkingBlocks = msg.content.filter(
+              (c) => c.type === 'thinking' && c.thinking,
+            )
+
+            if (thinkingBlocks.length > 0) {
+              // Combine all thinking blocks
+              message.thoughts = thinkingBlocks
+                .map((t) => t.thinking)
+                .filter(Boolean)
+                .join('\n\n')
+
+              // Calculate total duration from first start to last stop
+              const timestamps = thinkingBlocks
+                .flatMap((t) => [t.start_timestamp, t.stop_timestamp])
+                .filter(Boolean)
+                .map((ts) => new Date(ts!).getTime())
+                .sort((a, b) => a - b)
+
+              if (timestamps.length >= 2) {
+                const durationMs =
+                  timestamps[timestamps.length - 1] - timestamps[0]
+                message.thinkingDuration = Math.round(durationMs / 1000)
+              }
+            }
+          }
+
+          messages.push(message)
         }
       }
 
