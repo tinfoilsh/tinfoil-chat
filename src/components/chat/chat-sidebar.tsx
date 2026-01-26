@@ -859,6 +859,379 @@ export function ChatSidebar({
             <div className="relative z-10 border-b border-border-subtle" />
           )}
 
+          {/* Projects dropdown - show for premium users */}
+          {isSignedIn && isPremium && (
+            <div className="relative z-10 flex-none border-t border-border-subtle">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  const newExpanded = !isProjectsExpanded
+                  setIsProjectsExpanded(newExpanded)
+                  if (newExpanded && projects.length === 0) {
+                    refreshProjects()
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    const newExpanded = !isProjectsExpanded
+                    setIsProjectsExpanded(newExpanded)
+                    if (newExpanded && projects.length === 0) {
+                      refreshProjects()
+                    }
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (
+                    e.dataTransfer.types.includes('application/x-chat-id') &&
+                    cloudSyncEnabled
+                  ) {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setIsDropTargetProjectsHeader(true)
+                  }
+                }}
+                onDragEnter={(e) => {
+                  if (
+                    e.dataTransfer.types.includes('application/x-chat-id') &&
+                    cloudSyncEnabled
+                  ) {
+                    e.preventDefault()
+                    setIsDropTargetProjectsHeader(true)
+                    if (!isProjectsExpanded) {
+                      setIsProjectsExpanded(true)
+                      if (projects.length === 0) {
+                        refreshProjects()
+                      }
+                    }
+                  }
+                }}
+                onDragLeave={() => {
+                  setIsDropTargetProjectsHeader(false)
+                }}
+                onDrop={() => {
+                  setIsDropTargetProjectsHeader(false)
+                }}
+                className={cn(
+                  'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  isDropTargetProjectsHeader
+                    ? isDarkMode
+                      ? 'border border-white/30 bg-white/10'
+                      : 'border border-gray-400 bg-gray-200/30'
+                    : isProjectMode
+                      ? isDarkMode
+                        ? 'text-emerald-400'
+                        : 'text-emerald-600'
+                      : isDarkMode
+                        ? 'text-content-secondary hover:bg-surface-chat'
+                        : 'text-content-secondary hover:bg-white',
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <FolderIcon className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">
+                    {isProjectMode && activeProjectName
+                      ? activeProjectName
+                      : 'Projects'}
+                  </span>
+                </span>
+                <div className="flex items-center gap-1">
+                  {isProjectsExpanded ? (
+                    <ChevronDownIcon className="h-4 w-4" />
+                  ) : (
+                    <ChevronRightIcon className="h-4 w-4" />
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded projects list */}
+              {isProjectsExpanded && (
+                <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
+                  {/* Cloud sync disabled message */}
+                  {!cloudSyncEnabled ? (
+                    <div className="px-3 py-2">
+                      <p className="text-xs text-content-muted">
+                        Projects require cloud sync to be enabled.
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (onCloudSyncSetupClick) {
+                            onCloudSyncSetupClick()
+                          } else {
+                            setCloudSyncEnabledSetting(true)
+                            setCloudSyncEnabled(true)
+                          }
+                        }}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+                      >
+                        <CloudIcon className="h-3.5 w-3.5" />
+                        Enable Cloud Sync
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Create new project button */}
+                      {onCreateProject && (
+                        <button
+                          onClick={async () => {
+                            setIsCreatingProject(true)
+                            try {
+                              await onCreateProject()
+                              if (windowWidth < MOBILE_BREAKPOINT) {
+                                setIsOpen(false)
+                              }
+                            } finally {
+                              setIsCreatingProject(false)
+                            }
+                          }}
+                          disabled={isCreatingProject}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                            'text-content-secondary hover:text-content-primary',
+                            isDarkMode
+                              ? 'hover:bg-surface-chat'
+                              : 'hover:bg-surface-sidebar',
+                            isCreatingProject &&
+                              'cursor-not-allowed opacity-50',
+                          )}
+                        >
+                          {isCreatingProject ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-content-muted border-t-transparent" />
+                          ) : (
+                            <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                          )}
+                          <span className="truncate">
+                            {isCreatingProject ? 'Creating...' : 'New Project'}
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Projects list */}
+                      {projectsLoading && projects.length === 0 ? (
+                        <div className="flex justify-center px-3 py-2">
+                          <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
+                        </div>
+                      ) : projects.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-content-muted">
+                          No projects yet
+                        </div>
+                      ) : (
+                        <>
+                          {projects.map((project) => (
+                            <div
+                              key={project.id}
+                              role="button"
+                              tabIndex={project.decryptionFailed ? -1 : 0}
+                              onClick={async () => {
+                                if (project.decryptionFailed) return
+
+                                if (onEnterProject) {
+                                  await onEnterProject(project.id, project.name)
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (
+                                  (e.key === 'Enter' || e.key === ' ') &&
+                                  onEnterProject &&
+                                  !project.decryptionFailed
+                                ) {
+                                  e.preventDefault()
+                                  onEnterProject(project.id, project.name)
+                                }
+                              }}
+                              onDragOver={(e) => {
+                                if (
+                                  e.dataTransfer.types.includes(
+                                    'application/x-chat-id',
+                                  ) &&
+                                  !project.decryptionFailed
+                                ) {
+                                  e.preventDefault()
+                                  e.dataTransfer.dropEffect = 'move'
+                                  setDropTargetProject(project.id)
+                                }
+                              }}
+                              onDragEnter={(e) => {
+                                if (
+                                  e.dataTransfer.types.includes(
+                                    'application/x-chat-id',
+                                  ) &&
+                                  !project.decryptionFailed
+                                ) {
+                                  e.preventDefault()
+                                  setDropTargetProject(project.id)
+                                  if (projectHoverTimerRef.current) {
+                                    clearTimeout(projectHoverTimerRef.current)
+                                  }
+                                  projectHoverTimerRef.current = setTimeout(
+                                    () => {
+                                      onEnterProject?.(project.id, project.name)
+                                    },
+                                    400,
+                                  )
+                                }
+                              }}
+                              onDragLeave={(e) => {
+                                // Only clear if actually leaving the button (not just moving between children)
+                                if (
+                                  !e.currentTarget.contains(
+                                    e.relatedTarget as Node,
+                                  )
+                                ) {
+                                  if (dropTargetProjectId === project.id) {
+                                    setDropTargetProject(null)
+                                  }
+                                  if (projectHoverTimerRef.current) {
+                                    clearTimeout(projectHoverTimerRef.current)
+                                    projectHoverTimerRef.current = null
+                                  }
+                                }
+                              }}
+                              onDrop={async (e) => {
+                                e.preventDefault()
+                                if (projectHoverTimerRef.current) {
+                                  clearTimeout(projectHoverTimerRef.current)
+                                  projectHoverTimerRef.current = null
+                                }
+                                const chatId = e.dataTransfer.getData(
+                                  'application/x-chat-id',
+                                )
+                                if (
+                                  chatId &&
+                                  onMoveChatToProject &&
+                                  !project.decryptionFailed
+                                ) {
+                                  // Convert local chat to cloud first if needed
+                                  const chat = chats.find(
+                                    (c) => c.id === chatId,
+                                  )
+                                  let finalChatId = chatId
+                                  if (
+                                    chat?.isLocalOnly &&
+                                    onConvertChatToCloud
+                                  ) {
+                                    finalChatId =
+                                      await onConvertChatToCloud(chatId)
+                                  }
+                                  await onMoveChatToProject(
+                                    finalChatId,
+                                    project.id,
+                                  )
+                                }
+                                clearDragState()
+                              }}
+                              className={cn(
+                                'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                                dropTargetProjectId === project.id
+                                  ? isDarkMode
+                                    ? 'border-white/30 bg-white/10'
+                                    : 'border-gray-400 bg-gray-200/30'
+                                  : 'border-transparent hover:border-border-subtle',
+                                project.decryptionFailed
+                                  ? 'cursor-default'
+                                  : isDarkMode
+                                    ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
+                                    : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
+                              )}
+                            >
+                              {project.decryptionFailed ? (
+                                <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
+                              ) : (
+                                <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                              )}
+                              <div className="flex min-w-0 flex-1 flex-col text-left">
+                                <span
+                                  className={cn(
+                                    'truncate leading-5',
+                                    project.decryptionFailed &&
+                                      'text-orange-500',
+                                  )}
+                                >
+                                  {project.name}
+                                </span>
+                                <span
+                                  className={cn(
+                                    'text-xs',
+                                    project.decryptionFailed
+                                      ? 'text-red-500'
+                                      : 'text-content-muted',
+                                  )}
+                                >
+                                  {project.decryptionFailed
+                                    ? 'Failed to decrypt: wrong key'
+                                    : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
+                                </span>
+                              </div>
+                              {project.decryptionFailed && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    if (deletingProjectId === project.id) return
+                                    setDeletingProjectId(project.id)
+                                    try {
+                                      await deleteProject(project.id)
+                                      await refreshProjects()
+                                    } catch (error) {
+                                      toast({
+                                        title: 'Failed to delete project',
+                                        description:
+                                          error instanceof Error
+                                            ? error.message
+                                            : 'Please try again.',
+                                        variant: 'destructive',
+                                      })
+                                    } finally {
+                                      setDeletingProjectId(null)
+                                    }
+                                  }}
+                                  disabled={deletingProjectId === project.id}
+                                  className={cn(
+                                    'shrink-0 rounded p-1 transition-colors',
+                                    isDarkMode
+                                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                                    deletingProjectId === project.id &&
+                                      'opacity-50',
+                                  )}
+                                  title="Delete encrypted project"
+                                >
+                                  {deletingProjectId === project.id ? (
+                                    <PiSpinner className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <TrashIcon className="h-4 w-4" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          {/* Load more button */}
+                          {hasMoreProjects && (
+                            <button
+                              onClick={() => loadMoreProjects()}
+                              disabled={projectsLoading}
+                              className={cn(
+                                'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
+                                isDarkMode
+                                  ? 'border-border-strong text-content-muted hover:text-content-secondary'
+                                  : 'border-border-subtle text-content-muted hover:text-content-secondary',
+                                projectsLoading &&
+                                  'cursor-not-allowed opacity-50',
+                              )}
+                            >
+                              {projectsLoading ? 'Loading...' : 'Load more'}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Chats Header */}
           <div
             className={cn(
@@ -1283,379 +1656,6 @@ export function ChatSidebar({
                     </>
                   }
                 />
-              )}
-            </div>
-          )}
-
-          {/* Projects dropdown - show for premium users */}
-          {isSignedIn && isPremium && (
-            <div className="relative z-10 flex-none border-t border-border-subtle">
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  const newExpanded = !isProjectsExpanded
-                  setIsProjectsExpanded(newExpanded)
-                  if (newExpanded && projects.length === 0) {
-                    refreshProjects()
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    const newExpanded = !isProjectsExpanded
-                    setIsProjectsExpanded(newExpanded)
-                    if (newExpanded && projects.length === 0) {
-                      refreshProjects()
-                    }
-                  }
-                }}
-                onDragOver={(e) => {
-                  if (
-                    e.dataTransfer.types.includes('application/x-chat-id') &&
-                    cloudSyncEnabled
-                  ) {
-                    e.preventDefault()
-                    e.dataTransfer.dropEffect = 'move'
-                    setIsDropTargetProjectsHeader(true)
-                  }
-                }}
-                onDragEnter={(e) => {
-                  if (
-                    e.dataTransfer.types.includes('application/x-chat-id') &&
-                    cloudSyncEnabled
-                  ) {
-                    e.preventDefault()
-                    setIsDropTargetProjectsHeader(true)
-                    if (!isProjectsExpanded) {
-                      setIsProjectsExpanded(true)
-                      if (projects.length === 0) {
-                        refreshProjects()
-                      }
-                    }
-                  }
-                }}
-                onDragLeave={() => {
-                  setIsDropTargetProjectsHeader(false)
-                }}
-                onDrop={() => {
-                  setIsDropTargetProjectsHeader(false)
-                }}
-                className={cn(
-                  'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                  isDropTargetProjectsHeader
-                    ? isDarkMode
-                      ? 'border border-white/30 bg-white/10'
-                      : 'border border-gray-400 bg-gray-200/30'
-                    : isProjectMode
-                      ? isDarkMode
-                        ? 'text-emerald-400'
-                        : 'text-emerald-600'
-                      : isDarkMode
-                        ? 'text-content-secondary hover:bg-surface-chat'
-                        : 'text-content-secondary hover:bg-white',
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <FolderIcon className="h-4 w-4" />
-                  <span className="font-aeonik font-medium">
-                    {isProjectMode && activeProjectName
-                      ? activeProjectName
-                      : 'Projects'}
-                  </span>
-                </span>
-                <div className="flex items-center gap-1">
-                  {isProjectsExpanded ? (
-                    <ChevronDownIcon className="h-4 w-4" />
-                  ) : (
-                    <ChevronRightIcon className="h-4 w-4" />
-                  )}
-                </div>
-              </div>
-
-              {/* Expanded projects list */}
-              {isProjectsExpanded && (
-                <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
-                  {/* Cloud sync disabled message */}
-                  {!cloudSyncEnabled ? (
-                    <div className="px-3 py-2">
-                      <p className="text-xs text-content-muted">
-                        Projects require cloud sync to be enabled.
-                      </p>
-                      <button
-                        onClick={() => {
-                          if (onCloudSyncSetupClick) {
-                            onCloudSyncSetupClick()
-                          } else {
-                            setCloudSyncEnabledSetting(true)
-                            setCloudSyncEnabled(true)
-                          }
-                        }}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-                      >
-                        <CloudIcon className="h-3.5 w-3.5" />
-                        Enable Cloud Sync
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Create new project button */}
-                      {onCreateProject && (
-                        <button
-                          onClick={async () => {
-                            setIsCreatingProject(true)
-                            try {
-                              await onCreateProject()
-                              if (windowWidth < MOBILE_BREAKPOINT) {
-                                setIsOpen(false)
-                              }
-                            } finally {
-                              setIsCreatingProject(false)
-                            }
-                          }}
-                          disabled={isCreatingProject}
-                          className={cn(
-                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-                            'text-content-secondary hover:text-content-primary',
-                            isDarkMode
-                              ? 'hover:bg-surface-chat'
-                              : 'hover:bg-surface-sidebar',
-                            isCreatingProject &&
-                              'cursor-not-allowed opacity-50',
-                          )}
-                        >
-                          {isCreatingProject ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-content-muted border-t-transparent" />
-                          ) : (
-                            <FolderPlusIcon className="h-4 w-4 shrink-0" />
-                          )}
-                          <span className="truncate">
-                            {isCreatingProject ? 'Creating...' : 'New Project'}
-                          </span>
-                        </button>
-                      )}
-
-                      {/* Projects list */}
-                      {projectsLoading && projects.length === 0 ? (
-                        <div className="flex justify-center px-3 py-2">
-                          <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
-                        </div>
-                      ) : projects.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-content-muted">
-                          No projects yet
-                        </div>
-                      ) : (
-                        <>
-                          {projects.map((project) => (
-                            <div
-                              key={project.id}
-                              role="button"
-                              tabIndex={project.decryptionFailed ? -1 : 0}
-                              onClick={async () => {
-                                if (project.decryptionFailed) return
-
-                                if (onEnterProject) {
-                                  await onEnterProject(project.id, project.name)
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (
-                                  (e.key === 'Enter' || e.key === ' ') &&
-                                  onEnterProject &&
-                                  !project.decryptionFailed
-                                ) {
-                                  e.preventDefault()
-                                  onEnterProject(project.id, project.name)
-                                }
-                              }}
-                              onDragOver={(e) => {
-                                if (
-                                  e.dataTransfer.types.includes(
-                                    'application/x-chat-id',
-                                  ) &&
-                                  !project.decryptionFailed
-                                ) {
-                                  e.preventDefault()
-                                  e.dataTransfer.dropEffect = 'move'
-                                  setDropTargetProject(project.id)
-                                }
-                              }}
-                              onDragEnter={(e) => {
-                                if (
-                                  e.dataTransfer.types.includes(
-                                    'application/x-chat-id',
-                                  ) &&
-                                  !project.decryptionFailed
-                                ) {
-                                  e.preventDefault()
-                                  setDropTargetProject(project.id)
-                                  if (projectHoverTimerRef.current) {
-                                    clearTimeout(projectHoverTimerRef.current)
-                                  }
-                                  projectHoverTimerRef.current = setTimeout(
-                                    () => {
-                                      onEnterProject?.(project.id, project.name)
-                                    },
-                                    400,
-                                  )
-                                }
-                              }}
-                              onDragLeave={(e) => {
-                                // Only clear if actually leaving the button (not just moving between children)
-                                if (
-                                  !e.currentTarget.contains(
-                                    e.relatedTarget as Node,
-                                  )
-                                ) {
-                                  if (dropTargetProjectId === project.id) {
-                                    setDropTargetProject(null)
-                                  }
-                                  if (projectHoverTimerRef.current) {
-                                    clearTimeout(projectHoverTimerRef.current)
-                                    projectHoverTimerRef.current = null
-                                  }
-                                }
-                              }}
-                              onDrop={async (e) => {
-                                e.preventDefault()
-                                if (projectHoverTimerRef.current) {
-                                  clearTimeout(projectHoverTimerRef.current)
-                                  projectHoverTimerRef.current = null
-                                }
-                                const chatId = e.dataTransfer.getData(
-                                  'application/x-chat-id',
-                                )
-                                if (
-                                  chatId &&
-                                  onMoveChatToProject &&
-                                  !project.decryptionFailed
-                                ) {
-                                  // Convert local chat to cloud first if needed
-                                  const chat = chats.find(
-                                    (c) => c.id === chatId,
-                                  )
-                                  let finalChatId = chatId
-                                  if (
-                                    chat?.isLocalOnly &&
-                                    onConvertChatToCloud
-                                  ) {
-                                    finalChatId =
-                                      await onConvertChatToCloud(chatId)
-                                  }
-                                  await onMoveChatToProject(
-                                    finalChatId,
-                                    project.id,
-                                  )
-                                }
-                                clearDragState()
-                              }}
-                              className={cn(
-                                'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
-                                dropTargetProjectId === project.id
-                                  ? isDarkMode
-                                    ? 'border-white/30 bg-white/10'
-                                    : 'border-gray-400 bg-gray-200/30'
-                                  : 'border-transparent hover:border-border-subtle',
-                                project.decryptionFailed
-                                  ? 'cursor-default'
-                                  : isDarkMode
-                                    ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
-                                    : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
-                              )}
-                            >
-                              {project.decryptionFailed ? (
-                                <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
-                              ) : (
-                                <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
-                              )}
-                              <div className="flex min-w-0 flex-1 flex-col text-left">
-                                <span
-                                  className={cn(
-                                    'truncate leading-5',
-                                    project.decryptionFailed &&
-                                      'text-orange-500',
-                                  )}
-                                >
-                                  {project.name}
-                                </span>
-                                <span
-                                  className={cn(
-                                    'text-xs',
-                                    project.decryptionFailed
-                                      ? 'text-red-500'
-                                      : 'text-content-muted',
-                                  )}
-                                >
-                                  {project.decryptionFailed
-                                    ? 'Failed to decrypt: wrong key'
-                                    : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
-                                </span>
-                              </div>
-                              {project.decryptionFailed && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation()
-                                    if (deletingProjectId === project.id) return
-                                    setDeletingProjectId(project.id)
-                                    try {
-                                      await deleteProject(project.id)
-                                      await refreshProjects()
-                                    } catch (error) {
-                                      toast({
-                                        title: 'Failed to delete project',
-                                        description:
-                                          error instanceof Error
-                                            ? error.message
-                                            : 'Please try again.',
-                                        variant: 'destructive',
-                                      })
-                                    } finally {
-                                      setDeletingProjectId(null)
-                                    }
-                                  }}
-                                  disabled={deletingProjectId === project.id}
-                                  className={cn(
-                                    'shrink-0 rounded p-1 transition-colors',
-                                    isDarkMode
-                                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                                    deletingProjectId === project.id &&
-                                      'opacity-50',
-                                  )}
-                                  title="Delete encrypted project"
-                                >
-                                  {deletingProjectId === project.id ? (
-                                    <PiSpinner className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <TrashIcon className="h-4 w-4" />
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Load more button */}
-                          {hasMoreProjects && (
-                            <button
-                              onClick={() => loadMoreProjects()}
-                              disabled={projectsLoading}
-                              className={cn(
-                                'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
-                                isDarkMode
-                                  ? 'border-border-strong text-content-muted hover:text-content-secondary'
-                                  : 'border-border-subtle text-content-muted hover:text-content-secondary',
-                                projectsLoading &&
-                                  'cursor-not-allowed opacity-50',
-                              )}
-                            >
-                              {projectsLoading ? 'Loading...' : 'Load more'}
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
               )}
             </div>
           )}
