@@ -76,11 +76,16 @@ test.describe('Smoke Tests', () => {
     const textarea = page.locator('#chat-input')
     await expect(textarea).toBeVisible({ timeout: 10000 })
 
-    // Should have the correct placeholder
-    await expect(textarea).toHaveAttribute(
-      'placeholder',
+    // Should have a valid placeholder (randomly selected from a list)
+    const placeholder = await textarea.getAttribute('placeholder')
+    const validPlaceholders = [
       "What's on your mind?",
-    )
+      'Ask me anything...',
+      'How can I help you today?',
+      "Go ahead, I won't tell anyone...",
+      'Your secrets are safe with me...',
+    ]
+    expect(validPlaceholders).toContain(placeholder)
 
     // Should be able to type in it
     await textarea.fill('Hello, this is a test message')
