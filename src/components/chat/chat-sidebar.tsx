@@ -1376,7 +1376,17 @@ export function ChatSidebar({
                   showSyncStatus={true}
                   enableTitleAnimation={true}
                   isDraggable={
-                    isSignedIn && cloudSyncEnabled && !!onMoveChatToProject
+                    isSignedIn &&
+                    cloudSyncEnabled &&
+                    (!!onMoveChatToProject ||
+                      !!onConvertChatToCloud ||
+                      !!onConvertChatToLocal)
+                  }
+                  showMoveToProject={
+                    isSignedIn &&
+                    isPremium &&
+                    cloudSyncEnabled &&
+                    !!onMoveChatToProject
                   }
                   onSelectChat={handleChatSelect}
                   onAfterSelect={() => {
@@ -1391,6 +1401,21 @@ export function ChatSidebar({
                   onDragEnd={() => {
                     clearDragState()
                   }}
+                  projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+                  onMoveToProject={
+                    onMoveChatToProject
+                      ? async (chatId, projectId) => {
+                          // Check if this is a local chat that needs to be converted first
+                          const chat = chats.find((c) => c.id === chatId)
+                          if (chat?.isLocalOnly && onConvertChatToCloud) {
+                            await onConvertChatToCloud(chatId)
+                          }
+                          await onMoveChatToProject(chatId, projectId)
+                        }
+                      : undefined
+                  }
+                  onConvertToCloud={onConvertChatToCloud}
+                  onConvertToLocal={onConvertChatToLocal}
                   emptyState={
                     activeTab === 'local' ? (
                       <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
@@ -1597,10 +1622,9 @@ export function ChatSidebar({
                             <button
                               key={project.id}
                               onClick={async () => {
-                                if (
-                                  onEnterProject &&
-                                  !project.decryptionFailed
-                                ) {
+                                if (project.decryptionFailed) return
+
+                                if (onEnterProject) {
                                   await onEnterProject(project.id, project.name)
                                 }
                               }}
@@ -1638,6 +1662,16 @@ export function ChatSidebar({
                                   onMoveChatToProject &&
                                   !project.decryptionFailed
                                 ) {
+                                  // Convert local chat to cloud first if needed
+                                  const chat = chats.find(
+                                    (c) => c.id === chatId,
+                                  )
+                                  if (
+                                    chat?.isLocalOnly &&
+                                    onConvertChatToCloud
+                                  ) {
+                                    await onConvertChatToCloud(chatId)
+                                  }
                                   await onMoveChatToProject(chatId, project.id)
                                 }
                                 clearDragState()

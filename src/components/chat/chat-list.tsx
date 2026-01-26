@@ -7,6 +7,7 @@ import {
   ChatListItem,
   getBlankChatSelectId,
   getChatKey,
+  type ProjectOption,
 } from './chat-list-item'
 import { DeleteConfirmation } from './delete-confirmation'
 
@@ -30,6 +31,8 @@ interface ChatListProps {
   enableTitleAnimation?: boolean
   animatedDeleteConfirmation?: boolean
   isDraggable?: boolean
+  showMoveToProject?: boolean
+  projects?: ProjectOption[]
   onSelectChat: (chatId: string) => void
   onAfterSelect?: () => void
   onUpdateTitle?: (chatId: string, title: string) => void
@@ -37,6 +40,9 @@ interface ChatListProps {
   onEncryptionKeyClick?: () => void
   onDragStart?: (chatId: string) => void
   onDragEnd?: () => void
+  onMoveToProject?: (chatId: string, projectId: string) => void
+  onConvertToCloud?: (chatId: string) => void
+  onConvertToLocal?: (chatId: string) => void
   loadMoreButton?: React.ReactNode
   emptyState?: React.ReactNode
 }
@@ -53,6 +59,8 @@ export function ChatList({
   enableTitleAnimation = false,
   animatedDeleteConfirmation = true,
   isDraggable = false,
+  showMoveToProject = false,
+  projects = [],
   onSelectChat,
   onAfterSelect,
   onUpdateTitle,
@@ -60,6 +68,9 @@ export function ChatList({
   onEncryptionKeyClick,
   onDragStart,
   onDragEnd,
+  onMoveToProject,
+  onConvertToCloud,
+  onConvertToLocal,
   loadMoreButton,
   emptyState,
 }: ChatListProps) {
@@ -171,6 +182,10 @@ export function ChatList({
             isDraggable={
               isDraggable && !chat.isBlankChat && !chat.decryptionFailed
             }
+            showMoveToProject={
+              showMoveToProject && !chat.isBlankChat && !chat.decryptionFailed
+            }
+            projects={projects}
             onSelect={() => handleSelect(chat)}
             onStartEdit={() => handleStartEdit(chat)}
             onTitleChange={setEditingTitle}
@@ -179,6 +194,17 @@ export function ChatList({
             onRequestDelete={() => setDeletingChatId(chat.id)}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
+            onMoveToProject={
+              onMoveToProject
+                ? (projectId) => onMoveToProject(chat.id, projectId)
+                : undefined
+            }
+            onConvertToCloud={
+              onConvertToCloud ? () => onConvertToCloud(chat.id) : undefined
+            }
+            onConvertToLocal={
+              onConvertToLocal ? () => onConvertToLocal(chat.id) : undefined
+            }
           />
           {deletingChatId === chat.id && (
             <DeleteConfirmation
