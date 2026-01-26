@@ -91,13 +91,20 @@ export function ChatInput({
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
-        handleDocumentUpload(e.target.files[0])
+        const file = e.target.files[0]
+        if (!isPremium && isImageFile(file)) {
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+          return
+        }
+        handleDocumentUpload(file)
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
         }
       }
     },
-    [handleDocumentUpload],
+    [handleDocumentUpload, isPremium],
   )
 
   const triggerFileInput = () => {
