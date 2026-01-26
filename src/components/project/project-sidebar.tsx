@@ -20,7 +20,9 @@ import {
   Cog6ToothIcon,
   DocumentIcon,
   DocumentPlusIcon,
+  FolderIcon,
   PencilSquareIcon,
+  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -51,7 +53,7 @@ import {
   BsFiletypeXlsx,
   BsFiletypeXml,
 } from 'react-icons/bs'
-import { GoSidebarExpand } from 'react-icons/go'
+import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { PiLightbulbFilamentThin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
@@ -626,8 +628,57 @@ export function ProjectSidebar({
 
   const chatsWithBlank: ChatItemData[] = [blankChat, ...projectChats]
 
+  const isMobile = windowWidth < MOBILE_BREAKPOINT
+
   return (
     <>
+      {/* Collapsed sidebar rail - always visible on desktop when sidebar is closed */}
+      {!isMobile && !isOpen && (
+        <div
+          className={cn(
+            'fixed left-0 top-0 z-40 flex h-dvh flex-col border-r',
+            'border-border-subtle bg-surface-sidebar text-content-primary',
+          )}
+          style={{ width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px` }}
+        >
+          {/* Folder icon - shows expand icon on hover */}
+          <div className="flex h-16 flex-none items-center justify-center">
+            <button
+              onClick={() => setIsOpen(true)}
+              className="group/logo relative rounded p-2"
+              aria-label="Expand sidebar"
+            >
+              <FolderIcon className="h-6 w-6 text-content-secondary transition-opacity group-hover/logo:opacity-0" />
+              <GoSidebarCollapse className="absolute inset-0 m-auto h-5 w-5 text-content-secondary opacity-0 transition-opacity group-hover/logo:opacity-100" />
+            </button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-col items-center gap-1 px-2">
+            {/* New chat button */}
+            <div className="group relative">
+              <button
+                onClick={onNewChat}
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                )}
+                aria-label="New chat"
+              >
+                <PlusIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                New chat{' '}
+                <span className="text-content-muted">
+                  {modKey}
+                  {isMac ? '⇧' : 'Shift+'}O
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className={cn(
           'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-r',
