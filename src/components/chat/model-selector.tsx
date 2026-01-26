@@ -38,6 +38,8 @@ export function ModelSelector({
     maxHeight: string
     bottom?: string
     top?: string
+    left?: string
+    right?: string
   }>({
     maxHeight: '400px',
     ...(preferredPosition === 'below' ? { top: '100%' } : { bottom: '100%' }),
@@ -91,11 +93,35 @@ export function ModelSelector({
       const isMobile = window.innerWidth < 768
       const maxHeightCap = isMobile ? 300 : window.innerHeight * 0.7
 
+      // Calculate horizontal positioning to prevent overflow
+      const menuWidth = 280 // Fixed width from className
+      const viewportWidth = window.innerWidth
+      const buttonLeft = buttonRect.left
+      const buttonRight = buttonRect.right
+
+      let horizontalStyles: { left?: string; right?: string } = {}
+
+      if (isMobile) {
+        // On mobile, check if dropdown would overflow right edge
+        if (buttonLeft + menuWidth > viewportWidth - 10) {
+          // Anchor to right edge of button, but ensure it doesn't overflow left
+          const rightOffset = viewportWidth - buttonRight
+          const dropdownLeft = viewportWidth - rightOffset - menuWidth
+          if (dropdownLeft < 10) {
+            // Would overflow left, center it in viewport instead
+            horizontalStyles = { left: `${-buttonLeft + 10}px` }
+          } else {
+            horizontalStyles = { right: '0' }
+          }
+        }
+      }
+
       if (useAbove) {
         setDynamicStyles({
           maxHeight: `${Math.min(Math.max(0, spaceAbove), maxHeightCap)}px`,
           bottom: '100%',
           top: undefined,
+          ...horizontalStyles,
         })
       } else {
         // Position below
@@ -103,6 +129,7 @@ export function ModelSelector({
           maxHeight: `${Math.min(Math.max(0, spaceBelow), maxHeightCap)}px`,
           top: '100%',
           bottom: undefined,
+          ...horizontalStyles,
         })
       }
     }
@@ -160,6 +187,8 @@ export function ModelSelector({
         maxHeight: dynamicStyles.maxHeight,
         ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
         ...(dynamicStyles.top && { top: dynamicStyles.top }),
+        ...(dynamicStyles.left && { left: dynamicStyles.left }),
+        ...(dynamicStyles.right && { right: dynamicStyles.right }),
       }}
       onTouchStart={(e) => {
         e.stopPropagation()
