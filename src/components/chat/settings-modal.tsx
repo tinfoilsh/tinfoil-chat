@@ -182,7 +182,6 @@ export function SettingsModal({
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
   const [isKeyVisible, setIsKeyVisible] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Structured personalization fields
   const [nickname, setNickname] = useState<string>('')
@@ -1445,14 +1444,6 @@ ${encryptionKey.replace('key_', '')}
     [handleFileImport, toast],
   )
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      await handleFileImport(file)
-      e.target.value = ''
-    }
-  }
-
   if (!isOpen) return null
 
   const navItems = [
@@ -2410,37 +2401,36 @@ ${encryptionKey.replace('key_', '')}
                         className="space-y-2"
                       >
                         <div className="flex gap-2">
-                          <input
-                            type="password"
-                            value={inputKey}
-                            onChange={(e) => setInputKey(e.target.value)}
-                            placeholder="Enter key (e.g., key_abc123...)"
-                            autoComplete="off"
-                            aria-label="Encryption key input"
-                            className={cn(
-                              'flex-1 rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
-                              isDragging && 'border-blue-400',
-                            )}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !isUpdating) {
-                                handleUpdateKey()
+                          <div className="relative flex-1">
+                            <input
+                              type="password"
+                              value={inputKey}
+                              onChange={(e) => setInputKey(e.target.value)}
+                              placeholder={
+                                isDragging
+                                  ? ''
+                                  : 'Enter key (e.g., key_abc123...)'
                               }
-                            }}
-                          />
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".pem"
-                            onChange={handleFileSelect}
-                            className="hidden"
-                          />
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-colors hover:bg-surface-chat/80"
-                            title="Upload PEM file"
-                          >
-                            <ArrowUpTrayIcon className="h-5 w-5" />
-                          </button>
+                              autoComplete="off"
+                              aria-label="Encryption key input"
+                              className={cn(
+                                'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
+                                isDragging && 'ring-2 ring-blue-500',
+                              )}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !isUpdating) {
+                                  handleUpdateKey()
+                                }
+                              }}
+                            />
+                            {isDragging && (
+                              <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/10">
+                                <span className="text-sm text-blue-500">
+                                  Drop your PEM file here
+                                </span>
+                              </div>
+                            )}
+                          </div>
                           <button
                             onClick={handleUpdateKey}
                             disabled={isUpdating || !inputKey.trim()}
@@ -2455,11 +2445,6 @@ ${encryptionKey.replace('key_', '')}
                             {isUpdating ? 'Updating...' : 'Update'}
                           </button>
                         </div>
-                        {isDragging && (
-                          <p className="text-center text-sm text-brand-accent-light">
-                            Drop your PEM file here
-                          </p>
-                        )}
                       </div>
                     </div>
                   )}
