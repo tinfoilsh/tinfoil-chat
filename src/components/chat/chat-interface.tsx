@@ -1991,6 +1991,7 @@ export function ChatInterface({
           }
         }}
         initialTab={settingsInitialTab}
+        chats={chats}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
