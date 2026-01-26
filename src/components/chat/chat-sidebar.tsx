@@ -1320,20 +1320,14 @@ export function ChatSidebar({
             <div
               ref={chatListRef}
               onDragOver={(e) => {
-                if (
-                  e.dataTransfer.types.includes('application/x-chat-id') &&
-                  draggingChatId
-                ) {
+                if (e.dataTransfer.types.includes('application/x-chat-id')) {
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
                   setIsDropTargetChatList(true)
                 }
               }}
               onDragEnter={(e) => {
-                if (
-                  e.dataTransfer.types.includes('application/x-chat-id') &&
-                  draggingChatId
-                ) {
+                if (e.dataTransfer.types.includes('application/x-chat-id')) {
                   e.preventDefault()
                   setIsDropTargetChatList(true)
                 }
@@ -1647,7 +1641,9 @@ export function ChatSidebar({
                               }}
                               onDragOver={(e) => {
                                 if (
-                                  draggingChatId &&
+                                  e.dataTransfer.types.includes(
+                                    'application/x-chat-id',
+                                  ) &&
                                   !project.decryptionFailed
                                 ) {
                                   e.preventDefault()
@@ -1657,7 +1653,9 @@ export function ChatSidebar({
                               }}
                               onDragEnter={(e) => {
                                 if (
-                                  draggingChatId &&
+                                  e.dataTransfer.types.includes(
+                                    'application/x-chat-id',
+                                  ) &&
                                   !project.decryptionFailed
                                 ) {
                                   e.preventDefault()
