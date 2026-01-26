@@ -1529,12 +1529,12 @@ ${encryptionKey.replace('key_', '')}
     { id: 'encryption' as const, label: 'Encryption', icon: BsKey },
     {
       id: 'import' as const,
-      label: 'Import',
+      label: 'Import Chats',
       icon: GiParachute,
     },
     {
       id: 'export' as const,
-      label: 'Export',
+      label: 'Export Chats',
       icon: GoPackageDependents,
     },
     { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
@@ -2218,7 +2218,7 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
                           To access your chats on a new device, you&apos;ll need
-                          to enter your encryption key.
+                          to enter or scan your personal encryption key.
                         </div>
                       </div>
                     </div>
@@ -2665,7 +2665,8 @@ ${encryptionKey.replace('key_', '')}
                           2
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          Click on &quot;Export data&quot; and wait for an email
+                          Click on &quot;Export data&quot; and confirm the
+                          export.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
@@ -2680,7 +2681,7 @@ ${encryptionKey.replace('key_', '')}
                           3
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          Download and unzip the file they sent you via email
+                          Download and unzip the file you receive by email.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
@@ -2699,7 +2700,7 @@ ${encryptionKey.replace('key_', '')}
                           <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
                             conversations.json
                           </code>{' '}
-                          from the unzipped folder
+                          from the unzipped folder.
                         </div>
                       </div>
                       <input
@@ -2780,7 +2781,8 @@ ${encryptionKey.replace('key_', '')}
                           2
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          Click on &quot;Export data&quot; and wait for an email
+                          Click on &quot;Export data&quot; and confirm the
+                          export.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
@@ -2795,7 +2797,7 @@ ${encryptionKey.replace('key_', '')}
                           3
                         </div>
                         <div className="font-aeonik-fono text-sm text-content-muted">
-                          Download and unzip the file they sent you via email
+                          Download and unzip the file you receive by email.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
@@ -2818,7 +2820,7 @@ ${encryptionKey.replace('key_', '')}
                           <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
                             projects.json
                           </code>{' '}
-                          from the unzipped folder
+                          from the unzipped folder.
                         </div>
                       </div>
                       <input
@@ -2986,7 +2988,7 @@ ${encryptionKey.replace('key_', '')}
                             ? 'Exporting...'
                             : projectsLoading
                               ? 'Loading projects...'
-                              : `Export ${projects.length} Project${projects.length !== 1 ? 's' : ''}`}
+                              : 'Export Projects'}
                         </button>
                       )}
                     </div>
