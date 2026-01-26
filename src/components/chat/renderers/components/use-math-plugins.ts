@@ -30,8 +30,9 @@ async function loadPlugins(): Promise<PluginState> {
     import('remark-math'),
     import('rehype-katex'),
     import('remark-breaks'),
+    import('rehype-raw'),
   ])
-    .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod]) => {
+    .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod, rehypeRawMod]) => {
       cachedPlugins = {
         remarkPlugins: [
           [remarkMathMod.default, { singleDollarTextMath: false }],
@@ -39,6 +40,7 @@ async function loadPlugins(): Promise<PluginState> {
           remarkBreaksMod.default,
         ],
         rehypePlugins: [
+          rehypeRawMod.default,
           [
             rehypeKatexMod.default,
             {
