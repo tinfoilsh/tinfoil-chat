@@ -124,7 +124,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
   return (
     <motion.div
-      className="w-full"
+      className="flex min-h-[60vh] w-full items-center justify-center md:min-h-0 md:items-start"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -136,7 +136,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
       <div className="flex w-full justify-center">
         <div className="w-full max-w-2xl">
           <motion.h1
-            className="flex items-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:text-3xl"
+            className="flex items-center justify-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:justify-start md:text-3xl"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
