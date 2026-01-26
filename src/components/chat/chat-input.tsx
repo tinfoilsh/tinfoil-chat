@@ -400,7 +400,7 @@ export function ChatInput({
       <div className="relative">
         {/* Project tab - manila folder style, absolutely positioned */}
         {isProjectMode && activeProject && (
-          <div className="pointer-events-none absolute -top-[25px] right-4 z-10">
+          <div className="pointer-events-none absolute -top-[25px] right-8 z-10">
             <div className="pointer-events-auto inline-flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1">
               <FolderIcon className="h-3 w-3 text-content-secondary" />
               <span className="text-xs font-medium text-content-secondary">
@@ -411,7 +411,7 @@ export function ChatInput({
         )}
         <div
           className={cn(
-            'rounded-4xl border border-border-subtle bg-surface-chat p-4 shadow-md transition-colors',
+            'rounded-4xl border border-border-subtle bg-surface-chat px-6 py-4 shadow-md transition-colors',
             isDragOver && 'ring-2 ring-emerald-400/60',
           )}
           onDragOver={handleDragOver}
@@ -435,7 +435,7 @@ export function ChatInput({
           {processedDocuments && processedDocuments.length > 0 && (
             <div
               ref={documentsScrollRef}
-              className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4 pt-2"
+              className="-mx-6 mb-3 flex gap-2 overflow-x-auto px-6 pt-2"
             >
               {processedDocuments.map((doc) => (
                 <div
