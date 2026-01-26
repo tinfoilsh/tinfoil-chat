@@ -3,6 +3,9 @@
 import {
   CheckIcon,
   CloudArrowUpIcon,
+  CloudIcon,
+  EllipsisVerticalIcon,
+  FolderIcon,
   PencilSquareIcon,
   TrashIcon,
   XMarkIcon,
@@ -45,6 +48,11 @@ export function getBlankChatSelectId(chat: ChatItemData): string {
   return chat.isLocalOnly ? 'blank-local' : 'blank-cloud'
 }
 
+export interface ProjectOption {
+  id: string
+  name: string
+}
+
 interface ChatListItemProps {
   chat: ChatItemData
   isSelected: boolean
@@ -55,6 +63,8 @@ interface ChatListItemProps {
   showSyncStatus?: boolean
   enableTitleAnimation?: boolean
   isDraggable?: boolean
+  showMoveToProject?: boolean
+  projects?: ProjectOption[]
   onSelect: () => void
   onStartEdit: () => void
   onTitleChange: (title: string) => void
@@ -63,6 +73,9 @@ interface ChatListItemProps {
   onRequestDelete: () => void
   onDragStart?: (chatId: string) => void
   onDragEnd?: () => void
+  onMoveToProject?: (projectId: string) => void
+  onConvertToCloud?: () => void
+  onConvertToLocal?: () => void
 }
 
 export function ChatListItem({
@@ -75,6 +88,8 @@ export function ChatListItem({
   showSyncStatus = false,
   enableTitleAnimation = false,
   isDraggable = false,
+  showMoveToProject = false,
+  projects = [],
   onSelect,
   onStartEdit,
   onTitleChange,
@@ -83,12 +98,20 @@ export function ChatListItem({
   onRequestDelete,
   onDragStart,
   onDragEnd,
+  onMoveToProject,
+  onConvertToCloud,
+  onConvertToLocal,
 }: ChatListItemProps) {
   const [displayTitle, setDisplayTitle] = useState(chat.title)
   const [isAnimating, setIsAnimating] = useState(false)
   const [animationFromTitle, setAnimationFromTitle] = useState('')
   const [animationToTitle, setAnimationToTitle] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [mobileMenuView, setMobileMenuView] = useState<'main' | 'projects'>(
+    'main',
+  )
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
   const prevTitleRef = useRef(chat.title)
 
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
@@ -115,6 +138,23 @@ export function ChatListItem({
     setIsAnimating(false)
     prevTitleRef.current = chat.title
   }
+
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    if (!isMobileMenuOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsMobileMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isMobileMenuOpen])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -352,22 +392,12 @@ export function ChatListItem({
               </button>
             )}
           </div>
-          <div className="flex items-center md:hidden">
-            {!chat.decryptionFailed && !chat.isBlankChat && (
-              <button
-                className={cn(
-                  'mr-1 rounded p-1 transition-colors',
-                  isDarkMode
-                    ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                    : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                )}
-                onClick={handleStartEdit}
-                title="Rename"
-              >
-                <PencilSquareIcon className="h-4 w-4" />
-              </button>
-            )}
-            {!chat.isBlankChat && (
+          {/* Mobile: three-dot menu */}
+          {!chat.isBlankChat && (
+            <div
+              className="relative flex items-center md:hidden"
+              ref={mobileMenuRef}
+            >
               <button
                 className={cn(
                   'rounded p-1 transition-colors',
@@ -375,13 +405,214 @@ export function ChatListItem({
                     ? 'text-content-muted hover:bg-surface-chat hover:text-white'
                     : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
                 )}
-                onClick={handleRequestDelete}
-                title="Delete"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isMobileMenuOpen) {
+                    setIsMobileMenuOpen(false)
+                    setMobileMenuView('main')
+                  } else {
+                    setIsMobileMenuOpen(true)
+                  }
+                }}
+                title="More options"
               >
-                <TrashIcon className="h-4 w-4" />
+                <EllipsisVerticalIcon className="h-5 w-5" />
               </button>
-            )}
-          </div>
+
+              {/* Mobile dropdown menu */}
+              {isMobileMenuOpen && (
+                <div
+                  className={cn(
+                    'absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border py-1 shadow-lg',
+                    isDarkMode
+                      ? 'border-border-subtle bg-surface-chat'
+                      : 'border-border-subtle bg-white',
+                  )}
+                >
+                  {mobileMenuView === 'main' ? (
+                    <>
+                      {/* Rename */}
+                      {!chat.decryptionFailed && (
+                        <button
+                          className={cn(
+                            'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                            isDarkMode
+                              ? 'text-content-secondary hover:bg-surface-sidebar'
+                              : 'text-content-secondary hover:bg-gray-100',
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setIsMobileMenuOpen(false)
+                            setMobileMenuView('main')
+                            onStartEdit()
+                          }}
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                          Rename
+                        </button>
+                      )}
+
+                      {/* Move to project - opens submenu */}
+                      {showMoveToProject &&
+                        onMoveToProject &&
+                        !chat.decryptionFailed &&
+                        projects.length > 0 && (
+                          <button
+                            className={cn(
+                              'flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-sidebar'
+                                : 'text-content-secondary hover:bg-gray-100',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setMobileMenuView('projects')
+                            }}
+                          >
+                            <span className="flex items-center gap-3">
+                              <FolderIcon className="h-4 w-4" />
+                              Move to project
+                            </span>
+                            <svg
+                              className="h-4 w-4 text-content-muted"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                          </button>
+                        )}
+
+                      {/* Move to cloud (if local) */}
+                      {chat.isLocalOnly &&
+                        onConvertToCloud &&
+                        !chat.decryptionFailed && (
+                          <button
+                            className={cn(
+                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-sidebar'
+                                : 'text-content-secondary hover:bg-gray-100',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setIsMobileMenuOpen(false)
+                              setMobileMenuView('main')
+                              onConvertToCloud()
+                            }}
+                          >
+                            <CloudIcon className="h-4 w-4" />
+                            Move to cloud
+                          </button>
+                        )}
+
+                      {/* Move to local (if cloud) */}
+                      {!chat.isLocalOnly &&
+                        onConvertToLocal &&
+                        !chat.decryptionFailed && (
+                          <button
+                            className={cn(
+                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-sidebar'
+                                : 'text-content-secondary hover:bg-gray-100',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setIsMobileMenuOpen(false)
+                              setMobileMenuView('main')
+                              onConvertToLocal()
+                            }}
+                          >
+                            <CiFloppyDisk className="h-4 w-4" />
+                            Move to local
+                          </button>
+                        )}
+
+                      {/* Delete */}
+                      <button
+                        className={cn(
+                          'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                          'text-red-500 hover:bg-red-500/10',
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsMobileMenuOpen(false)
+                          setMobileMenuView('main')
+                          onRequestDelete()
+                        }}
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {/* Projects submenu */}
+                      {/* Back button */}
+                      <button
+                        className={cn(
+                          'flex w-full items-center gap-2 border-b px-3 py-2.5 text-left text-sm font-medium transition-colors',
+                          isDarkMode
+                            ? 'border-border-subtle text-content-primary hover:bg-surface-sidebar'
+                            : 'border-border-subtle text-content-primary hover:bg-gray-100',
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMobileMenuView('main')
+                        }}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 19l-7-7 7-7"
+                          />
+                        </svg>
+                        Back
+                      </button>
+
+                      {/* Project list */}
+                      <div className="max-h-[200px] overflow-y-auto">
+                        {projects.map((project) => (
+                          <button
+                            key={project.id}
+                            className={cn(
+                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-sidebar'
+                                : 'text-content-secondary hover:bg-gray-100',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setIsMobileMenuOpen(false)
+                              setMobileMenuView('main')
+                              onMoveToProject?.(project.id)
+                            }}
+                          >
+                            <FolderIcon className="h-4 w-4 text-content-muted" />
+                            <span className="truncate">{project.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
