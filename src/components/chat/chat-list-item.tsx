@@ -76,6 +76,7 @@ interface ChatListItemProps {
   onMoveToProject?: (projectId: string) => void
   onConvertToCloud?: () => void
   onConvertToLocal?: () => void
+  onRemoveFromProject?: () => void
 }
 
 export function ChatListItem({
@@ -101,6 +102,7 @@ export function ChatListItem({
   onMoveToProject,
   onConvertToCloud,
   onConvertToLocal,
+  onRemoveFromProject,
 }: ChatListItemProps) {
   const [displayTitle, setDisplayTitle] = useState(chat.title)
   const [isAnimating, setIsAnimating] = useState(false)
@@ -488,6 +490,27 @@ export function ChatListItem({
                             </svg>
                           </button>
                         )}
+
+                      {/* Move out of project */}
+                      {onRemoveFromProject && !chat.decryptionFailed && (
+                        <button
+                          className={cn(
+                            'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                            isDarkMode
+                              ? 'text-content-secondary hover:bg-surface-sidebar'
+                              : 'text-content-secondary hover:bg-gray-100',
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setIsMobileMenuOpen(false)
+                            setMobileMenuView('main')
+                            onRemoveFromProject()
+                          }}
+                        >
+                          <FolderIcon className="h-4 w-4" />
+                          Move out of project
+                        </button>
+                      )}
 
                       {/* Move to cloud (if local) */}
                       {chat.isLocalOnly &&
