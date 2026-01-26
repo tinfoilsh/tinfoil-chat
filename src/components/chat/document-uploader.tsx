@@ -194,7 +194,9 @@ export const useDocumentUploader = (isPremium?: boolean) => {
             component: 'DocumentUploader',
             metadata: { fileName: file.name },
           })
-          onError(new Error('Failed to process image'), documentId)
+          const message =
+            error instanceof Error ? error.message : 'Unknown error'
+          onError(new Error(`Failed to process image: ${message}`), documentId)
           return
         }
       }
