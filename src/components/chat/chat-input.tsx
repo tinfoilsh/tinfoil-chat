@@ -91,14 +91,13 @@ export function ChatInput({
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
-        const file = e.target.files[0]
-        if (!isPremium && isImageFile(file)) {
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ''
+        const files = Array.from(e.target.files)
+        for (const file of files) {
+          if (!isPremium && isImageFile(file)) {
+            continue
           }
-          return
+          handleDocumentUpload(file)
         }
-        handleDocumentUpload(file)
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
         }
@@ -376,6 +375,7 @@ export function ChatInput({
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
+            multiple
             accept={
               isPremium
                 ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt'
