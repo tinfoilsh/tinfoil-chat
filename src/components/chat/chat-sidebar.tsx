@@ -1413,11 +1413,7 @@ export function ChatSidebar({
                     !!onMoveChatToProject
                   }
                   onSelectChat={handleChatSelect}
-                  onAfterSelect={() => {
-                    if (windowWidth < MOBILE_BREAKPOINT) {
-                      setIsOpen(false)
-                    }
-                  }}
+                  onAfterSelect={undefined}
                   onUpdateTitle={updateChatTitle}
                   onDeleteChat={deleteChat}
                   onEncryptionKeyClick={onEncryptionKeyClick}
