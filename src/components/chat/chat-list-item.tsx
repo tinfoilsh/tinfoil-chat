@@ -151,6 +151,7 @@ export function ChatListItem({
         !mobileMenuRef.current.contains(event.target as Node)
       ) {
         setIsMobileMenuOpen(false)
+        setMobileMenuView('main')
       }
     }
 
