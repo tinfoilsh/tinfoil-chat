@@ -60,7 +60,7 @@ interface ProjectSidebarProps {
   deleteChat?: (chatId: string) => void
   updateChatTitle?: (chatId: string, newTitle: string) => void
   onEncryptionKeyClick?: () => void
-  onRemoveChatFromProject?: (chatId: string) => Promise<void>
+  onRemoveChatFromProject?: (chatId: string) => Promise<string>
 }
 
 function formatFileSize(bytes: number): string {

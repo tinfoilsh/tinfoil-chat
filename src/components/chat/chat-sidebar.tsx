@@ -75,9 +75,9 @@ type ChatSidebarProps = {
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
-  onRemoveChatFromProject?: (chatId: string) => Promise<void>
-  onConvertChatToCloud?: (chatId: string) => Promise<void>
-  onConvertChatToLocal?: (chatId: string) => Promise<void>
+  onRemoveChatFromProject?: (chatId: string) => Promise<string>
+  onConvertChatToCloud?: (chatId: string) => Promise<string>
+  onConvertChatToLocal?: (chatId: string) => Promise<string>
 }
 
 // Add this constant at the top of the file
@@ -1322,7 +1322,7 @@ export function ChatSidebar({
               onDragOver={(e) => {
                 if (
                   e.dataTransfer.types.includes('application/x-chat-id') &&
-                  draggingChatFromProjectId
+                  draggingChatId
                 ) {
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
@@ -1332,7 +1332,7 @@ export function ChatSidebar({
               onDragEnter={(e) => {
                 if (
                   e.dataTransfer.types.includes('application/x-chat-id') &&
-                  draggingChatFromProjectId
+                  draggingChatId
                 ) {
                   e.preventDefault()
                   setIsDropTargetChatList(true)
@@ -1347,13 +1347,29 @@ export function ChatSidebar({
               onDrop={async (e) => {
                 e.preventDefault()
                 const chatId = e.dataTransfer.getData('application/x-chat-id')
-                if (chatId && draggingChatFromProjectId) {
-                  if (activeTab === 'local' && onConvertChatToLocal) {
-                    // Convert to local (also clears projectId)
+                if (chatId) {
+                  const chat = chats.find((c) => c.id === chatId)
+                  if (draggingChatFromProjectId) {
+                    // Dragging from project - remove from project
+                    if (activeTab === 'local' && onConvertChatToLocal) {
+                      await onConvertChatToLocal(chatId)
+                    } else if (onRemoveChatFromProject) {
+                      await onRemoveChatFromProject(chatId)
+                    }
+                  } else if (
+                    chat?.isLocalOnly &&
+                    activeTab === 'cloud' &&
+                    onConvertChatToCloud
+                  ) {
+                    // Local chat dropped on cloud tab area - convert to cloud
+                    await onConvertChatToCloud(chatId)
+                  } else if (
+                    !chat?.isLocalOnly &&
+                    activeTab === 'local' &&
+                    onConvertChatToLocal
+                  ) {
+                    // Cloud chat dropped on local tab area - convert to local
                     await onConvertChatToLocal(chatId)
-                  } else if (onRemoveChatFromProject) {
-                    // Remove from project, keeping as cloud chat
-                    await onRemoveChatFromProject(chatId)
                   }
                 }
                 setIsDropTargetChatList(false)
@@ -1407,10 +1423,11 @@ export function ChatSidebar({
                       ? async (chatId, projectId) => {
                           // Check if this is a local chat that needs to be converted first
                           const chat = chats.find((c) => c.id === chatId)
+                          let finalChatId = chatId
                           if (chat?.isLocalOnly && onConvertChatToCloud) {
-                            await onConvertChatToCloud(chatId)
+                            finalChatId = await onConvertChatToCloud(chatId)
                           }
-                          await onMoveChatToProject(chatId, projectId)
+                          await onMoveChatToProject(finalChatId, projectId)
                         }
                       : undefined
                   }
@@ -1666,13 +1683,18 @@ export function ChatSidebar({
                                   const chat = chats.find(
                                     (c) => c.id === chatId,
                                   )
+                                  let finalChatId = chatId
                                   if (
                                     chat?.isLocalOnly &&
                                     onConvertChatToCloud
                                   ) {
-                                    await onConvertChatToCloud(chatId)
+                                    finalChatId =
+                                      await onConvertChatToCloud(chatId)
                                   }
-                                  await onMoveChatToProject(chatId, project.id)
+                                  await onMoveChatToProject(
+                                    finalChatId,
+                                    project.id,
+                                  )
                                 }
                                 clearDragState()
                               }}
