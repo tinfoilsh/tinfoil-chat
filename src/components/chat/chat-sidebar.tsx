@@ -31,7 +31,6 @@ import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
 
 import { useProject } from '@/components/project/project-context'
-import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { useCloudPagination } from '@/hooks/use-cloud-pagination'
 import { authTokenManager } from '@/services/auth'
@@ -895,7 +894,6 @@ export function ChatSidebar({
 
         {/* Main sidebar content */}
         <div className="relative flex h-full flex-col overflow-hidden">
-          <TextureGrid />
           {/* Message for non-premium users (signed in or not) */}
           {!isPremium && (
             <div
