@@ -11,6 +11,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from '../icons/lazy-icons'
 import { cn } from '../ui/utils'
@@ -113,7 +114,9 @@ export function ChatListItem({
   const [mobileMenuView, setMobileMenuView] = useState<'main' | 'projects'>(
     'main',
   )
-  const mobileMenuRef = useRef<HTMLDivElement>(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const mobileMenuPortalRef = useRef<HTMLDivElement>(null)
   const prevTitleRef = useRef(chat.title)
 
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
@@ -146,10 +149,11 @@ export function ChatListItem({
     if (!isMobileMenuOpen) return
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        mobileMenuRef.current &&
-        !mobileMenuRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node
+      const isInsideButton = mobileMenuButtonRef.current?.contains(target)
+      const isInsideMenu = mobileMenuPortalRef.current?.contains(target)
+
+      if (!isInsideButton && !isInsideMenu) {
         setIsMobileMenuOpen(false)
         setMobileMenuView('main')
       }
@@ -397,11 +401,9 @@ export function ChatListItem({
           </div>
           {/* Mobile: three-dot menu */}
           {!chat.isBlankChat && (
-            <div
-              className="relative flex items-center md:hidden"
-              ref={mobileMenuRef}
-            >
+            <div className="flex items-center md:hidden">
               <button
+                ref={mobileMenuButtonRef}
                 className={cn(
                   'rounded p-1 transition-colors',
                   isDarkMode
@@ -414,6 +416,11 @@ export function ChatListItem({
                     setIsMobileMenuOpen(false)
                     setMobileMenuView('main')
                   } else {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setMenuPosition({
+                      top: rect.bottom + 4,
+                      left: rect.right,
+                    })
                     setIsMobileMenuOpen(true)
                   }
                 }}
@@ -422,219 +429,227 @@ export function ChatListItem({
                 <EllipsisVerticalIcon className="h-5 w-5" />
               </button>
 
-              {/* Mobile dropdown menu */}
-              {isMobileMenuOpen && (
-                <div
-                  className={cn(
-                    'absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-lg border py-1 shadow-lg',
-                    isDarkMode
-                      ? 'border-border-subtle bg-surface-chat'
-                      : 'border-border-subtle bg-white',
-                  )}
-                >
-                  {mobileMenuView === 'main' ? (
-                    <>
-                      {/* Rename */}
-                      {!chat.decryptionFailed && (
-                        <button
-                          className={cn(
-                            'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
-                            isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-sidebar'
-                              : 'text-content-secondary hover:bg-gray-100',
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setIsMobileMenuOpen(false)
-                            setMobileMenuView('main')
-                            onStartEdit()
-                          }}
-                        >
-                          <PencilSquareIcon className="h-4 w-4" />
-                          Rename
-                        </button>
-                      )}
-
-                      {/* Move to project - opens submenu */}
-                      {showMoveToProject &&
-                        onMoveToProject &&
-                        !chat.decryptionFailed &&
-                        projects.length > 0 && (
+              {/* Mobile dropdown menu - rendered via portal to escape overflow constraints */}
+              {isMobileMenuOpen &&
+                createPortal(
+                  <div
+                    ref={mobileMenuPortalRef}
+                    className={cn(
+                      'fixed z-[9999] min-w-[200px] rounded-lg border py-1 shadow-lg',
+                      isDarkMode
+                        ? 'border-border-subtle bg-surface-chat'
+                        : 'border-border-subtle bg-white',
+                    )}
+                    style={{
+                      top: menuPosition.top,
+                      left: menuPosition.left,
+                      transform: 'translateX(-100%)',
+                    }}
+                  >
+                    {mobileMenuView === 'main' ? (
+                      <>
+                        {/* Rename */}
+                        {!chat.decryptionFailed && (
                           <button
                             className={cn(
-                              'flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors',
+                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
                               isDarkMode
                                 ? 'text-content-secondary hover:bg-surface-sidebar'
                                 : 'text-content-secondary hover:bg-gray-100',
                             )}
                             onClick={(e) => {
                               e.stopPropagation()
-                              setMobileMenuView('projects')
+                              setIsMobileMenuOpen(false)
+                              setMobileMenuView('main')
+                              onStartEdit()
                             }}
                           >
-                            <span className="flex items-center gap-3">
-                              <FolderIcon className="h-4 w-4" />
-                              Move to project
-                            </span>
-                            <svg
-                              className="h-4 w-4 text-content-muted"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                            <PencilSquareIcon className="h-4 w-4" />
+                            Rename
+                          </button>
+                        )}
+
+                        {/* Move to project - opens submenu */}
+                        {showMoveToProject &&
+                          onMoveToProject &&
+                          !chat.decryptionFailed &&
+                          projects.length > 0 && (
+                            <button
+                              className={cn(
+                                'flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors',
+                                isDarkMode
+                                  ? 'text-content-secondary hover:bg-surface-sidebar'
+                                  : 'text-content-secondary hover:bg-gray-100',
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setMobileMenuView('projects')
+                              }}
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
+                              <span className="flex items-center gap-3">
+                                <FolderIcon className="h-4 w-4" />
+                                Move to project
+                              </span>
+                              <svg
+                                className="h-4 w-4 text-content-muted"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                          )}
+
+                        {/* Move out of project */}
+                        {onRemoveFromProject && !chat.decryptionFailed && (
+                          <button
+                            className={cn(
+                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                              isDarkMode
+                                ? 'text-content-secondary hover:bg-surface-sidebar'
+                                : 'text-content-secondary hover:bg-gray-100',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setIsMobileMenuOpen(false)
+                              setMobileMenuView('main')
+                              onRemoveFromProject()
+                            }}
+                          >
+                            <FolderIcon className="h-4 w-4" />
+                            Move out of project
                           </button>
                         )}
 
-                      {/* Move out of project */}
-                      {onRemoveFromProject && !chat.decryptionFailed && (
+                        {/* Move to cloud (if local) */}
+                        {chat.isLocalOnly &&
+                          onConvertToCloud &&
+                          !chat.decryptionFailed && (
+                            <button
+                              className={cn(
+                                'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                                isDarkMode
+                                  ? 'text-content-secondary hover:bg-surface-sidebar'
+                                  : 'text-content-secondary hover:bg-gray-100',
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setIsMobileMenuOpen(false)
+                                setMobileMenuView('main')
+                                onConvertToCloud()
+                              }}
+                            >
+                              <CloudIcon className="h-4 w-4" />
+                              Move to cloud
+                            </button>
+                          )}
+
+                        {/* Move to local (if cloud) */}
+                        {!chat.isLocalOnly &&
+                          onConvertToLocal &&
+                          !chat.decryptionFailed && (
+                            <button
+                              className={cn(
+                                'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                                isDarkMode
+                                  ? 'text-content-secondary hover:bg-surface-sidebar'
+                                  : 'text-content-secondary hover:bg-gray-100',
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setIsMobileMenuOpen(false)
+                                setMobileMenuView('main')
+                                onConvertToLocal()
+                              }}
+                            >
+                              <CiFloppyDisk className="h-4 w-4" />
+                              Move to local
+                            </button>
+                          )}
+
+                        {/* Delete */}
                         <button
                           className={cn(
                             'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
-                            isDarkMode
-                              ? 'text-content-secondary hover:bg-surface-sidebar'
-                              : 'text-content-secondary hover:bg-gray-100',
+                            'text-red-500 hover:bg-red-500/10',
                           )}
                           onClick={(e) => {
                             e.stopPropagation()
                             setIsMobileMenuOpen(false)
                             setMobileMenuView('main')
-                            onRemoveFromProject()
+                            onRequestDelete()
                           }}
                         >
-                          <FolderIcon className="h-4 w-4" />
-                          Move out of project
+                          <TrashIcon className="h-4 w-4" />
+                          Delete
                         </button>
-                      )}
-
-                      {/* Move to cloud (if local) */}
-                      {chat.isLocalOnly &&
-                        onConvertToCloud &&
-                        !chat.decryptionFailed && (
-                          <button
-                            className={cn(
-                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
-                              isDarkMode
-                                ? 'text-content-secondary hover:bg-surface-sidebar'
-                                : 'text-content-secondary hover:bg-gray-100',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setIsMobileMenuOpen(false)
-                              setMobileMenuView('main')
-                              onConvertToCloud()
-                            }}
-                          >
-                            <CloudIcon className="h-4 w-4" />
-                            Move to cloud
-                          </button>
-                        )}
-
-                      {/* Move to local (if cloud) */}
-                      {!chat.isLocalOnly &&
-                        onConvertToLocal &&
-                        !chat.decryptionFailed && (
-                          <button
-                            className={cn(
-                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
-                              isDarkMode
-                                ? 'text-content-secondary hover:bg-surface-sidebar'
-                                : 'text-content-secondary hover:bg-gray-100',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setIsMobileMenuOpen(false)
-                              setMobileMenuView('main')
-                              onConvertToLocal()
-                            }}
-                          >
-                            <CiFloppyDisk className="h-4 w-4" />
-                            Move to local
-                          </button>
-                        )}
-
-                      {/* Delete */}
-                      <button
-                        className={cn(
-                          'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
-                          'text-red-500 hover:bg-red-500/10',
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setIsMobileMenuOpen(false)
-                          setMobileMenuView('main')
-                          onRequestDelete()
-                        }}
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                        Delete
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {/* Projects submenu */}
-                      {/* Back button */}
-                      <button
-                        className={cn(
-                          'flex w-full items-center gap-2 border-b px-3 py-2.5 text-left text-sm font-medium transition-colors',
-                          isDarkMode
-                            ? 'border-border-subtle text-content-primary hover:bg-surface-sidebar'
-                            : 'border-border-subtle text-content-primary hover:bg-gray-100',
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setMobileMenuView('main')
-                        }}
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      </>
+                    ) : (
+                      <>
+                        {/* Projects submenu */}
+                        {/* Back button */}
+                        <button
+                          className={cn(
+                            'flex w-full items-center gap-2 border-b px-3 py-2.5 text-left text-sm font-medium transition-colors',
+                            isDarkMode
+                              ? 'border-border-subtle text-content-primary hover:bg-surface-sidebar'
+                              : 'border-border-subtle text-content-primary hover:bg-gray-100',
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMobileMenuView('main')
+                          }}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 19l-7-7 7-7"
-                          />
-                        </svg>
-                        Back
-                      </button>
-
-                      {/* Project list */}
-                      <div className="max-h-[200px] overflow-y-auto">
-                        {projects.map((project) => (
-                          <button
-                            key={project.id}
-                            className={cn(
-                              'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
-                              isDarkMode
-                                ? 'text-content-secondary hover:bg-surface-sidebar'
-                                : 'text-content-secondary hover:bg-gray-100',
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setIsMobileMenuOpen(false)
-                              setMobileMenuView('main')
-                              onMoveToProject?.(project.id)
-                            }}
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            <FolderIcon className="h-4 w-4 text-content-muted" />
-                            <span className="truncate">{project.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 19l-7-7 7-7"
+                            />
+                          </svg>
+                          Back
+                        </button>
+
+                        {/* Project list */}
+                        <div className="max-h-[200px] overflow-y-auto">
+                          {projects.map((project) => (
+                            <button
+                              key={project.id}
+                              className={cn(
+                                'flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors',
+                                isDarkMode
+                                  ? 'text-content-secondary hover:bg-surface-sidebar'
+                                  : 'text-content-secondary hover:bg-gray-100',
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setIsMobileMenuOpen(false)
+                                setMobileMenuView('main')
+                                onMoveToProject?.(project.id)
+                              }}
+                            >
+                              <FolderIcon className="h-4 w-4 text-content-muted" />
+                              <span className="truncate">{project.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>,
+                  document.body,
+                )}
             </div>
           )}
         </div>
