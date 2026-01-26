@@ -61,6 +61,7 @@ interface ProjectSidebarProps {
   updateChatTitle?: (chatId: string, newTitle: string) => void
   onEncryptionKeyClick?: () => void
   onRemoveChatFromProject?: (chatId: string) => Promise<string>
+  onAddChatToProject?: (chatId: string) => Promise<void>
 }
 
 function formatFileSize(bytes: number): string {
@@ -96,6 +97,7 @@ export function ProjectSidebar({
   updateChatTitle,
   onEncryptionKeyClick,
   onRemoveChatFromProject,
+  onAddChatToProject,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
   const { setDraggingChat, clearDragState } = useDrag()
@@ -153,6 +155,7 @@ export function ProjectSidebar({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const exitHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isExitButtonDragHover, setIsExitButtonDragHover] = useState(false)
+  const [isDropTargetChatList, setIsDropTargetChatList] = useState(false)
 
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
@@ -1114,7 +1117,42 @@ export function ProjectSidebar({
           </div>
 
           {/* Scrollable Chat List */}
-          <div className="relative z-10 flex-1 overflow-y-auto">
+          <div
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes('application/x-chat-id')) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setIsDropTargetChatList(true)
+              }
+            }}
+            onDragEnter={(e) => {
+              if (e.dataTransfer.types.includes('application/x-chat-id')) {
+                e.preventDefault()
+                setIsDropTargetChatList(true)
+              }
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setIsDropTargetChatList(false)
+              }
+            }}
+            onDrop={async (e) => {
+              e.preventDefault()
+              setIsDropTargetChatList(false)
+              const chatId = e.dataTransfer.getData('application/x-chat-id')
+              if (chatId && onAddChatToProject) {
+                await onAddChatToProject(chatId)
+              }
+              clearDragState()
+            }}
+            className={cn(
+              'relative z-10 flex-1 overflow-y-auto',
+              isDropTargetChatList &&
+                (isDarkMode
+                  ? 'border border-white/30 bg-white/10'
+                  : 'border border-gray-400 bg-gray-200/30'),
+            )}
+          >
             <ChatList
               chats={chatsWithBlank}
               currentChatId={currentChatId}

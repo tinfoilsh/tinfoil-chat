@@ -1919,6 +1919,9 @@ export function ChatInterface({
               isSignedIn ? handleOpenEncryptionKeyModal : undefined
             }
             onRemoveChatFromProject={handleRemoveChatFromProject}
+            onAddChatToProject={(chatId) =>
+              handleMoveChatToProject(chatId, activeProject.id)
+            }
           />
         ) : loadingProject ? (
           <ProjectSidebar
