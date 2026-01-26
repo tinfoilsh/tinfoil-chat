@@ -75,9 +75,9 @@ type ChatSidebarProps = {
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
-  onRemoveChatFromProject?: (chatId: string) => Promise<void>
-  onConvertChatToCloud?: (chatId: string) => Promise<void>
-  onConvertChatToLocal?: (chatId: string) => Promise<void>
+  onRemoveChatFromProject?: (chatId: string) => Promise<string | null>
+  onConvertChatToCloud?: (chatId: string) => Promise<string>
+  onConvertChatToLocal?: (chatId: string) => Promise<string | null>
 }
 
 // Add this constant at the top of the file
@@ -1243,18 +1243,10 @@ export function ChatSidebar({
                         const chatId = e.dataTransfer.getData(
                           'application/x-chat-id',
                         )
-                        if (chatId) {
-                          if (
-                            draggingChatFromProjectId &&
-                            onRemoveChatFromProject
-                          ) {
-                            // Remove from project first
-                            await onRemoveChatFromProject(chatId)
-                          }
-                          // Convert to local (both for project chats and cloud chats)
-                          if (onConvertChatToLocal) {
-                            await onConvertChatToLocal(chatId)
-                          }
+                        if (chatId && onConvertChatToLocal) {
+                          // convertChatToLocal clones with fresh ID/timestamp
+                          // and also clears projectId, so no need to call onRemoveChatFromProject
+                          await onConvertChatToLocal(chatId)
                         }
                         clearDragState()
                       }}
@@ -1351,16 +1343,13 @@ export function ChatSidebar({
               onDrop={async (e) => {
                 e.preventDefault()
                 const chatId = e.dataTransfer.getData('application/x-chat-id')
-                if (
-                  chatId &&
-                  draggingChatFromProjectId &&
-                  onRemoveChatFromProject
-                ) {
-                  // Remove from project, keeping as cloud chat (current tab)
-                  await onRemoveChatFromProject(chatId)
-                  // If on local tab, also convert to local
+                if (chatId && draggingChatFromProjectId) {
                   if (activeTab === 'local' && onConvertChatToLocal) {
+                    // Convert to local (also clears projectId, clones with fresh ID)
                     await onConvertChatToLocal(chatId)
+                  } else if (onRemoveChatFromProject) {
+                    // Remove from project, keeping as cloud chat (clones with fresh ID)
+                    await onRemoveChatFromProject(chatId)
                   }
                 }
                 setIsDropTargetChatList(false)
