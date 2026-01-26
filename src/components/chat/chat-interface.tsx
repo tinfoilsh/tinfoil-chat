@@ -62,6 +62,13 @@ const EncryptionKeyModal = dynamic(
     import('../modals/encryption-key-modal').then((m) => m.EncryptionKeyModal),
   { ssr: false },
 )
+const CloudSyncIntroModal = dynamic(
+  () =>
+    import('../modals/cloud-sync-intro-modal').then(
+      (m) => m.CloudSyncIntroModal,
+    ),
+  { ssr: false },
+)
 const CloudSyncSetupModal = dynamic(
   () =>
     import('../modals/cloud-sync-setup-modal').then(
@@ -223,12 +230,24 @@ export function ChatInterface({
 
   // State for settings sidebar
   const [isSettingsSidebarOpen, setIsSettingsSidebarOpen] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    | 'general'
+    | 'chat'
+    | 'personalization'
+    | 'encryption'
+    | 'account'
+    | undefined
+  >(undefined)
 
   // State for share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
 
   // State for encryption key modal
   const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
+    useState(false)
+
+  // State for cloud sync intro modal
+  const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
     useState(false)
 
   // State for cloud sync setup modal
@@ -808,6 +827,7 @@ export function ChatInterface({
       setIsSettingsSidebarOpen(false)
     } else {
       // Open settings and close verifier if open
+      setSettingsInitialTab(undefined)
       setIsSettingsSidebarOpen(true)
       handleSetVerifierSidebarOpen(false)
       // If window is narrow, close left sidebar when opening settings
@@ -822,9 +842,14 @@ export function ChatInterface({
     setIsShareModalOpen(true)
   }
 
-  // Handler for encryption key button
+  // Handler for encryption key button - opens settings sidebar to encryption tab
   const handleOpenEncryptionKeyModal = () => {
-    setIsEncryptionKeyModalOpen(true)
+    setSettingsInitialTab('encryption')
+    setIsSettingsSidebarOpen(true)
+    handleSetVerifierSidebarOpen(false)
+    if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+      setIsSidebarOpen(false)
+    }
   }
 
   // Handler for cloud sync setup
@@ -1985,6 +2010,7 @@ export function ChatInterface({
             window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
           }
         }}
+        initialTab={settingsInitialTab}
       />
 
       {/* Main Chat Area - Modified for sliding effect */}
@@ -2244,6 +2270,13 @@ export function ChatInterface({
             window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
           }
         }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Cloud Sync Intro Modal */}
+      <CloudSyncIntroModal
+        isOpen={isCloudSyncIntroModalOpen}
+        onClose={() => setIsCloudSyncIntroModalOpen(false)}
         isDarkMode={isDarkMode}
       />
 

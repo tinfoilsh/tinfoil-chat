@@ -108,6 +108,13 @@ const ScrambleText = ({
   )
 }
 
+export type SettingsTab =
+  | 'general'
+  | 'chat'
+  | 'personalization'
+  | 'encryption'
+  | 'account'
+
 type SettingsSidebarProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
@@ -121,6 +128,7 @@ type SettingsSidebarProps = {
   isPremium?: boolean
   encryptionKey: string | null
   onKeyChange: (key: string) => Promise<void>
+  initialTab?: SettingsTab
 }
 
 export function SettingsSidebar({
@@ -136,6 +144,7 @@ export function SettingsSidebar({
   isPremium,
   encryptionKey,
   onKeyChange,
+  initialTab,
 }: SettingsSidebarProps) {
   const { user } = useUser()
   const { toast } = useToast()
@@ -175,9 +184,16 @@ export function SettingsSidebar({
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
   // Active tab state
-  const [activeTab, setActiveTab] = useState<
-    'general' | 'chat' | 'personalization' | 'encryption' | 'account'
-  >('general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    initialTab ?? 'general',
+  )
+
+  // Update active tab when initialTab prop changes (e.g., opening to a specific tab)
+  useEffect(() => {
+    if (initialTab && isOpen) {
+      setActiveTab(initialTab)
+    }
+  }, [initialTab, isOpen])
 
   // Advanced settings collapsed state
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
