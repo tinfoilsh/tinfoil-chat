@@ -75,9 +75,9 @@ type ChatSidebarProps = {
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
-  onRemoveChatFromProject?: (chatId: string) => Promise<string | null>
-  onConvertChatToCloud?: (chatId: string) => Promise<string>
-  onConvertChatToLocal?: (chatId: string) => Promise<string | null>
+  onRemoveChatFromProject?: (chatId: string) => Promise<void>
+  onConvertChatToCloud?: (chatId: string) => Promise<void>
+  onConvertChatToLocal?: (chatId: string) => Promise<void>
 }
 
 // Add this constant at the top of the file
@@ -1244,8 +1244,7 @@ export function ChatSidebar({
                           'application/x-chat-id',
                         )
                         if (chatId && onConvertChatToLocal) {
-                          // convertChatToLocal clones with fresh ID/timestamp
-                          // and also clears projectId, so no need to call onRemoveChatFromProject
+                          // convertChatToLocal also clears projectId
                           await onConvertChatToLocal(chatId)
                         }
                         clearDragState()
@@ -1345,10 +1344,10 @@ export function ChatSidebar({
                 const chatId = e.dataTransfer.getData('application/x-chat-id')
                 if (chatId && draggingChatFromProjectId) {
                   if (activeTab === 'local' && onConvertChatToLocal) {
-                    // Convert to local (also clears projectId, clones with fresh ID)
+                    // Convert to local (also clears projectId)
                     await onConvertChatToLocal(chatId)
                   } else if (onRemoveChatFromProject) {
-                    // Remove from project, keeping as cloud chat (clones with fresh ID)
+                    // Remove from project, keeping as cloud chat
                     await onRemoveChatFromProject(chatId)
                   }
                 }

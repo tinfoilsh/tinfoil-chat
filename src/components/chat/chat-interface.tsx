@@ -945,27 +945,18 @@ export function ChatInterface({
   )
 
   // Handler for removing a chat from a project via drag and drop
-  // Returns the new chat ID (chat is cloned with fresh ID and timestamp)
   const handleRemoveChatFromProject = useCallback(
-    async (chatId: string): Promise<string | null> => {
+    async (chatId: string): Promise<void> => {
       try {
-        // Clone chat with fresh ID/timestamp and remove from project
-        const newChatId = await chatStorage.removeChatFromProject(chatId)
+        await chatStorage.removeChatFromProject(chatId)
 
         // Reload chats to update the UI
         await reloadChats()
-
-        // If the removed chat was the current chat, select the new one
-        if (currentChat.id === chatId) {
-          handleChatSelect(newChatId)
-        }
 
         toast({
           title: 'Chat removed from project',
           description: 'The chat is now in your main chat list.',
         })
-
-        return newChatId
       } catch (error) {
         logError('Failed to remove chat from project', error, {
           component: 'ChatInterface',
@@ -981,32 +972,22 @@ export function ChatInterface({
           description: 'Please try again.',
           variant: 'destructive',
         })
-
-        return null
       }
     },
-    [currentChat.id, handleChatSelect, reloadChats, toast],
+    [reloadChats, toast],
   )
 
   // Handler for converting a local-only chat to cloud chat via drag and drop
-  // Returns the new chat ID (chat is cloned with fresh ID and timestamp)
   const handleConvertChatToCloud = useCallback(
-    async (chatId: string): Promise<string> => {
+    async (chatId: string): Promise<void> => {
       try {
-        const newChatId = await chatStorage.convertChatToCloud(chatId)
+        await chatStorage.convertChatToCloud(chatId)
         await reloadChats()
-
-        // If the converted chat was the current chat, navigate to the new chat
-        if (currentChat.id === chatId) {
-          handleChatSelect(newChatId)
-        }
 
         toast({
           title: 'Chat moved to cloud',
           description: 'The chat will now sync across your devices.',
         })
-
-        return newChatId
       } catch (error) {
         logError('Failed to convert chat to cloud', error, {
           component: 'ChatInterface',
@@ -1019,32 +1000,22 @@ export function ChatInterface({
           description: 'Please try again.',
           variant: 'destructive',
         })
-
-        throw error
       }
     },
-    [currentChat.id, handleChatSelect, reloadChats, toast],
+    [reloadChats, toast],
   )
 
   // Handler for converting a cloud chat to local-only via drag and drop
-  // Returns the new chat ID (chat is cloned with fresh ID and timestamp)
   const handleConvertChatToLocal = useCallback(
-    async (chatId: string): Promise<string | null> => {
+    async (chatId: string): Promise<void> => {
       try {
-        const newChatId = await chatStorage.convertChatToLocal(chatId)
+        await chatStorage.convertChatToLocal(chatId)
         await reloadChats()
-
-        // If the converted chat was the current chat, select the new one
-        if (currentChat.id === chatId) {
-          handleChatSelect(newChatId)
-        }
 
         toast({
           title: 'Chat moved to local',
           description: 'The chat is now only stored on this device.',
         })
-
-        return newChatId
       } catch (error) {
         logError('Failed to convert chat to local', error, {
           component: 'ChatInterface',
@@ -1057,11 +1028,9 @@ export function ChatInterface({
           description: 'Please try again.',
           variant: 'destructive',
         })
-
-        return null
       }
     },
-    [currentChat.id, handleChatSelect, reloadChats, toast],
+    [reloadChats, toast],
   )
 
   // Don't automatically create new chats - let the chat state handle initialization
