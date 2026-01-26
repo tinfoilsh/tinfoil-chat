@@ -1,4 +1,5 @@
-import { getAIModels, type BaseModel } from '@/config/models'
+import { getAIModels } from '@/config/models'
+import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import {
   getDocumentFormat,
@@ -18,10 +19,7 @@ export const getFileIconType = getFileIcon
 /**
  * Handles the document upload and processing logic
  */
-export const useDocumentUploader = (
-  isPremium?: boolean,
-  selectedModelDetails?: BaseModel,
-) => {
+export const useDocumentUploader = (isPremium?: boolean) => {
   const [uploadingDocuments, setUploadingDocuments] = useState<
     Record<string, boolean>
   >({})
@@ -85,6 +83,53 @@ export const useDocumentUploader = (
     return fileContents
   }
 
+  // Describe image using multimodal model
+  const describeImageWithMultimodal = async (
+    base64: string,
+    mimeType: string,
+  ): Promise<string> => {
+    const models = await getAIModels(true)
+    const multimodalModel = models.find(
+      (m) => m.multimodal && m.chat && m.type === 'chat',
+    )
+    if (!multimodalModel) {
+      throw new Error('No multimodal model available')
+    }
+
+    const client = await getTinfoilClient()
+    await client.ready()
+
+    const response = await client.chat.completions.create({
+      model: multimodalModel.modelName,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Describe this image in detail. Include:
+- What is happening in the image
+- Colors (provide hex codes where relevant)
+- Any text visible in the image
+- Layout and composition
+- Other notable details`,
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mimeType};base64,${base64}` },
+            },
+          ],
+        },
+      ],
+      stream: false,
+    })
+
+    return (
+      (response.choices[0]?.message?.content as string) ||
+      'Unable to describe image'
+    )
+  }
+
   // Main upload function
   const handleDocumentUpload = async (
     file: File,
@@ -122,30 +167,34 @@ export const useDocumentUploader = (
         return
       }
 
-      // For image files, encode for multimodal models (don't send to Docling)
+      // For image files, get description from multimodal model (premium only)
       if (isImageFile(file)) {
-        if (selectedModelDetails?.multimodal) {
-          try {
-            const imageData = await scaleAndEncodeImage(file, {
-              maxWidth: 500,
-              maxHeight: 500,
-              quality: 0.9,
-            })
-            onSuccess('', documentId, imageData)
-            return
-          } catch (error) {
-            logError('Image scaling failed', error, {
-              component: 'DocumentUploader',
-              metadata: { fileName: file.name },
-            })
-            onError(new Error('Failed to process image'), documentId)
-            return
-          }
-        } else {
+        if (!isPremium) {
           onError(
-            new Error('Image upload requires a model with vision capabilities'),
+            new Error('Image upload requires a premium subscription'),
             documentId,
           )
+          return
+        }
+
+        try {
+          const imageData = await scaleAndEncodeImage(file, {
+            maxWidth: 768,
+            maxHeight: 768,
+            quality: 0.9,
+          })
+          const description = await describeImageWithMultimodal(
+            imageData.base64,
+            imageData.mimeType,
+          )
+          onSuccess(description, documentId)
+          return
+        } catch (error) {
+          logError('Image description failed', error, {
+            component: 'DocumentUploader',
+            metadata: { fileName: file.name },
+          })
+          onError(new Error('Failed to process image'), documentId)
           return
         }
       }
