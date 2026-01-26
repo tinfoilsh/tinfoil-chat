@@ -82,7 +82,7 @@ export function ChatInput({
 
   // Random placeholder - use first one initially to avoid SSR hydration mismatch,
   // then randomize after mount
-  const [placeholder, setPlaceholder] = useState(
+  const [placeholder, setPlaceholder] = useState<string>(
     CONSTANTS.INPUT_PLACEHOLDERS[0],
   )
 
