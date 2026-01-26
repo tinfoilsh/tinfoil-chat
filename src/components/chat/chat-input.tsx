@@ -80,6 +80,14 @@ export function ChatInput({
   // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
   const [isDragOver, setIsDragOver] = useState(false)
 
+  // Random placeholder that stays stable during the session
+  const [placeholder] = useState(
+    () =>
+      CONSTANTS.INPUT_PLACEHOLDERS[
+        Math.floor(Math.random() * CONSTANTS.INPUT_PLACEHOLDERS.length)
+      ],
+  )
+
   // Scroll to the end when new documents are added
   useEffect(() => {
     if (documentsScrollRef.current && processedDocuments?.length) {
@@ -736,9 +744,7 @@ export function ChatInput({
                 cancelGeneration()
               }
             }}
-            placeholder={
-              hasMessages ? 'Reply to Tin...' : "What's on your mind?"
-            }
+            placeholder={hasMessages ? 'Reply to Tin...' : placeholder}
             rows={1}
             className="w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
             style={{
