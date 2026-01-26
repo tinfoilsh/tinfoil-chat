@@ -500,7 +500,7 @@ export function ChatInput({
                         compact
                       />
                     )}
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                       <span className="truncate text-sm font-medium text-content-primary">
                         {doc.name}
                       </span>

@@ -74,6 +74,7 @@ const aeonik = localFont({
   ],
   variable: '--font-aeonik',
   display: 'swap',
+  declarations: [{ prop: 'ascent-override', value: '90%' }],
 })
 
 const openDyslexic = localFont({

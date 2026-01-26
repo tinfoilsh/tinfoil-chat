@@ -194,6 +194,22 @@ export const DocumentList = memo(function DocumentList({
             nameCount > 1 ? `${doc.name}-${nameCount}` : doc.name
           const preview = getPreviewForDocument(documentContent, doc.name)
 
+          if (hasImageData) {
+            return (
+              <div
+                key={uniqueKey}
+                className="max-w-[300px] overflow-hidden rounded-lg"
+              >
+                <img
+                  src={`data:${imageData![index].mimeType};base64,${imageData![index].base64}`}
+                  alt={doc.name}
+                  className="h-auto w-full object-contain"
+                  loading="lazy"
+                />
+              </div>
+            )
+          }
+
           return (
             <div
               key={uniqueKey}
@@ -209,20 +225,9 @@ export const DocumentList = memo(function DocumentList({
               className="flex min-w-[200px] max-w-[300px] cursor-pointer flex-col rounded-lg bg-surface-message-user/90 p-3 shadow-sm backdrop-blur-sm transition-colors hover:bg-surface-message-user"
             >
               <div className="flex items-center gap-2">
-                {hasImageData ? (
-                  <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
-                    <img
-                      src={`data:${imageData![index].mimeType};base64,${imageData![index].base64}`}
-                      alt={doc.name}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center p-1">
-                    {getFileIcon(doc.name, 20)}
-                  </div>
-                )}
+                <div className="flex items-center justify-center p-1">
+                  {getFileIcon(doc.name, 20)}
+                </div>
                 <span className="truncate text-sm font-medium text-content-primary">
                   {doc.name}
                 </span>
