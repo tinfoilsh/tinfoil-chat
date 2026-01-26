@@ -265,22 +265,58 @@ export function ChatInput({
   }, [sendAudioForTranscription, stopRecording, toast])
 
   // --- Drag and drop handlers (for welcome screen) ---
+  // Check if drag contains any files that would be accepted
+  const dragHasSupportedFiles = useCallback(
+    (items: DataTransferItemList) => {
+      const fileItems = Array.from(items).filter((item) => item.kind === 'file')
+      if (fileItems.length === 0) return false
+
+      // For non-premium users, check if there are any non-image files
+      if (!isPremium) {
+        return fileItems.some((item) => !item.type.startsWith('image/'))
+      }
+      return true
+    },
+    [isPremium],
+  )
+
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
+
+      // Don't show drop indicator if no supported files
+      if (
+        e.dataTransfer.items &&
+        !dragHasSupportedFiles(e.dataTransfer.items)
+      ) {
+        return
+      }
+
       if (!isDragOver) {
         setIsDragOver(true)
       }
     },
-    [isDragOver],
+    [isDragOver, dragHasSupportedFiles],
   )
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragOver(true)
-  }, [])
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Don't show drop indicator if no supported files
+      if (
+        e.dataTransfer.items &&
+        !dragHasSupportedFiles(e.dataTransfer.items)
+      ) {
+        return
+      }
+
+      setIsDragOver(true)
+    },
+    [dragHasSupportedFiles],
+  )
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -301,12 +337,17 @@ export function ChatInput({
       if (files && files.length > 0 && handleDocumentUpload) {
         const file = files[0]
         if (!isPremium && isImageFile(file)) {
+          toast({
+            title: 'Premium Feature',
+            description: 'Image uploads are only available with Premium.',
+            position: 'top-left',
+          })
           return
         }
         handleDocumentUpload(file)
       }
     },
-    [handleDocumentUpload, isPremium],
+    [handleDocumentUpload, isPremium, toast],
   )
 
   // Handle paste event for long text detection
