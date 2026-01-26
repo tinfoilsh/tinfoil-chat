@@ -1,3 +1,4 @@
+import type { Chat, Message } from '@/components/chat/types'
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
@@ -14,8 +15,10 @@ import { logInfo } from '@/utils/error-handling'
 import { SignInButton, UserButton, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
+  ArrowPathIcon,
   ArrowUpTrayIcon,
   ChatBubbleLeftRightIcon,
+  CheckCircleIcon,
   ChevronDownIcon,
   Cog6ToothIcon,
   CreditCardIcon,
@@ -30,6 +33,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BsKey, BsQrCode } from 'react-icons/bs'
+import { GiParachute } from 'react-icons/gi'
 import { PiSignIn } from 'react-icons/pi'
 import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
@@ -113,6 +117,7 @@ export type SettingsTab =
   | 'chat'
   | 'personalization'
   | 'encryption'
+  | 'import'
   | 'account'
 
 type SettingsModalProps = {
@@ -205,6 +210,26 @@ export function SettingsModal({
   // Upgrade state
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
+
+  // Import state
+  const [importSource, setImportSource] = useState<'chatgpt' | 'claude' | null>(
+    null,
+  )
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{
+    current: number
+    total: number
+    type: 'chats' | 'projects'
+  } | null>(null)
+  const [importResult, setImportResult] = useState<{
+    success: boolean
+    chatsImported: number
+    projectsImported: number
+    errors: string[]
+  } | null>(null)
+  const chatGptFileInputRef = useRef<HTMLInputElement>(null)
+  const claudeConversationsFileInputRef = useRef<HTMLInputElement>(null)
+  const claudeProjectsFileInputRef = useRef<HTMLInputElement>(null)
 
   // Available personality traits
   const availableTraits = [
@@ -758,6 +783,400 @@ export function SettingsModal({
     }
   }, [getToken])
 
+  // Import handlers
+  const generateChatId = () => {
+    return `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  }
+
+  const parseChatGPTConversations = (
+    data: Array<{
+      title: string
+      create_time: number
+      update_time: number
+      mapping: Record<
+        string,
+        {
+          id: string
+          message?: {
+            author: { role: string }
+            content: { content_type: string; parts?: (string | object)[] }
+            create_time?: number
+          }
+          parent?: string
+          children?: string[]
+        }
+      >
+    }>,
+  ): Chat[] => {
+    const chats: Chat[] = []
+
+    for (const conversation of data) {
+      const messages: Message[] = []
+
+      // Find the root node and traverse the tree
+      const nodeMap = conversation.mapping
+      const nodeIds = Object.keys(nodeMap)
+
+      // Find messages by traversing parent-child relationships
+      const visitedNodes = new Set<string>()
+      const processNode = (nodeId: string) => {
+        if (visitedNodes.has(nodeId)) return
+        visitedNodes.add(nodeId)
+
+        const node = nodeMap[nodeId]
+        if (!node) return
+
+        const msg = node.message
+        if (
+          msg &&
+          (msg.author.role === 'user' || msg.author.role === 'assistant') &&
+          (msg.content.content_type === 'text' ||
+            msg.content.content_type === 'multimodal_text') &&
+          msg.content.parts &&
+          msg.content.parts.length > 0
+        ) {
+          // Filter to only string parts (multimodal_text can have image objects)
+          const textParts = msg.content.parts.filter(
+            (p): p is string => typeof p === 'string',
+          )
+          const content = textParts.join('\n').trim()
+          if (content) {
+            messages.push({
+              role: msg.author.role as 'user' | 'assistant',
+              content,
+              timestamp: msg.create_time
+                ? new Date(msg.create_time * 1000)
+                : new Date(conversation.create_time * 1000),
+            })
+          }
+        }
+
+        // Process children
+        if (node.children) {
+          for (const childId of node.children) {
+            processNode(childId)
+          }
+        }
+      }
+
+      // Start from root nodes (nodes without parents or with null parent)
+      for (const nodeId of nodeIds) {
+        const node = nodeMap[nodeId]
+        if (!node.parent || node.parent === 'client-created-root') {
+          processNode(nodeId)
+        }
+      }
+
+      if (messages.length > 0) {
+        chats.push({
+          id: generateChatId(),
+          title: conversation.title || 'Imported Chat',
+          messages,
+          createdAt: new Date(conversation.create_time * 1000),
+          isLocalOnly: !isCloudSyncEnabled(),
+        })
+      }
+    }
+
+    return chats
+  }
+
+  const parseClaudeConversations = (
+    data: Array<{
+      uuid: string
+      name: string
+      created_at: string
+      updated_at: string
+      chat_messages: Array<{
+        uuid: string
+        text: string
+        sender: 'human' | 'assistant'
+        created_at: string
+      }>
+    }>,
+  ): Chat[] => {
+    const chats: Chat[] = []
+
+    for (const conversation of data) {
+      const messages: Message[] = []
+
+      for (const msg of conversation.chat_messages || []) {
+        if (msg.text && msg.text.trim()) {
+          messages.push({
+            role: msg.sender === 'human' ? 'user' : 'assistant',
+            content: msg.text.trim(),
+            timestamp: new Date(msg.created_at),
+          })
+        }
+      }
+
+      if (messages.length > 0) {
+        chats.push({
+          id: generateChatId(),
+          title: conversation.name || 'Imported Chat',
+          messages,
+          createdAt: new Date(conversation.created_at),
+          isLocalOnly: !isCloudSyncEnabled(),
+        })
+      }
+    }
+
+    return chats
+  }
+
+  const handleImportChatGPT = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImportSource('chatgpt')
+    setIsImporting(true)
+    setImportResult(null)
+
+    try {
+      const content = await file.text()
+      const data = JSON.parse(content)
+
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid ChatGPT export format')
+      }
+
+      const chats = parseChatGPTConversations(data)
+      setImportProgress({ current: 0, total: chats.length, type: 'chats' })
+
+      let imported = 0
+      const errors: string[] = []
+
+      for (let i = 0; i < chats.length; i++) {
+        try {
+          await chatStorage.saveChat(chats[i])
+          imported++
+        } catch (err) {
+          errors.push(`Failed to import "${chats[i].title}"`)
+        }
+        setImportProgress({
+          current: i + 1,
+          total: chats.length,
+          type: 'chats',
+        })
+      }
+
+      setImportResult({
+        success: errors.length === 0,
+        chatsImported: imported,
+        projectsImported: 0,
+        errors,
+      })
+
+      if (onChatsUpdated) {
+        onChatsUpdated()
+      }
+
+      toast({
+        title: 'Import complete',
+        description: `Imported ${imported} chat${imported !== 1 ? 's' : ''} from ChatGPT`,
+      })
+    } catch (err) {
+      setImportResult({
+        success: false,
+        chatsImported: 0,
+        projectsImported: 0,
+        errors: [err instanceof Error ? err.message : 'Failed to parse file'],
+      })
+      toast({
+        title: 'Import failed',
+        description: 'Could not parse the ChatGPT export file',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsImporting(false)
+      setImportProgress(null)
+      e.target.value = ''
+    }
+  }
+
+  const handleImportClaudeConversations = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImportSource('claude')
+    setIsImporting(true)
+    setImportResult(null)
+
+    try {
+      const content = await file.text()
+      const data = JSON.parse(content)
+
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid Claude export format')
+      }
+
+      const chats = parseClaudeConversations(data)
+      setImportProgress({ current: 0, total: chats.length, type: 'chats' })
+
+      let imported = 0
+      const errors: string[] = []
+
+      for (let i = 0; i < chats.length; i++) {
+        try {
+          await chatStorage.saveChat(chats[i])
+          imported++
+        } catch (err) {
+          errors.push(`Failed to import "${chats[i].title}"`)
+        }
+        setImportProgress({
+          current: i + 1,
+          total: chats.length,
+          type: 'chats',
+        })
+      }
+
+      setImportResult({
+        success: errors.length === 0,
+        chatsImported: imported,
+        projectsImported: 0,
+        errors,
+      })
+
+      if (onChatsUpdated) {
+        onChatsUpdated()
+      }
+
+      toast({
+        title: 'Import complete',
+        description: `Imported ${imported} chat${imported !== 1 ? 's' : ''} from Claude`,
+      })
+    } catch (err) {
+      setImportResult({
+        success: false,
+        chatsImported: 0,
+        projectsImported: 0,
+        errors: [err instanceof Error ? err.message : 'Failed to parse file'],
+      })
+      toast({
+        title: 'Import failed',
+        description: 'Could not parse the Claude export file',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsImporting(false)
+      setImportProgress(null)
+      e.target.value = ''
+    }
+  }
+
+  const handleImportClaudeProjects = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!isPremium) {
+      toast({
+        title: 'Premium required',
+        description: 'Project import is only available for premium users',
+        variant: 'destructive',
+      })
+      e.target.value = ''
+      return
+    }
+
+    setImportSource('claude')
+    setIsImporting(true)
+    setImportResult(null)
+
+    try {
+      const content = await file.text()
+      const data = JSON.parse(content)
+
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid Claude projects export format')
+      }
+
+      setImportProgress({ current: 0, total: data.length, type: 'projects' })
+
+      let imported = 0
+      const errors: string[] = []
+
+      // Dynamically import project storage to avoid circular dependencies
+      const { projectStorage } = await import(
+        '@/services/cloud/project-storage'
+      )
+
+      for (let i = 0; i < data.length; i++) {
+        const project = data[i]
+        try {
+          // Create the project
+          const createdProject = await projectStorage.createProject({
+            name: project.name || 'Imported Project',
+            description: project.description || '',
+            systemInstructions: project.prompt_template || '',
+          })
+
+          // Upload any documents
+          if (project.docs && Array.isArray(project.docs)) {
+            for (const doc of project.docs) {
+              if (doc.content && doc.filename) {
+                try {
+                  await projectStorage.uploadDocument(
+                    createdProject.id,
+                    doc.filename,
+                    'text/markdown',
+                    doc.content,
+                  )
+                } catch {
+                  errors.push(
+                    `Failed to import document "${doc.filename}" for project "${project.name}"`,
+                  )
+                }
+              }
+            }
+          }
+
+          imported++
+        } catch (err) {
+          errors.push(`Failed to import project "${project.name}"`)
+        }
+        setImportProgress({
+          current: i + 1,
+          total: data.length,
+          type: 'projects',
+        })
+      }
+
+      setImportResult({
+        success: errors.length === 0,
+        chatsImported: 0,
+        projectsImported: imported,
+        errors,
+      })
+
+      toast({
+        title: 'Import complete',
+        description: `Imported ${imported} project${imported !== 1 ? 's' : ''} from Claude`,
+      })
+    } catch (err) {
+      setImportResult({
+        success: false,
+        chatsImported: 0,
+        projectsImported: 0,
+        errors: [err instanceof Error ? err.message : 'Failed to parse file'],
+      })
+      toast({
+        title: 'Import failed',
+        description: 'Could not parse the Claude projects file',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsImporting(false)
+      setImportProgress(null)
+      e.target.value = ''
+    }
+  }
+
   // Cleanup copy timeout on unmount
   useEffect(() => {
     return () => {
@@ -932,13 +1351,22 @@ ${encryptionKey.replace('key_', '')}
 
   const navItems = [
     { id: 'general' as const, label: 'General', icon: Cog6ToothIcon },
-    { id: 'chat' as const, label: 'Chat', icon: ChatBubbleLeftRightIcon },
+    {
+      id: 'chat' as const,
+      label: 'Chat Settings',
+      icon: ChatBubbleLeftRightIcon,
+    },
     {
       id: 'personalization' as const,
       label: 'Personalization',
       icon: UserIcon,
     },
     { id: 'encryption' as const, label: 'Encryption', icon: BsKey },
+    {
+      id: 'import' as const,
+      label: 'Import Conversations',
+      icon: GiParachute,
+    },
     { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
   ]
 
@@ -1500,28 +1928,49 @@ ${encryptionKey.replace('key_', '')}
                       )}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-medium text-emerald-500">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
                           1
                         </div>
-                        <div className="font-aeonik-fono text-xs text-content-muted">
+                        <div className="font-aeonik-fono text-sm text-content-muted">
                           Your chats are encrypted on your device before being
                           sent to the cloud.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-medium text-emerald-500">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
                           2
                         </div>
-                        <div className="font-aeonik-fono text-xs text-content-muted">
+                        <div className="font-aeonik-fono text-sm text-content-muted">
                           Only you have the encryption key. Tinfoil cannot read
                           your messages.
                         </div>
                       </div>
                       <div className="flex items-start gap-3">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-medium text-emerald-500">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
                           3
                         </div>
-                        <div className="font-aeonik-fono text-xs text-content-muted">
+                        <div className="font-aeonik-fono text-sm text-content-muted">
                           To access your chats on a new device, you&apos;ll need
                           to enter your encryption key.
                         </div>
@@ -1827,6 +2276,372 @@ ${encryptionKey.replace('key_', '')}
                       </div>
                     </div>
                   )}
+                </>
+              )}
+
+              {/* Import Tab */}
+              {activeTab === 'import' && (
+                <>
+                  {/* Import Progress */}
+                  {isImporting && importProgress && (
+                    <div className="space-y-3">
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-4',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <ArrowPathIcon className="h-5 w-5 animate-spin text-brand-accent-light" />
+                          <div className="flex-1">
+                            <div className="font-aeonik text-sm font-medium text-content-primary">
+                              Importing {importProgress.type}...
+                            </div>
+                            <div className="font-aeonik-fono text-xs text-content-muted">
+                              {importProgress.current} of {importProgress.total}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-chat">
+                          <div
+                            className="h-full bg-brand-accent-light transition-all"
+                            style={{
+                              width: `${(importProgress.current / importProgress.total) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Import Result */}
+                  {importResult && !isImporting && (
+                    <div className="space-y-3">
+                      <div
+                        className={cn(
+                          'rounded-lg border p-4',
+                          importResult.success
+                            ? 'border-emerald-500/30 bg-emerald-500/10'
+                            : 'border-red-500/30 bg-red-500/10',
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          {importResult.success ? (
+                            <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+                          ) : (
+                            <XMarkIcon className="h-5 w-5 text-red-500" />
+                          )}
+                          <div>
+                            <div
+                              className={cn(
+                                'font-aeonik text-sm font-medium',
+                                importResult.success
+                                  ? 'text-emerald-500'
+                                  : 'text-red-500',
+                              )}
+                            >
+                              {importResult.success
+                                ? 'Import complete'
+                                : 'Import completed with errors'}
+                            </div>
+                            <div className="font-aeonik-fono text-xs text-content-muted">
+                              {importResult.chatsImported > 0 &&
+                                `${importResult.chatsImported} chat${importResult.chatsImported !== 1 ? 's' : ''} imported`}
+                              {importResult.chatsImported > 0 &&
+                                importResult.projectsImported > 0 &&
+                                ', '}
+                              {importResult.projectsImported > 0 &&
+                                `${importResult.projectsImported} project${importResult.projectsImported !== 1 ? 's' : ''} imported`}
+                            </div>
+                            {importResult.errors.length > 0 && (
+                              <div className="mt-2 text-xs text-red-400">
+                                {importResult.errors
+                                  .slice(0, 3)
+                                  .map((err, i) => (
+                                    <div key={i}>{err}</div>
+                                  ))}
+                                {importResult.errors.length > 3 && (
+                                  <div>
+                                    +{importResult.errors.length - 3} more
+                                    errors
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ChatGPT Import */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Import from ChatGPT
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          1
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Open{' '}
+                          <a
+                            href="https://chatgpt.com/#settings/DataControls"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              'hover:underline',
+                              isDarkMode
+                                ? 'text-brand-accent-light'
+                                : 'text-[#004444]',
+                            )}
+                          >
+                            ChatGPT Settings &gt; Data Controls
+                          </a>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          2
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Click on &quot;Export data&quot; and wait for an email
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          3
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Download and unzip the file they sent you via email
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          4
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Select{' '}
+                          <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
+                            conversations.json
+                          </code>{' '}
+                          from the unzipped folder
+                        </div>
+                      </div>
+                      <input
+                        ref={chatGptFileInputRef}
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportChatGPT}
+                        className="hidden"
+                        disabled={isImporting}
+                      />
+                      <button
+                        onClick={() => chatGptFileInputRef.current?.click()}
+                        disabled={isImporting}
+                        className={cn(
+                          'mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                          isImporting
+                            ? 'cursor-not-allowed opacity-50'
+                            : 'hover:bg-surface-chat',
+                          isDarkMode
+                            ? 'bg-surface-chat text-content-primary'
+                            : 'bg-surface-sidebar text-content-primary',
+                        )}
+                      >
+                        <ArrowUpTrayIcon className="h-4 w-4" />
+                        Select File
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Claude Import */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Import from Claude
+                    </h3>
+                    <div
+                      className={cn(
+                        'space-y-3 rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          1
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Open{' '}
+                          <a
+                            href="https://claude.ai/settings/data-privacy-controls"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              'hover:underline',
+                              isDarkMode
+                                ? 'text-brand-accent-light'
+                                : 'text-[#004444]',
+                            )}
+                          >
+                            Claude Settings &gt; Privacy
+                          </a>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          2
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Click on &quot;Export data&quot; and wait for an email
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          3
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Download and unzip the file they sent you via email
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            isDarkMode
+                              ? 'bg-content-muted/20 text-content-secondary'
+                              : 'bg-content-muted/20 text-content-secondary',
+                          )}
+                        >
+                          4
+                        </div>
+                        <div className="font-aeonik-fono text-sm text-content-muted">
+                          Select{' '}
+                          <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
+                            conversations.json
+                          </code>{' '}
+                          or{' '}
+                          <code className="rounded bg-surface-chat px-1.5 py-0.5 font-mono text-xs">
+                            projects.json
+                          </code>{' '}
+                          from the unzipped folder
+                        </div>
+                      </div>
+                      <input
+                        ref={claudeConversationsFileInputRef}
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportClaudeConversations}
+                        className="hidden"
+                        disabled={isImporting}
+                      />
+                      <input
+                        ref={claudeProjectsFileInputRef}
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportClaudeProjects}
+                        className="hidden"
+                        disabled={isImporting || !isPremium}
+                      />
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() =>
+                            claudeConversationsFileInputRef.current?.click()
+                          }
+                          disabled={isImporting}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isImporting
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          <ArrowUpTrayIcon className="h-4 w-4" />
+                          Conversations
+                        </button>
+                        <button
+                          onClick={() =>
+                            claudeProjectsFileInputRef.current?.click()
+                          }
+                          disabled={isImporting || !isPremium}
+                          className={cn(
+                            'flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle px-4 py-2.5 text-sm font-medium transition-colors',
+                            isImporting || !isPremium
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat',
+                            isDarkMode
+                              ? 'bg-surface-chat text-content-primary'
+                              : 'bg-surface-sidebar text-content-primary',
+                          )}
+                        >
+                          <ArrowUpTrayIcon className="h-4 w-4" />
+                          Projects
+                          {!isPremium && (
+                            <span className="ml-1 rounded-full bg-brand-accent-light/20 px-1.5 py-0.5 text-[10px] font-medium text-brand-accent-light">
+                              Pro
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
 
