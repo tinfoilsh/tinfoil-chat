@@ -52,7 +52,10 @@ export function logError(
         : error,
     context,
     timestamp: new Date().toISOString(),
-    url: typeof window !== 'undefined' ? window.location.href : undefined,
+    url:
+      typeof window !== 'undefined'
+        ? window.location.href.split('#')[0]
+        : undefined,
     userAgent:
       typeof window !== 'undefined' ? window.navigator.userAgent : undefined,
   }
