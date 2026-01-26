@@ -394,6 +394,8 @@ export function ChatSidebar({
     clearDragState,
   } = useDrag()
 
+  const [isDropTargetChatList, setIsDropTargetChatList] = useState(false)
+
   const [isMac, setIsMac] = useState(false)
   useEffect(() => {
     setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
@@ -1065,7 +1067,7 @@ export function ChatSidebar({
                 const chatId = e.dataTransfer.types.includes(
                   'application/x-chat-id',
                 )
-                if (chatId && onRemoveChatFromProject) {
+                if (chatId) {
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
                   setDropTargetChatHistory(true)
@@ -1075,9 +1077,10 @@ export function ChatSidebar({
                 const chatId = e.dataTransfer.types.includes(
                   'application/x-chat-id',
                 )
-                if (chatId && onRemoveChatFromProject) {
+                if (chatId) {
                   e.preventDefault()
                   setDropTargetChatHistory(true)
+                  setIsChatHistoryExpanded(true)
                 }
               }}
               onDragLeave={() => {
@@ -1181,9 +1184,10 @@ export function ChatSidebar({
                             draggingChatFromProjectId &&
                             onRemoveChatFromProject
                           ) {
+                            // Chat from project is already cloud, just remove from project
                             await onRemoveChatFromProject(chatId)
-                          }
-                          if (onConvertChatToCloud) {
+                          } else if (onConvertChatToCloud) {
+                            // Only convert if dragging from local (not from project)
                             await onConvertChatToCloud(chatId)
                           }
                         }
@@ -1244,8 +1248,10 @@ export function ChatSidebar({
                             draggingChatFromProjectId &&
                             onRemoveChatFromProject
                           ) {
+                            // Remove from project first
                             await onRemoveChatFromProject(chatId)
                           }
+                          // Convert to local (both for project chats and cloud chats)
                           if (onConvertChatToLocal) {
                             await onConvertChatToLocal(chatId)
                           }
@@ -1317,9 +1323,53 @@ export function ChatSidebar({
           {isChatHistoryExpanded && (
             <div
               ref={chatListRef}
+              onDragOver={(e) => {
+                if (
+                  e.dataTransfer.types.includes('application/x-chat-id') &&
+                  draggingChatFromProjectId
+                ) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setIsDropTargetChatList(true)
+                }
+              }}
+              onDragEnter={(e) => {
+                if (
+                  e.dataTransfer.types.includes('application/x-chat-id') &&
+                  draggingChatFromProjectId
+                ) {
+                  e.preventDefault()
+                  setIsDropTargetChatList(true)
+                }
+              }}
+              onDragLeave={(e) => {
+                // Only clear if leaving the container entirely
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setIsDropTargetChatList(false)
+                }
+              }}
+              onDrop={async (e) => {
+                e.preventDefault()
+                const chatId = e.dataTransfer.getData('application/x-chat-id')
+                if (
+                  chatId &&
+                  draggingChatFromProjectId &&
+                  onRemoveChatFromProject
+                ) {
+                  // Remove from project, keeping as cloud chat (current tab)
+                  await onRemoveChatFromProject(chatId)
+                  // If on local tab, also convert to local
+                  if (activeTab === 'local' && onConvertChatToLocal) {
+                    await onConvertChatToLocal(chatId)
+                  }
+                }
+                setIsDropTargetChatList(false)
+                clearDragState()
+              }}
               className={cn(
                 'relative z-10 flex-1 overflow-y-auto',
                 isChatListScrolled && 'border-t border-border-subtle',
+                isDropTargetChatList && 'bg-emerald-400/5',
               )}
             >
               {isClient && (
