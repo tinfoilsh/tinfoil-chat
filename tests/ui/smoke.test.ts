@@ -26,7 +26,7 @@ test.describe('Smoke Tests', () => {
     await expect(html).toHaveAttribute('data-theme', 'light')
 
     // First open the sidebar (it may be collapsed)
-    const sidebarToggle = page.locator('button[aria-label="Open sidebar"]')
+    const sidebarToggle = page.locator('button[aria-label="Expand sidebar"]')
     if (await sidebarToggle.isVisible()) {
       await sidebarToggle.click()
       // Wait for sidebar to open
