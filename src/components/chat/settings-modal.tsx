@@ -1547,7 +1547,15 @@ ${encryptionKey.replace('key_', '')}
                     : 'text-content-secondary hover:bg-surface-chat/50',
                 )}
               >
-                <item.icon className="h-4 w-4" />
+                {item.id === 'account' && isSignedIn && user?.imageUrl ? (
+                  <img
+                    src={user.imageUrl}
+                    alt=""
+                    className="h-4 w-4 rounded-full object-cover"
+                  />
+                ) : (
+                  <item.icon className="h-4 w-4" />
+                )}
                 {item.label}
               </button>
             ))}
@@ -1579,7 +1587,15 @@ ${encryptionKey.replace('key_', '')}
                     : 'text-content-secondary hover:bg-surface-chat/50',
                 )}
               >
-                <item.icon className="h-5 w-5" />
+                {item.id === 'account' && isSignedIn && user?.imageUrl ? (
+                  <img
+                    src={user.imageUrl}
+                    alt=""
+                    className="h-5 w-5 rounded-full object-cover"
+                  />
+                ) : (
+                  <item.icon className="h-5 w-5" />
+                )}
                 {item.label}
               </button>
             ))}
@@ -2048,12 +2064,12 @@ ${encryptionKey.replace('key_', '')}
                             key={trait}
                             onClick={() => handleTraitToggle(trait)}
                             className={cn(
-                              'rounded-full px-2 py-1 text-xs transition-colors',
+                              'rounded-full px-3 py-1.5 text-sm transition-colors',
                               selectedTraits.includes(trait)
                                 ? 'bg-brand-accent-light text-brand-accent-dark'
                                 : isDarkMode
                                   ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat'
-                                  : 'bg-surface-sidebar text-content-secondary hover:bg-surface-sidebar',
+                                  : 'border border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-surface-chat',
                             )}
                           >
                             {selectedTraits.includes(trait) ? '✓ ' : '+ '}
