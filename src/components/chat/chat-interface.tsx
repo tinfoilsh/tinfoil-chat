@@ -2146,7 +2146,7 @@ export function ChatInterface({
                               e.stopPropagation()
                               handleLabelClick('model', () => {})
                             }}
-                            className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-secondary transition-colors hover:bg-surface-chat"
+                            className="flex items-center gap-1 text-content-secondary transition-colors hover:text-content-primary"
                           >
                             {(() => {
                               const model = models.find(
@@ -2155,30 +2155,11 @@ export function ChatInterface({
                               if (!model) return null
                               return (
                                 <>
-                                  <img
-                                    src={
-                                      failedImages[model.modelName]
-                                        ? '/icon.png'
-                                        : model.image === 'openai.png'
-                                          ? `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
-                                          : model.image === 'moonshot.png'
-                                            ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
-                                            : `/model-icons/${model.image}`
-                                    }
-                                    alt={model.name}
-                                    className="h-4 w-4"
-                                    onError={() =>
-                                      setFailedImages((prev) => ({
-                                        ...prev,
-                                        [model.modelName]: true,
-                                      }))
-                                    }
-                                  />
-                                  <span className="text-xs font-medium text-content-primary">
+                                  <span className="text-xs font-medium">
                                     {model.name}
                                   </span>
                                   <svg
-                                    className="h-3 w-3 text-content-muted"
+                                    className="h-3 w-3"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
