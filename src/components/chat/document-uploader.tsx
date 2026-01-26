@@ -233,7 +233,7 @@ export const useDocumentUploader = (isPremium?: boolean) => {
 
       // Handle 204 No Content response
       if (response.status === 204) {
-        onSuccess('NO TEXT CONTENT', documentId)
+        onSuccess('', documentId)
         return
       }
 
@@ -262,7 +262,7 @@ export const useDocumentUploader = (isPremium?: boolean) => {
       if (processingResult.document && processingResult.document.md_content) {
         onSuccess(processingResult.document.md_content, documentId)
       } else {
-        onSuccess('NO TEXT CONTENT', documentId)
+        onSuccess('', documentId)
       }
     } catch (error) {
       logError('Document processing failed', error, {
