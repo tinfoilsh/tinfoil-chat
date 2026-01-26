@@ -57,18 +57,6 @@ import { ModelSelector } from './model-selector'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 // Lazy-load modals that aren't shown on initial load
-const EncryptionKeyModal = dynamic(
-  () =>
-    import('../modals/encryption-key-modal').then((m) => m.EncryptionKeyModal),
-  { ssr: false },
-)
-const CloudSyncIntroModal = dynamic(
-  () =>
-    import('../modals/cloud-sync-intro-modal').then(
-      (m) => m.CloudSyncIntroModal,
-    ),
-  { ssr: false },
-)
 const CloudSyncSetupModal = dynamic(
   () =>
     import('../modals/cloud-sync-setup-modal').then(
@@ -241,14 +229,6 @@ export function ChatInterface({
 
   // State for share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false)
-
-  // State for encryption key modal
-  const [isEncryptionKeyModalOpen, setIsEncryptionKeyModalOpen] =
-    useState(false)
-
-  // State for cloud sync intro modal
-  const [isCloudSyncIntroModalOpen, setIsCloudSyncIntroModalOpen] =
-    useState(false)
 
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
@@ -2253,32 +2233,6 @@ export function ChatInterface({
             )}
         </div>
       </div>
-
-      {/* Encryption Key Modal */}
-      <EncryptionKeyModal
-        isOpen={isEncryptionKeyModalOpen}
-        onClose={() => setIsEncryptionKeyModalOpen(false)}
-        encryptionKey={encryptionKey}
-        onKeyChange={async (key: string) => {
-          const syncResult = await setEncryptionKey(key)
-          // If sync happened (key changed), reload chats
-          if (syncResult) {
-            await reloadChats()
-            // Also retry profile decryption with the new key
-            await retryProfileDecryption()
-            // Notify projects to retry decryption
-            window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
-          }
-        }}
-        isDarkMode={isDarkMode}
-      />
-
-      {/* Cloud Sync Intro Modal */}
-      <CloudSyncIntroModal
-        isOpen={isCloudSyncIntroModalOpen}
-        onClose={() => setIsCloudSyncIntroModalOpen(false)}
-        isDarkMode={isDarkMode}
-      />
 
       {/* Cloud Sync Setup Modal - manually triggered from settings */}
       {showCloudSyncSetupModal && (

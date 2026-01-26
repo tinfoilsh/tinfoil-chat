@@ -16,7 +16,7 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
-import { SignInButton, UserButton, useUser } from '@clerk/nextjs'
+import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -155,6 +155,7 @@ export function SettingsModal({
   onKeyChange,
   initialTab,
 }: SettingsModalProps) {
+  const { getToken } = useAuth()
   const { user } = useUser()
   const { toast } = useToast()
   const [maxMessages, setMaxMessages] = useState<number>(
