@@ -20,6 +20,7 @@ export const CONSTANTS = {
   ASYNC_STATE_DELAY_MS: 50,
   // Sidebar widths
   CHAT_SIDEBAR_WIDTH_PX: 300,
+  CHAT_SIDEBAR_COLLAPSED_WIDTH_PX: 64,
   SETTINGS_SIDEBAR_WIDTH_PX: 345,
   VERIFIER_SIDEBAR_WIDTH_PX: 345,
   // Long text paste threshold (characters) - texts longer than this will be converted to .txt file

@@ -16,12 +16,13 @@ import {
   Cog6ToothIcon,
   FolderIcon,
   FolderPlusIcon,
+  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
-import { HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
+import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { IoChatbubblesOutline } from 'react-icons/io5'
 import { PiFolder, PiMicrophone, PiSparkle, PiSpinner } from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
@@ -693,6 +694,9 @@ export function ChatSidebar({
     }
   }, [])
 
+  // Check if mobile
+  const isMobile = windowWidth < MOBILE_BREAKPOINT
+
   return (
     <>
       {/* CSS for subtle pulse animation */}
@@ -710,28 +714,155 @@ export function ChatSidebar({
         }
       `}</style>
 
-      {/* Sidebar wrapper */}
+      {/* Collapsed sidebar rail - always visible on desktop when sidebar is closed */}
+      {!isMobile && !isOpen && (
+        <div
+          className={cn(
+            'fixed left-0 top-0 z-40 flex h-dvh flex-col border-r',
+            'border-border-subtle bg-surface-sidebar text-content-primary',
+          )}
+          style={{ width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px` }}
+        >
+          {/* Logo icon - shows expand icon on hover */}
+          <div className="flex h-16 flex-none items-center justify-center">
+            <button
+              onClick={() => setIsOpen(true)}
+              className="group/logo relative rounded p-2"
+              aria-label="Expand sidebar"
+            >
+              <img
+                src={isDarkMode ? '/icon-dark.png' : '/icon-light.png'}
+                alt="Tinfoil"
+                className="h-6 w-6 transition-opacity group-hover/logo:opacity-0"
+              />
+              <GoSidebarCollapse className="absolute inset-0 m-auto h-5 w-5 text-content-secondary opacity-0 transition-opacity group-hover/logo:opacity-100" />
+            </button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-col items-center gap-1 px-2">
+            {/* New chat button */}
+            <div className="group relative">
+              <button
+                onClick={() => createNewChat(activeTab === 'local', true)}
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                )}
+                aria-label="New chat"
+              >
+                <PlusIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                New chat{' '}
+                <span className="text-content-muted">
+                  {modKey}
+                  {isMac ? '⇧' : 'Shift+'}O
+                </span>
+              </span>
+            </div>
+
+            {/* Chats button */}
+            <div className="group relative">
+              <button
+                onClick={() => {
+                  sessionStorage.setItem('sidebarExpandSection', 'chats')
+                  setIsChatHistoryExpanded(true)
+                  setIsProjectsExpanded(false)
+                  setIsOpen(true)
+                }}
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                )}
+                aria-label="Chats"
+              >
+                <IoChatbubblesOutline className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Chats <span className="text-content-muted">{modKey}.</span>
+              </span>
+            </div>
+
+            {/* Projects button - only for premium users */}
+            {isSignedIn && isPremium && (
+              <div className="group relative">
+                <button
+                  onClick={() => {
+                    sessionStorage.setItem('sidebarExpandSection', 'projects')
+                    setIsProjectsExpanded(true)
+                    setIsChatHistoryExpanded(false)
+                    setIsOpen(true)
+                  }}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                    'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                  )}
+                  aria-label="Projects"
+                >
+                  <FolderIcon className="h-5 w-5" />
+                </button>
+                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  Projects
+                </span>
+              </div>
+            )}
+
+            {/* Settings button */}
+            <div className="group relative">
+              <button
+                onClick={onSettingsClick}
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                )}
+                aria-label="Settings"
+              >
+                <Cog6ToothIcon className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Settings
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded sidebar wrapper */}
       <div
         className={cn(
-          'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-r',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'fixed z-40 flex h-dvh flex-col overflow-hidden border-r',
+          // On mobile: slide in/out. On desktop: always positioned, just toggle width
+          isMobile
+            ? isOpen
+              ? 'translate-x-0'
+              : '-translate-x-full'
+            : 'translate-x-0',
           'border-border-subtle bg-surface-sidebar text-content-primary',
           isInitialLoad ? '' : 'transition-all duration-200 ease-in-out',
         )}
-        style={{ maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px` }}
+        style={{
+          width: isMobile ? '85vw' : `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
+          maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
+          // On desktop when closed, hide behind the collapsed rail
+          left:
+            !isMobile && !isOpen
+              ? `-${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
+              : '0',
+        }}
       >
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between p-4">
-          <Link
-            href="https://www.tinfoil.sh"
-            title="Home"
-            className="flex items-center"
-          >
-            <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
-          </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <Link
+              href="https://www.tinfoil.sh"
+              title="Home"
+              className="flex items-center"
+            >
+              <Logo className="h-6 w-auto" dark={isDarkMode} />
+            </Link>
             {/* Settings button */}
-            <div className="group relative">
+            <div className="group relative flex items-center">
               <button
                 id="settings-button"
                 type="button"
@@ -744,6 +875,21 @@ export function ChatSidebar({
                 Settings
               </span>
             </div>
+          </div>
+          {/* Close sidebar button */}
+          <div className="group relative flex items-center">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="rounded p-1.5 text-content-muted transition-all duration-200 hover:bg-surface-chat hover:text-content-secondary"
+              aria-label="Close sidebar"
+            >
+              <GoSidebarExpand className="h-5 w-5" />
+            </button>
+            <span className="pointer-events-none absolute right-full top-1/2 z-50 mr-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+              Close sidebar{' '}
+              <span className="text-content-muted">{modKey}.</span>
+            </span>
           </div>
         </div>
 
@@ -1715,38 +1861,6 @@ export function ChatSidebar({
             </p>
           </div>
         </div>
-      </div>
-
-      {/* Close button on the right edge - outside overflow-hidden container */}
-      <div
-        className="group fixed top-8 z-40 -translate-y-1/2 transition-all duration-200 ease-in-out"
-        style={{
-          left: isOpen
-            ? `min(85vw, ${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px)`
-            : `calc(min(85vw, ${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px) - 100%)`,
-        }}
-      >
-        <button
-          onClick={() => setIsOpen(false)}
-          aria-label="Close sidebar"
-          className={cn(
-            'rounded-r-lg border border-l-0 p-2 transition-colors',
-            isDarkMode
-              ? 'border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-surface-chat hover:text-content-primary'
-              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-white hover:text-content-primary',
-          )}
-        >
-          <HiOutlineChevronDoubleLeft className="h-4 w-4" />
-        </button>
-        <span
-          className={cn(
-            'pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
-            !isOpen && 'hidden',
-          )}
-        >
-          Close sidebar{' '}
-          <span className="ml-1.5 text-content-muted">{modKey}.</span>
-        </span>
       </div>
 
       {/* Mobile overlay */}

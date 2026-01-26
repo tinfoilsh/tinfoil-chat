@@ -52,7 +52,7 @@ import {
   BsFiletypeXlsx,
   BsFiletypeXml,
 } from 'react-icons/bs'
-import { HiOutlineChevronDoubleLeft } from 'react-icons/hi2'
+import { GoSidebarExpand } from 'react-icons/go'
 import { PiLightbulbFilamentThin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
@@ -640,16 +640,16 @@ export function ProjectSidebar({
       >
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
-          <Link
-            href="https://www.tinfoil.sh"
-            title="Home"
-            className="flex items-center"
-          >
-            <Logo className="mt-1 h-6 w-auto" dark={isDarkMode} />
-          </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <Link
+              href="https://www.tinfoil.sh"
+              title="Home"
+              className="flex items-center"
+            >
+              <Logo className="h-6 w-auto" dark={isDarkMode} />
+            </Link>
             {/* Settings button */}
-            <div className="group relative">
+            <div className="group relative flex items-center">
               <button
                 type="button"
                 onClick={onSettingsClick}
@@ -661,6 +661,21 @@ export function ProjectSidebar({
                 Settings
               </span>
             </div>
+          </div>
+          {/* Close sidebar button */}
+          <div className="group relative flex items-center">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="rounded p-1.5 text-content-muted transition-all duration-200 hover:bg-surface-chat hover:text-content-secondary"
+              aria-label="Close sidebar"
+            >
+              <GoSidebarExpand className="h-5 w-5" />
+            </button>
+            <span className="pointer-events-none absolute right-full top-1/2 z-50 mr-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+              Close sidebar{' '}
+              <span className="text-content-muted">{modKey}.</span>
+            </span>
           </div>
         </div>
 
@@ -1273,38 +1288,6 @@ export function ProjectSidebar({
             </p>
           </div>
         </div>
-      </div>
-
-      {/* Close button on the right edge - outside overflow-hidden container */}
-      <div
-        className="group fixed top-8 z-40 -translate-y-1/2 transition-all duration-200 ease-in-out"
-        style={{
-          left: isOpen
-            ? `min(85vw, ${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px)`
-            : `calc(min(85vw, ${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px) - 100%)`,
-        }}
-      >
-        <button
-          onClick={() => setIsOpen(false)}
-          aria-label="Close sidebar"
-          className={cn(
-            'rounded-r-lg border border-l-0 p-2 transition-colors',
-            isDarkMode
-              ? 'border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-surface-chat hover:text-content-primary'
-              : 'border-border-subtle bg-surface-sidebar text-content-secondary hover:bg-white hover:text-content-primary',
-          )}
-        >
-          <HiOutlineChevronDoubleLeft className="h-4 w-4" />
-        </button>
-        <span
-          className={cn(
-            'pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
-            !isOpen && 'hidden',
-          )}
-        >
-          Close sidebar{' '}
-          <span className="ml-1.5 text-content-muted">{modKey}.</span>
-        </span>
       </div>
 
       {/* Mobile overlay */}
