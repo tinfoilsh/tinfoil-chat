@@ -1670,8 +1670,8 @@ export function ChatInterface({
         }}
       />
 
-      {/* Mobile sidebar toggle - only visible on mobile when sidebar is closed */}
-      {windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
+      {/* Mobile sidebar toggle - only visible when collapsed sidebar rail is hidden */}
+      {windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT &&
         !isSidebarOpen &&
         !(isVerifierSidebarOpen || isSettingsModalOpen) && (
           <div className="group relative">
