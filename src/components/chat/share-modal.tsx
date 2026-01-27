@@ -51,6 +51,20 @@ export function ShareModal({
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const contentRef = useRef<HTMLPreElement>(null)
 
+  // Reset modal state when chatId changes (different chat)
+  useEffect(() => {
+    setShareUrl(null)
+    setIsShareEnabled(false)
+    setIsLinkCopied(false)
+  }, [chatId])
+
+  // Reset transient state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsLinkCopied(false)
+    }
+  }, [isOpen])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return
