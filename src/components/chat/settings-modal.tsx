@@ -2157,7 +2157,12 @@ ${encryptionKey.replace('key_', '')}
                   {/* Reset Button */}
                   <button
                     onClick={handleResetPersonalization}
-                    className="rounded border border-border-subtle bg-surface-chat px-2 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+                    className={cn(
+                      'w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                      isDarkMode
+                        ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40'
+                        : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
+                    )}
                   >
                     Reset all fields
                   </button>
