@@ -11,6 +11,7 @@ import {
   ArrowDownIcon,
   ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline'
+import { AnimatePresence, motion } from 'framer-motion'
 import { GoSidebarCollapse } from 'react-icons/go'
 import { HiOutlineShieldExclamation } from 'react-icons/hi2'
 import { IoShareOutline, IoShieldCheckmarkOutline } from 'react-icons/io5'
@@ -1756,98 +1757,120 @@ export function ChatInterface({
 
       {/* Left Sidebar Component - Show ProjectSidebar when in project mode or loading */}
       <DragProvider>
-        {isProjectMode && activeProject ? (
-          <ProjectSidebar
-            isOpen={isSidebarOpen}
-            setIsOpen={setIsSidebarOpen}
-            project={activeProject}
-            isDarkMode={isDarkMode}
-            onExitProject={handleExitProject}
-            onExitProjectWhileDragging={handleExitProjectWhileDragging}
-            onNewChat={() => createNewChat(false, true)}
-            onSelectChat={handleChatSelect}
-            currentChatId={currentChat?.id}
-            isClient={isClient}
-            isPremium={isPremium}
-            chats={chats
-              .filter((c) => c.projectId === activeProject.id)
-              .map((c) => ({
-                id: c.id,
-                title: c.title,
-                messageCount: c.messages.length,
-                createdAt: c.createdAt,
-                projectId: c.projectId,
-                isBlankChat: c.isBlankChat,
-              }))}
-            deleteChat={deleteChat}
-            updateChatTitle={updateChatTitle}
-            onEncryptionKeyClick={
-              isSignedIn ? handleOpenEncryptionKeyModal : undefined
-            }
-            onRemoveChatFromProject={handleRemoveChatFromProject}
-            onAddChatToProject={(chatId) =>
-              handleMoveChatToProject(chatId, activeProject.id)
-            }
-            onSettingsClick={handleOpenSettingsModal}
-          />
-        ) : loadingProject ? (
-          <ProjectSidebar
-            isOpen={isSidebarOpen}
-            setIsOpen={setIsSidebarOpen}
-            project={null}
-            projectName={loadingProject.name}
-            isLoading={true}
-            isDarkMode={isDarkMode}
-            onExitProject={handleExitProject}
-            onExitProjectWhileDragging={handleExitProjectWhileDragging}
-            onNewChat={() => {}}
-            onSelectChat={() => {}}
-            isClient={isClient}
-            isPremium={isPremium}
-            onSettingsClick={handleOpenSettingsModal}
-          />
-        ) : (
-          <ChatSidebar
-            isOpen={isSidebarOpen}
-            setIsOpen={setIsSidebarOpen}
-            chats={chats}
-            currentChat={currentChat}
-            isDarkMode={isDarkMode}
-            createNewChat={createNewChat}
-            handleChatSelect={handleChatSelect}
-            updateChatTitle={updateChatTitle}
-            deleteChat={deleteChat}
-            isClient={isClient}
-            verificationComplete={verificationComplete}
-            verificationSuccess={verificationSuccess}
-            onVerificationComplete={(success) => {
-              setVerificationComplete(true)
-              setVerificationSuccess(success)
-            }}
-            isPremium={isPremium}
-            onEncryptionKeyClick={
-              isSignedIn ? handleOpenEncryptionKeyModal : undefined
-            }
-            onCloudSyncSetupClick={
-              isSignedIn ? handleOpenCloudSyncSetup : undefined
-            }
-            onChatsUpdated={reloadChats}
-            isProjectMode={isProjectMode}
-            activeProjectName={activeProject?.name}
-            onEnterProject={async (projectId, projectName) => {
-              // Create a new blank chat before entering project mode
-              // This prevents the current chat from being associated with the project
-              createNewChat(false, true)
-              await enterProjectMode(projectId, projectName)
-            }}
-            onCreateProject={handleCreateProject}
-            onMoveChatToProject={handleMoveChatToProject}
-            onRemoveChatFromProject={handleRemoveChatFromProject}
-            onConvertChatToCloud={handleConvertChatToCloud}
-            onConvertChatToLocal={handleConvertChatToLocal}
-            onSettingsClick={handleOpenSettingsModal}
-          />
-        )}
+        <AnimatePresence mode="wait" initial={false}>
+          {isProjectMode || loadingProject ? (
+            <motion.div
+              key="sidebar-project-context"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="z-40"
+            >
+              {isProjectMode && activeProject ? (
+                <ProjectSidebar
+                  isOpen={isSidebarOpen}
+                  setIsOpen={setIsSidebarOpen}
+                  project={activeProject}
+                  isDarkMode={isDarkMode}
+                  onExitProject={handleExitProject}
+                  onExitProjectWhileDragging={handleExitProjectWhileDragging}
+                  onNewChat={() => createNewChat(false, true)}
+                  onSelectChat={handleChatSelect}
+                  currentChatId={currentChat?.id}
+                  isClient={isClient}
+                  isPremium={isPremium}
+                  chats={chats
+                    .filter((c) => c.projectId === activeProject.id)
+                    .map((c) => ({
+                      id: c.id,
+                      title: c.title,
+                      messageCount: c.messages.length,
+                      createdAt: c.createdAt,
+                      projectId: c.projectId,
+                      isBlankChat: c.isBlankChat,
+                    }))}
+                  deleteChat={deleteChat}
+                  updateChatTitle={updateChatTitle}
+                  onEncryptionKeyClick={
+                    isSignedIn ? handleOpenEncryptionKeyModal : undefined
+                  }
+                  onRemoveChatFromProject={handleRemoveChatFromProject}
+                  onAddChatToProject={(chatId) =>
+                    handleMoveChatToProject(chatId, activeProject.id)
+                  }
+                  onSettingsClick={handleOpenSettingsModal}
+                />
+              ) : (
+                <ProjectSidebar
+                  isOpen={isSidebarOpen}
+                  setIsOpen={setIsSidebarOpen}
+                  project={null}
+                  projectName={loadingProject?.name}
+                  isLoading={true}
+                  isDarkMode={isDarkMode}
+                  onExitProject={handleExitProject}
+                  onExitProjectWhileDragging={handleExitProjectWhileDragging}
+                  onNewChat={() => {}}
+                  onSelectChat={() => {}}
+                  isClient={isClient}
+                  isPremium={isPremium}
+                  onSettingsClick={handleOpenSettingsModal}
+                />
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="sidebar-chat-context"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="z-40"
+            >
+              <ChatSidebar
+                isOpen={isSidebarOpen}
+                setIsOpen={setIsSidebarOpen}
+                chats={chats}
+                currentChat={currentChat}
+                isDarkMode={isDarkMode}
+                createNewChat={createNewChat}
+                handleChatSelect={handleChatSelect}
+                updateChatTitle={updateChatTitle}
+                deleteChat={deleteChat}
+                isClient={isClient}
+                verificationComplete={verificationComplete}
+                verificationSuccess={verificationSuccess}
+                onVerificationComplete={(success) => {
+                  setVerificationComplete(true)
+                  setVerificationSuccess(success)
+                }}
+                isPremium={isPremium}
+                onEncryptionKeyClick={
+                  isSignedIn ? handleOpenEncryptionKeyModal : undefined
+                }
+                onCloudSyncSetupClick={
+                  isSignedIn ? handleOpenCloudSyncSetup : undefined
+                }
+                onChatsUpdated={reloadChats}
+                isProjectMode={isProjectMode}
+                activeProjectName={activeProject?.name}
+                onEnterProject={async (projectId, projectName) => {
+                  // Create a new blank chat before entering project mode
+                  // This prevents the current chat from being associated with the project
+                  createNewChat(false, true)
+                  await enterProjectMode(projectId, projectName)
+                }}
+                onCreateProject={handleCreateProject}
+                onMoveChatToProject={handleMoveChatToProject}
+                onRemoveChatFromProject={handleRemoveChatFromProject}
+                onConvertChatToCloud={handleConvertChatToCloud}
+                onConvertChatToLocal={handleConvertChatToLocal}
+                onSettingsClick={handleOpenSettingsModal}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </DragProvider>
 
       {/* Right Verifier Sidebar */}
