@@ -25,6 +25,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BsFile,
@@ -54,7 +55,6 @@ import {
   BsFiletypeXml,
 } from 'react-icons/bs'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
-import { PiLightbulbFilamentThin } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
@@ -848,7 +848,7 @@ export function ProjectSidebar({
             </div>
           </div>
 
-          {/* Project Settings Dropdown - moved up */}
+          {/* Project Settings Dropdown */}
           <div className="relative z-10 mt-3 flex-none border-y border-border-subtle">
             <button
               onClick={() =>
@@ -877,112 +877,124 @@ export function ProjectSidebar({
               )}
             </button>
 
-            {settingsExpanded && !isLoading && (
-              <div className="px-4 py-4">
-                <div className="space-y-3">
-                  {/* Description */}
-                  <div className="space-y-2">
-                    <div className="font-aeonik text-sm font-medium text-content-secondary">
-                      Project description
-                    </div>
-                    <textarea
-                      value={editedDescription}
-                      onChange={(e) => setEditedDescription(e.target.value)}
-                      placeholder="Describe your project and goals..."
-                      rows={5}
-                      className={cn(
-                        'w-full resize-none rounded-md border px-3 py-2 text-sm',
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                          : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                        'focus:outline-none focus:ring-1 focus:ring-border-strong',
-                      )}
-                    />
-                  </div>
-
-                  {/* Response Instructions */}
-                  <div className="space-y-2">
-                    <div className="font-aeonik text-sm font-medium text-content-secondary">
-                      Response instructions
-                    </div>
-                    <textarea
-                      value={editedInstructions}
-                      onChange={(e) => setEditedInstructions(e.target.value)}
-                      placeholder="Specific response preferences or instructions..."
-                      rows={5}
-                      className={cn(
-                        'w-full resize-none rounded-md border px-3 py-2 text-sm',
-                        isDarkMode
-                          ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                          : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                        'focus:outline-none focus:ring-1 focus:ring-border-strong',
-                      )}
-                    />
-                  </div>
-
-                  {/* Save button */}
-                  {hasUnsavedChanges && (
-                    <button
-                      onClick={handleSaveSettings}
-                      disabled={isSaving}
-                      className={cn(
-                        'w-full rounded-lg px-3 py-2 font-aeonik text-sm font-medium transition-colors',
-                        'bg-emerald-600 text-white hover:bg-emerald-700',
-                        isSaving && 'cursor-not-allowed opacity-50',
-                      )}
-                    >
-                      {isSaving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                  )}
-
-                  {/* Delete Project */}
-                  {showDeleteConfirm ? (
-                    <div className="rounded-lg bg-red-600 p-3">
-                      <p className="mb-3 font-aeonik-fono text-xs text-white">
-                        Delete this project? This cannot be undone.
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleDeleteProject}
-                          disabled={isDeleting}
+            <AnimatePresence initial={false}>
+              {settingsExpanded && !isLoading && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-4 py-4">
+                    <div className="space-y-3">
+                      {/* Description */}
+                      <div className="space-y-2">
+                        <div className="font-aeonik text-sm font-medium text-content-secondary">
+                          Project description
+                        </div>
+                        <textarea
+                          value={editedDescription}
+                          onChange={(e) => setEditedDescription(e.target.value)}
+                          placeholder="Describe your project and goals..."
+                          rows={5}
                           className={cn(
-                            'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                            'w-full resize-none rounded-md border px-3 py-2 text-sm',
                             isDarkMode
-                              ? 'bg-red-200 text-red-900 hover:bg-red-300'
-                              : 'bg-white text-red-600 hover:bg-red-50',
-                            isDeleting && 'cursor-not-allowed opacity-50',
+                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                            'focus:outline-none focus:ring-1 focus:ring-border-strong',
+                          )}
+                        />
+                      </div>
+
+                      {/* Response Instructions */}
+                      <div className="space-y-2">
+                        <div className="font-aeonik text-sm font-medium text-content-secondary">
+                          Response instructions
+                        </div>
+                        <textarea
+                          value={editedInstructions}
+                          onChange={(e) =>
+                            setEditedInstructions(e.target.value)
+                          }
+                          placeholder="Specific response preferences or instructions..."
+                          rows={5}
+                          className={cn(
+                            'w-full resize-none rounded-md border px-3 py-2 text-sm',
+                            isDarkMode
+                              ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
+                              : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
+                            'focus:outline-none focus:ring-1 focus:ring-border-strong',
+                          )}
+                        />
+                      </div>
+
+                      {/* Save button */}
+                      {hasUnsavedChanges && (
+                        <button
+                          onClick={handleSaveSettings}
+                          disabled={isSaving}
+                          className={cn(
+                            'w-full rounded-lg px-3 py-2 font-aeonik text-sm font-medium transition-colors',
+                            'bg-emerald-600 text-white hover:bg-emerald-700',
+                            isSaving && 'cursor-not-allowed opacity-50',
                           )}
                         >
-                          {isDeleting ? 'Deleting...' : 'Delete'}
+                          {isSaving ? 'Saving...' : 'Save Changes'}
                         </button>
-                        <button
-                          onClick={() => setShowDeleteConfirm(false)}
-                          className="flex-1 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className={cn(
-                        'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                        isDarkMode
-                          ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40'
-                          : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
                       )}
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                      Delete Project
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+
+                      {/* Delete Project */}
+                      {showDeleteConfirm ? (
+                        <div className="rounded-lg bg-red-600 p-3">
+                          <p className="mb-3 font-aeonik-fono text-xs text-white">
+                            Delete this project? This cannot be undone.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleDeleteProject}
+                              disabled={isDeleting}
+                              className={cn(
+                                'flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                                isDarkMode
+                                  ? 'bg-red-200 text-red-900 hover:bg-red-300'
+                                  : 'bg-white text-red-600 hover:bg-red-50',
+                                isDeleting && 'cursor-not-allowed opacity-50',
+                              )}
+                            >
+                              {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                            <button
+                              onClick={() => setShowDeleteConfirm(false)}
+                              className="flex-1 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className={cn(
+                            'flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+                            isDarkMode
+                              ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40'
+                              : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
+                          )}
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                          Delete Project
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Documents Section - moved below settings */}
+          {/* Documents Section */}
           <div className="relative z-10 flex-none border-b border-border-subtle">
             <button
               onClick={() =>
@@ -1020,222 +1032,150 @@ export function ProjectSidebar({
               accept=".pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt"
             />
 
-            {documentsExpanded && !isLoading && (
-              <div className="max-h-64 overflow-y-auto px-2 py-2">
-                {/* Drag and drop zone - at top */}
-                <div
-                  onClick={() =>
-                    !contextLoading && fileInputRef.current?.click()
-                  }
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  className={cn(
-                    'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
-                    contextLoading
-                      ? 'cursor-not-allowed opacity-50'
-                      : 'cursor-pointer',
-                    projectDocuments.length > 0 ||
-                      contextUploadingFiles.length > 0
-                      ? 'mb-2 py-3'
-                      : 'py-6',
-                    isDraggingOver
-                      ? isDarkMode
-                        ? 'border-emerald-400 bg-emerald-950/30'
-                        : 'border-emerald-500 bg-emerald-50'
-                      : isDarkMode
-                        ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
-                        : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
-                  )}
+            <AnimatePresence initial={false}>
+              {documentsExpanded && !isLoading && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden"
                 >
-                  <DocumentPlusIcon
-                    className={cn(
-                      'h-5 w-5',
-                      projectDocuments.length === 0 &&
-                        contextUploadingFiles.length === 0 &&
-                        'mb-2 h-6 w-6',
-                      isDarkMode ? 'text-content-muted' : 'text-content-muted',
-                    )}
-                  />
-                  {projectDocuments.length === 0 &&
-                    contextUploadingFiles.length === 0 && (
-                      <>
-                        <p className="text-center font-aeonik-fono text-xs text-content-muted">
-                          Drop files here or click to upload
-                        </p>
-                        <p className="mt-1 text-center font-aeonik-fono text-[10px] text-content-muted">
-                          PDF, TXT, MD, DOCX, XLSX, PPTX, HTML, CSV, images
-                        </p>
-                      </>
-                    )}
-                </div>
-
-                {/* Document list */}
-                {(projectDocuments.length > 0 ||
-                  contextUploadingFiles.length > 0) && (
-                  <div className="space-y-1">
-                    {/* Uploading placeholder documents - newest at top */}
-                    {[...contextUploadingFiles].reverse().map((file) => (
-                      <div
-                        key={file.id}
+                  <div className="max-h-64 overflow-y-auto px-2 py-2">
+                    {/* Drag and drop zone - at top */}
+                    <div
+                      onClick={() =>
+                        !contextLoading && fileInputRef.current?.click()
+                      }
+                      onDrop={handleDrop}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      className={cn(
+                        'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
+                        contextLoading
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer',
+                        projectDocuments.length > 0 ||
+                          contextUploadingFiles.length > 0
+                          ? 'mb-2 py-3'
+                          : 'py-6',
+                        isDraggingOver
+                          ? isDarkMode
+                            ? 'border-emerald-400 bg-emerald-950/30'
+                            : 'border-emerald-500 bg-emerald-50'
+                          : isDarkMode
+                            ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
+                            : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
+                      )}
+                    >
+                      <DocumentPlusIcon
                         className={cn(
-                          'flex items-center gap-2 rounded-md px-2 py-1.5 opacity-70',
-                          isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar',
-                        )}
-                      >
-                        <PiSpinnerThin
-                          className={cn(
-                            'h-4 w-4 flex-shrink-0 animate-spin',
-                            isDarkMode
-                              ? 'text-emerald-400'
-                              : 'text-emerald-600',
-                          )}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-aeonik-fono text-xs text-content-primary">
-                            {file.name}
-                          </div>
-                          <div className="font-aeonik-fono text-[10px] text-content-muted">
-                            Uploading...
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {/* Existing documents - newest at top */}
-                    {[...projectDocuments].reverse().map((doc) => (
-                      <div
-                        key={doc.id}
-                        className={cn(
-                          'flex items-center gap-2 rounded-md px-2 py-1.5',
-                          isDarkMode ? 'bg-surface-chat' : 'bg-surface-sidebar',
-                        )}
-                      >
-                        {getFileIcon(
-                          doc.filename,
-                          cn(
-                            'h-4 w-4 flex-shrink-0',
-                            isDarkMode
-                              ? 'text-emerald-400'
-                              : 'text-emerald-600',
-                          ),
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-aeonik-fono text-xs text-content-primary">
-                            {doc.filename}
-                          </div>
-                          <div className="font-aeonik-fono text-[10px] text-content-muted">
-                            {formatFileSize(doc.sizeBytes)}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveDocument(doc.id)}
-                          disabled={contextLoading}
-                          className={cn(
-                            'rounded p-0.5 transition-colors',
-                            isDarkMode
-                              ? 'text-content-muted hover:text-red-400'
-                              : 'text-content-muted hover:text-red-600',
-                            contextLoading && 'cursor-not-allowed opacity-50',
-                          )}
-                        >
-                          <TrashIcon className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Memory Section - currently disabled, set to true to re-enable */}
-          {false && (
-            <div className="relative z-10 flex-none border-b border-border-subtle">
-              <button
-                onClick={() => !isLoading && setMemoryExpanded(!memoryExpanded)}
-                disabled={isLoading}
-                className={cn(
-                  'flex w-full items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
-                  isLoading
-                    ? 'cursor-default opacity-50'
-                    : isDarkMode
-                      ? 'text-content-secondary hover:bg-surface-chat'
-                      : 'text-content-secondary hover:bg-white',
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <PiLightbulbFilamentThin className="h-4 w-4" />
-                  <span className="font-aeonik font-medium">
-                    Project memory
-                  </span>
-                </span>
-                {memoryExpanded && !isLoading ? (
-                  <ChevronUpIcon className="h-4 w-4" />
-                ) : (
-                  <ChevronDownIcon className="h-4 w-4" />
-                )}
-              </button>
-
-              {memoryExpanded && !isLoading && (
-                <div className="px-4 pb-3 pt-2">
-                  {(project?.memory?.length ?? 0) === 0 ? (
-                    <p className="py-2 text-center font-aeonik-fono text-xs text-content-muted">
-                      No memory yet. Memory will appear here as you have
-                      conversations.
-                    </p>
-                  ) : (
-                    <>
-                      <textarea
-                        value={memoryText}
-                        onChange={handleMemoryChange}
-                        placeholder="Facts about this project (one per line)..."
-                        rows={6}
-                        className={cn(
-                          'w-full resize-none rounded-md border px-3 py-2 font-aeonik-fono text-xs',
+                          'h-5 w-5',
+                          projectDocuments.length === 0 &&
+                            contextUploadingFiles.length === 0 &&
+                            'mb-2 h-6 w-6',
                           isDarkMode
-                            ? 'border-border-strong bg-surface-chat text-content-secondary placeholder:text-content-muted'
-                            : 'border-border-subtle bg-surface-sidebar text-content-primary placeholder:text-content-muted',
-                          'focus:outline-none focus:ring-1 focus:ring-border-strong',
+                            ? 'text-content-muted'
+                            : 'text-content-muted',
                         )}
                       />
-                      {memoryEdited && (
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            onClick={handleMemorySave}
+                      {projectDocuments.length === 0 &&
+                        contextUploadingFiles.length === 0 && (
+                          <>
+                            <p className="text-center font-aeonik-fono text-xs text-content-muted">
+                              Drop files here or click to upload
+                            </p>
+                            <p className="mt-1 text-center font-aeonik-fono text-[10px] text-content-muted">
+                              PDF, TXT, MD, DOCX, XLSX, PPTX, HTML, CSV, images
+                            </p>
+                          </>
+                        )}
+                    </div>
+
+                    {/* Document list */}
+                    {(projectDocuments.length > 0 ||
+                      contextUploadingFiles.length > 0) && (
+                      <div className="space-y-1">
+                        {/* Uploading placeholder documents - newest at top */}
+                        {[...contextUploadingFiles].reverse().map((file) => (
+                          <div
+                            key={file.id}
                             className={cn(
-                              'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
-                              'bg-emerald-600 text-white hover:bg-emerald-700',
-                            )}
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => {
-                              setMemoryText(
-                                (project?.memory || [])
-                                  .map((f) => f.fact)
-                                  .join('\n\n'),
-                              )
-                              setMemoryEdited(false)
-                            }}
-                            className={cn(
-                              'flex-1 rounded-lg px-3 py-1.5 font-aeonik text-xs font-medium transition-colors',
+                              'flex items-center gap-2 rounded-md px-2 py-1.5 opacity-70',
                               isDarkMode
-                                ? 'bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
-                                : 'bg-surface-sidebar text-content-primary hover:bg-white',
-                              'border border-border-subtle',
+                                ? 'bg-surface-chat'
+                                : 'bg-surface-sidebar',
                             )}
                           >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                            <PiSpinnerThin
+                              className={cn(
+                                'h-4 w-4 flex-shrink-0 animate-spin',
+                                isDarkMode
+                                  ? 'text-emerald-400'
+                                  : 'text-emerald-600',
+                              )}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-aeonik-fono text-xs text-content-primary">
+                                {file.name}
+                              </div>
+                              <div className="font-aeonik-fono text-[10px] text-content-muted">
+                                Uploading...
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {/* Existing documents - newest at top */}
+                        {[...projectDocuments].reverse().map((doc) => (
+                          <div
+                            key={doc.id}
+                            className={cn(
+                              'flex items-center gap-2 rounded-md px-2 py-1.5',
+                              isDarkMode
+                                ? 'bg-surface-chat'
+                                : 'bg-surface-sidebar',
+                            )}
+                          >
+                            {getFileIcon(
+                              doc.filename,
+                              cn(
+                                'h-4 w-4 flex-shrink-0',
+                                isDarkMode
+                                  ? 'text-emerald-400'
+                                  : 'text-emerald-600',
+                              ),
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-aeonik-fono text-xs text-content-primary">
+                                {doc.filename}
+                              </div>
+                              <div className="font-aeonik-fono text-[10px] text-content-muted">
+                                {formatFileSize(doc.sizeBytes)}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleRemoveDocument(doc.id)}
+                              disabled={contextLoading}
+                              className={cn(
+                                'rounded p-0.5 transition-colors',
+                                isDarkMode
+                                  ? 'text-content-muted hover:text-red-400'
+                                  : 'text-content-muted hover:text-red-600',
+                                contextLoading &&
+                                  'cursor-not-allowed opacity-50',
+                              )}
+                            >
+                              <TrashIcon className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
               )}
-            </div>
-          )}
+            </AnimatePresence>
+          </div>
 
           {/* Chat History Header */}
           <div className="relative z-10 flex-none border-b border-border-subtle px-3 py-2 sm:px-4 sm:py-3">
