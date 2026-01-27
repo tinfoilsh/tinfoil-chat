@@ -691,13 +691,15 @@ export function ProjectSidebar({
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="https://www.tinfoil.sh"
+            <button
+              onClick={() => {
+                window.location.href = window.location.origin
+              }}
               title="Home"
               className="flex items-center"
             >
               <Logo className="h-6 w-auto" dark={isDarkMode} />
-            </Link>
+            </button>
             {/* Settings button */}
             <div className="group relative flex items-center">
               <button
