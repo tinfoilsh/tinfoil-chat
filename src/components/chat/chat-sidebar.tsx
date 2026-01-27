@@ -19,6 +19,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
+import { AnimatePresence, motion } from 'framer-motion'
 import { AiOutlineCloudSync } from 'react-icons/ai'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
@@ -1092,289 +1093,314 @@ export function ChatSidebar({
               </div>
 
               {/* Expanded projects list */}
-              {isProjectsExpanded && (
-                <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
-                  {/* Cloud sync disabled message */}
-                  {!cloudSyncEnabled ? (
-                    <div className="px-3 py-2">
-                      <p className="text-xs text-content-muted">
-                        Projects require cloud sync to be enabled.
-                      </p>
-                      <button
-                        onClick={() => {
-                          if (onCloudSyncSetupClick) {
-                            onCloudSyncSetupClick()
-                          } else {
-                            setCloudSyncEnabledSetting(true)
-                            setCloudSyncEnabled(true)
-                          }
-                        }}
-                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-                      >
-                        <CloudIcon className="h-3.5 w-3.5" />
-                        Enable Cloud Sync
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Create new project button */}
-                      {onCreateProject && (
-                        <button
-                          onClick={async () => {
-                            setIsCreatingProject(true)
-                            try {
-                              await onCreateProject()
-                              if (windowWidth < MOBILE_BREAKPOINT) {
-                                setIsOpen(false)
+              <AnimatePresence initial={false}>
+                {isProjectsExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="max-h-64 space-y-1 overflow-y-auto px-2 py-2">
+                      {/* Cloud sync disabled message */}
+                      {!cloudSyncEnabled ? (
+                        <div className="px-3 py-2">
+                          <p className="text-xs text-content-muted">
+                            Projects require cloud sync to be enabled.
+                          </p>
+                          <button
+                            onClick={() => {
+                              if (onCloudSyncSetupClick) {
+                                onCloudSyncSetupClick()
+                              } else {
+                                setCloudSyncEnabledSetting(true)
+                                setCloudSyncEnabled(true)
                               }
-                            } finally {
-                              setIsCreatingProject(false)
-                            }
-                          }}
-                          disabled={isCreatingProject}
-                          className={cn(
-                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-                            'text-content-secondary hover:text-content-primary',
-                            isDarkMode
-                              ? 'hover:bg-surface-chat'
-                              : 'hover:bg-surface-sidebar',
-                            isCreatingProject &&
-                              'cursor-not-allowed opacity-50',
-                          )}
-                        >
-                          {isCreatingProject ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-content-muted border-t-transparent" />
-                          ) : (
-                            <FolderPlusIcon className="h-4 w-4 shrink-0" />
-                          )}
-                          <span className="truncate">
-                            {isCreatingProject ? 'Creating...' : 'New Project'}
-                          </span>
-                        </button>
-                      )}
-
-                      {/* Projects list */}
-                      {projectsLoading && projects.length === 0 ? (
-                        <div className="flex justify-center px-3 py-2">
-                          <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
-                        </div>
-                      ) : projects.length === 0 ? (
-                        <div className="px-3 py-2 text-xs text-content-muted">
-                          No projects yet
+                            }}
+                            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+                          >
+                            <CloudIcon className="h-3.5 w-3.5" />
+                            Enable Cloud Sync
+                          </button>
                         </div>
                       ) : (
                         <>
-                          {projects.map((project) => (
-                            <div
-                              key={project.id}
-                              role="button"
-                              tabIndex={project.decryptionFailed ? -1 : 0}
-                              onClick={async () => {
-                                if (project.decryptionFailed) return
-
-                                if (onEnterProject) {
-                                  await onEnterProject(project.id, project.name)
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (
-                                  (e.key === 'Enter' || e.key === ' ') &&
-                                  onEnterProject &&
-                                  !project.decryptionFailed
-                                ) {
-                                  e.preventDefault()
-                                  onEnterProject(project.id, project.name)
-                                }
-                              }}
-                              onDragOver={(e) => {
-                                if (
-                                  e.dataTransfer.types.includes(
-                                    'application/x-chat-id',
-                                  ) &&
-                                  !project.decryptionFailed
-                                ) {
-                                  e.preventDefault()
-                                  e.dataTransfer.dropEffect = 'move'
-                                  setDropTargetProject(project.id)
-                                }
-                              }}
-                              onDragEnter={(e) => {
-                                if (
-                                  e.dataTransfer.types.includes(
-                                    'application/x-chat-id',
-                                  ) &&
-                                  !project.decryptionFailed
-                                ) {
-                                  e.preventDefault()
-                                  setDropTargetProject(project.id)
-                                  if (projectHoverTimerRef.current) {
-                                    clearTimeout(projectHoverTimerRef.current)
-                                  }
-                                  projectHoverTimerRef.current = setTimeout(
-                                    () => {
-                                      onEnterProject?.(project.id, project.name)
-                                    },
-                                    400,
-                                  )
-                                }
-                              }}
-                              onDragLeave={(e) => {
-                                // Only clear if actually leaving the button (not just moving between children)
-                                if (
-                                  !e.currentTarget.contains(
-                                    e.relatedTarget as Node,
-                                  )
-                                ) {
-                                  if (dropTargetProjectId === project.id) {
-                                    setDropTargetProject(null)
-                                  }
-                                  if (projectHoverTimerRef.current) {
-                                    clearTimeout(projectHoverTimerRef.current)
-                                    projectHoverTimerRef.current = null
-                                  }
-                                }
-                              }}
-                              onDrop={async (e) => {
-                                e.preventDefault()
-                                if (projectHoverTimerRef.current) {
-                                  clearTimeout(projectHoverTimerRef.current)
-                                  projectHoverTimerRef.current = null
-                                }
-                                const chatId = e.dataTransfer.getData(
-                                  'application/x-chat-id',
-                                )
-                                if (
-                                  chatId &&
-                                  onMoveChatToProject &&
-                                  !project.decryptionFailed
-                                ) {
-                                  // Convert local chat to cloud first if needed
-                                  const chat = chats.find(
-                                    (c) => c.id === chatId,
-                                  )
-                                  let finalChatId = chatId
-                                  if (
-                                    chat?.isLocalOnly &&
-                                    onConvertChatToCloud
-                                  ) {
-                                    finalChatId =
-                                      await onConvertChatToCloud(chatId)
-                                  }
-                                  await onMoveChatToProject(
-                                    finalChatId,
-                                    project.id,
-                                  )
-                                }
-                                clearDragState()
-                              }}
-                              className={cn(
-                                'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
-                                dropTargetProjectId === project.id
-                                  ? isDarkMode
-                                    ? 'border-white/30 bg-white/10'
-                                    : 'border-gray-400 bg-gray-200/30'
-                                  : 'border-transparent hover:border-border-subtle',
-                                project.decryptionFailed
-                                  ? 'cursor-default'
-                                  : isDarkMode
-                                    ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
-                                    : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
-                              )}
-                            >
-                              {project.decryptionFailed ? (
-                                <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
-                              ) : (
-                                <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
-                              )}
-                              <div className="flex min-w-0 flex-1 flex-col text-left">
-                                <span
-                                  className={cn(
-                                    'truncate leading-5',
-                                    project.decryptionFailed &&
-                                      'text-orange-500',
-                                  )}
-                                >
-                                  {project.name}
-                                </span>
-                                <span
-                                  className={cn(
-                                    'text-xs',
-                                    project.decryptionFailed
-                                      ? 'text-red-500'
-                                      : 'text-content-muted',
-                                  )}
-                                >
-                                  {project.decryptionFailed
-                                    ? 'Failed to decrypt: wrong key'
-                                    : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
-                                </span>
-                              </div>
-                              {project.decryptionFailed && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation()
-                                    if (deletingProjectId === project.id) return
-                                    setDeletingProjectId(project.id)
-                                    try {
-                                      await deleteProject(project.id)
-                                      await refreshProjects()
-                                    } catch (error) {
-                                      toast({
-                                        title: 'Failed to delete project',
-                                        description:
-                                          error instanceof Error
-                                            ? error.message
-                                            : 'Please try again.',
-                                        variant: 'destructive',
-                                      })
-                                    } finally {
-                                      setDeletingProjectId(null)
-                                    }
-                                  }}
-                                  disabled={deletingProjectId === project.id}
-                                  className={cn(
-                                    'shrink-0 rounded p-1 transition-colors',
-                                    isDarkMode
-                                      ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                      : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                                    deletingProjectId === project.id &&
-                                      'opacity-50',
-                                  )}
-                                  title="Delete encrypted project"
-                                >
-                                  {deletingProjectId === project.id ? (
-                                    <PiSpinner className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <TrashIcon className="h-4 w-4" />
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Load more button */}
-                          {hasMoreProjects && (
+                          {/* Create new project button */}
+                          {onCreateProject && (
                             <button
-                              onClick={() => loadMoreProjects()}
-                              disabled={projectsLoading}
+                              onClick={async () => {
+                                setIsCreatingProject(true)
+                                try {
+                                  await onCreateProject()
+                                  if (windowWidth < MOBILE_BREAKPOINT) {
+                                    setIsOpen(false)
+                                  }
+                                } finally {
+                                  setIsCreatingProject(false)
+                                }
+                              }}
+                              disabled={isCreatingProject}
                               className={cn(
-                                'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
+                                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                                'text-content-secondary hover:text-content-primary',
                                 isDarkMode
-                                  ? 'border-border-strong text-content-muted hover:text-content-secondary'
-                                  : 'border-border-subtle text-content-muted hover:text-content-secondary',
-                                projectsLoading &&
+                                  ? 'hover:bg-surface-chat'
+                                  : 'hover:bg-surface-sidebar',
+                                isCreatingProject &&
                                   'cursor-not-allowed opacity-50',
                               )}
                             >
-                              {projectsLoading ? 'Loading...' : 'Load more'}
+                              {isCreatingProject ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-content-muted border-t-transparent" />
+                              ) : (
+                                <FolderPlusIcon className="h-4 w-4 shrink-0" />
+                              )}
+                              <span className="truncate">
+                                {isCreatingProject
+                                  ? 'Creating...'
+                                  : 'New Project'}
+                              </span>
                             </button>
+                          )}
+
+                          {/* Projects list */}
+                          {projectsLoading && projects.length === 0 ? (
+                            <div className="flex justify-center px-3 py-2">
+                              <PiSpinner className="h-4 w-4 animate-spin text-content-muted" />
+                            </div>
+                          ) : projects.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-content-muted">
+                              No projects yet
+                            </div>
+                          ) : (
+                            <>
+                              {projects.map((project) => (
+                                <div
+                                  key={project.id}
+                                  role="button"
+                                  tabIndex={project.decryptionFailed ? -1 : 0}
+                                  onClick={async () => {
+                                    if (project.decryptionFailed) return
+
+                                    if (onEnterProject) {
+                                      await onEnterProject(
+                                        project.id,
+                                        project.name,
+                                      )
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (
+                                      (e.key === 'Enter' || e.key === ' ') &&
+                                      onEnterProject &&
+                                      !project.decryptionFailed
+                                    ) {
+                                      e.preventDefault()
+                                      onEnterProject(project.id, project.name)
+                                    }
+                                  }}
+                                  onDragOver={(e) => {
+                                    if (
+                                      e.dataTransfer.types.includes(
+                                        'application/x-chat-id',
+                                      ) &&
+                                      !project.decryptionFailed
+                                    ) {
+                                      e.preventDefault()
+                                      e.dataTransfer.dropEffect = 'move'
+                                      setDropTargetProject(project.id)
+                                    }
+                                  }}
+                                  onDragEnter={(e) => {
+                                    if (
+                                      e.dataTransfer.types.includes(
+                                        'application/x-chat-id',
+                                      ) &&
+                                      !project.decryptionFailed
+                                    ) {
+                                      e.preventDefault()
+                                      setDropTargetProject(project.id)
+                                      if (projectHoverTimerRef.current) {
+                                        clearTimeout(
+                                          projectHoverTimerRef.current,
+                                        )
+                                      }
+                                      projectHoverTimerRef.current = setTimeout(
+                                        () => {
+                                          onEnterProject?.(
+                                            project.id,
+                                            project.name,
+                                          )
+                                        },
+                                        400,
+                                      )
+                                    }
+                                  }}
+                                  onDragLeave={(e) => {
+                                    // Only clear if actually leaving the button (not just moving between children)
+                                    if (
+                                      !e.currentTarget.contains(
+                                        e.relatedTarget as Node,
+                                      )
+                                    ) {
+                                      if (dropTargetProjectId === project.id) {
+                                        setDropTargetProject(null)
+                                      }
+                                      if (projectHoverTimerRef.current) {
+                                        clearTimeout(
+                                          projectHoverTimerRef.current,
+                                        )
+                                        projectHoverTimerRef.current = null
+                                      }
+                                    }
+                                  }}
+                                  onDrop={async (e) => {
+                                    e.preventDefault()
+                                    if (projectHoverTimerRef.current) {
+                                      clearTimeout(projectHoverTimerRef.current)
+                                      projectHoverTimerRef.current = null
+                                    }
+                                    const chatId = e.dataTransfer.getData(
+                                      'application/x-chat-id',
+                                    )
+                                    if (
+                                      chatId &&
+                                      onMoveChatToProject &&
+                                      !project.decryptionFailed
+                                    ) {
+                                      // Convert local chat to cloud first if needed
+                                      const chat = chats.find(
+                                        (c) => c.id === chatId,
+                                      )
+                                      let finalChatId = chatId
+                                      if (
+                                        chat?.isLocalOnly &&
+                                        onConvertChatToCloud
+                                      ) {
+                                        finalChatId =
+                                          await onConvertChatToCloud(chatId)
+                                      }
+                                      await onMoveChatToProject(
+                                        finalChatId,
+                                        project.id,
+                                      )
+                                    }
+                                    clearDragState()
+                                  }}
+                                  className={cn(
+                                    'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                                    dropTargetProjectId === project.id
+                                      ? isDarkMode
+                                        ? 'border-white/30 bg-white/10'
+                                        : 'border-gray-400 bg-gray-200/30'
+                                      : 'border-transparent hover:border-border-subtle',
+                                    project.decryptionFailed
+                                      ? 'cursor-default'
+                                      : isDarkMode
+                                        ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
+                                        : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
+                                  )}
+                                >
+                                  {project.decryptionFailed ? (
+                                    <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
+                                  ) : (
+                                    <FolderIcon className="mt-0.5 h-4 w-4 shrink-0 self-start text-content-muted" />
+                                  )}
+                                  <div className="flex min-w-0 flex-1 flex-col text-left">
+                                    <span
+                                      className={cn(
+                                        'truncate leading-5',
+                                        project.decryptionFailed &&
+                                          'text-orange-500',
+                                      )}
+                                    >
+                                      {project.name}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        'text-xs',
+                                        project.decryptionFailed
+                                          ? 'text-red-500'
+                                          : 'text-content-muted',
+                                      )}
+                                    >
+                                      {project.decryptionFailed
+                                        ? 'Failed to decrypt: wrong key'
+                                        : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
+                                    </span>
+                                  </div>
+                                  {project.decryptionFailed && (
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        if (deletingProjectId === project.id)
+                                          return
+                                        setDeletingProjectId(project.id)
+                                        try {
+                                          await deleteProject(project.id)
+                                          await refreshProjects()
+                                        } catch (error) {
+                                          toast({
+                                            title: 'Failed to delete project',
+                                            description:
+                                              error instanceof Error
+                                                ? error.message
+                                                : 'Please try again.',
+                                            variant: 'destructive',
+                                          })
+                                        } finally {
+                                          setDeletingProjectId(null)
+                                        }
+                                      }}
+                                      disabled={
+                                        deletingProjectId === project.id
+                                      }
+                                      className={cn(
+                                        'shrink-0 rounded p-1 transition-colors',
+                                        isDarkMode
+                                          ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                          : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                                        deletingProjectId === project.id &&
+                                          'opacity-50',
+                                      )}
+                                      title="Delete encrypted project"
+                                    >
+                                      {deletingProjectId === project.id ? (
+                                        <PiSpinner className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <TrashIcon className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+
+                              {/* Load more button */}
+                              {hasMoreProjects && (
+                                <button
+                                  onClick={() => loadMoreProjects()}
+                                  disabled={projectsLoading}
+                                  className={cn(
+                                    'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
+                                    isDarkMode
+                                      ? 'border-border-strong text-content-muted hover:text-content-secondary'
+                                      : 'border-border-subtle text-content-muted hover:text-content-secondary',
+                                    projectsLoading &&
+                                      'cursor-not-allowed opacity-50',
+                                  )}
+                                >
+                                  {projectsLoading ? 'Loading...' : 'Load more'}
+                                </button>
+                              )}
+                            </>
                           )}
                         </>
                       )}
-                    </>
-                  )}
-                </div>
-              )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -1451,360 +1477,391 @@ export function ChatSidebar({
             </div>
 
             {/* Expanded Chats content */}
-            {isChatHistoryExpanded && (
-              <>
-                {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
-                {isSignedIn && cloudSyncEnabled && (
-                  <div className="relative mx-4 mt-2 flex rounded-lg bg-surface-chat p-1">
-                    {/* Sliding background indicator */}
-                    <div
-                      className={cn(
-                        'absolute inset-y-1 w-[calc(50%-4px)] rounded-md shadow-sm transition-all duration-200 ease-in-out',
-                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                        activeTab === 'cloud'
-                          ? 'translate-x-0'
-                          : 'translate-x-full',
-                      )}
-                      style={{ left: '4px' }}
-                    />
+            <AnimatePresence initial={false}>
+              {isChatHistoryExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
+                  {isSignedIn && cloudSyncEnabled && (
+                    <div className="relative mx-4 mt-2 flex rounded-lg bg-surface-chat p-1">
+                      {/* Sliding background indicator */}
+                      <div
+                        className={cn(
+                          'absolute inset-y-1 w-[calc(50%-4px)] rounded-md shadow-sm transition-all duration-200 ease-in-out',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          activeTab === 'cloud'
+                            ? 'translate-x-0'
+                            : 'translate-x-full',
+                        )}
+                        style={{ left: '4px' }}
+                      />
 
-                    <button
-                      onClick={() => setActiveTab('cloud')}
-                      onDragOver={(e) => {
-                        if (
-                          e.dataTransfer.types.includes(
-                            'application/x-chat-id',
-                          ) &&
-                          onConvertChatToCloud
-                        ) {
-                          e.preventDefault()
-                          e.dataTransfer.dropEffect = 'move'
-                          setDropTargetTab('cloud')
-                        }
-                      }}
-                      onDragEnter={(e) => {
-                        if (
-                          e.dataTransfer.types.includes(
-                            'application/x-chat-id',
-                          ) &&
-                          onConvertChatToCloud
-                        ) {
-                          e.preventDefault()
-                          setDropTargetTab('cloud')
-                          setActiveTab('cloud')
-                        }
-                      }}
-                      onDragLeave={() => {
-                        if (dropTargetTab === 'cloud') {
-                          setDropTargetTab(null)
-                        }
-                      }}
-                      onDrop={async (e) => {
-                        e.preventDefault()
-                        const chatId = e.dataTransfer.getData(
-                          'application/x-chat-id',
-                        )
-                        if (chatId) {
+                      <button
+                        onClick={() => setActiveTab('cloud')}
+                        onDragOver={(e) => {
                           if (
-                            draggingChatFromProjectId &&
-                            onRemoveChatFromProject
+                            e.dataTransfer.types.includes(
+                              'application/x-chat-id',
+                            ) &&
+                            onConvertChatToCloud
                           ) {
-                            // Chat from project is already cloud, just remove from project
-                            await onRemoveChatFromProject(chatId)
-                          } else if (onConvertChatToCloud) {
-                            // Only convert if dragging from local (not from project)
-                            await onConvertChatToCloud(chatId)
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setDropTargetTab('cloud')
                           }
-                        }
-                        clearDragState()
-                      }}
-                      className={cn(
-                        'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                        dropTargetTab === 'cloud'
-                          ? isDarkMode
-                            ? 'bg-white/10'
-                            : 'bg-gray-200/30'
-                          : activeTab === 'cloud'
-                            ? isDarkMode
-                              ? 'text-white'
-                              : 'text-content-primary'
-                            : 'text-content-muted hover:text-content-secondary',
-                      )}
-                    >
-                      <CloudIcon className="h-3.5 w-3.5" />
-                      Cloud
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('local')}
-                      onDragOver={(e) => {
-                        if (
-                          e.dataTransfer.types.includes(
-                            'application/x-chat-id',
-                          ) &&
-                          onConvertChatToLocal
-                        ) {
-                          e.preventDefault()
-                          e.dataTransfer.dropEffect = 'move'
-                          setDropTargetTab('local')
-                        }
-                      }}
-                      onDragEnter={(e) => {
-                        if (
-                          e.dataTransfer.types.includes(
-                            'application/x-chat-id',
-                          ) &&
-                          onConvertChatToLocal
-                        ) {
-                          e.preventDefault()
-                          setActiveTab('local')
-                          setDropTargetTab('local')
-                        }
-                      }}
-                      onDragLeave={() => {
-                        if (dropTargetTab === 'local') {
-                          setDropTargetTab(null)
-                        }
-                      }}
-                      onDrop={async (e) => {
-                        e.preventDefault()
-                        const chatId = e.dataTransfer.getData(
-                          'application/x-chat-id',
-                        )
-                        if (chatId && onConvertChatToLocal) {
-                          // convertChatToLocal also clears projectId
-                          await onConvertChatToLocal(chatId)
-                        }
-                        clearDragState()
-                      }}
-                      className={cn(
-                        'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                        dropTargetTab === 'local'
-                          ? isDarkMode
-                            ? 'bg-white/10'
-                            : 'bg-gray-200/30'
-                          : activeTab === 'local'
-                            ? isDarkMode
-                              ? 'text-white'
-                              : 'text-content-primary'
-                            : 'text-content-muted hover:text-content-secondary',
-                      )}
-                    >
-                      <CiFloppyDisk className="h-3.5 w-3.5" />
-                      Local
-                    </button>
-                  </div>
-                )}
-
-                {/* Description text - show when NOT displaying the cloud sync box */}
-                {(!isSignedIn || cloudSyncEnabled) && (
-                  <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
-                    {!isSignedIn ? (
-                      'Your chats are stored temporarily in this browser tab. Create an account for persistent storage.'
-                    ) : activeTab === 'local' ? (
-                      "Local chats are stored only on this device and won't sync across devices."
-                    ) : (
-                      <>
-                        Your chats are encrypted and synced to the cloud. The
-                        encryption key is only stored on this browser and never
-                        sent to Tinfoil.
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Cloud Sync Toggle - show when signed in and cloud sync is OFF */}
-                {isSignedIn && !cloudSyncEnabled && (
-                  <div
-                    className={`mx-4 my-3 rounded-lg border border-border-subtle px-3 py-2 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-aeonik text-sm font-medium text-content-secondary">
-                        Cloud Sync
-                      </div>
-                      <label className="relative inline-flex cursor-pointer items-center">
-                        <input
-                          type="checkbox"
-                          checked={cloudSyncEnabled}
-                          onChange={(e) =>
-                            handleCloudSyncToggle(e.target.checked)
+                        }}
+                        onDragEnter={(e) => {
+                          if (
+                            e.dataTransfer.types.includes(
+                              'application/x-chat-id',
+                            ) &&
+                            onConvertChatToCloud
+                          ) {
+                            e.preventDefault()
+                            setDropTargetTab('cloud')
+                            setActiveTab('cloud')
                           }
-                          className="peer sr-only"
-                        />
-                        <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                      </label>
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetTab === 'cloud') {
+                            setDropTargetTab(null)
+                          }
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault()
+                          const chatId = e.dataTransfer.getData(
+                            'application/x-chat-id',
+                          )
+                          if (chatId) {
+                            if (
+                              draggingChatFromProjectId &&
+                              onRemoveChatFromProject
+                            ) {
+                              // Chat from project is already cloud, just remove from project
+                              await onRemoveChatFromProject(chatId)
+                            } else if (onConvertChatToCloud) {
+                              // Only convert if dragging from local (not from project)
+                              await onConvertChatToCloud(chatId)
+                            }
+                          }
+                          clearDragState()
+                        }}
+                        className={cn(
+                          'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                          dropTargetTab === 'cloud'
+                            ? isDarkMode
+                              ? 'bg-white/10'
+                              : 'bg-gray-200/30'
+                            : activeTab === 'cloud'
+                              ? isDarkMode
+                                ? 'text-white'
+                                : 'text-content-primary'
+                              : 'text-content-muted hover:text-content-secondary',
+                        )}
+                      >
+                        <CloudIcon className="h-3.5 w-3.5" />
+                        Cloud
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('local')}
+                        onDragOver={(e) => {
+                          if (
+                            e.dataTransfer.types.includes(
+                              'application/x-chat-id',
+                            ) &&
+                            onConvertChatToLocal
+                          ) {
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setDropTargetTab('local')
+                          }
+                        }}
+                        onDragEnter={(e) => {
+                          if (
+                            e.dataTransfer.types.includes(
+                              'application/x-chat-id',
+                            ) &&
+                            onConvertChatToLocal
+                          ) {
+                            e.preventDefault()
+                            setActiveTab('local')
+                            setDropTargetTab('local')
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dropTargetTab === 'local') {
+                            setDropTargetTab(null)
+                          }
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault()
+                          const chatId = e.dataTransfer.getData(
+                            'application/x-chat-id',
+                          )
+                          if (chatId && onConvertChatToLocal) {
+                            // convertChatToLocal also clears projectId
+                            await onConvertChatToLocal(chatId)
+                          }
+                          clearDragState()
+                        }}
+                        className={cn(
+                          'relative z-10 flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                          dropTargetTab === 'local'
+                            ? isDarkMode
+                              ? 'bg-white/10'
+                              : 'bg-gray-200/30'
+                            : activeTab === 'local'
+                              ? isDarkMode
+                                ? 'text-white'
+                                : 'text-content-primary'
+                              : 'text-content-muted hover:text-content-secondary',
+                        )}
+                      >
+                        <CiFloppyDisk className="h-3.5 w-3.5" />
+                        Local
+                      </button>
                     </div>
-                  </div>
-                )}
-              </>
-            )}
+                  )}
+
+                  {/* Description text - show when NOT displaying the cloud sync box */}
+                  {(!isSignedIn || cloudSyncEnabled) && (
+                    <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
+                      {!isSignedIn ? (
+                        'Your chats are stored temporarily in this browser tab. Create an account for persistent storage.'
+                      ) : activeTab === 'local' ? (
+                        "Local chats are stored only on this device and won't sync across devices."
+                      ) : (
+                        <>
+                          Your chats are encrypted and synced to the cloud. The
+                          encryption key is only stored on this browser and
+                          never sent to Tinfoil.
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cloud Sync Toggle - show when signed in and cloud sync is OFF */}
+                  {isSignedIn && !cloudSyncEnabled && (
+                    <div
+                      className={`mx-4 my-3 rounded-lg border border-border-subtle px-3 py-2 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-aeonik text-sm font-medium text-content-secondary">
+                          Cloud Sync
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={cloudSyncEnabled}
+                            onChange={(e) =>
+                              handleCloudSyncToggle(e.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Scrollable Chat List */}
-          {isChatHistoryExpanded && (
-            <div
-              ref={chatListRef}
-              onDragOver={(e) => {
-                if (e.dataTransfer.types.includes('application/x-chat-id')) {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  setIsDropTargetChatList(true)
-                }
-              }}
-              onDragEnter={(e) => {
-                if (e.dataTransfer.types.includes('application/x-chat-id')) {
-                  e.preventDefault()
-                  setIsDropTargetChatList(true)
-                }
-              }}
-              onDragLeave={(e) => {
-                // Only clear if leaving the container entirely
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  setIsDropTargetChatList(false)
-                }
-              }}
-              onDrop={async (e) => {
-                e.preventDefault()
-                const chatId = e.dataTransfer.getData('application/x-chat-id')
-                if (chatId) {
-                  const chat = chats.find((c) => c.id === chatId)
-                  if (draggingChatFromProjectId) {
-                    // Dragging from project - remove from project
-                    if (activeTab === 'local' && onConvertChatToLocal) {
-                      await onConvertChatToLocal(chatId)
-                    } else if (onRemoveChatFromProject) {
-                      await onRemoveChatFromProject(chatId)
+          <AnimatePresence initial={false}>
+            {isChatHistoryExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                className="flex-1 overflow-hidden"
+              >
+                <div
+                  ref={chatListRef}
+                  onDragOver={(e) => {
+                    if (
+                      e.dataTransfer.types.includes('application/x-chat-id')
+                    ) {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      setIsDropTargetChatList(true)
                     }
-                  } else if (
-                    chat?.isLocalOnly &&
-                    activeTab === 'cloud' &&
-                    onConvertChatToCloud
-                  ) {
-                    // Local chat dropped on cloud tab area - convert to cloud
-                    await onConvertChatToCloud(chatId)
-                  } else if (
-                    !chat?.isLocalOnly &&
-                    activeTab === 'local' &&
-                    onConvertChatToLocal
-                  ) {
-                    // Cloud chat dropped on local tab area - convert to local
-                    await onConvertChatToLocal(chatId)
-                  }
-                }
-                setIsDropTargetChatList(false)
-                clearDragState()
-              }}
-              className={cn(
-                'relative z-10 flex-1 overflow-y-auto',
-                isChatListScrolled && 'border-t border-border-subtle',
-                isDropTargetChatList &&
-                  (isDarkMode
-                    ? 'border border-white/30 bg-white/10'
-                    : 'border border-gray-400 bg-gray-200/30'),
-              )}
-            >
-              {isClient && (
-                <ChatList
-                  chats={sortedChats as ChatItemData[]}
-                  currentChatId={currentChat?.id}
-                  currentChatIsBlank={currentChat?.isBlankChat}
-                  currentChatIsLocalOnly={currentChat?.isLocalOnly}
-                  isDarkMode={isDarkMode}
-                  showEncryptionStatus={true}
-                  showSyncStatus={true}
-                  enableTitleAnimation={true}
-                  isDraggable={
-                    isSignedIn &&
-                    cloudSyncEnabled &&
-                    (!!onMoveChatToProject ||
-                      !!onConvertChatToCloud ||
-                      !!onConvertChatToLocal)
-                  }
-                  showMoveToProject={
-                    isSignedIn &&
-                    isPremium &&
-                    cloudSyncEnabled &&
-                    !!onMoveChatToProject
-                  }
-                  onSelectChat={handleChatSelect}
-                  onAfterSelect={undefined}
-                  onUpdateTitle={updateChatTitle}
-                  onDeleteChat={deleteChat}
-                  onEncryptionKeyClick={onEncryptionKeyClick}
-                  onDragStart={(chatId) => setDraggingChat(chatId, null)}
-                  onDragEnd={() => {
+                  }}
+                  onDragEnter={(e) => {
+                    if (
+                      e.dataTransfer.types.includes('application/x-chat-id')
+                    ) {
+                      e.preventDefault()
+                      setIsDropTargetChatList(true)
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    // Only clear if leaving the container entirely
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setIsDropTargetChatList(false)
+                    }
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault()
+                    const chatId = e.dataTransfer.getData(
+                      'application/x-chat-id',
+                    )
+                    if (chatId) {
+                      const chat = chats.find((c) => c.id === chatId)
+                      if (draggingChatFromProjectId) {
+                        // Dragging from project - remove from project
+                        if (activeTab === 'local' && onConvertChatToLocal) {
+                          await onConvertChatToLocal(chatId)
+                        } else if (onRemoveChatFromProject) {
+                          await onRemoveChatFromProject(chatId)
+                        }
+                      } else if (
+                        chat?.isLocalOnly &&
+                        activeTab === 'cloud' &&
+                        onConvertChatToCloud
+                      ) {
+                        // Local chat dropped on cloud tab area - convert to cloud
+                        await onConvertChatToCloud(chatId)
+                      } else if (
+                        !chat?.isLocalOnly &&
+                        activeTab === 'local' &&
+                        onConvertChatToLocal
+                      ) {
+                        // Cloud chat dropped on local tab area - convert to local
+                        await onConvertChatToLocal(chatId)
+                      }
+                    }
+                    setIsDropTargetChatList(false)
                     clearDragState()
                   }}
-                  projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-                  onMoveToProject={
-                    onMoveChatToProject
-                      ? async (chatId, projectId) => {
-                          // Check if this is a local chat that needs to be converted first
-                          const chat = chats.find((c) => c.id === chatId)
-                          let finalChatId = chatId
-                          if (chat?.isLocalOnly && onConvertChatToCloud) {
-                            finalChatId = await onConvertChatToCloud(chatId)
-                          }
-                          await onMoveChatToProject(finalChatId, projectId)
-                        }
-                      : undefined
-                  }
-                  onConvertToCloud={onConvertChatToCloud}
-                  onConvertToLocal={onConvertChatToLocal}
-                  emptyState={
-                    activeTab === 'local' ? (
-                      <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                        <p className="text-sm text-content-muted">
-                          No local chats yet
-                        </p>
-                        <p className="mt-1 text-xs text-content-muted">
-                          Disable cloud sync in settings to create local-only
-                          chats
-                        </p>
-                      </div>
-                    ) : undefined
-                  }
-                  loadMoreButton={
-                    <>
-                      {/* Sentinel element for intersection observer */}
-                      <div ref={loadMoreSentinelRef} className="h-1" />
-                      {/* Shimmer placeholder while loading or waiting for chats to render */}
-                      {(isLoadingMore || pendingChatsRender) && (
-                        <div className="space-y-1 px-2">
-                          {[...Array(3)].map((_, i) => (
-                            <div
-                              key={i}
-                              className="animate-pulse rounded-lg px-3 py-2"
-                            >
-                              <div
-                                className={cn(
-                                  'mb-1.5 h-3.5 w-3/4 rounded',
-                                  isDarkMode ? 'bg-gray-700' : 'bg-gray-200',
-                                )}
-                              />
-                              <div
-                                className={cn(
-                                  'h-3 w-1/3 rounded',
-                                  isDarkMode ? 'bg-gray-700' : 'bg-gray-200',
-                                )}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {isSignedIn &&
-                        !shouldShowLoadMore &&
-                        !hasMoreRemote &&
-                        hasAttemptedLoadMore && (
-                          <div className="px-3 py-2 text-center text-xs text-content-muted">
-                            No more chats
+                  className={cn(
+                    'relative z-10 h-full overflow-y-auto',
+                    isChatListScrolled && 'border-t border-border-subtle',
+                    isDropTargetChatList &&
+                      (isDarkMode
+                        ? 'border border-white/30 bg-white/10'
+                        : 'border border-gray-400 bg-gray-200/30'),
+                  )}
+                >
+                  {isClient && (
+                    <ChatList
+                      chats={sortedChats as ChatItemData[]}
+                      currentChatId={currentChat?.id}
+                      currentChatIsBlank={currentChat?.isBlankChat}
+                      currentChatIsLocalOnly={currentChat?.isLocalOnly}
+                      isDarkMode={isDarkMode}
+                      showEncryptionStatus={true}
+                      showSyncStatus={true}
+                      enableTitleAnimation={true}
+                      isDraggable={
+                        isSignedIn &&
+                        cloudSyncEnabled &&
+                        (!!onMoveChatToProject ||
+                          !!onConvertChatToCloud ||
+                          !!onConvertChatToLocal)
+                      }
+                      showMoveToProject={
+                        isSignedIn &&
+                        isPremium &&
+                        cloudSyncEnabled &&
+                        !!onMoveChatToProject
+                      }
+                      onSelectChat={handleChatSelect}
+                      onAfterSelect={undefined}
+                      onUpdateTitle={updateChatTitle}
+                      onDeleteChat={deleteChat}
+                      onEncryptionKeyClick={onEncryptionKeyClick}
+                      onDragStart={(chatId) => setDraggingChat(chatId, null)}
+                      onDragEnd={() => {
+                        clearDragState()
+                      }}
+                      projects={projects.map((p) => ({
+                        id: p.id,
+                        name: p.name,
+                      }))}
+                      onMoveToProject={
+                        onMoveChatToProject
+                          ? async (chatId, projectId) => {
+                              // Check if this is a local chat that needs to be converted first
+                              const chat = chats.find((c) => c.id === chatId)
+                              let finalChatId = chatId
+                              if (chat?.isLocalOnly && onConvertChatToCloud) {
+                                finalChatId = await onConvertChatToCloud(chatId)
+                              }
+                              await onMoveChatToProject(finalChatId, projectId)
+                            }
+                          : undefined
+                      }
+                      onConvertToCloud={onConvertChatToCloud}
+                      onConvertToLocal={onConvertChatToLocal}
+                      emptyState={
+                        activeTab === 'local' ? (
+                          <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                            <p className="text-sm text-content-muted">
+                              No local chats yet
+                            </p>
+                            <p className="mt-1 text-xs text-content-muted">
+                              Disable cloud sync in settings to create
+                              local-only chats
+                            </p>
                           </div>
-                        )}
-                    </>
-                  }
-                />
-              )}
-            </div>
-          )}
+                        ) : undefined
+                      }
+                      loadMoreButton={
+                        <>
+                          {/* Sentinel element for intersection observer */}
+                          <div ref={loadMoreSentinelRef} className="h-1" />
+                          {/* Shimmer placeholder while loading or waiting for chats to render */}
+                          {(isLoadingMore || pendingChatsRender) && (
+                            <div className="space-y-1 px-2">
+                              {[...Array(3)].map((_, i) => (
+                                <div
+                                  key={i}
+                                  className="animate-pulse rounded-lg px-3 py-2"
+                                >
+                                  <div
+                                    className={cn(
+                                      'mb-1.5 h-3.5 w-3/4 rounded',
+                                      isDarkMode
+                                        ? 'bg-gray-700'
+                                        : 'bg-gray-200',
+                                    )}
+                                  />
+                                  <div
+                                    className={cn(
+                                      'h-3 w-1/3 rounded',
+                                      isDarkMode
+                                        ? 'bg-gray-700'
+                                        : 'bg-gray-200',
+                                    )}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {isSignedIn &&
+                            !shouldShowLoadMore &&
+                            !hasMoreRemote &&
+                            hasAttemptedLoadMore && (
+                              <div className="px-3 py-2 text-center text-xs text-content-muted">
+                                No more chats
+                              </div>
+                            )}
+                        </>
+                      }
+                    />
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* App Store button for iOS users */}
           {isClient && isIOS && (
