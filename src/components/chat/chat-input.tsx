@@ -532,8 +532,8 @@ export function ChatInput({
             onFocus={handleInputFocus}
             onChange={(e) => {
               setInput(e.target.value)
-              e.target.style.height = inputMinHeight
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
+              e.target.style.height = '0px'
+              e.target.style.height = `${Math.max(parseInt(inputMinHeight), Math.min(e.target.scrollHeight, 240))}px`
             }}
             onPaste={handlePaste}
             onKeyDown={(e) => {
@@ -762,6 +762,7 @@ export function ChatInput({
             rows={1}
             className="min-h-[36px] w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none md:min-h-0"
             style={{
+              minHeight: inputMinHeight,
               maxHeight: '240px',
             }}
           />
