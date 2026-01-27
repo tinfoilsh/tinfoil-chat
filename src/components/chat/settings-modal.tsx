@@ -31,6 +31,7 @@ import {
   EyeIcon,
   EyeSlashIcon,
   MoonIcon,
+  SparklesIcon,
   SunIcon,
   UserCircleIcon,
   UserIcon,
@@ -3012,7 +3013,7 @@ ${encryptionKey.replace('key_', '')}
                           isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                         )}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
                           <div className="flex items-center gap-4">
                             <UserButton
                               appearance={{
@@ -3035,7 +3036,13 @@ ${encryptionKey.replace('key_', '')}
                           </div>
                           <button
                             onClick={() => signOut()}
-                            className="rounded-lg px-3 py-1.5 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
+                            className={cn(
+                              'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                              'w-full border md:w-auto md:border-0',
+                              isDarkMode
+                                ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40 md:bg-transparent md:hover:bg-red-500/10'
+                                : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100 md:bg-transparent md:text-red-500 md:hover:bg-red-500/10',
+                            )}
                           >
                             Sign out
                           </button>
@@ -3053,12 +3060,15 @@ ${encryptionKey.replace('key_', '')}
                             isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                           )}
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="font-aeonik text-sm font-medium text-content-primary">
-                                {isPremium ? 'Premium' : 'Free Tier'}
+                              <div className="flex items-center gap-3">
+                                <SparklesIcon className="h-5 w-5 text-content-muted" />
+                                <div className="font-aeonik text-sm font-medium text-content-primary">
+                                  {isPremium ? 'Premium' : 'Free Tier'}
+                                </div>
                               </div>
-                              <div className="font-aeonik-fono text-xs text-content-muted">
+                              <div className="mt-1 font-aeonik-fono text-xs text-content-muted">
                                 {isPremium
                                   ? 'You have access to all premium features'
                                   : 'Upgrade to unlock premium features'}
@@ -3066,7 +3076,7 @@ ${encryptionKey.replace('key_', '')}
                             </div>
                             <div
                               className={cn(
-                                'rounded-full px-3 py-1 text-xs font-medium',
+                                'shrink-0 rounded-full px-3 py-1 text-xs font-medium',
                                 isPremium
                                   ? 'bg-emerald-500/20 text-emerald-500'
                                   : 'bg-content-muted/20 text-content-muted',
@@ -3084,20 +3094,20 @@ ${encryptionKey.replace('key_', '')}
                             }}
                             disabled={billingLoading}
                             className={cn(
-                              'flex w-full items-center justify-between rounded-lg border border-border-subtle p-4 transition-colors hover:bg-surface-chat',
+                              'flex w-full items-start justify-between rounded-lg border border-border-subtle p-4 transition-colors hover:bg-surface-chat',
                               isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                               billingLoading && 'cursor-not-allowed opacity-70',
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <CreditCardIcon className="h-5 w-5 text-content-muted" />
-                              <div className="text-left">
+                            <div className="text-left">
+                              <div className="flex items-center gap-3">
+                                <CreditCardIcon className="h-5 w-5 text-content-muted" />
                                 <div className="font-aeonik text-sm font-medium text-content-primary">
                                   Manage Billing
                                 </div>
-                                <div className="font-aeonik-fono text-xs text-content-muted">
-                                  Update payment method, view invoices
-                                </div>
+                              </div>
+                              <div className="mt-1 font-aeonik-fono text-xs text-content-muted">
+                                Update payment method, view invoices
                               </div>
                             </div>
                             <div className="text-sm text-content-muted">
