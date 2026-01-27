@@ -79,6 +79,7 @@ type ChatSidebarProps = {
   onConvertChatToCloud?: (chatId: string) => Promise<string>
   onConvertChatToLocal?: (chatId: string) => Promise<string>
   onSettingsClick?: () => void
+  windowWidth: number
 }
 
 // Add this constant at the top of the file
@@ -127,6 +128,7 @@ export function ChatSidebar({
   onConvertChatToCloud,
   onConvertChatToLocal,
   onSettingsClick,
+  windowWidth,
 }: ChatSidebarProps) {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
@@ -170,9 +172,6 @@ export function ChatSidebar({
   const [isChatListScrolled, setIsChatListScrolled] = useState(false)
   const chatListRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== 'undefined' ? window.innerWidth : 0,
-  )
   const [isIOS, setIsIOS] = useState(false)
   const [highlightBox, setHighlightBox] = useState<'signin' | 'premium' | null>(
     null,
@@ -363,20 +362,10 @@ export function ChatSidebar({
     (hasMoreRemote ||
       (!hasAttemptedLoadMore && syncedChatsCount >= PAGINATION.CHATS_PER_PAGE))
 
-  // Add window resize listener and iOS detection
+  // Detect iOS device
   useEffect(() => {
     if (isClient) {
-      const handleResize = () => {
-        setWindowWidth(window.innerWidth)
-      }
-
-      // Detect iOS device
       setIsIOS(isIOSDevice())
-
-      window.addEventListener('resize', handleResize)
-      return () => {
-        window.removeEventListener('resize', handleResize)
-      }
     }
   }, [isClient])
 

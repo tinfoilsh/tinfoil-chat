@@ -1800,6 +1800,7 @@ export function ChatInterface({
                     handleMoveChatToProject(chatId, activeProject.id)
                   }
                   onSettingsClick={handleOpenSettingsModal}
+                  windowWidth={windowWidth}
                 />
               ) : (
                 <ProjectSidebar
@@ -1816,6 +1817,7 @@ export function ChatInterface({
                   isClient={isClient}
                   isPremium={isPremium}
                   onSettingsClick={handleOpenSettingsModal}
+                  windowWidth={windowWidth}
                 />
               )}
             </motion.div>
@@ -1867,6 +1869,7 @@ export function ChatInterface({
                 onConvertChatToCloud={handleConvertChatToCloud}
                 onConvertChatToLocal={handleConvertChatToLocal}
                 onSettingsClick={handleOpenSettingsModal}
+                windowWidth={windowWidth}
               />
             </motion.div>
           )}

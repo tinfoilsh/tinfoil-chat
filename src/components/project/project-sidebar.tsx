@@ -90,6 +90,7 @@ interface ProjectSidebarProps {
   onRemoveChatFromProject?: (chatId: string) => Promise<string>
   onAddChatToProject?: (chatId: string) => Promise<void>
   onSettingsClick?: () => void
+  windowWidth: number
 }
 
 function formatFileSize(bytes: number): string {
@@ -188,6 +189,7 @@ export function ProjectSidebar({
   onRemoveChatFromProject,
   onAddChatToProject,
   onSettingsClick,
+  windowWidth,
 }: ProjectSidebarProps) {
   const { isSignedIn } = useAuth()
   const { setDraggingChat, clearDragState } = useDrag()
@@ -206,9 +208,6 @@ export function ProjectSidebar({
   } = useProject()
   const { handleDocumentUpload: processDocument, isDocumentUploading } =
     useDocumentUploader(isPremium)
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== 'undefined' ? window.innerWidth : 0,
-  )
   const [settingsExpanded, setSettingsExpanded] = useState(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [memoryExpanded, setMemoryExpanded] = useState(false)
@@ -291,18 +290,6 @@ export function ProjectSidebar({
       }
     }
   }, [isOpen])
-
-  useEffect(() => {
-    if (isClient) {
-      const handleResize = () => {
-        setWindowWidth(window.innerWidth)
-      }
-      // Set initial width on mount
-      handleResize()
-      window.addEventListener('resize', handleResize)
-      return () => window.removeEventListener('resize', handleResize)
-    }
-  }, [isClient])
 
   // Sync memory text with project memory
   const projectId = project?.id
