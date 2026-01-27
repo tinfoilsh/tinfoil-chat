@@ -163,7 +163,7 @@ export function SettingsModal({
   initialTab,
   chats = [],
 }: SettingsModalProps) {
-  const { getToken } = useAuth()
+  const { getToken, signOut } = useAuth()
   const { user } = useUser()
   const { toast } = useToast()
 
@@ -3008,25 +3008,33 @@ ${encryptionKey.replace('key_', '')}
                           isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                         )}
                       >
-                        <div className="flex items-center gap-4">
-                          <UserButton
-                            appearance={{
-                              elements: {
-                                avatarBox: 'w-12 h-12',
-                              },
-                            }}
-                          />
-                          <div>
-                            <div className="font-aeonik text-base font-medium text-content-primary">
-                              {user?.firstName
-                                ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
-                                : user?.emailAddresses?.[0]?.emailAddress ||
-                                  'User'}
-                            </div>
-                            <div className="text-sm text-content-muted">
-                              {user?.emailAddresses?.[0]?.emailAddress}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <UserButton
+                              appearance={{
+                                elements: {
+                                  avatarBox: 'w-12 h-12',
+                                },
+                              }}
+                            />
+                            <div>
+                              <div className="font-aeonik text-base font-medium text-content-primary">
+                                {user?.firstName
+                                  ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}`
+                                  : user?.emailAddresses?.[0]?.emailAddress ||
+                                    'User'}
+                              </div>
+                              <div className="text-sm text-content-muted">
+                                {user?.emailAddresses?.[0]?.emailAddress}
+                              </div>
                             </div>
                           </div>
+                          <button
+                            onClick={() => signOut()}
+                            className="rounded-lg px-3 py-1.5 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
+                          >
+                            Sign out
+                          </button>
                         </div>
                       </div>
 
