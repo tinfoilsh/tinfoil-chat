@@ -27,7 +27,6 @@ import {
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
-  Cog6ToothIcon,
   CreditCardIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -42,6 +41,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BsKey, BsQrCode } from 'react-icons/bs'
 import { GiParachute } from 'react-icons/gi'
 import { GoPackageDependents } from 'react-icons/go'
+import { HiOutlineAdjustmentsVertical } from 'react-icons/hi2'
 import { PiSignIn } from 'react-icons/pi'
 import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
@@ -212,7 +212,7 @@ export function SettingsModal({
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    initialTab ?? 'general',
+    initialTab ?? 'account',
   )
 
   // Update active tab when initialTab prop changes (e.g., opening to a specific tab)
@@ -1515,7 +1515,12 @@ ${encryptionKey.replace('key_', '')}
   if (!isOpen) return null
 
   const navItems = [
-    { id: 'general' as const, label: 'General', icon: Cog6ToothIcon },
+    { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
+    {
+      id: 'general' as const,
+      label: 'General',
+      icon: HiOutlineAdjustmentsVertical,
+    },
     {
       id: 'chat' as const,
       label: 'Chat Settings',
@@ -1537,7 +1542,6 @@ ${encryptionKey.replace('key_', '')}
       label: 'Export Chats',
       icon: GoPackageDependents,
     },
-    { id: 'account' as const, label: 'Account', icon: UserCircleIcon },
   ]
 
   return (

@@ -38,6 +38,14 @@ test.describe('Smoke Tests', () => {
     await expect(settingsButton).toBeVisible({ timeout: 10000 })
     await settingsButton.click()
 
+    // Navigate to the General tab where the theme toggle is located
+    // There are mobile and desktop tab buttons - only click the visible one
+    const generalTab = page
+      .locator('button', { hasText: 'General' })
+      .filter({ visible: true })
+      .first()
+    await generalTab.click()
+
     // Find and click the theme toggle button in the settings modal
     const themeToggle = page.locator('#theme-toggle')
     await expect(themeToggle).toBeVisible({ timeout: 5000 })
