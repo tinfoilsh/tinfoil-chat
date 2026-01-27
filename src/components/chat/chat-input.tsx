@@ -110,6 +110,15 @@ export function ChatInput({
     }
   }, [processedDocuments?.length])
 
+  // Reset textarea height when input is cleared (e.g., after sending a message)
+  // This handles Safari mobile where the synchronous height reset in use-chat-messaging.ts
+  // may not work due to timing with React's DOM updates
+  useEffect(() => {
+    if (input === '' && inputRef.current) {
+      inputRef.current.style.height = inputMinHeight
+    }
+  }, [input, inputMinHeight, inputRef])
+
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0 && handleDocumentUpload) {
