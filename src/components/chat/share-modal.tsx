@@ -48,6 +48,7 @@ export function ShareModal({
   const [isLinkCopied, setIsLinkCopied] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isShareEnabled, setIsShareEnabled] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
   const contentRef = useRef<HTMLPreElement>(null)
 
   // Handle keyboard shortcuts
@@ -152,6 +153,22 @@ export function ShareModal({
     }
   }
 
+  const handleCopyShareUrl = async () => {
+    if (!shareUrl) return
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setIsLinkCopied(true)
+      setTimeout(() => setIsLinkCopied(false), 2000)
+    } catch {
+      toast({
+        title: 'Copy failed',
+        description: 'Failed to copy link to clipboard',
+        variant: 'destructive',
+        position: 'top-left',
+      })
+    }
+  }
+
   const handleShareLink = async () => {
     if (!chatId) {
       toast({
@@ -187,22 +204,51 @@ export function ShareModal({
       }
 
       // Generate throwaway key and encrypt
-      const key = await generateShareKey()
-      const encrypted = await encryptForShare(shareableData, key)
-      const keyBase64url = await exportKeyToBase64url(key)
+      let key: CryptoKey
+      try {
+        key = await generateShareKey()
+      } catch (e) {
+        throw new Error(
+          `Key generation failed: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
+
+      let encrypted: Awaited<ReturnType<typeof encryptForShare>>
+      try {
+        encrypted = await encryptForShare(shareableData, key)
+      } catch (e) {
+        throw new Error(
+          `Encryption failed: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
+
+      let keyBase64url: string
+      try {
+        keyBase64url = await exportKeyToBase64url(key)
+      } catch (e) {
+        throw new Error(
+          `Key export failed: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
 
       // Upload encrypted data to server
-      await uploadSharedChat(chatId, encrypted)
+      try {
+        await uploadSharedChat(chatId, encrypted)
+      } catch (e) {
+        throw new Error(
+          `Upload failed: ${e instanceof Error ? e.message : String(e)}`,
+        )
+      }
 
       // Build share URL with key in fragment
-      const shareUrl = `${window.location.origin}/share/${chatId}#${keyBase64url}`
-      await navigator.clipboard.writeText(shareUrl)
-      setIsLinkCopied(true)
-      setTimeout(() => setIsLinkCopied(false), 2000)
+      const url = `${window.location.origin}/share/${chatId}#${keyBase64url}`
+      setShareUrl(url)
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to create share link'
       toast({
         title: 'Share failed',
-        description: 'Failed to create share link',
+        description: errorMessage,
         variant: 'destructive',
         position: 'top-left',
       })
@@ -303,19 +349,14 @@ export function ShareModal({
                         </span>
                       </label>
 
-                      {isShareEnabled && (
+                      {isShareEnabled && !shareUrl && (
                         <div className="flex justify-start pt-2">
                           <button
                             onClick={handleShareLink}
                             disabled={isUploading || !chatId}
                             className="flex items-center justify-center gap-2 rounded-lg bg-brand-accent-dark px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-accent-dark/90 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {isLinkCopied ? (
-                              <>
-                                <CheckIcon className="h-4 w-4" />
-                                Link Copied!
-                              </>
-                            ) : isUploading ? (
+                            {isUploading ? (
                               <>
                                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                                 Uploading...
@@ -324,6 +365,34 @@ export function ShareModal({
                               <>
                                 <LinkIcon className="h-4 w-4" />
                                 Create share link
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {isShareEnabled && shareUrl && (
+                        <div className="flex items-center gap-2 pt-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={shareUrl}
+                            className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-sm text-content-primary"
+                            onClick={(e) => e.currentTarget.select()}
+                          />
+                          <button
+                            onClick={handleCopyShareUrl}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-accent-dark/90"
+                          >
+                            {isLinkCopied ? (
+                              <>
+                                <CheckIcon className="h-4 w-4" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <DocumentDuplicateIcon className="h-4 w-4" />
+                                Copy
                               </>
                             )}
                           </button>
