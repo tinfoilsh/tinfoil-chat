@@ -236,8 +236,9 @@ export function ChatInterface({
 
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return localStorage.getItem('webSearchEnabled') === 'true'
+    if (typeof window === 'undefined') return true
+    const saved = localStorage.getItem('webSearchEnabled')
+    return saved === null ? true : saved === 'true'
   })
 
   // PII check setting (controlled from settings modal, defaults to on)
