@@ -40,9 +40,12 @@ import {
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BsKey, BsQrCode } from 'react-icons/bs'
-import { GiParachute } from 'react-icons/gi'
-import { GoPackageDependents } from 'react-icons/go'
+import {
+  AiOutlineCloudSync,
+  AiOutlineExport,
+  AiOutlineImport,
+} from 'react-icons/ai'
+import { BsQrCode } from 'react-icons/bs'
 import { HiOutlineAdjustmentsVertical } from 'react-icons/hi2'
 import { PiSignIn } from 'react-icons/pi'
 import QRCode from 'react-qr-code'
@@ -127,7 +130,7 @@ export type SettingsTab =
   | 'general'
   | 'chat'
   | 'personalization'
-  | 'encryption'
+  | 'cloud-sync'
   | 'import'
   | 'export'
   | 'account'
@@ -1552,16 +1555,20 @@ ${encryptionKey.replace('key_', '')}
       label: 'Personalization',
       icon: UserIcon,
     },
-    { id: 'encryption' as const, label: 'Encryption', icon: BsKey },
+    {
+      id: 'cloud-sync' as const,
+      label: 'Cloud Sync',
+      icon: AiOutlineCloudSync,
+    },
     {
       id: 'import' as const,
       label: 'Import Chats',
-      icon: GiParachute,
+      icon: AiOutlineImport,
     },
     {
       id: 'export' as const,
       label: 'Export Chats',
-      icon: GoPackageDependents,
+      icon: AiOutlineExport,
     },
   ]
 
@@ -2213,8 +2220,8 @@ ${encryptionKey.replace('key_', '')}
                 </>
               )}
 
-              {/* Encryption Tab */}
-              {activeTab === 'encryption' && (
+              {/* Cloud Sync Tab */}
+              {activeTab === 'cloud-sync' && (
                 <>
                   {/* How It Works */}
                   <div className="space-y-3">
@@ -2976,7 +2983,7 @@ ${encryptionKey.replace('key_', '')}
                         exportType === 'chats' ? (
                           <ArrowPathIcon className="h-4 w-4 animate-spin" />
                         ) : (
-                          <GoPackageDependents className="h-4 w-4" />
+                          <AiOutlineExport className="h-4 w-4" />
                         )}
                         {isPreparingExport && exportType === 'chats'
                           ? 'Please wait while we prepare the export...'
@@ -3036,7 +3043,7 @@ ${encryptionKey.replace('key_', '')}
                           ) : projectsLoading ? (
                             <ArrowPathIcon className="h-4 w-4 animate-spin" />
                           ) : (
-                            <GoPackageDependents className="h-4 w-4" />
+                            <AiOutlineExport className="h-4 w-4" />
                           )}
                           {isExporting && exportType === 'projects'
                             ? 'Exporting...'

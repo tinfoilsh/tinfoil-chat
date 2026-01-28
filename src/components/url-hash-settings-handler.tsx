@@ -36,7 +36,7 @@ export function UrlHashSettingsHandler({
         'general',
         'chat',
         'personalization',
-        'encryption',
+        'cloud-sync',
         'import',
         'export',
         'account',
