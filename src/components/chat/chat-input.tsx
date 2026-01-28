@@ -4,11 +4,7 @@ import { cn } from '@/components/ui/utils'
 import { useToast } from '@/hooks/use-toast'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
-import {
-  convertWebMToWAV,
-  isImageFile,
-  isWebMAudioSupported,
-} from '@/utils/preprocessing'
+import { isImageFile } from '@/utils/preprocessing'
 import {
   FolderIcon,
   MicrophoneIcon,
@@ -77,7 +73,6 @@ export function ChatInput({
   // --- Speech-to-text state ---
   const [isRecording, setIsRecording] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
-  const [isConverting, setIsConverting] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -167,7 +162,7 @@ export function ChatInput({
         }
 
         const client = await getTinfoilClient()
-        const file = new File([blob], 'audio.wav', { type: 'audio/wav' })
+        const file = new File([blob], 'audio.webm', { type: 'audio/webm' })
 
         const transcription = await client.audio.transcriptions.create({
           file,
@@ -206,6 +201,13 @@ export function ChatInput({
     },
     [setInput, toast, input, audioModel],
   )
+
+  const isWebMAudioSupported = () => {
+    return (
+      typeof MediaRecorder !== 'undefined' &&
+      MediaRecorder.isTypeSupported('audio/webm')
+    )
+  }
 
   const startRecording = useCallback(async () => {
     try {
@@ -250,15 +252,8 @@ export function ChatInput({
             throw new Error('No audio data recorded')
           }
 
-          setIsConverting(true)
-
-          // Convert WebM to WAV
-          const wavBlob = await convertWebMToWAV(webmBlob)
-
-          setIsConverting(false)
-
-          // Send WAV for transcription
-          sendAudioForTranscription(wavBlob)
+          // Send WebM for transcription
+          sendAudioForTranscription(webmBlob)
         } catch (err) {
           toast({
             title: 'Recording Error',
@@ -271,7 +266,6 @@ export function ChatInput({
           })
           setIsRecording(false)
           setIsTranscribing(false)
-          setIsConverting(false)
         }
       }
 
@@ -684,7 +678,6 @@ export function ChatInput({
                 if (
                   loadingState === 'idle' &&
                   !isTranscribing &&
-                  !isConverting &&
                   (hasInput || hasDocuments)
                 ) {
                   handleSubmit(e)
@@ -905,18 +898,12 @@ export function ChatInput({
                       ? 'animate-pulse text-red-500'
                       : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
                   )}
-                  title={
-                    isRecording
-                      ? 'Stop recording'
-                      : isConverting
-                        ? 'Converting to WAV...'
-                        : 'Start recording'
-                  }
-                  disabled={isTranscribing || isConverting}
+                  title={isRecording ? 'Stop recording' : 'Start recording'}
+                  disabled={isTranscribing}
                 >
                   {isRecording ? (
                     <StopIcon className="h-5 w-5" />
-                  ) : isTranscribing || isConverting ? (
+                  ) : isTranscribing ? (
                     <PiSpinner className="h-5 w-5 animate-spin text-current" />
                   ) : (
                     <MicrophoneIcon className="h-5 w-5" />
@@ -941,7 +928,10 @@ export function ChatInput({
                 disabled={
                   loadingState !== 'loading' &&
                   loadingState !== 'retrying' &&
-                  (isTranscribing || isConverting)
+                  (isTranscribing ||
+                    (!input.trim() &&
+                      (!processedDocuments ||
+                        !processedDocuments.some((doc) => !doc.isUploading))))
                 }
               >
                 {loadingState === 'loading' || loadingState === 'retrying' ? (
