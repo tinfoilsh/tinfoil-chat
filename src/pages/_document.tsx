@@ -2,17 +2,42 @@ import { Head, Html, Main, NextScript } from 'next/document'
 import Script from 'next/script'
 
 export default function Document() {
+  // Inline script to set theme before first paint to prevent flash
+  const themeScript = `
+    (function() {
+      var theme = localStorage.getItem('theme');
+      if (!theme) {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  `
+
   return (
     <Html lang="en" data-theme="light" className="overflow-x-hidden">
       <Head>
+        {/* Theme initialization script - must run before first paint */}
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         {/* Preconnect to external domains */}
         <link rel="preconnect" href="https://clerk.accounts.dev" />
 
         {/* PWA Manifest */}
         <link rel="manifest" href="/site.webmanifest" />
 
-        {/* Theme color */}
-        <meta name="theme-color" content="#ffffff" />
+        {/* Theme color - adapts to light/dark mode */}
+        <meta
+          name="theme-color"
+          content="#ffffff"
+          media="(prefers-color-scheme: light)"
+        />
+        <meta
+          name="theme-color"
+          content="#121212"
+          media="(prefers-color-scheme: dark)"
+        />
 
         {/* Meta tags */}
         <meta
