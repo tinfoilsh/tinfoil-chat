@@ -6,14 +6,18 @@ import {
   useState,
 } from 'react'
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+
 interface UseUIStateReturn {
   isClient: boolean
   isSidebarOpen: boolean
   isDarkMode: boolean
+  themeMode: ThemeMode
   windowWidth: number
   messagesEndRef: React.RefObject<HTMLDivElement>
   setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>
   toggleTheme: () => void
+  setThemeMode: (mode: ThemeMode) => void
   openAndExpandVerifier: () => void
   handleInputFocus: () => void
 }
@@ -32,6 +36,7 @@ export function useUIState(): UseUIStateReturn {
     return false
   })
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('system')
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
@@ -42,14 +47,37 @@ export function useUIState(): UseUIStateReturn {
   useEffect(() => {
     setIsClient(true)
 
-    // Check localStorage first
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme !== null) {
-      setIsDarkMode(savedTheme === 'dark')
+    // Check localStorage for theme mode
+    const savedThemeMode = localStorage.getItem('themeMode') as ThemeMode | null
+    if (
+      savedThemeMode &&
+      ['light', 'dark', 'system'].includes(savedThemeMode)
+    ) {
+      setThemeModeState(savedThemeMode)
+      if (savedThemeMode === 'system') {
+        const prefersDark = window.matchMedia(
+          '(prefers-color-scheme: dark)',
+        ).matches
+        setIsDarkMode(prefersDark)
+      } else {
+        setIsDarkMode(savedThemeMode === 'dark')
+      }
       return
     }
 
-    // Use browser's preferred color scheme for new users
+    // Legacy: check old 'theme' key for backwards compatibility
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme !== null) {
+      const mode = savedTheme === 'dark' ? 'dark' : 'light'
+      setThemeModeState(mode)
+      setIsDarkMode(savedTheme === 'dark')
+      // Migrate to new key
+      localStorage.setItem('themeMode', mode)
+      return
+    }
+
+    // Default to system preference for new users
+    setThemeModeState('system')
     const prefersDark = window.matchMedia(
       '(prefers-color-scheme: dark)',
     ).matches
@@ -78,6 +106,19 @@ export function useUIState(): UseUIStateReturn {
     const theme = isDarkMode ? 'dark' : 'light'
     document.documentElement.setAttribute('data-theme', theme)
   }, [isClient, isDarkMode])
+
+  // Listen for system theme changes when in 'system' mode
+  useEffect(() => {
+    if (!isClient || themeMode !== 'system') return
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = (e: MediaQueryListEvent) => {
+      setIsDarkMode(e.matches)
+    }
+
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [isClient, themeMode])
 
   // Add effect to prevent body and html scrolling
   useEffect(() => {
@@ -114,20 +155,36 @@ export function useUIState(): UseUIStateReturn {
     sessionStorage.setItem(SIDEBAR_OPEN_KEY, isSidebarOpen ? 'true' : 'false')
   }, [isSidebarOpen])
 
-  // Toggle dark mode
-  const toggleTheme = useCallback(() => {
-    setIsDarkMode((prev) => {
-      const newTheme = !prev
-      localStorage.setItem('theme', newTheme ? 'dark' : 'light')
-      // Trigger theme change event for profile sync
-      window.dispatchEvent(
-        new CustomEvent('themeChanged', {
-          detail: newTheme ? 'dark' : 'light',
-        }),
-      )
-      return newTheme
-    })
+  // Set theme mode (light, dark, or system)
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeModeState(mode)
+    localStorage.setItem('themeMode', mode)
+
+    if (mode === 'system') {
+      const prefersDark = window.matchMedia(
+        '(prefers-color-scheme: dark)',
+      ).matches
+      setIsDarkMode(prefersDark)
+      // Also update legacy key for backwards compatibility
+      localStorage.setItem('theme', prefersDark ? 'dark' : 'light')
+    } else {
+      setIsDarkMode(mode === 'dark')
+      localStorage.setItem('theme', mode)
+    }
+
+    // Trigger theme change event for profile sync
+    window.dispatchEvent(
+      new CustomEvent('themeChanged', {
+        detail: mode,
+      }),
+    )
   }, [])
+
+  // Toggle dark mode (legacy, toggles between light and dark)
+  const toggleTheme = useCallback(() => {
+    const newMode = isDarkMode ? 'light' : 'dark'
+    setThemeMode(newMode)
+  }, [isDarkMode, setThemeMode])
 
   // Handle verifier expansion
   const openAndExpandVerifier = useCallback(() => {
@@ -153,10 +210,12 @@ export function useUIState(): UseUIStateReturn {
     isClient,
     isSidebarOpen,
     isDarkMode,
+    themeMode,
     windowWidth,
     messagesEndRef,
     setIsSidebarOpen,
     toggleTheme,
+    setThemeMode,
     openAndExpandVerifier,
     handleInputFocus,
   }

@@ -5,7 +5,7 @@ import { useChatMessaging } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
 import { useModelManagement } from './use-model-management'
 import type { ReasoningEffort } from './use-reasoning-effort'
-import { useUIState } from './use-ui-state'
+import { useUIState, type ThemeMode } from './use-ui-state'
 
 // Return type for useChatState hook
 interface UseChatStateReturn {
@@ -19,6 +19,7 @@ interface UseChatStateReturn {
   isClient: boolean
   isSidebarOpen: boolean
   isDarkMode: boolean
+  themeMode: ThemeMode
   messagesEndRef: React.RefObject<HTMLDivElement>
   isInitialLoad: boolean
   isThinking: boolean
@@ -52,6 +53,7 @@ interface UseChatStateReturn {
   deleteChat: (chatId: string) => void
   handleChatSelect: (chatId: string) => void
   toggleTheme: () => void
+  setThemeMode: (mode: ThemeMode) => void
   openAndExpandVerifier: () => void
   handleInputFocus: () => void
   handleLabelClick: (
@@ -107,8 +109,10 @@ export function useChatState({
     messagesEndRef,
     setIsSidebarOpen,
     toggleTheme,
+    setThemeMode,
     openAndExpandVerifier,
     handleInputFocus,
+    themeMode,
   } = useUIState()
 
   // Chat Storage Management
@@ -274,6 +278,7 @@ export function useChatState({
     isClient,
     isSidebarOpen,
     isDarkMode,
+    themeMode,
     messagesEndRef,
     isInitialLoad,
     isThinking,
@@ -300,6 +305,7 @@ export function useChatState({
     deleteChat,
     handleChatSelect,
     toggleTheme,
+    setThemeMode,
     openAndExpandVerifier,
     handleInputFocus,
     handleLabelClick,

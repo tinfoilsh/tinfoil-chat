@@ -5,9 +5,12 @@ export default function Document() {
   // Inline script to set theme before first paint to prevent flash
   const themeScript = `
     (function() {
-      var theme = localStorage.getItem('theme');
-      if (!theme) {
+      var themeMode = localStorage.getItem('themeMode');
+      var theme;
+      if (themeMode === 'system' || !themeMode) {
         theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      } else {
+        theme = themeMode;
       }
       document.documentElement.setAttribute('data-theme', theme);
       if (theme === 'dark') {

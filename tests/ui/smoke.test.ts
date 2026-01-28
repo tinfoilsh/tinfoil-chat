@@ -46,16 +46,23 @@ test.describe('Smoke Tests', () => {
       .first()
     await generalTab.click()
 
-    // Find and click the theme toggle button in the settings modal
-    const themeToggle = page.locator('#theme-toggle')
-    await expect(themeToggle).toBeVisible({ timeout: 5000 })
-    await themeToggle.click()
+    // Find the theme selector buttons (Light, Dark, System)
+    const darkThemeButton = page.locator('button', { hasText: 'Dark' }).filter({
+      has: page.locator('svg'),
+    })
+    await expect(darkThemeButton).toBeVisible({ timeout: 5000 })
+    await darkThemeButton.click()
 
     // Should now be in dark mode
     await expect(html).toHaveAttribute('data-theme', 'dark')
 
-    // Toggle back to light mode
-    await themeToggle.click()
+    // Click Light to switch back to light mode
+    const lightThemeButton = page
+      .locator('button', { hasText: 'Light' })
+      .filter({
+        has: page.locator('svg'),
+      })
+    await lightThemeButton.click()
     await expect(html).toHaveAttribute('data-theme', 'light')
   })
 
