@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@/config'
 import { useProjects } from '@/hooks/use-projects'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
+import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -19,6 +20,7 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
+import { generateReverseId } from '@/utils/reverse-id'
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
@@ -861,8 +863,9 @@ export function SettingsModal({
   }, [getToken])
 
   // Import handlers
-  const generateChatId = () => {
-    return `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  const generateChatId = (createdAt?: Date) => {
+    const timestampMs = createdAt?.getTime() || Date.now()
+    return generateReverseId(timestampMs).id
   }
 
   const getParseOptions = () => ({
@@ -894,18 +897,45 @@ export function SettingsModal({
       let imported = 0
       const errors: string[] = []
 
+      // Save all chats to IndexedDB first (skip cloud sync on individual saves)
       for (let i = 0; i < chats.length; i++) {
         try {
-          await chatStorage.saveChat(chats[i])
+          await chatStorage.saveChat(chats[i], true) // skipCloudSync = true
           imported++
         } catch (err) {
-          errors.push(`Failed to import "${chats[i].title}"`)
+          errors.push(`Failed to save "${chats[i].title}" locally`)
         }
         setImportProgress({
           current: i + 1,
           total: chats.length,
           type: 'chats',
         })
+      }
+
+      // Bulk upload to cloud if sync is enabled
+      if (isCloudSyncEnabled() && (await cloudStorage.isAuthenticated())) {
+        const CHUNK_SIZE = 100
+        const chatsToUpload = chats.filter((c) => !c.isLocalOnly)
+
+        for (let i = 0; i < chatsToUpload.length; i += CHUNK_SIZE) {
+          const chunk = chatsToUpload.slice(i, i + CHUNK_SIZE)
+          try {
+            const result = await cloudStorage.bulkUploadChats(chunk)
+            if (result.failed > 0) {
+              result.results
+                .filter((r) => !r.success)
+                .forEach((r) =>
+                  errors.push(
+                    `Cloud upload failed: ${r.error || r.conversationId}`,
+                  ),
+                )
+            }
+          } catch (err) {
+            errors.push(
+              `Bulk upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            )
+          }
+        }
       }
 
       setImportResult({
@@ -966,18 +996,45 @@ export function SettingsModal({
       let imported = 0
       const errors: string[] = []
 
+      // Save all chats to IndexedDB first (skip cloud sync on individual saves)
       for (let i = 0; i < chats.length; i++) {
         try {
-          await chatStorage.saveChat(chats[i])
+          await chatStorage.saveChat(chats[i], true) // skipCloudSync = true
           imported++
         } catch (err) {
-          errors.push(`Failed to import "${chats[i].title}"`)
+          errors.push(`Failed to save "${chats[i].title}" locally`)
         }
         setImportProgress({
           current: i + 1,
           total: chats.length,
           type: 'chats',
         })
+      }
+
+      // Bulk upload to cloud if sync is enabled
+      if (isCloudSyncEnabled() && (await cloudStorage.isAuthenticated())) {
+        const CHUNK_SIZE = 100
+        const chatsToUpload = chats.filter((c) => !c.isLocalOnly)
+
+        for (let i = 0; i < chatsToUpload.length; i += CHUNK_SIZE) {
+          const chunk = chatsToUpload.slice(i, i + CHUNK_SIZE)
+          try {
+            const result = await cloudStorage.bulkUploadChats(chunk)
+            if (result.failed > 0) {
+              result.results
+                .filter((r) => !r.success)
+                .forEach((r) =>
+                  errors.push(
+                    `Cloud upload failed: ${r.error || r.conversationId}`,
+                  ),
+                )
+            }
+          } catch (err) {
+            errors.push(
+              `Bulk upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            )
+          }
+        }
       }
 
       setImportResult({
