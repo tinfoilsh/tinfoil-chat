@@ -223,6 +223,25 @@ export function SettingsModal({
     }
   }, [initialTab, isOpen])
 
+  // Sync URL fragment with active tab
+  useEffect(() => {
+    if (isOpen) {
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${window.location.search}#settings/${activeTab}`,
+      )
+    } else {
+      if (window.location.hash.startsWith('#settings/')) {
+        window.history.replaceState(
+          null,
+          '',
+          window.location.pathname + window.location.search,
+        )
+      }
+    }
+  }, [isOpen, activeTab])
+
   // Advanced settings collapsed state
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false)
 

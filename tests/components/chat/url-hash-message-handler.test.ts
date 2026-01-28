@@ -134,10 +134,11 @@ describe('URL Hash Message Handler', () => {
   })
 
   describe('hash extraction', () => {
-    it('should extract hash without the # prefix', () => {
-      window.location.hash = '#dGVzdA=='
+    it('should extract hash with send= prefix', () => {
+      window.location.hash = '#send=dGVzdA=='
       const hash = window.location.hash
-      const encodedMessage = hash.slice(1)
+      expect(hash.startsWith('#send=')).toBe(true)
+      const encodedMessage = hash.slice(6)
       expect(encodedMessage).toBe('dGVzdA==')
     })
 
@@ -152,6 +153,12 @@ describe('URL Hash Message Handler', () => {
       window.location.hash = '#'
       const hash = window.location.hash
       expect(hash.length <= 1).toBe(true)
+    })
+
+    it('should ignore hash without send= prefix', () => {
+      window.location.hash = '#settings/general'
+      const hash = window.location.hash
+      expect(hash.startsWith('#send=')).toBe(false)
     })
   })
 

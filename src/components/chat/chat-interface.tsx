@@ -44,6 +44,7 @@ import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
+import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
 import { ChatInput } from './chat-input'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
@@ -56,6 +57,7 @@ import { useReasoningEffort } from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
+import type { SettingsTab } from './settings-modal'
 // Lazy-load modals that aren't shown on initial load
 const CloudSyncSetupModal = dynamic(
   () =>
@@ -219,12 +221,7 @@ export function ChatInterface({
   // State for settings modal
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<
-    | 'general'
-    | 'chat'
-    | 'personalization'
-    | 'encryption'
-    | 'account'
-    | undefined
+    SettingsTab | undefined
   >(undefined)
 
   // State for share modal
@@ -1670,6 +1667,21 @@ export function ChatInterface({
         }
         onMessageReady={(message) => {
           handleQuery(message)
+        }}
+      />
+
+      {/* URL Hash Settings Handler */}
+      <UrlHashSettingsHandler
+        isReady={
+          !isLoadingConfig && isClient && !!currentChat && hasValidatedModel
+        }
+        onSettingsTabReady={(tab) => {
+          setSettingsInitialTab(tab)
+          setIsSettingsModalOpen(true)
+          handleSetVerifierSidebarOpen(false)
+          if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+            setIsSidebarOpen(false)
+          }
         }}
       />
 

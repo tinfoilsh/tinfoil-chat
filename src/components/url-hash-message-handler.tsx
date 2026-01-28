@@ -6,6 +6,11 @@ interface UrlHashMessageHandlerProps {
   isReady: boolean
 }
 
+/**
+ * Handles URL fragments with format: #send=<base64-encoded-message>
+ * Example: #send=V2hhdCBpcyAyKzI/
+ * This format distinguishes message sending from other fragment uses like #settings/<tab>
+ */
 export function UrlHashMessageHandler({
   onMessageReady,
   isReady,
@@ -25,7 +30,11 @@ export function UrlHashMessageHandler({
           return
         }
 
-        const encodedMessage = hash.slice(1)
+        if (!hash.startsWith('#send=')) {
+          return
+        }
+
+        const encodedMessage = hash.slice(6)
 
         try {
           // Decode base64 to binary string (Latin-1)
