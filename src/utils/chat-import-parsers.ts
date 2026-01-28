@@ -64,7 +64,7 @@ export type ClaudeProject = {
 }
 
 export type ParseOptions = {
-  generateChatId: () => string
+  generateChatId: (createdAt?: Date) => string
   isCloudSyncEnabled: boolean
 }
 
@@ -179,11 +179,12 @@ export function parseChatGPTConversations(
     }
 
     if (messages.length > 0) {
+      const createdAt = new Date(conversation.create_time * 1000)
       chats.push({
-        id: options.generateChatId(),
+        id: options.generateChatId(createdAt),
         title: conversation.title || 'Imported Chat',
         messages,
-        createdAt: new Date(conversation.create_time * 1000),
+        createdAt,
         isLocalOnly: !options.isCloudSyncEnabled,
       })
     }
@@ -239,11 +240,12 @@ export function parseClaudeConversations(
     }
 
     if (messages.length > 0) {
+      const createdAt = new Date(conversation.created_at)
       chats.push({
-        id: options.generateChatId(),
+        id: options.generateChatId(createdAt),
         title: conversation.name || 'Imported Chat',
         messages,
-        createdAt: new Date(conversation.created_at),
+        createdAt,
         isLocalOnly: !options.isCloudSyncEnabled,
       })
     }

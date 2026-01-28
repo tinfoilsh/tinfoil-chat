@@ -33,6 +33,18 @@ export interface ProfileSyncStatus {
   lastUpdated?: string
 }
 
+export interface BulkConversationResult {
+  conversationId: string
+  success: boolean
+  error?: string
+}
+
+export interface BulkUploadResponse {
+  results: BulkConversationResult[]
+  succeeded: number
+  failed: number
+}
+
 export class CloudStorageService {
   async generateConversationId(timestamp?: string): Promise<{
     conversationId: string
@@ -92,6 +104,64 @@ export class CloudStorageService {
     }
 
     return null
+  }
+
+  async bulkUploadChats(
+    chats: Array<{
+      id: string
+      title: string
+      messages: Array<unknown>
+      createdAt: Date | string
+      projectId?: string
+      isLocalOnly?: boolean
+    }>,
+  ): Promise<BulkUploadResponse> {
+    if (chats.length === 0) {
+      return { results: [], succeeded: 0, failed: 0 }
+    }
+
+    if (chats.length > 100) {
+      throw new Error('Maximum 100 chats per bulk upload request')
+    }
+
+    await encryptionService.initialize()
+
+    // Encrypt all chats in parallel
+    const conversations = await Promise.all(
+      chats.map(async (chat) => {
+        const encrypted = await encryptionService.encrypt(chat)
+        const createdAtStr =
+          chat.createdAt instanceof Date
+            ? chat.createdAt.toISOString()
+            : chat.createdAt
+        return {
+          conversationId: chat.id,
+          data: JSON.stringify(encrypted),
+          metadata: {
+            'db-version': String(DB_VERSION),
+            'message-count': String(chat.messages?.length || 0),
+            'chat-created-at': createdAtStr,
+            'chat-updated-at': new Date().toISOString(),
+          },
+          projectId: chat.projectId,
+        }
+      }),
+    )
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/conversations/bulk`,
+      {
+        method: 'POST',
+        headers: await this.getHeaders(),
+        body: JSON.stringify({ conversations }),
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(`Bulk upload failed: ${response.statusText}`)
+    }
+
+    return response.json()
   }
 
   async downloadChat(chatId: string): Promise<StoredChat | null> {
