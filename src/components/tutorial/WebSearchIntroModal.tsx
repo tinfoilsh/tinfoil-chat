@@ -34,11 +34,6 @@ export function WebSearchIntroModal({
         if (!hasSeen) {
           setIsOpen(true)
         }
-      } else {
-        const hasSeen = localStorage.getItem(STORAGE_KEY)
-        if (!hasSeen) {
-          setIsOpen(true)
-        }
       }
       setIsReady(true)
     }
