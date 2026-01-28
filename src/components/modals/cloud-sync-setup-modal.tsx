@@ -500,24 +500,35 @@ ${generatedKey.replace('key_', '')}
         Enter or upload your personal encryption key.
       </p>
 
-      <div
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!isProcessing && inputKey.trim()) {
+            handleRestoreKey()
+          }
+        }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className="space-y-2"
+        id="encryption-key-form"
       >
         <div className="flex gap-2">
           <input
+            type="hidden"
+            name="username"
+            autoComplete="username"
+            value="encryption-key"
+            readOnly
+          />
+          <input
             type="password"
+            name="password"
             value={inputKey}
             onChange={(e) => setInputKey(e.target.value)}
             placeholder="Enter encryption key"
+            autoComplete="current-password"
             className="flex-1 rounded-lg border border-blue-500 bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isProcessing) {
-                handleRestoreKey()
-              }
-            }}
           />
           <input
             ref={fileInputRef}
@@ -527,6 +538,7 @@ ${generatedKey.replace('key_', '')}
             className="hidden"
           />
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-primary transition-colors hover:bg-surface-chat/80"
             title="Upload PEM file"
@@ -539,27 +551,28 @@ ${generatedKey.replace('key_', '')}
             Drop your PEM file here
           </p>
         )}
-      </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => setCurrentStep('generate-or-restore')}
-          className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
-        >
-          Back
-        </button>
-        <button
-          onClick={handleRestoreKey}
-          disabled={isProcessing || !inputKey.trim()}
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            isProcessing || !inputKey.trim()
-              ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
-          }`}
-        >
-          {isProcessing ? 'Restoring...' : 'Restore Key'}
-        </button>
-      </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentStep('generate-or-restore')}
+            className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+          >
+            Back
+          </button>
+          <button
+            type="submit"
+            disabled={isProcessing || !inputKey.trim()}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              isProcessing || !inputKey.trim()
+                ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+            }`}
+          >
+            {isProcessing ? 'Restoring...' : 'Restore Key'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 

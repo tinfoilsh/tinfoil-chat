@@ -288,49 +288,70 @@ export function FirstLoginKeyModal({
                         )}
                       </div>
 
-                      <div className="mt-4">
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          if (!isImporting && inputKey.trim()) {
+                            handleImport()
+                          }
+                        }}
+                        className="mt-4"
+                        id="encryption-key-form"
+                      >
                         <label className="block text-xs font-medium text-content-secondary">
                           Or paste your key directly:
                         </label>
                         <input
+                          type="hidden"
+                          name="username"
+                          autoComplete="username"
+                          value="encryption-key"
+                          readOnly
+                        />
+                        <input
                           type="password"
+                          name="password"
                           value={inputKey}
                           onChange={(e) => {
                             setInputKey(e.target.value)
                             setError(null)
                           }}
                           placeholder="Enter encryption key (e.g., key_abc123...)"
+                          autoComplete="current-password"
                           className="mt-1 w-full rounded-lg border border-border-subtle bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light"
                         />
-                      </div>
 
-                      {error && (
-                        <p className="mt-2 text-xs text-destructive">{error}</p>
-                      )}
+                        {error && (
+                          <p className="mt-2 text-xs text-destructive">
+                            {error}
+                          </p>
+                        )}
 
-                      <div className="mt-6 flex gap-3">
-                        <button
-                          onClick={() => {
-                            setShowImportView(false)
-                            setInputKey('')
-                            setError(null)
-                          }}
-                          className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/80"
-                        >
-                          Back
-                        </button>
-                        <button
-                          onClick={handleImport}
-                          disabled={isImporting || !inputKey.trim()}
-                          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                            isImporting || !inputKey.trim()
-                              ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                              : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
-                          }`}
-                        >
-                          {isImporting ? 'Importing...' : 'Import Key'}
-                        </button>
-                      </div>
+                        <div className="mt-6 flex gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowImportView(false)
+                              setInputKey('')
+                              setError(null)
+                            }}
+                            className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/80"
+                          >
+                            Back
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={isImporting || !inputKey.trim()}
+                            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                              isImporting || !inputKey.trim()
+                                ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                : 'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
+                            }`}
+                          >
+                            {isImporting ? 'Importing...' : 'Import Key'}
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   </>
                 )}

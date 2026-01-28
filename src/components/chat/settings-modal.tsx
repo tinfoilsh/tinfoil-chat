@@ -2588,16 +2588,31 @@ ${encryptionKey.replace('key_', '')}
                         your chats on this device.
                       </p>
 
-                      <div
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          if (!isUpdating && inputKey.trim()) {
+                            handleUpdateKey()
+                          }
+                        }}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         className="space-y-2"
+                        id="encryption-key-form"
                       >
                         <div className="flex gap-2">
                           <div className="relative flex-1">
                             <input
+                              type="hidden"
+                              name="username"
+                              autoComplete="username"
+                              value="encryption-key"
+                              readOnly
+                            />
+                            <input
                               type="password"
+                              name="password"
                               value={inputKey}
                               onChange={(e) => setInputKey(e.target.value)}
                               placeholder={
@@ -2605,17 +2620,12 @@ ${encryptionKey.replace('key_', '')}
                                   ? ''
                                   : 'Enter key (e.g., key_abc123...)'
                               }
-                              autoComplete="off"
+                              autoComplete="current-password"
                               aria-label="Encryption key input"
                               className={cn(
                                 'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
                                 isDragging && 'ring-2 ring-blue-500',
                               )}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !isUpdating) {
-                                  handleUpdateKey()
-                                }
-                              }}
                             />
                             {isDragging && (
                               <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/10">
@@ -2626,7 +2636,7 @@ ${encryptionKey.replace('key_', '')}
                             )}
                           </div>
                           <button
-                            onClick={handleUpdateKey}
+                            type="submit"
                             disabled={isUpdating || !inputKey.trim()}
                             aria-label="Update encryption key"
                             className={cn(
@@ -2639,7 +2649,7 @@ ${encryptionKey.replace('key_', '')}
                             {isUpdating ? 'Updating...' : 'Update'}
                           </button>
                         </div>
-                      </div>
+                      </form>
                     </div>
                   )}
                 </>
