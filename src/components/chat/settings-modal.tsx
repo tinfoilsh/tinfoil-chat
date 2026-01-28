@@ -1620,11 +1620,15 @@ ${encryptionKey.replace('key_', '')}
       label: 'Personalization',
       icon: UserIcon,
     },
-    {
-      id: 'cloud-sync' as const,
-      label: 'Cloud Sync',
-      icon: AiOutlineCloudSync,
-    },
+    ...(isSignedIn
+      ? [
+          {
+            id: 'cloud-sync' as const,
+            label: 'Cloud Sync',
+            icon: AiOutlineCloudSync,
+          },
+        ]
+      : []),
     {
       id: 'import' as const,
       label: 'Import Chats',
