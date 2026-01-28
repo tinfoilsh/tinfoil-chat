@@ -105,6 +105,11 @@ export function useUIState(): UseUIStateReturn {
 
     const theme = isDarkMode ? 'dark' : 'light'
     document.documentElement.setAttribute('data-theme', theme)
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
   }, [isClient, isDarkMode])
 
   // Listen for system theme changes when in 'system' mode
