@@ -1096,7 +1096,8 @@ export function ChatSidebar({
                       {!cloudSyncEnabled ? (
                         <div className="px-3 py-2">
                           <p className="text-xs text-content-muted">
-                            Projects require cloud sync to be enabled.
+                            The projects feature requires end-to-end encrypted
+                            cloud sync to be enabled on this device.
                           </p>
                           <button
                             onClick={() => {
@@ -1634,27 +1635,28 @@ export function ChatSidebar({
                     </div>
                   )}
 
-                  {/* Cloud Sync Toggle - show when signed in and cloud sync is OFF */}
+                  {/* Cloud Sync Setup - show when signed in and cloud sync is OFF */}
                   {isSignedIn && !cloudSyncEnabled && (
-                    <div
-                      className={`mx-4 my-3 rounded-lg border border-border-subtle px-3 py-2 ${isDarkMode ? 'bg-surface-sidebar' : 'bg-white'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="font-aeonik text-sm font-medium text-content-secondary">
-                          Cloud Sync
-                        </div>
-                        <label className="relative inline-flex cursor-pointer items-center">
-                          <input
-                            type="checkbox"
-                            checked={cloudSyncEnabled}
-                            onChange={(e) =>
-                              handleCloudSyncToggle(e.target.checked)
-                            }
-                            className="peer sr-only"
-                          />
-                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
-                        </label>
-                      </div>
+                    <div className="px-3 py-2">
+                      <p className="text-xs text-content-muted">
+                        Chat are only stored locally on this device. Set up
+                        end-to-end encrypted cloud sync to back up and access
+                        your data across multiple devices.
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (onCloudSyncSetupClick) {
+                            onCloudSyncSetupClick()
+                          } else {
+                            setCloudSyncEnabledSetting(true)
+                            setCloudSyncEnabled(true)
+                          }
+                        }}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+                      >
+                        <CloudIcon className="h-3.5 w-3.5" />
+                        Enable Cloud Sync
+                      </button>
                     </div>
                   )}
                 </motion.div>
