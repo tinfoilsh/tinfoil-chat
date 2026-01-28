@@ -31,30 +31,58 @@ async function loadPlugins(): Promise<PluginState> {
     import('rehype-katex'),
     import('remark-breaks'),
     import('rehype-raw'),
+    import('rehype-sanitize'),
   ])
-    .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod, rehypeRawMod]) => {
-      cachedPlugins = {
-        remarkPlugins: [
-          [remarkMathMod.default, { singleDollarTextMath: false }],
-          remarkGfm,
-          remarkBreaksMod.default,
-        ],
-        rehypePlugins: [
-          rehypeRawMod.default,
-          [
-            rehypeKatexMod.default,
-            {
-              throwOnError: false,
-              strict: false,
-              output: 'htmlAndMathml',
-              errorColor: TINFOIL_COLORS.utility.destructive,
-              trust: false,
-            },
+    .then(
+      ([
+        remarkMathMod,
+        rehypeKatexMod,
+        remarkBreaksMod,
+        rehypeRawMod,
+        rehypeSanitizeMod,
+      ]) => {
+        cachedPlugins = {
+          remarkPlugins: [
+            [remarkMathMod.default, { singleDollarTextMath: false }],
+            remarkGfm,
+            remarkBreaksMod.default,
           ],
-        ],
-      }
-      return cachedPlugins
-    })
+          rehypePlugins: [
+            rehypeRawMod.default,
+            [
+              rehypeSanitizeMod.default,
+              {
+                ...rehypeSanitizeMod.defaultSchema,
+                tagNames: [
+                  ...(rehypeSanitizeMod.defaultSchema.tagNames || []),
+                  'br',
+                  'span',
+                  'div',
+                  'sup',
+                  'sub',
+                  'mark',
+                ],
+                attributes: {
+                  ...rehypeSanitizeMod.defaultSchema.attributes,
+                  '*': ['className'],
+                },
+              },
+            ],
+            [
+              rehypeKatexMod.default,
+              {
+                throwOnError: false,
+                strict: false,
+                output: 'htmlAndMathml',
+                errorColor: TINFOIL_COLORS.utility.destructive,
+                trust: false,
+              },
+            ],
+          ],
+        }
+        return cachedPlugins
+      },
+    )
     .catch((error) => {
       logError('Failed to load markdown plugins', error, {
         component: 'useMathPlugins',
