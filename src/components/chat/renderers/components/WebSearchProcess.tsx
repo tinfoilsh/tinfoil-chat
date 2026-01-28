@@ -4,6 +4,11 @@ import { memo, useCallback, useMemo, useState } from 'react'
 
 const BOUNCE_DELAYS = ['0ms', '150ms', '300ms', '450ms', '600ms']
 
+const webSearchFaviconCache = new Map<
+  string,
+  { loaded: boolean; error: boolean }
+>()
+
 interface WebSearchProcessProps {
   webSearch: WebSearchState
 }
@@ -77,16 +82,20 @@ function FadeInFavicon({
   onLoad?: () => void
   onError?: () => void
 }) {
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState(false)
+  const faviconUrl = getFaviconUrl(url)
+  const cached = webSearchFaviconCache.get(faviconUrl)
+  const [loaded, setLoaded] = useState(cached?.loaded ?? false)
+  const [error, setError] = useState(cached?.error ?? false)
 
   const handleLoad = () => {
     setLoaded(true)
+    webSearchFaviconCache.set(faviconUrl, { loaded: true, error: false })
     onLoad?.()
   }
 
   const handleError = () => {
     setError(true)
+    webSearchFaviconCache.set(faviconUrl, { loaded: false, error: true })
     onError?.()
   }
 
@@ -101,7 +110,7 @@ function FadeInFavicon({
         />
       )}
       <img
-        src={getFaviconUrl(url)}
+        src={faviconUrl}
         alt=""
         className={`${className} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
         onLoad={handleLoad}

@@ -36,11 +36,25 @@ function getDomainName(url: string): string {
   }
 }
 
+const faviconCache = new Map<string, { loaded: boolean; error: boolean }>()
+
 function CitationPill({ url }: { url: string }) {
-  const [imgLoaded, setImgLoaded] = useState(false)
-  const [imgError, setImgError] = useState(false)
+  const faviconUrl = getFaviconUrl(url)
+  const cached = faviconCache.get(faviconUrl)
+  const [imgLoaded, setImgLoaded] = useState(cached?.loaded ?? false)
+  const [imgError, setImgError] = useState(cached?.error ?? false)
   const sanitizedHref = sanitizeUrl(url)
   const domain = getDomainName(url)
+
+  const handleLoad = () => {
+    setImgLoaded(true)
+    faviconCache.set(faviconUrl, { loaded: true, error: false })
+  }
+
+  const handleError = () => {
+    setImgError(true)
+    faviconCache.set(faviconUrl, { loaded: false, error: true })
+  }
 
   return (
     <Tooltip delayDuration={300}>
@@ -53,11 +67,11 @@ function CitationPill({ url }: { url: string }) {
         >
           {!imgError && (
             <img
-              src={getFaviconUrl(url)}
+              src={faviconUrl}
               alt=""
               className={`h-[1.1em] w-[1.1em] shrink-0 rounded-full bg-white p-[1px] transition-opacity ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgError(true)}
+              onLoad={handleLoad}
+              onError={handleError}
             />
           )}
           <span>{domain}</span>
