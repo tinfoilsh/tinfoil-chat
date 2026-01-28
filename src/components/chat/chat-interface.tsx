@@ -40,6 +40,7 @@ import {
   getProjectUploadPreference,
   setProjectUploadPreference,
 } from '@/utils/project-upload-preference'
+import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
@@ -1627,7 +1628,9 @@ export function ChatInterface({
     return (
       <div className="flex h-screen items-center justify-center bg-surface-chat-background px-4 font-aeonik">
         <div className="max-w-md text-center">
-          <div className="mb-6 text-7xl">:(</div>
+          <div className="mb-6 flex justify-center">
+            <TfTinSad className="h-24 w-24 text-content-secondary" />
+          </div>
           <h2 className="mb-3 text-xl font-semibold text-content-primary">
             Something went wrong
           </h2>
@@ -1639,7 +1642,7 @@ export function ChatInterface({
             onClick={() => window.location.reload()}
             className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90"
           >
-            Try Again
+            Try Now
           </button>
         </div>
       </div>
