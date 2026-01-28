@@ -736,10 +736,8 @@ export function SettingsModal({
     if (enabled) {
       // Check if encryption key exists
       if (!encryptionService.getKey()) {
-        // Turn on the toggle visually (but don't persist yet)
-        setCloudSyncEnabledState(true)
-
-        // Show the cloud sync setup modal
+        // Close settings modal and show the cloud sync setup modal
+        setIsOpen(false)
         if (onCloudSyncSetupClick) {
           onCloudSyncSetupClick()
         }
