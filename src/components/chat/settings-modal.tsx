@@ -916,6 +916,7 @@ export function SettingsModal({
       if (isCloudSyncEnabled() && (await cloudStorage.isAuthenticated())) {
         const CHUNK_SIZE = 100
         const chatsToUpload = chats.filter((c) => !c.isLocalOnly)
+        let cloudUploadFailed = false
 
         for (let i = 0; i < chatsToUpload.length; i += CHUNK_SIZE) {
           const chunk = chatsToUpload.slice(i, i + CHUNK_SIZE)
@@ -931,9 +932,12 @@ export function SettingsModal({
                 )
             }
           } catch (err) {
-            errors.push(
-              `Bulk upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            )
+            if (!cloudUploadFailed) {
+              errors.push(
+                `Cloud sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              )
+              cloudUploadFailed = true
+            }
           }
         }
       }
@@ -1015,6 +1019,7 @@ export function SettingsModal({
       if (isCloudSyncEnabled() && (await cloudStorage.isAuthenticated())) {
         const CHUNK_SIZE = 100
         const chatsToUpload = chats.filter((c) => !c.isLocalOnly)
+        let cloudUploadFailed = false
 
         for (let i = 0; i < chatsToUpload.length; i += CHUNK_SIZE) {
           const chunk = chatsToUpload.slice(i, i + CHUNK_SIZE)
@@ -1030,9 +1035,12 @@ export function SettingsModal({
                 )
             }
           } catch (err) {
-            errors.push(
-              `Bulk upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            )
+            if (!cloudUploadFailed) {
+              errors.push(
+                `Cloud sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              )
+              cloudUploadFailed = true
+            }
           }
         }
       }
