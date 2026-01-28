@@ -86,31 +86,16 @@ export default function Document() {
         <meta name="robots" content="index, follow" />
 
         {/* Favicons */}
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link
-          rel="icon"
-          href="/favicon-16x16.png"
-          sizes="16x16"
-          type="image/png"
-        />
-        <link
-          rel="icon"
-          href="/favicon-32x32.png"
-          sizes="32x32"
-          type="image/png"
-        />
         <link
           rel="icon"
           href="/icon-light.png"
           media="(prefers-color-scheme: light)"
-          sizes="192x192"
           type="image/png"
         />
         <link
           rel="icon"
           href="/icon-dark.png"
           media="(prefers-color-scheme: dark)"
-          sizes="192x192"
           type="image/png"
         />
 
