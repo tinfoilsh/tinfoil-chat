@@ -200,24 +200,16 @@ const DefaultMessageComponent = ({
             message.thoughts.trim().length > 0)) && (
           <div className="no-scroll-anchoring w-full px-4 py-2">
             <div className="mb-2 w-full">
-              <StreamingContentWrapper
-                isStreaming={Boolean(
-                  hasShownThoughts.current &&
-                    isLastMessage &&
-                    (isStreaming || message.isThinking),
-                )}
-              >
-                <ThoughtProcess
-                  thoughts={message.thoughts || ''}
-                  isDarkMode={isDarkMode}
-                  isThinking={message.isThinking}
-                  thinkingDuration={message.thinkingDuration}
-                  messageId={messageUniqueId}
-                  expandedThoughtsState={expandedThoughtsState}
-                  setExpandedThoughtsState={setExpandedThoughtsState}
-                  titleModelName={titleModelName}
-                />
-              </StreamingContentWrapper>
+              <ThoughtProcess
+                thoughts={message.thoughts || ''}
+                isDarkMode={isDarkMode}
+                isThinking={message.isThinking}
+                thinkingDuration={message.thinkingDuration}
+                messageId={messageUniqueId}
+                expandedThoughtsState={expandedThoughtsState}
+                setExpandedThoughtsState={setExpandedThoughtsState}
+                titleModelName={titleModelName}
+              />
             </div>
           </div>
         )}
