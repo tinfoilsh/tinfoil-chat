@@ -9,6 +9,7 @@ const API_BASE_URL =
 export interface ProfileData {
   // Theme settings
   isDarkMode?: boolean
+  themeMode?: 'light' | 'dark' | 'system'
 
   // Chat settings
   maxPromptMessages?: number

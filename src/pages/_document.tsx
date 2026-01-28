@@ -7,14 +7,26 @@ export default function Document() {
     (function() {
       var themeMode = localStorage.getItem('themeMode');
       var theme;
+
+      // If no themeMode, check legacy 'theme' key
+      if (!themeMode) {
+        var legacyTheme = localStorage.getItem('theme');
+        if (legacyTheme === 'dark' || legacyTheme === 'light') {
+          themeMode = legacyTheme;
+        }
+      }
+
       if (themeMode === 'system' || !themeMode) {
         theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       } else {
         theme = themeMode;
       }
+
       document.documentElement.setAttribute('data-theme', theme);
       if (theme === 'dark') {
         document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
       }
     })();
   `

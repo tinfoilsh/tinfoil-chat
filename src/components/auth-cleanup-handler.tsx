@@ -48,14 +48,9 @@ export function AuthCleanupHandler() {
     if (!isSignedIn && wasSignedIn && !hasCheckedRef.current) {
       hasCheckedRef.current = true
 
-      // Check theme - follow browser preference if no saved theme
-      const theme = localStorage.getItem('theme')
-      if (theme !== null) {
-        setIsDarkMode(theme === 'dark')
-      } else {
-        // Use browser's color scheme preference
-        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
-      }
+      // Check theme from data-theme attribute (source of truth)
+      const dataTheme = document.documentElement.getAttribute('data-theme')
+      setIsDarkMode(dataTheme === 'dark')
 
       setShowModal(true)
     }

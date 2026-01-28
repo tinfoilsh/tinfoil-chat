@@ -70,6 +70,7 @@ export function useProfileSync() {
 
       return (
         profile1.isDarkMode !== profile2.isDarkMode ||
+        profile1.themeMode !== profile2.themeMode ||
         profile1.maxPromptMessages !== profile2.maxPromptMessages ||
         profile1.language !== profile2.language ||
         profile1.nickname !== profile2.nickname ||
@@ -92,6 +93,14 @@ export function useProfileSync() {
     const savedTheme = localStorage.getItem('theme')
     if (savedTheme) {
       settings.isDarkMode = savedTheme === 'dark'
+    }
+    const savedThemeMode = localStorage.getItem('themeMode')
+    if (
+      savedThemeMode === 'light' ||
+      savedThemeMode === 'dark' ||
+      savedThemeMode === 'system'
+    ) {
+      settings.themeMode = savedThemeMode
     }
 
     // Chat settings
@@ -147,13 +156,33 @@ export function useProfileSync() {
 
   // Apply settings to localStorage
   const applySettingsToLocal = useCallback((settings: ProfileData) => {
-    // Theme
-    if (settings.isDarkMode !== undefined) {
-      localStorage.setItem('theme', settings.isDarkMode ? 'dark' : 'light')
+    // Theme - prefer themeMode if available, fall back to isDarkMode for backwards compatibility
+    if (settings.themeMode) {
+      localStorage.setItem('themeMode', settings.themeMode)
+      // Also set legacy theme key
+      if (settings.themeMode === 'system') {
+        const prefersDark = window.matchMedia(
+          '(prefers-color-scheme: dark)',
+        ).matches
+        localStorage.setItem('theme', prefersDark ? 'dark' : 'light')
+      } else {
+        localStorage.setItem('theme', settings.themeMode)
+      }
       // Trigger theme change event
       window.dispatchEvent(
         new CustomEvent('themeChanged', {
-          detail: settings.isDarkMode ? 'dark' : 'light',
+          detail: settings.themeMode,
+        }),
+      )
+    } else if (settings.isDarkMode !== undefined) {
+      // Legacy: only isDarkMode available (old profile data)
+      const theme = settings.isDarkMode ? 'dark' : 'light'
+      localStorage.setItem('theme', theme)
+      localStorage.setItem('themeMode', theme)
+      // Trigger theme change event
+      window.dispatchEvent(
+        new CustomEvent('themeChanged', {
+          detail: theme,
         }),
       )
     }

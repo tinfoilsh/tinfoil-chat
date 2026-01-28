@@ -5,23 +5,30 @@ export function TextureGrid({ className = '' }: { className?: string }) {
 
   useEffect(() => {
     const checkDarkMode = () => {
-      const theme = localStorage.getItem('theme')
-      if (theme) {
-        setIsDarkMode(theme === 'dark')
-      } else {
-        setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches)
-      }
+      // Check the data-theme attribute which is the source of truth
+      const dataTheme = document.documentElement.getAttribute('data-theme')
+      setIsDarkMode(dataTheme === 'dark')
     }
 
     checkDarkMode()
 
-    const handleStorageChange = () => checkDarkMode()
-    window.addEventListener('storage', handleStorageChange)
-    window.addEventListener('themeChanged', handleStorageChange)
+    // Listen for theme changes
+    const handleThemeChange = () => checkDarkMode()
+    window.addEventListener('themeChanged', handleThemeChange)
+
+    // Also observe the data-theme attribute for changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'data-theme') {
+          checkDarkMode()
+        }
+      })
+    })
+    observer.observe(document.documentElement, { attributes: true })
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('themeChanged', handleStorageChange)
+      window.removeEventListener('themeChanged', handleThemeChange)
+      observer.disconnect()
     }
   }, [])
 
