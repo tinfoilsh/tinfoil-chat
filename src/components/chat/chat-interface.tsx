@@ -820,9 +820,9 @@ export function ChatInterface({
     setIsShareModalOpen(true)
   }
 
-  // Handler for encryption key button - opens settings modal to encryption tab
+  // Handler for encryption key button - opens settings modal to cloud-sync tab
   const handleOpenEncryptionKeyModal = () => {
-    setSettingsInitialTab('encryption')
+    setSettingsInitialTab('cloud-sync')
     setIsSettingsModalOpen(true)
     handleSetVerifierSidebarOpen(false)
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
