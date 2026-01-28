@@ -69,6 +69,22 @@ export function ChatInput({
   const documentsScrollRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const { isProjectMode, activeProject } = useProject()
+  const [textareaResetNonce, setTextareaResetNonce] = useState(0)
+  const prevInputValueRef = useRef(input)
+  const shouldRemountOnClearRef = useRef(false)
+
+  // If the input transitions from non-empty -> empty (send/clear), remount the
+  // textarea to guarantee any stuck inline height is dropped on mobile Safari.
+  useEffect(() => {
+    const prev = prevInputValueRef.current
+    if (prev !== '' && input === '' && shouldRemountOnClearRef.current) {
+      setTextareaResetNonce((n) => n + 1)
+    }
+    prevInputValueRef.current = input
+    if (input === '') {
+      shouldRemountOnClearRef.current = false
+    }
+  }, [input])
 
   // --- Speech-to-text state ---
   const [isRecording, setIsRecording] = useState(false)
@@ -104,15 +120,6 @@ export function ChatInput({
         documentsScrollRef.current.scrollWidth
     }
   }, [processedDocuments?.length])
-
-  // Reset textarea height when input is cleared (e.g., after sending a message)
-  // This handles Safari mobile where the synchronous height reset in use-chat-messaging.ts
-  // may not work due to timing with React's DOM updates
-  useEffect(() => {
-    if (input === '' && inputRef.current) {
-      inputRef.current.style.height = inputMinHeight
-    }
-  }, [input, inputMinHeight, inputRef])
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -530,6 +537,7 @@ export function ChatInput({
           <textarea
             id="chat-input"
             ref={inputRef}
+            key={textareaResetNonce}
             value={input}
             autoFocus
             onFocus={handleInputFocus}
@@ -680,6 +688,7 @@ export function ChatInput({
                   !isTranscribing &&
                   (hasInput || hasDocuments)
                 ) {
+                  shouldRemountOnClearRef.current = true
                   handleSubmit(e)
                 }
               } else if (e.key === 'Enter' && e.shiftKey) {
@@ -921,6 +930,7 @@ export function ChatInput({
                     e.preventDefault()
                     cancelGeneration()
                   } else {
+                    shouldRemountOnClearRef.current = true
                     handleSubmit(e)
                   }
                 }}
