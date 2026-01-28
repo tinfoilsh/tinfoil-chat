@@ -369,8 +369,8 @@ ${generatedKey.replace('key_', '')}
       <h2 className="text-center text-xl font-bold">Encryption Key</h2>
 
       <p className="text-sm text-content-secondary">
-        Generate a new encryption key for this device. Your existing chats will
-        be encrypted and synced.
+        Generate a new personal encryption key or restore an existing one. Your
+        chats will be encrypted and synced with this personal key.
       </p>
 
       <button
@@ -378,7 +378,7 @@ ${generatedKey.replace('key_', '')}
         disabled={isProcessing}
         className="w-full rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
       >
-        Restore existing key instead
+        Restore Encryption Key
       </button>
 
       <div className="flex gap-2">
@@ -416,11 +416,11 @@ ${generatedKey.replace('key_', '')}
 
       <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
         {generatedKey && (
-          <div className="flex items-center justify-between">
-            <code className="font-mono text-xs text-brand-accent-light">
-              {generatedKey.substring(0, 30)}...
+          <div className="flex items-center justify-between gap-2">
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-blue-500">
+              {generatedKey.substring(0, 20)}...
             </code>
-            <div className="flex gap-2">
+            <div className="flex flex-shrink-0 gap-2">
               <button
                 onClick={downloadKeyAsPEM}
                 className="rounded-lg bg-surface-chat p-2 text-content-primary transition-all hover:bg-surface-chat/80"
@@ -497,7 +497,7 @@ ${generatedKey.replace('key_', '')}
       <h2 className="text-center text-xl font-bold">Restore Encryption Key</h2>
 
       <p className="text-center text-sm text-content-secondary">
-        Enter or import your existing encryption key.
+        Enter or upload your personal encryption key.
       </p>
 
       <div
@@ -511,10 +511,8 @@ ${generatedKey.replace('key_', '')}
             type="password"
             value={inputKey}
             onChange={(e) => setInputKey(e.target.value)}
-            placeholder="Enter encryption key (e.g., key_abc123...)"
-            className={`flex-1 rounded-lg border bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light ${
-              isDragging ? 'border-brand-accent-light' : 'border-border-subtle'
-            }`}
+            placeholder="Enter encryption key"
+            className="flex-1 rounded-lg border border-blue-500 bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !isProcessing) {
                 handleRestoreKey()
@@ -537,7 +535,7 @@ ${generatedKey.replace('key_', '')}
           </button>
         </div>
         {isDragging && (
-          <p className="text-center text-sm text-brand-accent-light">
+          <p className="text-center text-sm text-blue-500">
             Drop your PEM file here
           </p>
         )}
@@ -556,7 +554,7 @@ ${generatedKey.replace('key_', '')}
           className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             isProcessing || !inputKey.trim()
               ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-              : 'bg-emerald-500 text-white hover:bg-emerald-600'
+              : 'bg-blue-500 text-white hover:bg-blue-600'
           }`}
         >
           {isProcessing ? 'Restoring...' : 'Restore Key'}
