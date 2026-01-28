@@ -472,6 +472,7 @@ export function ChatInterface({
     isClient,
     isSidebarOpen,
     isDarkMode,
+    themeMode,
     messagesEndRef,
     isInitialLoad,
     isThinking,
@@ -497,6 +498,7 @@ export function ChatInterface({
     deleteChat,
     handleChatSelect,
     toggleTheme,
+    setThemeMode,
     openAndExpandVerifier,
     handleInputFocus,
     handleLabelClick,
@@ -1930,7 +1932,8 @@ export function ChatInterface({
         isOpen={isSettingsModalOpen}
         setIsOpen={setIsSettingsModalOpen}
         isDarkMode={isDarkMode}
-        toggleTheme={toggleTheme}
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
         isClient={isClient}
         defaultSystemPrompt={systemPrompt}
         onCloudSyncSetupClick={

@@ -27,6 +27,7 @@ import {
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  ComputerDesktopIcon,
   CreditCardIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -131,11 +132,14 @@ export type SettingsTab =
   | 'export'
   | 'account'
 
+import type { ThemeMode } from './hooks/use-ui-state'
+
 type SettingsModalProps = {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   isDarkMode: boolean
-  toggleTheme: () => void
+  themeMode: ThemeMode
+  setThemeMode: (mode: ThemeMode) => void
   isClient: boolean
   defaultSystemPrompt?: string
   onCloudSyncSetupClick?: () => void
@@ -152,7 +156,8 @@ export function SettingsModal({
   isOpen,
   setIsOpen,
   isDarkMode,
-  toggleTheme,
+  themeMode,
+  setThemeMode,
   isClient,
   defaultSystemPrompt = '',
   onCloudSyncSetupClick,
@@ -629,10 +634,6 @@ export function SettingsModal({
         isEnabled: isUsingPersonalization,
       })
     }
-  }
-
-  const handleThemeToggle = () => {
-    toggleTheme()
   }
 
   const handleChatFontChange = (
@@ -1693,29 +1694,53 @@ ${encryptionKey.replace('key_', '')}
                     </h3>
                     <div
                       className={cn(
-                        'flex items-center justify-between rounded-lg border border-border-subtle p-4',
+                        'rounded-lg border border-border-subtle p-4',
                         isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                       )}
                     >
-                      <div>
+                      <div className="mb-3">
                         <div className="font-aeonik text-sm font-medium text-content-primary">
                           Theme
                         </div>
                         <div className="font-aeonik-fono text-xs text-content-muted">
-                          Choose between light and dark mode
+                          Choose your preferred color scheme
                         </div>
                       </div>
-                      <button
-                        id="theme-toggle"
-                        onClick={handleThemeToggle}
-                        className="rounded-lg border border-border-subtle bg-surface-chat p-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat/80"
-                      >
-                        {isDarkMode ? (
-                          <SunIcon className="h-5 w-5" />
-                        ) : (
-                          <MoonIcon className="h-5 w-5" />
-                        )}
-                      </button>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          {
+                            id: 'light' as const,
+                            label: 'Light',
+                            icon: SunIcon,
+                          },
+                          {
+                            id: 'dark' as const,
+                            label: 'Dark',
+                            icon: MoonIcon,
+                          },
+                          {
+                            id: 'system' as const,
+                            label: 'System',
+                            icon: ComputerDesktopIcon,
+                          },
+                        ].map((theme) => (
+                          <button
+                            key={theme.id}
+                            onClick={() => setThemeMode(theme.id)}
+                            className={cn(
+                              'flex flex-col items-center gap-1 rounded-lg border p-3 transition-all',
+                              themeMode === theme.id
+                                ? 'border-brand-accent-light bg-brand-accent-light/10'
+                                : 'border-border-subtle hover:border-border-strong',
+                            )}
+                          >
+                            <theme.icon className="h-5 w-5 text-content-primary" />
+                            <span className="text-xs text-content-secondary">
+                              {theme.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Chat Font */}
