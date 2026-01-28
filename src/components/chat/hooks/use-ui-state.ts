@@ -49,11 +49,11 @@ export function useUIState(): UseUIStateReturn {
       return
     }
 
-    // Default to light mode when no saved preference
-    setIsDarkMode(false)
-
-    // Note: Not using browser's color scheme preference anymore
-    // to ensure consistent light mode default for new users
+    // Use browser's preferred color scheme for new users
+    const prefersDark = window.matchMedia(
+      '(prefers-color-scheme: dark)',
+    ).matches
+    setIsDarkMode(prefersDark)
   }, [])
 
   // Add effect to handle window resizing
