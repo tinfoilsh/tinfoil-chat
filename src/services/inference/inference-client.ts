@@ -246,7 +246,7 @@ export async function sendChatStream(
       const client = await getTinfoilClient()
       await client.ready()
 
-      // Build request body - tools is a custom extension for our web search proxy
+      // Build request body
       const requestBody: Record<string, unknown> = {
         model: model.modelName,
         messages,
@@ -256,11 +256,10 @@ export async function sendChatStream(
         requestBody.reasoning_effort = reasoningEffort
       }
       if (webSearchEnabled) {
-        const tools: Array<{ type: string }> = [{ type: 'web_search' }]
-        if (piiCheckEnabled) {
-          tools.push({ type: 'pii_check' })
-        }
-        requestBody.tools = tools
+        requestBody.web_search_options = {}
+      }
+      if (piiCheckEnabled) {
+        requestBody.pii_check_options = {}
       }
 
       const stream = await (client.chat.completions.create as Function)(

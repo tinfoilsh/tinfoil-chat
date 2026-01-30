@@ -33,20 +33,6 @@ function getDomainName(url: string): string {
   }
 }
 
-function formatPublishedDate(dateString: string): string {
-  try {
-    const date = new Date(dateString)
-    if (isNaN(date.getTime())) return ''
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  } catch {
-    return ''
-  }
-}
-
 function BouncingPlaceholder({
   index,
   style,
@@ -290,22 +276,10 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                     className="mt-0.5 h-4 w-4 shrink-0 rounded-full"
                   />
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs opacity-50">
-                        {getDomainName(source.url)}
-                      </span>
-                      {source.publishedDate && (
-                        <span className="text-xs opacity-50">
-                          {formatPublishedDate(source.publishedDate)}
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-xs opacity-50">
+                      {getDomainName(source.url)}
+                    </span>
                     <span className="truncate font-medium">{source.title}</span>
-                    {source.text && (
-                      <p className="line-clamp-2 text-xs opacity-70">
-                        {source.text}
-                      </p>
-                    )}
                   </div>
                 </a>
               ))}

@@ -392,23 +392,18 @@ export async function processStreamingResponse(
                 annotation.type === 'url_citation' &&
                 annotation.url_citation
               ) {
-                const { title, url, content, published_date } =
-                  annotation.url_citation
+                const { title, url } = annotation.url_citation
                 if (url) {
                   // Add to collectedSources without deduplication to preserve citation index mapping
                   collectedSources.push({
                     title: title || url,
                     url,
-                    text: content,
-                    publishedDate: published_date,
                   })
                   collectedAnnotations.push({
                     type: 'url_citation',
                     url_citation: {
                       title: title || url,
                       url,
-                      content,
-                      published_date,
                     },
                   })
                 }
