@@ -1,8 +1,8 @@
 export type URLCitation = {
   title: string
   url: string
-  content?: string
-  published_date?: string
+  start_index?: number
+  end_index?: number
 }
 
 export type Annotation = {
@@ -13,8 +13,6 @@ export type Annotation = {
 export type WebSearchSource = {
   title: string
   url: string
-  text?: string
-  publishedDate?: string
 }
 
 export type WebSearchState = {
