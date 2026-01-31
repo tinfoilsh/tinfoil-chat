@@ -4,17 +4,8 @@ import '@/styles/globals.css'
 import '@/styles/tailwind.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import type { AppProps } from 'next/app'
-import { Inter } from 'next/font/google'
 import localFont from 'next/font/local'
 import Head from 'next/head'
-
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-sans',
-  preload: true,
-  adjustFontFallback: true,
-})
 
 const aeonikFono = localFont({
   src: [
@@ -115,14 +106,13 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
       <style jsx global>{`
         :root {
-          --font-sans: ${inter.style.fontFamily};
           --font-aeonik-fono: ${aeonikFono.style.fontFamily};
           --font-aeonik: ${aeonik.style.fontFamily};
           --font-opendyslexic: ${openDyslexic.style.fontFamily};
         }
       `}</style>
       <div
-        className={`${inter.variable} ${aeonikFono.variable} ${aeonik.variable} ${openDyslexic.variable}`}
+        className={`${aeonikFono.variable} ${aeonik.variable} ${openDyslexic.variable}`}
       >
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
