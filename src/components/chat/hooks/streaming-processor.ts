@@ -38,7 +38,8 @@ function processCitationMarkers(
       .replace(/\(/g, '%28')
       .replace(/\)/g, '%29')
       .replace(/\|/g, '%7C')
-    return `[cite](#cite-${num}~${encodedUrl})`
+    const encodedTitle = encodeURIComponent(source.title || '')
+    return `[${num}](#cite-${num}~${encodedUrl}~${encodedTitle})`
   })
 }
 

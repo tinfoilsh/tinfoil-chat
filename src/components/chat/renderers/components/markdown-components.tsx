@@ -30,7 +30,7 @@ function getDomainName(url: string): string {
 
 const faviconCache = new Map<string, { loaded: boolean; error: boolean }>()
 
-function CitationPill({ url }: { url: string }) {
+function CitationPill({ url, title }: { url: string; title?: string }) {
   const faviconUrl = getFaviconUrl(url)
   const cached = faviconCache.get(faviconUrl)
   const [imgLoaded, setImgLoaded] = useState(cached?.loaded ?? false)
@@ -70,7 +70,15 @@ function CitationPill({ url }: { url: string }) {
         </a>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs">
-        <span className="text-xs">{domain}</span>
+        {title && <p className="text-sm font-medium leading-tight">{title}</p>}
+        <a
+          href={sanitizedHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block truncate text-xs text-blue-500 hover:underline"
+        >
+          {url}
+        </a>
       </TooltipContent>
     </Tooltip>
   )
@@ -237,8 +245,16 @@ export function createMarkdownComponents({
       if (href?.startsWith('#cite-')) {
         const tildeIndex = href.indexOf('~')
         if (tildeIndex !== -1) {
-          const url = href.slice(tildeIndex + 1)
-          return <CitationPill url={url} />
+          const rest = href.slice(tildeIndex + 1)
+          const secondTildeIndex = rest.indexOf('~')
+          if (secondTildeIndex !== -1) {
+            // New format: [1](#cite-1~url~encodedTitle)
+            const url = rest.slice(0, secondTildeIndex)
+            const title = decodeURIComponent(rest.slice(secondTildeIndex + 1))
+            return <CitationPill url={url} title={title || undefined} />
+          }
+          // Old format: [cite](#cite-1~url)
+          return <CitationPill url={rest} />
         }
       }
       const sanitizedHref = sanitizeUrl(href)
