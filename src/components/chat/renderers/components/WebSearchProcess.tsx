@@ -16,7 +16,7 @@ interface WebSearchProcessProps {
 function getFaviconUrl(url: string): string {
   try {
     const parsedUrl = new URL(url)
-    return `https://www.google.com/s2/favicons?sz=32&domain=${parsedUrl.hostname}`
+    return `https://icons.duckduckgo.com/ip3/${parsedUrl.hostname}.ico`
   } catch {
     return ''
   }
