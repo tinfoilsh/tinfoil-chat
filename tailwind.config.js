@@ -7,7 +7,7 @@ module.exports = {
       fontFamily: {
         // Use CSS vars from next/font for consistency across apps
         sans: [
-          'var(--font-sans)',
+          'var(--font-aeonik)',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
