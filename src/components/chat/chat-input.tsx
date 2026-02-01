@@ -951,6 +951,7 @@ export function ChatInput({
                   }
                 }}
                 className="group flex h-10 w-10 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-6 md:w-6"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
                 disabled={
                   loadingState !== 'loading' &&
                   loadingState !== 'retrying' &&
