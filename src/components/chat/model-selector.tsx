@@ -3,7 +3,7 @@ import {
   isLocalDevelopment,
   isModelAvailable,
 } from '@/config/models'
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { AIModel } from './types'
 
 type ModelSelectorProps = {
@@ -54,7 +54,8 @@ export function ModelSelector({
   }
 
   // Calculate optimal positioning and height
-  useEffect(() => {
+  // useLayoutEffect ensures positioning is calculated before browser paints (prevents visual jump on mobile)
+  useLayoutEffect(() => {
     let animationFrameId: number | null = null
 
     const calculatePosition = () => {
