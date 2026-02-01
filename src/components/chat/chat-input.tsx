@@ -919,19 +919,19 @@ export function ChatInput({
                   className={cn(
                     'disabled:opacity-50',
                     isRecording
-                      ? 'flex h-10 w-10 animate-pulse items-center justify-center rounded-full bg-red-500 text-white md:h-6 md:w-6'
-                      : 'rounded-lg bg-transparent p-2.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary md:p-1',
+                      ? 'flex h-10 w-10 animate-pulse items-center justify-center rounded-full bg-red-500 text-white md:h-8 md:w-8'
+                      : 'rounded-lg bg-transparent p-2.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary md:p-1.5',
                   )}
                   style={{ WebkitTapHighlightColor: 'transparent' }}
                   title={isRecording ? 'Stop recording' : 'Start recording'}
                   disabled={isTranscribing}
                 >
                   {isRecording ? (
-                    <StopIcon className="h-6 w-6 md:h-4 md:w-4" />
+                    <StopIcon className="h-6 w-6 md:h-5 md:w-5" />
                   ) : isTranscribing ? (
-                    <PiSpinner className="h-6 w-6 animate-spin text-current md:h-4 md:w-4" />
+                    <PiSpinner className="h-6 w-6 animate-spin text-current md:h-5 md:w-5" />
                   ) : (
-                    <MicrophoneIcon className="h-6 w-6 md:h-4 md:w-4" />
+                    <MicrophoneIcon className="h-6 w-6 md:h-5 md:w-5" />
                   )}
                 </button>
               )}
@@ -951,7 +951,7 @@ export function ChatInput({
                     inputRef.current?.blur()
                   }
                 }}
-                className="group flex h-10 w-10 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-6 md:w-6"
+                className="group flex h-10 w-10 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-8 md:w-8"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
                 disabled={
                   loadingState !== 'loading' &&
@@ -963,9 +963,9 @@ export function ChatInput({
                 }
               >
                 {loadingState === 'loading' || loadingState === 'retrying' ? (
-                  <div className="h-3.5 w-3.5 bg-button-send-foreground/80 transition-colors md:h-2.5 md:w-2.5" />
+                  <div className="h-3.5 w-3.5 bg-button-send-foreground/80 transition-colors md:h-3 md:w-3" />
                 ) : (
-                  <FiArrowUp className="h-6 w-6 text-button-send-foreground transition-colors md:h-4 md:w-4" />
+                  <FiArrowUp className="h-6 w-6 text-button-send-foreground transition-colors md:h-5 md:w-5" />
                 )}
               </button>
             </div>
