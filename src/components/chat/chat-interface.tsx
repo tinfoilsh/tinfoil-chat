@@ -1747,11 +1747,11 @@ export function ChatInterface({
             <button
               type="button"
               onClick={handleOpenShareModal}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background px-3 py-2 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary md:px-3 md:py-2"
               aria-label="Share"
             >
               <IoShareOutline className="h-4 w-4" />
-              <span className="text-sm">Share</span>
+              <span className="hidden text-sm md:inline">Share</span>
             </button>
           )}
 
