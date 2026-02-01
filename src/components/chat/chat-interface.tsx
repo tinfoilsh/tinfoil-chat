@@ -10,13 +10,12 @@ import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   ChatBubbleLeftRightIcon,
-  PlusIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BiSolidLock, BiSolidLockOpen } from 'react-icons/bi'
 import { GoSidebarCollapse } from 'react-icons/go'
 import { IoShareOutline } from 'react-icons/io5'
-import { PiSpinner } from 'react-icons/pi'
+import { PiNotePencilLight, PiSpinner } from 'react-icons/pi'
 
 import {
   ProjectModeBanner,
@@ -1738,7 +1737,7 @@ export function ChatInterface({
                 className="flex items-center justify-center rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
                 aria-label="New chat"
               >
-                <PlusIcon className="h-4 w-4" />
+                <PiNotePencilLight className="h-4 w-4" />
               </button>
             )}
 

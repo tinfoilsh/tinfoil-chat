@@ -16,7 +16,6 @@ import {
   Cog6ToothIcon,
   FolderIcon,
   FolderPlusIcon,
-  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -25,7 +24,13 @@ import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from 'react-icons/fa6'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
 import { IoChatbubblesOutline } from 'react-icons/io5'
-import { PiFolder, PiMicrophone, PiSparkle, PiSpinner } from 'react-icons/pi'
+import {
+  PiFolder,
+  PiMicrophone,
+  PiNotePencilLight,
+  PiSparkle,
+  PiSpinner,
+} from 'react-icons/pi'
 import { ChatList, type ChatItemData } from './chat-list'
 import { formatRelativeTime } from './chat-list-utils'
 import { CONSTANTS } from './constants'
@@ -740,7 +745,7 @@ export function ChatSidebar({
                 )}
                 aria-label="New chat"
               >
-                <PlusIcon className="h-5 w-5" />
+                <PiNotePencilLight className="h-5 w-5" />
               </button>
               <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                 New chat{' '}
@@ -748,28 +753,6 @@ export function ChatSidebar({
                   {modKey}
                   {isMac ? '⇧' : 'Shift+'}O
                 </span>
-              </span>
-            </div>
-
-            {/* Chats button */}
-            <div className="group relative">
-              <button
-                onClick={() => {
-                  sessionStorage.setItem('sidebarExpandSection', 'chats')
-                  setIsChatHistoryExpanded(true)
-                  setIsProjectsExpanded(false)
-                  setIsOpen(true)
-                }}
-                className={cn(
-                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
-                )}
-                aria-label="Chats"
-              >
-                <IoChatbubblesOutline className="h-5 w-5" />
-              </button>
-              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                Chats <span className="text-content-muted">{modKey}.</span>
               </span>
             </div>
 
@@ -796,6 +779,28 @@ export function ChatSidebar({
                 </span>
               </div>
             )}
+
+            {/* Chats button */}
+            <div className="group relative">
+              <button
+                onClick={() => {
+                  sessionStorage.setItem('sidebarExpandSection', 'chats')
+                  setIsChatHistoryExpanded(true)
+                  setIsProjectsExpanded(false)
+                  setIsOpen(true)
+                }}
+                className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                )}
+                aria-label="Chats"
+              >
+                <IoChatbubblesOutline className="h-5 w-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                Chats <span className="text-content-muted">{modKey}.</span>
+              </span>
+            </div>
 
             {/* Settings button */}
             <div className="group relative">
@@ -994,6 +999,31 @@ export function ChatSidebar({
           {!isPremium && (
             <div className="relative z-10 border-b border-border-subtle" />
           )}
+
+          {/* New Chat button */}
+          <div className="relative z-10 flex-none px-2 py-2">
+            <button
+              onClick={() => createNewChat(activeTab === 'local', true)}
+              disabled={currentChat?.isBlankChat}
+              className={cn(
+                'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
+                currentChat?.isBlankChat
+                  ? 'cursor-default border-transparent bg-transparent text-content-muted'
+                  : isDarkMode
+                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                    : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <PiNotePencilLight className="h-4 w-4" />
+                <span className="font-aeonik font-medium">New chat</span>
+              </span>
+              <span className="text-xs text-content-muted">
+                {modKey}
+                {isMac ? '⇧' : 'Shift+'}O
+              </span>
+            </button>
+          </div>
 
           {/* Projects dropdown - show for premium users */}
           {isSignedIn && isPremium && (

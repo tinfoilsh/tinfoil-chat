@@ -22,7 +22,6 @@ import {
   DocumentPlusIcon,
   FolderIcon,
   PencilSquareIcon,
-  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -55,6 +54,7 @@ import {
   BsFiletypeXml,
 } from 'react-icons/bs'
 import { GoSidebarCollapse, GoSidebarExpand } from 'react-icons/go'
+import { PiNotePencilLight } from 'react-icons/pi'
 import { CONSTANTS } from '../chat/constants'
 import { useProject } from './project-context'
 
@@ -652,7 +652,7 @@ export function ProjectSidebar({
                 )}
                 aria-label="New chat"
               >
-                <PlusIcon className="h-5 w-5" />
+                <PiNotePencilLight className="h-5 w-5" />
               </button>
               <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                 New chat{' '}
@@ -835,8 +835,33 @@ export function ProjectSidebar({
             </div>
           </div>
 
+          {/* New Chat button */}
+          <div className="relative z-10 mt-3 flex-none px-2 py-2">
+            <button
+              onClick={handleNewChat}
+              disabled={!currentChatId}
+              className={cn(
+                'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
+                !currentChatId
+                  ? 'cursor-default border-transparent bg-transparent text-content-muted'
+                  : isDarkMode
+                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                    : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <PiNotePencilLight className="h-4 w-4" />
+                <span className="font-aeonik font-medium">New chat</span>
+              </span>
+              <span className="text-xs text-content-muted">
+                {modKey}
+                {isMac ? '⇧' : 'Shift+'}O
+              </span>
+            </button>
+          </div>
+
           {/* Project Settings Dropdown */}
-          <div className="relative z-10 mt-3 flex-none border-y border-border-subtle">
+          <div className="relative z-10 flex-none border-y border-border-subtle">
             <button
               onClick={() =>
                 !isLoading && setSettingsExpanded(!settingsExpanded)
