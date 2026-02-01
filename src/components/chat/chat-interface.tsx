@@ -10,6 +10,7 @@ import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   ChatBubbleLeftRightIcon,
+  PlusIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
 import { GoSidebarCollapse } from 'react-icons/go'
@@ -1727,6 +1728,20 @@ export function ChatInterface({
                 : '16px',
           }}
         >
+          {/* New chat button - only show on mobile when there are messages */}
+          {windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
+            currentChat?.messages &&
+            currentChat.messages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => createNewChat()}
+                className="flex items-center justify-center rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
+                aria-label="New chat"
+              >
+                <PlusIcon className="h-4 w-4" />
+              </button>
+            )}
+
           {/* Share button - only show when there are messages */}
           {currentChat?.messages && currentChat.messages.length > 0 && (
             <button
