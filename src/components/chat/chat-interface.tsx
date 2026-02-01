@@ -13,9 +13,9 @@ import {
   PlusIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
+import { BiSolidLock, BiSolidLockOpen } from 'react-icons/bi'
 import { GoSidebarCollapse } from 'react-icons/go'
-import { HiOutlineShieldExclamation } from 'react-icons/hi2'
-import { IoShareOutline, IoShieldCheckmarkOutline } from 'react-icons/io5'
+import { IoShareOutline } from 'react-icons/io5'
 import { PiSpinner } from 'react-icons/pi'
 
 import {
@@ -1774,15 +1774,28 @@ export function ChatInterface({
               aria-pressed={isVerifierSidebarOpen}
             >
               {!verificationComplete ? (
-                <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
+                <>
+                  <PiSpinner className="h-4 w-4 animate-spin" />
+                  <span className="text-sm leading-none">Verifying...</span>
+                </>
               ) : verificationSuccess ? (
-                <IoShieldCheckmarkOutline className="h-5 w-5 text-emerald-500" />
+                <>
+                  <BiSolidLock className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light" />
+                  <span className="text-sm leading-none text-brand-accent-dark dark:text-brand-accent-light">
+                    Verified
+                  </span>
+                </>
               ) : (
-                <HiOutlineShieldExclamation className="h-5 w-5 text-red-500" />
+                <>
+                  <BiSolidLockOpen className="h-4 w-4 text-red-500" />
+                  <span className="text-sm leading-none text-red-500">
+                    Error
+                  </span>
+                </>
               )}
             </button>
             <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-              {isVerifierSidebarOpen ? 'Close verification' : 'Verification'}
+              {isVerifierSidebarOpen ? 'Close verification' : 'View details'}
             </span>
           </div>
         </div>
