@@ -917,20 +917,21 @@ export function ChatInput({
                   type="button"
                   onClick={isRecording ? stopRecording : startRecording}
                   className={cn(
-                    'rounded-lg p-1.5 disabled:opacity-50',
+                    'disabled:opacity-50',
                     isRecording
-                      ? 'animate-pulse text-red-500'
-                      : 'text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary',
+                      ? 'flex h-10 w-10 animate-pulse items-center justify-center rounded-full bg-red-500 text-white md:h-6 md:w-6'
+                      : 'rounded-lg bg-transparent p-2.5 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary md:p-1',
                   )}
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
                   title={isRecording ? 'Stop recording' : 'Start recording'}
                   disabled={isTranscribing}
                 >
                   {isRecording ? (
-                    <StopIcon className="h-5 w-5" />
+                    <StopIcon className="h-6 w-6 md:h-4 md:w-4" />
                   ) : isTranscribing ? (
-                    <PiSpinner className="h-5 w-5 animate-spin text-current" />
+                    <PiSpinner className="h-6 w-6 animate-spin text-current md:h-4 md:w-4" />
                   ) : (
-                    <MicrophoneIcon className="h-5 w-5" />
+                    <MicrophoneIcon className="h-6 w-6 md:h-4 md:w-4" />
                   )}
                 </button>
               )}
