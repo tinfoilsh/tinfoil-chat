@@ -201,16 +201,18 @@ test.describe('Smoke Tests', () => {
     // (depending on how fast the verification completes)
     // The button contains either a spinner, checkmark, or exclamation icon
     const spinnerIcon = verificationButton.locator('.animate-spin')
-    const checkmarkIcon = verificationButton.locator('.text-emerald-500')
-    const errorIcon = verificationButton.locator('.text-red-500')
+    const verifiedIcon = verificationButton
+      .locator('.text-brand-accent-dark')
+      .first()
+    const errorIcon = verificationButton.locator('.text-red-500').first()
 
     // Wait for either state to be visible initially
-    await expect(spinnerIcon.or(checkmarkIcon).or(errorIcon)).toBeVisible({
+    await expect(spinnerIcon.or(verifiedIcon).or(errorIcon)).toBeVisible({
       timeout: 10000,
     })
 
     // Eventually should transition to a final state (verified or failed)
-    await expect(checkmarkIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
+    await expect(verifiedIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
   })
 
   test('verification badge shows final state icon', async ({ page }) => {
@@ -227,10 +229,12 @@ test.describe('Smoke Tests', () => {
     await expect(verificationButton).toBeVisible({ timeout: 10000 })
 
     // Wait for verification to complete (success or failure)
-    // Success shows emerald checkmark, failure shows red exclamation
-    const checkmarkIcon = verificationButton.locator('.text-emerald-500')
-    const errorIcon = verificationButton.locator('.text-red-500')
-    await expect(checkmarkIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
+    // Success shows brand accent icon, failure shows red icon
+    const verifiedIcon = verificationButton
+      .locator('.text-brand-accent-dark')
+      .first()
+    const errorIcon = verificationButton.locator('.text-red-500').first()
+    await expect(verifiedIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
   })
 
   test('clicking verification button opens sidebar', async ({ page }) => {
@@ -247,9 +251,11 @@ test.describe('Smoke Tests', () => {
     await expect(verificationButton).toBeVisible({ timeout: 10000 })
 
     // Wait for verification to complete (success or failure)
-    const checkmarkIcon = verificationButton.locator('.text-emerald-500')
-    const errorIcon = verificationButton.locator('.text-red-500')
-    await expect(checkmarkIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
+    const verifiedIcon = verificationButton
+      .locator('.text-brand-accent-dark')
+      .first()
+    const errorIcon = verificationButton.locator('.text-red-500').first()
+    await expect(verifiedIcon.or(errorIcon)).toBeVisible({ timeout: 15000 })
 
     // Click the verification button to open the sidebar
     await verificationButton.click()
