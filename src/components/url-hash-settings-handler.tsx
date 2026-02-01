@@ -18,6 +18,10 @@ export function UrlHashSettingsHandler({
       return
     }
 
+    // Mark as processed immediately to prevent re-processing when the settings
+    // modal adds its own hash to the URL
+    hasProcessed.current = true
+
     const processHashSettings = () => {
       const hash = window.location.hash
 
@@ -55,7 +59,6 @@ export function UrlHashSettingsHandler({
         metadata: { tab: tabName },
       })
 
-      hasProcessed.current = true
       onSettingsTabReady(tabName as SettingsTab)
 
       window.history.replaceState(
