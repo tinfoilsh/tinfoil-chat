@@ -72,6 +72,7 @@ export function ChatInput({
   const [textareaResetNonce, setTextareaResetNonce] = useState(0)
   const prevInputValueRef = useRef(input)
   const shouldRemountOnClearRef = useRef(false)
+  const hasInitiallyFocusedRef = useRef(false)
 
   // If the input transitions from non-empty -> empty (send/clear), remount the
   // textarea to guarantee any stuck inline height is dropped on mobile Safari.
@@ -120,6 +121,25 @@ export function ChatInput({
         documentsScrollRef.current.scrollWidth
     }
   }, [processedDocuments?.length])
+
+  // Auto-resize textarea when input changes (handles typing, transcription, paste, etc.)
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = '0px'
+      inputRef.current.style.height = `${Math.max(
+        parseInt(inputMinHeight),
+        Math.min(inputRef.current.scrollHeight, 240),
+      )}px`
+    }
+  }, [input, inputMinHeight, inputRef])
+
+  // Focus textarea on initial mount only (not on remounts after sending)
+  useEffect(() => {
+    if (!hasInitiallyFocusedRef.current && inputRef.current) {
+      inputRef.current.focus()
+      hasInitiallyFocusedRef.current = true
+    }
+  }, [inputRef])
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -539,13 +559,8 @@ export function ChatInput({
             ref={inputRef}
             key={textareaResetNonce}
             value={input}
-            autoFocus
             onFocus={handleInputFocus}
-            onChange={(e) => {
-              setInput(e.target.value)
-              e.target.style.height = '0px'
-              e.target.style.height = `${Math.max(parseInt(inputMinHeight), Math.min(e.target.scrollHeight, 240))}px`
-            }}
+            onChange={(e) => setInput(e.target.value)}
             onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Tab') {
@@ -932,6 +947,7 @@ export function ChatInput({
                   } else {
                     shouldRemountOnClearRef.current = true
                     handleSubmit(e)
+                    inputRef.current?.blur()
                   }
                 }}
                 className="group flex h-10 w-10 items-center justify-center rounded-full bg-button-send-background text-button-send-foreground transition-colors hover:bg-button-send-background/80 disabled:opacity-50 md:h-6 md:w-6"
