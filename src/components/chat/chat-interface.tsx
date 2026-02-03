@@ -4,6 +4,7 @@ import {
   type BaseModel,
 } from '@/config/models'
 import { useChatRouter } from '@/hooks/use-chat-router'
+import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
 import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
@@ -299,6 +300,11 @@ export function ChatInterface({
 
   // Use subscription status from hook
   const isPremium = chat_subscription_active ?? false
+
+  // Load projects for move to project functionality
+  const { projects } = useProjects({
+    autoLoad: isSignedIn && isCloudSyncEnabled() && isPremium,
+  })
 
   // Use reasoning effort hook for gpt-oss models
   const { reasoningEffort, setReasoningEffort } = useReasoningEffort()
@@ -2024,6 +2030,11 @@ export function ChatInterface({
                   onAddChatToProject={(chatId) =>
                     handleMoveChatToProject(chatId, activeProject.id)
                   }
+                  onMoveChatToProject={handleMoveChatToProject}
+                  projects={projects.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                  }))}
                   onSettingsClick={handleOpenSettingsModal}
                   windowWidth={windowWidth}
                 />
