@@ -1467,19 +1467,6 @@ export function ChatInterface({
     setProcessedDocuments(remainingDocuments)
   }
 
-  // --- Drag & Drop across bottom input area ---
-  const [isBottomDragActive, setIsBottomDragActive] = useState(false)
-
-  const handleBottomDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsBottomDragActive(true)
-  }, [])
-
-  const handleBottomDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsBottomDragActive(false)
-  }, [])
-
   // Check if scroll button should be shown (throttled for performance)
   const checkScrollPosition = useCallback(() => {
     const el = scrollContainerRef.current
@@ -2238,28 +2225,6 @@ export function ChatInterface({
                   minHeight: '80px',
                   maxHeight: '50vh',
                   paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
-                  transition: 'border 0.2s ease-in-out',
-                  borderTop: isBottomDragActive
-                    ? '2px solid rgba(52, 211, 153, 0.5)' // emerald-400 with 50% opacity
-                    : 'none',
-                  borderLeft: isBottomDragActive
-                    ? '2px solid rgba(52, 211, 153, 0.5)'
-                    : 'none',
-                  borderRight: isBottomDragActive
-                    ? '2px solid rgba(52, 211, 153, 0.5)'
-                    : 'none',
-                  borderBottom: isBottomDragActive
-                    ? '2px solid rgba(52, 211, 153, 0.5)'
-                    : 'none',
-                }}
-                onDragOver={handleBottomDragOver}
-                onDragLeave={handleBottomDragLeave}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setIsBottomDragActive(false)
-                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                    handleFileUpload(e.dataTransfer.files[0])
-                  }
                 }}
               >
                 <form

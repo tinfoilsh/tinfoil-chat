@@ -211,7 +211,6 @@ export function ProjectSidebar({
   const [settingsExpanded, setSettingsExpanded] = useState(false)
   const [documentsExpanded, setDocumentsExpanded] = useState(false)
   const [memoryExpanded, setMemoryExpanded] = useState(false)
-  const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [memoryText, setMemoryText] = useState('')
   const [memoryEdited, setMemoryEdited] = useState(false)
 
@@ -471,75 +470,6 @@ export function ProjectSidebar({
     },
     [uploadDocument, processDocument, addUploadingFile, removeUploadingFile],
   )
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDraggingOver(false)
-
-      const files = e.dataTransfer.files
-      if (!files || files.length === 0) return
-
-      const fileArray = Array.from(files)
-      const uploadIds = fileArray.map(() => crypto.randomUUID())
-
-      fileArray.forEach((file, i) => {
-        addUploadingFile({
-          id: uploadIds[i],
-          name: file.name,
-          size: file.size,
-        })
-      })
-
-      await Promise.all(
-        fileArray.map(async (file, i) => {
-          return new Promise<void>((resolve) => {
-            processDocument(
-              file,
-              async (content) => {
-                try {
-                  await uploadDocument(file, content)
-                } catch {
-                  toast({
-                    title: 'Upload failed',
-                    description:
-                      'Failed to upload the document. Please try again.',
-                    variant: 'destructive',
-                  })
-                } finally {
-                  removeUploadingFile(uploadIds[i])
-                  resolve()
-                }
-              },
-              (error) => {
-                toast({
-                  title: 'Upload failed',
-                  description: error.message,
-                  variant: 'destructive',
-                })
-                removeUploadingFile(uploadIds[i])
-                resolve()
-              },
-            )
-          })
-        }),
-      )
-    },
-    [uploadDocument, processDocument, addUploadingFile, removeUploadingFile],
-  )
-
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDraggingOver(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDraggingOver(false)
-  }, [])
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
@@ -1059,9 +989,6 @@ export function ProjectSidebar({
                       onClick={() =>
                         !contextLoading && fileInputRef.current?.click()
                       }
-                      onDrop={handleDrop}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
                       className={cn(
                         'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
                         contextLoading
@@ -1071,13 +998,9 @@ export function ProjectSidebar({
                           contextUploadingFiles.length > 0
                           ? 'mb-2 py-3'
                           : 'py-6',
-                        isDraggingOver
-                          ? isDarkMode
-                            ? 'border-emerald-400 bg-emerald-950/30'
-                            : 'border-emerald-500 bg-emerald-50'
-                          : isDarkMode
-                            ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
-                            : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
+                        isDarkMode
+                          ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
+                          : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
                       )}
                     >
                       <DocumentPlusIcon
@@ -1095,7 +1018,7 @@ export function ProjectSidebar({
                         contextUploadingFiles.length === 0 && (
                           <>
                             <p className="text-center font-aeonik-fono text-xs text-content-muted">
-                              Drop files here or click to upload
+                              Click to upload
                             </p>
                             <p className="mt-1 text-center font-aeonik-fono text-[10px] text-content-muted">
                               PDF, TXT, MD, DOCX, XLSX, PPTX, HTML, CSV, images

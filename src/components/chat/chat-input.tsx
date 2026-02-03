@@ -94,9 +94,6 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // --- Drag and drop state (for welcome screen when no parent drag area exists) ---
-  const [isDragOver, setIsDragOver] = useState(false)
-
   // --- Mobile attachment menu state ---
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -319,92 +316,6 @@ export function ChatInput({
     }
   }, [sendAudioForTranscription, stopRecording, toast])
 
-  // --- Drag and drop handlers (for welcome screen) ---
-  // Check if drag contains any files that would be accepted
-  const dragHasSupportedFiles = useCallback(
-    (items: DataTransferItemList) => {
-      const fileItems = Array.from(items).filter((item) => item.kind === 'file')
-      if (fileItems.length === 0) return false
-
-      // For non-premium users, check if there are any non-image files
-      if (!isPremium) {
-        return fileItems.some((item) => !item.type.startsWith('image/'))
-      }
-      return true
-    },
-    [isPremium],
-  )
-
-  const handleDragOver = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-
-      // Don't show drop indicator if no supported files
-      if (
-        e.dataTransfer.items &&
-        !dragHasSupportedFiles(e.dataTransfer.items)
-      ) {
-        return
-      }
-
-      if (!isDragOver) {
-        setIsDragOver(true)
-      }
-    },
-    [isDragOver, dragHasSupportedFiles],
-  )
-
-  const handleDragEnter = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-
-      // Don't show drop indicator if no supported files
-      if (
-        e.dataTransfer.items &&
-        !dragHasSupportedFiles(e.dataTransfer.items)
-      ) {
-        return
-      }
-
-      setIsDragOver(true)
-    },
-    [dragHasSupportedFiles],
-  )
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    // Only set to false if we're leaving the input container completely
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOver(false)
-    }
-  }, [])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDragOver(false)
-
-      const files = e.dataTransfer.files
-      if (files && files.length > 0 && handleDocumentUpload) {
-        const file = files[0]
-        if (!isPremium && isImageFile(file)) {
-          toast({
-            title: 'Premium Feature',
-            description: 'Image uploads are only available with Premium.',
-            position: 'top-left',
-          })
-          return
-        }
-        handleDocumentUpload(file)
-      }
-    },
-    [handleDocumentUpload, isPremium, toast],
-  )
-
   // Handle paste event for long text detection
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -459,12 +370,7 @@ export function ChatInput({
         <div
           className={cn(
             'rounded-3xl border border-border-subtle bg-surface-chat px-3 py-3 shadow-md transition-colors md:rounded-4xl md:px-6 md:py-4',
-            isDragOver && 'ring-2 ring-emerald-400/60',
           )}
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
         >
           <input
             type="file"
