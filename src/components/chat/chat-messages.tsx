@@ -485,7 +485,7 @@ export function ChatMessages({
       {showSpacer && (
         <div
           data-spacer
-          className="h-[70vh] flex-shrink-0"
+          className="h-[70dvh] flex-shrink-0"
           aria-hidden="true"
         />
       )}

@@ -182,6 +182,40 @@ export function ChatInterface({
   const { user } = useUser()
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
 
+  // iOS Safari keyboard fix: keep a CSS var in sync with the *visual* viewport height.
+  // Without this, fixed full-screen layouts can leave an untouchable "dead zone"
+  // after the keyboard is dismissed.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+
+    const root = document.documentElement
+    const vv = window.visualViewport
+
+    const update = () => {
+      const height = vv?.height ?? window.innerHeight
+      root.style.setProperty('--app-height', `${Math.round(height)}px`)
+    }
+
+    update()
+
+    window.addEventListener('orientationchange', update)
+    if (vv) {
+      vv.addEventListener('resize', update)
+      vv.addEventListener('scroll', update)
+      return () => {
+        window.removeEventListener('orientationchange', update)
+        vv.removeEventListener('resize', update)
+        vv.removeEventListener('scroll', update)
+      }
+    }
+
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('orientationchange', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
   // Track whether we've loaded the initial chat from URL (to prevent URL flickering)
   const initialUrlChatLoadedRef = useRef(false)
   const { chat_subscription_active, isLoading: subscriptionLoading } =
@@ -1787,11 +1821,8 @@ export function ChatInterface({
       className="flex overflow-hidden bg-surface-chat-background"
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: '100%',
+        inset: 0,
+        height: 'var(--app-height, 100dvh)',
         minHeight: '-webkit-fill-available',
         overscrollBehavior: 'none',
       }}
