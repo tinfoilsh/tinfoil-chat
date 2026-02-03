@@ -609,7 +609,9 @@ export function ChatInput({
                 e.preventDefault()
                 const hasDocuments =
                   processedDocuments &&
-                  processedDocuments.some((doc) => !doc.isUploading)
+                  processedDocuments.some(
+                    (doc) => !doc.isUploading && !doc.isGeneratingDescription,
+                  )
                 const hasInput = input.trim().length > 0
                 if (
                   loadingState === 'idle' &&
@@ -872,7 +874,10 @@ export function ChatInput({
                   (isTranscribing ||
                     (!input.trim() &&
                       (!processedDocuments ||
-                        !processedDocuments.some((doc) => !doc.isUploading))))
+                        !processedDocuments.some(
+                          (doc) =>
+                            !doc.isUploading && !doc.isGeneratingDescription,
+                        ))))
                 }
               >
                 {loadingState === 'loading' || loadingState === 'retrying' ? (
