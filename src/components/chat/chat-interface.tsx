@@ -750,36 +750,52 @@ export function ChatInterface({
             doc.imageData!.base64,
             doc.imageData!.mimeType,
           )
-          return { id: doc.id, description, success: true }
+          return { id: doc.id, name: doc.name, description, success: true }
         } catch (error) {
           logError('Lazy image description failed', error, {
             component: 'ChatInterface',
             action: 'lazyDescribeImage',
             metadata: { documentId: doc.id, fileName: doc.name },
           })
-          return { id: doc.id, description: '', success: false }
+          return { id: doc.id, name: doc.name, description: '', success: false }
         }
       }),
     ).then((results) => {
+      const failedImages = results.filter((r) => !r.success)
+      if (failedImages.length > 0) {
+        toast({
+          title: 'Image processing failed',
+          description: `Could not process ${failedImages.length === 1 ? `"${failedImages[0].name}"` : `${failedImages.length} images`} for this model. Please try uploading again.`,
+          variant: 'destructive',
+          position: 'top-left',
+        })
+      }
+
       setProcessedDocuments((prev) =>
-        prev.map((doc) => {
-          const result = results.find((r) => r.id === doc.id)
-          if (result) {
-            return {
-              ...doc,
-              content: result.description,
-              hasDescription: true,
-              isUploading: false,
+        prev
+          .filter((doc) => {
+            const result = results.find((r) => r.id === doc.id)
+            return !result || result.success
+          })
+          .map((doc) => {
+            const result = results.find((r) => r.id === doc.id)
+            if (result) {
+              return {
+                ...doc,
+                content: result.description,
+                hasDescription: true,
+                isUploading: false,
+              }
             }
-          }
-          return doc
-        }),
+            return doc
+          }),
       )
     })
   }, [
     selectedModelDetails?.multimodal,
     processedDocuments,
     describeImageWithMultimodal,
+    toast,
   ])
 
   // Sync chats when user signs in and periodically
