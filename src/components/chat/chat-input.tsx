@@ -520,7 +520,7 @@ export function ChatInput({
                           alt={doc.name}
                           className="h-full w-full object-cover"
                         />
-                        {doc.isUploading && (
+                        {(doc.isUploading || doc.isGeneratingDescription) && (
                           <div className="absolute inset-0 flex items-center justify-center bg-surface-chat/70">
                             <PiSpinner className="h-3.5 w-3.5 animate-spin text-content-primary" />
                           </div>
@@ -544,7 +544,11 @@ export function ChatInput({
                       </span>
                       {!doc.isUploading && (
                         <span className="text-xs text-content-muted">
-                          {doc.imageData ? 'Image' : 'Document'}
+                          {doc.isGeneratingDescription
+                            ? 'Generating text description...'
+                            : doc.imageData
+                              ? 'Image'
+                              : 'Document'}
                         </span>
                       )}
                     </div>
