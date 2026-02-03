@@ -126,10 +126,13 @@ export function ChatInput({
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = '0px'
-      inputRef.current.style.height = `${Math.max(
+      const newHeight = Math.max(
         parseInt(inputMinHeight),
         Math.min(inputRef.current.scrollHeight, 240),
-      )}px`
+      )
+      inputRef.current.style.height = `${newHeight}px`
+      inputRef.current.style.overflowY =
+        inputRef.current.scrollHeight > 240 ? 'auto' : 'hidden'
     }
   }, [input, inputMinHeight, inputRef])
 
@@ -790,7 +793,7 @@ export function ChatInput({
             }}
             placeholder={hasMessages ? 'Reply to Tin...' : placeholder}
             rows={1}
-            className="min-h-[36px] w-full resize-none overflow-y-auto bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none md:min-h-0"
+            className="w-full resize-none bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
             style={{
               minHeight: inputMinHeight,
               maxHeight: '240px',
