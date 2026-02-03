@@ -1329,7 +1329,7 @@ export function ChatInterface({
     e.preventDefault()
     e.stopPropagation()
 
-    dragCounterRef.current -= 1
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
     if (dragCounterRef.current === 0) {
       setIsGlobalDragActive(false)
     }
