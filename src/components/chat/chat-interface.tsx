@@ -721,7 +721,8 @@ export function ChatInterface({
   ) as BaseModel | undefined
 
   // Initialize document uploader hook
-  const { handleDocumentUpload } = useDocumentUploader(isPremium)
+  const { handleDocumentUpload, describeImageWithMultimodal } =
+    useDocumentUploader(isPremium, selectedModelDetails?.multimodal)
 
   // Sync chats when user signs in and periodically
   // Profile sync is handled separately by useProfileSync hook
@@ -1040,7 +1041,7 @@ export function ChatInterface({
 
       await handleDocumentUpload(
         file,
-        (content, documentId, imageData) => {
+        (content, documentId, imageData, hasDescription) => {
           const newDocTokens = estimateTokenCount(content)
           const contextLimit = parseContextWindowTokens(
             selectedModelDetails?.contextWindow,
@@ -1076,6 +1077,7 @@ export function ChatInterface({
                     content,
                     imageData,
                     isImageDescription: !!imageData,
+                    hasDescription: hasDescription ?? !!content,
                   }
                 : doc,
             )
