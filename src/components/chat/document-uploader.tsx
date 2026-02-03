@@ -143,6 +143,10 @@ export const useDocumentUploader = (
       hasDescription?: boolean,
     ) => void,
     onError: (error: Error, documentId: string) => void,
+    onGeneratingDescription?: (
+      documentId: string,
+      imageData?: { base64: string; mimeType: string },
+    ) => void,
   ) => {
     const documentId = getDocumentId()
 
@@ -194,6 +198,9 @@ export const useDocumentUploader = (
             onSuccess('', documentId, imageData, false)
             return
           }
+
+          // Notify that we're generating the description
+          onGeneratingDescription?.(documentId, imageData)
 
           // For non-multimodal models, generate a text description
           const description = await describeImageWithMultimodal(

@@ -1152,6 +1152,7 @@ export function ChatInterface({
                     imageData,
                     isImageDescription: !!imageData,
                     hasDescription: hasDescription ?? !!content,
+                    isGeneratingDescription: false,
                   }
                 : doc,
             )
@@ -1168,6 +1169,21 @@ export function ChatInterface({
             variant: 'destructive',
             position: 'top-left',
           })
+        },
+        (documentId, imageData) => {
+          // Called when image description generation starts
+          setProcessedDocuments((prev) =>
+            prev.map((doc) =>
+              doc.id === tempDocId
+                ? {
+                    ...doc,
+                    isUploading: false,
+                    isGeneratingDescription: true,
+                    imageData,
+                  }
+                : doc,
+            ),
+          )
         },
       )
     },
