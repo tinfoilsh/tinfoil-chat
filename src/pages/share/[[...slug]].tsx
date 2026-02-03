@@ -170,11 +170,11 @@ export default function SharePage() {
     >
       <header className="border-b border-border-subtle px-6 py-4">
         <div className="mx-auto max-w-3xl">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-sm text-content-secondary">
+              <div className="text-sm text-content-secondary">
                 <span>Shared Chat</span>
-                <span>&middot;</span>
+                <span className="mx-2">&middot;</span>
                 <span>{formatDate(chatData.createdAt)}</span>
               </div>
               <h1 className="mt-1 text-xl font-semibold text-content-primary">
@@ -183,7 +183,7 @@ export default function SharePage() {
             </div>
             <Link
               href="/"
-              className="rounded-lg bg-button-send-background px-4 py-2 text-sm font-medium text-button-send-foreground transition-opacity hover:opacity-90"
+              className="w-fit rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Start your own chat
             </Link>
