@@ -486,7 +486,7 @@ export function ChatInput({
                   key={doc.id}
                   className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-2xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
                 >
-                  {removeDocument && !doc.isUploading && (
+                  {removeDocument && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
