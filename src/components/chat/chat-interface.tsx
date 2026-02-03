@@ -733,16 +733,20 @@ export function ChatInterface({
     if (selectedModelDetails?.multimodal) return
 
     const imagesNeedingDescriptions = processedDocuments.filter(
-      (doc) => doc.imageData && !doc.hasDescription && !doc.isUploading,
+      (doc) =>
+        doc.imageData &&
+        !doc.hasDescription &&
+        !doc.isUploading &&
+        !doc.isGeneratingDescription,
     )
 
     if (imagesNeedingDescriptions.length === 0) return
 
-    // Mark images as uploading while generating descriptions
+    // Mark images as generating descriptions
     setProcessedDocuments((prev) =>
       prev.map((doc) =>
         imagesNeedingDescriptions.some((img) => img.id === doc.id)
-          ? { ...doc, isUploading: true }
+          ? { ...doc, isGeneratingDescription: true }
           : doc,
       ),
     )
@@ -788,7 +792,7 @@ export function ChatInterface({
                 ...doc,
                 content: result.description,
                 hasDescription: true,
-                isUploading: false,
+                isGeneratingDescription: false,
               }
             }
             return doc
@@ -1388,9 +1392,9 @@ export function ChatInterface({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Filter out documents that are still uploading
+    // Filter out documents that are still uploading or generating descriptions
     const completedDocuments = processedDocuments.filter(
-      (doc) => !doc.isUploading,
+      (doc) => !doc.isUploading && !doc.isGeneratingDescription,
     )
 
     // Use default message if no input but documents are attached
@@ -1460,9 +1464,9 @@ export function ChatInterface({
       imageData,
     )
 
-    // Only remove the completed documents from the state
+    // Keep documents that are still uploading or generating descriptions
     const remainingDocuments = processedDocuments.filter(
-      (doc) => doc.isUploading,
+      (doc) => doc.isUploading || doc.isGeneratingDescription,
     )
     setProcessedDocuments(remainingDocuments)
   }
