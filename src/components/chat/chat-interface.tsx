@@ -232,7 +232,7 @@ export function ChatInterface({
 
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
-  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null)
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([])
 
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
@@ -1263,21 +1263,21 @@ export function ChatInterface({
         setProjectUploadPreference(addToProject ? 'project' : 'chat')
       }
 
-      // Capture file and close modal immediately
-      const fileToUpload = pendingUploadFile
-      setPendingUploadFile(null)
+      // Capture files and close modal immediately
+      const filesToUpload = pendingUploadFiles
+      setPendingUploadFiles([])
       setShowAddToProjectModal(false)
 
-      // Then process upload (UI will show upload progress)
-      if (fileToUpload) {
+      // Then process uploads (UI will show upload progress)
+      for (const file of filesToUpload) {
         if (addToProject) {
-          await addFileToProjectContext(fileToUpload)
+          await addFileToProjectContext(file)
         } else {
-          await processFileForChat(fileToUpload)
+          await processFileForChat(file)
         }
       }
     },
-    [pendingUploadFile, addFileToProjectContext, processFileForChat],
+    [pendingUploadFiles, addFileToProjectContext, processFileForChat],
   )
 
   // Document upload handler wrapper
@@ -1294,8 +1294,8 @@ export function ChatInterface({
           await processFileForChat(file)
           return
         } else {
-          // No preference saved - show dialog
-          setPendingUploadFile(file)
+          // No preference saved - queue file and show dialog
+          setPendingUploadFiles((prev) => [...prev, file])
           setShowAddToProjectModal(true)
           return
         }
@@ -2386,11 +2386,15 @@ export function ChatInterface({
       <AddToProjectContextModal
         isOpen={showAddToProjectModal}
         onClose={() => {
-          setPendingUploadFile(null)
+          setPendingUploadFiles([])
           setShowAddToProjectModal(false)
         }}
         onConfirm={handleAddToProjectConfirm}
-        fileName={pendingUploadFile?.name ?? ''}
+        fileName={
+          pendingUploadFiles.length === 1
+            ? pendingUploadFiles[0].name
+            : `${pendingUploadFiles.length} files`
+        }
         projectName={activeProject?.name ?? ''}
         isDarkMode={isDarkMode}
       />
