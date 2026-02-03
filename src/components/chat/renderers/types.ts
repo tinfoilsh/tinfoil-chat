@@ -10,6 +10,7 @@ export type ProcessedDocument = {
   isUploading?: boolean
   imageData?: { base64: string; mimeType: string }
   isImageDescription?: boolean // True if content is from multimodal image description
+  hasDescription?: boolean // True if a multimodal description has been generated
 }
 
 export interface MessageRenderProps {
