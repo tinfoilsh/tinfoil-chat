@@ -69,6 +69,11 @@ interface ProjectChat {
   isBlankChat?: boolean
 }
 
+interface ProjectOption {
+  id: string
+  name: string
+}
+
 interface ProjectSidebarProps {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
@@ -89,6 +94,8 @@ interface ProjectSidebarProps {
   onEncryptionKeyClick?: () => void
   onRemoveChatFromProject?: (chatId: string) => Promise<string>
   onAddChatToProject?: (chatId: string) => Promise<void>
+  onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
+  projects?: ProjectOption[]
   onSettingsClick?: () => void
   windowWidth: number
 }
@@ -188,6 +195,8 @@ export function ProjectSidebar({
   onEncryptionKeyClick,
   onRemoveChatFromProject,
   onAddChatToProject,
+  onMoveChatToProject,
+  projects = [],
   onSettingsClick,
   windowWidth,
 }: ProjectSidebarProps) {
@@ -1168,6 +1177,8 @@ export function ProjectSidebar({
               enableTitleAnimation={true}
               animatedDeleteConfirmation={false}
               isDraggable={!!onRemoveChatFromProject}
+              showMoveToProject={!!onMoveChatToProject && projects.length > 0}
+              projects={projects.filter((p) => p.id !== project?.id)}
               onSelectChat={(chatId) => {
                 if (chatId.startsWith('blank-') || chatId === '') {
                   handleNewChat()
@@ -1181,6 +1192,7 @@ export function ProjectSidebar({
                 setDraggingChat(chatId, project?.id ?? null)
               }
               onDragEnd={() => clearDragState()}
+              onMoveToProject={onMoveChatToProject}
               onRemoveFromProject={onRemoveChatFromProject}
             />
           </div>
