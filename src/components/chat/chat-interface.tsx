@@ -1345,7 +1345,9 @@ export function ChatInterface({
 
       const files = e.dataTransfer.files
       if (files && files.length > 0) {
-        handleFileUpload(files[0])
+        for (const file of Array.from(files)) {
+          handleFileUpload(file)
+        }
       }
     },
     [handleFileUpload],
