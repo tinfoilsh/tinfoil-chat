@@ -15,7 +15,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { BiSolidLock, BiSolidLockOpen } from 'react-icons/bi'
 import { GoSidebarCollapse } from 'react-icons/go'
 import { IoShareOutline } from 'react-icons/io5'
-import { PiNotePencilLight, PiSpinner } from 'react-icons/pi'
+import { PiFilePlusLight, PiNotePencilLight, PiSpinner } from 'react-icons/pi'
 
 import {
   ProjectModeBanner,
@@ -252,6 +252,10 @@ export function ChatInterface({
   const [processedDocuments, setProcessedDocuments] = useState<
     ProcessedDocument[]
   >([])
+
+  // State for global drag and drop overlay
+  const [isGlobalDragActive, setIsGlobalDragActive] = useState(false)
+  const dragCounterRef = useRef(0)
 
   // State for tracking verification document
   const [verificationDocument, setVerificationDocument] = useState<any>(null)
@@ -1299,6 +1303,50 @@ export function ChatInterface({
     [isProjectMode, activeProject, addFileToProjectContext, processFileForChat],
   )
 
+  // Global drag and drop handlers
+  const handleGlobalDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      dragCounterRef.current += 1
+      if (dragCounterRef.current === 1) {
+        setIsGlobalDragActive(true)
+      }
+    }
+  }, [])
+
+  const handleGlobalDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleGlobalDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    dragCounterRef.current -= 1
+    if (dragCounterRef.current === 0) {
+      setIsGlobalDragActive(false)
+    }
+  }, [])
+
+  const handleGlobalDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      dragCounterRef.current = 0
+      setIsGlobalDragActive(false)
+
+      const files = e.dataTransfer.files
+      if (files && files.length > 0) {
+        handleFileUpload(files[0])
+      }
+    },
+    [handleFileUpload],
+  )
+
   // Handler for removing documents
   const removeDocument = (id: string) => {
     setProcessedDocuments((prev) => prev.filter((doc) => doc.id !== id))
@@ -1754,7 +1802,23 @@ export function ChatInterface({
         minHeight: '-webkit-fill-available',
         overscrollBehavior: 'none',
       }}
+      onDragEnter={handleGlobalDragEnter}
+      onDragOver={handleGlobalDragOver}
+      onDragLeave={handleGlobalDragLeave}
+      onDrop={handleGlobalDrop}
     >
+      {/* Global drag and drop overlay */}
+      {isGlobalDragActive && (
+        <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <PiFilePlusLight className="h-20 w-20 text-white" />
+            <p className="text-lg font-medium text-white">
+              Drop files here to add to chat
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* URL Hash Message Handler */}
       <UrlHashMessageHandler
         isReady={
