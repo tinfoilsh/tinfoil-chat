@@ -11,7 +11,13 @@ import {
   StopIcon,
 } from '@heroicons/react/24/outline'
 import type { FormEvent, RefObject } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import {
   PiGlobe,
   PiGlobeX,
@@ -74,6 +80,27 @@ export function ChatInput({
   const shouldRemountOnClearRef = useRef(false)
   const hasInitiallyFocusedRef = useRef(false)
 
+  const useIsomorphicLayoutEffect =
+    typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
+  const resizeTextarea = useCallback(
+    (el: HTMLTextAreaElement | null) => {
+      if (!el) return
+
+      const min = Number.parseInt(inputMinHeight, 10) || 0
+      const max = 240
+
+      // Reset to auto so the browser recomputes content height.
+      el.style.height = 'auto'
+
+      const raw = el.scrollHeight
+      const next = Math.max(min, Math.min(raw, max))
+      el.style.height = `${next}px`
+      el.style.overflowY = raw > max ? 'auto' : 'hidden'
+    },
+    [inputMinHeight],
+  )
+
   // If the input transitions from non-empty -> empty (send/clear), remount the
   // textarea to guarantee any stuck inline height is dropped on mobile Safari.
   useEffect(() => {
@@ -119,19 +146,17 @@ export function ChatInput({
     }
   }, [processedDocuments?.length])
 
-  // Auto-resize textarea when input changes (handles typing, transcription, paste, etc.)
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = '0px'
-      const newHeight = Math.max(
-        parseInt(inputMinHeight),
-        Math.min(inputRef.current.scrollHeight, 240),
-      )
-      inputRef.current.style.height = `${newHeight}px`
-      inputRef.current.style.overflowY =
-        inputRef.current.scrollHeight > 240 ? 'auto' : 'hidden'
-    }
-  }, [input, inputMinHeight, inputRef])
+  // Auto-resize textarea as content changes (typing, transcription, paste, etc.)
+  // Layout effect avoids iOS Safari cases where `scrollHeight` lags a paint.
+  useIsomorphicLayoutEffect(() => {
+    resizeTextarea(inputRef.current)
+
+    // iOS Safari can report the previous scrollHeight on the same tick; re-check
+    // on the next frame to ensure growth kicks in.
+    const raf = requestAnimationFrame(() => resizeTextarea(inputRef.current))
+    return () => cancelAnimationFrame(raf)
+    // Include `textareaResetNonce` so a remount recalculates height immediately.
+  }, [input, inputRef, resizeTextarea, textareaResetNonce])
 
   // Focus textarea on initial mount only (not on remounts after sending)
   useEffect(() => {
@@ -473,7 +498,14 @@ export function ChatInput({
             key={textareaResetNonce}
             value={input}
             onFocus={handleInputFocus}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value)
+              resizeTextarea(e.currentTarget)
+            }}
+            onInput={(e) => {
+              // Some mobile Safari builds update `scrollHeight` more reliably on `input`.
+              resizeTextarea(e.currentTarget as HTMLTextAreaElement)
+            }}
             onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Tab') {
@@ -635,8 +667,12 @@ export function ChatInput({
 
                 if (!listMarkerMatch) {
                   setTimeout(() => {
-                    textarea.style.height = inputMinHeight
-                    textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
+                    textarea.style.height = 'auto'
+                    const max = 240
+                    const raw = textarea.scrollHeight
+                    const min = Number.parseInt(inputMinHeight, 10) || 0
+                    const next = Math.max(min, Math.min(raw, max))
+                    textarea.style.height = `${next}px`
                     textarea.scrollTop = textarea.scrollHeight
                   }, 0)
                 } else {
@@ -686,8 +722,12 @@ export function ChatInput({
                       cursorPosition + 1 + indent.length + newMarker.length + 1
 
                     setTimeout(() => {
-                      textarea.style.height = inputMinHeight
-                      textarea.style.height = `${Math.min(textarea.scrollHeight, 240)}px`
+                      textarea.style.height = 'auto'
+                      const max = 240
+                      const raw = textarea.scrollHeight
+                      const min = Number.parseInt(inputMinHeight, 10) || 0
+                      const next = Math.max(min, Math.min(raw, max))
+                      textarea.style.height = `${next}px`
                       textarea.selectionStart = textarea.selectionEnd =
                         newCursorPos
                       textarea.scrollTop = textarea.scrollHeight
