@@ -724,6 +724,64 @@ export function ChatInterface({
   const { handleDocumentUpload, describeImageWithMultimodal } =
     useDocumentUploader(isPremium, selectedModelDetails?.multimodal)
 
+  // Generate descriptions for images when switching to a non-multimodal model
+  useEffect(() => {
+    if (selectedModelDetails?.multimodal) return
+
+    const imagesNeedingDescriptions = processedDocuments.filter(
+      (doc) => doc.imageData && !doc.hasDescription && !doc.isUploading,
+    )
+
+    if (imagesNeedingDescriptions.length === 0) return
+
+    // Mark images as uploading while generating descriptions
+    setProcessedDocuments((prev) =>
+      prev.map((doc) =>
+        imagesNeedingDescriptions.some((img) => img.id === doc.id)
+          ? { ...doc, isUploading: true }
+          : doc,
+      ),
+    )
+
+    Promise.all(
+      imagesNeedingDescriptions.map(async (doc) => {
+        try {
+          const description = await describeImageWithMultimodal(
+            doc.imageData!.base64,
+            doc.imageData!.mimeType,
+          )
+          return { id: doc.id, description, success: true }
+        } catch (error) {
+          logError('Lazy image description failed', error, {
+            component: 'ChatInterface',
+            action: 'lazyDescribeImage',
+            metadata: { documentId: doc.id, fileName: doc.name },
+          })
+          return { id: doc.id, description: '', success: false }
+        }
+      }),
+    ).then((results) => {
+      setProcessedDocuments((prev) =>
+        prev.map((doc) => {
+          const result = results.find((r) => r.id === doc.id)
+          if (result) {
+            return {
+              ...doc,
+              content: result.description,
+              hasDescription: result.success,
+              isUploading: false,
+            }
+          }
+          return doc
+        }),
+      )
+    })
+  }, [
+    selectedModelDetails?.multimodal,
+    processedDocuments,
+    describeImageWithMultimodal,
+  ])
+
   // Sync chats when user signs in and periodically
   // Profile sync is handled separately by useProfileSync hook
   // Context-aware: syncs personal chats when not in project mode, project chats when in project mode
