@@ -768,7 +768,7 @@ export function ChatInterface({
             return {
               ...doc,
               content: result.description,
-              hasDescription: result.success,
+              hasDescription: true,
               isUploading: false,
             }
           }
