@@ -19,7 +19,10 @@ export const getFileIconType = getFileIcon
 /**
  * Handles the document upload and processing logic
  */
-export const useDocumentUploader = (isPremium?: boolean) => {
+export const useDocumentUploader = (
+  isPremium?: boolean,
+  isCurrentModelMultimodal?: boolean,
+) => {
   const [uploadingDocuments, setUploadingDocuments] = useState<
     Record<string, boolean>
   >({})
@@ -137,6 +140,7 @@ export const useDocumentUploader = (isPremium?: boolean) => {
       content: string,
       documentId: string,
       imageData?: { base64: string; mimeType: string },
+      hasDescription?: boolean,
     ) => void,
     onError: (error: Error, documentId: string) => void,
   ) => {
@@ -183,11 +187,20 @@ export const useDocumentUploader = (isPremium?: boolean) => {
             maxHeight: 768,
             quality: 0.9,
           })
+
+          // If current model is multimodal, skip description generation
+          // The image will be sent directly to the model
+          if (isCurrentModelMultimodal) {
+            onSuccess('', documentId, imageData, false)
+            return
+          }
+
+          // For non-multimodal models, generate a text description
           const description = await describeImageWithMultimodal(
             imageData.base64,
             imageData.mimeType,
           )
-          onSuccess(description, documentId, imageData)
+          onSuccess(description, documentId, imageData, true)
           return
         } catch (error) {
           logError('Image description failed', error, {
@@ -292,5 +305,6 @@ export const useDocumentUploader = (isPremium?: boolean) => {
     handleDocumentUpload,
     uploadingDocuments,
     isDocumentUploading: Object.keys(uploadingDocuments).length > 0,
+    describeImageWithMultimodal,
   }
 }
