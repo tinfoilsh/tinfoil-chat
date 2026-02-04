@@ -1,0 +1,293 @@
+/**
+ * Upload Coalescer
+ *
+ * Coalescing upload queue that replaces the recursive backupChat pattern.
+ * - Prevents duplicate uploads for the same chat
+ * - Coalesces rapid edits into a single upload (dirty flag pattern)
+ * - Implements exponential backoff retry for transient failures
+ * - Provides proper concurrency control
+ */
+
+import { logError, logInfo } from '@/utils/error-handling'
+
+/**
+ * Configuration for the upload coalescer
+ */
+export interface UploadCoalescerConfig {
+  /** Base delay for exponential backoff in ms (default: 1000) */
+  baseDelayMs?: number
+  /** Maximum delay between retries in ms (default: 8000) */
+  maxDelayMs?: number
+  /** Maximum number of retry attempts (default: 3) */
+  maxRetries?: number
+}
+
+/**
+ * State for a single chat's upload
+ */
+interface ChatUploadState {
+  /** Whether the chat has pending changes that need upload */
+  dirty: boolean
+  /** The currently in-flight upload promise, if any */
+  inFlight: Promise<void> | null
+  /** Number of consecutive failures */
+  failureCount: number
+  /** Timestamp of last successful upload */
+  lastSuccessAt?: number
+}
+
+/**
+ * Upload function signature
+ */
+type UploadFn = (chatId: string) => Promise<void>
+
+/**
+ * UploadCoalescer - manages coalescing upload queue for chat backups
+ *
+ * Usage:
+ * ```typescript
+ * const coalescer = new UploadCoalescer({
+ *   upload: (chatId) => cloudStorage.uploadChat(chatId),
+ * })
+ *
+ * // Enqueue uploads - rapid calls for same chat are coalesced
+ * coalescer.enqueue('chat-1')
+ * coalescer.enqueue('chat-1') // Will be coalesced
+ * coalescer.enqueue('chat-2') // Different chat, runs in parallel
+ * ```
+ */
+export class UploadCoalescer {
+  private states: Map<string, ChatUploadState> = new Map()
+  private uploadFn: UploadFn
+  private config: Required<UploadCoalescerConfig>
+
+  constructor(uploadFn: UploadFn, config: UploadCoalescerConfig = {}) {
+    this.uploadFn = uploadFn
+    this.config = {
+      baseDelayMs: config.baseDelayMs ?? 1000,
+      maxDelayMs: config.maxDelayMs ?? 8000,
+      maxRetries: config.maxRetries ?? 3,
+    }
+  }
+
+  /**
+   * Enqueue a chat for upload.
+   *
+   * If the chat is already being uploaded, marks it as dirty to trigger
+   * another upload after the current one completes.
+   *
+   * If no upload is in progress, starts a new upload worker.
+   *
+   * @param chatId The chat ID to upload
+   * @returns Promise that resolves when the enqueue is processed (NOT when upload completes)
+   */
+  enqueue(chatId: string): void {
+    let state = this.states.get(chatId)
+
+    if (!state) {
+      state = {
+        dirty: false,
+        inFlight: null,
+        failureCount: 0,
+      }
+      this.states.set(chatId, state)
+    }
+
+    // Mark as dirty (needs upload)
+    state.dirty = true
+
+    // If no upload in progress, start the worker
+    if (!state.inFlight) {
+      this.startWorker(chatId, state)
+    }
+  }
+
+  /**
+   * Start the worker loop for a chat.
+   * Continues uploading while the dirty flag is set.
+   */
+  private startWorker(chatId: string, state: ChatUploadState): void {
+    const workerPromise = (async () => {
+      while (state.dirty) {
+        // Clear dirty flag before upload
+        state.dirty = false
+
+        try {
+          await this.uploadWithRetry(chatId, state)
+          // Success - reset failure count
+          state.failureCount = 0
+          state.lastSuccessAt = Date.now()
+        } catch (error) {
+          // Upload failed after all retries
+          state.failureCount++
+          logError('Upload failed after retries', error, {
+            component: 'UploadCoalescer',
+            action: 'worker',
+            metadata: {
+              chatId,
+              failureCount: state.failureCount,
+              willRetry: state.dirty,
+            },
+          })
+
+          // If dirty was set during upload, we'll retry
+          // Otherwise, the failure is logged and we move on
+        }
+      }
+
+      // Worker done - clear in-flight promise
+      state.inFlight = null
+
+      // Clean up state if no longer needed
+      if (!state.dirty && state.failureCount === 0) {
+        this.states.delete(chatId)
+      }
+    })()
+
+    state.inFlight = workerPromise
+  }
+
+  /**
+   * Upload with exponential backoff retry.
+   */
+  private async uploadWithRetry(
+    chatId: string,
+    state: ChatUploadState,
+  ): Promise<void> {
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      try {
+        await this.uploadFn(chatId)
+        return // Success
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+
+        // Don't retry on final attempt
+        if (attempt === this.config.maxRetries) {
+          break
+        }
+
+        // Calculate backoff delay
+        const delay = Math.min(
+          this.config.baseDelayMs * Math.pow(2, attempt),
+          this.config.maxDelayMs,
+        )
+
+        logInfo(`Upload failed, retrying in ${delay}ms`, {
+          component: 'UploadCoalescer',
+          action: 'retry',
+          metadata: {
+            chatId,
+            attempt: attempt + 1,
+            maxRetries: this.config.maxRetries,
+            delay,
+            error: lastError.message,
+          },
+        })
+
+        // Wait before retry
+        await this.sleep(delay)
+
+        // Check if new changes came in during wait
+        if (state.dirty) {
+          // New changes - let the outer loop handle it with fresh data
+          return
+        }
+      }
+    }
+
+    // All retries exhausted
+    throw lastError ?? new Error('Upload failed')
+  }
+
+  /**
+   * Sleep for a specified duration.
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Check if a chat has a pending or in-flight upload.
+   */
+  hasPendingUpload(chatId: string): boolean {
+    const state = this.states.get(chatId)
+    return state ? state.dirty || state.inFlight !== null : false
+  }
+
+  /**
+   * Check if a chat is currently being uploaded.
+   */
+  isUploading(chatId: string): boolean {
+    const state = this.states.get(chatId)
+    return state?.inFlight !== null
+  }
+
+  /**
+   * Get the number of active uploads.
+   */
+  get activeUploadCount(): number {
+    let count = 0
+    for (const state of this.states.values()) {
+      if (state.inFlight) count++
+    }
+    return count
+  }
+
+  /**
+   * Get all chat IDs with pending uploads.
+   */
+  getPendingChatIds(): string[] {
+    const ids: string[] = []
+    for (const [chatId, state] of this.states.entries()) {
+      if (state.dirty || state.inFlight) {
+        ids.push(chatId)
+      }
+    }
+    return ids
+  }
+
+  /**
+   * Clear all pending uploads (useful for cleanup/testing).
+   */
+  clear(): void {
+    this.states.clear()
+  }
+
+  /**
+   * Wait for a specific chat's upload to complete.
+   * Returns immediately if no upload is in progress.
+   * Useful for testing and ensuring uploads complete before proceeding.
+   */
+  async waitForUpload(chatId: string): Promise<void> {
+    const state = this.states.get(chatId)
+    if (state?.inFlight) {
+      await state.inFlight
+    }
+  }
+
+  /**
+   * Wait for all pending uploads to complete.
+   * Useful for testing and cleanup.
+   */
+  async waitForAllUploads(): Promise<void> {
+    const promises: Promise<void>[] = []
+    for (const state of this.states.values()) {
+      if (state.inFlight) {
+        promises.push(state.inFlight)
+      }
+    }
+    await Promise.all(promises)
+  }
+}
+
+/**
+ * Create a singleton upload coalescer for a given upload function.
+ */
+export function createUploadCoalescer(
+  uploadFn: UploadFn,
+  config?: UploadCoalescerConfig,
+): UploadCoalescer {
+  return new UploadCoalescer(uploadFn, config)
+}
