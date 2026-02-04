@@ -221,7 +221,7 @@ export class UploadCoalescer {
    */
   isUploading(chatId: string): boolean {
     const state = this.states.get(chatId)
-    return state?.inFlight !== null
+    return !!state?.inFlight
   }
 
   /**
