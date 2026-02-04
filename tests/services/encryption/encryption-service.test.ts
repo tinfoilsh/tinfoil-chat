@@ -379,4 +379,82 @@ describe('EncryptionService', () => {
       expect(decrypted).toEqual(largeData)
     })
   })
+
+  describe('addDecryptionKey', () => {
+    it('should add a valid key to the fallback list', async () => {
+      const primaryKey = await service.generateKey()
+      await service.setKey(primaryKey)
+
+      const fallbackKey = await service.generateKey()
+      service.addDecryptionKey(fallbackKey)
+
+      expect(service.getFallbackKeyCount()).toBe(1)
+    })
+
+    it('should allow decrypting data encrypted with a fallback key', async () => {
+      // Create service 1 with key1 and encrypt data
+      const service1 = new EncryptionService()
+      const key1 = await service1.generateKey()
+      await service1.setKey(key1)
+      const testData = { message: 'encrypted with key1' }
+      const encrypted = await service1.encrypt(testData)
+
+      // Create service 2 with key2 as primary
+      const service2 = new EncryptionService()
+      const key2 = await service2.generateKey()
+      await service2.setKey(key2)
+
+      // Add key1 as fallback
+      service2.addDecryptionKey(key1)
+
+      // Should be able to decrypt data encrypted with key1
+      const decrypted = await service2.decrypt(encrypted)
+      expect(decrypted).toEqual(testData)
+    })
+
+    it('should reject invalid key format', async () => {
+      const key = await service.generateKey()
+      await service.setKey(key)
+
+      expect(() => service.addDecryptionKey('invalid_key')).toThrow(
+        'Key must start with "key_" prefix',
+      )
+    })
+
+    it('should not add the primary key to fallback list', async () => {
+      const key = await service.generateKey()
+      await service.setKey(key)
+
+      // Try to add the current primary key
+      service.addDecryptionKey(key)
+
+      expect(service.getFallbackKeyCount()).toBe(0)
+    })
+
+    it('should not add duplicate keys', async () => {
+      const primaryKey = await service.generateKey()
+      await service.setKey(primaryKey)
+
+      const fallbackKey = await service.generateKey()
+      service.addDecryptionKey(fallbackKey)
+      service.addDecryptionKey(fallbackKey) // Add again
+
+      expect(service.getFallbackKeyCount()).toBe(1)
+    })
+
+    it('should persist fallback keys to storage', async () => {
+      const primaryKey = await service.generateKey()
+      await service.setKey(primaryKey)
+
+      const fallbackKey = await service.generateKey()
+      service.addDecryptionKey(fallbackKey)
+
+      // Check storage
+      const stored = localStorage.getItem('tinfoil-encryption-key-history')
+      expect(stored).toBeTruthy()
+
+      const parsed = JSON.parse(stored!)
+      expect(parsed).toContain(fallbackKey)
+    })
+  })
 })
