@@ -183,6 +183,8 @@ describe('CloudSyncService', () => {
 
       const service = new CloudSyncService()
       await service.backupChat('cloud-1')
+      // Wait for the coalesced upload to complete
+      await service.waitForUpload('cloud-1')
 
       expect(mockUploadChat).toHaveBeenCalledTimes(1)
       expect(mockMarkAsSynced).toHaveBeenCalledTimes(1)
@@ -523,6 +525,194 @@ describe('CloudSyncService', () => {
 
       expect(mockUploadChat).not.toHaveBeenCalled()
       expect(result.uploaded).toBe(0)
+    })
+  })
+
+  describe('Sync eligibility - comprehensive filtering', () => {
+    /**
+     * Tests documenting all the conditions that make a chat ineligible for upload.
+     * These tests serve as a specification for the sync-predicates module.
+     */
+
+    const uploadableChat = {
+      id: 'uploadable',
+      title: 'Uploadable Chat',
+      messages: [{ role: 'user', content: 'test' }],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      lastAccessedAt: Date.now(),
+      isBlankChat: false,
+      isLocalOnly: false,
+      decryptionFailed: false,
+      encryptedData: undefined,
+      syncVersion: 1,
+    }
+
+    describe('backupUnsyncedChats filtering', () => {
+      it('uploads only eligible chats from a mixed batch', async () => {
+        mockGetUnsyncedChats.mockResolvedValue([
+          // Eligible
+          { ...uploadableChat, id: 'eligible-1' },
+          { ...uploadableChat, id: 'eligible-2' },
+
+          // Not eligible - various reasons
+          { ...uploadableChat, id: 'local-only', isLocalOnly: true },
+          { ...uploadableChat, id: 'blank', isBlankChat: true, messages: [] },
+          { ...uploadableChat, id: 'decrypt-failed', decryptionFailed: true },
+          {
+            ...uploadableChat,
+            id: 'has-encrypted-data',
+            encryptedData: '{"iv":"x"}',
+          },
+          { ...uploadableChat, id: 'streaming' },
+        ])
+
+        mockIsStreaming.mockImplementation((id: string) => id === 'streaming')
+
+        const service = new CloudSyncService()
+        const result = await service.backupUnsyncedChats()
+
+        expect(mockUploadChat).toHaveBeenCalledTimes(2)
+        expect(result.uploaded).toBe(2)
+      })
+
+      it('handles empty unsynced chats list', async () => {
+        mockGetUnsyncedChats.mockResolvedValue([])
+
+        const service = new CloudSyncService()
+        const result = await service.backupUnsyncedChats()
+
+        expect(mockUploadChat).not.toHaveBeenCalled()
+        expect(result.uploaded).toBe(0)
+      })
+
+      it('handles all chats being ineligible', async () => {
+        mockGetUnsyncedChats.mockResolvedValue([
+          { ...uploadableChat, id: 'local-1', isLocalOnly: true },
+          { ...uploadableChat, id: 'local-2', isLocalOnly: true },
+          { ...uploadableChat, id: 'blank-1', isBlankChat: true },
+        ])
+
+        const service = new CloudSyncService()
+        const result = await service.backupUnsyncedChats()
+
+        expect(mockUploadChat).not.toHaveBeenCalled()
+        expect(result.uploaded).toBe(0)
+      })
+    })
+
+    describe('Project chat filtering', () => {
+      it('filters by projectId when checking project sync status', async () => {
+        mockGetUnsyncedChats.mockResolvedValue([
+          { ...uploadableChat, id: 'project-a-chat', projectId: 'project-a' },
+          { ...uploadableChat, id: 'project-b-chat', projectId: 'project-b' },
+          { ...uploadableChat, id: 'no-project-chat' },
+        ])
+
+        const service = new CloudSyncService()
+
+        // Check status for project-a only
+        const statusA = await service.checkSyncStatus('project-a')
+        expect(statusA.needsSync).toBe(true)
+        expect(statusA.reason).toBe('local_changes')
+
+        // Check status for non-existent project
+        const statusC = await service.checkSyncStatus('project-c')
+        expect(statusC.reason).not.toBe('local_changes')
+      })
+
+      it('excludes project chats when checking regular sync status', async () => {
+        mockGetUnsyncedChats.mockResolvedValue([
+          { ...uploadableChat, id: 'project-chat', projectId: 'some-project' },
+        ])
+
+        const service = new CloudSyncService()
+
+        // Regular sync status should not see project chats
+        const status = await service.checkSyncStatus()
+        expect(status.reason).not.toBe('local_changes')
+      })
+    })
+  })
+
+  describe('Error handling', () => {
+    /**
+     * Note: Error handling tests for backupChat are complex due to the internal
+     * promise chaining and upload queue. The error propagation behavior will be
+     * better tested after the Phase 4 upload-coalescer refactor.
+     *
+     * For now, we document the expected behavior:
+     * - Upload failures should not mark chats as synced
+     * - backupUnsyncedChats should continue processing other chats after failures
+     */
+
+    it('handles missing chat gracefully', async () => {
+      mockGetChat.mockResolvedValue(null)
+
+      const service = new CloudSyncService()
+
+      // Should not throw, just return silently
+      await service.backupChat('nonexistent-chat')
+
+      expect(mockUploadChat).not.toHaveBeenCalled()
+    })
+
+    it('handles not authenticated state gracefully', async () => {
+      mockIsAuthenticated.mockResolvedValue(false)
+
+      const service = new CloudSyncService()
+
+      // Should not throw, just return silently
+      await service.backupChat('some-chat')
+
+      // Should not even fetch the chat
+      expect(mockGetChat).not.toHaveBeenCalled()
+      expect(mockUploadChat).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Sync version handling', () => {
+    it('increments syncVersion on successful upload', async () => {
+      mockGetChat.mockResolvedValue({
+        id: 'cloud-1',
+        title: 'Cloud',
+        messages: [{ role: 'user', content: 'hi' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        lastAccessedAt: Date.now(),
+        isBlankChat: false,
+        isLocalOnly: false,
+        syncVersion: 5,
+      })
+
+      const service = new CloudSyncService()
+      await service.backupChat('cloud-1')
+      // Wait for the coalesced upload to complete
+      await service.waitForUpload('cloud-1')
+
+      expect(mockMarkAsSynced).toHaveBeenCalledWith('cloud-1', 6)
+    })
+
+    it('defaults syncVersion to 1 when not present', async () => {
+      mockGetChat.mockResolvedValue({
+        id: 'cloud-1',
+        title: 'Cloud',
+        messages: [{ role: 'user', content: 'hi' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        lastAccessedAt: Date.now(),
+        isBlankChat: false,
+        isLocalOnly: false,
+        // No syncVersion
+      })
+
+      const service = new CloudSyncService()
+      await service.backupChat('cloud-1')
+      // Wait for the coalesced upload to complete
+      await service.waitForUpload('cloud-1')
+
+      // Should increment from default 0 to 1
+      expect(mockMarkAsSynced).toHaveBeenCalledWith('cloud-1', 1)
     })
   })
 })

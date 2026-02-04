@@ -5,9 +5,12 @@ import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
+import { processRemoteChat } from './chat-codec'
 import { cloudStorage, type ChatSyncStatus } from './cloud-storage'
 import { projectStorage } from './project-storage'
 import { streamingTracker } from './streaming-tracker'
+import { isUploadableChat, shouldIngestRemoteChat } from './sync-predicates'
+import { UploadCoalescer } from './upload-coalescer'
 
 export interface SyncResult {
   uploaded: number
@@ -33,14 +36,24 @@ const PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX =
   'tinfoil-project-chat-sync-status-'
 
 export class CloudSyncService {
-  private isSyncing = false
-  private uploadQueue: Map<string, Promise<void>> = new Map()
+  private syncLock: Promise<void> | null = null
+  private syncLockResolve: (() => void) | null = null
+  private uploadCoalescer: UploadCoalescer
   private pendingUploads: Map<string, () => Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
   private lastSyncStatus: ChatSyncStatus | null = null
   private projectSyncStatus: Map<string, ChatSyncStatus> = new Map()
 
   constructor() {
+    // Initialize upload coalescer with doBackupChat as the upload function
+    this.uploadCoalescer = new UploadCoalescer(
+      (chatId) => this.doBackupChat(chatId),
+      {
+        baseDelayMs: 1000,
+        maxDelayMs: 8000,
+        maxRetries: 3,
+      },
+    )
     // Listen for storage changes from other tabs to invalidate sync status cache
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
@@ -55,6 +68,43 @@ export class CloudSyncService {
           this.projectSyncStatus.delete(projectId)
         }
       })
+    }
+  }
+
+  /**
+   * Execute a function with sync lock protection.
+   * Only one sync operation can run at a time.
+   * Returns null if a sync is already in progress.
+   */
+  private async withSyncLock<T>(
+    fn: () => Promise<T>,
+  ): Promise<{ result: T; skipped: false } | { result: null; skipped: true }> {
+    // Check if sync is already in progress (atomic check)
+    if (this.syncLock) {
+      logInfo('[CloudSync] Sync already in progress, skipping', {
+        component: 'CloudSync',
+        action: 'withSyncLock',
+      })
+      return { result: null, skipped: true }
+    }
+
+    // Acquire lock
+    let resolve: () => void
+    this.syncLock = new Promise<void>((r) => {
+      resolve = r
+    })
+    this.syncLockResolve = resolve!
+
+    try {
+      const result = await fn()
+      return { result, skipped: false }
+    } finally {
+      // Release lock
+      this.syncLock = null
+      if (this.syncLockResolve) {
+        this.syncLockResolve()
+        this.syncLockResolve = null
+      }
     }
   }
 
@@ -138,11 +188,8 @@ export class CloudSyncService {
           // For regular chats, exclude project chats
           if (chat.projectId) return false
         }
-        return (
-          !(chat as any).isBlankChat &&
-          !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly
-        )
+        // Use centralized predicate for upload eligibility
+        return isUploadableChat(chat, (id) => streamingTracker.isStreaming(id))
       })
 
       if (chatsNeedingUpload.length > 0) {
@@ -224,11 +271,16 @@ export class CloudSyncService {
 
   // Perform a delta sync - only fetch chats that changed since last sync
   async syncChangedChats(): Promise<SyncResult> {
-    if (this.isSyncing) {
+    const lockResult = await this.withSyncLock(() => this.doSyncChangedChats())
+
+    if (lockResult.skipped) {
       throw new Error('Sync already in progress')
     }
 
-    this.isSyncing = true
+    return lockResult.result
+  }
+
+  private async doSyncChangedChats(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -246,8 +298,7 @@ export class CloudSyncService {
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync (first page only)
-        this.isSyncing = false
-        return await this.syncAllChats()
+        return await this.doSyncAllChats()
       }
 
       // Fetch only chats updated since our last sync
@@ -266,8 +317,7 @@ export class CloudSyncService {
             action: 'syncChangedChats',
           },
         )
-        this.isSyncing = false
-        return await this.syncAllChats()
+        return await this.doSyncAllChats()
       }
 
       const remoteConversations = updatedChats.conversations || []
@@ -288,7 +338,6 @@ export class CloudSyncService {
             action: 'syncChangedChats',
           })
         }
-        this.isSyncing = false
         return result
       }
 
@@ -313,43 +362,14 @@ export class CloudSyncService {
           let downloadedChat: StoredChat | null = null
 
           if (remoteChat.content) {
-            const encrypted = JSON.parse(remoteChat.content)
-
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              downloadedChat = decrypted
-            } catch (decryptError) {
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-
-              // Preserve projectId from local chat if it exists
-              const localChat = await indexedDBStorage.getChat(remoteChat.id)
-
-              downloadedChat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                updatedAt: ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-                // Preserve project association from local chat
-                projectId: localChat?.projectId,
-              } as StoredChat
-            }
+            // Use centralized chat codec for decryption/placeholder logic
+            const localChat = await indexedDBStorage.getChat(remoteChat.id)
+            const codecResult = await processRemoteChat(remoteChat, {
+              localChat,
+            })
+            downloadedChat = codecResult.chat
           } else {
+            // No inline content - fetch via downloadChat (handles its own decryption)
             downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
             if (downloadedChat) {
               downloadedChat.createdAt = ensureValidISODate(
@@ -377,14 +397,6 @@ export class CloudSyncService {
           }
 
           if (downloadedChat) {
-            downloadedChat.createdAt = ensureValidISODate(
-              downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.updatedAt = ensureValidISODate(
-              downloadedChat.updatedAt ?? downloadedChat.createdAt,
-              downloadedChat.id,
-            )
             await indexedDBStorage.saveChat(downloadedChat)
             await indexedDBStorage.markAsSynced(
               downloadedChat.id,
@@ -418,8 +430,6 @@ export class CloudSyncService {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
-    } finally {
-      this.isSyncing = false
     }
 
     return result
@@ -437,34 +447,34 @@ export class CloudSyncService {
     }
   }
 
-  // Backup a single chat to the cloud with rate limiting
+  // Backup a single chat to the cloud with coalescing and retry
   async backupChat(chatId: string): Promise<void> {
     // Don't attempt backup if not authenticated
     if (!(await cloudStorage.isAuthenticated())) {
       return
     }
 
-    // Check if there's already an upload in progress for this chat
-    const existingUpload = this.uploadQueue.get(chatId)
-    if (existingUpload) {
-      // Queue this upload to run after the current one completes
-      // This ensures we upload the latest version of the chat
-      return existingUpload.then(() => {
-        // Run the upload again with the latest data
-        return this.backupChat(chatId)
-      })
-    }
+    // Use the upload coalescer - it handles:
+    // - Coalescing rapid edits into a single upload
+    // - Exponential backoff retry on failure
+    // - Proper concurrency control per chat
+    this.uploadCoalescer.enqueue(chatId)
+  }
 
-    // Create the upload promise
-    const uploadPromise = this.doBackupChat(chatId)
-    this.uploadQueue.set(chatId, uploadPromise)
+  /**
+   * Wait for a specific chat's upload to complete.
+   * Useful for testing and ensuring uploads complete before proceeding.
+   */
+  async waitForUpload(chatId: string): Promise<void> {
+    await this.uploadCoalescer.waitForUpload(chatId)
+  }
 
-    // Clean up the queue when done
-    uploadPromise.finally(() => {
-      this.uploadQueue.delete(chatId)
-    })
-
-    return uploadPromise
+  /**
+   * Wait for all pending uploads to complete.
+   * Useful for testing and cleanup.
+   */
+  async waitForAllUploads(): Promise<void> {
+    await this.uploadCoalescer.waitForAllUploads()
   }
 
   private async doBackupChat(chatId: string): Promise<void> {
@@ -518,21 +528,24 @@ export class CloudSyncService {
         return // Chat might have been deleted
       }
 
-      // Don't sync blank chats or local-only chats
-      if ((chat as any).isBlankChat || chat.isLocalOnly) {
-        logInfo('Skipping sync for blank or local-only chat', {
+      // Use centralized predicate for upload eligibility
+      // Note: streaming is checked here AND after potential delay
+      if (!isUploadableChat(chat, (id) => streamingTracker.isStreaming(id))) {
+        logInfo('Skipping sync for ineligible chat', {
           component: 'CloudSync',
           action: 'backupChat',
           metadata: {
             chatId,
             isBlankChat: (chat as any).isBlankChat,
             isLocalOnly: chat.isLocalOnly,
+            decryptionFailed: chat.decryptionFailed,
+            hasEncryptedData: !!chat.encryptedData,
           },
         })
         return
       }
 
-      // Double-check streaming status right before upload
+      // Double-check streaming status right before upload (in case it started during async ops)
       if (streamingTracker.isStreaming(chatId)) {
         logInfo('Chat started streaming during backup process, aborting sync', {
           component: 'CloudSync',
@@ -576,17 +589,12 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Filter out blank chats, streaming chats, local-only chats, and failed-decryption placeholders
+      // Use centralized predicate for upload eligibility
       // Note: temp ID chats are allowed - uploadChat will generate server IDs for them
       // IMPORTANT: Never upload chats that failed to decrypt - they are placeholders with empty
       // messages that would overwrite real encrypted data on the server
-      const chatsToSync = unsyncedChats.filter(
-        (chat) =>
-          !(chat as any).isBlankChat &&
-          !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly &&
-          !chat.decryptionFailed &&
-          !chat.encryptedData,
+      const chatsToSync = unsyncedChats.filter((chat) =>
+        isUploadableChat(chat, (id) => streamingTracker.isStreaming(id)),
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
@@ -630,11 +638,16 @@ export class CloudSyncService {
 
   // Sync all chats (upload local changes, download remote changes)
   async syncAllChats(): Promise<SyncResult> {
-    if (this.isSyncing) {
+    const lockResult = await this.withSyncLock(() => this.doSyncAllChats())
+
+    if (lockResult.skipped) {
       throw new Error('Sync already in progress')
     }
 
-    this.isSyncing = true
+    return lockResult.result
+  }
+
+  private async doSyncAllChats(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -660,7 +673,6 @@ export class CloudSyncService {
           component: 'CloudSync',
           action: 'syncAllChats',
         })
-        this.isSyncing = false
         return result
       }
 
@@ -701,58 +713,17 @@ export class CloudSyncService {
 
         const localChat = localChatMap.get(remoteChat.id)
 
-        // Process if:
-        // 1. Chat doesn't exist locally
-        // 2. Remote is newer (based on updatedAt)
-        // 3. Chat failed decryption (to retry with new key)
-        const remoteTimestamp = Date.parse(remoteChat.updatedAt)
-        const shouldProcess =
-          !localChat ||
-          (!isNaN(remoteTimestamp) &&
-            remoteTimestamp > (localChat.syncedAt || 0)) ||
-          (localChat as any).decryptionFailed === true
-
-        if (shouldProcess) {
+        // Use centralized predicate to determine if we should ingest this remote chat
+        if (shouldIngestRemoteChat(remoteChat, localChat)) {
           try {
             let downloadedChat: StoredChat | null = null
 
             if (remoteChat.content) {
-              const encrypted = JSON.parse(remoteChat.content)
-
-              try {
-                const decrypted = await encryptionService.decrypt(encrypted)
-                downloadedChat = decrypted
-              } catch (decryptError) {
-                const isCorrupted =
-                  decryptError instanceof Error &&
-                  decryptError.message.includes('DATA_CORRUPTED')
-
-                const safeCreatedAt = ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                const safeUpdatedAt = ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                downloadedChat = {
-                  id: remoteChat.id,
-                  title: 'Encrypted',
-                  messages: [],
-                  createdAt: safeCreatedAt,
-                  updatedAt: safeUpdatedAt,
-                  lastAccessedAt: Date.now(),
-                  decryptionFailed: true,
-                  dataCorrupted: isCorrupted,
-                  encryptedData: remoteChat.content,
-                  syncedAt: Date.now(),
-                  locallyModified: false,
-                  syncVersion: 1,
-                  // Preserve project association from local chat
-                  projectId: localChat?.projectId,
-                } as StoredChat
-              }
+              // Use centralized chat codec for decryption/placeholder logic
+              const result = await processRemoteChat(remoteChat, { localChat })
+              downloadedChat = result.chat
             } else {
+              // No inline content - fetch via downloadChat (handles its own decryption)
               downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
               if (downloadedChat) {
                 const safeCreatedAt = ensureValidISODate(
@@ -779,14 +750,6 @@ export class CloudSyncService {
             }
 
             if (downloadedChat) {
-              downloadedChat.createdAt = ensureValidISODate(
-                downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              downloadedChat.updatedAt = ensureValidISODate(
-                downloadedChat.updatedAt ?? downloadedChat.createdAt,
-                downloadedChat.id,
-              )
               await indexedDBStorage.saveChat(downloadedChat)
               await indexedDBStorage.markAsSynced(
                 downloadedChat.id,
@@ -826,8 +789,6 @@ export class CloudSyncService {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
-    } finally {
-      this.isSyncing = false
     }
 
     return result
@@ -838,7 +799,9 @@ export class CloudSyncService {
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
   async smartSync(projectId?: string): Promise<SyncResult> {
-    if (this.isSyncing) {
+    // Note: smartSync doesn't need its own lock because it delegates to
+    // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
+    if (this.syncLock) {
       throw new Error('Sync already in progress')
     }
 
@@ -885,7 +848,7 @@ export class CloudSyncService {
 
   // Check if currently syncing
   get syncing(): boolean {
-    return this.isSyncing
+    return this.syncLock !== null
   }
 
   // Delete a chat from cloud storage
@@ -982,37 +945,9 @@ export class CloudSyncService {
         if (!remoteChat.content) return null
 
         try {
-          const encrypted = JSON.parse(remoteChat.content)
-
-          // Try to decrypt the chat data
-          let chat: StoredChat | null = null
-          try {
-            const decrypted = await encryptionService.decrypt(encrypted)
-            chat = decrypted
-          } catch (decryptError) {
-            // Check if this is corrupted data (compressed)
-            const isCorrupted =
-              decryptError instanceof Error &&
-              decryptError.message.includes('DATA_CORRUPTED')
-
-            // If decryption fails, store the encrypted data for later retry
-            chat = {
-              id: remoteChat.id,
-              title: 'Encrypted',
-              messages: [],
-              createdAt: remoteChat.createdAt,
-              updatedAt: remoteChat.updatedAt,
-              lastAccessedAt: Date.now(),
-              decryptionFailed: true,
-              dataCorrupted: isCorrupted,
-              encryptedData: remoteChat.content,
-              syncedAt: Date.now(),
-              locallyModified: false,
-              syncVersion: 1,
-            } as StoredChat
-          }
-
-          return chat
+          // Use centralized chat codec for decryption/placeholder logic
+          const result = await processRemoteChat(remoteChat)
+          return result.chat
         } catch (error) {
           logError(`Failed to process chat ${remoteChat.id}`, error, {
             component: 'CloudSync',
@@ -1183,47 +1118,33 @@ export class CloudSyncService {
 
       for (const chat of allChats) {
         try {
-          // Skip blank chats
-          if (chat.isBlankChat) continue
-
-          // Never upload local-only chats
-          if (chat.isLocalOnly) {
-            logInfo('Skipping local-only chat during re-encryption', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: { chatId: chat.id },
-            })
+          // Use centralized predicate for upload eligibility
+          // Note: No streaming check needed here since we're processing all chats in sequence
+          if (!isUploadableChat(chat)) {
+            if (
+              chat.isLocalOnly ||
+              chat.decryptionFailed ||
+              chat.encryptedData
+            ) {
+              logInfo('Skipping ineligible chat during re-encryption', {
+                component: 'CloudSync',
+                action: 'reencryptAndUploadChats',
+                metadata: {
+                  chatId: chat.id,
+                  isLocalOnly: chat.isLocalOnly,
+                  isBlankChat: (chat as any).isBlankChat,
+                  decryptionFailed: chat.decryptionFailed,
+                  hasEncryptedData: !!chat.encryptedData,
+                  dataCorrupted: chat.dataCorrupted,
+                },
+              })
+            }
             continue
           }
 
-          // Skip chats that failed to decrypt
-          if (chat.decryptionFailed) {
-            logInfo('Skipping chat that failed to decrypt', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: {
-                chatId: chat.id,
-                hasEncryptedData: !!chat.encryptedData,
-                dataCorrupted: chat.dataCorrupted,
-              },
-            })
-            continue
-          }
-
-          // For encrypted chats, they need to be decrypted first (will use old key from memory if available)
+          // For encrypted chats, they need to be decrypted first (handled by isUploadableChat above)
           // For decrypted chats, we can directly work with them
           let chatToReencrypt = chat
-
-          if (chat.encryptedData) {
-            // This chat is still encrypted with old key, skip it
-            // It will be handled by retryDecryptionWithNewKey
-            logInfo('Skipping encrypted chat - needs decryption first', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: { chatId: chat.id },
-            })
-            continue
-          }
 
           // Re-encrypt the chat with the new key by forcing a sync
           // The sync process will automatically encrypt with the current key
@@ -1312,37 +1233,11 @@ export class CloudSyncService {
       const processPromises = conversations.map(async (remoteChat) => {
         try {
           let chat: StoredChat | null = null
+
           if (remoteChat.content) {
-            try {
-              const encrypted = JSON.parse(remoteChat.content)
-              const decrypted = await encryptionService.decrypt(encrypted)
-              chat = decrypted as StoredChat
-            } catch (decryptError) {
-              // If decryption fails, store placeholder to retry later
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-              chat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                updatedAt: ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-              } as StoredChat
-            }
+            // Use centralized chat codec for decryption/placeholder logic
+            const result = await processRemoteChat(remoteChat)
+            chat = result.chat
           } else {
             // Fallback: download content by ID (should be rare when includeContent is true)
             chat = await cloudStorage.downloadChat(remoteChat.id)
@@ -1363,16 +1258,8 @@ export class CloudSyncService {
           }
 
           if (chat) {
-            chat.createdAt = ensureValidISODate(chat.createdAt, chat.id)
-            chat.updatedAt = ensureValidISODate(
-              chat.updatedAt ?? chat.createdAt,
-              chat.id,
-            )
             // Mark as loaded via pagination for local sort heuristics
             chat.loadedAt = Date.now()
-            chat.syncedAt = Date.now()
-            chat.locallyModified = false
-            chat.syncVersion = chat.syncVersion || 1
 
             await indexedDBStorage.saveChat(chat)
             await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion || 0)
@@ -1412,11 +1299,18 @@ export class CloudSyncService {
    * This fetches project-specific chats using the /api/projects/{projectId}/chats endpoint.
    */
   async syncProjectChats(projectId: string): Promise<SyncResult> {
-    if (this.isSyncing) {
+    const lockResult = await this.withSyncLock(() =>
+      this.doSyncProjectChats(projectId),
+    )
+
+    if (lockResult.skipped) {
       throw new Error('Sync already in progress')
     }
 
-    this.isSyncing = true
+    return lockResult.result
+  }
+
+  private async doSyncProjectChats(projectId: string): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -1424,7 +1318,6 @@ export class CloudSyncService {
     }
 
     if (!(await cloudStorage.isAuthenticated())) {
-      this.isSyncing = false
       return result
     }
 
@@ -1469,18 +1362,8 @@ export class CloudSyncService {
 
         const localChat = localChatMap.get(remoteChat.id)
 
-        // Process if:
-        // 1. Chat doesn't exist locally
-        // 2. Remote is newer (based on updatedAt)
-        // 3. Chat failed decryption (to retry with new key)
-        const remoteTimestamp = Date.parse(remoteChat.updatedAt)
-        const shouldProcess =
-          !localChat ||
-          (!isNaN(remoteTimestamp) &&
-            remoteTimestamp > (localChat.syncedAt || 0)) ||
-          localChat?.decryptionFailed === true
-
-        if (!shouldProcess) {
+        // Use centralized predicate to determine if we should ingest this remote chat
+        if (!shouldIngestRemoteChat(remoteChat, localChat)) {
           continue
         }
 
@@ -1488,60 +1371,17 @@ export class CloudSyncService {
           let downloadedChat: StoredChat | null = null
 
           if (remoteChat.content) {
-            const encrypted = JSON.parse(remoteChat.content)
-
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              downloadedChat = {
-                ...decrypted,
-                projectId, // Ensure projectId is set from the API context
-              } as StoredChat
-            } catch (decryptError) {
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-
-              const safeCreatedAt = ensureValidISODate(
-                remoteChat.createdAt,
-                remoteChat.id,
-              )
-              const safeUpdatedAt = ensureValidISODate(
-                remoteChat.updatedAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-
-              downloadedChat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: safeCreatedAt,
-                updatedAt: safeUpdatedAt,
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-                projectId,
-              } as StoredChat
-            }
+            // Use centralized chat codec for decryption/placeholder logic
+            const codecResult = await processRemoteChat(remoteChat, {
+              localChat,
+              projectId,
+            })
+            downloadedChat = codecResult.chat
+            // Ensure projectId is set from the API context
+            downloadedChat.projectId = projectId
           }
 
           if (downloadedChat) {
-            downloadedChat.createdAt = ensureValidISODate(
-              downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.updatedAt = ensureValidISODate(
-              downloadedChat.updatedAt ?? downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.lastAccessedAt = Date.now()
-            downloadedChat.syncedAt = Date.now()
-            downloadedChat.locallyModified = false
-            downloadedChat.projectId = projectId // Always ensure projectId is set
-
             await indexedDBStorage.saveChat(downloadedChat)
             await indexedDBStorage.markAsSynced(
               downloadedChat.id,
@@ -1596,8 +1436,6 @@ export class CloudSyncService {
         action: 'syncProjectChats',
         metadata: { projectId },
       })
-    } finally {
-      this.isSyncing = false
     }
 
     return result
@@ -1607,11 +1445,20 @@ export class CloudSyncService {
    * Perform a delta sync for project chats - only fetch chats that changed since last sync.
    */
   async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
-    if (this.isSyncing) {
+    const lockResult = await this.withSyncLock(() =>
+      this.doSyncProjectChatsChanged(projectId),
+    )
+
+    if (lockResult.skipped) {
       throw new Error('Sync already in progress')
     }
 
-    this.isSyncing = true
+    return lockResult.result
+  }
+
+  private async doSyncProjectChatsChanged(
+    projectId: string,
+  ): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -1619,7 +1466,6 @@ export class CloudSyncService {
     }
 
     if (!(await cloudStorage.isAuthenticated())) {
-      this.isSyncing = false
       return result
     }
 
@@ -1629,9 +1475,7 @@ export class CloudSyncService {
       const projectChatsToSync = unsyncedChats.filter(
         (chat) =>
           chat.projectId === projectId &&
-          !(chat as any).isBlankChat &&
-          !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly,
+          isUploadableChat(chat, (id) => streamingTracker.isStreaming(id)),
       )
 
       for (const chat of projectChatsToSync) {
@@ -1652,8 +1496,7 @@ export class CloudSyncService {
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync
-        this.isSyncing = false
-        return await this.syncProjectChats(projectId)
+        return await this.doSyncProjectChats(projectId)
       }
 
       // Initialize encryption service once before processing
@@ -1682,8 +1525,7 @@ export class CloudSyncService {
               metadata: { projectId },
             },
           )
-          this.isSyncing = false
-          return await this.syncProjectChats(projectId)
+          return await this.doSyncProjectChats(projectId)
         }
 
         const remoteChats = updatedChats.chats || []
@@ -1734,60 +1576,20 @@ export class CloudSyncService {
             let downloadedChat: StoredChat | null = null
 
             if (remoteChat.content) {
-              const encrypted = JSON.parse(remoteChat.content)
+              // Fetch local chat for project ID preservation
+              const localChat = await indexedDBStorage.getChat(remoteChat.id)
 
-              try {
-                const decrypted = await encryptionService.decrypt(encrypted)
-                downloadedChat = {
-                  ...decrypted,
-                  projectId,
-                } as StoredChat
-              } catch (decryptError) {
-                const isCorrupted =
-                  decryptError instanceof Error &&
-                  decryptError.message.includes('DATA_CORRUPTED')
-
-                // Preserve projectId from local chat if it exists
-                const localChat = await indexedDBStorage.getChat(remoteChat.id)
-
-                downloadedChat = {
-                  id: remoteChat.id,
-                  title: 'Encrypted',
-                  messages: [],
-                  createdAt: ensureValidISODate(
-                    remoteChat.createdAt,
-                    remoteChat.id,
-                  ),
-                  updatedAt: ensureValidISODate(
-                    remoteChat.updatedAt ?? remoteChat.createdAt,
-                    remoteChat.id,
-                  ),
-                  lastAccessedAt: Date.now(),
-                  decryptionFailed: true,
-                  dataCorrupted: isCorrupted,
-                  encryptedData: remoteChat.content,
-                  syncedAt: Date.now(),
-                  locallyModified: false,
-                  syncVersion: 1,
-                  projectId: localChat?.projectId || projectId,
-                } as StoredChat
-              }
+              // Use centralized chat codec for decryption/placeholder logic
+              const codecResult = await processRemoteChat(remoteChat, {
+                localChat,
+                projectId,
+              })
+              downloadedChat = codecResult.chat
+              // Ensure projectId is set from the API context
+              downloadedChat.projectId = projectId
             }
 
             if (downloadedChat) {
-              downloadedChat.createdAt = ensureValidISODate(
-                downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              downloadedChat.updatedAt = ensureValidISODate(
-                downloadedChat.updatedAt ?? downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              downloadedChat.lastAccessedAt = Date.now()
-              downloadedChat.syncedAt = Date.now()
-              downloadedChat.locallyModified = false
-              downloadedChat.projectId = projectId
-
               await indexedDBStorage.saveChat(downloadedChat)
               await indexedDBStorage.markAsSynced(
                 downloadedChat.id,
@@ -1828,8 +1630,6 @@ export class CloudSyncService {
       result.errors.push(
         `Project chat sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
-    } finally {
-      this.isSyncing = false
     }
 
     return result
