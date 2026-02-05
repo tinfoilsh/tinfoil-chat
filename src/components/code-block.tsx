@@ -65,6 +65,11 @@ const EXECUTABLE_LANGUAGES = [
   'py',
 ]
 
+const PYODIDE_CDN_BASE = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/'
+
+const createIframeDataUrl = (html: string): string =>
+  `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+
 const DARK_THEME = {
   ...oneDark,
   'pre[class*="language-"]': {
@@ -331,7 +336,7 @@ setTimeout(reportHeight, 100);
     } else {
       html = `${csp}${code}${heightReporter}`
     }
-    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+    return createIframeDataUrl(html)
   }, [code, instanceId])
 
   return (
@@ -447,7 +452,7 @@ parent.postMessage({ type: 'js-preview-output', instanceId: '${instanceId}', out
 </script>
 </body>
 </html>`
-    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+    return createIframeDataUrl(html)
   }, [code, instanceId])
 
   useEffect(() => {
@@ -521,9 +526,9 @@ const output = [];
 parent.postMessage({ type: 'python-preview-loading', instanceId: '${instanceId}' }, '*');
 
 try {
-  const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.mjs');
+  const { loadPyodide } = await import('${PYODIDE_CDN_BASE}pyodide.mjs');
   const pyodide = await loadPyodide({
-    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/'
+    indexURL: '${PYODIDE_CDN_BASE}'
   });
 
   // Redirect stdout
@@ -564,7 +569,7 @@ parent.postMessage({ type: 'python-preview-output', instanceId: '${instanceId}',
 </script>
 </body>
 </html>`
-    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+    return createIframeDataUrl(html)
   }, [code, instanceId])
 
   useEffect(() => {
@@ -852,7 +857,7 @@ const CssPreview = ({ code }: { code: string }) => {
   </div>
 </body>
 </html>`
-    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+    return createIframeDataUrl(html)
   }, [code, instanceId])
 
   return (
