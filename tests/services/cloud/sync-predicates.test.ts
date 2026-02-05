@@ -181,7 +181,7 @@ describe('Sync Predicates', () => {
       expect(shouldIngestRemoteChat(remote, local)).toBe(false)
     })
 
-    it('returns false when local has no syncedAt (treated as 0)', () => {
+    it('returns true when local has no syncedAt (treated as 0)', () => {
       // When syncedAt is undefined, it's treated as 0, so any valid remote timestamp wins
       const remote = {
         id: 'test-chat-1',
