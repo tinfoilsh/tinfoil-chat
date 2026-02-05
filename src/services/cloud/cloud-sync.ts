@@ -1381,8 +1381,6 @@ export class CloudSyncService {
               projectId,
             })
             downloadedChat = codecResult.chat
-            // Ensure projectId is set from the API context
-            downloadedChat.projectId = projectId
           }
 
           if (downloadedChat) {
@@ -1589,8 +1587,6 @@ export class CloudSyncService {
                 projectId,
               })
               downloadedChat = codecResult.chat
-              // Ensure projectId is set from the API context
-              downloadedChat.projectId = projectId
             }
 
             if (downloadedChat) {
