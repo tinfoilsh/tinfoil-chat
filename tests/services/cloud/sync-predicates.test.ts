@@ -9,13 +9,9 @@
  * - decryptionFailed !== true
  * - encryptedData is undefined/null
  * - not currently streaming
- *
- * A chat is a retry-decrypt candidate if:
- * - decryptionFailed === true OR encryptedData is present
  */
 
 import {
-  isRetryDecryptCandidate,
   isUploadableChat,
   shouldIngestRemoteChat,
 } from '@/services/cloud/sync-predicates'
@@ -103,39 +99,6 @@ describe('Sync Predicates', () => {
         decryptionFailed: false,
       } as StoredChat
       expect(isUploadableChat(explicitFalse)).toBe(true)
-    })
-  })
-
-  describe('isRetryDecryptCandidate', () => {
-    it('returns true for chats with decryptionFailed flag', () => {
-      const failedChat = { ...baseChat, decryptionFailed: true }
-      expect(isRetryDecryptCandidate(failedChat)).toBe(true)
-    })
-
-    it('returns true for chats with encryptedData', () => {
-      const encryptedChat = {
-        ...baseChat,
-        encryptedData: '{"iv":"abc","data":"xyz"}',
-      }
-      expect(isRetryDecryptCandidate(encryptedChat)).toBe(true)
-    })
-
-    it('returns true for chats with both decryptionFailed and encryptedData', () => {
-      const bothChat = {
-        ...baseChat,
-        decryptionFailed: true,
-        encryptedData: '{"iv":"abc","data":"xyz"}',
-      }
-      expect(isRetryDecryptCandidate(bothChat)).toBe(true)
-    })
-
-    it('returns false for normal decrypted chats', () => {
-      expect(isRetryDecryptCandidate(baseChat)).toBe(false)
-    })
-
-    it('returns false when decryptionFailed is explicitly false', () => {
-      const chat = { ...baseChat, decryptionFailed: false }
-      expect(isRetryDecryptCandidate(chat)).toBe(false)
     })
   })
 
@@ -233,7 +196,7 @@ describe('Sync Predicates', () => {
   })
 
   describe('Combined scenarios', () => {
-    it('a chat can be both non-uploadable and a retry candidate', () => {
+    it('a failed-decryption chat is not uploadable', () => {
       const failedChat = {
         ...baseChat,
         decryptionFailed: true,
@@ -242,9 +205,6 @@ describe('Sync Predicates', () => {
 
       // Should not upload (would overwrite server data with placeholder)
       expect(isUploadableChat(failedChat)).toBe(false)
-
-      // Should be retried when new key is available
-      expect(isRetryDecryptCandidate(failedChat)).toBe(true)
     })
 
     it('local-only chats are never uploadable regardless of other flags', () => {

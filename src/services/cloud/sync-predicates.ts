@@ -57,20 +57,6 @@ export function isUploadableChat(
 }
 
 /**
- * Determines if a chat is a candidate for decryption retry.
- *
- * A chat should be retried if:
- * - decryptionFailed === true (previous decryption attempt failed)
- * - encryptedData is present (has encrypted blob waiting to be decrypted)
- *
- * @param chat The chat to check
- * @returns true if the chat should be retried for decryption
- */
-export function isRetryDecryptCandidate(chat: StoredChat): boolean {
-  return chat.decryptionFailed === true || !!chat.encryptedData
-}
-
-/**
  * Determines if a remote chat should be downloaded and stored locally.
  *
  * A remote chat should be ingested if:
@@ -108,30 +94,4 @@ export function shouldIngestRemoteChat(
   }
 
   return false
-}
-
-/**
- * Filters a list of chats to only those eligible for upload.
- *
- * @param chats List of chats to filter
- * @param isStreaming Optional function to check if a chat is streaming
- * @returns Filtered list of uploadable chats
- */
-export function filterUploadableChats(
-  chats: StoredChat[],
-  isStreaming?: (chatId: string) => boolean,
-): StoredChat[] {
-  return chats.filter((chat) => isUploadableChat(chat, isStreaming))
-}
-
-/**
- * Filters a list of chats to only those that are candidates for decryption retry.
- *
- * @param chats List of chats to filter
- * @returns Filtered list of retry candidates
- */
-export function filterRetryDecryptCandidates(
-  chats: StoredChat[],
-): StoredChat[] {
-  return chats.filter(isRetryDecryptCandidate)
 }
