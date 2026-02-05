@@ -514,14 +514,9 @@ export class CloudSyncService {
             action: 'backupChat',
             metadata: { chatId },
           })
-          // Re-trigger the backup after streaming ends
-          this.backupChat(chatId).catch((error) => {
-            logError('Failed to backup chat after streaming', error, {
-              component: 'CloudSync',
-              action: 'backupChat',
-              metadata: { chatId },
-            })
-          })
+          // Re-trigger the backup after streaming ends.
+          // Errors are handled internally by the upload coalescer.
+          this.backupChat(chatId)
         })
 
         return
@@ -1482,7 +1477,9 @@ export class CloudSyncService {
 
       for (const chat of projectChatsToSync) {
         try {
-          await this.backupChat(chat.id)
+          // Call doBackupChat directly (not via coalescer) so we can
+          // await completion and accurately track upload results
+          await this.doBackupChat(chat.id)
           result.uploaded++
         } catch (error) {
           result.errors.push(
