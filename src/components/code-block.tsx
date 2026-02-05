@@ -55,7 +55,15 @@ const PlayIcon = () => (
   </svg>
 )
 
-const EXECUTABLE_LANGUAGES = ['html', 'javascript', 'js', 'typescript', 'ts']
+const EXECUTABLE_LANGUAGES = [
+  'html',
+  'javascript',
+  'js',
+  'typescript',
+  'ts',
+  'python',
+  'py',
+]
 
 const DARK_THEME = {
   ...oneDark,
@@ -151,6 +159,8 @@ const PREVIEWABLE_LANGUAGES = [
   'js',
   'typescript',
   'ts',
+  'python',
+  'py',
   'mermaid',
   'json',
   'css',
@@ -431,7 +441,7 @@ try {
     output.push('→ ' + (typeof result === 'object' ? JSON.stringify(result) : String(result)));
   }
 } catch (e) {
-  output.push('Error: ' + e.message);
+  output.push('Error: ' + (e.message || String(e) || 'Unknown error'));
 }
 parent.postMessage({ type: 'js-preview-output', instanceId: '${instanceId}', output }, '*');
 </script>
@@ -480,6 +490,135 @@ parent.postMessage({ type: 'js-preview-output', instanceId: '${instanceId}', out
       ))}
       {output.length === 0 && (
         <div className="italic text-content-muted">No output</div>
+      )}
+    </div>
+  )
+}
+
+const PythonPreview = ({ code }: { code: string }) => {
+  const [output, setOutput] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const instanceId = useId()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  const iframeSrc = useMemo(() => {
+    const jsonEscapedCode = JSON.stringify(code).replace(
+      /<\/script>/gi,
+      '<\\/script>',
+    )
+
+    // CSP allows loading Pyodide from CDN
+    // Data URL ensures isolation from parent page
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; connect-src https://cdn.jsdelivr.net;">
+</head>
+<body>
+<script type="module">
+const output = [];
+parent.postMessage({ type: 'python-preview-loading', instanceId: '${instanceId}' }, '*');
+
+try {
+  const { loadPyodide } = await import('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.mjs');
+  const pyodide = await loadPyodide({
+    indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/'
+  });
+
+  // Redirect stdout
+  pyodide.runPython(\`
+import sys
+from io import StringIO
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+\`);
+
+  // Run user code
+  const userCode = ${jsonEscapedCode};
+  try {
+    const result = pyodide.runPython(userCode);
+    const stdout = pyodide.runPython('sys.stdout.getvalue()');
+    const stderr = pyodide.runPython('sys.stderr.getvalue()');
+    
+    if (stdout) {
+      stdout.split('\\n').filter(line => line).forEach(line => output.push(line));
+    }
+    if (stderr) {
+      stderr.split('\\n').filter(line => line).forEach(line => output.push('Error: ' + line));
+    }
+    if (result !== undefined && result !== null && !stdout) {
+      const resultStr = String(result);
+      if (resultStr !== 'None') {
+        output.push('→ ' + resultStr);
+      }
+    }
+  } catch (e) {
+    output.push('Error: ' + (e.message || String(e) || 'Unknown error'));
+  }
+} catch (e) {
+  output.push('Error loading Python: ' + (e.message || String(e) || 'Unknown error'));
+}
+
+parent.postMessage({ type: 'python-preview-output', instanceId: '${instanceId}', output }, '*');
+</script>
+</body>
+</html>`
+    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+  }, [code, instanceId])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return
+      }
+      if (event.data?.instanceId !== instanceId) {
+        return
+      }
+      if (event.data?.type === 'python-preview-loading') {
+        setIsLoading(true)
+      }
+      if (event.data?.type === 'python-preview-output') {
+        setOutput(event.data.output)
+        setIsLoading(false)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [instanceId])
+
+  return (
+    <div className="font-mono text-sm">
+      <iframe
+        ref={iframeRef}
+        src={iframeSrc}
+        className="hidden"
+        sandbox="allow-scripts"
+        title="Python preview"
+      />
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-content-muted">
+        Python Output
+      </div>
+      {isLoading ? (
+        <div className="italic text-content-muted">Loading Python...</div>
+      ) : (
+        <>
+          {output.map((line, i) => (
+            <div
+              key={i}
+              className={
+                line.startsWith('Error:')
+                  ? 'text-red-500'
+                  : 'text-content-primary'
+              }
+            >
+              {line}
+            </div>
+          ))}
+          {output.length === 0 && (
+            <div className="italic text-content-muted">No output</div>
+          )}
+        </>
       )}
     </div>
   )
@@ -753,6 +892,9 @@ const CodePreview = ({
       case 'typescript':
       case 'ts':
         return <JavaScriptPreview code={code} />
+      case 'python':
+      case 'py':
+        return <PythonPreview code={code} />
       case 'mermaid':
         return <MermaidPreview code={code} isDarkMode={isDarkMode} />
       case 'json':
