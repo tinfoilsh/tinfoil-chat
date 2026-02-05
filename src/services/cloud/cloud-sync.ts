@@ -35,6 +35,10 @@ const SYNC_STATUS_STORAGE_KEY = 'tinfoil-chat-sync-status'
 const PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX =
   'tinfoil-project-chat-sync-status-'
 
+const UPLOAD_BASE_DELAY_MS = 1000
+const UPLOAD_MAX_DELAY_MS = 8000
+const UPLOAD_MAX_RETRIES = 3
+
 export class CloudSyncService {
   private syncLock: Promise<void> | null = null
   private syncLockResolve: (() => void) | null = null
@@ -49,9 +53,9 @@ export class CloudSyncService {
     this.uploadCoalescer = new UploadCoalescer(
       (chatId) => this.doBackupChat(chatId),
       {
-        baseDelayMs: 1000,
-        maxDelayMs: 8000,
-        maxRetries: 3,
+        baseDelayMs: UPLOAD_BASE_DELAY_MS,
+        maxDelayMs: UPLOAD_MAX_DELAY_MS,
+        maxRetries: UPLOAD_MAX_RETRIES,
       },
     )
     // Listen for storage changes from other tabs to invalidate sync status cache
