@@ -32,8 +32,6 @@ interface ChatUploadState {
   inFlight: Promise<void> | null
   /** Number of consecutive failures */
   failureCount: number
-  /** Timestamp of last successful upload */
-  lastSuccessAt?: number
 }
 
 /**
@@ -116,7 +114,6 @@ export class UploadCoalescer {
           await this.uploadWithRetry(chatId, state)
           // Success - reset failure count
           state.failureCount = 0
-          state.lastSuccessAt = Date.now()
         } catch (error) {
           // Upload failed after all retries
           state.failureCount++
