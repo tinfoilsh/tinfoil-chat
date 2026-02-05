@@ -720,8 +720,8 @@ export class CloudSyncService {
 
             if (remoteChat.content) {
               // Use centralized chat codec for decryption/placeholder logic
-              const result = await processRemoteChat(remoteChat, { localChat })
-              downloadedChat = result.chat
+              const codecResult = await processRemoteChat(remoteChat, { localChat })
+              downloadedChat = codecResult.chat
             } else {
               // No inline content - fetch via downloadChat (handles its own decryption)
               downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
