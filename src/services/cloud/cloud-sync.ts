@@ -43,7 +43,6 @@ export class CloudSyncService {
   private syncLock: Promise<void> | null = null
   private syncLockResolve: (() => void) | null = null
   private uploadCoalescer: UploadCoalescer
-  private pendingUploads: Map<string, () => Promise<void>> = new Map()
   private streamingCallbacks: Set<string> = new Set()
   private lastSyncStatus: ChatSyncStatus | null = null
   private projectSyncStatus: Map<string, ChatSyncStatus> = new Map()
