@@ -282,10 +282,7 @@ const HtmlPreview = ({ code }: { code: string }) => {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (
-        event.origin !== 'null' ||
-        event.source !== iframeRef.current?.contentWindow
-      ) {
+      if (event.source !== iframeRef.current?.contentWindow) {
         return
       }
       if (
@@ -301,7 +298,8 @@ const HtmlPreview = ({ code }: { code: string }) => {
 
   const iframeSrc = useMemo(() => {
     // CSP blocks network requests (fetch, XHR, WebSocket, etc.)
-    const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">`
+    // Data URL ensures complete CSP isolation from parent page (null origin)
+    const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:;">`
 
     const heightReporter = `
 <script>
@@ -315,19 +313,21 @@ new MutationObserver(reportHeight).observe(document.body, { childList: true, sub
 setTimeout(reportHeight, 100);
 </script>`
 
+    let html
     if (code.includes('<head>')) {
-      return code.replace('<head>', `<head>${csp}`) + heightReporter
+      html = code.replace('<head>', `<head>${csp}`) + heightReporter
     } else if (code.includes('</head>')) {
-      return code.replace('</head>', `${csp}${heightReporter}</head>`)
+      html = code.replace('</head>', `${csp}${heightReporter}</head>`)
     } else {
-      return `${csp}${code}${heightReporter}`
+      html = `${csp}${code}${heightReporter}`
     }
+    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
   }, [code, instanceId])
 
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={iframeSrc}
+      src={iframeSrc}
       className="w-full rounded border-0"
       style={{ height: `${height}px`, minHeight: '100px' }}
       sandbox="allow-scripts"
@@ -666,10 +666,7 @@ const CssPreview = ({ code }: { code: string }) => {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (
-        event.origin !== 'null' ||
-        event.source !== iframeRef.current?.contentWindow
-      ) {
+      if (event.source !== iframeRef.current?.contentWindow) {
         return
       }
       if (
@@ -685,11 +682,12 @@ const CssPreview = ({ code }: { code: string }) => {
 
   const iframeSrc = useMemo(() => {
     const escapedCode = code.replace(/<\//g, '<\\/')
-    const sampleHtml = `<!DOCTYPE html>
+    // Data URL ensures complete CSP isolation from parent page (null origin)
+    const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline';">
   <style>${escapedCode}</style>
   <script>
     function reportHeight() {
@@ -715,13 +713,13 @@ const CssPreview = ({ code }: { code: string }) => {
   </div>
 </body>
 </html>`
-    return sampleHtml
+    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
   }, [code, instanceId])
 
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={iframeSrc}
+      src={iframeSrc}
       className="w-full rounded border-0"
       style={{ height: `${height}px`, minHeight: '150px' }}
       sandbox="allow-scripts"
