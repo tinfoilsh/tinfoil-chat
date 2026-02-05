@@ -39,6 +39,8 @@ const UPLOAD_BASE_DELAY_MS = 1000
 const UPLOAD_MAX_DELAY_MS = 8000
 const UPLOAD_MAX_RETRIES = 3
 
+const isStreaming = (id: string) => streamingTracker.isStreaming(id)
+
 export class CloudSyncService {
   private syncLock: Promise<void> | null = null
   private syncLockResolve: (() => void) | null = null
@@ -192,7 +194,7 @@ export class CloudSyncService {
           if (chat.projectId) return false
         }
         // Use centralized predicate for upload eligibility
-        return isUploadableChat(chat, (id) => streamingTracker.isStreaming(id))
+        return isUploadableChat(chat, isStreaming)
       })
 
       if (chatsNeedingUpload.length > 0) {
@@ -528,7 +530,7 @@ export class CloudSyncService {
 
       // Use centralized predicate for upload eligibility
       // Note: streaming is checked here AND after potential delay
-      if (!isUploadableChat(chat, (id) => streamingTracker.isStreaming(id))) {
+      if (!isUploadableChat(chat, isStreaming)) {
         logInfo('Skipping sync for ineligible chat', {
           component: 'CloudSync',
           action: 'backupChat',
@@ -592,7 +594,7 @@ export class CloudSyncService {
       // IMPORTANT: Never upload chats that failed to decrypt - they are placeholders with empty
       // messages that would overwrite real encrypted data on the server
       const chatsToSync = unsyncedChats.filter((chat) =>
-        isUploadableChat(chat, (id) => streamingTracker.isStreaming(id)),
+        isUploadableChat(chat, isStreaming),
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
@@ -1470,8 +1472,7 @@ export class CloudSyncService {
       const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
       const projectChatsToSync = unsyncedChats.filter(
         (chat) =>
-          chat.projectId === projectId &&
-          isUploadableChat(chat, (id) => streamingTracker.isStreaming(id)),
+          chat.projectId === projectId && isUploadableChat(chat, isStreaming),
       )
 
       for (const chat of projectChatsToSync) {
