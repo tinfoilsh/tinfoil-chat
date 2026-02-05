@@ -403,25 +403,6 @@ const JavaScriptPreview = ({ code }: { code: string }) => {
   const instanceId = useId()
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (
-        event.origin !== 'null' ||
-        event.source !== iframeRef.current?.contentWindow
-      ) {
-        return
-      }
-      if (
-        event.data?.type === 'js-preview-output' &&
-        event.data?.instanceId === instanceId
-      ) {
-        setOutput(event.data.output)
-      }
-    }
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [instanceId])
-
   const iframeSrc = useMemo(() => {
     const strippedCode = stripModuleSyntax(code)
     const jsonEscapedCode = JSON.stringify(strippedCode).replace(
@@ -430,7 +411,8 @@ const JavaScriptPreview = ({ code }: { code: string }) => {
     )
 
     // CSP blocks network requests (fetch, XHR, WebSocket, etc.)
-    return `<!DOCTYPE html>
+    // Data URL ensures complete CSP isolation from parent page (null origin)
+    const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -455,13 +437,30 @@ parent.postMessage({ type: 'js-preview-output', instanceId: '${instanceId}', out
 </script>
 </body>
 </html>`
+    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
   }, [code, instanceId])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) {
+        return
+      }
+      if (
+        event.data?.type === 'js-preview-output' &&
+        event.data?.instanceId === instanceId
+      ) {
+        setOutput(event.data.output)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [instanceId])
 
   return (
     <div className="font-mono text-sm">
       <iframe
         ref={iframeRef}
-        srcDoc={iframeSrc}
+        src={iframeSrc}
         className="hidden"
         sandbox="allow-scripts"
         title="JavaScript preview"
