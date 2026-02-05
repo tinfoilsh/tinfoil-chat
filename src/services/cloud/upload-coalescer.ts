@@ -77,7 +77,6 @@ export class UploadCoalescer {
    * If no upload is in progress, starts a new upload worker.
    *
    * @param chatId The chat ID to upload
-   * @returns Promise that resolves when the enqueue is processed (NOT when upload completes)
    */
   enqueue(chatId: string): void {
     let state = this.states.get(chatId)
