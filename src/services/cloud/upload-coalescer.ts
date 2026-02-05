@@ -10,6 +10,10 @@
 
 import { logError, logInfo } from '@/utils/error-handling'
 
+const DEFAULT_BASE_DELAY_MS = 1000
+const DEFAULT_MAX_DELAY_MS = 8000
+const DEFAULT_MAX_RETRIES = 3
+
 /**
  * Configuration for the upload coalescer
  */
@@ -62,9 +66,9 @@ export class UploadCoalescer {
   constructor(uploadFn: UploadFn, config: UploadCoalescerConfig = {}) {
     this.uploadFn = uploadFn
     this.config = {
-      baseDelayMs: config.baseDelayMs ?? 1000,
-      maxDelayMs: config.maxDelayMs ?? 8000,
-      maxRetries: config.maxRetries ?? 3,
+      baseDelayMs: config.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
+      maxDelayMs: config.maxDelayMs ?? DEFAULT_MAX_DELAY_MS,
+      maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
     }
   }
 
