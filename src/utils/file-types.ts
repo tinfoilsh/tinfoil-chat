@@ -25,7 +25,7 @@ const DOCUMENT_EXTENSIONS = {
 
 // Supported media extensions
 const MEDIA_EXTENSIONS = {
-  audio: ['.mp3', '.wav', '.ogg'],
+  audio: ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.wma'],
   video: ['.mp4', '.mov', '.avi'],
 }
 

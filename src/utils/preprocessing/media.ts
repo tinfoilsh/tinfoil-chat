@@ -1,5 +1,5 @@
 /**
- * Image preprocessing utilities for document upload
+ * Media preprocessing utilities for document upload
  */
 
 interface ImageScaleOptions {
@@ -90,6 +90,15 @@ export async function scaleImage(
  */
 export function isImageFile(file: File): boolean {
   return file.type.startsWith('image/')
+}
+
+/**
+ * Checks if a file is an audio file based on its MIME type
+ * @param file - The file to check
+ * @returns true if the file is an audio file, false otherwise
+ */
+export function isAudioFile(file: File): boolean {
+  return file.type.startsWith('audio/')
 }
 
 /**

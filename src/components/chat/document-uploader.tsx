@@ -5,7 +5,11 @@ import {
   getDocumentFormat,
   getFileIconType as getFileIcon,
 } from '@/utils/file-types'
-import { isImageFile, scaleAndEncodeImage } from '@/utils/preprocessing'
+import {
+  isAudioFile,
+  isImageFile,
+  scaleAndEncodeImage,
+} from '@/utils/preprocessing'
 import { useState } from 'react'
 import { SecureClient } from 'tinfoil'
 import { CONSTANTS } from './constants'
@@ -219,6 +223,54 @@ export const useDocumentUploader = (
           onError(new Error(`Failed to process image: ${message}`), documentId)
           return
         }
+      }
+
+      // For audio files, transcribe via audio model (premium only)
+      if (isAudioFile(file)) {
+        if (!isPremium) {
+          onError(
+            new Error(
+              'Audio file transcription requires a premium subscription',
+            ),
+            documentId,
+          )
+          return
+        }
+
+        const models = await getAIModels(true)
+        const audioModel = (
+          models.find((m) => m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL) ||
+          models.find((m) => m.type === 'audio')
+        )?.modelName
+
+        if (!audioModel) {
+          onError(
+            new Error('No audio model available for transcription'),
+            documentId,
+          )
+          return
+        }
+
+        const client = await getTinfoilClient()
+        await client.ready()
+        const transcription = await client.audio.transcriptions.create({
+          file,
+          model: audioModel,
+          response_format: 'text',
+        })
+
+        const text =
+          typeof transcription === 'string'
+            ? transcription
+            : (transcription as any).text
+
+        if (!text) {
+          onError(new Error('No transcription text received'), documentId)
+          return
+        }
+
+        onSuccess(text.trim(), documentId)
+        return
       }
 
       // For non-txt files, proceed with API processing
