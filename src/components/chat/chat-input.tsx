@@ -405,7 +405,7 @@ export function ChatInput({
             multiple
             accept={
               isPremium
-                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt'
+                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.wma'
                 : '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.txt'
             }
           />
