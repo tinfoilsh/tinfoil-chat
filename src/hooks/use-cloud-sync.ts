@@ -38,6 +38,41 @@ export function useCloudSync() {
     }
   }, [])
 
+  // Listen for fallback key additions and trigger retry decryption
+  useEffect(() => {
+    const unsubscribe = encryptionService.onFallbackKeyAdded(() => {
+      logInfo('Fallback key added, triggering decryption retry', {
+        component: 'useCloudSync',
+        action: 'onFallbackKeyAdded',
+      })
+
+      // Run decryption retry in background
+      cloudSync
+        .retryDecryptionWithNewKey()
+        .then((decryptedCount) => {
+          if (decryptedCount > 0) {
+            logInfo(`Decrypted ${decryptedCount} chats with new fallback key`, {
+              component: 'useCloudSync',
+              action: 'onFallbackKeyAdded',
+              metadata: { decryptedCount },
+            })
+          }
+        })
+        .catch((error) => {
+          logError(
+            'Failed to retry decryption after fallback key added',
+            error,
+            {
+              component: 'useCloudSync',
+              action: 'onFallbackKeyAdded',
+            },
+          )
+        })
+    })
+
+    return unsubscribe
+  }, [])
+
   // Initialize cloud sync when user is signed in
   useEffect(() => {
     const initializeSync = async () => {

@@ -1,6 +1,5 @@
-import { CLOUD_SYNC, PAGINATION } from '@/config'
+import { PAGINATION } from '@/config'
 import { cloudSync } from '@/services/cloud/cloud-sync'
-import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -81,58 +80,20 @@ export function useCloudPagination(
       return
     }
 
-    try {
-      const allChats = await indexedDBStorage.getAllChats()
-      const syncedChats = allChats
-        .filter((chat) => chat.syncedAt && !(chat as any).isBlankChat)
-        .sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime()
-          const timeB = new Date(b.createdAt).getTime()
-          return timeB - timeA
-        })
+    // Note: We intentionally do NOT delete local chats here.
+    // IndexedDB can hold gigabytes of data, so keeping all synced chats
+    // locally provides better offline access. Users can fetch older chats
+    // from the cloud on demand via loadMore().
 
-      const deletedIds: string[] = []
-      if (syncedChats.length > pageSize) {
-        const chatsToDelete = syncedChats.slice(pageSize)
-        for (const chat of chatsToDelete) {
-          // Skip deletion for chats that were recently synced
-          // Remote listings might not include them yet due to eventual consistency
-          const recentlySynced =
-            typeof chat.syncedAt === 'number' &&
-            Date.now() - chat.syncedAt < CLOUD_SYNC.DELETION_GRACE_MS
-          if (recentlySynced) {
-            continue
-          }
-
-          try {
-            await indexedDBStorage.deleteChat(chat.id)
-            deletedIds.push(chat.id)
-          } catch (deleteError) {
-            logError('Failed to prune paginated chat', deleteError, {
-              component: 'useCloudPagination',
-              action: 'initialize_delete',
-              metadata: { chatId: chat.id },
-            })
-          }
-        }
-      }
-
-      // Don't set pagination state here - let loadMore() handle fetching page 1
-      // This ensures we don't skip page 1 when loadMore() is called
-      setHasAttempted(false)
-      return {
-        hasMore: false,
-        nextToken: undefined,
-        deletedIds,
-      }
-    } catch (error) {
-      logError('Failed to initialize pagination', error, {
-        component: 'useCloudPagination',
-        action: 'initialize',
-      })
-      return undefined
+    // Don't set pagination state here - let loadMore() handle fetching page 1
+    // This ensures we don't skip page 1 when loadMore() is called
+    setHasAttempted(false)
+    return {
+      hasMore: false,
+      nextToken: undefined,
+      deletedIds: [], // Never delete local chats
     }
-  }, [isSignedIn, userId, pageSize, cloudSyncEnabled])
+  }, [isSignedIn, userId, cloudSyncEnabled])
 
   const loadMore = useCallback(async () => {
     if (!isSignedIn || !userId || isLoading || !cloudSyncEnabled) return

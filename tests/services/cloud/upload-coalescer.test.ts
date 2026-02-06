@@ -1,0 +1,270 @@
+/**
+ * Upload Coalescer Tests
+ */
+
+import { UploadCoalescer } from '@/services/cloud/upload-coalescer'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Mock error handling
+vi.mock('@/utils/error-handling', () => ({
+  logInfo: vi.fn(),
+  logError: vi.fn(),
+}))
+
+describe('UploadCoalescer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  describe('Basic enqueue behavior', () => {
+    it('calls upload function when enqueued', async () => {
+      const uploadFn = vi.fn().mockResolvedValue(undefined)
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      coalescer.enqueue('chat-1')
+
+      // Let the async worker run
+      await vi.runAllTimersAsync()
+
+      expect(uploadFn).toHaveBeenCalledWith('chat-1')
+      expect(uploadFn).toHaveBeenCalledTimes(1)
+    })
+
+    it('handles multiple different chats in parallel', async () => {
+      const uploadFn = vi.fn().mockResolvedValue(undefined)
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-2')
+      coalescer.enqueue('chat-3')
+
+      await vi.runAllTimersAsync()
+
+      expect(uploadFn).toHaveBeenCalledTimes(3)
+      expect(uploadFn).toHaveBeenCalledWith('chat-1')
+      expect(uploadFn).toHaveBeenCalledWith('chat-2')
+      expect(uploadFn).toHaveBeenCalledWith('chat-3')
+    })
+  })
+
+  describe('Coalescing behavior', () => {
+    it('coalesces rapid enqueues for the same chat', async () => {
+      let resolveUpload: () => void
+      const uploadPromise = new Promise<void>((resolve) => {
+        resolveUpload = resolve
+      })
+      const uploadFn = vi.fn().mockReturnValue(uploadPromise)
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      // First enqueue starts upload
+      coalescer.enqueue('chat-1')
+
+      // These should be coalesced since upload is in progress
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-1')
+
+      // Still only one upload started
+      expect(uploadFn).toHaveBeenCalledTimes(1)
+      expect(coalescer.isUploading('chat-1')).toBe(true)
+
+      // Complete first upload
+      resolveUpload!()
+      await vi.runAllTimersAsync()
+
+      // Dirty flag was set, so one more upload
+      expect(uploadFn).toHaveBeenCalledTimes(2)
+    })
+
+    it('re-uploads after dirty flag set during upload', async () => {
+      let resolveFirst: () => void
+      let resolveSecond: () => void
+
+      const uploadFn = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveFirst = resolve
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveSecond = resolve
+            }),
+        )
+
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      // Start first upload
+      coalescer.enqueue('chat-1')
+      expect(uploadFn).toHaveBeenCalledTimes(1)
+
+      // Enqueue during upload - sets dirty flag
+      coalescer.enqueue('chat-1')
+      expect(uploadFn).toHaveBeenCalledTimes(1) // Still just one
+
+      // Complete first upload
+      resolveFirst!()
+      await vi.runAllTimersAsync()
+
+      // Second upload should have started
+      expect(uploadFn).toHaveBeenCalledTimes(2)
+
+      // Complete second upload
+      resolveSecond!()
+      await vi.runAllTimersAsync()
+
+      // No more uploads (dirty flag was clear)
+      expect(uploadFn).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('Retry behavior', () => {
+    it('retries failed uploads with exponential backoff', async () => {
+      const uploadFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce(undefined)
+
+      const coalescer = new UploadCoalescer(uploadFn, {
+        baseDelayMs: 100,
+        maxDelayMs: 400,
+        maxRetries: 3,
+      })
+
+      coalescer.enqueue('chat-1')
+
+      // First attempt fails immediately
+      await vi.advanceTimersByTimeAsync(0)
+      expect(uploadFn).toHaveBeenCalledTimes(1)
+
+      // Wait for first retry (100ms)
+      await vi.advanceTimersByTimeAsync(100)
+      expect(uploadFn).toHaveBeenCalledTimes(2)
+
+      // Wait for second retry (200ms)
+      await vi.advanceTimersByTimeAsync(200)
+      expect(uploadFn).toHaveBeenCalledTimes(3)
+
+      // All done
+      await vi.runAllTimersAsync()
+      expect(uploadFn).toHaveBeenCalledTimes(3)
+    })
+
+    it('gives up after max retries', async () => {
+      const uploadFn = vi.fn().mockRejectedValue(new Error('Permanent failure'))
+
+      const coalescer = new UploadCoalescer(uploadFn, {
+        baseDelayMs: 100,
+        maxRetries: 2,
+      })
+
+      coalescer.enqueue('chat-1')
+
+      await vi.runAllTimersAsync()
+
+      // 1 initial + 2 retries = 3 total attempts
+      expect(uploadFn).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  describe('State tracking', () => {
+    it('tracks pending uploads correctly', async () => {
+      const uploadFn = vi.fn().mockResolvedValue(undefined)
+
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      expect(coalescer.hasPendingUpload('chat-1')).toBe(false)
+
+      coalescer.enqueue('chat-1')
+
+      // Right after enqueue, dirty flag is set
+      expect(coalescer.hasPendingUpload('chat-1')).toBe(true)
+
+      // Let the upload complete
+      await vi.runAllTimersAsync()
+
+      // After completion, state should be cleaned up
+      expect(coalescer.hasPendingUpload('chat-1')).toBe(false)
+      expect(coalescer.activeUploadCount).toBe(0)
+    })
+
+    it('returns pending chat IDs', async () => {
+      const uploadFn = vi.fn().mockReturnValue(new Promise(() => {})) // Never resolves
+
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-2')
+
+      const pendingIds = coalescer.getPendingChatIds()
+
+      expect(pendingIds).toContain('chat-1')
+      expect(pendingIds).toContain('chat-2')
+      expect(pendingIds).toHaveLength(2)
+    })
+
+    it('clears all state', async () => {
+      const uploadFn = vi.fn().mockReturnValue(new Promise(() => {}))
+
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-2')
+
+      expect(coalescer.activeUploadCount).toBe(2)
+
+      coalescer.clear()
+
+      expect(coalescer.activeUploadCount).toBe(0)
+      expect(coalescer.getPendingChatIds()).toHaveLength(0)
+    })
+  })
+
+  describe('Edge cases', () => {
+    it('handles synchronous upload success', async () => {
+      const uploadFn = vi.fn().mockResolvedValue(undefined)
+      const coalescer = new UploadCoalescer(uploadFn)
+
+      coalescer.enqueue('chat-1')
+      await vi.runAllTimersAsync()
+
+      expect(uploadFn).toHaveBeenCalledTimes(1)
+      expect(coalescer.hasPendingUpload('chat-1')).toBe(false)
+    })
+
+    it('handles enqueue during retry backoff', async () => {
+      const uploadFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Fail'))
+        .mockResolvedValue(undefined)
+
+      const coalescer = new UploadCoalescer(uploadFn, {
+        baseDelayMs: 1000,
+        maxRetries: 3,
+      })
+
+      coalescer.enqueue('chat-1')
+      await vi.advanceTimersByTimeAsync(0) // First attempt fails
+
+      // Enqueue during backoff
+      coalescer.enqueue('chat-1')
+
+      // Advance to trigger retry
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Should succeed (dirty flag causes fresh data)
+      await vi.runAllTimersAsync()
+
+      expect(uploadFn).toHaveBeenCalledTimes(2)
+    })
+  })
+})

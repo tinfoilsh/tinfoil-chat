@@ -10,11 +10,14 @@ export interface EncryptedData {
   data: string // Base64 encoded encrypted data
 }
 
+export type FallbackKeyAddedCallback = () => void
+
 export class EncryptionService {
   private encryptionKey: CryptoKey | null = null
   private currentKeyString: string | null = null
   private fallbackKeyStrings: string[] = []
   private fallbackKeyCache: Map<string, CryptoKey> = new Map()
+  private fallbackKeyAddedCallbacks: Set<FallbackKeyAddedCallback> = new Set()
 
   // Helper to convert bytes to alphanumeric string (a-z, 0-9)
   // Always produces even-length strings (2 characters per byte)
@@ -284,6 +287,91 @@ export class EncryptionService {
         logInfo('Failed to remove encryption keys from storage', {
           component: 'EncryptionService',
           action: 'clearKeyPersist',
+          metadata: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    }
+  }
+
+  /**
+   * Add a decryption key to the fallback list without changing the primary key.
+   *
+   * This allows users to add old keys that can be used to decrypt historical
+   * chats without overwriting the current encryption key.
+   *
+   * @param keyString The key to add (must start with "key_" prefix)
+   * @throws Error if the key format is invalid
+   */
+  addDecryptionKey(keyString: string): void {
+    // Validate key format (throws if invalid)
+    this.getKeyBytes(keyString)
+
+    // Don't add if it's the current key
+    if (keyString === this.currentKeyString) {
+      logInfo('Key is already the primary encryption key', {
+        component: 'EncryptionService',
+        action: 'addDecryptionKey',
+      })
+      return
+    }
+
+    // Don't add duplicates
+    if (this.fallbackKeyStrings.includes(keyString)) {
+      logInfo('Key is already in fallback list', {
+        component: 'EncryptionService',
+        action: 'addDecryptionKey',
+      })
+      return
+    }
+
+    // Add to fallback list
+    this.fallbackKeyStrings.push(keyString)
+    this.saveKeyHistoryToStorage(this.fallbackKeyStrings)
+
+    logInfo('Added decryption key to fallback list', {
+      component: 'EncryptionService',
+      action: 'addDecryptionKey',
+      metadata: {
+        fallbackKeyCount: this.fallbackKeyStrings.length,
+      },
+    })
+
+    // Notify listeners that a new fallback key was added
+    // This allows triggering retry of failed decryptions
+    this.notifyFallbackKeyAdded()
+  }
+
+  /**
+   * Get the count of fallback decryption keys available.
+   */
+  getFallbackKeyCount(): number {
+    return this.fallbackKeyStrings.length
+  }
+
+  /**
+   * Register a callback to be called when a fallback key is added.
+   * Returns an unsubscribe function.
+   */
+  onFallbackKeyAdded(callback: FallbackKeyAddedCallback): () => void {
+    this.fallbackKeyAddedCallbacks.add(callback)
+    return () => {
+      this.fallbackKeyAddedCallbacks.delete(callback)
+    }
+  }
+
+  /**
+   * Notify all registered callbacks that a fallback key was added.
+   */
+  private notifyFallbackKeyAdded(): void {
+    for (const callback of this.fallbackKeyAddedCallbacks) {
+      try {
+        callback()
+      } catch (error) {
+        logInfo('Fallback key callback error', {
+          component: 'EncryptionService',
+          action: 'notifyFallbackKeyAdded',
           metadata: {
             error: error instanceof Error ? error.message : String(error),
           },
