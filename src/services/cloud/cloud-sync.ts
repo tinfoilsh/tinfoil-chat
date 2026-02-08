@@ -72,7 +72,10 @@ export class CloudSyncService {
           const projectId = e.key.slice(
             PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX.length,
           )
-          this.getProjectSyncCache(projectId).invalidate()
+          const existingCache = this.projectSyncCaches.get(projectId)
+          if (existingCache) {
+            existingCache.invalidate()
+          }
         }
       })
     }
