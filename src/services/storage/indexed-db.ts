@@ -43,6 +43,31 @@ function hashString(input: string): string {
  * Intentionally ignores `updatedAt` so we don't treat "save time changed" as a content change.
  * Avoids hashing huge blobs (documentContent/image base64) by hashing or summarizing those fields.
  */
+/**
+ * Determine whether a chat should be marked as locally modified (needing upload).
+ *
+ * Rules:
+ * 1. Chats that failed decryption are NEVER marked modified — they are placeholders
+ *    with empty messages that would overwrite real encrypted data on the server.
+ * 2. Existing chats: mark modified if meaningful content changed, or preserve the
+ *    existing modified flag so previously-dirty chats stay dirty.
+ * 3. New chats: use the caller-provided value, defaulting to true.
+ */
+export function computeLocallyModified(opts: {
+  isFailedDecryption: boolean
+  existingChat: StoredChat | undefined
+  hasContentChanges: boolean
+  callerValue: boolean | undefined
+}): boolean {
+  if (opts.isFailedDecryption) {
+    return false
+  }
+  if (opts.existingChat) {
+    return opts.hasContentChanges || opts.existingChat.locallyModified === true
+  }
+  return opts.callerValue ?? true
+}
+
 export function chatContentFingerprint(chat: {
   title?: string
   projectId?: string
@@ -258,11 +283,12 @@ export class IndexedDBStorage {
           // loaded with locallyModified: false from a previous sync
           // For new chats: use provided value or default to true
           // IMPORTANT: Never mark failed-to-decrypt chats as modified - they are placeholders
-          locallyModified: isFailedDecryption
-            ? false
-            : existingChat
-              ? hasContentChanges || existingChat.locallyModified === true
-              : ((chat as StoredChat).locallyModified ?? true),
+          locallyModified: computeLocallyModified({
+            isFailedDecryption,
+            existingChat,
+            hasContentChanges,
+            callerValue: (chat as StoredChat).locallyModified,
+          }),
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
