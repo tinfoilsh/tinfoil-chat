@@ -196,7 +196,6 @@ export class CloudStorageService {
       const remote: RemoteChatData = {
         id: chatId,
         content: rawContent,
-        createdAt: new Date().toISOString(),
       }
 
       const result = await processRemoteChat(remote)
