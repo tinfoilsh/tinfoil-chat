@@ -32,7 +32,7 @@ export function isUploadableChat(
   }
 
   // Blank chats (empty placeholders) are never uploaded
-  if ((chat as any).isBlankChat === true) {
+  if (chat.isBlankChat === true) {
     return false
   }
 
