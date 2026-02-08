@@ -1,6 +1,7 @@
 import type { Chat } from '@/components/chat/types'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
+import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
 import { chatEvents } from './chat-events'
@@ -221,69 +222,40 @@ export class ChatStorageService {
     )
   }
 
-  async convertChatToCloud(chatId: string): Promise<string> {
+  async convertChatToCloud(chatId: string): Promise<void> {
     await this.initialize()
 
-    // Clone the chat with a new ID and fresh timestamp
-    const newChatId = await indexedDBStorage.cloneChatWithNewId(chatId)
-    if (!newChatId) {
-      throw new Error('Failed to clone chat')
-    }
+    await indexedDBStorage.resetChatTimestamps(chatId)
+    await indexedDBStorage.updateChatLocalOnly(chatId, false)
 
-    // Mark as cloud chat (not local-only)
-    await indexedDBStorage.updateChatLocalOnly(newChatId, false)
+    chatEvents.emit({ reason: 'save', ids: [chatId] })
 
-    // Emit event so UI reflects the changes
-    chatEvents.emit({ reason: 'save', ids: [newChatId] })
-
-    // Trigger cloud backup
-    await cloudSync.backupChat(newChatId)
-
-    return newChatId
+    await cloudSync.backupChat(chatId)
   }
 
-  async convertChatToLocal(chatId: string): Promise<string> {
+  async convertChatToLocal(chatId: string): Promise<void> {
     await this.initialize()
 
-    // Clone the chat with a new ID and fresh timestamp
-    const newChatId = await indexedDBStorage.cloneChatWithNewId(chatId)
-    if (!newChatId) {
-      throw new Error('Failed to clone chat')
-    }
+    await indexedDBStorage.resetChatTimestamps(chatId)
+    await indexedDBStorage.updateChatLocalOnly(chatId, true)
+    await indexedDBStorage.updateChatProject(chatId, null)
 
-    // Mark as local-only and remove from any project
-    await indexedDBStorage.updateChatLocalOnly(newChatId, true)
-    await indexedDBStorage.updateChatProject(newChatId, null)
+    chatEvents.emit({ reason: 'save', ids: [chatId] })
 
-    // Emit event so UI reflects the changes
-    chatEvents.emit({ reason: 'save', ids: [newChatId] })
-
-    // Delete original from cloud (cloneChatWithNewId already deleted the local original)
     await cloudSync.deleteFromCloud(chatId)
-
-    return newChatId
   }
 
-  async removeChatFromProject(chatId: string): Promise<string> {
+  async removeChatFromProject(chatId: string): Promise<void> {
     await this.initialize()
 
-    // Clone the chat with a new ID and fresh timestamp
-    const newChatId = await indexedDBStorage.cloneChatWithNewId(chatId)
-    if (!newChatId) {
-      throw new Error('Failed to clone chat')
-    }
+    await indexedDBStorage.resetChatTimestamps(chatId)
+    await indexedDBStorage.updateChatProject(chatId, null)
 
-    // Remove the project association
-    await indexedDBStorage.updateChatProject(newChatId, null)
+    chatEvents.emit({ reason: 'save', ids: [chatId] })
 
-    // Emit event so UI reflects the changes
-    chatEvents.emit({ reason: 'save', ids: [newChatId] })
-
-    // Delete original from cloud and backup new chat
-    await cloudSync.deleteFromCloud(chatId)
-    await cloudSync.backupChat(newChatId)
-
-    return newChatId
+    // Update server-side project association, then re-upload the full encrypted blob
+    await cloudStorage.updateChatProject(chatId, null)
+    await cloudSync.backupChat(chatId)
   }
 }
 

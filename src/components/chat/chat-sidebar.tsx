@@ -80,9 +80,9 @@ type ChatSidebarProps = {
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>
   onCreateProject?: () => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
-  onRemoveChatFromProject?: (chatId: string) => Promise<string>
-  onConvertChatToCloud?: (chatId: string) => Promise<string>
-  onConvertChatToLocal?: (chatId: string) => Promise<string>
+  onRemoveChatFromProject?: (chatId: string) => Promise<void>
+  onConvertChatToCloud?: (chatId: string) => Promise<void>
+  onConvertChatToLocal?: (chatId: string) => Promise<void>
   onSettingsClick?: () => void
   windowWidth: number
 }
@@ -1293,16 +1293,14 @@ export function ChatSidebar({
                                       const chat = chats.find(
                                         (c) => c.id === chatId,
                                       )
-                                      let finalChatId = chatId
                                       if (
                                         chat?.isLocalOnly &&
                                         onConvertChatToCloud
                                       ) {
-                                        finalChatId =
-                                          await onConvertChatToCloud(chatId)
+                                        await onConvertChatToCloud(chatId)
                                       }
                                       await onMoveChatToProject(
-                                        finalChatId,
+                                        chatId,
                                         project.id,
                                       )
                                     }
@@ -1810,13 +1808,12 @@ export function ChatSidebar({
                       onMoveToProject={
                         onMoveChatToProject
                           ? async (chatId, projectId) => {
-                              // Check if this is a local chat that needs to be converted first
+                              // Convert local chat to cloud first if needed
                               const chat = chats.find((c) => c.id === chatId)
-                              let finalChatId = chatId
                               if (chat?.isLocalOnly && onConvertChatToCloud) {
-                                finalChatId = await onConvertChatToCloud(chatId)
+                                await onConvertChatToCloud(chatId)
                               }
-                              await onMoveChatToProject(finalChatId, projectId)
+                              await onMoveChatToProject(chatId, projectId)
                             }
                           : undefined
                       }
