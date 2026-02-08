@@ -1352,7 +1352,8 @@ export function ChatInterface({
     e.preventDefault()
     e.stopPropagation()
 
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+    const hasFiles = e.dataTransfer.types.includes('Files')
+    if (hasFiles && e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       dragCounterRef.current += 1
       if (dragCounterRef.current === 1) {
         setIsGlobalDragActive(true)
