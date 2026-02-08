@@ -181,8 +181,7 @@ export class CloudStorageService {
       throw new Error(`Failed to download chat: ${response.statusText}`)
     }
 
-    const encrypted = await response.json()
-    return JSON.stringify(encrypted)
+    return response.text()
   }
 
   async downloadChat(chatId: string): Promise<StoredChat | null> {

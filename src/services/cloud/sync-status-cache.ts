@@ -8,7 +8,7 @@ export class SyncStatusCache<T> {
   constructor(private storageKey: string) {}
 
   load(): T | null {
-    if (this.cached) return this.cached
+    if (this.cached !== null) return this.cached
     if (typeof window === 'undefined') return null
     try {
       const raw = localStorage.getItem(this.storageKey)
