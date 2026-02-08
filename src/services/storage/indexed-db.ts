@@ -527,15 +527,40 @@ export class IndexedDBStorage {
   }
 
   async resetChatTimestamps(chatId: string): Promise<void> {
-    const chat = await this.getChatInternal(chatId)
-    if (chat) {
-      const now = new Date().toISOString()
-      chat.createdAt = now
-      chat.updatedAt = now
-      chat.locallyModified = true
-      chat.syncedAt = undefined
-      await this.saveChatInternal(chat)
-    }
+    this.saveQueue = this.saveQueue
+      .catch((error) => {
+        logError('Previous save operation failed, recovering queue', error, {
+          component: 'IndexedDBStorage',
+          action: 'resetChatTimestamps.queueRecovery',
+        })
+      })
+      .then(async () => {
+        const db = await this.ensureDB()
+        const chat = await this.getChatInternal(chatId)
+
+        if (chat) {
+          return new Promise<void>((resolve, reject) => {
+            const transaction = db.transaction([CHATS_STORE], 'readwrite')
+            const store = transaction.objectStore(CHATS_STORE)
+
+            transaction.oncomplete = () => resolve()
+            transaction.onerror = () =>
+              reject(new Error('Failed to reset chat timestamps'))
+
+            const now = new Date().toISOString()
+            chat.createdAt = now
+            chat.updatedAt = now
+            chat.locallyModified = true
+            chat.syncedAt = undefined
+
+            const request = store.put(chat)
+
+            request.onerror = () =>
+              reject(new Error('Failed to reset chat timestamps'))
+          })
+        }
+      })
+    return this.saveQueue
   }
 
   async updateChatProject(
