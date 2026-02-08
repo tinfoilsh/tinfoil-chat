@@ -279,6 +279,7 @@ export class EncryptionService {
     this.currentKeyString = null
     this.fallbackKeyCache.clear()
     this.fallbackKeyStrings = []
+    this.fallbackKeyAddedCallbacks.clear()
     if (persist) {
       try {
         localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
