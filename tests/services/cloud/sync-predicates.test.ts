@@ -193,6 +193,45 @@ describe('Sync Predicates', () => {
       } as StoredChat
       expect(shouldIngestRemoteChat(remote, local)).toBe(true)
     })
+
+    it('returns false when local chat has unsynced modifications', () => {
+      const remote = {
+        id: 'test-chat-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      }
+      const local = {
+        ...baseChat,
+        locallyModified: true,
+        syncedAt: new Date('2024-01-01T00:00:00.000Z').getTime(),
+      } as StoredChat
+      expect(shouldIngestRemoteChat(remote, local)).toBe(false)
+    })
+
+    it('returns true when local chat has no unsynced modifications and remote is newer', () => {
+      const remote = {
+        id: 'test-chat-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      }
+      const local = {
+        ...baseChat,
+        locallyModified: false,
+        syncedAt: new Date('2024-01-01T00:00:00.000Z').getTime(),
+      } as StoredChat
+      expect(shouldIngestRemoteChat(remote, local)).toBe(true)
+    })
+
+    it('returns true for decryption-failed chat even if locallyModified', () => {
+      const remote = {
+        id: 'test-chat-1',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      }
+      const local = {
+        ...baseChat,
+        decryptionFailed: true,
+        locallyModified: true,
+      } as StoredChat
+      expect(shouldIngestRemoteChat(remote, local)).toBe(true)
+    })
   })
 
   describe('Combined scenarios', () => {
