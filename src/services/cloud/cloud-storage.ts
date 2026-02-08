@@ -328,6 +328,26 @@ export class CloudStorageService {
     }
   }
 
+  async getDeletedChatsSince(since: string): Promise<{ deletedIds: string[] }> {
+    const params = new URLSearchParams()
+    params.append('since', since)
+    params.append('_t', Date.now().toString())
+
+    const url = `${API_BASE_URL}/api/chats/deleted-since?${params.toString()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get deleted chats since: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
   async getChatsUpdatedSince(options: {
     since: string
     includeContent?: boolean
