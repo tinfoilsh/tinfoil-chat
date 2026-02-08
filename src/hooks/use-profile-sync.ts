@@ -1,6 +1,7 @@
 import { CLOUD_SYNC } from '@/config'
 import type { ProfileSyncStatus } from '@/services/cloud/cloud-storage'
 import { profileSync, type ProfileData } from '@/services/cloud/profile-sync'
+import { SyncStatusCache } from '@/services/cloud/sync-status-cache'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -15,33 +16,10 @@ export function useProfileSync() {
   const lastSyncedVersion = useRef<number>(0)
   const hasPendingChanges = useRef(false)
   const lastSyncedProfile = useRef<ProfileData | null>(null)
-  const cachedSyncStatus = useRef<ProfileSyncStatus | null>(null)
+  const profileSyncCache = useRef(
+    new SyncStatusCache<ProfileSyncStatus>(PROFILE_SYNC_STATUS_KEY),
+  )
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
-
-  // Load cached profile sync status
-  const loadCachedSyncStatus = useCallback((): ProfileSyncStatus | null => {
-    if (typeof window === 'undefined') return null
-    try {
-      const cached = localStorage.getItem(PROFILE_SYNC_STATUS_KEY)
-      if (cached) {
-        return JSON.parse(cached)
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null
-  }, [])
-
-  // Save profile sync status
-  const saveSyncStatus = useCallback((status: ProfileSyncStatus): void => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem(PROFILE_SYNC_STATUS_KEY, JSON.stringify(status))
-      cachedSyncStatus.current = status
-    } catch {
-      // Ignore storage errors
-    }
-  }, [])
 
   // Listen for cloud sync setting changes
   useEffect(() => {
@@ -387,7 +365,7 @@ export function useProfileSync() {
       }
 
       // Get cached status
-      const cached = cachedSyncStatus.current || loadCachedSyncStatus()
+      const cached = profileSyncCache.current.load()
 
       // Check if we need to sync
       const needsSync =
@@ -438,7 +416,7 @@ export function useProfileSync() {
         }
 
         // Update cached sync status only after successful processing
-        saveSyncStatus(remoteStatus)
+        profileSyncCache.current.save(remoteStatus)
       }
     } catch (error) {
       logError('Failed smart profile sync', error, {
@@ -446,13 +424,7 @@ export function useProfileSync() {
         action: 'smartSyncFromCloud',
       })
     }
-  }, [
-    isSignedIn,
-    loadCachedSyncStatus,
-    saveSyncStatus,
-    applySettingsToLocal,
-    hasProfileChanged,
-  ])
+  }, [isSignedIn, applySettingsToLocal, hasProfileChanged])
 
   // Sync profile from local to cloud (debounced)
   const syncToCloud = useCallback(async () => {
@@ -530,11 +502,8 @@ export function useProfileSync() {
       hasPendingChanges.current = false
       lastSyncedVersion.current = 0
       lastSyncedProfile.current = null
-      cachedSyncStatus.current = null
+      profileSyncCache.current.clear()
       profileSync.clearCache()
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem(PROFILE_SYNC_STATUS_KEY)
-      }
       return
     }
 
