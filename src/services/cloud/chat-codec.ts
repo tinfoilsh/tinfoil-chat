@@ -112,7 +112,7 @@ export async function processRemoteChat(
       lastAccessedAt: Date.now(),
       syncedAt: Date.now(),
       locallyModified: false,
-      syncVersion: decrypted.syncVersion || 1,
+      syncVersion: decrypted.syncVersion ?? 1,
       // Preserve or set project ID
       projectId: decrypted.projectId ?? effectiveProjectId,
     }

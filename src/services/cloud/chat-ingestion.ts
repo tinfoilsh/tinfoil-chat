@@ -126,7 +126,7 @@ export async function ingestRemoteChats(
         }
 
         await indexedDBStorage.saveChat(chat)
-        await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion || 0)
+        await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion ?? 0)
         result.savedIds.push(chat.id)
         result.downloaded++
       }

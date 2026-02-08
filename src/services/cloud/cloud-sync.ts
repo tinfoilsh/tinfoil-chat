@@ -433,7 +433,7 @@ export class CloudSyncService {
       await cloudStorage.uploadChat(chat)
 
       // Mark as synced with incremented version
-      const newVersion = (chat.syncVersion || 0) + 1
+      const newVersion = (chat.syncVersion ?? 0) + 1
       await indexedDBStorage.markAsSynced(chatId, newVersion)
     } catch (error) {
       // Silently fail if no auth token set
@@ -491,7 +491,7 @@ export class CloudSyncService {
 
           await cloudStorage.uploadChat(chat)
 
-          const newVersion = (chat.syncVersion || 0) + 1
+          const newVersion = (chat.syncVersion ?? 0) + 1
           await indexedDBStorage.markAsSynced(chat.id, newVersion)
           result.uploaded++
         } catch (error) {
