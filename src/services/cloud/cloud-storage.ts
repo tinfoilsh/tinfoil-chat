@@ -17,6 +17,7 @@ export interface ChatListResponse {
     messageCount: number
     size: number
     content?: string
+    projectId?: string
   }>
   nextContinuationToken?: string
   hasMore: boolean
@@ -361,6 +362,44 @@ export class CloudStorageService {
     if (!response.ok) {
       throw new Error(
         `Failed to get chats updated since: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
+  async getAllChatsSyncStatus(): Promise<ChatSyncStatus> {
+    const url = `${API_BASE_URL}/api/chats/all-sync-status?_t=${Date.now()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get all chats sync status: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
+  async getAllChatsUpdatedSince(options: {
+    since: string
+  }): Promise<ChatListResponse> {
+    const params = new URLSearchParams()
+    params.append('since', options.since)
+    params.append('_t', Date.now().toString())
+
+    const url = `${API_BASE_URL}/api/chats/all-updated-since?${params.toString()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get all chats updated since: ${response.statusText}`,
       )
     }
 
