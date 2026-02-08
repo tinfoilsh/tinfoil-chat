@@ -10,6 +10,7 @@ import { cloudStorage, type ChatSyncStatus } from './cloud-storage'
 import { projectStorage } from './project-storage'
 import { streamingTracker } from './streaming-tracker'
 import { isUploadableChat, shouldIngestRemoteChat } from './sync-predicates'
+import { SyncStatusCache } from './sync-status-cache'
 import { UploadCoalescer } from './upload-coalescer'
 
 export interface SyncResult {
@@ -46,8 +47,10 @@ export class CloudSyncService {
   private syncLockResolve: (() => void) | null = null
   private uploadCoalescer: UploadCoalescer
   private streamingCallbacks: Set<string> = new Set()
-  private lastSyncStatus: ChatSyncStatus | null = null
-  private projectSyncStatus: Map<string, ChatSyncStatus> = new Map()
+  private chatSyncCache = new SyncStatusCache<ChatSyncStatus>(
+    SYNC_STATUS_STORAGE_KEY,
+  )
+  private projectSyncCaches = new Map<string, SyncStatusCache<ChatSyncStatus>>()
 
   constructor() {
     // Initialize upload coalescer with doBackupChat as the upload function
@@ -64,16 +67,29 @@ export class CloudSyncService {
       window.addEventListener('storage', (e) => {
         if (e.key === SYNC_STATUS_STORAGE_KEY) {
           // Another tab updated sync status, invalidate our cache
-          this.lastSyncStatus = null
+          this.chatSyncCache.invalidate()
         } else if (e.key?.startsWith(PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX)) {
           // Another tab updated project sync status, invalidate that project's cache
           const projectId = e.key.slice(
             PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX.length,
           )
-          this.projectSyncStatus.delete(projectId)
+          this.getProjectSyncCache(projectId).invalidate()
         }
       })
     }
+  }
+
+  private getProjectSyncCache(
+    projectId: string,
+  ): SyncStatusCache<ChatSyncStatus> {
+    let cache = this.projectSyncCaches.get(projectId)
+    if (!cache) {
+      cache = new SyncStatusCache(
+        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
+      )
+      this.projectSyncCaches.set(projectId, cache)
+    }
+    return cache
   }
 
   /**
@@ -110,66 +126,6 @@ export class CloudSyncService {
         this.syncLockResolve()
         this.syncLockResolve = null
       }
-    }
-  }
-
-  // Load cached sync status from localStorage
-  private loadCachedSyncStatus(): ChatSyncStatus | null {
-    if (typeof window === 'undefined') return null
-    try {
-      const cached = localStorage.getItem(SYNC_STATUS_STORAGE_KEY)
-      if (cached) {
-        return JSON.parse(cached)
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null
-  }
-
-  // Save sync status to localStorage
-  private saveSyncStatus(status: ChatSyncStatus): void {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem(SYNC_STATUS_STORAGE_KEY, JSON.stringify(status))
-      this.lastSyncStatus = status
-    } catch {
-      // Ignore storage errors
-    }
-  }
-
-  // Load cached project sync status from localStorage
-  private loadCachedProjectSyncStatus(
-    projectId: string,
-  ): ChatSyncStatus | null {
-    if (typeof window === 'undefined') return null
-    try {
-      const cached = localStorage.getItem(
-        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
-      )
-      if (cached) {
-        return JSON.parse(cached)
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null
-  }
-
-  // Save project sync status to localStorage
-  private saveProjectSyncStatus(
-    projectId: string,
-    status: ChatSyncStatus,
-  ): void {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem(
-        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
-        JSON.stringify(status),
-      )
-      this.projectSyncStatus.set(projectId, status)
-    } catch {
-      // Ignore storage errors
     }
   }
 
@@ -211,9 +167,8 @@ export class CloudSyncService {
 
       // Get cached status
       const cachedStatus = projectId
-        ? this.projectSyncStatus.get(projectId) ||
-          this.loadCachedProjectSyncStatus(projectId)
-        : this.lastSyncStatus || this.loadCachedSyncStatus()
+        ? this.getProjectSyncCache(projectId).load()
+        : this.chatSyncCache.load()
 
       // If no cached status, we need a full sync
       if (!cachedStatus) {
@@ -299,7 +254,7 @@ export class CloudSyncService {
       result.errors.push(...backupResult.errors)
 
       // Get cached sync status to determine what changed
-      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+      const cachedStatus = this.chatSyncCache.load()
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync (first page only)
@@ -432,7 +387,7 @@ export class CloudSyncService {
       // Update cached sync status
       try {
         const newStatus = await cloudStorage.getChatSyncStatus()
-        this.saveSyncStatus(newStatus)
+        this.chatSyncCache.save(newStatus)
       } catch (statusError) {
         logError('Failed to update sync status', statusError, {
           component: 'CloudSync',
@@ -450,14 +405,7 @@ export class CloudSyncService {
 
   // Clear cached sync status (useful when logging out or resetting)
   clearSyncStatus(): void {
-    this.lastSyncStatus = null
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem(SYNC_STATUS_STORAGE_KEY)
-      } catch {
-        // Ignore storage errors
-      }
-    }
+    this.chatSyncCache.clear()
   }
 
   // Backup a single chat to the cloud with coalescing and retry
@@ -772,7 +720,7 @@ export class CloudSyncService {
       }
 
       // Delete local chats that were deleted on another device
-      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+      const cachedStatus = this.chatSyncCache.load()
       if (cachedStatus?.lastUpdated) {
         try {
           const { deletedIds } = await cloudStorage.getDeletedChatsSince(
@@ -799,7 +747,7 @@ export class CloudSyncService {
       // Update cached sync status after successful sync
       try {
         const newStatus = await cloudStorage.getChatSyncStatus()
-        this.saveSyncStatus(newStatus)
+        this.chatSyncCache.save(newStatus)
       } catch (statusError) {
         // Non-fatal: continue even if we can't update status
         logError('Failed to update sync status after full sync', statusError, {
@@ -855,9 +803,8 @@ export class CloudSyncService {
 
     // If we have a cached lastUpdated, use delta sync; otherwise fall back to full sync
     const cachedStatus = projectId
-      ? this.projectSyncStatus.get(projectId) ||
-        this.loadCachedProjectSyncStatus(projectId)
-      : this.lastSyncStatus || this.loadCachedSyncStatus()
+      ? this.getProjectSyncCache(projectId).load()
+      : this.chatSyncCache.load()
 
     if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
       return projectId
@@ -1423,7 +1370,7 @@ export class CloudSyncService {
       try {
         const newStatus =
           await projectStorage.getProjectChatsSyncStatus(projectId)
-        this.saveProjectSyncStatus(projectId, newStatus)
+        this.getProjectSyncCache(projectId).save(newStatus)
       } catch (statusError) {
         logError(
           'Failed to update project sync status after full sync',
@@ -1499,9 +1446,7 @@ export class CloudSyncService {
       }
 
       // Get cached sync status to determine what changed
-      const cachedStatus =
-        this.projectSyncStatus.get(projectId) ||
-        this.loadCachedProjectSyncStatus(projectId)
+      const cachedStatus = this.getProjectSyncCache(projectId).load()
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync
@@ -1546,7 +1491,7 @@ export class CloudSyncService {
           try {
             const newStatus =
               await projectStorage.getProjectChatsSyncStatus(projectId)
-            this.saveProjectSyncStatus(projectId, newStatus)
+            this.getProjectSyncCache(projectId).save(newStatus)
           } catch (statusError) {
             logError('Failed to update project sync status', statusError, {
               component: 'CloudSync',
@@ -1622,7 +1567,7 @@ export class CloudSyncService {
       try {
         const newStatus =
           await projectStorage.getProjectChatsSyncStatus(projectId)
-        this.saveProjectSyncStatus(projectId, newStatus)
+        this.getProjectSyncCache(projectId).save(newStatus)
       } catch (statusError) {
         logError('Failed to update project sync status', statusError, {
           component: 'CloudSync',
