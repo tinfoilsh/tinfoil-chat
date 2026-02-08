@@ -19,6 +19,7 @@ export interface StoredChat extends Chat {
   version?: number // Storage format version
   loadedAt?: number // Timestamp when chat was loaded from pagination
   isLocalOnly?: boolean // True if chat should never be synced to cloud (created when sync was disabled)
+  isBlankChat?: boolean // True for new chats that haven't been used yet (empty placeholders)
 }
 
 const DB_NAME = 'tinfoil-chat'
@@ -171,7 +172,7 @@ export class IndexedDBStorage {
     const db = await this.ensureDB()
 
     // Don't save blank chats to IndexedDB
-    if ((chat as any).isBlankChat === true) {
+    if ((chat as StoredChat).isBlankChat === true) {
       return
     }
 

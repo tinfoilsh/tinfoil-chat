@@ -547,7 +547,7 @@ export class CloudSyncService {
           action: 'backupChat',
           metadata: {
             chatId,
-            isBlankChat: (chat as any).isBlankChat,
+            isBlankChat: chat.isBlankChat,
             isLocalOnly: chat.isLocalOnly,
             decryptionFailed: chat.decryptionFailed,
             hasEncryptedData: !!chat.encryptedData,
@@ -1160,7 +1160,7 @@ export class CloudSyncService {
                 metadata: {
                   chatId: chat.id,
                   isLocalOnly: chat.isLocalOnly,
-                  isBlankChat: (chat as any).isBlankChat,
+                  isBlankChat: chat.isBlankChat,
                   decryptionFailed: chat.decryptionFailed,
                   hasEncryptedData: !!chat.encryptedData,
                   dataCorrupted: chat.dataCorrupted,
