@@ -18,6 +18,7 @@ export class EncryptionService {
   private fallbackKeyStrings: string[] = []
   private fallbackKeyCache: Map<string, CryptoKey> = new Map()
   private fallbackKeyAddedCallbacks: Set<FallbackKeyAddedCallback> = new Set()
+  private initPromise: Promise<unknown> | null = null
 
   // Helper to convert bytes to alphanumeric string (a-z, 0-9)
   // Always produces even-length strings (2 characters per byte)
@@ -383,7 +384,12 @@ export class EncryptionService {
 
   private async ensureInitialized(): Promise<void> {
     if (!this.encryptionKey) {
-      await this.initialize()
+      if (!this.initPromise) {
+        this.initPromise = this.initialize().finally(() => {
+          this.initPromise = null
+        })
+      }
+      await this.initPromise
     }
     if (!this.encryptionKey) {
       throw new Error('Encryption key not initialized')
