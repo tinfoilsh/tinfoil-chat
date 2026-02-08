@@ -17,7 +17,7 @@ import type { StoredChat } from '../storage/indexed-db'
 export interface RemoteChatData {
   id: string
   content?: string | null
-  createdAt: string
+  createdAt?: string
   updatedAt?: string | null
 }
 
