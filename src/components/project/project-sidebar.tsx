@@ -92,7 +92,7 @@ interface ProjectSidebarProps {
   deleteChat?: (chatId: string) => void
   updateChatTitle?: (chatId: string, newTitle: string) => void
   onEncryptionKeyClick?: () => void
-  onRemoveChatFromProject?: (chatId: string) => Promise<string>
+  onRemoveChatFromProject?: (chatId: string) => Promise<void>
   onAddChatToProject?: (chatId: string) => Promise<void>
   onMoveChatToProject?: (chatId: string, projectId: string) => Promise<void>
   projects?: ProjectOption[]

@@ -526,6 +526,18 @@ export class IndexedDBStorage {
     )
   }
 
+  async resetChatTimestamps(chatId: string): Promise<void> {
+    const chat = await this.getChatInternal(chatId)
+    if (chat) {
+      const now = new Date().toISOString()
+      chat.createdAt = now
+      chat.updatedAt = now
+      chat.locallyModified = true
+      chat.syncedAt = undefined
+      await this.saveChatInternal(chat)
+    }
+  }
+
   async updateChatProject(
     chatId: string,
     projectId: string | null,
