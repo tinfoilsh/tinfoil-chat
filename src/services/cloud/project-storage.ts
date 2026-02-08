@@ -54,7 +54,6 @@ export class ProjectStorageService {
       memory: [],
     }
 
-    await encryptionService.initialize()
     const encrypted = await encryptionService.encrypt(projectData)
 
     const response = await fetch(`${API_BASE_URL}/api/storage/project`, {
@@ -98,7 +97,6 @@ export class ProjectStorageService {
       memory: data.memory ?? existing.memory,
     }
 
-    await encryptionService.initialize()
     const encrypted = await encryptionService.encrypt(projectData)
 
     const response = await fetch(`${API_BASE_URL}/api/storage/project`, {
@@ -134,7 +132,6 @@ export class ProjectStorageService {
 
       const data = await response.json()
 
-      await encryptionService.initialize()
       const decrypted = (await encryptionService.decrypt(
         data.content,
       )) as ProjectData
@@ -263,7 +260,6 @@ export class ProjectStorageService {
   ): Promise<ProjectDocument> {
     const { documentId } = await this.generateDocumentId(projectId)
 
-    await encryptionService.initialize()
     const encrypted = await encryptionService.encrypt({
       content,
       filename,
@@ -323,7 +319,6 @@ export class ProjectStorageService {
 
       const data = await response.json()
 
-      await encryptionService.initialize()
       const decrypted = (await encryptionService.decrypt(data.content)) as {
         content: string
         filename?: string

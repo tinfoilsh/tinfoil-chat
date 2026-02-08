@@ -68,9 +68,6 @@ export class ProfileSyncService {
 
       const data = await response.json()
 
-      // Initialize encryption service
-      await encryptionService.initialize()
-
       // Try to decrypt the profile data
       try {
         const encrypted = JSON.parse(data.data)
@@ -155,9 +152,6 @@ export class ProfileSyncService {
         },
       })
 
-      // Initialize encryption service
-      await encryptionService.initialize()
-
       // Add metadata
       const profileWithMetadata: ProfileData = {
         ...profile,
@@ -238,7 +232,6 @@ export class ProfileSyncService {
     }
 
     try {
-      await encryptionService.initialize()
       const encrypted = JSON.parse(this.failedDecryptionData)
       const decrypted = await encryptionService.decrypt(encrypted)
 
