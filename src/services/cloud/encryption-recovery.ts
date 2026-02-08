@@ -23,7 +23,7 @@ export async function retryDecryptionWithNewKey(
   // Ensure batchSize is a positive integer, default to 5 if invalid
   const batchSize = Math.max(1, Math.floor(options.batchSize || 5))
   let decryptedCount = 0
-  let chatsWithEncryptedData: any[] = []
+  let chatsWithEncryptedData: StoredChat[] = []
 
   try {
     // Get all chats that have encrypted data
@@ -39,7 +39,7 @@ export async function retryDecryptionWithNewKey(
       const batchPromises = batch.map(async (chat) => {
         try {
           // Parse the stored encrypted data
-          const encryptedData = JSON.parse(chat.encryptedData)
+          const encryptedData = JSON.parse(chat.encryptedData!)
 
           // Decrypt the chat data
           const decryptedData = await encryptionService.decrypt(encryptedData)

@@ -5,7 +5,10 @@ import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { processRemoteChat } from './chat-codec'
 import { ingestRemoteChats, syncRemoteDeletions } from './chat-ingestion'
 import { cloudStorage, type ChatSyncStatus } from './cloud-storage'
-import * as encryptionRecovery from './encryption-recovery'
+import {
+  reencryptAndUploadChats as doReencryptAndUpload,
+  retryDecryptionWithNewKey as doRetryDecryption,
+} from './encryption-recovery'
 import { projectStorage } from './project-storage'
 import { streamingTracker } from './streaming-tracker'
 import { isUploadableChat } from './sync-predicates'
@@ -811,7 +814,7 @@ export class CloudSyncService {
       batchSize?: number
     } = {},
   ): Promise<number> {
-    return encryptionRecovery.retryDecryptionWithNewKey(options)
+    return doRetryDecryption(options)
   }
 
   // Re-encrypt all local chats with new key and upload to cloud
@@ -820,7 +823,7 @@ export class CloudSyncService {
     uploaded: number
     errors: string[]
   }> {
-    return encryptionRecovery.reencryptAndUploadChats()
+    return doReencryptAndUpload()
   }
 
   // Fetch a page of remote chats, decrypt, persist to IndexedDB, and return pagination info
