@@ -333,92 +333,103 @@ export class CloudSyncService {
           action: 'syncChangedChats',
           metadata: { since: cachedStatus.lastUpdated },
         })
-        // Update the cached status with current time to track this sync
+      } else {
+        logInfo(`Syncing ${remoteConversations.length} changed chats`, {
+          component: 'CloudSync',
+          action: 'syncChangedChats',
+          metadata: { since: cachedStatus.lastUpdated },
+        })
+
+        // Initialize encryption service once before processing
+        await encryptionService.initialize()
+
+        // Process updated remote chats
+        const savedIds: string[] = []
+        for (const remoteChat of remoteConversations) {
+          // Skip if this chat was recently deleted
+          if (deletedChatsTracker.isDeleted(remoteChat.id)) {
+            continue
+          }
+
+          try {
+            let downloadedChat: StoredChat | null = null
+
+            if (remoteChat.content) {
+              // Use centralized chat codec for decryption/placeholder logic
+              const localChat = await indexedDBStorage.getChat(remoteChat.id)
+              const codecResult = await processRemoteChat(remoteChat, {
+                localChat,
+              })
+              downloadedChat = codecResult.chat
+            } else {
+              // No inline content - fetch via downloadChat (handles its own decryption)
+              downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
+              if (downloadedChat) {
+                downloadedChat.createdAt = ensureValidISODate(
+                  downloadedChat.createdAt ?? remoteChat.createdAt,
+                  remoteChat.id,
+                )
+                downloadedChat.updatedAt = ensureValidISODate(
+                  downloadedChat.updatedAt ??
+                    remoteChat.updatedAt ??
+                    remoteChat.createdAt,
+                  remoteChat.id,
+                )
+                downloadedChat.lastAccessedAt = Date.now()
+                downloadedChat.syncedAt = Date.now()
+                downloadedChat.locallyModified = false
+                downloadedChat.syncVersion = downloadedChat.syncVersion || 1
+                // Preserve project association from local chat if decryption failed
+                if (downloadedChat.decryptionFailed) {
+                  const localChat = await indexedDBStorage.getChat(
+                    remoteChat.id,
+                  )
+                  if (localChat?.projectId) {
+                    downloadedChat.projectId = localChat.projectId
+                  }
+                }
+              }
+            }
+
+            if (downloadedChat) {
+              await indexedDBStorage.saveChat(downloadedChat)
+              await indexedDBStorage.markAsSynced(
+                downloadedChat.id,
+                downloadedChat.syncVersion || 0,
+              )
+              savedIds.push(downloadedChat.id)
+              result.downloaded++
+            }
+          } catch (error) {
+            result.errors.push(
+              `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        }
+
+        if (savedIds.length > 0) {
+          chatEvents.emit({ reason: 'sync', ids: savedIds })
+        }
+      }
+
+      // Delete local chats that were deleted on another device
+      if (cachedStatus?.lastUpdated) {
         try {
-          const newStatus = await cloudStorage.getChatSyncStatus()
-          this.saveSyncStatus(newStatus)
-        } catch (statusError) {
-          logError('Failed to update sync status', statusError, {
+          const { deletedIds } = await cloudStorage.getDeletedChatsSince(
+            cachedStatus.lastUpdated,
+          )
+          for (const id of deletedIds) {
+            await indexedDBStorage.deleteChat(id)
+          }
+          if (deletedIds.length > 0) {
+            chatEvents.emit({ reason: 'sync', ids: deletedIds })
+          }
+        } catch (error) {
+          logError('Failed to check for remotely deleted chats', error, {
             component: 'CloudSync',
             action: 'syncChangedChats',
           })
         }
-        return result
-      }
-
-      logInfo(`Syncing ${remoteConversations.length} changed chats`, {
-        component: 'CloudSync',
-        action: 'syncChangedChats',
-        metadata: { since: cachedStatus.lastUpdated },
-      })
-
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
-      // Process updated remote chats
-      const savedIds: string[] = []
-      for (const remoteChat of remoteConversations) {
-        // Skip if this chat was recently deleted
-        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
-          continue
-        }
-
-        try {
-          let downloadedChat: StoredChat | null = null
-
-          if (remoteChat.content) {
-            // Use centralized chat codec for decryption/placeholder logic
-            const localChat = await indexedDBStorage.getChat(remoteChat.id)
-            const codecResult = await processRemoteChat(remoteChat, {
-              localChat,
-            })
-            downloadedChat = codecResult.chat
-          } else {
-            // No inline content - fetch via downloadChat (handles its own decryption)
-            downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
-            if (downloadedChat) {
-              downloadedChat.createdAt = ensureValidISODate(
-                downloadedChat.createdAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              downloadedChat.updatedAt = ensureValidISODate(
-                downloadedChat.updatedAt ??
-                  remoteChat.updatedAt ??
-                  remoteChat.createdAt,
-                remoteChat.id,
-              )
-              downloadedChat.lastAccessedAt = Date.now()
-              downloadedChat.syncedAt = Date.now()
-              downloadedChat.locallyModified = false
-              downloadedChat.syncVersion = downloadedChat.syncVersion || 1
-              // Preserve project association from local chat if decryption failed
-              if (downloadedChat.decryptionFailed) {
-                const localChat = await indexedDBStorage.getChat(remoteChat.id)
-                if (localChat?.projectId) {
-                  downloadedChat.projectId = localChat.projectId
-                }
-              }
-            }
-          }
-
-          if (downloadedChat) {
-            await indexedDBStorage.saveChat(downloadedChat)
-            await indexedDBStorage.markAsSynced(
-              downloadedChat.id,
-              downloadedChat.syncVersion || 0,
-            )
-            savedIds.push(downloadedChat.id)
-            result.downloaded++
-          }
-        } catch (error) {
-          result.errors.push(
-            `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-          )
-        }
-      }
-
-      if (savedIds.length > 0) {
-        chatEvents.emit({ reason: 'sync', ids: savedIds })
       }
 
       // Update cached sync status
@@ -720,7 +731,9 @@ export class CloudSyncService {
 
             if (remoteChat.content) {
               // Use centralized chat codec for decryption/placeholder logic
-              const codecResult = await processRemoteChat(remoteChat, { localChat })
+              const codecResult = await processRemoteChat(remoteChat, {
+                localChat,
+              })
               downloadedChat = codecResult.chat
             } else {
               // No inline content - fetch via downloadChat (handles its own decryption)
@@ -766,9 +779,26 @@ export class CloudSyncService {
         }
       }
 
-      // Since we're only syncing the first page, we can't determine if chats
-      // were deleted remotely (they might just be on page 2+)
-      // Deletion tracking would require fetching all pages, which we're avoiding for performance
+      // Delete local chats that were deleted on another device
+      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+      if (cachedStatus?.lastUpdated) {
+        try {
+          const { deletedIds } = await cloudStorage.getDeletedChatsSince(
+            cachedStatus.lastUpdated,
+          )
+          for (const id of deletedIds) {
+            await indexedDBStorage.deleteChat(id)
+          }
+          if (deletedIds.length > 0) {
+            chatEvents.emit({ reason: 'sync', ids: deletedIds })
+          }
+        } catch (error) {
+          logError('Failed to check for remotely deleted chats', error, {
+            component: 'CloudSync',
+            action: 'syncAllChats',
+          })
+        }
+      }
 
       if (savedIds.length > 0) {
         chatEvents.emit({ reason: 'sync', ids: savedIds })
