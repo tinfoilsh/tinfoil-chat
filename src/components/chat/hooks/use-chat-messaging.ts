@@ -488,10 +488,14 @@ export function useChatMessaging({
       if (isFirstMessage && userMessage) {
         const titleModel = models.find((m) => m.type === 'title')
         if (titleModel) {
-          earlyTitlePromiseRef.current = generateTitle(
+          const titlePromise = generateTitle(
             [{ role: 'user', content: userMessage.content || '' }],
             titleModel.modelName,
           )
+          // Prevent unhandled rejection if streaming exits early and the
+          // promise is never awaited (e.g. abort, navigation, empty response)
+          titlePromise.catch(() => {})
+          earlyTitlePromiseRef.current = titlePromise
         }
       }
 
