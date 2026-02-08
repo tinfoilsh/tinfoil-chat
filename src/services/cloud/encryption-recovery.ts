@@ -120,6 +120,10 @@ export async function reencryptAndUploadChats(): Promise<{
       metadata: { totalChats: allChats.length },
     })
 
+    if (!(await cloudStorage.isAuthenticated())) {
+      return result
+    }
+
     for (const chat of allChats) {
       try {
         // Use centralized predicate for upload eligibility
@@ -142,38 +146,29 @@ export async function reencryptAndUploadChats(): Promise<{
           continue
         }
 
-        // For encrypted chats, they need to be decrypted first (handled by isUploadableChat above)
-        // For decrypted chats, we can directly work with them
-        let chatToReencrypt = chat
-
         // Re-encrypt the chat with the new key by forcing a sync
         // The sync process will automatically encrypt with the current key
-        if (await cloudStorage.isAuthenticated()) {
-          // Increment sync version to force upload
-          chatToReencrypt.syncVersion = (chatToReencrypt.syncVersion || 0) + 1
+        // Increment sync version to force upload
+        chat.syncVersion = (chat.syncVersion || 0) + 1
 
-          // Save locally with new sync version
-          await indexedDBStorage.saveChat(chatToReencrypt)
+        // Save locally with new sync version
+        await indexedDBStorage.saveChat(chat)
 
-          // Upload to cloud (will be encrypted with new key)
-          await cloudStorage.uploadChat(chatToReencrypt)
+        // Upload to cloud (will be encrypted with new key)
+        await cloudStorage.uploadChat(chat)
 
-          await indexedDBStorage.markAsSynced(
-            chatToReencrypt.id,
-            chatToReencrypt.syncVersion || 0,
-          )
-          result.uploaded++
-          result.reencrypted++
+        await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion || 0)
+        result.uploaded++
+        result.reencrypted++
 
-          logInfo('Chat re-encrypted and uploaded', {
-            component: 'CloudSync',
-            action: 'reencryptAndUploadChats',
-            metadata: {
-              chatId: chatToReencrypt.id,
-              syncVersion: chatToReencrypt.syncVersion,
-            },
-          })
-        }
+        logInfo('Chat re-encrypted and uploaded', {
+          component: 'CloudSync',
+          action: 'reencryptAndUploadChats',
+          metadata: {
+            chatId: chat.id,
+            syncVersion: chat.syncVersion,
+          },
+        })
       } catch (error) {
         const errorMsg = `Failed to re-encrypt chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`
         result.errors.push(errorMsg)
