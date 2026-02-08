@@ -100,18 +100,16 @@ export class CloudSyncService {
   /**
    * Execute a function with sync lock protection.
    * Only one sync operation can run at a time.
-   * Returns null if a sync is already in progress.
+   * Throws if a sync is already in progress.
    */
-  private async withSyncLock<T>(
-    fn: () => Promise<T>,
-  ): Promise<{ result: T; skipped: false } | { result: null; skipped: true }> {
+  private async withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
     // Check if sync is already in progress (atomic check)
     if (this.syncLock) {
       logInfo('[CloudSync] Sync already in progress, skipping', {
         component: 'CloudSync',
         action: 'withSyncLock',
       })
-      return { result: null, skipped: true }
+      throw new Error('Sync already in progress')
     }
 
     // Acquire lock
@@ -122,8 +120,7 @@ export class CloudSyncService {
     this.syncLockResolve = resolve!
 
     try {
-      const result = await fn()
-      return { result, skipped: false }
+      return await fn()
     } finally {
       // Release lock
       this.syncLock = null
@@ -236,13 +233,7 @@ export class CloudSyncService {
 
   // Perform a delta sync - only fetch chats that changed since last sync
   async syncChangedChats(): Promise<SyncResult> {
-    const lockResult = await this.withSyncLock(() => this.doSyncChangedChats())
-
-    if (lockResult.skipped) {
-      throw new Error('Sync already in progress')
-    }
-
-    return lockResult.result
+    return this.withSyncLock(() => this.doSyncChangedChats())
   }
 
   private async doSyncChangedChats(): Promise<SyncResult> {
@@ -522,13 +513,7 @@ export class CloudSyncService {
 
   // Sync all chats (upload local changes, download remote changes)
   async syncAllChats(): Promise<SyncResult> {
-    const lockResult = await this.withSyncLock(() => this.doSyncAllChats())
-
-    if (lockResult.skipped) {
-      throw new Error('Sync already in progress')
-    }
-
-    return lockResult.result
+    return this.withSyncLock(() => this.doSyncAllChats())
   }
 
   private async doSyncAllChats(): Promise<SyncResult> {
@@ -874,15 +859,7 @@ export class CloudSyncService {
    * This fetches project-specific chats using the /api/projects/{projectId}/chats endpoint.
    */
   async syncProjectChats(projectId: string): Promise<SyncResult> {
-    const lockResult = await this.withSyncLock(() =>
-      this.doSyncProjectChats(projectId),
-    )
-
-    if (lockResult.skipped) {
-      throw new Error('Sync already in progress')
-    }
-
-    return lockResult.result
+    return this.withSyncLock(() => this.doSyncProjectChats(projectId))
   }
 
   private async doSyncProjectChats(projectId: string): Promise<SyncResult> {
@@ -975,15 +952,7 @@ export class CloudSyncService {
    * Perform a delta sync for project chats - only fetch chats that changed since last sync.
    */
   async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
-    const lockResult = await this.withSyncLock(() =>
-      this.doSyncProjectChatsChanged(projectId),
-    )
-
-    if (lockResult.skipped) {
-      throw new Error('Sync already in progress')
-    }
-
-    return lockResult.result
+    return this.withSyncLock(() => this.doSyncProjectChatsChanged(projectId))
   }
 
   private async doSyncProjectChatsChanged(
