@@ -1,5 +1,6 @@
 import { PAGINATION } from '@/config'
 import { logError, logInfo } from '@/utils/error-handling'
+import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { processRemoteChat } from './chat-codec'
@@ -35,6 +36,7 @@ export interface SyncStatusResult {
 }
 
 const SYNC_STATUS_STORAGE_KEY = 'tinfoil-chat-sync-status'
+const ALL_CHATS_SYNC_STATUS_STORAGE_KEY = 'tinfoil-all-chats-sync-status'
 const PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX =
   'tinfoil-project-chat-sync-status-'
 
@@ -51,6 +53,9 @@ export class CloudSyncService {
   private streamingCallbacks: Set<string> = new Set()
   private chatSyncCache = new SyncStatusCache<ChatSyncStatus>(
     SYNC_STATUS_STORAGE_KEY,
+  )
+  private allChatsSyncCache = new SyncStatusCache<ChatSyncStatus>(
+    ALL_CHATS_SYNC_STATUS_STORAGE_KEY,
   )
   private projectSyncCaches = new Map<string, SyncStatusCache<ChatSyncStatus>>()
 
@@ -70,6 +75,8 @@ export class CloudSyncService {
         if (e.key === SYNC_STATUS_STORAGE_KEY) {
           // Another tab updated sync status, invalidate our cache
           this.chatSyncCache.invalidate()
+        } else if (e.key === ALL_CHATS_SYNC_STATUS_STORAGE_KEY) {
+          this.allChatsSyncCache.invalidate()
         } else if (e.key?.startsWith(PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX)) {
           // Another tab updated project sync status, invalidate that project's cache
           const projectId = e.key.slice(
@@ -231,6 +238,89 @@ export class CloudSyncService {
     }
   }
 
+  /**
+   * Detect and apply cross-scope changes (chats moving between projects or becoming unassigned).
+   * Uses the unscoped all-updated-since endpoint to find chats whose projectId changed.
+   */
+  private async syncCrossScope(result: SyncResult): Promise<void> {
+    try {
+      const cachedAllStatus = this.allChatsSyncCache.load()
+
+      const remoteAllStatus = await cloudStorage.getAllChatsSyncStatus()
+
+      // If nothing changed globally, skip
+      if (
+        cachedAllStatus &&
+        remoteAllStatus.count === cachedAllStatus.count &&
+        remoteAllStatus.lastUpdated === cachedAllStatus.lastUpdated
+      ) {
+        this.allChatsSyncCache.save(remoteAllStatus)
+        return
+      }
+
+      // If we have no cached status, save current and return (first run baseline)
+      if (!cachedAllStatus?.lastUpdated) {
+        this.allChatsSyncCache.save(remoteAllStatus)
+        return
+      }
+
+      const allUpdated = await cloudStorage.getAllChatsUpdatedSince({
+        since: cachedAllStatus.lastUpdated,
+      })
+
+      const remoteChats = allUpdated.conversations || []
+      if (remoteChats.length === 0) {
+        this.allChatsSyncCache.save(remoteAllStatus)
+        return
+      }
+
+      logInfo(
+        `Cross-scope sync: processing ${remoteChats.length} changed chats`,
+        {
+          component: 'CloudSync',
+          action: 'syncCrossScope',
+        },
+      )
+
+      const changedIds: string[] = []
+
+      for (const remoteChat of remoteChats) {
+        const localChat = await indexedDBStorage.getChat(remoteChat.id)
+
+        const remoteProjectId = remoteChat.projectId ?? undefined
+        const localProjectId = localChat?.projectId ?? undefined
+
+        if (localChat && remoteProjectId !== localProjectId) {
+          // Project assignment changed — update local state
+          await indexedDBStorage.updateChatProject(
+            remoteChat.id,
+            remoteChat.projectId ?? null,
+          )
+          changedIds.push(remoteChat.id)
+        } else if (!localChat && remoteChat.content) {
+          // New chat we don't have locally — ingest it
+          const ingestResult = await ingestRemoteChats([remoteChat], {
+            fetchMissingContent: true,
+          })
+          result.downloaded += ingestResult.downloaded
+          result.errors.push(...ingestResult.errors)
+          changedIds.push(...ingestResult.savedIds)
+        }
+      }
+
+      if (changedIds.length > 0) {
+        chatEvents.emit({ reason: 'sync', ids: changedIds })
+      }
+
+      this.allChatsSyncCache.save(remoteAllStatus)
+    } catch (error) {
+      logError('Failed to sync cross-scope changes', error, {
+        component: 'CloudSync',
+        action: 'syncCrossScope',
+      })
+    }
+  }
+
   // Perform a delta sync - only fetch chats that changed since last sync
   async syncChangedChats(): Promise<SyncResult> {
     return this.withSyncLock(() => this.doSyncChangedChats())
@@ -313,6 +403,9 @@ export class CloudSyncService {
           action: 'syncChangedChats',
         })
       }
+
+      // Detect cross-scope moves (chats moving between projects)
+      await this.syncCrossScope(result)
     } catch (error) {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -325,6 +418,7 @@ export class CloudSyncService {
   // Clear cached sync status (useful when logging out or resetting)
   clearSyncStatus(): void {
     this.chatSyncCache.clear()
+    this.allChatsSyncCache.clear()
   }
 
   // Backup a single chat to the cloud with coalescing and retry
@@ -587,6 +681,9 @@ export class CloudSyncService {
           action: 'syncAllChats',
         })
       }
+
+      // Detect cross-scope moves (chats moving between projects)
+      await this.syncCrossScope(result)
     } catch (error) {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
