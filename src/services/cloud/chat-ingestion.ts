@@ -100,8 +100,8 @@ export async function ingestRemoteChats(
         chatContent = await cloudStorage.fetchRawChatContent(remoteChat.id)
       }
 
-      // Skip if still no content and we're not fetching missing content
-      if (!chatContent && !fetchMissingContent) {
+      // Skip if no content available (either not requested or fetch returned nothing)
+      if (!chatContent) {
         continue
       }
 
