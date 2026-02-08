@@ -11,7 +11,6 @@
  */
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { logError } from '@/utils/error-handling'
-import { CONSTANTS } from '../constants'
 import type {
   Annotation,
   Chat,
@@ -68,8 +67,6 @@ export interface StreamingContext {
   setLoadingState: (s: 'idle' | 'loading') => void
   storeHistory: boolean
   startingChatId: string // Capture the chat ID at the start of the query
-  onEarlyTitleGeneration?: (content: string) => void // Callback for early title generation
-  titleGeneratedRef?: React.MutableRefObject<boolean> // Track if title was already generated
 }
 
 export interface StreamingHandlers {
@@ -121,31 +118,12 @@ export async function processStreamingResponse(
     let initialContentBuffer = ''
     let sseBuffer = ''
     let isUsingReasoningFormat = false
-    let earlyTitleTriggered = false
     let webSearchState: WebSearchState | undefined = undefined
     let collectedSources: WebSearchSource[] = []
     let collectedAnnotations: Annotation[] = []
     let searchReasoning = ''
     let webSearchStarted = false
     let thinkingStarted = false
-
-    // Helper to check word count and trigger early title generation
-    const checkForEarlyTitleGeneration = (content: string) => {
-      if (
-        earlyTitleTriggered ||
-        !ctx.isFirstMessage ||
-        !ctx.onEarlyTitleGeneration ||
-        ctx.updatedChat.title !== 'Untitled'
-      ) {
-        return
-      }
-
-      const wordCount = content.split(/\s+/).filter(Boolean).length
-      if (wordCount >= CONSTANTS.TITLE_GENERATION_WORD_THRESHOLD) {
-        earlyTitleTriggered = true
-        ctx.onEarlyTitleGeneration(content)
-      }
-    }
 
     // Process citations for display during streaming
     const getMessageWithCitations = (): Message => {
@@ -540,7 +518,6 @@ export async function processStreamingResponse(
               content: (assistantMessage.content || '') + content,
               isThinking: false,
             }
-            checkForEarlyTitleGeneration(assistantMessage.content || '')
             if (isSameChat()) {
               scheduleStreamingUpdate()
             }
@@ -710,7 +687,6 @@ export async function processStreamingResponse(
                 content: (assistantMessage.content || '') + content,
                 isThinking: false,
               }
-              checkForEarlyTitleGeneration(assistantMessage.content || '')
               if (isSameChat()) {
                 scheduleStreamingUpdate()
               }
