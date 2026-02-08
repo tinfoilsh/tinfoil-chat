@@ -707,8 +707,6 @@ export class CloudSyncService {
 
       // Create maps for easy lookup
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
-      const remoteChatMap = new Map(remoteConversations.map((c) => [c.id, c]))
-
       // Process remote chats
       const savedIds: string[] = []
       for (const remoteChat of remoteConversations) {
