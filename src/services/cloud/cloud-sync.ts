@@ -1,5 +1,4 @@
 import { PAGINATION } from '@/config'
-import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from '../storage/chat-events'
@@ -304,44 +303,17 @@ export class CloudSyncService {
           }
 
           try {
-            let downloadedChat: StoredChat | null = null
+            // Fetch raw content if not inline
+            const chatContent =
+              remoteChat.content ??
+              (await cloudStorage.fetchRawChatContent(remoteChat.id))
 
-            if (remoteChat.content) {
-              // Use centralized chat codec for decryption/placeholder logic
-              const localChat = await indexedDBStorage.getChat(remoteChat.id)
-              const codecResult = await processRemoteChat(remoteChat, {
-                localChat,
-              })
-              downloadedChat = codecResult.chat
-            } else {
-              // No inline content - fetch via downloadChat (handles its own decryption)
-              downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
-              if (downloadedChat) {
-                downloadedChat.createdAt = ensureValidISODate(
-                  downloadedChat.createdAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                downloadedChat.updatedAt = ensureValidISODate(
-                  downloadedChat.updatedAt ??
-                    remoteChat.updatedAt ??
-                    remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                downloadedChat.lastAccessedAt = Date.now()
-                downloadedChat.syncedAt = Date.now()
-                downloadedChat.locallyModified = false
-                downloadedChat.syncVersion = downloadedChat.syncVersion || 1
-                // Preserve project association from local chat if decryption failed
-                if (downloadedChat.decryptionFailed) {
-                  const localChat = await indexedDBStorage.getChat(
-                    remoteChat.id,
-                  )
-                  if (localChat?.projectId) {
-                    downloadedChat.projectId = localChat.projectId
-                  }
-                }
-              }
-            }
+            const localChat = await indexedDBStorage.getChat(remoteChat.id)
+            const codecResult = await processRemoteChat(
+              { ...remoteChat, content: chatContent },
+              { localChat },
+            )
+            const downloadedChat = codecResult.chat
 
             if (downloadedChat) {
               await indexedDBStorage.saveChat(downloadedChat)
@@ -667,40 +639,16 @@ export class CloudSyncService {
         // Use centralized predicate to determine if we should ingest this remote chat
         if (shouldIngestRemoteChat(remoteChat, localChat)) {
           try {
-            let downloadedChat: StoredChat | null = null
+            // Fetch raw content if not inline
+            const chatContent =
+              remoteChat.content ??
+              (await cloudStorage.fetchRawChatContent(remoteChat.id))
 
-            if (remoteChat.content) {
-              // Use centralized chat codec for decryption/placeholder logic
-              const codecResult = await processRemoteChat(remoteChat, {
-                localChat,
-              })
-              downloadedChat = codecResult.chat
-            } else {
-              // No inline content - fetch via downloadChat (handles its own decryption)
-              downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
-              if (downloadedChat) {
-                const safeCreatedAt = ensureValidISODate(
-                  downloadedChat.createdAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                const safeUpdatedAt = ensureValidISODate(
-                  downloadedChat.updatedAt ??
-                    remoteChat.updatedAt ??
-                    remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                downloadedChat.createdAt = safeCreatedAt
-                downloadedChat.updatedAt = safeUpdatedAt
-                downloadedChat.lastAccessedAt = Date.now()
-                downloadedChat.syncedAt = Date.now()
-                downloadedChat.locallyModified = false
-                downloadedChat.syncVersion = downloadedChat.syncVersion || 1
-                // Preserve project association from local chat if decryption failed
-                if (downloadedChat.decryptionFailed && localChat?.projectId) {
-                  downloadedChat.projectId = localChat.projectId
-                }
-              }
-            }
+            const codecResult = await processRemoteChat(
+              { ...remoteChat, content: chatContent },
+              { localChat },
+            )
+            const downloadedChat = codecResult.chat
 
             if (downloadedChat) {
               await indexedDBStorage.saveChat(downloadedChat)
@@ -1192,30 +1140,16 @@ export class CloudSyncService {
       // Process chats in parallel for performance
       const processPromises = conversations.map(async (remoteChat) => {
         try {
-          let chat: StoredChat | null = null
+          // Fetch raw content if not inline
+          const chatContent =
+            remoteChat.content ??
+            (await cloudStorage.fetchRawChatContent(remoteChat.id))
 
-          if (remoteChat.content) {
-            // Use centralized chat codec for decryption/placeholder logic
-            const result = await processRemoteChat(remoteChat)
-            chat = result.chat
-          } else {
-            // Fallback: download content by ID (should be rare when includeContent is true)
-            chat = await cloudStorage.downloadChat(remoteChat.id)
-            if (chat) {
-              chat.createdAt = ensureValidISODate(
-                chat.createdAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              chat.updatedAt = ensureValidISODate(
-                chat.updatedAt ?? remoteChat.updatedAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              chat.lastAccessedAt = Date.now()
-              chat.syncedAt = Date.now()
-              chat.locallyModified = false
-              chat.syncVersion = chat.syncVersion || 1
-            }
-          }
+          const codecResult = await processRemoteChat({
+            ...remoteChat,
+            content: chatContent,
+          })
+          const chat = codecResult.chat
 
           if (chat) {
             // Mark as loaded via pagination for local sort heuristics

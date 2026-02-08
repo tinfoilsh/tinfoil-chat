@@ -1,8 +1,8 @@
-import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
 import { DB_VERSION, type StoredChat } from '../storage/indexed-db'
+import { processRemoteChat, type RemoteChatData } from './chat-codec'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -161,48 +161,46 @@ export class CloudStorageService {
     return response.json()
   }
 
+  /**
+   * Fetch raw encrypted content for a single chat by ID.
+   * Returns the raw JSON string, or null if not found.
+   */
+  async fetchRawChatContent(chatId: string): Promise<string | null> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/conversation/${chatId}`,
+      {
+        headers: await this.getHeaders(),
+      },
+    )
+
+    if (response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to download chat: ${response.statusText}`)
+    }
+
+    const encrypted = await response.json()
+    return JSON.stringify(encrypted)
+  }
+
   async downloadChat(chatId: string): Promise<StoredChat | null> {
     try {
-      // Download encrypted data directly from backend
-      const response = await fetch(
-        `${API_BASE_URL}/api/storage/conversation/${chatId}`,
-        {
-          headers: await this.getHeaders(),
-        },
-      )
+      const rawContent = await this.fetchRawChatContent(chatId)
 
-      if (response.status === 404) {
+      if (rawContent === null) {
         return null
       }
 
-      if (!response.ok) {
-        throw new Error(`Failed to download chat: ${response.statusText}`)
+      const remote: RemoteChatData = {
+        id: chatId,
+        content: rawContent,
+        createdAt: new Date().toISOString(),
       }
 
-      const encrypted = await response.json()
-
-      // Try to decrypt the chat data
-      try {
-        const decrypted = await encryptionService.decrypt(encrypted)
-        return decrypted
-      } catch (decryptError) {
-        // If decryption fails, store the encrypted data for later retry
-        const safeCreatedAt = ensureValidISODate(undefined, chatId)
-
-        return {
-          id: chatId,
-          title: 'Encrypted',
-          messages: [],
-          createdAt: safeCreatedAt,
-          updatedAt: new Date().toISOString(),
-          lastAccessedAt: Date.now(),
-          decryptionFailed: true,
-          encryptedData: JSON.stringify(encrypted),
-          syncedAt: Date.now(),
-          locallyModified: false,
-          syncVersion: 1,
-        } as StoredChat
-      }
+      const result = await processRemoteChat(remote)
+      return result.chat
     } catch (error) {
       logError(`Failed to download chat ${chatId}`, error, {
         component: 'CloudStorage',
