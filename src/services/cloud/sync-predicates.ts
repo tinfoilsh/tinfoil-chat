@@ -62,7 +62,7 @@ export function isUploadableChat(
  * A remote chat should be ingested if:
  * - No local version exists
  * - Local version failed decryption (retry with potentially new key)
- * - Remote version is newer than local version
+ * - Remote version is newer than local version AND local has no unsynced modifications
  *
  * @param remote The remote chat metadata
  * @param local The local chat (if exists)
@@ -81,6 +81,11 @@ export function shouldIngestRemoteChat(
   // (user may have added a new decryption key)
   if (local.decryptionFailed || local.encryptedData) {
     return true
+  }
+
+  // Don't overwrite local changes that haven't been uploaded yet
+  if (local.locallyModified) {
+    return false
   }
 
   // Compare timestamps - ingest if remote is newer
