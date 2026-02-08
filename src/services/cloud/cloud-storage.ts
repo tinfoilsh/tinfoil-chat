@@ -76,7 +76,6 @@ export class CloudStorageService {
 
   async uploadChat(chat: StoredChat): Promise<string | null> {
     // Encrypt the chat data first
-    await encryptionService.initialize()
     const encrypted = await encryptionService.encrypt(chat)
 
     // Metadata for the chat
@@ -123,8 +122,6 @@ export class CloudStorageService {
     if (chats.length > 100) {
       throw new Error('Maximum 100 chats per bulk upload request')
     }
-
-    await encryptionService.initialize()
 
     // Encrypt all chats in parallel
     const conversations = await Promise.all(
@@ -186,7 +183,6 @@ export class CloudStorageService {
 
       // Try to decrypt the chat data
       try {
-        await encryptionService.initialize()
         const decrypted = await encryptionService.decrypt(encrypted)
         return decrypted
       } catch (decryptError) {

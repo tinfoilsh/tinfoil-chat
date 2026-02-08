@@ -3,7 +3,6 @@ import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
-import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from './chat-events'
 import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
@@ -36,7 +35,6 @@ export class ChatStorageService {
   private async doInitialize(): Promise<void> {
     try {
       await indexedDBStorage.initialize()
-      await encryptionService.initialize()
     } catch (error) {
       logError('Failed to initialize chat storage', error, {
         component: 'ChatStorageService',

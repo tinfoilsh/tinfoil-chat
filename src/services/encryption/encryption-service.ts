@@ -380,11 +380,18 @@ export class EncryptionService {
     }
   }
 
-  // Encrypt data
-  async encrypt(data: any): Promise<EncryptedData> {
+  private async ensureInitialized(): Promise<void> {
+    if (!this.encryptionKey) {
+      await this.initialize()
+    }
     if (!this.encryptionKey) {
       throw new Error('Encryption key not initialized')
     }
+  }
+
+  // Encrypt data
+  async encrypt(data: any): Promise<EncryptedData> {
+    await this.ensureInitialized()
 
     // Convert data to string
     const dataString = JSON.stringify(data)
@@ -402,7 +409,7 @@ export class EncryptionService {
         name: 'AES-GCM',
         iv: iv,
       },
-      this.encryptionKey,
+      this.encryptionKey!,
       dataBytes.buffer.slice(
         dataBytes.byteOffset,
         dataBytes.byteOffset + dataBytes.byteLength,
@@ -421,9 +428,7 @@ export class EncryptionService {
 
   // Decrypt data
   async decrypt(encryptedData: EncryptedData): Promise<any> {
-    if (!this.encryptionKey) {
-      throw new Error('Encryption key not initialized')
-    }
+    await this.ensureInitialized()
 
     try {
       // Validate input data
@@ -442,7 +447,7 @@ export class EncryptionService {
         throw new Error(`Invalid base64 encoding: ${error}`)
       }
       try {
-        return await this.decryptWithKey(this.encryptionKey, iv, data)
+        return await this.decryptWithKey(this.encryptionKey!, iv, data)
       } catch (primaryError) {
         let lastError: unknown = primaryError
 

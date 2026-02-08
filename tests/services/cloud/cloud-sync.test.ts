@@ -112,7 +112,6 @@ describe('CloudSyncService', () => {
       const service = new CloudSyncService()
       const result = await service.reencryptAndUploadChats()
 
-      expect(mockEncryptionInitialize).toHaveBeenCalled()
       expect(mockUploadChat).toHaveBeenCalledTimes(1)
       expect(mockUploadChat.mock.calls[0]?.[0]?.id).toBe('cloud-1')
 

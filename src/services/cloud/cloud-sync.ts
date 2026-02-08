@@ -340,9 +340,6 @@ export class CloudSyncService {
           metadata: { since: cachedStatus.lastUpdated },
         })
 
-        // Initialize encryption service once before processing
-        await encryptionService.initialize()
-
         // Process updated remote chats
         const savedIds: string[] = []
         for (const remoteChat of remoteConversations) {
@@ -702,9 +699,6 @@ export class CloudSyncService {
 
       const localChats = await indexedDBStorage.getAllChats()
 
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
       // Create maps for easy lookup
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
       // Process remote chats
@@ -944,9 +938,6 @@ export class CloudSyncService {
     }
 
     try {
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
       // For authenticated users, load from R2 with content
       const remoteList = await cloudStorage.listChats({
         limit,
@@ -1141,9 +1132,6 @@ export class CloudSyncService {
         metadata: { totalChats: allChats.length },
       })
 
-      // Initialize encryption with new key
-      await encryptionService.initialize()
-
       for (const chat of allChats) {
         try {
           // Use centralized predicate for upload eligibility
@@ -1243,9 +1231,6 @@ export class CloudSyncService {
     }
 
     try {
-      // Initialize encryption service before processing
-      await encryptionService.initialize()
-
       // Request a page with content for decryption
       const remoteList = await cloudStorage.listChats({
         limit,
@@ -1376,9 +1361,6 @@ export class CloudSyncService {
       // Get local chats to compare
       const localChats = await indexedDBStorage.getAllChats()
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
-
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
 
       const savedIds: string[] = []
 
@@ -1525,9 +1507,6 @@ export class CloudSyncService {
         // No cached status, fall back to full sync
         return await this.doSyncProjectChats(projectId)
       }
-
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
 
       // Fetch and process chats updated since our last sync, with pagination
       const savedIds: string[] = []
