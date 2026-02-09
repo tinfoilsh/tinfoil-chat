@@ -344,11 +344,15 @@ export class CloudStorageService {
   async getChatsUpdatedSince(options: {
     since: string
     includeContent?: boolean
+    continuationToken?: string
   }): Promise<ChatListResponse> {
     const params = new URLSearchParams()
     params.append('since', options.since)
     if (options.includeContent) {
       params.append('includeContent', 'true')
+    }
+    if (options.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
     }
     // Add cache-busting parameter to avoid stale CDN/browser cache
     params.append('_t', Date.now().toString())

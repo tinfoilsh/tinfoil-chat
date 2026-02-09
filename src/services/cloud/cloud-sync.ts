@@ -348,45 +348,63 @@ export class CloudSyncService {
         return await this.doSyncAllChats()
       }
 
-      // Fetch only chats updated since our last sync
-      let updatedChats
-      try {
-        updatedChats = await cloudStorage.getChatsUpdatedSince({
-          since: cachedStatus.lastUpdated,
-          includeContent: true,
-        })
-      } catch (error) {
-        logError(
-          'Failed to get updated chats, falling back to full sync',
-          error,
-          {
+      // Fetch chats updated since our last sync, paginating through all results
+      let continuationToken: string | undefined
+      let hasMore = true
+      let isFirstPage = true
+
+      while (hasMore) {
+        let updatedChats
+        try {
+          updatedChats = await cloudStorage.getChatsUpdatedSince({
+            since: cachedStatus.lastUpdated,
+            includeContent: true,
+            continuationToken,
+          })
+        } catch (error) {
+          logError(
+            'Failed to get updated chats, falling back to full sync',
+            error,
+            {
+              component: 'CloudSync',
+              action: 'syncChangedChats',
+            },
+          )
+          return await this.doSyncAllChats()
+        }
+
+        const remoteConversations = updatedChats.conversations || []
+
+        if (isFirstPage && remoteConversations.length === 0) {
+          logInfo('No chats updated since last sync', {
             component: 'CloudSync',
             action: 'syncChangedChats',
-          },
-        )
-        return await this.doSyncAllChats()
-      }
+            metadata: { since: cachedStatus.lastUpdated },
+          })
+          break
+        }
 
-      const remoteConversations = updatedChats.conversations || []
-
-      if (remoteConversations.length === 0) {
-        logInfo('No chats updated since last sync', {
-          component: 'CloudSync',
-          action: 'syncChangedChats',
-          metadata: { since: cachedStatus.lastUpdated },
-        })
-      } else {
-        logInfo(`Syncing ${remoteConversations.length} changed chats`, {
-          component: 'CloudSync',
-          action: 'syncChangedChats',
-          metadata: { since: cachedStatus.lastUpdated },
-        })
+        if (isFirstPage) {
+          logInfo(`Syncing changed chats`, {
+            component: 'CloudSync',
+            action: 'syncChangedChats',
+            metadata: {
+              since: cachedStatus.lastUpdated,
+              firstPageCount: remoteConversations.length,
+              hasMore: updatedChats.hasMore,
+            },
+          })
+        }
+        isFirstPage = false
 
         const ingestResult = await ingestRemoteChats(remoteConversations, {
           fetchMissingContent: true,
         })
         result.downloaded += ingestResult.downloaded
         result.errors.push(...ingestResult.errors)
+
+        hasMore = updatedChats.hasMore === true
+        continuationToken = updatedChats.nextContinuationToken
       }
 
       // Delete local chats that were deleted on another device
