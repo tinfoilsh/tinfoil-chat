@@ -419,6 +419,10 @@ export class CloudSyncService {
   clearSyncStatus(): void {
     this.chatSyncCache.clear()
     this.allChatsSyncCache.clear()
+    for (const cache of this.projectSyncCaches.values()) {
+      cache.clear()
+    }
+    this.projectSyncCaches.clear()
   }
 
   // Backup a single chat to the cloud with coalescing and retry

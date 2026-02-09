@@ -1,6 +1,5 @@
 import type { Chat as ChatType } from '@/components/chat/types'
 import { logError, logWarning } from '@/utils/error-handling'
-import { generateReverseId } from '@/utils/reverse-id'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
   createdAt: string
@@ -587,30 +586,6 @@ export class IndexedDBStorage {
       chat.updatedAt = new Date().toISOString()
       await this.saveChatInternal(chat)
     }
-  }
-
-  async cloneChatWithNewId(oldChatId: string): Promise<string | null> {
-    const oldChat = await this.getChatInternal(oldChatId)
-    if (!oldChat) {
-      return null
-    }
-
-    const { id: newId, createdAtMs } = generateReverseId()
-    const now = new Date(createdAtMs).toISOString()
-
-    const newChat: StoredChat = {
-      ...oldChat,
-      id: newId,
-      createdAt: now,
-      updatedAt: now,
-      syncedAt: undefined,
-      locallyModified: true,
-    }
-
-    await this.saveChatInternal(newChat)
-    await this.deleteChat(oldChatId)
-
-    return newId
   }
 }
 
