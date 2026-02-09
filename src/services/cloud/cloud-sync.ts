@@ -780,6 +780,18 @@ export class CloudSyncService {
     }
   }
 
+  // Update a chat's project association on the server
+  async updateChatProject(
+    chatId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    if (!(await cloudStorage.isAuthenticated())) {
+      return
+    }
+
+    await cloudStorage.updateChatProject(chatId, projectId)
+  }
+
   private async paginateLocalChats(
     limit: number,
     continuationToken?: string,

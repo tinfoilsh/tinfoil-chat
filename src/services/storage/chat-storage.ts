@@ -1,7 +1,6 @@
 import type { Chat } from '@/components/chat/types'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
-import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
 import { chatEvents } from './chat-events'
@@ -242,7 +241,17 @@ export class ChatStorageService {
 
     chatEvents.emit({ reason: 'save', ids: [chatId] })
 
-    await cloudSync.deleteFromCloud(chatId)
+    cloudSync.deleteFromCloud(chatId).catch((error) => {
+      logError(
+        'Failed to delete chat from cloud during local conversion',
+        error,
+        {
+          component: 'ChatStorageService',
+          action: 'convertChatToLocal',
+          metadata: { chatId },
+        },
+      )
+    })
   }
 
   async removeChatFromProject(chatId: string): Promise<void> {
@@ -254,7 +263,7 @@ export class ChatStorageService {
     chatEvents.emit({ reason: 'save', ids: [chatId] })
 
     // Update server-side project association, then re-upload the full encrypted blob
-    await cloudStorage.updateChatProject(chatId, null)
+    await cloudSync.updateChatProject(chatId, null)
     await cloudSync.backupChat(chatId)
   }
 }

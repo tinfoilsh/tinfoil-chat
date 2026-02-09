@@ -28,7 +28,7 @@ import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
-import { cloudStorage } from '@/services/cloud/cloud-storage'
+
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
@@ -996,7 +996,7 @@ export function ChatInterface({
         await indexedDBStorage.updateChatProject(chatId, projectId)
 
         // Update cloud storage, then re-upload encrypted blob to keep it consistent
-        await cloudStorage.updateChatProject(chatId, projectId)
+        await cloudSync.updateChatProject(chatId, projectId)
         await cloudSync.backupChat(chatId)
 
         // Reload chats to update the UI
