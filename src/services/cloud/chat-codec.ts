@@ -113,8 +113,9 @@ export async function processRemoteChat(
       syncedAt: Date.now(),
       locallyModified: false,
       syncVersion: decrypted.syncVersion ?? 1,
-      // Preserve or set project ID
-      projectId: decrypted.projectId ?? effectiveProjectId,
+      // Explicit projectId from caller is authoritative (e.g. cross-scope sync);
+      // fall back to the blob's value, then the local chat's value
+      projectId: projectId ?? decrypted.projectId ?? localChat?.projectId,
     }
 
     return {
