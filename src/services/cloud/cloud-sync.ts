@@ -301,6 +301,7 @@ export class CloudSyncService {
           // New chat we don't have locally — ingest it
           const ingestResult = await ingestRemoteChats([remoteChat], {
             fetchMissingContent: true,
+            projectId: remoteChat.projectId ?? undefined,
           })
           result.downloaded += ingestResult.downloaded
           result.errors.push(...ingestResult.errors)
