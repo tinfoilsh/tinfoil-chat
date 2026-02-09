@@ -139,7 +139,7 @@ export class UploadCoalescer {
       state.inFlight = null
 
       // Clean up state if no longer needed
-      if (!state.dirty && state.failureCount === 0) {
+      if (!state.dirty) {
         this.states.delete(chatId)
       }
     })()
