@@ -403,7 +403,8 @@ export class CloudSyncService {
         result.downloaded += ingestResult.downloaded
         result.errors.push(...ingestResult.errors)
 
-        hasMore = updatedChats.hasMore === true
+        hasMore =
+          updatedChats.hasMore === true && !!updatedChats.nextContinuationToken
         continuationToken = updatedChats.nextContinuationToken
       }
 
@@ -1198,7 +1199,7 @@ export class CloudSyncService {
         result.errors.push(...ingestResult.errors)
 
         // Check if there are more pages
-        hasMore = updatedChats.hasMore === true
+        hasMore = updatedChats.hasMore === true && !!updatedChats.nextCursor
         cursorId = updatedChats.nextCursor
       }
 
