@@ -362,25 +362,25 @@ export function createMarkdownComponents({
     },
 
     // Generic container elements - pass through with text color
-    div({ children, ...props }: any) {
+    div({ children, className, ...props }: any) {
       return (
-        <div {...props} className="text-content-primary">
+        <div {...props} className={className || 'text-content-primary'}>
           {children}
         </div>
       )
     },
 
-    span({ children, ...props }: any) {
+    span({ children, className, ...props }: any) {
       return (
-        <span {...props} className="text-content-primary">
+        <span {...props} className={className || 'text-content-primary'}>
           {children}
         </span>
       )
     },
 
-    p({ children, ...props }: any) {
+    p({ children, className, ...props }: any) {
       return (
-        <p {...props} className="text-content-primary">
+        <p {...props} className={className || 'text-content-primary'}>
           {children}
         </p>
       )

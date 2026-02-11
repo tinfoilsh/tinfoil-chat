@@ -35,7 +35,7 @@ async function loadPlugins(): Promise<PluginState> {
     .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod, rehypeRawMod]) => {
       cachedPlugins = {
         remarkPlugins: [
-          [remarkMathMod.default, { singleDollarTextMath: false }],
+          [remarkMathMod.default, { singleDollarTextMath: true }],
           remarkGfm,
           remarkBreaksMod.default,
         ],
@@ -46,7 +46,7 @@ async function loadPlugins(): Promise<PluginState> {
             {
               throwOnError: false,
               strict: false,
-              output: 'htmlAndMathml',
+              output: 'html',
               errorColor: TINFOIL_COLORS.utility.destructive,
               trust: false,
             },
