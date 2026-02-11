@@ -340,6 +340,7 @@ export function useChatMessaging({
           ...currentChat,
           id: chatId,
           title: 'Untitled',
+          titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
           createdAt: new Date(),
@@ -414,6 +415,7 @@ export function useChatMessaging({
           ...currentChat,
           id: `session-${Date.now()}`,
           title: 'Untitled',
+          titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
           createdAt: new Date(),
@@ -606,6 +608,7 @@ export function useChatMessaging({
 
           // Resolve title: await the in-flight title gen promise if one exists
           let resolvedTitle = updatedChat.title
+          let resolvedTitleState = updatedChat.titleState
           if (
             isFirstMessage &&
             updatedChat.title === 'Untitled' &&
@@ -615,6 +618,7 @@ export function useChatMessaging({
               const generated = await earlyTitlePromiseRef.current
               if (generated && generated !== 'Untitled') {
                 resolvedTitle = generated
+                resolvedTitleState = 'generated'
                 logInfo('[handleQuery] Title resolved from parallel gen', {
                   component: 'useChatMessaging',
                   action: 'handleQuery.titleResolved',
@@ -633,6 +637,7 @@ export function useChatMessaging({
             ...updatedChat,
             id: chatId,
             title: resolvedTitle,
+            titleState: resolvedTitleState,
             messages: finalMessages,
             pendingSave: false,
           }
@@ -640,13 +645,23 @@ export function useChatMessaging({
           // Update React state with resolved title
           setCurrentChat((prev) =>
             prev.id === chatId
-              ? { ...prev, title: resolvedTitle, messages: finalMessages }
+              ? {
+                  ...prev,
+                  title: resolvedTitle,
+                  titleState: resolvedTitleState,
+                  messages: finalMessages,
+                }
               : prev,
           )
           setChats((prevChats) =>
             prevChats.map((c) =>
               c.id === chatId
-                ? { ...c, title: resolvedTitle, messages: finalMessages }
+                ? {
+                    ...c,
+                    title: resolvedTitle,
+                    titleState: resolvedTitleState,
+                    messages: finalMessages,
+                  }
                 : c,
             ),
           )

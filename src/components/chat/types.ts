@@ -40,9 +40,12 @@ export type Message = {
   searchReasoning?: string // Search agent's reasoning for multi-turn context
 }
 
+export type TitleState = 'placeholder' | 'generated' | 'manual'
+
 export type Chat = {
   id: string
   title: string
+  titleState?: TitleState
   messages: Message[]
   createdAt: Date
   // Sync metadata - optional for backward compatibility
