@@ -264,49 +264,56 @@ export class CloudSyncService {
         return
       }
 
-      const allUpdated = await cloudStorage.getAllChatsUpdatedSince({
-        since: cachedAllStatus.lastUpdated,
-      })
+      const changedIds: string[] = []
+      let continuationToken: string | undefined
+      let totalProcessed = 0
 
-      const remoteChats = allUpdated.conversations || []
-      if (remoteChats.length === 0) {
-        this.allChatsSyncCache.save(remoteAllStatus)
-        return
-      }
+      do {
+        const allUpdated = await cloudStorage.getAllChatsUpdatedSince({
+          since: cachedAllStatus.lastUpdated,
+          continuationToken,
+        })
 
-      logInfo(
-        `Cross-scope sync: processing ${remoteChats.length} changed chats`,
-        {
+        const remoteChats = allUpdated.conversations || []
+        if (remoteChats.length === 0) break
+
+        totalProcessed += remoteChats.length
+
+        for (const remoteChat of remoteChats) {
+          const localChat = await indexedDBStorage.getChat(remoteChat.id)
+
+          const remoteProjectId = remoteChat.projectId ?? undefined
+          const localProjectId = localChat?.projectId ?? undefined
+
+          if (localChat && remoteProjectId !== localProjectId) {
+            // Project assignment changed — update local state
+            await indexedDBStorage.updateChatProject(
+              remoteChat.id,
+              remoteChat.projectId ?? null,
+            )
+            changedIds.push(remoteChat.id)
+          } else if (!localChat && remoteChat.content) {
+            // New chat we don't have locally — ingest it
+            const ingestResult = await ingestRemoteChats([remoteChat], {
+              fetchMissingContent: true,
+              projectId: remoteChat.projectId ?? undefined,
+            })
+            result.downloaded += ingestResult.downloaded
+            result.errors.push(...ingestResult.errors)
+            changedIds.push(...ingestResult.savedIds)
+          }
+        }
+
+        continuationToken = allUpdated.hasMore
+          ? allUpdated.nextContinuationToken
+          : undefined
+      } while (continuationToken)
+
+      if (totalProcessed > 0) {
+        logInfo(`Cross-scope sync: processed ${totalProcessed} changed chats`, {
           component: 'CloudSync',
           action: 'syncCrossScope',
-        },
-      )
-
-      const changedIds: string[] = []
-
-      for (const remoteChat of remoteChats) {
-        const localChat = await indexedDBStorage.getChat(remoteChat.id)
-
-        const remoteProjectId = remoteChat.projectId ?? undefined
-        const localProjectId = localChat?.projectId ?? undefined
-
-        if (localChat && remoteProjectId !== localProjectId) {
-          // Project assignment changed — update local state
-          await indexedDBStorage.updateChatProject(
-            remoteChat.id,
-            remoteChat.projectId ?? null,
-          )
-          changedIds.push(remoteChat.id)
-        } else if (!localChat && remoteChat.content) {
-          // New chat we don't have locally — ingest it
-          const ingestResult = await ingestRemoteChats([remoteChat], {
-            fetchMissingContent: true,
-            projectId: remoteChat.projectId ?? undefined,
-          })
-          result.downloaded += ingestResult.downloaded
-          result.errors.push(...ingestResult.errors)
-          changedIds.push(...ingestResult.savedIds)
-        }
+        })
       }
 
       if (changedIds.length > 0) {

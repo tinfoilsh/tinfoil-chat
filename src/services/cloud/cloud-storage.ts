@@ -390,9 +390,13 @@ export class CloudStorageService {
 
   async getAllChatsUpdatedSince(options: {
     since: string
+    continuationToken?: string
   }): Promise<ChatListResponse> {
     const params = new URLSearchParams()
     params.append('since', options.since)
+    if (options.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
+    }
     params.append('_t', Date.now().toString())
 
     const url = `${API_BASE_URL}/api/chats/all-updated-since?${params.toString()}`
