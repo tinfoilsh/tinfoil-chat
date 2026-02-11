@@ -595,22 +595,11 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Upload all chats in parallel for better performance
+      // Route each chat through doBackupChat for consistent streaming checks,
+      // upload logic, and markAsSynced handling
       const uploadPromises = chatsToSync.map(async (chat) => {
         try {
-          // Skip if chat started streaming while in queue
-          if (streamingTracker.isStreaming(chat.id)) {
-            logInfo(`Skipping sync for chat ${chat.id} - started streaming`, {
-              component: 'CloudSync',
-              action: 'backupUnsyncedChats',
-            })
-            return
-          }
-
-          await cloudStorage.uploadChat(chat)
-
-          const newVersion = (chat.syncVersion ?? 0) + 1
-          await indexedDBStorage.markAsSynced(chat.id, newVersion)
+          await this.doBackupChat(chat.id)
           result.uploaded++
         } catch (error) {
           result.errors.push(
