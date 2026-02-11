@@ -140,8 +140,11 @@ export class UploadCoalescer {
       // Worker done - clear in-flight promise
       state.inFlight = null
 
-      // Clean up state if no longer needed
-      if (!state.dirty) {
+      // Clean up state if no longer needed.
+      // Only delete from the map if this worker's generation still matches.
+      // After clear(), the map may hold a new state for the same chatId
+      // that this old worker must not touch.
+      if (!state.dirty && workerGeneration === this.generation) {
         this.states.delete(chatId)
       }
     })()
