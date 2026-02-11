@@ -10,6 +10,7 @@ import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { cloudStorage } from './cloud-storage'
+import { streamingTracker } from './streaming-tracker'
 import { isUploadableChat } from './sync-predicates'
 
 // Retry decryption for chats that failed to decrypt
@@ -126,23 +127,25 @@ export async function reencryptAndUploadChats(): Promise<{
 
     for (const chat of allChats) {
       try {
-        // Use centralized predicate for upload eligibility
-        // Note: No streaming check needed here since we're processing all chats in sequence
-        if (!isUploadableChat(chat)) {
-          if (chat.isLocalOnly || chat.decryptionFailed || chat.encryptedData) {
-            logInfo('Skipping ineligible chat during re-encryption', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: {
-                chatId: chat.id,
-                isLocalOnly: chat.isLocalOnly,
-                isBlankChat: chat.isBlankChat,
-                decryptionFailed: chat.decryptionFailed,
-                hasEncryptedData: !!chat.encryptedData,
-                dataCorrupted: chat.dataCorrupted,
-              },
-            })
-          }
+        // Use centralized predicate for upload eligibility (including streaming check)
+        if (
+          !isUploadableChat(
+            chat,
+            streamingTracker.isStreaming.bind(streamingTracker),
+          )
+        ) {
+          logInfo('Skipping ineligible chat during re-encryption', {
+            component: 'CloudSync',
+            action: 'reencryptAndUploadChats',
+            metadata: {
+              chatId: chat.id,
+              isLocalOnly: chat.isLocalOnly,
+              isBlankChat: chat.isBlankChat,
+              decryptionFailed: chat.decryptionFailed,
+              hasEncryptedData: !!chat.encryptedData,
+              dataCorrupted: chat.dataCorrupted,
+            },
+          })
           continue
         }
 

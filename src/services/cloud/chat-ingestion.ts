@@ -154,11 +154,24 @@ export async function syncRemoteDeletions(
 ): Promise<void> {
   try {
     const { deletedIds } = await cloudStorage.getDeletedChatsSince(since)
+    const successfulIds: string[] = []
     for (const id of deletedIds) {
-      await indexedDBStorage.deleteChat(id)
+      try {
+        await indexedDBStorage.deleteChat(id)
+        successfulIds.push(id)
+      } catch (error) {
+        logError(
+          `Failed to delete chat ${id} during remote deletion sync`,
+          error,
+          {
+            component: 'CloudSync',
+            action: logAction,
+          },
+        )
+      }
     }
-    if (deletedIds.length > 0) {
-      chatEvents.emit({ reason: 'sync', ids: deletedIds })
+    if (successfulIds.length > 0) {
+      chatEvents.emit({ reason: 'sync', ids: successfulIds })
     }
   } catch (error) {
     logError('Failed to check for remotely deleted chats', error, {

@@ -1033,6 +1033,7 @@ export class CloudSyncService {
         localChatMap,
         projectId,
         checkShouldIngest: true,
+        fetchMissingContent: true,
       })
       result.downloaded += ingestResult.downloaded
       result.errors.push(...ingestResult.errors)
@@ -1190,6 +1191,7 @@ export class CloudSyncService {
 
         const ingestResult = await ingestRemoteChats(remoteChats, {
           projectId,
+          fetchMissingContent: true,
         })
         result.downloaded += ingestResult.downloaded
         result.errors.push(...ingestResult.errors)

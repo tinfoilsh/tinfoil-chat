@@ -48,9 +48,9 @@ type UploadFn = (chatId: string) => Promise<void>
  *
  * Usage:
  * ```typescript
- * const coalescer = new UploadCoalescer({
- *   upload: (chatId) => cloudStorage.uploadChat(chatId),
- * })
+ * const coalescer = new UploadCoalescer(
+ *   (chatId) => cloudStorage.uploadChat(chatId),
+ * )
  *
  * // Enqueue uploads - rapid calls for same chat are coalesced
  * coalescer.enqueue('chat-1')
@@ -62,6 +62,7 @@ export class UploadCoalescer {
   private states: Map<string, ChatUploadState> = new Map()
   private uploadFn: UploadFn
   private config: Required<UploadCoalescerConfig>
+  private generation = 0
 
   constructor(uploadFn: UploadFn, config: UploadCoalescerConfig = {}) {
     this.uploadFn = uploadFn
@@ -108,8 +109,9 @@ export class UploadCoalescer {
    * Continues uploading while the dirty flag is set.
    */
   private startWorker(chatId: string, state: ChatUploadState): void {
+    const workerGeneration = this.generation
     const workerPromise = (async () => {
-      while (state.dirty) {
+      while (state.dirty && workerGeneration === this.generation) {
         // Clear dirty flag before upload
         state.dirty = false
 
@@ -252,6 +254,7 @@ export class UploadCoalescer {
    * Clear all pending uploads (useful for cleanup/testing).
    */
   clear(): void {
+    this.generation++
     this.states.clear()
   }
 
