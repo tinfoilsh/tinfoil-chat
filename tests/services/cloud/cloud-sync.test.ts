@@ -216,6 +216,11 @@ describe('CloudSyncService', () => {
         good,
       ])
 
+      // doBackupChat re-reads the chat from IndexedDB
+      mockGetChat.mockImplementation((id: string) =>
+        id === 'cloud-1' ? Promise.resolve(good) : Promise.resolve(undefined),
+      )
+
       mockIsStreaming.mockImplementation((id: string) => id === 'streaming')
 
       const service = new CloudSyncService()
