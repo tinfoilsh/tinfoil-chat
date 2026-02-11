@@ -1,4 +1,5 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import { cloudSync } from '@/services/cloud/cloud-sync'
 import { profileSync } from '@/services/cloud/profile-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
@@ -59,11 +60,12 @@ export async function performSignoutCleanup(): Promise<void> {
       action: 'clearProfileCache',
     })
 
-    // Clear deleted chats tracker
+    // Clear sync caches so stale state doesn't leak into the next session
+    cloudSync.clearSyncStatus()
     deletedChatsTracker.clear()
-    logInfo('Cleared deleted chats tracker', {
+    logInfo('Cleared sync caches and deleted chats tracker', {
       component: 'signoutCleanup',
-      action: 'clearDeletedChatsTracker',
+      action: 'clearSyncCaches',
     })
 
     // Clear project event handlers
