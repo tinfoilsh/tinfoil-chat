@@ -657,15 +657,11 @@ export function ChatInterface({
   useEffect(() => {
     const initTinfoil = async () => {
       try {
-        const { initializeTinfoilClient, getTinfoilClient } = await import(
+        const { getReadyClient } = await import(
           '@/services/inference/tinfoil-client'
         )
-        // Initialize in background - will use placeholder key if not signed in
-        await initializeTinfoilClient()
-
-        // Fetch the verification document after initialization
-        const client = await getTinfoilClient()
-        const doc = await (client as any).getVerificationDocument?.()
+        const client = await getReadyClient()
+        const doc = await client.getVerificationDocument()
         if (doc) {
           setVerificationDocument(doc)
           // Set verification status based on document
