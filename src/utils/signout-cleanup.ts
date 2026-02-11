@@ -8,6 +8,8 @@ import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { logError, logInfo } from '@/utils/error-handling'
 
+export const ACTIVE_USER_ID_KEY = 'tinfoil-active-user-id'
+
 const LOCAL_STORAGE_KEYS = [
   'theme',
   'maxPromptMessages',
@@ -30,6 +32,7 @@ const LOCAL_STORAGE_KEYS = [
   'tinfoil-profile-sync-status',
   'cloudSyncEnabled',
   'cloudSyncExplicitlyDisabled',
+  ACTIVE_USER_ID_KEY,
 ] as const
 
 export async function performSignoutCleanup(): Promise<void> {
@@ -38,6 +41,10 @@ export async function performSignoutCleanup(): Promise<void> {
       component: 'signoutCleanup',
       action: 'performSignoutCleanup',
     })
+
+    // Clear encryption key immediately (in-memory + localStorage) before any
+    // async work, so concurrent code cannot re-persist a stale key.
+    encryptionService.clearKey({ persist: true })
 
     // Reset renderer registry to clear any cached renderers
     resetRendererRegistry()
@@ -148,9 +155,6 @@ export async function performSignoutCleanup(): Promise<void> {
         })
       }
     }
-
-    // Clear encryption key state without touching storage again
-    encryptionService.clearKey({ persist: false })
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',
