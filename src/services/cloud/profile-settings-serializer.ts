@@ -47,7 +47,10 @@ export function loadLocalSettings(): ProfileData {
   // Chat settings
   const maxMessages = localStorage.getItem('maxPromptMessages')
   if (maxMessages) {
-    settings.maxPromptMessages = parseInt(maxMessages, 10)
+    const parsed = parseInt(maxMessages, 10)
+    if (!isNaN(parsed)) {
+      settings.maxPromptMessages = parsed
+    }
   }
 
   const language = localStorage.getItem('userLanguage')
