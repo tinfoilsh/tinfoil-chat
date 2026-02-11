@@ -21,7 +21,9 @@ export function updateChatTitle(
 ) {
   setChats((prevChats) => {
     const updatedChats = prevChats.map((chat) =>
-      chat.id === chatId ? { ...chat, title: newTitle } : chat,
+      chat.id === chatId
+        ? { ...chat, title: newTitle, titleState: 'manual' as const }
+        : chat,
     )
 
     // Save updated chats to localStorage
@@ -31,6 +33,10 @@ export function updateChatTitle(
   })
 
   if (currentChat?.id === chatId) {
-    setCurrentChat((prev: Chat) => ({ ...prev, title: newTitle }))
+    setCurrentChat((prev: Chat) => ({
+      ...prev,
+      title: newTitle,
+      titleState: 'manual' as const,
+    }))
   }
 }
