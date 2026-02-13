@@ -1,15 +1,14 @@
 import { logInfo } from '@/utils/error-handling'
 
 const DELETED_CHATS_KEY = 'tinfoil-deleted-chats'
-const EXPIRY_TIME = 5 * 60 * 1000 // 5 minutes
 
-interface DeletedChatEntry {
-  chatId: string
-  deletedAt: number
-}
-
+/**
+ * Tracks deleted chats to prevent resurrection during sync.
+ * IDs persist for the browser session (via sessionStorage) and are only
+ * removed explicitly via removeFromDeleted() or clear().
+ */
 class DeletedChatsTracker {
-  private deletedChats: Map<string, number> = new Map()
+  private deletedChats: Set<string> = new Set()
 
   constructor() {
     this.loadFromStorage()
@@ -17,21 +16,18 @@ class DeletedChatsTracker {
 
   private loadFromStorage(): void {
     if (typeof window === 'undefined') return
-
     try {
       const stored = sessionStorage.getItem(DELETED_CHATS_KEY)
       if (stored) {
-        const entries: DeletedChatEntry[] = JSON.parse(stored)
-        const now = Date.now()
-
-        // Only keep entries that aren't expired
-        entries.forEach((entry) => {
-          if (now - entry.deletedAt < EXPIRY_TIME) {
-            this.deletedChats.set(entry.chatId, entry.deletedAt)
+        const parsed: unknown[] = JSON.parse(stored)
+        parsed.forEach((entry) => {
+          if (typeof entry === 'string') {
+            this.deletedChats.add(entry)
+          } else if (entry && typeof entry === 'object' && 'chatId' in entry) {
+            // Backward compat with old {chatId, deletedAt} format
+            this.deletedChats.add((entry as { chatId: string }).chatId)
           }
         })
-
-        // Update storage to remove expired entries
         this.saveToStorage()
       }
     } catch (error) {
@@ -41,20 +37,10 @@ class DeletedChatsTracker {
 
   private saveToStorage(): void {
     if (typeof window === 'undefined') return
-
-    const now = Date.now()
-    const entries: DeletedChatEntry[] = []
-
-    // Only save non-expired entries
-    this.deletedChats.forEach((deletedAt, chatId) => {
-      if (now - deletedAt < EXPIRY_TIME) {
-        entries.push({ chatId, deletedAt })
-      }
-    })
-
     try {
-      if (entries.length > 0) {
-        sessionStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(entries))
+      const ids = Array.from(this.deletedChats)
+      if (ids.length > 0) {
+        sessionStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(ids))
       } else {
         sessionStorage.removeItem(DELETED_CHATS_KEY)
       }
@@ -64,7 +50,7 @@ class DeletedChatsTracker {
   }
 
   markAsDeleted(chatId: string): void {
-    this.deletedChats.set(chatId, Date.now())
+    this.deletedChats.add(chatId)
     this.saveToStorage()
 
     logInfo('Marked chat as deleted', {
@@ -75,20 +61,7 @@ class DeletedChatsTracker {
   }
 
   isDeleted(chatId: string): boolean {
-    const deletedAt = this.deletedChats.get(chatId)
-    if (!deletedAt) return false
-
-    const now = Date.now()
-    const isExpired = now - deletedAt > EXPIRY_TIME
-
-    if (isExpired) {
-      // Remove expired entry
-      this.deletedChats.delete(chatId)
-      this.saveToStorage()
-      return false
-    }
-
-    return true
+    return this.deletedChats.has(chatId)
   }
 
   removeFromDeleted(chatId: string): void {
@@ -111,25 +84,7 @@ class DeletedChatsTracker {
   }
 
   getDeletedIds(): string[] {
-    const now = Date.now()
-    const validIds: string[] = []
-    const expiredIds: string[] = []
-
-    this.deletedChats.forEach((deletedAt, chatId) => {
-      if (now - deletedAt < EXPIRY_TIME) {
-        validIds.push(chatId)
-      } else {
-        expiredIds.push(chatId)
-      }
-    })
-
-    // Remove expired entries from memory
-    if (expiredIds.length > 0) {
-      expiredIds.forEach((id) => this.deletedChats.delete(id))
-      this.saveToStorage()
-    }
-
-    return validIds
+    return Array.from(this.deletedChats)
   }
 }
 

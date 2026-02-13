@@ -139,6 +139,7 @@ const ChatMessage = memo(
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevProps.message.attachments === nextProps.message.attachments &&
         prevProps.message.documentContent ===
           nextProps.message.documentContent &&
         prevProps.message.documents === nextProps.message.documents &&
@@ -158,6 +159,7 @@ const ChatMessage = memo(
     return (
       prevProps.message.content === nextProps.message.content &&
       prevProps.message.thoughts === nextProps.message.thoughts &&
+      prevProps.message.attachments === nextProps.message.attachments &&
       prevProps.message.documentContent === nextProps.message.documentContent &&
       prevProps.message.documents === nextProps.message.documents &&
       prevProps.message.imageData === nextProps.message.imageData &&

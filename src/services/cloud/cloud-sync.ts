@@ -1,13 +1,20 @@
 import { PAGINATION } from '@/config'
-import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError, logInfo } from '@/utils/error-handling'
-import { encryptionService } from '../encryption/encryption-service'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
+import { processRemoteChat } from './chat-codec'
+import { ingestRemoteChats, syncRemoteDeletions } from './chat-ingestion'
 import { cloudStorage, type ChatSyncStatus } from './cloud-storage'
+import {
+  reencryptAndUploadChats as doReencryptAndUpload,
+  retryDecryptionWithNewKey as doRetryDecryption,
+} from './encryption-recovery'
 import { projectStorage } from './project-storage'
 import { streamingTracker } from './streaming-tracker'
+import { isUploadableChat } from './sync-predicates'
+import { SyncStatusCache } from './sync-status-cache'
+import { UploadCoalescer } from './upload-coalescer'
 
 export interface SyncResult {
   uploaded: number
@@ -29,92 +36,105 @@ export interface SyncStatusResult {
 }
 
 const SYNC_STATUS_STORAGE_KEY = 'tinfoil-chat-sync-status'
+const ALL_CHATS_SYNC_STATUS_STORAGE_KEY = 'tinfoil-all-chats-sync-status'
 const PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX =
   'tinfoil-project-chat-sync-status-'
 
+const UPLOAD_BASE_DELAY_MS = 1000
+const UPLOAD_MAX_DELAY_MS = 8000
+const UPLOAD_MAX_RETRIES = 3
+
+const isStreaming = (id: string) => streamingTracker.isStreaming(id)
+
 export class CloudSyncService {
-  private isSyncing = false
-  private uploadQueue: Map<string, Promise<void>> = new Map()
-  private pendingUploads: Map<string, () => Promise<void>> = new Map()
+  private syncLock: Promise<void> | null = null
+  private syncLockResolve: (() => void) | null = null
+  private uploadCoalescer: UploadCoalescer
   private streamingCallbacks: Set<string> = new Set()
-  private lastSyncStatus: ChatSyncStatus | null = null
-  private projectSyncStatus: Map<string, ChatSyncStatus> = new Map()
+  private chatSyncCache = new SyncStatusCache<ChatSyncStatus>(
+    SYNC_STATUS_STORAGE_KEY,
+  )
+  private allChatsSyncCache = new SyncStatusCache<ChatSyncStatus>(
+    ALL_CHATS_SYNC_STATUS_STORAGE_KEY,
+  )
+  private projectSyncCaches = new Map<string, SyncStatusCache<ChatSyncStatus>>()
 
   constructor() {
+    // Initialize upload coalescer with doBackupChat as the upload function
+    this.uploadCoalescer = new UploadCoalescer(
+      (chatId) => this.doBackupChat(chatId),
+      {
+        baseDelayMs: UPLOAD_BASE_DELAY_MS,
+        maxDelayMs: UPLOAD_MAX_DELAY_MS,
+        maxRetries: UPLOAD_MAX_RETRIES,
+      },
+    )
     // Listen for storage changes from other tabs to invalidate sync status cache
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
         if (e.key === SYNC_STATUS_STORAGE_KEY) {
           // Another tab updated sync status, invalidate our cache
-          this.lastSyncStatus = null
+          this.chatSyncCache.invalidate()
+        } else if (e.key === ALL_CHATS_SYNC_STATUS_STORAGE_KEY) {
+          this.allChatsSyncCache.invalidate()
         } else if (e.key?.startsWith(PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX)) {
           // Another tab updated project sync status, invalidate that project's cache
           const projectId = e.key.slice(
             PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX.length,
           )
-          this.projectSyncStatus.delete(projectId)
+          const existingCache = this.projectSyncCaches.get(projectId)
+          if (existingCache) {
+            existingCache.invalidate()
+          }
         }
       })
     }
   }
 
-  // Load cached sync status from localStorage
-  private loadCachedSyncStatus(): ChatSyncStatus | null {
-    if (typeof window === 'undefined') return null
-    try {
-      const cached = localStorage.getItem(SYNC_STATUS_STORAGE_KEY)
-      if (cached) {
-        return JSON.parse(cached)
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null
-  }
-
-  // Save sync status to localStorage
-  private saveSyncStatus(status: ChatSyncStatus): void {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem(SYNC_STATUS_STORAGE_KEY, JSON.stringify(status))
-      this.lastSyncStatus = status
-    } catch {
-      // Ignore storage errors
-    }
-  }
-
-  // Load cached project sync status from localStorage
-  private loadCachedProjectSyncStatus(
+  private getProjectSyncCache(
     projectId: string,
-  ): ChatSyncStatus | null {
-    if (typeof window === 'undefined') return null
-    try {
-      const cached = localStorage.getItem(
+  ): SyncStatusCache<ChatSyncStatus> {
+    let cache = this.projectSyncCaches.get(projectId)
+    if (!cache) {
+      cache = new SyncStatusCache(
         PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
       )
-      if (cached) {
-        return JSON.parse(cached)
-      }
-    } catch {
-      // Ignore parse errors
+      this.projectSyncCaches.set(projectId, cache)
     }
-    return null
+    return cache
   }
 
-  // Save project sync status to localStorage
-  private saveProjectSyncStatus(
-    projectId: string,
-    status: ChatSyncStatus,
-  ): void {
-    if (typeof window === 'undefined') return
+  /**
+   * Execute a function with sync lock protection.
+   * Only one sync operation can run at a time.
+   * Throws if a sync is already in progress.
+   */
+  private async withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+    // Check if sync is already in progress (atomic check)
+    if (this.syncLock) {
+      logInfo('[CloudSync] Sync already in progress, skipping', {
+        component: 'CloudSync',
+        action: 'withSyncLock',
+      })
+      throw new Error('Sync already in progress')
+    }
+
+    // Acquire lock
+    let resolve: () => void
+    this.syncLock = new Promise<void>((r) => {
+      resolve = r
+    })
+    this.syncLockResolve = resolve!
+
     try {
-      localStorage.setItem(
-        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
-        JSON.stringify(status),
-      )
-      this.projectSyncStatus.set(projectId, status)
-    } catch {
-      // Ignore storage errors
+      return await fn()
+    } finally {
+      // Release lock
+      this.syncLock = null
+      if (this.syncLockResolve) {
+        this.syncLockResolve()
+        this.syncLockResolve = null
+      }
     }
   }
 
@@ -138,11 +158,8 @@ export class CloudSyncService {
           // For regular chats, exclude project chats
           if (chat.projectId) return false
         }
-        return (
-          !(chat as any).isBlankChat &&
-          !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly
-        )
+        // Use centralized predicate for upload eligibility
+        return isUploadableChat(chat, isStreaming)
       })
 
       if (chatsNeedingUpload.length > 0) {
@@ -159,9 +176,8 @@ export class CloudSyncService {
 
       // Get cached status
       const cachedStatus = projectId
-        ? this.projectSyncStatus.get(projectId) ||
-          this.loadCachedProjectSyncStatus(projectId)
-        : this.lastSyncStatus || this.loadCachedSyncStatus()
+        ? this.getProjectSyncCache(projectId).load()
+        : this.chatSyncCache.load()
 
       // If no cached status, we need a full sync
       if (!cachedStatus) {
@@ -222,13 +238,103 @@ export class CloudSyncService {
     }
   }
 
+  /**
+   * Detect and apply cross-scope changes (chats moving between projects or becoming unassigned).
+   * Uses the unscoped all-updated-since endpoint to find chats whose projectId changed.
+   */
+  private async syncCrossScope(result: SyncResult): Promise<void> {
+    try {
+      const cachedAllStatus = this.allChatsSyncCache.load()
+
+      const remoteAllStatus = await cloudStorage.getAllChatsSyncStatus()
+
+      // If nothing changed globally, skip
+      if (
+        cachedAllStatus &&
+        remoteAllStatus.count === cachedAllStatus.count &&
+        remoteAllStatus.lastUpdated === cachedAllStatus.lastUpdated
+      ) {
+        this.allChatsSyncCache.save(remoteAllStatus)
+        return
+      }
+
+      // If we have no cached status, save current and return (first run baseline)
+      if (!cachedAllStatus?.lastUpdated) {
+        this.allChatsSyncCache.save(remoteAllStatus)
+        return
+      }
+
+      const changedIds: string[] = []
+      let continuationToken: string | undefined
+      let totalProcessed = 0
+
+      do {
+        const allUpdated = await cloudStorage.getAllChatsUpdatedSince({
+          since: cachedAllStatus.lastUpdated,
+          continuationToken,
+        })
+
+        const remoteChats = allUpdated.conversations || []
+        if (remoteChats.length === 0) break
+
+        totalProcessed += remoteChats.length
+
+        for (const remoteChat of remoteChats) {
+          const localChat = await indexedDBStorage.getChat(remoteChat.id)
+
+          const remoteProjectId = remoteChat.projectId ?? undefined
+          const localProjectId = localChat?.projectId ?? undefined
+
+          if (localChat && remoteProjectId !== localProjectId) {
+            // Project assignment changed — update local state
+            await indexedDBStorage.updateChatProject(
+              remoteChat.id,
+              remoteChat.projectId ?? null,
+            )
+            changedIds.push(remoteChat.id)
+          } else if (!localChat && remoteChat.content) {
+            // New chat we don't have locally — ingest it
+            const ingestResult = await ingestRemoteChats([remoteChat], {
+              fetchMissingContent: true,
+              projectId: remoteChat.projectId ?? undefined,
+            })
+            result.downloaded += ingestResult.downloaded
+            result.errors.push(...ingestResult.errors)
+            changedIds.push(...ingestResult.savedIds)
+          }
+        }
+
+        continuationToken = allUpdated.hasMore
+          ? allUpdated.nextContinuationToken
+          : undefined
+      } while (continuationToken)
+
+      if (totalProcessed > 0) {
+        logInfo(`Cross-scope sync: processed ${totalProcessed} changed chats`, {
+          component: 'CloudSync',
+          action: 'syncCrossScope',
+        })
+      }
+
+      if (changedIds.length > 0) {
+        chatEvents.emit({ reason: 'sync', ids: changedIds })
+      }
+
+      this.allChatsSyncCache.save(remoteAllStatus)
+    } catch (error) {
+      logError('Failed to sync cross-scope changes', error, {
+        component: 'CloudSync',
+        action: 'syncCrossScope',
+      })
+    }
+  }
+
   // Perform a delta sync - only fetch chats that changed since last sync
   async syncChangedChats(): Promise<SyncResult> {
-    if (this.isSyncing) {
-      throw new Error('Sync already in progress')
-    }
+    return this.withSyncLock(() => this.doSyncChangedChats())
+  }
 
-    this.isSyncing = true
+  private async doSyncChangedChats(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -242,184 +348,95 @@ export class CloudSyncService {
       result.errors.push(...backupResult.errors)
 
       // Get cached sync status to determine what changed
-      const cachedStatus = this.lastSyncStatus || this.loadCachedSyncStatus()
+      const cachedStatus = this.chatSyncCache.load()
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync (first page only)
-        this.isSyncing = false
-        return await this.syncAllChats()
+        return await this.doSyncAllChats()
       }
 
-      // Fetch only chats updated since our last sync
-      let updatedChats
-      try {
-        updatedChats = await cloudStorage.getChatsUpdatedSince({
-          since: cachedStatus.lastUpdated,
-          includeContent: true,
-        })
-      } catch (error) {
-        logError(
-          'Failed to get updated chats, falling back to full sync',
-          error,
-          {
-            component: 'CloudSync',
-            action: 'syncChangedChats',
-          },
-        )
-        this.isSyncing = false
-        return await this.syncAllChats()
-      }
+      // Fetch chats updated since our last sync, paginating through all results
+      let continuationToken: string | undefined
+      let hasMore = true
+      let isFirstPage = true
 
-      const remoteConversations = updatedChats.conversations || []
-
-      if (remoteConversations.length === 0) {
-        logInfo('No chats updated since last sync', {
-          component: 'CloudSync',
-          action: 'syncChangedChats',
-          metadata: { since: cachedStatus.lastUpdated },
-        })
-        // Update the cached status with current time to track this sync
+      while (hasMore) {
+        let updatedChats
         try {
-          const newStatus = await cloudStorage.getChatSyncStatus()
-          this.saveSyncStatus(newStatus)
-        } catch (statusError) {
-          logError('Failed to update sync status', statusError, {
+          updatedChats = await cloudStorage.getChatsUpdatedSince({
+            since: cachedStatus.lastUpdated,
+            includeContent: true,
+            continuationToken,
+          })
+        } catch (error) {
+          logError(
+            'Failed to get updated chats, falling back to full sync',
+            error,
+            {
+              component: 'CloudSync',
+              action: 'syncChangedChats',
+            },
+          )
+          return await this.doSyncAllChats()
+        }
+
+        const remoteConversations = updatedChats.conversations || []
+
+        if (isFirstPage && remoteConversations.length === 0) {
+          logInfo('No chats updated since last sync', {
             component: 'CloudSync',
             action: 'syncChangedChats',
+            metadata: { since: cachedStatus.lastUpdated },
+          })
+          break
+        }
+
+        if (isFirstPage) {
+          logInfo(`Syncing changed chats`, {
+            component: 'CloudSync',
+            action: 'syncChangedChats',
+            metadata: {
+              since: cachedStatus.lastUpdated,
+              firstPageCount: remoteConversations.length,
+              hasMore: updatedChats.hasMore,
+            },
           })
         }
-        this.isSyncing = false
-        return result
+        isFirstPage = false
+
+        const ingestResult = await ingestRemoteChats(remoteConversations, {
+          fetchMissingContent: true,
+        })
+        result.downloaded += ingestResult.downloaded
+        result.errors.push(...ingestResult.errors)
+
+        hasMore =
+          updatedChats.hasMore === true && !!updatedChats.nextContinuationToken
+        continuationToken = updatedChats.nextContinuationToken
       }
 
-      logInfo(`Syncing ${remoteConversations.length} changed chats`, {
-        component: 'CloudSync',
-        action: 'syncChangedChats',
-        metadata: { since: cachedStatus.lastUpdated },
-      })
-
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
-      // Process updated remote chats
-      const savedIds: string[] = []
-      for (const remoteChat of remoteConversations) {
-        // Skip if this chat was recently deleted
-        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
-          continue
-        }
-
-        try {
-          let downloadedChat: StoredChat | null = null
-
-          if (remoteChat.content) {
-            const encrypted = JSON.parse(remoteChat.content)
-
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              downloadedChat = decrypted
-            } catch (decryptError) {
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-
-              // Preserve projectId from local chat if it exists
-              const localChat = await indexedDBStorage.getChat(remoteChat.id)
-
-              downloadedChat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                updatedAt: ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-                // Preserve project association from local chat
-                projectId: localChat?.projectId,
-              } as StoredChat
-            }
-          } else {
-            downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
-            if (downloadedChat) {
-              downloadedChat.createdAt = ensureValidISODate(
-                downloadedChat.createdAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              downloadedChat.updatedAt = ensureValidISODate(
-                downloadedChat.updatedAt ??
-                  remoteChat.updatedAt ??
-                  remoteChat.createdAt,
-                remoteChat.id,
-              )
-              downloadedChat.lastAccessedAt = Date.now()
-              downloadedChat.syncedAt = Date.now()
-              downloadedChat.locallyModified = false
-              downloadedChat.syncVersion = downloadedChat.syncVersion || 1
-              // Preserve project association from local chat if decryption failed
-              if (downloadedChat.decryptionFailed) {
-                const localChat = await indexedDBStorage.getChat(remoteChat.id)
-                if (localChat?.projectId) {
-                  downloadedChat.projectId = localChat.projectId
-                }
-              }
-            }
-          }
-
-          if (downloadedChat) {
-            downloadedChat.createdAt = ensureValidISODate(
-              downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.updatedAt = ensureValidISODate(
-              downloadedChat.updatedAt ?? downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            await indexedDBStorage.saveChat(downloadedChat)
-            await indexedDBStorage.markAsSynced(
-              downloadedChat.id,
-              downloadedChat.syncVersion || 0,
-            )
-            savedIds.push(downloadedChat.id)
-            result.downloaded++
-          }
-        } catch (error) {
-          result.errors.push(
-            `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-          )
-        }
-      }
-
-      if (savedIds.length > 0) {
-        chatEvents.emit({ reason: 'sync', ids: savedIds })
+      // Delete local chats that were deleted on another device
+      if (cachedStatus?.lastUpdated) {
+        await syncRemoteDeletions(cachedStatus.lastUpdated, 'syncChangedChats')
       }
 
       // Update cached sync status
       try {
         const newStatus = await cloudStorage.getChatSyncStatus()
-        this.saveSyncStatus(newStatus)
+        this.chatSyncCache.save(newStatus)
       } catch (statusError) {
         logError('Failed to update sync status', statusError, {
           component: 'CloudSync',
           action: 'syncChangedChats',
         })
       }
+
+      // Detect cross-scope moves (chats moving between projects)
+      await this.syncCrossScope(result)
     } catch (error) {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
-    } finally {
-      this.isSyncing = false
     }
 
     return result
@@ -427,44 +444,42 @@ export class CloudSyncService {
 
   // Clear cached sync status (useful when logging out or resetting)
   clearSyncStatus(): void {
-    this.lastSyncStatus = null
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem(SYNC_STATUS_STORAGE_KEY)
-      } catch {
-        // Ignore storage errors
-      }
+    this.chatSyncCache.clear()
+    this.allChatsSyncCache.clear()
+    for (const cache of this.projectSyncCaches.values()) {
+      cache.clear()
     }
+    this.projectSyncCaches.clear()
   }
 
-  // Backup a single chat to the cloud with rate limiting
+  // Backup a single chat to the cloud with coalescing and retry
   async backupChat(chatId: string): Promise<void> {
     // Don't attempt backup if not authenticated
     if (!(await cloudStorage.isAuthenticated())) {
       return
     }
 
-    // Check if there's already an upload in progress for this chat
-    const existingUpload = this.uploadQueue.get(chatId)
-    if (existingUpload) {
-      // Queue this upload to run after the current one completes
-      // This ensures we upload the latest version of the chat
-      return existingUpload.then(() => {
-        // Run the upload again with the latest data
-        return this.backupChat(chatId)
-      })
-    }
+    // Use the upload coalescer - it handles:
+    // - Coalescing rapid edits into a single upload
+    // - Exponential backoff retry on failure
+    // - Proper concurrency control per chat
+    this.uploadCoalescer.enqueue(chatId)
+  }
 
-    // Create the upload promise
-    const uploadPromise = this.doBackupChat(chatId)
-    this.uploadQueue.set(chatId, uploadPromise)
+  /**
+   * Wait for a specific chat's upload to complete.
+   * Useful for testing and ensuring uploads complete before proceeding.
+   */
+  async waitForUpload(chatId: string): Promise<void> {
+    await this.uploadCoalescer.waitForUpload(chatId)
+  }
 
-    // Clean up the queue when done
-    uploadPromise.finally(() => {
-      this.uploadQueue.delete(chatId)
-    })
-
-    return uploadPromise
+  /**
+   * Wait for all pending uploads to complete.
+   * Useful for testing and cleanup.
+   */
+  async waitForAllUploads(): Promise<void> {
+    await this.uploadCoalescer.waitForAllUploads()
   }
 
   private async doBackupChat(chatId: string): Promise<void> {
@@ -500,14 +515,9 @@ export class CloudSyncService {
             action: 'backupChat',
             metadata: { chatId },
           })
-          // Re-trigger the backup after streaming ends
-          this.backupChat(chatId).catch((error) => {
-            logError('Failed to backup chat after streaming', error, {
-              component: 'CloudSync',
-              action: 'backupChat',
-              metadata: { chatId },
-            })
-          })
+          // Re-trigger the backup after streaming ends.
+          // Errors are handled internally by the upload coalescer.
+          this.backupChat(chatId)
         })
 
         return
@@ -518,21 +528,24 @@ export class CloudSyncService {
         return // Chat might have been deleted
       }
 
-      // Don't sync blank chats or local-only chats
-      if ((chat as any).isBlankChat || chat.isLocalOnly) {
-        logInfo('Skipping sync for blank or local-only chat', {
+      // Use centralized predicate for upload eligibility
+      // Note: streaming is checked here AND after potential delay
+      if (!isUploadableChat(chat, isStreaming)) {
+        logInfo('Skipping sync for ineligible chat', {
           component: 'CloudSync',
           action: 'backupChat',
           metadata: {
             chatId,
-            isBlankChat: (chat as any).isBlankChat,
+            isBlankChat: chat.isBlankChat,
             isLocalOnly: chat.isLocalOnly,
+            decryptionFailed: chat.decryptionFailed,
+            hasEncryptedData: !!chat.encryptedData,
           },
         })
         return
       }
 
-      // Double-check streaming status right before upload
+      // Double-check streaming status right before upload (in case it started during async ops)
       if (streamingTracker.isStreaming(chatId)) {
         logInfo('Chat started streaming during backup process, aborting sync', {
           component: 'CloudSync',
@@ -545,7 +558,7 @@ export class CloudSyncService {
       await cloudStorage.uploadChat(chat)
 
       // Mark as synced with incremented version
-      const newVersion = (chat.syncVersion || 0) + 1
+      const newVersion = (chat.syncVersion ?? 0) + 1
       await indexedDBStorage.markAsSynced(chatId, newVersion)
     } catch (error) {
       // Silently fail if no auth token set
@@ -576,17 +589,12 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Filter out blank chats, streaming chats, local-only chats, and failed-decryption placeholders
+      // Use centralized predicate for upload eligibility
       // Note: temp ID chats are allowed - uploadChat will generate server IDs for them
       // IMPORTANT: Never upload chats that failed to decrypt - they are placeholders with empty
       // messages that would overwrite real encrypted data on the server
-      const chatsToSync = unsyncedChats.filter(
-        (chat) =>
-          !(chat as any).isBlankChat &&
-          !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly &&
-          !chat.decryptionFailed &&
-          !chat.encryptedData,
+      const chatsToSync = unsyncedChats.filter((chat) =>
+        isUploadableChat(chat, isStreaming),
       )
 
       logInfo(`Chats with messages to sync: ${chatsToSync.length}`, {
@@ -594,22 +602,11 @@ export class CloudSyncService {
         action: 'backupUnsyncedChats',
       })
 
-      // Upload all chats in parallel for better performance
+      // Route each chat through doBackupChat for consistent streaming checks,
+      // upload logic, and markAsSynced handling
       const uploadPromises = chatsToSync.map(async (chat) => {
         try {
-          // Skip if chat started streaming while in queue
-          if (streamingTracker.isStreaming(chat.id)) {
-            logInfo(`Skipping sync for chat ${chat.id} - started streaming`, {
-              component: 'CloudSync',
-              action: 'backupUnsyncedChats',
-            })
-            return
-          }
-
-          await cloudStorage.uploadChat(chat)
-
-          const newVersion = (chat.syncVersion || 0) + 1
-          await indexedDBStorage.markAsSynced(chat.id, newVersion)
+          await this.doBackupChat(chat.id)
           result.uploaded++
         } catch (error) {
           result.errors.push(
@@ -630,11 +627,10 @@ export class CloudSyncService {
 
   // Sync all chats (upload local changes, download remote changes)
   async syncAllChats(): Promise<SyncResult> {
-    if (this.isSyncing) {
-      throw new Error('Sync already in progress')
-    }
+    return this.withSyncLock(() => this.doSyncAllChats())
+  }
 
-    this.isSyncing = true
+  private async doSyncAllChats(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -660,7 +656,6 @@ export class CloudSyncService {
           component: 'CloudSync',
           action: 'syncAllChats',
         })
-        this.isSyncing = false
         return result
       }
 
@@ -679,142 +674,26 @@ export class CloudSyncService {
 
       const localChats = await indexedDBStorage.getAllChats()
 
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
-      // Create maps for easy lookup
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
-      const remoteChatMap = new Map(remoteConversations.map((c) => [c.id, c]))
 
-      // Process remote chats
-      const savedIds: string[] = []
-      for (const remoteChat of remoteConversations) {
-        // Skip if this chat was recently deleted
-        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
-          logInfo('Skipping sync for recently deleted chat', {
-            component: 'CloudSync',
-            action: 'syncAllChats',
-            metadata: { chatId: remoteChat.id },
-          })
-          continue
-        }
+      const ingestResult = await ingestRemoteChats(remoteConversations, {
+        localChatMap,
+        checkShouldIngest: true,
+        fetchMissingContent: true,
+      })
+      result.downloaded += ingestResult.downloaded
+      result.errors.push(...ingestResult.errors)
 
-        const localChat = localChatMap.get(remoteChat.id)
-
-        // Process if:
-        // 1. Chat doesn't exist locally
-        // 2. Remote is newer (based on updatedAt)
-        // 3. Chat failed decryption (to retry with new key)
-        const remoteTimestamp = Date.parse(remoteChat.updatedAt)
-        const shouldProcess =
-          !localChat ||
-          (!isNaN(remoteTimestamp) &&
-            remoteTimestamp > (localChat.syncedAt || 0)) ||
-          (localChat as any).decryptionFailed === true
-
-        if (shouldProcess) {
-          try {
-            let downloadedChat: StoredChat | null = null
-
-            if (remoteChat.content) {
-              const encrypted = JSON.parse(remoteChat.content)
-
-              try {
-                const decrypted = await encryptionService.decrypt(encrypted)
-                downloadedChat = decrypted
-              } catch (decryptError) {
-                const isCorrupted =
-                  decryptError instanceof Error &&
-                  decryptError.message.includes('DATA_CORRUPTED')
-
-                const safeCreatedAt = ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                const safeUpdatedAt = ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                downloadedChat = {
-                  id: remoteChat.id,
-                  title: 'Encrypted',
-                  messages: [],
-                  createdAt: safeCreatedAt,
-                  updatedAt: safeUpdatedAt,
-                  lastAccessedAt: Date.now(),
-                  decryptionFailed: true,
-                  dataCorrupted: isCorrupted,
-                  encryptedData: remoteChat.content,
-                  syncedAt: Date.now(),
-                  locallyModified: false,
-                  syncVersion: 1,
-                  // Preserve project association from local chat
-                  projectId: localChat?.projectId,
-                } as StoredChat
-              }
-            } else {
-              downloadedChat = await cloudStorage.downloadChat(remoteChat.id)
-              if (downloadedChat) {
-                const safeCreatedAt = ensureValidISODate(
-                  downloadedChat.createdAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                const safeUpdatedAt = ensureValidISODate(
-                  downloadedChat.updatedAt ??
-                    remoteChat.updatedAt ??
-                    remoteChat.createdAt,
-                  remoteChat.id,
-                )
-                downloadedChat.createdAt = safeCreatedAt
-                downloadedChat.updatedAt = safeUpdatedAt
-                downloadedChat.lastAccessedAt = Date.now()
-                downloadedChat.syncedAt = Date.now()
-                downloadedChat.locallyModified = false
-                downloadedChat.syncVersion = downloadedChat.syncVersion || 1
-                // Preserve project association from local chat if decryption failed
-                if (downloadedChat.decryptionFailed && localChat?.projectId) {
-                  downloadedChat.projectId = localChat.projectId
-                }
-              }
-            }
-
-            if (downloadedChat) {
-              downloadedChat.createdAt = ensureValidISODate(
-                downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              downloadedChat.updatedAt = ensureValidISODate(
-                downloadedChat.updatedAt ?? downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              await indexedDBStorage.saveChat(downloadedChat)
-              await indexedDBStorage.markAsSynced(
-                downloadedChat.id,
-                downloadedChat.syncVersion || 0,
-              )
-              savedIds.push(downloadedChat.id)
-              result.downloaded++
-            }
-          } catch (error) {
-            result.errors.push(
-              `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-            )
-          }
-        }
-      }
-
-      // Since we're only syncing the first page, we can't determine if chats
-      // were deleted remotely (they might just be on page 2+)
-      // Deletion tracking would require fetching all pages, which we're avoiding for performance
-
-      if (savedIds.length > 0) {
-        chatEvents.emit({ reason: 'sync', ids: savedIds })
+      // Delete local chats that were deleted on another device
+      const cachedStatus = this.chatSyncCache.load()
+      if (cachedStatus?.lastUpdated) {
+        await syncRemoteDeletions(cachedStatus.lastUpdated, 'syncAllChats')
       }
 
       // Update cached sync status after successful sync
       try {
         const newStatus = await cloudStorage.getChatSyncStatus()
-        this.saveSyncStatus(newStatus)
+        this.chatSyncCache.save(newStatus)
       } catch (statusError) {
         // Non-fatal: continue even if we can't update status
         logError('Failed to update sync status after full sync', statusError, {
@@ -822,12 +701,13 @@ export class CloudSyncService {
           action: 'syncAllChats',
         })
       }
+
+      // Detect cross-scope moves (chats moving between projects)
+      await this.syncCrossScope(result)
     } catch (error) {
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
-    } finally {
-      this.isSyncing = false
     }
 
     return result
@@ -838,7 +718,9 @@ export class CloudSyncService {
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
   async smartSync(projectId?: string): Promise<SyncResult> {
-    if (this.isSyncing) {
+    // Note: smartSync doesn't need its own lock because it delegates to
+    // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
+    if (this.syncLock) {
       throw new Error('Sync already in progress')
     }
 
@@ -870,9 +752,8 @@ export class CloudSyncService {
 
     // If we have a cached lastUpdated, use delta sync; otherwise fall back to full sync
     const cachedStatus = projectId
-      ? this.projectSyncStatus.get(projectId) ||
-        this.loadCachedProjectSyncStatus(projectId)
-      : this.lastSyncStatus || this.loadCachedSyncStatus()
+      ? this.getProjectSyncCache(projectId).load()
+      : this.chatSyncCache.load()
 
     if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
       return projectId
@@ -885,7 +766,7 @@ export class CloudSyncService {
 
   // Check if currently syncing
   get syncing(): boolean {
-    return this.isSyncing
+    return this.syncLock !== null
   }
 
   // Delete a chat from cloud storage
@@ -919,6 +800,42 @@ export class CloudSyncService {
     }
   }
 
+  // Update a chat's project association on the server
+  async updateChatProject(
+    chatId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    if (!(await cloudStorage.isAuthenticated())) {
+      return
+    }
+
+    await cloudStorage.updateChatProject(chatId, projectId)
+  }
+
+  private async paginateLocalChats(
+    limit: number,
+    continuationToken?: string,
+  ): Promise<PaginatedChatsResult> {
+    const localChats = await indexedDBStorage.getAllChats()
+    const sortedChats = localChats.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime()
+      const timeB = new Date(b.createdAt).getTime()
+      return timeB - timeA
+    })
+
+    const start = continuationToken ? parseInt(continuationToken, 10) : 0
+    const paginatedChats = sortedChats.slice(start, start + limit)
+
+    return {
+      chats: paginatedChats,
+      hasMore: start + limit < sortedChats.length,
+      nextToken:
+        start + limit < sortedChats.length
+          ? (start + limit).toString()
+          : undefined,
+    }
+  }
+
   // Load chats with pagination - combines local and remote chats
   async loadChatsWithPagination(options: {
     limit: number
@@ -930,32 +847,12 @@ export class CloudSyncService {
     // If no authentication, just return local chats
     if (!(await cloudStorage.isAuthenticated())) {
       if (loadLocal) {
-        const localChats = await indexedDBStorage.getAllChats()
-        const sortedChats = localChats.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime()
-          const timeB = new Date(b.createdAt).getTime()
-          return timeB - timeA
-        })
-
-        const start = continuationToken ? parseInt(continuationToken, 10) : 0
-        const paginatedChats = sortedChats.slice(start, start + limit)
-
-        return {
-          chats: paginatedChats,
-          hasMore: start + limit < sortedChats.length,
-          nextToken:
-            start + limit < sortedChats.length
-              ? (start + limit).toString()
-              : undefined,
-        }
+        return this.paginateLocalChats(limit, continuationToken)
       }
       return { chats: [], hasMore: false }
     }
 
     try {
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
       // For authenticated users, load from R2 with content
       const remoteList = await cloudStorage.listChats({
         limit,
@@ -982,37 +879,9 @@ export class CloudSyncService {
         if (!remoteChat.content) return null
 
         try {
-          const encrypted = JSON.parse(remoteChat.content)
-
-          // Try to decrypt the chat data
-          let chat: StoredChat | null = null
-          try {
-            const decrypted = await encryptionService.decrypt(encrypted)
-            chat = decrypted
-          } catch (decryptError) {
-            // Check if this is corrupted data (compressed)
-            const isCorrupted =
-              decryptError instanceof Error &&
-              decryptError.message.includes('DATA_CORRUPTED')
-
-            // If decryption fails, store the encrypted data for later retry
-            chat = {
-              id: remoteChat.id,
-              title: 'Encrypted',
-              messages: [],
-              createdAt: remoteChat.createdAt,
-              updatedAt: remoteChat.updatedAt,
-              lastAccessedAt: Date.now(),
-              decryptionFailed: true,
-              dataCorrupted: isCorrupted,
-              encryptedData: remoteChat.content,
-              syncedAt: Date.now(),
-              locallyModified: false,
-              syncVersion: 1,
-            } as StoredChat
-          }
-
-          return chat
+          // Use centralized chat codec for decryption/placeholder logic
+          const result = await processRemoteChat(remoteChat)
+          return result.chat
         } catch (error) {
           logError(`Failed to process chat ${remoteChat.id}`, error, {
             component: 'CloudSync',
@@ -1045,24 +914,7 @@ export class CloudSyncService {
 
       // Fall back to local chats if remote loading fails
       if (loadLocal) {
-        const localChats = await indexedDBStorage.getAllChats()
-        const sortedChats = localChats.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime()
-          const timeB = new Date(b.createdAt).getTime()
-          return timeB - timeA
-        })
-
-        const start = continuationToken ? parseInt(continuationToken, 10) : 0
-        const paginatedChats = sortedChats.slice(start, start + limit)
-
-        return {
-          chats: paginatedChats,
-          hasMore: start + limit < sortedChats.length,
-          nextToken:
-            start + limit < sortedChats.length
-              ? (start + limit).toString()
-              : undefined,
-        }
+        return this.paginateLocalChats(limit, continuationToken)
       }
 
       throw error
@@ -1076,84 +928,7 @@ export class CloudSyncService {
       batchSize?: number
     } = {},
   ): Promise<number> {
-    const { onProgress } = options
-    // Ensure batchSize is a positive integer, default to 5 if invalid
-    const batchSize = Math.max(1, Math.floor(options.batchSize || 5))
-    let decryptedCount = 0
-    let chatsWithEncryptedData: any[] = []
-
-    try {
-      // Get all chats that have encrypted data
-      chatsWithEncryptedData =
-        await indexedDBStorage.getChatsWithEncryptedData()
-
-      const total = chatsWithEncryptedData.length
-
-      // Process chats in batches to avoid blocking the UI
-      for (let i = 0; i < chatsWithEncryptedData.length; i += batchSize) {
-        const batch = chatsWithEncryptedData.slice(i, i + batchSize)
-
-        // Process batch in parallel
-        const batchPromises = batch.map(async (chat) => {
-          try {
-            // Parse the stored encrypted data
-            const encryptedData = JSON.parse(chat.encryptedData)
-
-            // Decrypt the chat data
-            const decryptedData = await encryptionService.decrypt(encryptedData)
-
-            logInfo(`Decrypted chat ${chat.id}`, {
-              component: 'CloudSync',
-              action: 'retryDecryptionWithNewKey',
-              metadata: {
-                chatId: chat.id,
-                decryptedTitle: decryptedData.title,
-                messageCount: decryptedData.messages?.length || 0,
-              },
-            })
-
-            // Create properly decrypted chat with original data
-            const updatedChat: StoredChat = {
-              ...decryptedData, // Use all decrypted data first
-              id: chat.id, // Preserve the original ID
-              decryptionFailed: false,
-              encryptedData: undefined,
-              syncedAt: chat.syncedAt,
-              syncVersion: chat.syncVersion,
-              locallyModified: false,
-            }
-
-            await indexedDBStorage.saveChat(updatedChat)
-            return true
-          } catch (error) {
-            logError(`Failed to decrypt chat ${chat.id}`, error, {
-              component: 'CloudSync',
-              action: 'retryDecryptionWithNewKey',
-              metadata: { chatId: chat.id },
-            })
-            return false
-          }
-        })
-
-        const results = await Promise.all(batchPromises)
-        decryptedCount += results.filter(Boolean).length
-
-        // Report progress
-        if (onProgress) {
-          onProgress(Math.min(i + batchSize, total), total)
-        }
-
-        // Yield to the event loop between batches
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-    } catch (error) {
-      logError('Failed to retry decryptions', error, {
-        component: 'CloudSync',
-        action: 'retryDecryptionWithNewKey',
-      })
-    }
-
-    return decryptedCount
+    return doRetryDecryption(options)
   }
 
   // Re-encrypt all local chats with new key and upload to cloud
@@ -1162,123 +937,7 @@ export class CloudSyncService {
     uploaded: number
     errors: string[]
   }> {
-    const result = {
-      reencrypted: 0,
-      uploaded: 0,
-      errors: [] as string[],
-    }
-
-    try {
-      // Get all local chats
-      const allChats = await indexedDBStorage.getAllChats()
-
-      logInfo('Starting re-encryption of local chats', {
-        component: 'CloudSync',
-        action: 'reencryptAndUploadChats',
-        metadata: { totalChats: allChats.length },
-      })
-
-      // Initialize encryption with new key
-      await encryptionService.initialize()
-
-      for (const chat of allChats) {
-        try {
-          // Skip blank chats
-          if (chat.isBlankChat) continue
-
-          // Never upload local-only chats
-          if (chat.isLocalOnly) {
-            logInfo('Skipping local-only chat during re-encryption', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: { chatId: chat.id },
-            })
-            continue
-          }
-
-          // Skip chats that failed to decrypt
-          if (chat.decryptionFailed) {
-            logInfo('Skipping chat that failed to decrypt', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: {
-                chatId: chat.id,
-                hasEncryptedData: !!chat.encryptedData,
-                dataCorrupted: chat.dataCorrupted,
-              },
-            })
-            continue
-          }
-
-          // For encrypted chats, they need to be decrypted first (will use old key from memory if available)
-          // For decrypted chats, we can directly work with them
-          let chatToReencrypt = chat
-
-          if (chat.encryptedData) {
-            // This chat is still encrypted with old key, skip it
-            // It will be handled by retryDecryptionWithNewKey
-            logInfo('Skipping encrypted chat - needs decryption first', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: { chatId: chat.id },
-            })
-            continue
-          }
-
-          // Re-encrypt the chat with the new key by forcing a sync
-          // The sync process will automatically encrypt with the current key
-          if (await cloudStorage.isAuthenticated()) {
-            // Increment sync version to force upload
-            chatToReencrypt.syncVersion = (chatToReencrypt.syncVersion || 0) + 1
-
-            // Save locally with new sync version
-            await indexedDBStorage.saveChat(chatToReencrypt)
-
-            // Upload to cloud (will be encrypted with new key)
-            await cloudStorage.uploadChat(chatToReencrypt)
-
-            await indexedDBStorage.markAsSynced(
-              chatToReencrypt.id,
-              chatToReencrypt.syncVersion || 0,
-            )
-            result.uploaded++
-            result.reencrypted++
-
-            logInfo('Chat re-encrypted and uploaded', {
-              component: 'CloudSync',
-              action: 'reencryptAndUploadChats',
-              metadata: {
-                chatId: chatToReencrypt.id,
-                syncVersion: chatToReencrypt.syncVersion,
-              },
-            })
-          }
-        } catch (error) {
-          const errorMsg = `Failed to re-encrypt chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`
-          result.errors.push(errorMsg)
-          logError('Failed to re-encrypt chat', error, {
-            component: 'CloudSync',
-            action: 'reencryptAndUploadChats',
-            metadata: { chatId: chat.id },
-          })
-        }
-      }
-
-      logInfo('Completed re-encryption of local chats', {
-        component: 'CloudSync',
-        action: 'reencryptAndUploadChats',
-        metadata: result,
-      })
-    } catch (error) {
-      const errorMsg = `Re-encryption failed: ${error instanceof Error ? error.message : String(error)}`
-      result.errors.push(errorMsg)
-      logError('Failed to re-encrypt chats', error, {
-        component: 'CloudSync',
-        action: 'reencryptAndUploadChats',
-      })
-    }
-
-    return result
+    return doReencryptAndUpload()
   }
 
   // Fetch a page of remote chats, decrypt, persist to IndexedDB, and return pagination info
@@ -1294,9 +953,6 @@ export class CloudSyncService {
     }
 
     try {
-      // Initialize encryption service before processing
-      await encryptionService.initialize()
-
       // Request a page with content for decryption
       const remoteList = await cloudStorage.listChats({
         limit,
@@ -1305,98 +961,18 @@ export class CloudSyncService {
       })
 
       const conversations = remoteList.conversations || []
-      let saved = 0
-      const savedIds: string[] = []
 
-      // Process chats in parallel for performance
-      const processPromises = conversations.map(async (remoteChat) => {
-        try {
-          let chat: StoredChat | null = null
-          if (remoteChat.content) {
-            try {
-              const encrypted = JSON.parse(remoteChat.content)
-              const decrypted = await encryptionService.decrypt(encrypted)
-              chat = decrypted as StoredChat
-            } catch (decryptError) {
-              // If decryption fails, store placeholder to retry later
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-              chat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: ensureValidISODate(
-                  remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                updatedAt: ensureValidISODate(
-                  remoteChat.updatedAt ?? remoteChat.createdAt,
-                  remoteChat.id,
-                ),
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-              } as StoredChat
-            }
-          } else {
-            // Fallback: download content by ID (should be rare when includeContent is true)
-            chat = await cloudStorage.downloadChat(remoteChat.id)
-            if (chat) {
-              chat.createdAt = ensureValidISODate(
-                chat.createdAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              chat.updatedAt = ensureValidISODate(
-                chat.updatedAt ?? remoteChat.updatedAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-              chat.lastAccessedAt = Date.now()
-              chat.syncedAt = Date.now()
-              chat.locallyModified = false
-              chat.syncVersion = chat.syncVersion || 1
-            }
-          }
-
-          if (chat) {
-            chat.createdAt = ensureValidISODate(chat.createdAt, chat.id)
-            chat.updatedAt = ensureValidISODate(
-              chat.updatedAt ?? chat.createdAt,
-              chat.id,
-            )
-            // Mark as loaded via pagination for local sort heuristics
-            chat.loadedAt = Date.now()
-            chat.syncedAt = Date.now()
-            chat.locallyModified = false
-            chat.syncVersion = chat.syncVersion || 1
-
-            await indexedDBStorage.saveChat(chat)
-            await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion || 0)
-            saved += 1
-            savedIds.push(chat.id)
-          }
-        } catch (error) {
-          logError(`Failed to process chat ${remoteChat.id}`, error, {
-            component: 'CloudSync',
-            action: 'fetchAndStorePage',
-          })
-        }
+      const ingestResult = await ingestRemoteChats(conversations, {
+        fetchMissingContent: true,
+        setLoadedAt: true,
+        skipDeleted: false,
+        eventReason: 'pagination',
       })
-
-      await Promise.all(processPromises)
-
-      if (savedIds.length > 0) {
-        chatEvents.emit({ reason: 'pagination', ids: savedIds })
-      }
 
       return {
         hasMore: !!remoteList.nextContinuationToken,
         nextToken: remoteList.nextContinuationToken,
-        saved,
+        saved: ingestResult.downloaded,
       }
     } catch (error) {
       logError('Failed to fetch and store chat page', error, {
@@ -1412,11 +988,10 @@ export class CloudSyncService {
    * This fetches project-specific chats using the /api/projects/{projectId}/chats endpoint.
    */
   async syncProjectChats(projectId: string): Promise<SyncResult> {
-    if (this.isSyncing) {
-      throw new Error('Sync already in progress')
-    }
+    return this.withSyncLock(() => this.doSyncProjectChats(projectId))
+  }
 
-    this.isSyncing = true
+  private async doSyncProjectChats(projectId: string): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -1424,7 +999,6 @@ export class CloudSyncService {
     }
 
     if (!(await cloudStorage.isAuthenticated())) {
-      this.isSyncing = false
       return result
     }
 
@@ -1452,114 +1026,17 @@ export class CloudSyncService {
         metadata: { projectId, chatCount: remoteChats.length },
       })
 
-      // Get local chats to compare
       const localChats = await indexedDBStorage.getAllChats()
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
 
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
-      const savedIds: string[] = []
-
-      for (const remoteChat of remoteChats) {
-        // Skip if this chat was recently deleted
-        if (deletedChatsTracker.isDeleted(remoteChat.id)) {
-          continue
-        }
-
-        const localChat = localChatMap.get(remoteChat.id)
-
-        // Process if:
-        // 1. Chat doesn't exist locally
-        // 2. Remote is newer (based on updatedAt)
-        // 3. Chat failed decryption (to retry with new key)
-        const remoteTimestamp = Date.parse(remoteChat.updatedAt)
-        const shouldProcess =
-          !localChat ||
-          (!isNaN(remoteTimestamp) &&
-            remoteTimestamp > (localChat.syncedAt || 0)) ||
-          localChat?.decryptionFailed === true
-
-        if (!shouldProcess) {
-          continue
-        }
-
-        try {
-          let downloadedChat: StoredChat | null = null
-
-          if (remoteChat.content) {
-            const encrypted = JSON.parse(remoteChat.content)
-
-            try {
-              const decrypted = await encryptionService.decrypt(encrypted)
-              downloadedChat = {
-                ...decrypted,
-                projectId, // Ensure projectId is set from the API context
-              } as StoredChat
-            } catch (decryptError) {
-              const isCorrupted =
-                decryptError instanceof Error &&
-                decryptError.message.includes('DATA_CORRUPTED')
-
-              const safeCreatedAt = ensureValidISODate(
-                remoteChat.createdAt,
-                remoteChat.id,
-              )
-              const safeUpdatedAt = ensureValidISODate(
-                remoteChat.updatedAt ?? remoteChat.createdAt,
-                remoteChat.id,
-              )
-
-              downloadedChat = {
-                id: remoteChat.id,
-                title: 'Encrypted',
-                messages: [],
-                createdAt: safeCreatedAt,
-                updatedAt: safeUpdatedAt,
-                lastAccessedAt: Date.now(),
-                decryptionFailed: true,
-                dataCorrupted: isCorrupted,
-                encryptedData: remoteChat.content,
-                syncedAt: Date.now(),
-                locallyModified: false,
-                syncVersion: 1,
-                projectId,
-              } as StoredChat
-            }
-          }
-
-          if (downloadedChat) {
-            downloadedChat.createdAt = ensureValidISODate(
-              downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.updatedAt = ensureValidISODate(
-              downloadedChat.updatedAt ?? downloadedChat.createdAt,
-              downloadedChat.id,
-            )
-            downloadedChat.lastAccessedAt = Date.now()
-            downloadedChat.syncedAt = Date.now()
-            downloadedChat.locallyModified = false
-            downloadedChat.projectId = projectId // Always ensure projectId is set
-
-            await indexedDBStorage.saveChat(downloadedChat)
-            await indexedDBStorage.markAsSynced(
-              downloadedChat.id,
-              downloadedChat.syncVersion || 0,
-            )
-            savedIds.push(downloadedChat.id)
-            result.downloaded++
-          }
-        } catch (error) {
-          result.errors.push(
-            `Failed to process project chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-          )
-        }
-      }
-
-      if (savedIds.length > 0) {
-        chatEvents.emit({ reason: 'sync', ids: savedIds })
-      }
+      const ingestResult = await ingestRemoteChats(remoteChats, {
+        localChatMap,
+        projectId,
+        checkShouldIngest: true,
+        fetchMissingContent: true,
+      })
+      result.downloaded += ingestResult.downloaded
+      result.errors.push(...ingestResult.errors)
 
       logInfo('Project chat sync complete', {
         component: 'CloudSync',
@@ -1575,7 +1052,7 @@ export class CloudSyncService {
       try {
         const newStatus =
           await projectStorage.getProjectChatsSyncStatus(projectId)
-        this.saveProjectSyncStatus(projectId, newStatus)
+        this.getProjectSyncCache(projectId).save(newStatus)
       } catch (statusError) {
         logError(
           'Failed to update project sync status after full sync',
@@ -1596,8 +1073,6 @@ export class CloudSyncService {
         action: 'syncProjectChats',
         metadata: { projectId },
       })
-    } finally {
-      this.isSyncing = false
     }
 
     return result
@@ -1607,11 +1082,12 @@ export class CloudSyncService {
    * Perform a delta sync for project chats - only fetch chats that changed since last sync.
    */
   async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
-    if (this.isSyncing) {
-      throw new Error('Sync already in progress')
-    }
+    return this.withSyncLock(() => this.doSyncProjectChatsChanged(projectId))
+  }
 
-    this.isSyncing = true
+  private async doSyncProjectChatsChanged(
+    projectId: string,
+  ): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -1619,7 +1095,6 @@ export class CloudSyncService {
     }
 
     if (!(await cloudStorage.isAuthenticated())) {
-      this.isSyncing = false
       return result
     }
 
@@ -1628,15 +1103,14 @@ export class CloudSyncService {
       const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
       const projectChatsToSync = unsyncedChats.filter(
         (chat) =>
-          chat.projectId === projectId &&
-          !(chat as any).isBlankChat &&
-          !streamingTracker.isStreaming(chat.id) &&
-          !chat.isLocalOnly,
+          chat.projectId === projectId && isUploadableChat(chat, isStreaming),
       )
 
       for (const chat of projectChatsToSync) {
         try {
-          await this.backupChat(chat.id)
+          // Call doBackupChat directly (not via coalescer) so we can
+          // await completion and accurately track upload results
+          await this.doBackupChat(chat.id)
           result.uploaded++
         } catch (error) {
           result.errors.push(
@@ -1646,21 +1120,14 @@ export class CloudSyncService {
       }
 
       // Get cached sync status to determine what changed
-      const cachedStatus =
-        this.projectSyncStatus.get(projectId) ||
-        this.loadCachedProjectSyncStatus(projectId)
+      const cachedStatus = this.getProjectSyncCache(projectId).load()
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync
-        this.isSyncing = false
-        return await this.syncProjectChats(projectId)
+        return await this.doSyncProjectChats(projectId)
       }
 
-      // Initialize encryption service once before processing
-      await encryptionService.initialize()
-
       // Fetch and process chats updated since our last sync, with pagination
-      const savedIds: string[] = []
       let cursorId: string | undefined
       let hasMore = true
       let isFirstPage = true
@@ -1682,8 +1149,7 @@ export class CloudSyncService {
               metadata: { projectId },
             },
           )
-          this.isSyncing = false
-          return await this.syncProjectChats(projectId)
+          return await this.doSyncProjectChats(projectId)
         }
 
         const remoteChats = updatedChats.chats || []
@@ -1698,7 +1164,7 @@ export class CloudSyncService {
           try {
             const newStatus =
               await projectStorage.getProjectChatsSyncStatus(projectId)
-            this.saveProjectSyncStatus(projectId, newStatus)
+            this.getProjectSyncCache(projectId).save(newStatus)
           } catch (statusError) {
             logError('Failed to update project sync status', statusError, {
               component: 'CloudSync',
@@ -1723,100 +1189,23 @@ export class CloudSyncService {
         }
         isFirstPage = false
 
-        // Process this page of remote chats
-        for (const remoteChat of remoteChats) {
-          // Skip if this chat was recently deleted
-          if (deletedChatsTracker.isDeleted(remoteChat.id)) {
-            continue
-          }
-
-          try {
-            let downloadedChat: StoredChat | null = null
-
-            if (remoteChat.content) {
-              const encrypted = JSON.parse(remoteChat.content)
-
-              try {
-                const decrypted = await encryptionService.decrypt(encrypted)
-                downloadedChat = {
-                  ...decrypted,
-                  projectId,
-                } as StoredChat
-              } catch (decryptError) {
-                const isCorrupted =
-                  decryptError instanceof Error &&
-                  decryptError.message.includes('DATA_CORRUPTED')
-
-                // Preserve projectId from local chat if it exists
-                const localChat = await indexedDBStorage.getChat(remoteChat.id)
-
-                downloadedChat = {
-                  id: remoteChat.id,
-                  title: 'Encrypted',
-                  messages: [],
-                  createdAt: ensureValidISODate(
-                    remoteChat.createdAt,
-                    remoteChat.id,
-                  ),
-                  updatedAt: ensureValidISODate(
-                    remoteChat.updatedAt ?? remoteChat.createdAt,
-                    remoteChat.id,
-                  ),
-                  lastAccessedAt: Date.now(),
-                  decryptionFailed: true,
-                  dataCorrupted: isCorrupted,
-                  encryptedData: remoteChat.content,
-                  syncedAt: Date.now(),
-                  locallyModified: false,
-                  syncVersion: 1,
-                  projectId: localChat?.projectId || projectId,
-                } as StoredChat
-              }
-            }
-
-            if (downloadedChat) {
-              downloadedChat.createdAt = ensureValidISODate(
-                downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              downloadedChat.updatedAt = ensureValidISODate(
-                downloadedChat.updatedAt ?? downloadedChat.createdAt,
-                downloadedChat.id,
-              )
-              downloadedChat.lastAccessedAt = Date.now()
-              downloadedChat.syncedAt = Date.now()
-              downloadedChat.locallyModified = false
-              downloadedChat.projectId = projectId
-
-              await indexedDBStorage.saveChat(downloadedChat)
-              await indexedDBStorage.markAsSynced(
-                downloadedChat.id,
-                downloadedChat.syncVersion || 0,
-              )
-              savedIds.push(downloadedChat.id)
-              result.downloaded++
-            }
-          } catch (error) {
-            result.errors.push(
-              `Failed to process project chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
-            )
-          }
-        }
+        const ingestResult = await ingestRemoteChats(remoteChats, {
+          projectId,
+          fetchMissingContent: true,
+        })
+        result.downloaded += ingestResult.downloaded
+        result.errors.push(...ingestResult.errors)
 
         // Check if there are more pages
-        hasMore = updatedChats.hasMore === true
+        hasMore = updatedChats.hasMore === true && !!updatedChats.nextCursor
         cursorId = updatedChats.nextCursor
-      }
-
-      if (savedIds.length > 0) {
-        chatEvents.emit({ reason: 'sync', ids: savedIds })
       }
 
       // Update cached sync status
       try {
         const newStatus =
           await projectStorage.getProjectChatsSyncStatus(projectId)
-        this.saveProjectSyncStatus(projectId, newStatus)
+        this.getProjectSyncCache(projectId).save(newStatus)
       } catch (statusError) {
         logError('Failed to update project sync status', statusError, {
           component: 'CloudSync',
@@ -1828,8 +1217,6 @@ export class CloudSyncService {
       result.errors.push(
         `Project chat sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
-    } finally {
-      this.isSyncing = false
     }
 
     return result

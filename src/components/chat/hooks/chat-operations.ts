@@ -16,6 +16,7 @@ export function createBlankChat(isLocalOnly = false): Chat {
   return {
     id: '', // Blank chats have no ID
     title: 'New Chat',
+    titleState: 'placeholder',
     messages: [],
     createdAt: new Date(),
     isBlankChat: true,

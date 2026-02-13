@@ -1285,7 +1285,7 @@ export function SettingsModal({
               messages: storedChat.messages,
               createdAt: new Date(storedChat.createdAt),
               isLocalOnly: storedChat.isLocalOnly,
-              isBlankChat: (storedChat as any).isBlankChat,
+              isBlankChat: storedChat.isBlankChat,
               syncedAt: storedChat.syncedAt,
               projectId: storedChat.projectId,
             })

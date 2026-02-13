@@ -52,6 +52,7 @@ export function createUpdateChatWithHistoryCheck({
           return {
             ...updatedChat,
             title: c.title, // Preserve title from state (may have been updated by early title gen)
+            titleState: c.titleState,
           }
         }
         return c
@@ -62,6 +63,7 @@ export function createUpdateChatWithHistoryCheck({
       setCurrentChat((prev) => ({
         ...updatedChat,
         title: prev.title, // Preserve title from state (may have been updated by early title gen)
+        titleState: prev.titleState,
       }))
     }
 

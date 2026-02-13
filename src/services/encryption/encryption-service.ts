@@ -10,11 +10,15 @@ export interface EncryptedData {
   data: string // Base64 encoded encrypted data
 }
 
+export type FallbackKeyAddedCallback = () => void
+
 export class EncryptionService {
   private encryptionKey: CryptoKey | null = null
   private currentKeyString: string | null = null
   private fallbackKeyStrings: string[] = []
   private fallbackKeyCache: Map<string, CryptoKey> = new Map()
+  private fallbackKeyAddedCallbacks: Set<FallbackKeyAddedCallback> = new Set()
+  private initPromise: Promise<unknown> | null = null
 
   // Helper to convert bytes to alphanumeric string (a-z, 0-9)
   // Always produces even-length strings (2 characters per byte)
@@ -276,6 +280,7 @@ export class EncryptionService {
     this.currentKeyString = null
     this.fallbackKeyCache.clear()
     this.fallbackKeyStrings = []
+    this.fallbackKeyAddedCallbacks.clear()
     if (persist) {
       try {
         localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
@@ -292,11 +297,108 @@ export class EncryptionService {
     }
   }
 
-  // Encrypt data
-  async encrypt(data: any): Promise<EncryptedData> {
+  /**
+   * Add a decryption key to the fallback list without changing the primary key.
+   *
+   * This allows users to add old keys that can be used to decrypt historical
+   * chats without overwriting the current encryption key.
+   *
+   * @param keyString The key to add (must start with "key_" prefix)
+   * @throws Error if the key format is invalid
+   */
+  addDecryptionKey(keyString: string): void {
+    // Validate key format (throws if invalid)
+    this.getKeyBytes(keyString)
+
+    // Don't add if it's the current key
+    if (keyString === this.currentKeyString) {
+      logInfo('Key is already the primary encryption key', {
+        component: 'EncryptionService',
+        action: 'addDecryptionKey',
+      })
+      return
+    }
+
+    // Don't add duplicates
+    if (this.fallbackKeyStrings.includes(keyString)) {
+      logInfo('Key is already in fallback list', {
+        component: 'EncryptionService',
+        action: 'addDecryptionKey',
+      })
+      return
+    }
+
+    // Add to fallback list
+    this.fallbackKeyStrings.push(keyString)
+    this.saveKeyHistoryToStorage(this.fallbackKeyStrings)
+
+    logInfo('Added decryption key to fallback list', {
+      component: 'EncryptionService',
+      action: 'addDecryptionKey',
+      metadata: {
+        fallbackKeyCount: this.fallbackKeyStrings.length,
+      },
+    })
+
+    // Notify listeners that a new fallback key was added
+    // This allows triggering retry of failed decryptions
+    this.notifyFallbackKeyAdded()
+  }
+
+  /**
+   * Get the count of fallback decryption keys available.
+   */
+  getFallbackKeyCount(): number {
+    return this.fallbackKeyStrings.length
+  }
+
+  /**
+   * Register a callback to be called when a fallback key is added.
+   * Returns an unsubscribe function.
+   */
+  onFallbackKeyAdded(callback: FallbackKeyAddedCallback): () => void {
+    this.fallbackKeyAddedCallbacks.add(callback)
+    return () => {
+      this.fallbackKeyAddedCallbacks.delete(callback)
+    }
+  }
+
+  /**
+   * Notify all registered callbacks that a fallback key was added.
+   */
+  private notifyFallbackKeyAdded(): void {
+    for (const callback of this.fallbackKeyAddedCallbacks) {
+      try {
+        callback()
+      } catch (error) {
+        logInfo('Fallback key callback error', {
+          component: 'EncryptionService',
+          action: 'notifyFallbackKeyAdded',
+          metadata: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    }
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (!this.encryptionKey) {
+      if (!this.initPromise) {
+        this.initPromise = this.initialize().finally(() => {
+          this.initPromise = null
+        })
+      }
+      await this.initPromise
+    }
     if (!this.encryptionKey) {
       throw new Error('Encryption key not initialized')
     }
+  }
+
+  // Encrypt data
+  async encrypt(data: any): Promise<EncryptedData> {
+    await this.ensureInitialized()
 
     // Convert data to string
     const dataString = JSON.stringify(data)
@@ -314,7 +416,7 @@ export class EncryptionService {
         name: 'AES-GCM',
         iv: iv,
       },
-      this.encryptionKey,
+      this.encryptionKey!,
       dataBytes.buffer.slice(
         dataBytes.byteOffset,
         dataBytes.byteOffset + dataBytes.byteLength,
@@ -333,9 +435,7 @@ export class EncryptionService {
 
   // Decrypt data
   async decrypt(encryptedData: EncryptedData): Promise<any> {
-    if (!this.encryptionKey) {
-      throw new Error('Encryption key not initialized')
-    }
+    await this.ensureInitialized()
 
     try {
       // Validate input data
@@ -354,7 +454,7 @@ export class EncryptionService {
         throw new Error(`Invalid base64 encoding: ${error}`)
       }
       try {
-        return await this.decryptWithKey(this.encryptionKey, iv, data)
+        return await this.decryptWithKey(this.encryptionKey!, iv, data)
       } catch (primaryError) {
         let lastError: unknown = primaryError
 

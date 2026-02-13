@@ -1,4 +1,4 @@
-import type { LoadingState, Message } from '@/components/chat/types'
+import type { Attachment, LoadingState, Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 
 // ProcessedDocument type for chat input documents
@@ -8,10 +8,12 @@ export type ProcessedDocument = {
   time: Date
   content?: string
   isUploading?: boolean
-  imageData?: { base64: string; mimeType: string }
+  attachment?: Attachment // The resolved attachment for this document
   isImageDescription?: boolean // True if content is from multimodal image description
   hasDescription?: boolean // True if a multimodal description has been generated
   isGeneratingDescription?: boolean // True while generating image description
+  // Legacy field — kept for backward compat during transition
+  imageData?: { base64: string; mimeType: string }
 }
 
 export interface MessageRenderProps {
@@ -31,13 +33,7 @@ export interface MessageRenderProps {
 }
 
 export interface InputRenderProps {
-  onSubmit: (
-    content: Message['content'],
-    documentContent?: Message['documentContent'],
-    multimodalText?: Message['multimodalText'],
-    documents?: Message['documents'],
-    imageData?: Message['imageData'],
-  ) => void
+  onSubmit: (content: Message['content'], attachments?: Attachment[]) => void
   isDarkMode: boolean
   isPremium: boolean
   model: BaseModel

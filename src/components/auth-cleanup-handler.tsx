@@ -1,10 +1,9 @@
-import { resetRendererRegistry } from '@/components/chat/renderers'
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
-import { encryptionService } from '@/services/encryption/encryption-service'
-import { logInfo } from '@/utils/error-handling'
 import {
+  ACTIVE_USER_ID_KEY,
   getEncryptionKey,
   performSignoutCleanup,
+  performUserSwitchCleanup,
 } from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { useEffect, useRef, useState } from 'react'
@@ -15,37 +14,26 @@ export function AuthCleanupHandler() {
   const [showModal, setShowModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const hasCheckedRef = useRef(false)
-  const previousUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isLoaded) return
 
-    // Check if user switched (different user logged in)
-    if (
-      isSignedIn &&
-      user?.id &&
-      previousUserIdRef.current &&
-      previousUserIdRef.current !== user.id
-    ) {
-      // User switched - reset renderer registry to prevent state leakage
-      resetRendererRegistry()
-      encryptionService.clearKey()
-      logInfo('Reset renderer registry due to user switch', {
-        component: 'AuthCleanupHandler',
-        action: 'userSwitch',
-        metadata: {
-          previousUserId: previousUserIdRef.current,
-          newUserId: user.id,
-        },
-      })
+    if (isSignedIn && user?.id) {
+      const storedUserId = localStorage.getItem(ACTIVE_USER_ID_KEY)
+
+      if (storedUserId && storedUserId !== user.id) {
+        // Different user signed in — clear all previous user data + reload
+        performUserSwitchCleanup(user.id)
+        return
+      }
+
+      // Same user or fresh sign-in — persist the active user ID
+      localStorage.setItem(ACTIVE_USER_ID_KEY, user.id)
     }
 
-    // Update the previous user ID BEFORE checking signout
-    const wasSignedIn = previousUserIdRef.current !== null
-    previousUserIdRef.current = user?.id || null
-
-    // Check if user just signed out (was signed in before, now not signed in)
-    if (!isSignedIn && wasSignedIn && !hasCheckedRef.current) {
+    // Check if user just signed out (stored user ID exists but no longer signed in)
+    const storedUserId = localStorage.getItem(ACTIVE_USER_ID_KEY)
+    if (!isSignedIn && storedUserId && !hasCheckedRef.current) {
       hasCheckedRef.current = true
 
       // Check theme from data-theme attribute (source of truth)

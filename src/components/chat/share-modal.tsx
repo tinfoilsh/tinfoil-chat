@@ -17,6 +17,10 @@ import {
 } from '@heroicons/react/24/outline'
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '../ui/card'
+import {
+  getMessageAttachments,
+  hasMessageAttachments,
+} from './attachment-helpers'
 import { CONSTANTS } from './constants'
 import type { Message } from './types'
 
@@ -128,21 +132,25 @@ export function ShareModal({
         markdown += message.content + '\n\n'
       }
 
-      // Add document references if any
-      if (message.documents && message.documents.length > 0) {
-        markdown += '**Attached Documents:**\n'
-        message.documents.forEach((doc) => {
-          markdown += `- ${doc.name}\n`
+      // Add attachment references if any
+      if (hasMessageAttachments(message)) {
+        const allAttachments = getMessageAttachments(message)
+        markdown += '**Attachments:**\n'
+        allAttachments.forEach((a) => {
+          markdown += `- ${a.fileName}\n`
         })
         markdown += '\n'
-      }
 
-      // Add document content if any
-      if (message.documentContent) {
-        markdown += '**Document Content:**\n'
-        markdown += '```\n'
-        markdown += message.documentContent
-        markdown += '\n```\n\n'
+        // Add document text content if any
+        const docTexts = allAttachments
+          .filter((a) => a.type === 'document' && a.textContent)
+          .map((a) => `Document title: ${a.fileName}\n${a.textContent}`)
+        if (docTexts.length > 0) {
+          markdown += '**Document Content:**\n'
+          markdown += '```\n'
+          markdown += docTexts.join('\n\n')
+          markdown += '\n```\n\n'
+        }
       }
 
       markdown += '---\n\n'
@@ -202,8 +210,19 @@ export function ShareModal({
         messages: messages.map((m) => ({
           role: m.role,
           content: m.content,
-          documentContent: m.documentContent,
-          documents: m.documents,
+          documentContent:
+            m.documentContent ??
+            (m.attachments
+              ?.filter((a) => a.type === 'document' && a.textContent)
+              .map(
+                (a) =>
+                  `Document title: ${a.fileName}\nDocument contents:\n${a.textContent}`,
+              )
+              .join('\n\n') ||
+              undefined),
+          documents:
+            m.documents ??
+            (m.attachments?.map((a) => ({ name: a.fileName })) || undefined),
           timestamp:
             m.timestamp instanceof Date
               ? m.timestamp.getTime()

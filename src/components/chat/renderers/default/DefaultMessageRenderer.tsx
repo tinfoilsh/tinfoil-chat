@@ -7,6 +7,7 @@ import {
 import React, { memo } from 'react'
 import { BsCheckLg } from 'react-icons/bs'
 import { RxCopy } from 'react-icons/rx'
+import { hasMessageAttachments } from '../../attachment-helpers'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
@@ -175,9 +176,10 @@ const DefaultMessageComponent = ({
       className={`relative flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
       data-message-role={message.role}
     >
-      {/* Display documents for user messages */}
-      {isUser && message.documents && message.documents.length > 0 && (
+      {/* Display documents and images for user messages */}
+      {isUser && hasMessageAttachments(message) && (
         <DocumentList
+          attachments={message.attachments}
           documents={message.documents}
           documentContent={message.documentContent}
           imageData={message.imageData}

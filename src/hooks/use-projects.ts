@@ -53,8 +53,6 @@ export function useProjects(
         includeContent: true,
       })
 
-      await encryptionService.initialize()
-
       const decryptedProjects: Project[] = await Promise.all(
         response.projects.map(async (item) => {
           try {
@@ -150,8 +148,6 @@ export function useProjects(
         continuationToken,
         includeContent: true,
       })
-
-      await encryptionService.initialize()
 
       const decryptedProjects: Project[] = await Promise.all(
         response.projects.map(async (item) => {

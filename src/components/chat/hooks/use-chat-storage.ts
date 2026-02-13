@@ -269,7 +269,9 @@ export function useChatStorage({
     (chatId: string, newTitle: string) => {
       setChats((prevChats) => {
         const updatedChats = prevChats.map((chat) =>
-          chat.id === chatId ? { ...chat, title: newTitle } : chat,
+          chat.id === chatId
+            ? { ...chat, title: newTitle, titleState: 'manual' as const }
+            : chat,
         )
 
         const chatToUpdate = updatedChats.find((c) => c.id === chatId)
@@ -286,7 +288,11 @@ export function useChatStorage({
       })
 
       if (currentChat?.id === chatId) {
-        setCurrentChat((prev) => ({ ...prev, title: newTitle }))
+        setCurrentChat((prev) => ({
+          ...prev,
+          title: newTitle,
+          titleState: 'manual' as const,
+        }))
       }
     },
     [storeHistory, currentChat?.id, persistenceManager],

@@ -1,6 +1,5 @@
 import type { Chat as ChatType } from '@/components/chat/types'
 import { logError, logWarning } from '@/utils/error-handling'
-import { generateReverseId } from '@/utils/reverse-id'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
   createdAt: string
@@ -19,6 +18,7 @@ export interface StoredChat extends Chat {
   version?: number // Storage format version
   loadedAt?: number // Timestamp when chat was loaded from pagination
   isLocalOnly?: boolean // True if chat should never be synced to cloud (created when sync was disabled)
+  isBlankChat?: boolean // True for new chats that haven't been used yet (empty placeholders)
 }
 
 const DB_NAME = 'tinfoil-chat'
@@ -55,6 +55,23 @@ export function chatContentFingerprint(chat: {
     thinkingDuration: m.thinkingDuration,
     isError: m.isError,
     timestamp: m.timestamp,
+    // New format: hash attachment data to avoid huge fingerprints
+    attachments:
+      Array.isArray(m.attachments) && m.attachments.length > 0
+        ? m.attachments.map((a: any) => ({
+            id: a.id,
+            type: a.type,
+            fileName: a.fileName,
+            base64Hash:
+              typeof a.base64 === 'string' ? hashString(a.base64) : null,
+            base64Length: typeof a.base64 === 'string' ? a.base64.length : 0,
+            textContentHash:
+              typeof a.textContent === 'string'
+                ? hashString(a.textContent)
+                : null,
+          }))
+        : [],
+    // Legacy fields — still included for old messages that haven't been migrated
     documents: m.documents,
     documentContentHash:
       typeof m.documentContent === 'string'
@@ -79,6 +96,31 @@ export function chatContentFingerprint(chat: {
     projectId: chat.projectId ?? null,
     messages,
   })
+}
+
+/**
+ * Determine whether a chat should be marked as locally modified (needing upload).
+ *
+ * Rules:
+ * 1. Chats that failed decryption are NEVER marked modified — they are placeholders
+ *    with empty messages that would overwrite real encrypted data on the server.
+ * 2. Existing chats: mark modified if meaningful content changed, or preserve the
+ *    existing modified flag so previously-dirty chats stay dirty.
+ * 3. New chats: use the caller-provided value, defaulting to true.
+ */
+export function computeLocallyModified(opts: {
+  isFailedDecryption: boolean
+  existingChat: StoredChat | undefined
+  hasContentChanges: boolean
+  callerValue: boolean | undefined
+}): boolean {
+  if (opts.isFailedDecryption) {
+    return false
+  }
+  if (opts.existingChat) {
+    return opts.hasContentChanges || opts.existingChat.locallyModified === true
+  }
+  return opts.callerValue ?? true
 }
 
 export class IndexedDBStorage {
@@ -171,7 +213,7 @@ export class IndexedDBStorage {
     const db = await this.ensureDB()
 
     // Don't save blank chats to IndexedDB
-    if ((chat as any).isBlankChat === true) {
+    if ((chat as StoredChat).isBlankChat === true) {
       return
     }
 
@@ -257,11 +299,12 @@ export class IndexedDBStorage {
           // loaded with locallyModified: false from a previous sync
           // For new chats: use provided value or default to true
           // IMPORTANT: Never mark failed-to-decrypt chats as modified - they are placeholders
-          locallyModified: isFailedDecryption
-            ? false
-            : existingChat
-              ? hasContentChanges || existingChat.locallyModified === true
-              : ((chat as StoredChat).locallyModified ?? true),
+          locallyModified: computeLocallyModified({
+            isFailedDecryption,
+            existingChat,
+            hasContentChanges,
+            callerValue: (chat as StoredChat).locallyModified,
+          }),
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
           decryptionFailed: (chat as StoredChat).decryptionFailed,
@@ -499,6 +542,43 @@ export class IndexedDBStorage {
     )
   }
 
+  async resetChatTimestamps(chatId: string): Promise<void> {
+    this.saveQueue = this.saveQueue
+      .catch((error) => {
+        logError('Previous save operation failed, recovering queue', error, {
+          component: 'IndexedDBStorage',
+          action: 'resetChatTimestamps.queueRecovery',
+        })
+      })
+      .then(async () => {
+        const db = await this.ensureDB()
+        const chat = await this.getChatInternal(chatId)
+
+        if (chat) {
+          return new Promise<void>((resolve, reject) => {
+            const transaction = db.transaction([CHATS_STORE], 'readwrite')
+            const store = transaction.objectStore(CHATS_STORE)
+
+            transaction.oncomplete = () => resolve()
+            transaction.onerror = () =>
+              reject(new Error('Failed to reset chat timestamps'))
+
+            const now = new Date().toISOString()
+            chat.createdAt = now
+            chat.updatedAt = now
+            chat.locallyModified = true
+            chat.syncedAt = undefined
+
+            const request = store.put(chat)
+
+            request.onerror = () =>
+              reject(new Error('Failed to reset chat timestamps'))
+          })
+        }
+      })
+    return this.saveQueue
+  }
+
   async updateChatProject(
     chatId: string,
     projectId: string | null,
@@ -523,30 +603,6 @@ export class IndexedDBStorage {
       chat.updatedAt = new Date().toISOString()
       await this.saveChatInternal(chat)
     }
-  }
-
-  async cloneChatWithNewId(oldChatId: string): Promise<string | null> {
-    const oldChat = await this.getChatInternal(oldChatId)
-    if (!oldChat) {
-      return null
-    }
-
-    const { id: newId, createdAtMs } = generateReverseId()
-    const now = new Date(createdAtMs).toISOString()
-
-    const newChat: StoredChat = {
-      ...oldChat,
-      id: newId,
-      createdAt: now,
-      updatedAt: now,
-      syncedAt: undefined,
-      locallyModified: true,
-    }
-
-    await this.saveChatInternal(newChat)
-    await this.deleteChat(oldChatId)
-
-    return newId
   }
 }
 

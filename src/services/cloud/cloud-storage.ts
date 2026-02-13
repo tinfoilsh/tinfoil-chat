@@ -1,8 +1,8 @@
-import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
 import { DB_VERSION, type StoredChat } from '../storage/indexed-db'
+import { processRemoteChat, type RemoteChatData } from './chat-codec'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -17,6 +17,7 @@ export interface ChatListResponse {
     messageCount: number
     size: number
     content?: string
+    projectId?: string
   }>
   nextContinuationToken?: string
   hasMore: boolean
@@ -76,7 +77,6 @@ export class CloudStorageService {
 
   async uploadChat(chat: StoredChat): Promise<string | null> {
     // Encrypt the chat data first
-    await encryptionService.initialize()
     const encrypted = await encryptionService.encrypt(chat)
 
     // Metadata for the chat
@@ -124,8 +124,6 @@ export class CloudStorageService {
       throw new Error('Maximum 100 chats per bulk upload request')
     }
 
-    await encryptionService.initialize()
-
     // Encrypt all chats in parallel
     const conversations = await Promise.all(
       chats.map(async (chat) => {
@@ -164,49 +162,44 @@ export class CloudStorageService {
     return response.json()
   }
 
+  /**
+   * Fetch raw encrypted content for a single chat by ID.
+   * Returns the raw JSON string, or null if not found.
+   */
+  async fetchRawChatContent(chatId: string): Promise<string | null> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/conversation/${chatId}`,
+      {
+        headers: await this.getHeaders(),
+      },
+    )
+
+    if (response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to download chat: ${response.statusText}`)
+    }
+
+    return response.text()
+  }
+
   async downloadChat(chatId: string): Promise<StoredChat | null> {
     try {
-      // Download encrypted data directly from backend
-      const response = await fetch(
-        `${API_BASE_URL}/api/storage/conversation/${chatId}`,
-        {
-          headers: await this.getHeaders(),
-        },
-      )
+      const rawContent = await this.fetchRawChatContent(chatId)
 
-      if (response.status === 404) {
+      if (rawContent === null) {
         return null
       }
 
-      if (!response.ok) {
-        throw new Error(`Failed to download chat: ${response.statusText}`)
+      const remote: RemoteChatData = {
+        id: chatId,
+        content: rawContent,
       }
 
-      const encrypted = await response.json()
-
-      // Try to decrypt the chat data
-      try {
-        await encryptionService.initialize()
-        const decrypted = await encryptionService.decrypt(encrypted)
-        return decrypted
-      } catch (decryptError) {
-        // If decryption fails, store the encrypted data for later retry
-        const safeCreatedAt = ensureValidISODate(undefined, chatId)
-
-        return {
-          id: chatId,
-          title: 'Encrypted',
-          messages: [],
-          createdAt: safeCreatedAt,
-          updatedAt: new Date().toISOString(),
-          lastAccessedAt: Date.now(),
-          decryptionFailed: true,
-          encryptedData: JSON.stringify(encrypted),
-          syncedAt: Date.now(),
-          locallyModified: false,
-          syncVersion: 1,
-        } as StoredChat
-      }
+      const result = await processRemoteChat(remote)
+      return result.chat
     } catch (error) {
       logError(`Failed to download chat ${chatId}`, error, {
         component: 'CloudStorage',
@@ -328,14 +321,38 @@ export class CloudStorageService {
     }
   }
 
+  async getDeletedChatsSince(since: string): Promise<{ deletedIds: string[] }> {
+    const params = new URLSearchParams()
+    params.append('since', since)
+    params.append('_t', Date.now().toString())
+
+    const url = `${API_BASE_URL}/api/chats/deleted-since?${params.toString()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get deleted chats since: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
   async getChatsUpdatedSince(options: {
     since: string
     includeContent?: boolean
+    continuationToken?: string
   }): Promise<ChatListResponse> {
     const params = new URLSearchParams()
     params.append('since', options.since)
     if (options.includeContent) {
       params.append('includeContent', 'true')
+    }
+    if (options.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
     }
     // Add cache-busting parameter to avoid stale CDN/browser cache
     params.append('_t', Date.now().toString())
@@ -349,6 +366,48 @@ export class CloudStorageService {
     if (!response.ok) {
       throw new Error(
         `Failed to get chats updated since: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
+  async getAllChatsSyncStatus(): Promise<ChatSyncStatus> {
+    const url = `${API_BASE_URL}/api/chats/all-sync-status?_t=${Date.now()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get all chats sync status: ${response.statusText}`,
+      )
+    }
+
+    return response.json()
+  }
+
+  async getAllChatsUpdatedSince(options: {
+    since: string
+    continuationToken?: string
+  }): Promise<ChatListResponse> {
+    const params = new URLSearchParams()
+    params.append('since', options.since)
+    if (options.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
+    }
+    params.append('_t', Date.now().toString())
+
+    const url = `${API_BASE_URL}/api/chats/all-updated-since?${params.toString()}`
+    const response = await fetch(url, {
+      headers: await this.getHeaders(),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get all chats updated since: ${response.statusText}`,
       )
     }
 

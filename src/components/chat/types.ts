@@ -22,13 +22,27 @@ export type WebSearchState = {
   reason?: string
 }
 
+export type Attachment = {
+  id: string
+  type: 'image' | 'document'
+  fileName: string
+  mimeType?: string
+  base64?: string
+  thumbnailBase64?: string
+  textContent?: string
+  description?: string
+  fileSize?: number
+}
+
 export type Message = {
   role: 'user' | 'assistant'
   content: string
-  documentContent?: string // Separate field for document content
-  multimodalText?: string // Image descriptions from multimodal model
-  documents?: Array<{ name: string }> // New field for document names and types
-  imageData?: Array<{ base64: string; mimeType: string }> // Base64 image data for multimodal support - excluded from localStorage
+  attachments?: Attachment[]
+  // Legacy fields — kept for reading old messages, not written for new ones
+  documentContent?: string
+  multimodalText?: string
+  documents?: Array<{ name: string }>
+  imageData?: Array<{ base64: string; mimeType: string }>
   timestamp: Date
   thoughts?: string
   isThinking?: boolean
@@ -40,9 +54,12 @@ export type Message = {
   searchReasoning?: string // Search agent's reasoning for multi-turn context
 }
 
+export type TitleState = 'placeholder' | 'generated' | 'manual'
+
 export type Chat = {
   id: string
   title: string
+  titleState?: TitleState
   messages: Message[]
   createdAt: Date
   // Sync metadata - optional for backward compatibility

@@ -43,10 +43,7 @@ interface UseChatStateReturn {
   handleSubmit: (e: React.FormEvent) => void
   handleQuery: (
     query: string,
-    documentContent?: string,
-    multimodalText?: string,
-    documents?: Array<{ name: string }>,
-    imageData?: Array<{ base64: string; mimeType: string }>,
+    attachments?: import('@/components/chat/types').Attachment[],
     systemPromptOverride?: string,
   ) => void
   createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
