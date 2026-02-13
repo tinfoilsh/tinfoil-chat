@@ -1,5 +1,5 @@
 import { getAIModels } from '@/config/models'
-import { getReadyClient } from '@/services/inference/tinfoil-client'
+import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import {
   getDocumentFormat,
@@ -103,8 +103,7 @@ export const useDocumentUploader = (
       throw new Error('No multimodal model available')
     }
 
-    const client = await getReadyClient()
-
+    const client = await getTinfoilClient()
     const response = await client.chat.completions.create({
       model: multimodalModel.modelName,
       messages: [
@@ -250,7 +249,7 @@ export const useDocumentUploader = (
           return
         }
 
-        const client = await getReadyClient()
+        const client = await getTinfoilClient()
         const transcription = await client.audio.transcriptions.create({
           file,
           model: audioModel,
