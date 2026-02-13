@@ -657,10 +657,10 @@ export function ChatInterface({
   useEffect(() => {
     const initTinfoil = async () => {
       try {
-        const { getReadyClient } = await import(
+        const { getTinfoilClient } = await import(
           '@/services/inference/tinfoil-client'
         )
-        const client = await getReadyClient()
+        const client = await getTinfoilClient()
         const doc = await client.getVerificationDocument()
         if (doc) {
           setVerificationDocument(doc)
