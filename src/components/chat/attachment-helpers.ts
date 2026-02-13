@@ -10,13 +10,17 @@ export function getMessageImages(msg: Message): Attachment[] {
 
   // Legacy format: reconstruct from documents + imageData
   if (msg.documents && msg.imageData) {
-    return msg.imageData.map((img, i) => ({
-      id: `legacy-img-${i}`,
-      type: 'image' as const,
-      fileName: msg.documents?.[i]?.name ?? 'Image',
-      mimeType: img.mimeType,
-      base64: img.base64,
-    }))
+    return msg.imageData.map((img, i) => {
+      const fileName = msg.documents?.[i]?.name ?? 'Image'
+      return {
+        id: `legacy-img-${i}`,
+        type: 'image' as const,
+        fileName,
+        mimeType: img.mimeType,
+        base64: img.base64,
+        description: extractImageDescription(fileName, msg.multimodalText),
+      }
+    })
   }
 
   return []
@@ -62,6 +66,23 @@ export function hasMessageAttachments(msg: Message): boolean {
   if (msg.attachments && msg.attachments.length > 0) return true
   if (msg.documents && msg.documents.length > 0) return true
   return false
+}
+
+/**
+ * Extract a single image description from the legacy combined multimodalText string.
+ * Format: "Image: {name}\nDescription:\n{description}\n\nImage: {name2}\n..."
+ */
+function extractImageDescription(
+  name: string,
+  multimodalText?: string,
+): string | undefined {
+  if (!multimodalText) return undefined
+  const marker = `Image: ${name}\nDescription:\n`
+  const idx = multimodalText.indexOf(marker)
+  if (idx === -1) return undefined
+  const rest = multimodalText.slice(idx + marker.length)
+  const nextImg = rest.indexOf('\n\nImage: ')
+  return (nextImg === -1 ? rest : rest.slice(0, nextImg)).trim() || undefined
 }
 
 /**
