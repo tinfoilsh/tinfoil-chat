@@ -63,10 +63,7 @@ interface UseChatMessagingReturn {
   handleSubmit: (e: React.FormEvent) => void
   handleQuery: (
     query: string,
-    documentContent?: string,
-    multimodalText?: string,
-    documents?: Array<{ name: string }>,
-    imageData?: Array<{ base64: string; mimeType: string }>,
+    attachments?: import('@/components/chat/types').Attachment[],
     systemPromptOverride?: string,
     baseMessages?: Message[],
   ) => void
@@ -260,10 +257,7 @@ export function useChatMessaging({
   const handleQuery = useCallback(
     async (
       query: string,
-      documentContent?: string,
-      multimodalText?: string,
-      documents?: Array<{ name: string }>,
-      imageData?: Array<{ base64: string; mimeType: string }>,
+      attachments?: import('@/components/chat/types').Attachment[],
       systemPromptOverride?: string,
       baseMessages?: Message[],
     ) => {
@@ -302,10 +296,8 @@ export function useChatMessaging({
         ? {
             role: 'user',
             content: query,
-            documentContent: documentContent,
-            multimodalText: multimodalText,
-            documents,
-            imageData,
+            attachments:
+              attachments && attachments.length > 0 ? attachments : undefined,
             timestamp: new Date(),
           }
         : null
@@ -779,10 +771,7 @@ export function useChatMessaging({
       // handleQuery will handle state updates and persistence
       handleQuery(
         newContent,
-        originalMessage.documentContent,
-        originalMessage.multimodalText,
-        originalMessage.documents,
-        originalMessage.imageData,
+        originalMessage.attachments,
         undefined,
         truncatedMessages,
       )

@@ -60,6 +60,7 @@ import { ModelSelector } from './model-selector'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
+import type { Attachment } from './types'
 // Lazy-load modals that aren't shown on initial load
 const CloudSyncSetupModal = dynamic(
   () =>
@@ -771,7 +772,8 @@ export function ChatInterface({
 
     const imagesNeedingDescriptions = processedDocuments.filter(
       (doc) =>
-        doc.imageData &&
+        (doc.imageData ||
+          (doc.attachment?.type === 'image' && doc.attachment?.base64)) &&
         !doc.hasDescription &&
         !doc.isUploading &&
         !doc.isGeneratingDescription,
@@ -790,10 +792,14 @@ export function ChatInterface({
 
     Promise.all(
       imagesNeedingDescriptions.map(async (doc) => {
+        const base64 = doc.attachment?.base64 ?? doc.imageData?.base64
+        const mimeType = doc.attachment?.mimeType ?? doc.imageData?.mimeType
+        if (!base64 || !mimeType)
+          return { id: doc.id, name: doc.name, description: '', success: false }
         try {
           const description = await describeImageWithMultimodal(
-            doc.imageData!.base64,
-            doc.imageData!.mimeType,
+            base64,
+            mimeType,
           )
           return { id: doc.id, name: doc.name, description, success: true }
         } catch (error) {
@@ -830,6 +836,10 @@ export function ChatInterface({
                 content: result.description,
                 hasDescription: true,
                 isGeneratingDescription: false,
+                // Update description on the attachment if present
+                attachment: doc.attachment
+                  ? { ...doc.attachment, description: result.description }
+                  : undefined,
               }
             }
             return doc
@@ -1165,6 +1175,25 @@ export function ChatInterface({
             return
           }
 
+          // Build an Attachment object from the upload result
+          const attachment: Attachment | undefined = imageData
+            ? {
+                id: documentId,
+                type: 'image',
+                fileName: file.name,
+                mimeType: imageData.mimeType,
+                base64: imageData.base64,
+                description: hasDescription && content ? content : file.name,
+              }
+            : content
+              ? {
+                  id: documentId,
+                  type: 'document',
+                  fileName: file.name,
+                  textContent: content,
+                }
+              : undefined
+
           setProcessedDocuments((prev) => {
             return prev.map((doc) =>
               doc.id === tempDocId
@@ -1174,6 +1203,7 @@ export function ChatInterface({
                     time: new Date(),
                     content,
                     imageData,
+                    attachment,
                     isImageDescription: !!imageData,
                     hasDescription: hasDescription ?? !!content,
                     isGeneratingDescription: false,
@@ -1196,6 +1226,17 @@ export function ChatInterface({
         },
         (documentId, imageData) => {
           // Called when image description generation starts
+          const imgAttachment: Attachment | undefined = imageData
+            ? {
+                id: documentId,
+                type: 'image',
+                fileName: file.name,
+                mimeType: imageData.mimeType,
+                base64: imageData.base64,
+                description: file.name,
+              }
+            : undefined
+
           setProcessedDocuments((prev) =>
             prev.map((doc) =>
               doc.id === tempDocId
@@ -1204,6 +1245,7 @@ export function ChatInterface({
                     isUploading: false,
                     isGeneratingDescription: true,
                     imageData,
+                    attachment: imgAttachment,
                   }
                 : doc,
             ),
@@ -1429,59 +1471,37 @@ export function ChatInterface({
     // Don't auto-scroll here - let the message append handler do it
     // This prevents the dip when thoughts start streaming
 
-    // Separate regular documents from image descriptions
-    const regularDocuments = completedDocuments.filter(
-      (doc) => !doc.isImageDescription,
-    )
-    const imageDescriptions = completedDocuments.filter(
-      (doc) => doc.isImageDescription,
-    )
+    // Build unified attachments array from completed documents
+    const attachments: Attachment[] = completedDocuments
+      .filter(
+        (doc) => !doc.isImageDescription || doc.imageData || doc.attachment,
+      )
+      .map((doc) => {
+        // Use pre-built attachment if available
+        if (doc.attachment) return doc.attachment
 
-    // Document content (from PDFs, Word docs, etc.)
-    const docContent =
-      regularDocuments.length > 0
-        ? regularDocuments
-            .map(
-              (doc) =>
-                `Document title: ${doc.name}\nDocument contents:\n${doc.content}`,
-            )
-            .filter((content) => content)
-            .join('\n\n')
-        : undefined
+        // Build attachment from legacy ProcessedDocument fields
+        if (doc.imageData) {
+          return {
+            id: doc.id,
+            type: 'image' as const,
+            fileName: doc.name,
+            mimeType: doc.imageData.mimeType,
+            base64: doc.imageData.base64,
+            description:
+              doc.isImageDescription && doc.content ? doc.content : doc.name,
+          }
+        }
 
-    // Multimodal text (image descriptions from multimodal model)
-    const multimodalText =
-      imageDescriptions.length > 0
-        ? imageDescriptions
-            .map((doc) => `Image: ${doc.name}\nDescription:\n${doc.content}`)
-            .filter((content) => content)
-            .join('\n\n')
-        : undefined
+        return {
+          id: doc.id,
+          type: 'document' as const,
+          fileName: doc.name,
+          textContent: doc.content,
+        }
+      })
 
-    const documentNames =
-      completedDocuments.length > 0
-        ? completedDocuments.map((doc) => ({ name: doc.name }))
-        : undefined
-
-    // Collect image data from documents for multimodal support
-    const imageData =
-      completedDocuments.length > 0
-        ? completedDocuments
-            .map((doc) => doc.imageData)
-            .filter(
-              (imgData): imgData is { base64: string; mimeType: string } =>
-                imgData !== undefined,
-            )
-        : undefined
-
-    // Call handleQuery with the message, document content, multimodal text, document names, and image data
-    handleQuery(
-      messageText,
-      docContent,
-      multimodalText,
-      documentNames,
-      imageData,
-    )
+    handleQuery(messageText, attachments.length > 0 ? attachments : undefined)
 
     // Keep documents that are still uploading or generating descriptions
     const remainingDocuments = processedDocuments.filter(
