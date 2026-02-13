@@ -8,9 +8,8 @@ import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
-import { AttestationError, ConfigurationError, FetchError } from 'tinfoil'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { getReadyClient } from './tinfoil-client'
+import { getTinfoilClient } from './tinfoil-client'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -21,10 +20,6 @@ function delay(ms: number): Promise<void> {
 }
 
 function isRetryableError(error: unknown): boolean {
-  if (error instanceof ConfigurationError) return false
-  if (error instanceof FetchError || error instanceof AttestationError)
-    return true
-
   const anyErr = error as any
 
   // Don't retry user-initiated aborts
@@ -248,7 +243,7 @@ export async function sendChatStream(
     }
 
     try {
-      const client = await getReadyClient()
+      const client = await getTinfoilClient()
 
       // Build request body
       const requestBody: Record<string, unknown> = {
@@ -373,8 +368,7 @@ export async function sendStructuredCompletion<T>(
 ): Promise<T> {
   const { model, messages, jsonSchema, signal } = params
 
-  const client = await getReadyClient()
-
+  const client = await getTinfoilClient()
   const response = await client.chat.completions.create(
     {
       model: model.modelName,

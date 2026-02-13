@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
-import { ConfigurationError, FetchError, TinfoilAI } from 'tinfoil'
+import { TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
@@ -101,28 +101,3 @@ export async function getTinfoilClient(): Promise<TinfoilAI> {
   return clientInstance!
 }
 
-export async function getReadyClient(): Promise<TinfoilAI> {
-  const client = await getTinfoilClient()
-  try {
-    await client.ready()
-    return client
-  } catch (error) {
-    if (error instanceof ConfigurationError) {
-      throw error
-    }
-
-    logError('Client verification failed, resetting', error, {
-      component: 'tinfoil-client',
-      action: 'getReadyClient',
-      metadata: {
-        errorType:
-          error instanceof FetchError ? 'FetchError' : 'AttestationError',
-      },
-    })
-
-    resetTinfoilClient()
-    const freshClient = await getTinfoilClient()
-    await freshClient.ready()
-    return freshClient
-  }
-}
