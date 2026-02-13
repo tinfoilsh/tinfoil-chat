@@ -7,6 +7,10 @@ import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { sanitizeUrl } from '@braintree/sanitize-url'
 import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
+import {
+  getMessageAttachments,
+  hasMessageAttachments,
+} from './attachment-helpers'
 import { useMathPlugins } from './renderers/components/use-math-plugins'
 import type { Message } from './types'
 
@@ -216,12 +220,12 @@ const PrintableMessage = memo(function PrintableMessage({
         </span>
       </div>
 
-      {message.documents && message.documents.length > 0 && (
+      {hasMessageAttachments(message) && (
         <div className="printable-documents">
           <span className="printable-documents-label">Attachments:</span>
           <ul>
-            {message.documents.map((doc, i) => (
-              <li key={i}>{doc.name}</li>
+            {getMessageAttachments(message).map((a) => (
+              <li key={a.id}>{a.fileName}</li>
             ))}
           </ul>
         </div>
