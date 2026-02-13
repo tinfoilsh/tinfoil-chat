@@ -447,10 +447,10 @@ export function ChatInput({
                     </button>
                   )}
                   <div className="flex items-center gap-2">
-                    {doc.imageData ? (
+                    {doc.attachment?.type === 'image' || doc.imageData ? (
                       <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md border border-border-subtle bg-surface-card">
                         <img
-                          src={`data:${doc.imageData.mimeType};base64,${doc.imageData.base64}`}
+                          src={`data:${doc.attachment?.mimeType ?? doc.imageData?.mimeType};base64,${doc.attachment?.thumbnailBase64 ?? doc.attachment?.base64 ?? doc.imageData?.base64}`}
                           alt={doc.name}
                           className="h-full w-full object-cover"
                         />
@@ -480,7 +480,7 @@ export function ChatInput({
                         <span className="text-xs text-content-muted">
                           {doc.isGeneratingDescription
                             ? 'Generating text description...'
-                            : doc.imageData
+                            : doc.attachment?.type === 'image' || doc.imageData
                               ? 'Image'
                               : 'Document'}
                         </span>

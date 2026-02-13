@@ -55,6 +55,23 @@ export function chatContentFingerprint(chat: {
     thinkingDuration: m.thinkingDuration,
     isError: m.isError,
     timestamp: m.timestamp,
+    // New format: hash attachment data to avoid huge fingerprints
+    attachments:
+      Array.isArray(m.attachments) && m.attachments.length > 0
+        ? m.attachments.map((a: any) => ({
+            id: a.id,
+            type: a.type,
+            fileName: a.fileName,
+            base64Hash:
+              typeof a.base64 === 'string' ? hashString(a.base64) : null,
+            base64Length: typeof a.base64 === 'string' ? a.base64.length : 0,
+            textContentHash:
+              typeof a.textContent === 'string'
+                ? hashString(a.textContent)
+                : null,
+          }))
+        : [],
+    // Legacy fields — still included for old messages that haven't been migrated
     documents: m.documents,
     documentContentHash:
       typeof m.documentContent === 'string'

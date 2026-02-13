@@ -1,3 +1,7 @@
+import {
+  getMessageDocuments,
+  getMessageImages,
+} from '@/components/chat/attachment-helpers'
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import type {
@@ -185,7 +189,8 @@ export class ChatQueryBuilder {
   }
 
   /**
-   * Build user content including document and image data if applicable
+   * Build user content including document and image data if applicable.
+   * Handles both new attachment format and legacy fields.
    */
   private static buildUserContent(
     msg: Message,
@@ -193,36 +198,56 @@ export class ChatQueryBuilder {
   ):
     | string
     | Array<{ type: string; text?: string; image_url?: { url: string } }> {
-    // Build text content including documents and multimodal text
     let textContent = msg.content
 
-    if (msg.documentContent) {
-      textContent = `${textContent}\n\n${msg.documentContent}`
+    // Derive document content from attachments (or legacy fields via helpers)
+    const docAttachments = getMessageDocuments(msg)
+    if (docAttachments.length > 0) {
+      const docContent = docAttachments
+        .filter((a) => a.textContent)
+        .map(
+          (a) =>
+            `Document title: ${a.fileName}\nDocument contents:\n${a.textContent}`,
+        )
+        .join('\n\n')
+      if (docContent) {
+        textContent = `${textContent}\n\n${docContent}`
+      }
     }
 
-    if (msg.multimodalText) {
-      textContent = `${textContent}\n\n[Treat these descriptions as if they are the raw images.]\n${msg.multimodalText}`
-    }
+    // Derive image data from attachments (or legacy fields via helpers)
+    const imageAttachments = getMessageImages(msg)
 
-    // Handle multimodal content (images)
-    if (msg.imageData && msg.imageData.length > 0 && multimodal) {
+    if (imageAttachments.length > 0 && multimodal) {
       const content: Array<{
         type: string
         text?: string
         image_url?: { url: string }
       }> = [{ type: 'text', text: textContent }]
 
-      // Add image parts
-      for (const imgData of msg.imageData) {
-        content.push({
-          type: 'image_url',
-          image_url: {
-            url: `data:${imgData.mimeType};base64,${imgData.base64}`,
-          },
-        })
+      for (const img of imageAttachments) {
+        if (img.base64 && img.mimeType) {
+          content.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${img.mimeType};base64,${img.base64}`,
+            },
+          })
+        }
       }
 
       return content
+    }
+
+    // Non-multimodal fallback: append image descriptions as text
+    if (imageAttachments.length > 0 && !multimodal) {
+      const descriptions = imageAttachments
+        .filter((a) => a.description)
+        .map((a) => `Image: ${a.fileName}\nDescription:\n${a.description}`)
+        .join('\n\n')
+      if (descriptions) {
+        textContent = `${textContent}\n\n[Treat these descriptions as if they are the raw images.]\n${descriptions}`
+      }
     }
 
     return textContent
