@@ -29,8 +29,13 @@ import {
   BsFiletypeXml,
 } from 'react-icons/bs'
 
+import { getMessageAttachments } from '../../attachment-helpers'
+import type { Attachment } from '../../types'
+
 interface DocumentListProps {
-  documents: Array<{ name: string }>
+  attachments?: Attachment[]
+  // Legacy props — used when attachments is not present
+  documents?: Array<{ name: string }>
   documentContent?: string
   imageData?: Array<{ base64: string; mimeType: string }>
 }
@@ -129,6 +134,7 @@ function getPreviewForDocument(
 }
 
 export const DocumentList = memo(function DocumentList({
+  attachments,
   documents,
   documentContent,
   imageData,
@@ -152,84 +158,84 @@ export const DocumentList = memo(function DocumentList({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [modalOpen])
 
-  if (!documents || documents.length === 0) {
+  // Resolve attachments from new format or legacy fields
+  const resolvedAttachments: Attachment[] = (() => {
+    if (attachments && attachments.length > 0) return attachments
+    // Build a synthetic Message to use the helpers
+    const syntheticMsg = {
+      role: 'user' as const,
+      content: '',
+      timestamp: new Date(),
+      documents,
+      documentContent,
+      imageData,
+    }
+    return getMessageAttachments(syntheticMsg)
+  })()
+
+  if (resolvedAttachments.length === 0) {
     return null
   }
 
-  const openModal = (docName: string) => {
-    if (!documentContent) return
+  const imageAttachments = resolvedAttachments.filter((a) => a.type === 'image')
+  const docAttachments = resolvedAttachments.filter(
+    (a) => a.type === 'document',
+  )
 
-    const docHeader = `Document title: ${docName}`
-    const headerIndex = documentContent.indexOf(docHeader)
-
-    if (headerIndex === -1) return
-
-    const contentsMarker = 'Document contents:\n'
-    const contentsStart = documentContent.indexOf(contentsMarker, headerIndex)
-    if (contentsStart === -1) return
-
-    const startIndex = contentsStart + contentsMarker.length
-    const nextDocIndex = documentContent.indexOf(
-      '\nDocument title: ',
-      startIndex,
-    )
-    const docSection =
-      nextDocIndex === -1
-        ? documentContent.slice(startIndex)
-        : documentContent.slice(startIndex, nextDocIndex)
-
-    setModalContent({ name: docName, content: docSection.trim() })
+  const openModal = (attachment: Attachment) => {
+    if (!attachment.textContent) return
+    setModalContent({
+      name: attachment.fileName,
+      content: attachment.textContent.trim(),
+    })
     setModalOpen(true)
   }
 
   return (
     <>
       <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
-        {documents.map((doc, index) => {
-          const hasImageData = imageData && imageData[index]
-          const nameCount = documents.filter(
-            (d, i) => i <= index && d.name === doc.name,
-          ).length
-          const uniqueKey =
-            nameCount > 1 ? `${doc.name}-${nameCount}` : doc.name
-          const preview = getPreviewForDocument(documentContent, doc.name)
-
-          if (hasImageData) {
-            return (
-              <div
-                key={uniqueKey}
-                className="max-w-[300px] overflow-hidden rounded-lg"
-              >
-                <img
-                  src={`data:${imageData![index].mimeType};base64,${imageData![index].base64}`}
-                  alt={doc.name}
-                  className="h-auto w-full object-contain"
-                  loading="lazy"
-                />
-              </div>
-            )
-          }
+        {imageAttachments.map((attachment) => (
+          <div
+            key={attachment.id}
+            className="max-w-[300px] overflow-hidden rounded-lg"
+          >
+            <img
+              src={`data:${attachment.mimeType || 'image/jpeg'};base64,${attachment.base64}`}
+              alt={attachment.fileName}
+              className="h-auto w-full object-contain"
+              loading="lazy"
+            />
+          </div>
+        ))}
+        {docAttachments.map((attachment) => {
+          const preview = attachment.textContent
+            ? attachment.textContent
+                .split('\n')
+                .filter((l) => l.trim() && !l.trim().startsWith('# '))
+                .slice(0, 2)
+                .join('\n') || null
+            : getPreviewForDocument(documentContent, attachment.fileName)
 
           return (
             <div
-              key={uniqueKey}
+              key={attachment.id}
               role="button"
               tabIndex={0}
-              onClick={() => openModal(doc.name)}
+              onClick={() => openModal(attachment)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  openModal(doc.name)
+                  openModal(attachment)
                 }
               }}
               className="flex min-w-[200px] max-w-[300px] cursor-pointer flex-col rounded-lg bg-surface-message-user/90 p-3 shadow-sm backdrop-blur-sm transition-colors hover:bg-surface-message-user"
             >
               <div className="flex items-center gap-2">
                 <div className="flex items-center justify-center p-1">
-                  {getFileIcon(doc.name, 20)}
+                  {getFileIcon(attachment.fileName, 20)}
                 </div>
                 <span className="truncate text-sm font-medium text-content-primary">
-                  {doc.name}
+                  {attachment.fileName}
                 </span>
               </div>
 
