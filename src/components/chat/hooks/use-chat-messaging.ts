@@ -25,6 +25,7 @@ import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getMessageAttachments } from '../attachment-helpers'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import { createBlankChat, sortChats } from './chat-operations'
@@ -769,9 +770,12 @@ export function useChatMessaging({
 
       // Re-submit with the new content, passing truncated messages as base
       // handleQuery will handle state updates and persistence
+      // Use getMessageAttachments to handle both new (attachments) and legacy (documents+imageData) formats
+      const attachments =
+        originalMessage.attachments ?? getMessageAttachments(originalMessage)
       handleQuery(
         newContent,
-        originalMessage.attachments,
+        attachments.length > 0 ? attachments : undefined,
         undefined,
         truncatedMessages,
       )
