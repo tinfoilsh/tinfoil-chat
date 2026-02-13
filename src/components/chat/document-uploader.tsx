@@ -193,7 +193,7 @@ export const useDocumentUploader = (
           const imageData = await scaleAndEncodeImage(file, {
             maxWidth: 768,
             maxHeight: 768,
-            quality: 0.9,
+            quality: 0.85,
           })
 
           // If current model is multimodal, skip description generation
