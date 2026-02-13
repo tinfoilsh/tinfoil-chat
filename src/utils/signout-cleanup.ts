@@ -46,15 +46,19 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   })
 
   // Clear localStorage, preserving only non-user-specific keys
-  const hasSeenWebSearchIntro = localStorage.getItem(
-    'has_seen_web_search_intro',
-  )
-  localStorage.clear()
-  if (hasSeenWebSearchIntro) {
-    localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
-  }
-  if (preserveUserId) {
-    localStorage.setItem(ACTIVE_USER_ID_KEY, preserveUserId)
+  try {
+    const hasSeenWebSearchIntro = localStorage.getItem(
+      'has_seen_web_search_intro',
+    )
+    localStorage.clear()
+    if (hasSeenWebSearchIntro) {
+      localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
+    }
+    if (preserveUserId) {
+      localStorage.setItem(ACTIVE_USER_ID_KEY, preserveUserId)
+    }
+  } catch {
+    // best-effort — don't let localStorage failures skip remaining cleanup
   }
 
   // Clear sessionStorage
@@ -117,9 +121,16 @@ export function performUserSwitchCleanup(newUserId: string): void {
   clearAllUserData({
     context: 'AuthCleanupHandler',
     preserveUserId: newUserId,
-  }).finally(() => {
-    window.location.reload()
   })
+    .catch((error) => {
+      logError('Failed to clear user data during switch', error, {
+        component: 'AuthCleanupHandler',
+        action: 'performUserSwitchCleanup',
+      })
+    })
+    .finally(() => {
+      window.location.reload()
+    })
 }
 
 export function getEncryptionKey(): string | null {
