@@ -1,62 +1,12 @@
-import { resetRendererRegistry } from '@/components/chat/renderers'
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
-import { encryptionService } from '@/services/encryption/encryption-service'
-import { indexedDBStorage } from '@/services/storage/indexed-db'
-import { logError, logInfo } from '@/utils/error-handling'
 import {
   ACTIVE_USER_ID_KEY,
   getEncryptionKey,
   performSignoutCleanup,
+  performUserSwitchCleanup,
 } from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { useEffect, useRef, useState } from 'react'
-
-function performUserSwitchCleanup(newUserId: string): void {
-  logInfo('User switch detected, clearing all data', {
-    component: 'AuthCleanupHandler',
-    action: 'performUserSwitchCleanup',
-    metadata: { newUserId },
-  })
-
-  // Persist the new user ID first so it survives the reload
-  localStorage.setItem(ACTIVE_USER_ID_KEY, newUserId)
-
-  // Nuke the encryption key in-memory immediately
-  encryptionService.clearKey({ persist: true })
-
-  // Reset in-memory caches
-  resetRendererRegistry()
-
-  // Clear localStorage, preserving only the new active user ID and intro flag
-  const hasSeenWebSearchIntro = localStorage.getItem(
-    'has_seen_web_search_intro',
-  )
-  localStorage.clear()
-  localStorage.setItem(ACTIVE_USER_ID_KEY, newUserId)
-  if (hasSeenWebSearchIntro) {
-    localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
-  }
-
-  // Clear sessionStorage
-  try {
-    sessionStorage.clear()
-  } catch {
-    // best-effort
-  }
-
-  // Clear IndexedDB async, then reload regardless of outcome
-  indexedDBStorage
-    .clearAll()
-    .catch((error) => {
-      logError('Failed to clear IndexedDB during user switch', error, {
-        component: 'AuthCleanupHandler',
-        action: 'performUserSwitchCleanup',
-      })
-    })
-    .finally(() => {
-      window.location.reload()
-    })
-}
 
 export function AuthCleanupHandler() {
   const { isSignedIn, isLoaded } = useAuth()

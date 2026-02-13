@@ -10,30 +10,80 @@ import { logError, logInfo } from '@/utils/error-handling'
 
 export const ACTIVE_USER_ID_KEY = 'tinfoil-active-user-id'
 
-const LOCAL_STORAGE_KEYS = [
-  'theme',
-  'maxPromptMessages',
-  'userLanguage',
-  'userNickname',
-  'userProfession',
-  'userTraits',
-  'userAdditionalContext',
-  'isUsingPersonalization',
-  'isUsingCustomPrompt',
-  'customSystemPrompt',
-  'encryptionKey',
-  'encryptionKeySet',
-  'hasUnlockedCloud',
-  'clerk-db-jwt',
-  '__clerk_db_jwt',
-  'tinfoil-encryption-key',
-  'tinfoil-encryption-key-history',
-  'tinfoil-chat-sync-status',
-  'tinfoil-profile-sync-status',
-  'cloudSyncEnabled',
-  'cloudSyncExplicitlyDisabled',
-  ACTIVE_USER_ID_KEY,
-] as const
+interface ClearUserDataOptions {
+  /** If set, preserve this user ID in localStorage after clearing */
+  preserveUserId?: string
+  /** Logging context label */
+  context: string
+}
+
+async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
+  const { context, preserveUserId } = options
+
+  // Clear encryption key immediately (in-memory + localStorage) before any
+  // async work, so concurrent code cannot re-persist a stale key.
+  encryptionService.clearKey({ persist: true })
+
+  // Reset renderer registry to clear any cached renderers
+  resetRendererRegistry()
+
+  // Reset tinfoil client to clear cached API key
+  resetTinfoilClient()
+
+  // Clear profile sync cache
+  profileSync.clearCache()
+
+  // Clear sync caches so stale state doesn't leak into the next session
+  cloudSync.clearSyncStatus()
+  deletedChatsTracker.clear()
+
+  // Clear project event handlers
+  projectEvents.clear()
+
+  logInfo('Cleared in-memory caches', {
+    component: context,
+    action: 'clearAllUserData',
+  })
+
+  // Clear localStorage, preserving only non-user-specific keys
+  const hasSeenWebSearchIntro = localStorage.getItem(
+    'has_seen_web_search_intro',
+  )
+  localStorage.clear()
+  if (hasSeenWebSearchIntro) {
+    localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
+  }
+  if (preserveUserId) {
+    localStorage.setItem(ACTIVE_USER_ID_KEY, preserveUserId)
+  }
+
+  // Clear sessionStorage
+  try {
+    sessionStorage.clear()
+  } catch {
+    // best-effort
+  }
+
+  // Clear IndexedDB
+  try {
+    await indexedDBStorage.clearAll()
+  } catch (error) {
+    logError('Failed to clear IndexedDB', error, {
+      component: context,
+      action: 'clearAllUserData',
+    })
+  }
+
+  // Clear service worker caches
+  if ('caches' in window) {
+    try {
+      const cacheNames = await caches.keys()
+      await Promise.all(cacheNames.map((name) => caches.delete(name)))
+    } catch {
+      // best-effort
+    }
+  }
+}
 
 export async function performSignoutCleanup(): Promise<void> {
   try {
@@ -42,119 +92,7 @@ export async function performSignoutCleanup(): Promise<void> {
       action: 'performSignoutCleanup',
     })
 
-    // Clear encryption key immediately (in-memory + localStorage) before any
-    // async work, so concurrent code cannot re-persist a stale key.
-    encryptionService.clearKey({ persist: true })
-
-    // Reset renderer registry to clear any cached renderers
-    resetRendererRegistry()
-    logInfo('Reset renderer registry', {
-      component: 'signoutCleanup',
-      action: 'resetRendererRegistry',
-    })
-
-    // Reset tinfoil client to clear cached API key
-    resetTinfoilClient()
-    logInfo('Reset tinfoil client', {
-      component: 'signoutCleanup',
-      action: 'resetTinfoilClient',
-    })
-
-    // Clear profile sync cache
-    profileSync.clearCache()
-    logInfo('Cleared profile sync cache', {
-      component: 'signoutCleanup',
-      action: 'clearProfileCache',
-    })
-
-    // Clear sync caches so stale state doesn't leak into the next session
-    cloudSync.clearSyncStatus()
-    deletedChatsTracker.clear()
-    logInfo('Cleared sync caches and deleted chats tracker', {
-      component: 'signoutCleanup',
-      action: 'clearSyncCaches',
-    })
-
-    // Clear project event handlers
-    projectEvents.clear()
-    logInfo('Cleared project event handlers', {
-      component: 'signoutCleanup',
-      action: 'clearProjectEvents',
-    })
-
-    // Clear specific localStorage items first
-    LOCAL_STORAGE_KEYS.forEach((key) => {
-      try {
-        localStorage.removeItem(key)
-      } catch (error) {
-        logInfo(`Failed to remove localStorage item: ${key}`, {
-          component: 'signoutCleanup',
-          action: 'clearLocalStorage',
-          metadata: { key },
-        })
-      }
-    })
-
-    // Then clear all remaining localStorage items, preserving certain keys
-    try {
-      // Preserve keys that should persist across signout
-      const hasSeenWebSearchIntro = localStorage.getItem(
-        'has_seen_web_search_intro',
-      )
-
-      localStorage.clear()
-
-      // Restore preserved keys
-      if (hasSeenWebSearchIntro) {
-        localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
-      }
-    } catch (error) {
-      logInfo('Failed to clear all localStorage', {
-        component: 'signoutCleanup',
-        action: 'clearLocalStorage',
-      })
-    }
-
-    // Clear sessionStorage
-    try {
-      sessionStorage.clear()
-    } catch (error) {
-      logInfo('Failed to clear sessionStorage', {
-        component: 'signoutCleanup',
-        action: 'clearSessionStorage',
-      })
-    }
-
-    // Clear IndexedDB
-    try {
-      await indexedDBStorage.clearAll()
-      logInfo('Cleared IndexedDB', {
-        component: 'signoutCleanup',
-        action: 'clearIndexedDB',
-      })
-    } catch (error) {
-      logError('Failed to clear IndexedDB during signout', error, {
-        component: 'signoutCleanup',
-        action: 'clearIndexedDB',
-      })
-    }
-
-    // Clear service worker caches
-    if ('caches' in window) {
-      try {
-        const cacheNames = await caches.keys()
-        await Promise.all(cacheNames.map((name) => caches.delete(name)))
-        logInfo('Cleared service worker caches', {
-          component: 'signoutCleanup',
-          action: 'clearCaches',
-        })
-      } catch (error) {
-        logInfo('Failed to clear caches during signout', {
-          component: 'signoutCleanup',
-          action: 'clearCaches',
-        })
-      }
-    }
+    await clearAllUserData({ context: 'signoutCleanup' })
 
     logInfo('Signout cleanup completed', {
       component: 'signoutCleanup',
@@ -167,6 +105,21 @@ export async function performSignoutCleanup(): Promise<void> {
     })
     throw error
   }
+}
+
+export function performUserSwitchCleanup(newUserId: string): void {
+  logInfo('User switch detected, clearing all data', {
+    component: 'AuthCleanupHandler',
+    action: 'performUserSwitchCleanup',
+    metadata: { newUserId },
+  })
+
+  clearAllUserData({
+    context: 'AuthCleanupHandler',
+    preserveUserId: newUserId,
+  }).finally(() => {
+    window.location.reload()
+  })
 }
 
 export function getEncryptionKey(): string | null {
