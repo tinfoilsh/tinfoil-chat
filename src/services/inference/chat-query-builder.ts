@@ -211,7 +211,7 @@ export class ChatQueryBuilder {
         )
         .join('\n\n')
       if (docContent) {
-        textContent = `${textContent}\n\n${docContent}`
+        textContent = `---\nDocument content:\n${docContent}\n---\n\n${textContent}`
       }
     }
 
