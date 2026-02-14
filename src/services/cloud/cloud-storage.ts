@@ -3,7 +3,7 @@ import { decryptAttachment, encryptAttachment } from '@/utils/binary-codec'
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
-import { DB_VERSION, type StoredChat } from '../storage/indexed-db'
+import { type StoredChat } from '../storage/indexed-db'
 import { processRemoteChat, type RemoteChatData } from './chat-codec'
 
 const API_BASE_URL =
@@ -203,34 +203,79 @@ export class CloudStorageService {
       throw new Error('Maximum 100 chats per bulk upload request')
     }
 
-    // Encrypt all chats in parallel
-    const conversations = await Promise.all(
-      chats.map(async (chat) => {
-        const encrypted = await encryptionService.encrypt(chat)
-        const createdAtStr =
-          chat.createdAt instanceof Date
-            ? chat.createdAt.toISOString()
-            : chat.createdAt
-        return {
-          conversationId: chat.id,
-          data: JSON.stringify(encrypted),
-          metadata: {
-            'db-version': String(DB_VERSION),
-            'message-count': String(chat.messages?.length || 0),
-            'chat-created-at': createdAtStr,
-            'chat-updated-at': new Date().toISOString(),
-          },
-          projectId: chat.projectId,
+    // Step 1: Upload attachments and encrypt each chat to v1 binary
+    const metadata: Array<{
+      conversationId: string
+      messageCount: number
+      projectId?: string
+    }> = []
+    const binaryParts: Array<{ id: string; data: Uint8Array }> = []
+
+    for (const chat of chats) {
+      const messages = (chat.messages as Message[]) || []
+
+      // Upload image attachments for this chat
+      for (const msg of messages) {
+        for (const att of msg.attachments || []) {
+          if (att.type === 'image' && att.base64) {
+            const raw = Uint8Array.from(atob(att.base64), (c) =>
+              c.charCodeAt(0),
+            )
+            const { encryptedData, key, iv } = await encryptAttachment(raw)
+            await this.uploadAttachment(att.id, chat.id, encryptedData)
+
+            att.encryptionKey = btoa(
+              String.fromCharCode.apply(null, Array.from(key)),
+            )
+            att.encryptionIV = btoa(
+              String.fromCharCode.apply(null, Array.from(iv)),
+            )
+          }
         }
-      }),
+      }
+
+      // Build stripped copy without base64 blobs
+      const strippedMessages = messages.map((msg) => ({
+        ...msg,
+        attachments: msg.attachments?.map((att) => {
+          if (att.type === 'image' && att.base64) {
+            const { base64: _removed, ...rest } = att
+            return rest
+          }
+          return att
+        }),
+      }))
+
+      const strippedChat = { ...chat, messages: strippedMessages }
+      const binary = await encryptionService.encryptV1(strippedChat)
+
+      metadata.push({
+        conversationId: chat.id,
+        messageCount: messages.length,
+        ...(chat.projectId ? { projectId: chat.projectId } : {}),
+      })
+      binaryParts.push({ id: chat.id, data: binary })
+    }
+
+    // Step 2: Build multipart form — metadata JSON + one binary part per conversation
+    const formData = new FormData()
+    formData.append(
+      'metadata',
+      new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
     )
+    for (const part of binaryParts) {
+      formData.append(
+        part.id,
+        new Blob([part.data], { type: 'application/octet-stream' }),
+      )
+    }
 
     const response = await fetch(
       `${API_BASE_URL}/api/storage/conversations/bulk`,
       {
         method: 'POST',
         headers: await this.getHeaders(),
-        body: JSON.stringify({ conversations }),
+        body: formData,
       },
     )
 
