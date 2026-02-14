@@ -27,6 +27,7 @@ export interface RemoteChatEntry {
   content?: string | null
   createdAt: string
   updatedAt?: string
+  formatVersion?: number
 }
 
 export interface IngestOptions {
@@ -110,6 +111,7 @@ export async function ingestRemoteChats(
         content: chatContent,
         createdAt: remoteChat.createdAt,
         updatedAt: remoteChat.updatedAt,
+        formatVersion: remoteChat.formatVersion,
       }
 
       const codecOptions: ProcessRemoteChatOptions = { localChat }

@@ -12,6 +12,7 @@ export interface StoredChat extends Chat {
   syncedAt?: number
   locallyModified?: boolean
   syncVersion?: number
+  formatVersion?: number // 0=legacy JSON, 1=gzip+binary
   decryptionFailed?: boolean
   dataCorrupted?: boolean // True if data appears to be corrupted (e.g., compressed with wrong key)
   encryptedData?: string

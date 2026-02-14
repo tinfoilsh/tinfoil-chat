@@ -32,6 +32,9 @@ export type Attachment = {
   textContent?: string
   description?: string
   fileSize?: number
+  // v1 format: per-attachment encryption key material (base64-encoded)
+  encryptionKey?: string
+  encryptionIV?: string
 }
 
 export type Message = {
