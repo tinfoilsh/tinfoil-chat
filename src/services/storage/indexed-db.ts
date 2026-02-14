@@ -63,13 +63,6 @@ export function chatContentFingerprint(chat: {
             id: a.id,
             type: a.type,
             fileName: a.fileName,
-            base64Hash:
-              typeof a.base64 === 'string' ? hashString(a.base64) : null,
-            base64Length: typeof a.base64 === 'string' ? a.base64.length : 0,
-            textContentHash:
-              typeof a.textContent === 'string'
-                ? hashString(a.textContent)
-                : null,
           }))
         : [],
     // Legacy fields — still included for old messages that haven't been migrated
