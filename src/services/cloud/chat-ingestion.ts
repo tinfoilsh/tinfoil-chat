@@ -96,22 +96,42 @@ export async function ingestRemoteChats(
 
     try {
       // Resolve content: use inline if present, otherwise optionally fetch
-      let chatContent = remoteChat.content ?? null
-      if (!chatContent && fetchMissingContent) {
-        chatContent = await cloudStorage.fetchRawChatContent(remoteChat.id)
-      }
-
-      // Skip if no content available (either not requested or fetch returned nothing)
-      if (!chatContent) {
-        continue
-      }
-
-      const codecInput: RemoteChatData = {
+      let codecInput: RemoteChatData = {
         id: remoteChat.id,
-        content: chatContent,
         createdAt: remoteChat.createdAt,
         updatedAt: remoteChat.updatedAt,
         formatVersion: remoteChat.formatVersion,
+      }
+
+      if (remoteChat.content) {
+        if (remoteChat.formatVersion === 1) {
+          // Inline v1 content is base64-encoded binary from the list endpoint
+          const binaryStr = atob(remoteChat.content)
+          const bytes = new Uint8Array(binaryStr.length)
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i)
+          }
+          codecInput.binaryContent = bytes.buffer as ArrayBuffer
+          codecInput.formatVersion = 1
+        } else {
+          codecInput.content = remoteChat.content
+        }
+      } else if (fetchMissingContent) {
+        const fetched = await cloudStorage.fetchRawChatContent(remoteChat.id)
+        if (fetched) {
+          if (fetched.formatVersion === 1) {
+            codecInput.binaryContent = fetched.binaryContent
+            codecInput.formatVersion = 1
+          } else {
+            codecInput.content = fetched.content
+            codecInput.formatVersion = 0
+          }
+        }
+      }
+
+      // Skip if no content available (either not requested or fetch returned nothing)
+      if (!codecInput.content && !codecInput.binaryContent) {
+        continue
       }
 
       const codecOptions: ProcessRemoteChatOptions = { localChat }

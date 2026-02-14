@@ -17,6 +17,8 @@ import type { StoredChat } from '../storage/indexed-db'
 export interface RemoteChatData {
   id: string
   content?: string | null
+  /** v1 binary content (gzip+AES-GCM encrypted). Mutually exclusive with content. */
+  binaryContent?: ArrayBuffer | null
   createdAt?: string
   updatedAt?: string | null
   formatVersion?: number
