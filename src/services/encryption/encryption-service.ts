@@ -1,5 +1,6 @@
 // Encryption service for end-to-end encryption of chat data
 
+import { compressAndEncrypt, decryptAndDecompress } from '@/utils/binary-codec'
 import { logInfo } from '@/utils/error-handling'
 
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
@@ -485,6 +486,48 @@ export class EncryptionService {
       }
     } catch (error) {
       throw new Error(`Decryption failed: ${error}`)
+    }
+  }
+
+  // Encrypt data using v1 binary format (gzip + AES-GCM, raw binary output)
+  async encryptV1(data: unknown): Promise<Uint8Array> {
+    await this.ensureInitialized()
+    return compressAndEncrypt(data, this.encryptionKey!)
+  }
+
+  // Decrypt v1 binary format with fallback key support
+  async decryptV1(binary: Uint8Array): Promise<unknown> {
+    await this.ensureInitialized()
+
+    try {
+      return await decryptAndDecompress(binary, this.encryptionKey!)
+    } catch (primaryError) {
+      let lastError: unknown = primaryError
+
+      for (const [index, keyString] of this.fallbackKeyStrings.entries()) {
+        const fallbackKey = await this.getFallbackCryptoKey(keyString)
+        if (!fallbackKey) {
+          continue
+        }
+
+        try {
+          const result = await decryptAndDecompress(binary, fallbackKey)
+          logInfo('V1 decryption succeeded with fallback key', {
+            component: 'EncryptionService',
+            action: 'decryptV1',
+            metadata: { fallbackIndex: index },
+          })
+          return result
+        } catch (fallbackError) {
+          lastError = fallbackError
+        }
+      }
+
+      if (lastError instanceof Error) {
+        throw lastError
+      }
+
+      throw new Error(String(lastError ?? 'No valid encryption keys'))
     }
   }
 
