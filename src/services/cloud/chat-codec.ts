@@ -75,8 +75,8 @@ export async function processRemoteChat(
     remote.id,
   )
 
-  // If no content, return a placeholder
-  if (!remote.content) {
+  // If no content at all, return a placeholder
+  if (!remote.content && !remote.binaryContent) {
     logInfo('Remote chat has no content', {
       component: 'ChatCodec',
       action: 'processRemoteChat',
@@ -95,10 +95,20 @@ export async function processRemoteChat(
     }
   }
 
-  // Try to decrypt the content
+  // Try to decrypt the content — route by format version
   try {
-    const encrypted = JSON.parse(remote.content)
-    const decrypted = await encryptionService.decrypt(encrypted)
+    let decrypted: any
+
+    if (remote.formatVersion === 1 && remote.binaryContent) {
+      decrypted = await encryptionService.decryptV1(
+        new Uint8Array(remote.binaryContent),
+      )
+    } else if (remote.content) {
+      const encrypted = JSON.parse(remote.content)
+      decrypted = await encryptionService.decrypt(encrypted)
+    } else {
+      throw new Error('No content available for decryption')
+    }
 
     // Ensure timestamps are valid
     const chat: StoredChat = {
@@ -116,6 +126,7 @@ export async function processRemoteChat(
       syncedAt: Date.now(),
       locallyModified: false,
       syncVersion: decrypted.syncVersion ?? 1,
+      formatVersion: remote.formatVersion ?? 0,
       // Explicit projectId from caller is authoritative (e.g. cross-scope sync);
       // fall back to the blob's value, then the local chat's value
       projectId: projectId ?? decrypted.projectId ?? localChat?.projectId,
@@ -153,11 +164,11 @@ export async function processRemoteChat(
         updatedAt: safeUpdatedAt,
         projectId: effectiveProjectId,
         status,
-        encryptedData: remote.content,
+        encryptedData: remote.content ?? undefined,
         dataCorrupted: isCorrupted,
       }),
       status,
-      encryptedData: remote.content,
+      encryptedData: remote.content ?? undefined,
     }
   }
 }
