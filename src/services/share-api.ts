@@ -10,16 +10,27 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 }
 
 /**
- * Upload encrypted shared chat data to the server
+ * Fetched share data — either v0 JSON or v1 raw binary.
+ */
+export type FetchedShareData =
+  | { formatVersion: 0; data: EncryptedShareData }
+  | { formatVersion: 1; binary: ArrayBuffer }
+
+/**
+ * Upload v1 binary encrypted shared chat data to the server.
  */
 export async function uploadSharedChat(
   chatId: string,
-  encryptedData: EncryptedShareData,
+  encryptedData: Uint8Array,
 ): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/shares/${chatId}`, {
     method: 'PUT',
-    headers: await getAuthHeaders(),
-    body: JSON.stringify(encryptedData),
+    headers: {
+      ...(await getAuthHeaders()),
+      'Content-Type': 'application/octet-stream',
+      'X-Format-Version': '1',
+    },
+    body: encryptedData,
   })
 
   if (!response.ok) {
@@ -34,12 +45,12 @@ export async function uploadSharedChat(
 }
 
 /**
- * Fetch encrypted shared chat data from the server
- * This endpoint is public - no authentication required
+ * Fetch encrypted shared chat data from the server.
+ * Returns v0 JSON or v1 binary based on X-Format-Version header.
  */
 export async function fetchSharedChat(
   chatId: string,
-): Promise<EncryptedShareData> {
+): Promise<FetchedShareData> {
   const response = await fetch(`${API_BASE_URL}/api/shares/${chatId}`, {
     method: 'GET',
   })
@@ -51,5 +62,16 @@ export async function fetchSharedChat(
     throw new Error(`Failed to fetch shared chat: ${response.status}`)
   }
 
-  return response.json()
+  const formatVersion = parseInt(
+    response.headers.get('X-Format-Version') || '0',
+    10,
+  )
+
+  if (formatVersion === 1) {
+    const binary = await response.arrayBuffer()
+    return { formatVersion: 1, binary }
+  }
+
+  const data: EncryptedShareData = await response.json()
+  return { formatVersion: 0, data }
 }
