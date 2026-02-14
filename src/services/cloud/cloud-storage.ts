@@ -15,7 +15,9 @@ export interface ChatListResponse {
     updatedAt: string
     title: string
     messageCount: number
+    syncVersion: number
     size: number
+    formatVersion: number
     content?: string
     projectId?: string
   }>
