@@ -1,9 +1,9 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { useToast } from '@/hooks/use-toast'
 import { uploadSharedChat } from '@/services/share-api'
+import { compressAndEncrypt } from '@/utils/binary-codec'
 import type { ShareableChatData } from '@/utils/compression'
 import {
-  encryptForShare,
   exportKeyToBase64url,
   generateShareKey,
 } from '@/utils/share-encryption'
@@ -246,9 +246,9 @@ export function ShareModal({
         )
       }
 
-      let encrypted: Awaited<ReturnType<typeof encryptForShare>>
+      let encrypted: Uint8Array
       try {
-        encrypted = await encryptForShare(shareableData, key)
+        encrypted = await compressAndEncrypt(shareableData, key)
       } catch (e) {
         throw new Error(
           `Encryption failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -264,7 +264,7 @@ export function ShareModal({
         )
       }
 
-      // Upload encrypted data to server
+      // Upload encrypted binary to server
       try {
         await uploadSharedChat(chatId, encrypted)
       } catch (e) {
