@@ -4,11 +4,12 @@ import { initializeRenderers } from '@/components/chat/renderers/client'
 import { SharedChatView } from '@/components/chat/shared-chat-view'
 import { getAIModels, type BaseModel } from '@/config/models'
 import { fetchSharedChat } from '@/services/share-api'
+import { decryptAndDecompress } from '@/utils/binary-codec'
 import {
   validateShareableChatData,
   type ShareableChatData,
 } from '@/utils/compression'
-import { decryptShare } from '@/utils/share-encryption'
+import { decryptShare, importKeyFromBase64url } from '@/utils/share-encryption'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
@@ -79,8 +80,17 @@ export default function SharePage() {
       }
 
       try {
-        const encryptedData = await fetchSharedChat(chatId)
-        const decrypted = await decryptShare(encryptedData, keyBase64url)
+        const fetched = await fetchSharedChat(chatId)
+        let decrypted: object | null
+        if (fetched.formatVersion === 1) {
+          const key = await importKeyFromBase64url(keyBase64url)
+          decrypted = (await decryptAndDecompress(
+            new Uint8Array(fetched.binary),
+            key,
+          )) as object | null
+        } else {
+          decrypted = await decryptShare(fetched.data, keyBase64url)
+        }
 
         if (!decrypted) {
           setErrorMessage('Failed to decrypt chat data')
