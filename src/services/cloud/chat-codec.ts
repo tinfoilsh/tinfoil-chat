@@ -19,6 +19,7 @@ export interface RemoteChatData {
   content?: string | null
   createdAt?: string
   updatedAt?: string | null
+  formatVersion?: number
 }
 
 /**
