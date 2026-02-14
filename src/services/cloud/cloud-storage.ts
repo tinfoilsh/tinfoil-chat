@@ -1,3 +1,5 @@
+import type { Attachment, Message } from '@/components/chat/types'
+import { decryptAttachment, encryptAttachment } from '@/utils/binary-codec'
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
@@ -48,6 +50,10 @@ export interface BulkUploadResponse {
   failed: number
 }
 
+export type RawChatContent =
+  | { content: string; formatVersion: 0 }
+  | { binaryContent: ArrayBuffer; formatVersion: 1 }
+
 export class CloudStorageService {
   async generateConversationId(timestamp?: string): Promise<{
     conversationId: string
@@ -78,34 +84,105 @@ export class CloudStorageService {
   }
 
   async uploadChat(chat: StoredChat): Promise<string | null> {
-    // Encrypt the chat data first
-    const encrypted = await encryptionService.encrypt(chat)
+    const messages: Message[] = (chat.messages as Message[]) || []
 
-    // Metadata for the chat
-    const metadata = {
-      'db-version': String(DB_VERSION),
-      'message-count': String(chat.messages?.length || 0),
-      'chat-created-at': chat.createdAt,
-      'chat-updated-at': chat.updatedAt,
+    // Step 1: Collect image attachments that have base64 data to upload
+    const attachmentsToUpload: {
+      attachment: Attachment
+      base64Data: string
+    }[] = []
+    for (const msg of messages) {
+      for (const att of msg.attachments || []) {
+        if (att.type === 'image' && att.base64) {
+          attachmentsToUpload.push({ attachment: att, base64Data: att.base64 })
+        }
+      }
     }
 
-    // Upload through backend proxy to avoid CORS issues
-    const response = await fetch(`${API_BASE_URL}/api/storage/conversation`, {
-      method: 'PUT',
-      headers: await this.getHeaders(),
-      body: JSON.stringify({
-        conversationId: chat.id,
-        data: JSON.stringify(encrypted),
-        metadata,
-        projectId: chat.projectId,
+    // Step 2: Encrypt and upload each image attachment separately
+    for (const { attachment, base64Data } of attachmentsToUpload) {
+      const raw = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))
+      const { encryptedData, key, iv } = await encryptAttachment(raw)
+      await this.uploadAttachment(attachment.id, chat.id, encryptedData)
+
+      // Store key material on the attachment for inclusion in chat JSON
+      attachment.encryptionKey = btoa(
+        String.fromCharCode.apply(null, Array.from(key)),
+      )
+      attachment.encryptionIV = btoa(
+        String.fromCharCode.apply(null, Array.from(iv)),
+      )
+    }
+
+    // Step 3: Build a stripped copy — remove base64 blobs, keep thumbnails + key material
+    const strippedMessages = messages.map((msg) => ({
+      ...msg,
+      attachments: msg.attachments?.map((att) => {
+        if (att.type === 'image' && att.base64) {
+          const { base64: _removed, ...rest } = att
+          return rest
+        }
+        return att
       }),
-    })
+    }))
+
+    const strippedChat = {
+      ...chat,
+      messages: strippedMessages,
+    }
+
+    // Step 4: Compress + encrypt to v1 binary
+    const binary = await encryptionService.encryptV1(strippedChat)
+
+    // Step 5: Upload binary to v1 endpoint
+    const headers: Record<string, string> = {
+      ...(await this.getHeaders()),
+      'Content-Type': 'application/octet-stream',
+      'X-Message-Count': String(messages.length),
+    }
+    if (chat.projectId) {
+      headers['X-Project-Id'] = chat.projectId
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/conversation/${chat.id}/data`,
+      {
+        method: 'PUT',
+        headers,
+        body: binary,
+      },
+    )
 
     if (!response.ok) {
       throw new Error(`Failed to upload chat: ${response.statusText}`)
     }
 
     return null
+  }
+
+  private async uploadAttachment(
+    attachmentId: string,
+    chatId: string,
+    encryptedData: Uint8Array,
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/attachment/${attachmentId}`,
+      {
+        method: 'PUT',
+        headers: {
+          ...(await this.getHeaders()),
+          'Content-Type': 'application/octet-stream',
+          'X-Chat-Id': chatId,
+        },
+        body: encryptedData,
+      },
+    )
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to upload attachment ${attachmentId}: ${response.statusText}`,
+      )
+    }
   }
 
   async bulkUploadChats(
@@ -166,9 +243,9 @@ export class CloudStorageService {
 
   /**
    * Fetch raw encrypted content for a single chat by ID.
-   * Returns the raw JSON string, or null if not found.
+   * Returns v0 JSON string or v1 binary ArrayBuffer based on X-Format-Version header.
    */
-  async fetchRawChatContent(chatId: string): Promise<string | null> {
+  async fetchRawChatContent(chatId: string): Promise<RawChatContent | null> {
     const response = await fetch(
       `${API_BASE_URL}/api/storage/conversation/${chatId}`,
       {
@@ -184,20 +261,33 @@ export class CloudStorageService {
       throw new Error(`Failed to download chat: ${response.statusText}`)
     }
 
-    return response.text()
+    const formatVersion = parseInt(
+      response.headers.get('X-Format-Version') || '0',
+      10,
+    )
+
+    if (formatVersion === 1) {
+      const binaryContent = await response.arrayBuffer()
+      return { binaryContent, formatVersion: 1 }
+    }
+
+    const content = await response.text()
+    return { content, formatVersion: 0 }
   }
 
   async downloadChat(chatId: string): Promise<StoredChat | null> {
     try {
-      const rawContent = await this.fetchRawChatContent(chatId)
+      const raw = await this.fetchRawChatContent(chatId)
 
-      if (rawContent === null) {
+      if (raw === null) {
         return null
       }
 
       const remote: RemoteChatData = {
         id: chatId,
-        content: rawContent,
+        ...(raw.formatVersion === 1
+          ? { binaryContent: raw.binaryContent, formatVersion: 1 }
+          : { content: raw.content, formatVersion: 0 }),
       }
 
       const result = await processRemoteChat(remote)
@@ -210,6 +300,74 @@ export class CloudStorageService {
       })
       return null
     }
+  }
+
+  /**
+   * Fetch a single encrypted attachment blob by ID.
+   */
+  async fetchAttachment(attachmentId: string): Promise<ArrayBuffer | null> {
+    const response = await fetch(
+      `${API_BASE_URL}/api/storage/attachment/${attachmentId}`,
+    )
+
+    if (response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch attachment ${attachmentId}: ${response.statusText}`,
+      )
+    }
+
+    return response.arrayBuffer()
+  }
+
+  /**
+   * Fetch and decrypt all image attachments for a v1 chat, populating the base64 field
+   * on each attachment in-place. Attachments that fail to load are silently skipped.
+   */
+  async loadChatImages(chat: StoredChat): Promise<void> {
+    const messages = (chat.messages as Message[]) || []
+    const tasks: Promise<void>[] = []
+
+    for (const msg of messages) {
+      for (const att of msg.attachments || []) {
+        if (att.type !== 'image' || !att.encryptionKey || att.base64) {
+          continue
+        }
+
+        tasks.push(
+          (async () => {
+            try {
+              const encryptedBuf = await this.fetchAttachment(att.id)
+              if (!encryptedBuf) return
+
+              const keyBytes = Uint8Array.from(atob(att.encryptionKey!), (c) =>
+                c.charCodeAt(0),
+              )
+              const decrypted = await decryptAttachment(
+                new Uint8Array(encryptedBuf),
+                keyBytes,
+              )
+
+              // Convert raw bytes back to base64 for display
+              const CHUNK_SIZE = 0x8000
+              const chunks: string[] = []
+              for (let i = 0; i < decrypted.length; i += CHUNK_SIZE) {
+                const chunk = decrypted.subarray(i, i + CHUNK_SIZE)
+                chunks.push(String.fromCharCode.apply(null, Array.from(chunk)))
+              }
+              att.base64 = btoa(chunks.join(''))
+            } catch {
+              // Silently skip failed attachments — thumbnail is still available
+            }
+          })(),
+        )
+      }
+    }
+
+    await Promise.all(tasks)
   }
 
   async listChats(options?: {
