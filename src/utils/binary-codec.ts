@@ -103,11 +103,11 @@ export async function decryptAndDecompress(
 /**
  * Encrypt a raw attachment blob with a random per-attachment key.
  * Returns the ciphertext (IV || encrypted data) and the key material
- * so the caller can store key+IV in the chat JSON metadata.
+ * so the caller can store the key in chat JSON metadata.
  */
 export async function encryptAttachment(
   data: Uint8Array,
-): Promise<{ encryptedData: Uint8Array; key: Uint8Array; iv: Uint8Array }> {
+): Promise<{ encryptedData: Uint8Array; key: Uint8Array }> {
   const key = await crypto.subtle.generateKey(
     { name: AES_GCM, length: 256 },
     true,
@@ -123,7 +123,7 @@ export async function encryptAttachment(
 
   const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', key))
 
-  return { encryptedData: packIvCiphertext(iv, ciphertext), key: rawKey, iv }
+  return { encryptedData: packIvCiphertext(iv, ciphertext), key: rawKey }
 }
 
 /**
