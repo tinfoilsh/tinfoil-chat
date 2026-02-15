@@ -35,6 +35,7 @@ export interface ProjectChat {
   messageCount: number
   syncVersion: number
   size: number
+  formatVersion: number
   createdAt: string
   updatedAt: string
   content?: string
@@ -43,7 +44,7 @@ export interface ProjectChat {
 export interface ProjectChatListResponse {
   chats: ProjectChat[]
   hasMore?: boolean
-  nextCursor?: string
+  nextContinuationToken?: string
 }
 
 export interface ProjectChatSyncStatus {

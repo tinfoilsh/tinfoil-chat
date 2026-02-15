@@ -1197,8 +1197,9 @@ export class CloudSyncService {
         result.errors.push(...ingestResult.errors)
 
         // Check if there are more pages
-        hasMore = updatedChats.hasMore === true && !!updatedChats.nextCursor
-        cursorId = updatedChats.nextCursor
+        hasMore =
+          updatedChats.hasMore === true && !!updatedChats.nextContinuationToken
+        cursorId = updatedChats.nextContinuationToken
       }
 
       // Update cached sync status
