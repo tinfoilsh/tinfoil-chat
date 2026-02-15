@@ -6,6 +6,7 @@
  * These don't interact with the sync lock or sync caches.
  */
 
+import { base64ToUint8Array } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
 import { encryptionService } from '../encryption/encryption-service'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
@@ -43,11 +44,7 @@ export async function retryDecryptionWithNewKey(
 
           if (chat.formatVersion === 1) {
             // v1: encryptedData is base64-encoded binary
-            const binaryStr = atob(chat.encryptedData!)
-            const bytes = new Uint8Array(binaryStr.length)
-            for (let i = 0; i < binaryStr.length; i++) {
-              bytes[i] = binaryStr.charCodeAt(i)
-            }
+            const bytes = base64ToUint8Array(chat.encryptedData!)
             decryptedData = await encryptionService.decryptV1(bytes)
           } else {
             // v0: encryptedData is a JSON string

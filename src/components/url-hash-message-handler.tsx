@@ -1,3 +1,4 @@
+import { base64ToUint8Array } from '@/utils/binary-codec'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { useEffect, useRef } from 'react'
 
@@ -37,11 +38,8 @@ export function UrlHashMessageHandler({
         const encodedMessage = hash.slice(6)
 
         try {
-          // Decode base64 to binary string (Latin-1)
-          const binaryString = atob(encodedMessage)
-
-          // Convert binary string to UTF-8
-          const bytes = Uint8Array.from(binaryString, (c) => c.charCodeAt(0))
+          // Decode base64 to binary, then interpret as UTF-8
+          const bytes = base64ToUint8Array(encodedMessage)
           const decodedMessage = new TextDecoder('utf-8').decode(bytes)
 
           if (!decodedMessage) {
