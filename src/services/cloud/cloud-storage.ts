@@ -1,4 +1,4 @@
-import type { Attachment, Message } from '@/components/chat/types'
+import type { Message } from '@/components/chat/types'
 import { decryptAttachment, encryptAttachment } from '@/utils/binary-codec'
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
@@ -54,6 +54,19 @@ export type RawChatContent =
   | { content: string; formatVersion: 0 }
   | { binaryContent: ArrayBuffer; formatVersion: 1 }
 
+function stripBase64FromMessages(messages: Message[]): Message[] {
+  return messages.map((msg) => ({
+    ...msg,
+    attachments: msg.attachments?.map((att) => {
+      if (att.type === 'image' && att.base64) {
+        const { base64: _removed, ...rest } = att
+        return rest
+      }
+      return att
+    }),
+  }))
+}
+
 export class CloudStorageService {
   async generateConversationId(timestamp?: string): Promise<{
     conversationId: string
@@ -86,55 +99,13 @@ export class CloudStorageService {
   async uploadChat(chat: StoredChat): Promise<string | null> {
     const messages: Message[] = (chat.messages as Message[]) || []
 
-    // Step 1: Collect image attachments that have base64 data to upload
-    const attachmentsToUpload: {
-      attachment: Attachment
-      base64Data: string
-    }[] = []
-    for (const msg of messages) {
-      for (const att of msg.attachments || []) {
-        if (att.type === 'image' && att.base64) {
-          attachmentsToUpload.push({ attachment: att, base64Data: att.base64 })
-        }
-      }
-    }
-
-    // Step 2: Encrypt and upload each image attachment separately
-    for (const { attachment, base64Data } of attachmentsToUpload) {
-      const raw = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))
-      const { encryptedData, key, iv } = await encryptAttachment(raw)
-      await this.uploadAttachment(attachment.id, chat.id, encryptedData)
-
-      // Store key material on the attachment for inclusion in chat JSON
-      attachment.encryptionKey = btoa(
-        String.fromCharCode.apply(null, Array.from(key)),
-      )
-      attachment.encryptionIV = btoa(
-        String.fromCharCode.apply(null, Array.from(iv)),
-      )
-    }
-
-    // Step 3: Build a stripped copy — remove base64 blobs, keep thumbnails + key material
-    const strippedMessages = messages.map((msg) => ({
-      ...msg,
-      attachments: msg.attachments?.map((att) => {
-        if (att.type === 'image' && att.base64) {
-          const { base64: _removed, ...rest } = att
-          return rest
-        }
-        return att
-      }),
-    }))
-
+    await this.encryptAndUploadAttachments(messages, chat.id)
     const strippedChat = {
       ...chat,
-      messages: strippedMessages,
+      messages: stripBase64FromMessages(messages),
     }
-
-    // Step 4: Compress + encrypt to v1 binary
     const binary = await encryptionService.encryptV1(strippedChat)
 
-    // Step 5: Upload binary to v1 endpoint
     const headers: Record<string, string> = {
       ...(await this.getHeaders()),
       'Content-Type': 'application/octet-stream',
@@ -158,6 +129,28 @@ export class CloudStorageService {
     }
 
     return null
+  }
+
+  private async encryptAndUploadAttachments(
+    messages: Message[],
+    chatId: string,
+  ): Promise<void> {
+    for (const msg of messages) {
+      for (const att of msg.attachments || []) {
+        if (att.type === 'image' && att.base64) {
+          const raw = Uint8Array.from(atob(att.base64), (c) => c.charCodeAt(0))
+          const { encryptedData, key, iv } = await encryptAttachment(raw)
+          await this.uploadAttachment(att.id, chatId, encryptedData)
+
+          att.encryptionKey = btoa(
+            String.fromCharCode.apply(null, Array.from(key)),
+          )
+          att.encryptionIV = btoa(
+            String.fromCharCode.apply(null, Array.from(iv)),
+          )
+        }
+      }
+    }
   }
 
   private async uploadAttachment(
@@ -214,39 +207,11 @@ export class CloudStorageService {
     for (const chat of chats) {
       const messages = (chat.messages as Message[]) || []
 
-      // Upload image attachments for this chat
-      for (const msg of messages) {
-        for (const att of msg.attachments || []) {
-          if (att.type === 'image' && att.base64) {
-            const raw = Uint8Array.from(atob(att.base64), (c) =>
-              c.charCodeAt(0),
-            )
-            const { encryptedData, key, iv } = await encryptAttachment(raw)
-            await this.uploadAttachment(att.id, chat.id, encryptedData)
-
-            att.encryptionKey = btoa(
-              String.fromCharCode.apply(null, Array.from(key)),
-            )
-            att.encryptionIV = btoa(
-              String.fromCharCode.apply(null, Array.from(iv)),
-            )
-          }
-        }
+      await this.encryptAndUploadAttachments(messages, chat.id)
+      const strippedChat = {
+        ...chat,
+        messages: stripBase64FromMessages(messages),
       }
-
-      // Build stripped copy without base64 blobs
-      const strippedMessages = messages.map((msg) => ({
-        ...msg,
-        attachments: msg.attachments?.map((att) => {
-          if (att.type === 'image' && att.base64) {
-            const { base64: _removed, ...rest } = att
-            return rest
-          }
-          return att
-        }),
-      }))
-
-      const strippedChat = { ...chat, messages: strippedMessages }
       const binary = await encryptionService.encryptV1(strippedChat)
 
       metadata.push({

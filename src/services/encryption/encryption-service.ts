@@ -454,36 +454,11 @@ export class EncryptionService {
       } catch (error) {
         throw new Error(`Invalid base64 encoding: ${error}`)
       }
-      try {
-        return await this.decryptWithKey(this.encryptionKey!, iv, data)
-      } catch (primaryError) {
-        let lastError: unknown = primaryError
 
-        for (const [index, keyString] of this.fallbackKeyStrings.entries()) {
-          const fallbackKey = await this.getFallbackCryptoKey(keyString)
-          if (!fallbackKey) {
-            continue
-          }
-
-          try {
-            const result = await this.decryptWithKey(fallbackKey, iv, data)
-            logInfo('Decryption succeeded with fallback key', {
-              component: 'EncryptionService',
-              action: 'decrypt',
-              metadata: { fallbackIndex: index },
-            })
-            return result
-          } catch (fallbackError) {
-            lastError = fallbackError
-          }
-        }
-
-        if (lastError instanceof Error) {
-          throw lastError
-        }
-
-        throw new Error(String(lastError ?? 'No valid encryption keys'))
-      }
+      return await this.decryptWithFallback(
+        (key) => this.decryptWithKey(key, iv, data),
+        'decrypt',
+      )
     } catch (error) {
       throw new Error(`Decryption failed: ${error}`)
     }
@@ -498,9 +473,18 @@ export class EncryptionService {
   // Decrypt v1 binary format with fallback key support
   async decryptV1(binary: Uint8Array): Promise<unknown> {
     await this.ensureInitialized()
+    return this.decryptWithFallback(
+      (key) => decryptAndDecompress(binary, key),
+      'decryptV1',
+    )
+  }
 
+  private async decryptWithFallback<T>(
+    decryptFn: (key: CryptoKey) => Promise<T>,
+    action: string,
+  ): Promise<T> {
     try {
-      return await decryptAndDecompress(binary, this.encryptionKey!)
+      return await decryptFn(this.encryptionKey!)
     } catch (primaryError) {
       let lastError: unknown = primaryError
 
@@ -511,10 +495,10 @@ export class EncryptionService {
         }
 
         try {
-          const result = await decryptAndDecompress(binary, fallbackKey)
-          logInfo('V1 decryption succeeded with fallback key', {
+          const result = await decryptFn(fallbackKey)
+          logInfo('Decryption succeeded with fallback key', {
             component: 'EncryptionService',
-            action: 'decryptV1',
+            action,
             metadata: { fallbackIndex: index },
           })
           return result
