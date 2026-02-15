@@ -199,7 +199,7 @@ export const DocumentList = memo(function DocumentList({
           return (
             <div
               key={attachment.id}
-              className="max-w-[300px] overflow-hidden rounded-lg"
+              className="w-[300px] overflow-hidden rounded-lg"
             >
               {src ? (
                 <img
@@ -209,7 +209,7 @@ export const DocumentList = memo(function DocumentList({
                   loading="lazy"
                 />
               ) : (
-                <div className="bg-surface-secondary flex h-[200px] w-[300px] items-center justify-center">
+                <div className="bg-surface-secondary flex h-[200px] w-full items-center justify-center">
                   <div className="border-content-tertiary h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" />
                 </div>
               )}
