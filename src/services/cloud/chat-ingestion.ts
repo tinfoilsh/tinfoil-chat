@@ -7,7 +7,7 @@
  */
 
 import { base64ToUint8Array } from '@/utils/binary-codec'
-import { logError } from '@/utils/error-handling'
+import { logError, logInfo } from '@/utils/error-handling'
 import { chatEvents, type ChatChangeReason } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
@@ -52,6 +52,8 @@ export interface IngestResult {
   savedIds: string[]
   downloaded: number
   errors: string[]
+  /** IDs of chats that were decrypted with a fallback key and should be re-encrypted with the current key */
+  needsReencryption: string[]
 }
 
 /**
@@ -78,6 +80,7 @@ export async function ingestRemoteChats(
     savedIds: [],
     downloaded: 0,
     errors: [],
+    needsReencryption: [],
   }
 
   for (const remoteChat of remoteChats) {
@@ -148,6 +151,10 @@ export async function ingestRemoteChats(
         await indexedDBStorage.markAsSynced(chat.id, chat.syncVersion ?? 0)
         result.savedIds.push(chat.id)
         result.downloaded++
+
+        if (codecResult.needsReencryption) {
+          result.needsReencryption.push(chat.id)
+        }
       }
     } catch (error) {
       result.errors.push(
@@ -160,7 +167,50 @@ export async function ingestRemoteChats(
     chatEvents.emit({ reason: eventReason, ids: result.savedIds })
   }
 
+  // Re-encrypt chats that were decrypted with a fallback key in the background.
+  // This ensures key rotation propagates: chats are re-uploaded with the current key.
+  if (result.needsReencryption.length > 0) {
+    reencryptChatIds(result.needsReencryption).catch(() => {
+      // Failures are logged inside; don't block the caller
+    })
+  }
+
   return result
+}
+
+/**
+ * Re-encrypt and upload specific chats that were decrypted with a fallback key.
+ * Runs in the background after ingestion completes.
+ */
+async function reencryptChatIds(chatIds: string[]): Promise<void> {
+  for (const chatId of chatIds) {
+    try {
+      const chat = await indexedDBStorage.getChat(chatId)
+      if (!chat || chat.decryptionFailed || chat.dataCorrupted) {
+        continue
+      }
+
+      const newVersion = (chat.syncVersion ?? 0) + 1
+      const chatToUpload = { ...chat, syncVersion: newVersion }
+      await cloudStorage.uploadChat(chatToUpload)
+
+      chat.syncVersion = newVersion
+      await indexedDBStorage.saveChat(chat)
+      await indexedDBStorage.markAsSynced(chatId, newVersion)
+
+      logInfo('Re-encrypted chat with current key after fallback decryption', {
+        component: 'ChatIngestion',
+        action: 'reencryptChatIds',
+        metadata: { chatId },
+      })
+    } catch (error) {
+      logError(`Failed to re-encrypt chat ${chatId}`, error, {
+        component: 'ChatIngestion',
+        action: 'reencryptChatIds',
+        metadata: { chatId },
+      })
+    }
+  }
 }
 
 /**
