@@ -170,6 +170,34 @@ function generateProjectName(): string {
   return `${adjective} ${animal}`
 }
 
+function buildAttachment(opts: {
+  id: string
+  fileName: string
+  imageData?: { base64: string; mimeType: string }
+  textContent?: string
+  description?: string
+}): Attachment | undefined {
+  if (opts.imageData) {
+    return {
+      id: opts.id,
+      type: 'image',
+      fileName: opts.fileName,
+      mimeType: opts.imageData.mimeType,
+      base64: opts.imageData.base64,
+      description: opts.description ?? opts.fileName,
+    }
+  }
+  if (opts.textContent) {
+    return {
+      id: opts.id,
+      type: 'document',
+      fileName: opts.fileName,
+      textContent: opts.textContent,
+    }
+  }
+  return undefined
+}
+
 export function ChatInterface({
   verificationState,
   minHeight,
@@ -1176,23 +1204,13 @@ export function ChatInterface({
           }
 
           // Build an Attachment object from the upload result
-          const attachment: Attachment | undefined = imageData
-            ? {
-                id: documentId,
-                type: 'image',
-                fileName: file.name,
-                mimeType: imageData.mimeType,
-                base64: imageData.base64,
-                description: hasDescription && content ? content : file.name,
-              }
-            : content
-              ? {
-                  id: documentId,
-                  type: 'document',
-                  fileName: file.name,
-                  textContent: content,
-                }
-              : undefined
+          const attachment = buildAttachment({
+            id: documentId,
+            fileName: file.name,
+            imageData: imageData ?? undefined,
+            textContent: content ?? undefined,
+            description: hasDescription && content ? content : undefined,
+          })
 
           setProcessedDocuments((prev) => {
             return prev.map((doc) =>
@@ -1226,16 +1244,11 @@ export function ChatInterface({
         },
         (documentId, imageData) => {
           // Called when image description generation starts
-          const imgAttachment: Attachment | undefined = imageData
-            ? {
-                id: documentId,
-                type: 'image',
-                fileName: file.name,
-                mimeType: imageData.mimeType,
-                base64: imageData.base64,
-                description: file.name,
-              }
-            : undefined
+          const imgAttachment = buildAttachment({
+            id: documentId,
+            fileName: file.name,
+            imageData: imageData ?? undefined,
+          })
 
           setProcessedDocuments((prev) =>
             prev.map((doc) =>
@@ -1481,24 +1494,16 @@ export function ChatInterface({
         if (doc.attachment) return doc.attachment
 
         // Build attachment from legacy ProcessedDocument fields
-        if (doc.imageData) {
-          return {
+        return (
+          buildAttachment({
             id: doc.id,
-            type: 'image' as const,
             fileName: doc.name,
-            mimeType: doc.imageData.mimeType,
-            base64: doc.imageData.base64,
+            imageData: doc.imageData ?? undefined,
+            textContent: doc.content ?? undefined,
             description:
-              doc.isImageDescription && doc.content ? doc.content : doc.name,
-          }
-        }
-
-        return {
-          id: doc.id,
-          type: 'document' as const,
-          fileName: doc.name,
-          textContent: doc.content,
-        }
+              doc.isImageDescription && doc.content ? doc.content : undefined,
+          }) ?? { id: doc.id, type: 'document' as const, fileName: doc.name }
+        )
       })
 
     handleQuery(messageText, attachments.length > 0 ? attachments : undefined)
