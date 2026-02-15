@@ -144,11 +144,10 @@ export class CloudStorageService {
       for (const att of msg.attachments || []) {
         if (att.type === 'image' && att.base64) {
           const raw = base64ToUint8Array(att.base64)
-          const { encryptedData, key, iv } = await encryptAttachment(raw)
+          const { encryptedData, key } = await encryptAttachment(raw)
           await this.uploadAttachment(att.id, chatId, encryptedData)
 
           att.encryptionKey = uint8ArrayToBase64(key)
-          att.encryptionIV = uint8ArrayToBase64(iv)
         }
       }
     }
