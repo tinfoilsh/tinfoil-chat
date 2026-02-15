@@ -232,6 +232,18 @@ export function ShareModal({
           thoughts: m.thoughts,
           thinkingDuration: m.thinkingDuration,
           isError: m.isError,
+          attachments: m.attachments?.length
+            ? m.attachments.map((a) => ({
+                id: a.id,
+                type: a.type,
+                fileName: a.fileName,
+                mimeType: a.mimeType,
+                thumbnailBase64: a.thumbnailBase64,
+                encryptionKey: a.encryptionKey,
+                textContent: a.textContent,
+                description: a.description,
+              }))
+            : undefined,
         })),
         createdAt: chatCreatedAt ? chatCreatedAt.getTime() : Date.now(),
       }
