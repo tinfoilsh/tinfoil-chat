@@ -9,7 +9,7 @@ export function getMessageImages(msg: Message): Attachment[] {
   }
 
   // Legacy format: reconstruct from documents + imageData
-  if (msg.documents && msg.imageData) {
+  if (msg.imageData) {
     return msg.imageData.map((img, i) => {
       const fileName = msg.documents?.[i]?.name ?? 'Image'
       return {
@@ -65,6 +65,7 @@ export function getMessageAttachments(msg: Message): Attachment[] {
 export function hasMessageAttachments(msg: Message): boolean {
   if (msg.attachments && msg.attachments.length > 0) return true
   if (msg.documents && msg.documents.length > 0) return true
+  if (msg.imageData && msg.imageData.length > 0) return true
   return false
 }
 
