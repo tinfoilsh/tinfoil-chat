@@ -75,7 +75,7 @@ export class CloudStorageService {
     return response.json()
   }
 
-  private async getHeaders(): Promise<HeadersInit> {
+  private async getHeaders(): Promise<Record<string, string>> {
     return authTokenManager.getAuthHeaders()
   }
 
@@ -149,7 +149,7 @@ export class CloudStorageService {
       {
         method: 'PUT',
         headers,
-        body: binary,
+        body: binary as unknown as BodyInit,
       },
     )
 
@@ -174,7 +174,7 @@ export class CloudStorageService {
           'Content-Type': 'application/octet-stream',
           'X-Chat-Id': chatId,
         },
-        body: encryptedData,
+        body: encryptedData as unknown as BodyInit,
       },
     )
 
@@ -266,7 +266,7 @@ export class CloudStorageService {
     for (const part of binaryParts) {
       formData.append(
         part.id,
-        new Blob([part.data], { type: 'application/octet-stream' }),
+        new Blob([part.data as BlobPart], { type: 'application/octet-stream' }),
       )
     }
 

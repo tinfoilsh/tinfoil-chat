@@ -35,7 +35,7 @@ export class ProfileSyncService {
   private cachedProfile: ProfileData | null = null
   private failedDecryptionData: string | null = null
 
-  private async getHeaders(): Promise<HeadersInit> {
+  private async getHeaders(): Promise<Record<string, string>> {
     return authTokenManager.getAuthHeaders()
   }
 
