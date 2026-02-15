@@ -5,7 +5,7 @@ import { authTokenManager } from './auth'
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
 
-async function getAuthHeaders(): Promise<HeadersInit> {
+async function getAuthHeaders(): Promise<Record<string, string>> {
   return authTokenManager.getAuthHeaders()
 }
 
@@ -30,7 +30,7 @@ export async function uploadSharedChat(
       'Content-Type': 'application/octet-stream',
       'X-Format-Version': '1',
     },
-    body: encryptedData,
+    body: encryptedData as unknown as BodyInit,
   })
 
   if (!response.ok) {

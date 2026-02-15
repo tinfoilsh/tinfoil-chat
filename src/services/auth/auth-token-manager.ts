@@ -24,7 +24,7 @@ class AuthTokenManager {
     return token
   }
 
-  async getAuthHeaders(): Promise<HeadersInit> {
+  async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await this.getValidToken()
     return {
       Authorization: `Bearer ${token}`,
