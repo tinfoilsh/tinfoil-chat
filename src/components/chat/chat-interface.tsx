@@ -1139,7 +1139,7 @@ export function ChatInterface({
   // Helper to process file and add to chat attachments
   const processFileForChat = useCallback(
     async (file: File) => {
-      const tempDocId = Math.random().toString(36).substring(2, 9)
+      const tempDocId = crypto.randomUUID()
 
       setProcessedDocuments((prev) => [
         ...prev,
