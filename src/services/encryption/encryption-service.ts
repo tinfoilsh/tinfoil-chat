@@ -1,6 +1,11 @@
 // Encryption service for end-to-end encryption of chat data
 
-import { compressAndEncrypt, decryptAndDecompress } from '@/utils/binary-codec'
+import {
+  base64ToUint8Array,
+  compressAndEncrypt,
+  decryptAndDecompress,
+  uint8ArrayToBase64,
+} from '@/utils/binary-codec'
 import { logInfo } from '@/utils/error-handling'
 
 const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
@@ -425,8 +430,8 @@ export class EncryptionService {
     )
 
     // Convert to base64 safely for large data
-    const ivBase64 = this.uint8ArrayToBase64(iv)
-    const dataBase64 = this.uint8ArrayToBase64(new Uint8Array(encryptedData))
+    const ivBase64 = uint8ArrayToBase64(iv)
+    const dataBase64 = uint8ArrayToBase64(new Uint8Array(encryptedData))
 
     return {
       iv: ivBase64,
@@ -449,8 +454,8 @@ export class EncryptionService {
       let data: Uint8Array
 
       try {
-        iv = Uint8Array.from(atob(encryptedData.iv), (c) => c.charCodeAt(0))
-        data = Uint8Array.from(atob(encryptedData.data), (c) => c.charCodeAt(0))
+        iv = base64ToUint8Array(encryptedData.iv)
+        data = base64ToUint8Array(encryptedData.data)
       } catch (error) {
         throw new Error(`Invalid base64 encoding: ${error}`)
       }
@@ -573,20 +578,6 @@ export class EncryptionService {
     }
 
     return JSON.parse(decryptedString)
-  }
-
-  // Helper method to convert Uint8Array to base64 safely for large data
-  private uint8ArrayToBase64(bytes: Uint8Array): string {
-    // Use a more efficient approach with array join instead of string concatenation
-    const CHUNK_SIZE = 0x8000 // 32KB chunks
-    const chunks: string[] = []
-
-    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-      const chunk = bytes.subarray(i, i + CHUNK_SIZE)
-      chunks.push(String.fromCharCode.apply(null, Array.from(chunk)))
-    }
-
-    return btoa(chunks.join(''))
   }
 }
 

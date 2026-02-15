@@ -1,3 +1,4 @@
+import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { logError } from '@/utils/error-handling'
 import pako from 'pako'
 
@@ -48,11 +49,7 @@ export async function importKeyFromBase64url(
   while (base64.length % 4) {
     base64 += '='
   }
-  const binaryString = atob(base64)
-  const bytes = new Uint8Array(binaryString.length)
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i)
-  }
+  const bytes = base64ToUint8Array(base64)
   return crypto.subtle.importKey('raw', bytes, { name: ALGORITHM }, false, [
     'decrypt',
   ])
@@ -141,27 +138,4 @@ export async function decryptShare(
     })
     return null
   }
-}
-
-/**
- * Convert Uint8Array to base64 string
- */
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
-/**
- * Convert base64 string to Uint8Array
- */
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
 }

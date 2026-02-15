@@ -6,6 +6,7 @@
  * appears in every sync method.
  */
 
+import { base64ToUint8Array } from '@/utils/binary-codec'
 import { logError } from '@/utils/error-handling'
 import { chatEvents, type ChatChangeReason } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
@@ -106,11 +107,7 @@ export async function ingestRemoteChats(
       if (remoteChat.content) {
         if (remoteChat.formatVersion === 1) {
           // Inline v1 content is base64-encoded binary from the list endpoint
-          const binaryStr = atob(remoteChat.content)
-          const bytes = new Uint8Array(binaryStr.length)
-          for (let i = 0; i < binaryStr.length; i++) {
-            bytes[i] = binaryStr.charCodeAt(i)
-          }
+          const bytes = base64ToUint8Array(remoteChat.content)
           codecInput.binaryContent = bytes.buffer as ArrayBuffer
           codecInput.formatVersion = 1
         } else {

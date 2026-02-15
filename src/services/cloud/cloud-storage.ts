@@ -1,5 +1,10 @@
 import type { Message } from '@/components/chat/types'
-import { decryptAttachment, encryptAttachment } from '@/utils/binary-codec'
+import {
+  base64ToUint8Array,
+  decryptAttachment,
+  encryptAttachment,
+  uint8ArrayToBase64,
+} from '@/utils/binary-codec'
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
@@ -138,16 +143,12 @@ export class CloudStorageService {
     for (const msg of messages) {
       for (const att of msg.attachments || []) {
         if (att.type === 'image' && att.base64) {
-          const raw = Uint8Array.from(atob(att.base64), (c) => c.charCodeAt(0))
+          const raw = base64ToUint8Array(att.base64)
           const { encryptedData, key, iv } = await encryptAttachment(raw)
           await this.uploadAttachment(att.id, chatId, encryptedData)
 
-          att.encryptionKey = btoa(
-            String.fromCharCode.apply(null, Array.from(key)),
-          )
-          att.encryptionIV = btoa(
-            String.fromCharCode.apply(null, Array.from(iv)),
-          )
+          att.encryptionKey = uint8ArrayToBase64(key)
+          att.encryptionIV = uint8ArrayToBase64(iv)
         }
       }
     }
@@ -353,22 +354,14 @@ export class CloudStorageService {
               const encryptedBuf = await this.fetchAttachment(att.id)
               if (!encryptedBuf) return
 
-              const keyBytes = Uint8Array.from(atob(att.encryptionKey!), (c) =>
-                c.charCodeAt(0),
-              )
+              const keyBytes = base64ToUint8Array(att.encryptionKey!)
               const decrypted = await decryptAttachment(
                 new Uint8Array(encryptedBuf),
                 keyBytes,
               )
 
               // Convert raw bytes back to base64 for display
-              const CHUNK_SIZE = 0x8000
-              const chunks: string[] = []
-              for (let i = 0; i < decrypted.length; i += CHUNK_SIZE) {
-                const chunk = decrypted.subarray(i, i + CHUNK_SIZE)
-                chunks.push(String.fromCharCode.apply(null, Array.from(chunk)))
-              }
-              att.base64 = btoa(chunks.join(''))
+              att.base64 = uint8ArrayToBase64(decrypted)
             } catch {
               // Silently skip failed attachments — thumbnail is still available
             }
