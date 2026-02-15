@@ -32,7 +32,7 @@ export const useDocumentUploader = (
   >({})
 
   // Get a unique ID for the document
-  const getDocumentId = () => Math.random().toString(36).substring(2, 9)
+  const getDocumentId = () => crypto.randomUUID()
 
   // Get docling model from config
   const getDoclingModel = async (): Promise<{
