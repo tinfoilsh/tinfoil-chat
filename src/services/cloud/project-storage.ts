@@ -446,7 +446,7 @@ export class ProjectStorageService {
     const params = new URLSearchParams()
     params.append('since', options.since)
     if (options.cursorId) {
-      params.append('cursor_id', options.cursorId)
+      params.append('continuationToken', options.cursorId)
     }
     params.append('_t', Date.now().toString())
 
