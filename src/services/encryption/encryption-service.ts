@@ -441,6 +441,21 @@ export class EncryptionService {
 
   // Decrypt data
   async decrypt(encryptedData: EncryptedData): Promise<any> {
+    const { result } = await this.decryptRaw(encryptedData)
+    return result
+  }
+
+  // Decrypt data with fallback key tracking (for re-encryption decisions)
+  async decryptWithFallbackInfo(
+    encryptedData: EncryptedData,
+  ): Promise<{ data: any; usedFallbackKey: boolean }> {
+    const { result, usedFallbackKey } = await this.decryptRaw(encryptedData)
+    return { data: result, usedFallbackKey }
+  }
+
+  private async decryptRaw(
+    encryptedData: EncryptedData,
+  ): Promise<{ result: any; usedFallbackKey: boolean }> {
     await this.ensureInitialized()
 
     try {
@@ -477,6 +492,21 @@ export class EncryptionService {
 
   // Decrypt v1 binary format with fallback key support
   async decryptV1(binary: Uint8Array): Promise<unknown> {
+    const { result } = await this.decryptV1Raw(binary)
+    return result
+  }
+
+  // Decrypt v1 binary format with fallback key tracking (for re-encryption decisions)
+  async decryptV1WithFallbackInfo(
+    binary: Uint8Array,
+  ): Promise<{ data: unknown; usedFallbackKey: boolean }> {
+    const { result, usedFallbackKey } = await this.decryptV1Raw(binary)
+    return { data: result, usedFallbackKey }
+  }
+
+  private async decryptV1Raw(
+    binary: Uint8Array,
+  ): Promise<{ result: unknown; usedFallbackKey: boolean }> {
     await this.ensureInitialized()
     try {
       return await this.decryptWithFallback(
@@ -491,9 +521,10 @@ export class EncryptionService {
   private async decryptWithFallback<T>(
     decryptFn: (key: CryptoKey) => Promise<T>,
     action: string,
-  ): Promise<T> {
+  ): Promise<{ result: T; usedFallbackKey: boolean }> {
     try {
-      return await decryptFn(this.encryptionKey!)
+      const result = await decryptFn(this.encryptionKey!)
+      return { result, usedFallbackKey: false }
     } catch (primaryError) {
       let lastError: unknown = primaryError
 
@@ -510,7 +541,7 @@ export class EncryptionService {
             action,
             metadata: { fallbackIndex: index },
           })
-          return result
+          return { result, usedFallbackKey: true }
         } catch (fallbackError) {
           lastError = fallbackError
         }
