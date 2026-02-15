@@ -34,6 +34,8 @@ export interface ProcessedChatResult {
   status: 'decrypted' | 'decryption_failed' | 'corrupted' | 'no_content'
   /** Original encrypted data (only if decryption failed) */
   encryptedData?: string
+  /** True when decryption succeeded using a fallback key (chat should be re-encrypted with current key) */
+  needsReencryption?: boolean
 }
 
 /**
@@ -98,14 +100,19 @@ export async function processRemoteChat(
   // Try to decrypt the content — route by format version
   try {
     let decrypted: any
+    let usedFallbackKey = false
 
     if (remote.formatVersion === 1 && remote.binaryContent) {
-      decrypted = await encryptionService.decryptV1(
+      const info = await encryptionService.decryptV1WithFallbackInfo(
         new Uint8Array(remote.binaryContent),
       )
+      decrypted = info.data
+      usedFallbackKey = info.usedFallbackKey
     } else if (remote.content) {
       const encrypted = JSON.parse(remote.content)
-      decrypted = await encryptionService.decrypt(encrypted)
+      const info = await encryptionService.decryptWithFallbackInfo(encrypted)
+      decrypted = info.data
+      usedFallbackKey = info.usedFallbackKey
     } else {
       throw new Error('No content available for decryption')
     }
@@ -135,6 +142,7 @@ export async function processRemoteChat(
     return {
       chat,
       status: 'decrypted',
+      needsReencryption: usedFallbackKey,
     }
   } catch (decryptError) {
     // Determine if this is data corruption vs wrong key
