@@ -4,6 +4,17 @@ import pako from 'pako'
 /**
  * Shareable chat data structure for URL encoding
  */
+export type ShareableAttachment = {
+  id: string
+  type: 'image' | 'document'
+  fileName: string
+  mimeType?: string
+  thumbnailBase64?: string
+  encryptionKey?: string
+  textContent?: string
+  description?: string
+}
+
 export type ShareableChatData = {
   v: 1
   title: string
@@ -16,6 +27,7 @@ export type ShareableChatData = {
     thoughts?: string
     thinkingDuration?: number
     isError?: boolean
+    attachments?: ShareableAttachment[]
   }>
   createdAt: number
 }
