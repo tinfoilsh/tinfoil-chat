@@ -3,6 +3,36 @@ import pako from 'pako'
 const AES_GCM = 'AES-GCM'
 const IV_LENGTH = 12
 
+/** Get a safe ArrayBuffer copy from a Uint8Array subview. */
+function toBuffer(view: Uint8Array): ArrayBuffer {
+  return view.buffer.slice(
+    view.byteOffset,
+    view.byteOffset + view.byteLength,
+  ) as ArrayBuffer
+}
+
+/** Concatenate IV(12) || ciphertext into a single Uint8Array. */
+function packIvCiphertext(iv: Uint8Array, ciphertext: ArrayBuffer): Uint8Array {
+  const result = new Uint8Array(IV_LENGTH + ciphertext.byteLength)
+  result.set(iv, 0)
+  result.set(new Uint8Array(ciphertext), IV_LENGTH)
+  return result
+}
+
+/** Split IV(12) || ciphertext, validating minimum length. */
+function unpackIvCiphertext(
+  data: Uint8Array,
+  errorMsg: string,
+): { iv: Uint8Array; ciphertext: Uint8Array } {
+  if (data.length <= IV_LENGTH) {
+    throw new Error(errorMsg)
+  }
+  return {
+    iv: data.subarray(0, IV_LENGTH),
+    ciphertext: data.subarray(IV_LENGTH),
+  }
+}
+
 /**
  * Compress and encrypt a JSON-serialisable object into raw binary.
  * Pipeline: JSON.stringify → gzip → AES-GCM encrypt → IV(12) || ciphertext
@@ -21,11 +51,7 @@ export async function compressAndEncrypt(
     compressed,
   )
 
-  // Wire format: IV(12 bytes) || ciphertext
-  const result = new Uint8Array(IV_LENGTH + ciphertext.byteLength)
-  result.set(iv, 0)
-  result.set(new Uint8Array(ciphertext), IV_LENGTH)
-  return result
+  return packIvCiphertext(iv, ciphertext)
 }
 
 /**
@@ -36,26 +62,15 @@ export async function decryptAndDecompress(
   binary: Uint8Array,
   cryptoKey: CryptoKey,
 ): Promise<unknown> {
-  if (binary.length <= IV_LENGTH) {
-    throw new Error('Binary data too short to contain IV and ciphertext')
-  }
-
-  const iv = binary.subarray(0, IV_LENGTH)
-  const ciphertext = binary.subarray(IV_LENGTH)
+  const { iv, ciphertext } = unpackIvCiphertext(
+    binary,
+    'Binary data too short to contain IV and ciphertext',
+  )
 
   const decrypted = await crypto.subtle.decrypt(
-    {
-      name: AES_GCM,
-      iv: iv.buffer.slice(
-        iv.byteOffset,
-        iv.byteOffset + iv.byteLength,
-      ) as ArrayBuffer,
-    },
+    { name: AES_GCM, iv: toBuffer(iv) },
     cryptoKey,
-    ciphertext.buffer.slice(
-      ciphertext.byteOffset,
-      ciphertext.byteOffset + ciphertext.byteLength,
-    ) as ArrayBuffer,
+    toBuffer(ciphertext),
   )
 
   const decompressed = pako.ungzip(new Uint8Array(decrypted), { to: 'string' })
@@ -80,20 +95,12 @@ export async function encryptAttachment(
   const ciphertext = await crypto.subtle.encrypt(
     { name: AES_GCM, iv },
     key,
-    data.buffer.slice(
-      data.byteOffset,
-      data.byteOffset + data.byteLength,
-    ) as ArrayBuffer,
+    toBuffer(data),
   )
 
   const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', key))
 
-  // Wire format: IV(12 bytes) || ciphertext
-  const result = new Uint8Array(IV_LENGTH + ciphertext.byteLength)
-  result.set(iv, 0)
-  result.set(new Uint8Array(ciphertext), IV_LENGTH)
-
-  return { encryptedData: result, key: rawKey, iv }
+  return { encryptedData: packIvCiphertext(iv, ciphertext), key: rawKey, iv }
 }
 
 /**
@@ -104,37 +111,23 @@ export async function decryptAttachment(
   encryptedData: Uint8Array,
   key: Uint8Array,
 ): Promise<Uint8Array> {
-  if (encryptedData.length <= IV_LENGTH) {
-    throw new Error('Encrypted attachment too short')
-  }
-
-  const iv = encryptedData.subarray(0, IV_LENGTH)
-  const ciphertext = encryptedData.subarray(IV_LENGTH)
+  const { iv, ciphertext } = unpackIvCiphertext(
+    encryptedData,
+    'Encrypted attachment too short',
+  )
 
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    key.buffer.slice(
-      key.byteOffset,
-      key.byteOffset + key.byteLength,
-    ) as ArrayBuffer,
+    toBuffer(key),
     { name: AES_GCM },
     false,
     ['decrypt'],
   )
 
   const decrypted = await crypto.subtle.decrypt(
-    {
-      name: AES_GCM,
-      iv: iv.buffer.slice(
-        iv.byteOffset,
-        iv.byteOffset + iv.byteLength,
-      ) as ArrayBuffer,
-    },
+    { name: AES_GCM, iv: toBuffer(iv) },
     cryptoKey,
-    ciphertext.buffer.slice(
-      ciphertext.byteOffset,
-      ciphertext.byteOffset + ciphertext.byteLength,
-    ) as ArrayBuffer,
+    toBuffer(ciphertext),
   )
 
   return new Uint8Array(decrypted)
