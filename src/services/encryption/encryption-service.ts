@@ -473,10 +473,14 @@ export class EncryptionService {
   // Decrypt v1 binary format with fallback key support
   async decryptV1(binary: Uint8Array): Promise<unknown> {
     await this.ensureInitialized()
-    return this.decryptWithFallback(
-      (key) => decryptAndDecompress(binary, key),
-      'decryptV1',
-    )
+    try {
+      return await this.decryptWithFallback(
+        (key) => decryptAndDecompress(binary, key),
+        'decryptV1',
+      )
+    } catch (error) {
+      throw new Error(`Decryption failed: ${error}`)
+    }
   }
 
   private async decryptWithFallback<T>(
