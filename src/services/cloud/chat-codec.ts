@@ -157,6 +157,26 @@ export async function processRemoteChat(
       },
     })
 
+    // Preserve encrypted payload for later recovery (e.g., after key rotation).
+    // v0: store the JSON string directly. v1: base64-encode the binary.
+    let preservedData: string | undefined
+    if (remote.content) {
+      preservedData = remote.content
+    } else if (remote.binaryContent) {
+      const bytes = new Uint8Array(remote.binaryContent)
+      const CHUNK = 0x8000
+      const chunks: string[] = []
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        chunks.push(
+          String.fromCharCode.apply(
+            null,
+            Array.from(bytes.subarray(i, i + CHUNK)),
+          ),
+        )
+      }
+      preservedData = btoa(chunks.join(''))
+    }
+
     return {
       chat: createPlaceholderChat({
         id: remote.id,
@@ -164,11 +184,12 @@ export async function processRemoteChat(
         updatedAt: safeUpdatedAt,
         projectId: effectiveProjectId,
         status,
-        encryptedData: remote.content ?? undefined,
+        encryptedData: preservedData,
+        formatVersion: remote.formatVersion ?? 0,
         dataCorrupted: isCorrupted,
       }),
       status,
-      encryptedData: remote.content ?? undefined,
+      encryptedData: preservedData,
     }
   }
 }
@@ -183,6 +204,7 @@ interface PlaceholderOptions {
   projectId?: string
   status: 'decryption_failed' | 'corrupted' | 'no_content'
   encryptedData?: string
+  formatVersion?: number
   dataCorrupted?: boolean
 }
 
@@ -197,6 +219,7 @@ function createPlaceholderChat(options: PlaceholderOptions): StoredChat {
     projectId,
     status,
     encryptedData,
+    formatVersion,
     dataCorrupted,
   } = options
 
@@ -210,6 +233,7 @@ function createPlaceholderChat(options: PlaceholderOptions): StoredChat {
     decryptionFailed: status !== 'no_content',
     dataCorrupted: dataCorrupted ?? false,
     encryptedData,
+    formatVersion: formatVersion ?? 0,
     syncedAt: Date.now(),
     locallyModified: false,
     syncVersion: 1,
