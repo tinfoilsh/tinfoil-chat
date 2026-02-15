@@ -1003,40 +1003,58 @@ export class CloudSyncService {
     }
 
     try {
-      // Fetch project chats with content for decryption
-      const projectChatsResponse = await projectStorage.listProjectChats(
-        projectId,
-        { includeContent: true },
-      )
-
-      const remoteChats = projectChatsResponse.chats || []
-
-      if (remoteChats.length === 0) {
-        logInfo('No project chats to sync', {
-          component: 'CloudSync',
-          action: 'syncProjectChats',
-          metadata: { projectId },
-        })
-        return result
-      }
-
-      logInfo(`Syncing ${remoteChats.length} project chats`, {
-        component: 'CloudSync',
-        action: 'syncProjectChats',
-        metadata: { projectId, chatCount: remoteChats.length },
-      })
-
       const localChats = await indexedDBStorage.getAllChats()
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
 
-      const ingestResult = await ingestRemoteChats(remoteChats, {
-        localChatMap,
-        projectId,
-        checkShouldIngest: true,
-        fetchMissingContent: true,
-      })
-      result.downloaded += ingestResult.downloaded
-      result.errors.push(...ingestResult.errors)
+      let hasMore = true
+      let continuationToken: string | undefined
+      let isFirstPage = true
+
+      while (hasMore) {
+        // Fetch project chats with content for decryption
+        const projectChatsResponse = await projectStorage.listProjectChats(
+          projectId,
+          { includeContent: true, continuationToken },
+        )
+
+        const remoteChats = projectChatsResponse.chats || []
+
+        if (isFirstPage && remoteChats.length === 0) {
+          logInfo('No project chats to sync', {
+            component: 'CloudSync',
+            action: 'syncProjectChats',
+            metadata: { projectId },
+          })
+          return result
+        }
+
+        if (isFirstPage) {
+          logInfo(`Syncing project chats`, {
+            component: 'CloudSync',
+            action: 'syncProjectChats',
+            metadata: {
+              projectId,
+              firstPageCount: remoteChats.length,
+              hasMore: projectChatsResponse.hasMore,
+            },
+          })
+        }
+        isFirstPage = false
+
+        const ingestResult = await ingestRemoteChats(remoteChats, {
+          localChatMap,
+          projectId,
+          checkShouldIngest: true,
+          fetchMissingContent: true,
+        })
+        result.downloaded += ingestResult.downloaded
+        result.errors.push(...ingestResult.errors)
+
+        hasMore =
+          projectChatsResponse.hasMore === true &&
+          !!projectChatsResponse.nextContinuationToken
+        continuationToken = projectChatsResponse.nextContinuationToken
+      }
 
       logInfo('Project chat sync complete', {
         component: 'CloudSync',
