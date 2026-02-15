@@ -334,11 +334,13 @@ export class CloudStorageService {
   }
 
   /**
-   * Fetch and decrypt all image attachments for a v1 chat, populating the base64 field
-   * on each attachment in-place. Attachments that fail to load are silently skipped.
+   * Fetch and decrypt all image attachments that have an encryption key but
+   * no base64 yet. Returns a map of attachmentId -> base64 string so the
+   * caller can merge results into the current (possibly updated) messages
+   * without overwriting the entire array with a stale snapshot.
    */
-  async loadChatImages(chat: StoredChat): Promise<void> {
-    const messages = (chat.messages as Message[]) || []
+  async loadChatImages(messages: Message[]): Promise<Record<string, string>> {
+    const results: Record<string, string> = {}
     const tasks: Promise<void>[] = []
 
     for (const msg of messages) {
@@ -347,20 +349,22 @@ export class CloudStorageService {
           continue
         }
 
+        const attId = att.id
+        const keyB64 = att.encryptionKey
+
         tasks.push(
           (async () => {
             try {
-              const encryptedBuf = await this.fetchAttachment(att.id)
+              const encryptedBuf = await this.fetchAttachment(attId)
               if (!encryptedBuf) return
 
-              const keyBytes = base64ToUint8Array(att.encryptionKey!)
+              const keyBytes = base64ToUint8Array(keyB64)
               const decrypted = await decryptAttachment(
                 new Uint8Array(encryptedBuf),
                 keyBytes,
               )
 
-              // Convert raw bytes back to base64 for display
-              att.base64 = uint8ArrayToBase64(decrypted)
+              results[attId] = uint8ArrayToBase64(decrypted)
             } catch {
               // Silently skip failed attachments — thumbnail is still available
             }
@@ -370,6 +374,7 @@ export class CloudStorageService {
     }
 
     await Promise.all(tasks)
+    return results
   }
 
   async listChats(options?: {

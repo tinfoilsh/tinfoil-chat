@@ -496,6 +496,50 @@ export function useChatStorage({
     }
   }, [initialChatId, isSignedIn, isInitialLoad, loadChatById, isLocalChatUrl])
 
+  // Lazy-load full-res images for synced chats with v1 encrypted attachments.
+  // Depends on currentChat.id (not currentChat) to avoid re-triggering on
+  // every streaming message update.
+  const currentChatId = currentChat.id
+  useEffect(() => {
+    const messages = currentChat.messages
+    const hasUnfetchedImages = messages.some((msg) =>
+      msg.attachments?.some(
+        (att) => att.type === 'image' && att.encryptionKey && !att.base64,
+      ),
+    )
+    if (!hasUnfetchedImages) return
+
+    let cancelled = false
+
+    async function loadImages() {
+      const imageMap = await cloudStorage.loadChatImages(messages)
+      if (cancelled || Object.keys(imageMap).length === 0) return
+
+      // Merge loaded base64 data into the current messages by attachment ID,
+      // rather than replacing the whole array with a stale snapshot.
+      const applyImages = (prev: Chat): Chat => {
+        const updated = prev.messages.map((msg) => ({
+          ...msg,
+          attachments: msg.attachments?.map((att) =>
+            imageMap[att.id] ? { ...att, base64: imageMap[att.id] } : att,
+          ),
+        }))
+        return { ...prev, messages: updated }
+      }
+
+      setCurrentChat(applyImages)
+      setChats((prev) =>
+        prev.map((c) => (c.id === currentChatId ? applyImages(c) : c)),
+      )
+    }
+
+    loadImages()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChatId])
+
   // Clear the decryption failed state (called after entering correct key)
   const clearInitialChatDecryptionFailed = useCallback(() => {
     setInitialChatDecryptionFailed(false)

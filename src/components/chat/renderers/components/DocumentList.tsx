@@ -194,19 +194,28 @@ export const DocumentList = memo(function DocumentList({
   return (
     <>
       <div className="mb-2 flex flex-wrap justify-end gap-2 px-4">
-        {imageAttachments.map((attachment) => (
-          <div
-            key={attachment.id}
-            className="max-w-[300px] overflow-hidden rounded-lg"
-          >
-            <img
-              src={`data:${attachment.mimeType || 'image/jpeg'};base64,${attachment.base64}`}
-              alt={attachment.fileName}
-              className="h-auto w-full object-contain"
-              loading="lazy"
-            />
-          </div>
-        ))}
+        {imageAttachments.map((attachment) => {
+          const src = attachment.base64 || attachment.thumbnailBase64
+          return (
+            <div
+              key={attachment.id}
+              className="max-w-[300px] overflow-hidden rounded-lg"
+            >
+              {src ? (
+                <img
+                  src={`data:${attachment.mimeType || 'image/jpeg'};base64,${src}`}
+                  alt={attachment.fileName}
+                  className="h-auto w-full object-contain"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="bg-surface-secondary flex h-[200px] w-[300px] items-center justify-center">
+                  <div className="border-content-tertiary h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" />
+                </div>
+              )}
+            </div>
+          )
+        })}
         {docAttachments.map((attachment) => {
           const preview = attachment.textContent
             ? attachment.textContent
