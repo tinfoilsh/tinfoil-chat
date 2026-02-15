@@ -39,11 +39,21 @@ export async function retryDecryptionWithNewKey(
       // Process batch in parallel
       const batchPromises = batch.map(async (chat) => {
         try {
-          // Parse the stored encrypted data
-          const encryptedData = JSON.parse(chat.encryptedData!)
+          let decryptedData: any
 
-          // Decrypt the chat data
-          const decryptedData = await encryptionService.decrypt(encryptedData)
+          if (chat.formatVersion === 1) {
+            // v1: encryptedData is base64-encoded binary
+            const binaryStr = atob(chat.encryptedData!)
+            const bytes = new Uint8Array(binaryStr.length)
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i)
+            }
+            decryptedData = await encryptionService.decryptV1(bytes)
+          } else {
+            // v0: encryptedData is a JSON string
+            const encryptedData = JSON.parse(chat.encryptedData!)
+            decryptedData = await encryptionService.decrypt(encryptedData)
+          }
 
           logInfo(`Decrypted chat ${chat.id}`, {
             component: 'CloudSync',
@@ -61,6 +71,7 @@ export async function retryDecryptionWithNewKey(
             id: chat.id, // Preserve the original ID
             decryptionFailed: false,
             encryptedData: undefined,
+            formatVersion: chat.formatVersion ?? 0,
             syncedAt: chat.syncedAt,
             syncVersion: chat.syncVersion,
             locallyModified: false,
