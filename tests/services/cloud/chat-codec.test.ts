@@ -17,6 +17,15 @@ const mockDecrypt = vi.fn()
 vi.mock('@/services/encryption/encryption-service', () => ({
   encryptionService: {
     decrypt: (...args: any[]) => mockDecrypt(...args),
+    decryptWithFallbackInfo: async (...args: any[]) => ({
+      data: await mockDecrypt(...args),
+      usedFallbackKey: false,
+    }),
+    decryptV1: (...args: any[]) => mockDecrypt(...args),
+    decryptV1WithFallbackInfo: async (...args: any[]) => ({
+      data: await mockDecrypt(...args),
+      usedFallbackKey: false,
+    }),
   },
 }))
 
