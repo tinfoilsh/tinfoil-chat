@@ -214,9 +214,13 @@ export class ProjectStorageService {
 
   async getProjectsUpdatedSince(options: {
     since: string
+    continuationToken?: string
   }): Promise<ProjectListResponse> {
     const params = new URLSearchParams()
     params.append('since', options.since)
+    if (options.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
+    }
 
     const url = `${API_BASE_URL}/api/projects/updated-since?${params.toString()}`
     const response = await fetch(url, {
@@ -402,11 +406,14 @@ export class ProjectStorageService {
 
   async listProjectChats(
     projectId: string,
-    options?: { includeContent?: boolean },
+    options?: { includeContent?: boolean; continuationToken?: string },
   ): Promise<ProjectChatListResponse> {
     const params = new URLSearchParams()
     if (options?.includeContent) {
       params.append('includeContent', 'true')
+    }
+    if (options?.continuationToken) {
+      params.append('continuationToken', options.continuationToken)
     }
 
     const url = `${API_BASE_URL}/api/projects/${projectId}/chats${params.toString() ? `?${params.toString()}` : ''}`
