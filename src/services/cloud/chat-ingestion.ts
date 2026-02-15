@@ -194,8 +194,8 @@ async function reencryptChatIds(chatIds: string[]): Promise<void> {
       const chatToUpload = { ...chat, syncVersion: newVersion }
       await cloudStorage.uploadChat(chatToUpload)
 
-      chat.syncVersion = newVersion
-      await indexedDBStorage.saveChat(chat)
+      // Only update sync metadata — markAsSynced re-reads the chat internally,
+      // so it won't overwrite any user changes made during the upload.
       await indexedDBStorage.markAsSynced(chatId, newVersion)
 
       logInfo('Re-encrypted chat with current key after fallback decryption', {
