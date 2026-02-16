@@ -29,17 +29,20 @@ function processCitationMarkers(
 ): string {
   if (sources.length === 0) return content
 
-  return content.replace(/【(\d+)[^】]*】/g, (match, num) => {
-    const index = parseInt(num, 10) - 1
-    const source = sources[index]
-    if (!source) return match
-    const encodedUrl = source.url
-      .replace(/\(/g, '%28')
-      .replace(/\)/g, '%29')
-      .replace(/\|/g, '%7C')
-    const encodedTitle = encodeURIComponent(source.title || '')
-    return `[${num}](#cite-${num}~${encodedUrl}~${encodedTitle})`
-  })
+  return content.replace(
+    /【(\d+)[^】]*】([.!?,;:。，！？；：]?)/g,
+    (match, num, punct) => {
+      const index = parseInt(num, 10) - 1
+      const source = sources[index]
+      if (!source) return match
+      const encodedUrl = source.url
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29')
+        .replace(/\|/g, '%7C')
+      const encodedTitle = encodeURIComponent(source.title || '')
+      return `${punct}[${num}](#cite-${num}~${encodedUrl}~${encodedTitle})`
+    },
+  )
 }
 
 export interface StreamingContext {
