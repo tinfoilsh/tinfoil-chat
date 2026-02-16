@@ -1471,13 +1471,10 @@ export function ChatInterface({
       (doc) => !doc.isUploading && !doc.isGeneratingDescription,
     )
 
-    // Use default message if no input but documents are attached
-    const messageText =
-      input.trim() ||
-      (completedDocuments.length > 0 ? CONSTANTS.DOCUMENT_ONLY_MESSAGE : '')
+    const messageText = input.trim()
 
     // Don't proceed if there's no input text and no documents
-    if (!messageText) {
+    if (!messageText && completedDocuments.length === 0) {
       return
     }
 

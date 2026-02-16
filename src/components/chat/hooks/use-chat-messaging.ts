@@ -262,8 +262,11 @@ export function useChatMessaging({
       systemPromptOverride?: string,
       baseMessages?: Message[],
     ) => {
-      // Allow empty query only if systemPromptOverride is provided
-      if ((!query.trim() && !systemPromptOverride) || loadingState !== 'idle')
+      // Allow empty query if systemPromptOverride or attachments are provided
+      if (
+        (!query.trim() && !systemPromptOverride && !attachments?.length) ||
+        loadingState !== 'idle'
+      )
         return
 
       // Safety check - ensure we have a current chat
@@ -291,7 +294,8 @@ export function useChatMessaging({
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
-      const hasUserContent = query.trim() !== ''
+      const hasUserContent =
+        query.trim() !== '' || (attachments && attachments.length > 0)
 
       const userMessage: Message | null = hasUserContent
         ? {
