@@ -35,7 +35,7 @@ export const useDocumentUploader = (
   const getDocumentId = () => crypto.randomUUID()
 
   // Get docling model from config
-  const getDoclingModel = async (): Promise<{
+  const getDocUploadModel = async (): Promise<{
     endpoint: string
     modelName: string
   }> => {
@@ -58,7 +58,7 @@ export const useDocumentUploader = (
     } catch (error) {
       logError('Failed to fetch docling model configuration', error, {
         component: 'DocumentUploader',
-        action: 'getDoclingModel',
+        action: 'getDocUploadModel',
       })
       throw error
     }
@@ -288,9 +288,9 @@ export const useDocumentUploader = (
       formData.append('do_picture_classification', 'false')
       formData.append('do_picture_description', 'false')
       formData.append('image_export_mode', 'placeholder')
-      formData.append('do_ocr', 'false')
+      formData.append('do_ocr', 'true')
 
-      const { endpoint, modelName } = await getDoclingModel()
+      const { endpoint, modelName } = await getDocUploadModel()
 
       // Add model parameter to formData
       formData.append('model', modelName)
