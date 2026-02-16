@@ -950,7 +950,9 @@ export function ChatSidebar({
                             : 'text-emerald-600 hover:text-emerald-500'
                         } ${upgradeLoading ? 'cursor-not-allowed opacity-70' : ''}`}
                       >
-                        {upgradeLoading ? 'Redirecting…' : 'Subscribe'}
+                        {upgradeLoading
+                          ? 'Redirecting…'
+                          : 'Start 7 day free trial'}
                         {!upgradeLoading && (
                           <svg
                             className="h-3 w-3"
@@ -977,7 +979,7 @@ export function ChatSidebar({
                     <div className="space-y-2">
                       <SignInButton mode="modal">
                         <span className="relative block w-full cursor-pointer rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
-                          Subscribe
+                          Start 7 day free trial
                         </span>
                       </SignInButton>
                       <p className="text-center text-xs text-content-secondary">
