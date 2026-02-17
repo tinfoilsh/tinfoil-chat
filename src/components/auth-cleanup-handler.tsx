@@ -50,6 +50,7 @@ export function AuthCleanupHandler() {
   }, [isSignedIn, isLoaded, user?.id])
 
   const handleKeepData = () => {
+    localStorage.removeItem(ACTIVE_USER_ID_KEY)
     setShowModal(false)
     // Force reload to clear all React state
     window.location.reload()
