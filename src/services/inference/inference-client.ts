@@ -8,9 +8,8 @@ import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
-import { AuthenticationError } from 'openai'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { clearCachedApiKey, getTinfoilClient } from './tinfoil-client'
+import { getTinfoilClient } from './tinfoil-client'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -244,6 +243,8 @@ export async function sendChatStream(
     }
 
     try {
+      const client = await getTinfoilClient()
+
       // Build request body
       const requestBody: Record<string, unknown> = {
         model: model.modelName,
@@ -260,25 +261,10 @@ export async function sendChatStream(
         requestBody.pii_check_options = {}
       }
 
-      const createStream = async () => {
-        const client = await getTinfoilClient()
-        return (client.chat.completions.create as Function)(
-          requestBody,
-          { signal },
-        )
-      }
-
-      let stream
-      try {
-        stream = await createStream()
-      } catch (err) {
-        if (err instanceof AuthenticationError) {
-          clearCachedApiKey()
-          stream = await createStream()
-        } else {
-          throw err
-        }
-      }
+      const stream = await (client.chat.completions.create as Function)(
+        requestBody,
+        { signal },
+      )
 
       const encoder = new TextEncoder()
       const readableStream = new ReadableStream({
