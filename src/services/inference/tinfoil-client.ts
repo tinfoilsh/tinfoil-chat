@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
-import { TinfoilAI } from 'tinfoil'
+import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
@@ -91,7 +91,7 @@ async function initClient(apiKey: string): Promise<TinfoilAI> {
   }
 }
 
-export async function getTinfoilClient(): Promise<TinfoilAI> {
+async function getRawClient(): Promise<TinfoilAI> {
   const apiKey = await fetchApiKey()
 
   if (!clientInstance || lastApiKey !== apiKey) {
@@ -101,3 +101,71 @@ export async function getTinfoilClient(): Promise<TinfoilAI> {
   return clientInstance!
 }
 
+/**
+ * Returns a proxy that behaves like TinfoilAI but automatically retries
+ * once on AuthenticationError (refreshing the API key in between).
+ * The proxy resolves the client lazily on each call so it always
+ * delegates to the current clientInstance.
+ */
+export async function getTinfoilClient(): Promise<TinfoilAI> {
+  // Ensure the client is initialized before returning the proxy
+  await getRawClient()
+
+  function resolve(path: PropertyKey[]): { target: any; parent: any } {
+    let parent: any = clientInstance
+    let target: any = clientInstance
+    for (const p of path) {
+      parent = target
+      target = target[p]
+    }
+    return { target, parent }
+  }
+
+  function proxyWithRetry(pathFromRoot: PropertyKey[]): any {
+    return new Proxy(Object.create(null), {
+      get(_, prop) {
+        // Avoid interfering with Promise resolution or inspection
+        if (
+          prop === 'then' ||
+          prop === Symbol.toPrimitive ||
+          prop === Symbol.toStringTag
+        ) {
+          const { target } = resolve(pathFromRoot)
+          return Reflect.get(target, prop)
+        }
+
+        const { target } = resolve(pathFromRoot)
+        const value = Reflect.get(target, prop)
+
+        if (typeof value === 'function') {
+          const currentPath = [...pathFromRoot, prop]
+          return (...args: any[]) => {
+            const { target: thisArg } = resolve(pathFromRoot)
+            const result = thisArg[prop].apply(thisArg, args)
+            // Only wrap thenables (async API calls), not sync helpers
+            if (result && typeof result.then === 'function') {
+              return result.catch(async (err: unknown) => {
+                if (err instanceof AuthenticationError) {
+                  resetTinfoilClient()
+                  await getRawClient()
+                  const { target: freshThis } = resolve(pathFromRoot)
+                  return freshThis[prop].apply(freshThis, args)
+                }
+                throw err
+              })
+            }
+            return result
+          }
+        }
+
+        if (typeof value === 'object' && value !== null) {
+          return proxyWithRetry([...pathFromRoot, prop])
+        }
+
+        return value
+      },
+    })
+  }
+
+  return proxyWithRetry([]) as TinfoilAI
+}

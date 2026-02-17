@@ -8,9 +8,8 @@ import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
-import { AuthenticationError } from 'openai'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { clearCachedApiKey, getTinfoilClient } from './tinfoil-client'
+import { getTinfoilClient } from './tinfoil-client'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -260,24 +259,12 @@ export async function sendChatStream(
         requestBody.pii_check_options = {}
       }
 
-      const createStream = async () => {
-        const client = await getTinfoilClient()
-        return (client.chat.completions.create as Function)(requestBody, {
-          signal,
-        })
-      }
+      const client = await getTinfoilClient()
 
-      let stream
-      try {
-        stream = await createStream()
-      } catch (err) {
-        if (err instanceof AuthenticationError) {
-          clearCachedApiKey()
-          stream = await createStream()
-        } else {
-          throw err
-        }
-      }
+      const stream: any = await (client.chat.completions.create as Function)(
+        requestBody,
+        { signal },
+      )
 
       const encoder = new TextEncoder()
       const readableStream = new ReadableStream({
@@ -381,38 +368,24 @@ export async function sendStructuredCompletion<T>(
 ): Promise<T> {
   const { model, messages, jsonSchema, signal } = params
 
-  const createCompletion = async () => {
-    const client = await getTinfoilClient()
-    return client.chat.completions.create(
-      {
-        model: model.modelName,
-        messages,
-        stream: false,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'response',
-            schema: jsonSchema,
-          },
+  const client = await getTinfoilClient()
+  const response = await client.chat.completions.create(
+    {
+      model: model.modelName,
+      messages,
+      stream: false,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'response',
+          schema: jsonSchema,
         },
       },
-      {
-        signal,
-      },
-    )
-  }
-
-  let response
-  try {
-    response = await createCompletion()
-  } catch (err) {
-    if (err instanceof AuthenticationError) {
-      clearCachedApiKey()
-      response = await createCompletion()
-    } else {
-      throw err
-    }
-  }
+    },
+    {
+      signal,
+    },
+  )
 
   const content = response.choices[0]?.message?.content
   if (!content) {
