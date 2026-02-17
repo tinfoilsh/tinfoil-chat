@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '@/config'
 import { logError } from '@/utils/error-handling'
-import { TinfoilAI } from 'tinfoil'
+import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
 const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
@@ -101,3 +101,23 @@ export async function getTinfoilClient(): Promise<TinfoilAI> {
   return clientInstance!
 }
 
+/**
+ * Executes an API call with automatic auth retry. On AuthenticationError,
+ * resets the client (clears the cached key), fetches a fresh key, and
+ * retries once.
+ */
+export async function withAuthRetry<T>(
+  fn: (client: TinfoilAI) => Promise<T>,
+): Promise<T> {
+  const client = await getTinfoilClient()
+  try {
+    return await fn(client)
+  } catch (err) {
+    if (err instanceof AuthenticationError) {
+      resetTinfoilClient()
+      const freshClient = await getTinfoilClient()
+      return await fn(freshClient)
+    }
+    throw err
+  }
+}

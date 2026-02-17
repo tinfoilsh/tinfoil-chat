@@ -9,7 +9,7 @@ import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { ChatQueryBuilder } from './chat-query-builder'
-import { getTinfoilClient } from './tinfoil-client'
+import { withAuthRetry } from './tinfoil-client'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -243,8 +243,6 @@ export async function sendChatStream(
     }
 
     try {
-      const client = await getTinfoilClient()
-
       // Build request body
       const requestBody: Record<string, unknown> = {
         model: model.modelName,
@@ -261,9 +259,10 @@ export async function sendChatStream(
         requestBody.pii_check_options = {}
       }
 
-      const stream = await (client.chat.completions.create as Function)(
-        requestBody,
-        { signal },
+      const stream: any = await withAuthRetry((client) =>
+        (client.chat.completions.create as Function)(requestBody, {
+          signal,
+        }),
       )
 
       const encoder = new TextEncoder()
@@ -368,23 +367,24 @@ export async function sendStructuredCompletion<T>(
 ): Promise<T> {
   const { model, messages, jsonSchema, signal } = params
 
-  const client = await getTinfoilClient()
-  const response = await client.chat.completions.create(
-    {
-      model: model.modelName,
-      messages,
-      stream: false,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          schema: jsonSchema,
+  const response = await withAuthRetry((client) =>
+    client.chat.completions.create(
+      {
+        model: model.modelName,
+        messages,
+        stream: false,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'response',
+            schema: jsonSchema,
+          },
         },
       },
-    },
-    {
-      signal,
-    },
+      {
+        signal,
+      },
+    ),
   )
 
   const content = response.choices[0]?.message?.content
