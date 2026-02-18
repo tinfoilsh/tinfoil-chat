@@ -39,6 +39,44 @@ const CODE_EXTENSIONS = {
   txt: ['.txt'],
 }
 
+// Plain text / code extensions that can be read directly in the browser
+const PLAIN_TEXT_EXTENSIONS = [
+  '.txt',
+  '.py',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.css',
+  '.json',
+  '.xml',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.sh',
+  '.bash',
+  '.rb',
+  '.java',
+  '.cpp',
+  '.c',
+  '.h',
+  '.hpp',
+  '.go',
+  '.rs',
+  '.swift',
+  '.kt',
+  '.r',
+  '.sql',
+  '.lua',
+  '.pl',
+  '.php',
+  '.env',
+  '.ini',
+  '.cfg',
+  '.conf',
+  '.log',
+]
+
 // Archive extensions
 const ARCHIVE_EXTENSIONS = ['.zip', '.rar', '.tar']
 
@@ -50,6 +88,11 @@ const ARCHIVE_EXTENSIONS = ['.zip', '.rar', '.tar']
 export function hasImageExtension(filename: string): boolean {
   const lowerFilename = filename.toLowerCase()
   return IMAGE_EXTENSIONS.some((ext) => lowerFilename.endsWith(ext))
+}
+
+export function isPlainTextFile(filename: string): boolean {
+  const lowerFilename = filename.toLowerCase()
+  return PLAIN_TEXT_EXTENSIONS.some((ext) => lowerFilename.endsWith(ext))
 }
 
 /**
