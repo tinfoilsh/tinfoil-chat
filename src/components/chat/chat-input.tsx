@@ -364,7 +364,13 @@ export function ChatInput({
           const file = imageItem.getAsFile()
           if (file) {
             e.preventDefault()
-            handleDocumentUpload(file)
+            handleDocumentUpload(file).catch((error) => {
+              logError('Failed to upload pasted image', error, {
+                component: 'ChatInput',
+                action: 'handlePaste',
+                metadata: { fileName: file.name },
+              })
+            })
             return
           }
         }
