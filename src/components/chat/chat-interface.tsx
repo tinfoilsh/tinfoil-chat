@@ -2227,7 +2227,7 @@ export function ChatInterface({
             data-scroll-container="main"
             className="relative flex flex-1 overflow-y-auto bg-surface-chat-background"
           >
-            <div className="flex min-w-0 flex-1">
+            <div className="flex min-w-0 flex-1 [container-type:inline-size]">
               <ChatMessages
                 messages={currentChat?.messages || []}
                 isDarkMode={isDarkMode}

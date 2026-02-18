@@ -1,0 +1,92 @@
+'use client'
+
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+const COLLAPSED_MAX_WIDTH_REM = 52
+
+interface ExpandableTableProps {
+  children: React.ReactNode
+}
+
+export function ExpandableTable({ children }: ExpandableTableProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [canExpand, setCanExpand] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const checkOverflow = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const collapsedPx =
+      COLLAPSED_MAX_WIDTH_REM *
+      parseFloat(getComputedStyle(document.documentElement).fontSize)
+    setCanExpand(el.scrollWidth > collapsedPx)
+  }, [])
+
+  useEffect(() => {
+    checkOverflow()
+
+    const observer = new ResizeObserver(checkOverflow)
+    if (containerRef.current) {
+      observer.observe(containerRef.current)
+    }
+    return () => observer.disconnect()
+  }, [checkOverflow])
+
+  const toggle = () => setIsExpanded((prev) => !prev)
+
+  const chevronBase =
+    'pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border border-border-subtle bg-white text-content-secondary shadow hover:text-content-primary dark:bg-zinc-800'
+
+  const collapsed = canExpand && !isExpanded
+  const expanded = canExpand && isExpanded
+
+  return (
+    <div
+      className={`table-breakout group/table relative my-4 ${collapsed ? 'rounded-lg border border-border-subtle' : ''}`}
+      style={{
+        maxWidth: isExpanded
+          ? 'calc(100cqw - 2rem)'
+          : `${COLLAPSED_MAX_WIDTH_REM}rem`,
+      }}
+    >
+      <div ref={containerRef} className="relative z-0 overflow-x-auto">
+        <table
+          className="divide-y divide-border-subtle"
+          style={{ minWidth: 'max-content' }}
+        >
+          {children}
+        </table>
+      </div>
+
+      {canExpand && (
+        <div className="pointer-events-none absolute inset-0 z-10">
+          <button
+            type="button"
+            onClick={toggle}
+            className={`${chevronBase} absolute left-1.5 top-1/2 -translate-y-1/2 ${expanded ? 'opacity-0 transition-opacity group-hover/table:opacity-100' : ''}`}
+            aria-label={collapsed ? 'Expand table' : 'Collapse table'}
+          >
+            {collapsed ? (
+              <ChevronLeftIcon className="h-4 w-4" />
+            ) : (
+              <ChevronRightIcon className="h-4 w-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={toggle}
+            className={`${chevronBase} absolute right-1.5 top-1/2 -translate-y-1/2 ${expanded ? 'opacity-0 transition-opacity group-hover/table:opacity-100' : ''}`}
+            aria-label={collapsed ? 'Expand table' : 'Collapse table'}
+          >
+            {collapsed ? (
+              <ChevronRightIcon className="h-4 w-4" />
+            ) : (
+              <ChevronLeftIcon className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

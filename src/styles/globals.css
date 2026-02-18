@@ -136,8 +136,17 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Allow tables to break out of the max-w-3xl message container */
+.table-breakout {
+  width: fit-content;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: max-width 0.3s ease;
+}
+
 /* Prevent horizontal scroll at message level */
-.prose > * {
+.prose > *:not(.table-breakout) {
   max-width: 100%;
 }
 

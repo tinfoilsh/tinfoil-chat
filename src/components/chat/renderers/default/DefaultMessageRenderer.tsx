@@ -189,7 +189,7 @@ const DefaultMessageComponent = ({
 
   return (
     <div
-      className={`relative flex flex-col ${isUser ? 'items-end' : 'w-full items-start'} group mb-6`}
+      className={`relative mx-auto flex w-full max-w-3xl flex-col ${isUser ? 'items-end' : 'items-start'} group mb-6`}
       data-message-role={message.role}
     >
       {/* Display documents and images for user messages */}
@@ -295,7 +295,7 @@ const DefaultMessageComponent = ({
                   >
                     <div
                       className={cn(
-                        'prose w-full max-w-none overflow-x-auto text-lg prose-pre:bg-transparent prose-pre:p-0',
+                        'prose w-full max-w-none text-lg prose-pre:bg-transparent prose-pre:p-0',
                         'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
                         'prose-a:text-blue-500 hover:prose-a:text-blue-600',
                       )}

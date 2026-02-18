@@ -7,6 +7,7 @@ import {
 import { sanitizeUrl } from '@braintree/sanitize-url'
 import { useState } from 'react'
 import type { Components } from 'react-markdown'
+import { ExpandableTable } from './ExpandableTable'
 
 function getFaviconUrl(url: string): string {
   try {
@@ -159,18 +160,8 @@ export function createMarkdownComponents({
     },
 
     // Table elements
-    table({ children, ...props }: any) {
-      return (
-        <div className="my-4 w-full overflow-x-auto">
-          <table
-            {...props}
-            className="divide-y divide-border-subtle"
-            style={{ minWidth: 'max-content' }}
-          >
-            {children}
-          </table>
-        </div>
-      )
+    table({ children }: any) {
+      return <ExpandableTable>{children}</ExpandableTable>
     },
 
     thead({ children, ...props }: any) {
@@ -202,7 +193,6 @@ export function createMarkdownComponents({
           {...props}
           className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-content-primary"
           style={{
-            maxWidth: '300px',
             wordWrap: 'break-word',
             whiteSpace: 'normal',
           }}
@@ -218,7 +208,6 @@ export function createMarkdownComponents({
           {...props}
           className="px-4 py-3 text-sm text-content-primary"
           style={{
-            maxWidth: '300px',
             wordWrap: 'break-word',
             whiteSpace: 'normal',
           }}
