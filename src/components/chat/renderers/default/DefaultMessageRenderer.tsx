@@ -1,6 +1,7 @@
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
+  ChevronDownIcon,
   InformationCircleIcon,
   PencilSquareIcon,
 } from '@heroicons/react/24/outline'
@@ -32,6 +33,11 @@ const DefaultMessageComponent = ({
   const [isEditing, setIsEditing] = React.useState(false)
   const [editContent, setEditContent] = React.useState(message.content || '')
   const [copiedUser, setCopiedUser] = React.useState(false)
+  const [isUserMessageExpanded, setIsUserMessageExpanded] =
+    React.useState(false)
+  const [isUserMessageOverflowing, setIsUserMessageOverflowing] =
+    React.useState(false)
+  const userMessageContentRef = React.useRef<HTMLDivElement>(null)
   const editTextareaRef = React.useRef<HTMLTextAreaElement>(null)
 
   // Generate a stable unique ID for this message
@@ -107,6 +113,16 @@ const DefaultMessageComponent = ({
       }
     }
   }, [message.content, isUser, isLastMessage, showActions])
+
+  const USER_MESSAGE_MAX_HEIGHT = 150
+
+  React.useEffect(() => {
+    if (isUser && userMessageContentRef.current) {
+      setIsUserMessageOverflowing(
+        userMessageContentRef.current.scrollHeight > USER_MESSAGE_MAX_HEIGHT,
+      )
+    }
+  }, [isUser, message.content])
 
   const handleStartEdit = React.useCallback(() => {
     setEditContent(message.content || '')
@@ -263,31 +279,72 @@ const DefaultMessageComponent = ({
                   </div>
                 )}
 
-                <div
-                  className={cn(
-                    'prose w-full max-w-none overflow-x-auto text-lg prose-pre:bg-transparent prose-pre:p-0',
-                    'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
-                    'prose-a:text-blue-500 hover:prose-a:text-blue-600',
-                  )}
-                >
-                  {!isUser && isStreaming && isLastMessage ? (
-                    <StreamingContentWrapper isStreaming={true}>
-                      <StreamingChunkedText
-                        content={message.content}
-                        isDarkMode={isDarkMode}
-                        isUser={isUser}
-                        isStreaming={isStreaming}
-                      />
-                    </StreamingContentWrapper>
-                  ) : (
-                    <StreamingChunkedText
-                      content={message.content}
-                      isDarkMode={isDarkMode}
-                      isUser={isUser}
-                      isStreaming={isStreaming}
-                    />
-                  )}
+                <div className="relative">
+                  <div
+                    ref={isUser ? userMessageContentRef : undefined}
+                    style={
+                      isUser &&
+                      isUserMessageOverflowing &&
+                      !isUserMessageExpanded
+                        ? {
+                            maxHeight: USER_MESSAGE_MAX_HEIGHT,
+                            overflow: 'hidden',
+                          }
+                        : undefined
+                    }
+                  >
+                    <div
+                      className={cn(
+                        'prose w-full max-w-none overflow-x-auto text-lg prose-pre:bg-transparent prose-pre:p-0',
+                        'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
+                        'prose-a:text-blue-500 hover:prose-a:text-blue-600',
+                      )}
+                    >
+                      {!isUser && isStreaming && isLastMessage ? (
+                        <StreamingContentWrapper isStreaming={true}>
+                          <StreamingChunkedText
+                            content={message.content}
+                            isDarkMode={isDarkMode}
+                            isUser={isUser}
+                            isStreaming={isStreaming}
+                          />
+                        </StreamingContentWrapper>
+                      ) : (
+                        <StreamingChunkedText
+                          content={message.content}
+                          isDarkMode={isDarkMode}
+                          isUser={isUser}
+                          isStreaming={isStreaming}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {isUser &&
+                    isUserMessageOverflowing &&
+                    !isUserMessageExpanded && (
+                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface-message-user/90 to-transparent" />
+                    )}
                 </div>
+
+                {isUser && isUserMessageOverflowing && (
+                  <button
+                    onClick={() =>
+                      setIsUserMessageExpanded(!isUserMessageExpanded)
+                    }
+                    className="mt-1 flex w-full items-center justify-center gap-1 py-1 text-xs font-medium text-content-secondary transition-colors hover:text-content-primary"
+                  >
+                    <span>
+                      {isUserMessageExpanded ? 'Show less' : 'Show more'}
+                    </span>
+                    <ChevronDownIcon
+                      className={cn(
+                        'h-3 w-3 transition-transform',
+                        isUserMessageExpanded && 'rotate-180',
+                      )}
+                    />
+                  </button>
+                )}
               </div>
             </div>
           )}
