@@ -4,6 +4,7 @@ import { logError } from '@/utils/error-handling'
 import {
   getDocumentFormat,
   getFileIconType as getFileIcon,
+  isPlainTextFile,
 } from '@/utils/file-types'
 import {
   isAudioFile,
@@ -170,8 +171,8 @@ export const useDocumentUploader = (
         return
       }
 
-      // Handle .txt files directly in the browser
-      if (file.name.toLowerCase().endsWith('.txt')) {
+      // Handle plain text and code files directly in the browser
+      if (isPlainTextFile(file.name)) {
         const formattedContent = await handleTextFile(file)
         onSuccess(formattedContent, documentId)
         return
