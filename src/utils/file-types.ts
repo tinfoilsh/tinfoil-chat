@@ -42,6 +42,7 @@ const CODE_EXTENSIONS = {
 // Plain text / code extensions that can be read directly in the browser
 const PLAIN_TEXT_EXTENSIONS = [
   '.txt',
+  '.md',
   '.py',
   '.js',
   '.jsx',
