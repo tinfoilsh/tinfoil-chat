@@ -341,9 +341,35 @@ export function ChatInput({
     }
   }, [sendAudioForTranscription, stopRecording, toast])
 
-  // Handle paste event for long text detection
+  // Handle paste event for images and long text detection
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      // Check for pasted images in clipboard
+      if (handleDocumentUpload) {
+        const items = Array.from(e.clipboardData.items)
+        const imageItem = items.find((item) => item.type.startsWith('image/'))
+
+        if (imageItem) {
+          if (!isPremium) {
+            toast({
+              title: 'Premium Required',
+              description: 'Image upload requires a premium subscription.',
+              variant: 'destructive',
+              position: 'top-left',
+            })
+            e.preventDefault()
+            return
+          }
+
+          const file = imageItem.getAsFile()
+          if (file) {
+            e.preventDefault()
+            handleDocumentUpload(file)
+            return
+          }
+        }
+      }
+
       const pastedText = e.clipboardData.getData('text')
 
       // Check if pasted text exceeds threshold
@@ -375,7 +401,7 @@ export function ChatInput({
       }
       // If text is short enough, let it paste normally (default behavior)
     },
-    [handleDocumentUpload],
+    [handleDocumentUpload, isPremium, toast],
   )
 
   return (
@@ -405,8 +431,8 @@ export function ChatInput({
             multiple
             accept={
               isPremium
-                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.wma'
-                : '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.txt'
+                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt,.py,.js,.jsx,.ts,.tsx,.css,.json,.xml,.yaml,.yml,.toml,.sh,.rb,.java,.cpp,.c,.h,.hpp,.go,.rs,.swift,.kt,.r,.sql,.lua,.pl,.php,.env,.ini,.cfg,.conf,.log,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.wma'
+                : '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.txt,.py,.js,.jsx,.ts,.tsx,.css,.json,.xml,.yaml,.yml,.toml,.sh,.rb,.java,.cpp,.c,.h,.hpp,.go,.rs,.swift,.kt,.r,.sql,.lua,.pl,.php,.env,.ini,.cfg,.conf,.log'
             }
           />
 
