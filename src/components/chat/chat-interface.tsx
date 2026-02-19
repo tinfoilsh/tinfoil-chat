@@ -749,13 +749,26 @@ export function ChatInterface({
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
     if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
+      // Skip auto-focus when sidebar is open on mobile — focusing the input
+      // triggers handleInputFocus which closes the sidebar
+      if (isSidebarOpen && windowWidth < CONSTANTS.MOBILE_BREAKPOINT) {
+        return
+      }
       // Small delay to ensure DOM is ready and input is rendered
       const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
+  }, [
+    isClient,
+    isLoadingConfig,
+    subscriptionLoading,
+    currentChat,
+    inputRef,
+    isSidebarOpen,
+    windowWidth,
+  ])
 
   // Keyboard shortcuts
   useEffect(() => {
