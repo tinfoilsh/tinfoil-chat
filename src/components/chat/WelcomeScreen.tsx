@@ -1,7 +1,8 @@
 import { type BaseModel } from '@/config/models'
 import { useClerk, useUser } from '@clerk/nextjs'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { BiSolidLock } from 'react-icons/bi'
 import { ChatInput } from './chat-input'
 import { CONSTANTS } from './constants'
 import { ModelSelector } from './model-selector'
@@ -33,6 +34,7 @@ interface WelcomeScreenProps {
   ) => void
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  onOpenVerifier?: () => void
 }
 
 export const WelcomeScreen = memo(function WelcomeScreen({
@@ -57,11 +59,13 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   handleLabelClick,
   webSearchEnabled,
   onWebSearchToggle,
+  onOpenVerifier,
 }: WelcomeScreenProps) {
   const { user, isSignedIn } = useUser()
   const { openSignIn } = useClerk()
   const [nickname, setNickname] = useState<string>('')
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
+  const [privacyExpanded, setPrivacyExpanded] = useState(false)
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleImageError = useCallback((modelName: string) => {
@@ -148,6 +152,98 @@ export const WelcomeScreen = memo(function WelcomeScreen({
           >
             {getGreeting()}
           </motion.h1>
+
+          {/* Privacy explainer */}
+          <motion.div
+            className="mt-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{
+              duration: 0.5,
+              ease: 'easeOut',
+              delay: 0.3,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setPrivacyExpanded((prev) => !prev)}
+              className="group flex w-full items-center justify-center gap-2 text-base text-content-secondary transition-colors hover:text-content-primary md:justify-start"
+            >
+              <BiSolidLock className="h-4 w-4 shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
+              <span>Your chats are private by design</span>
+              <svg
+                className={`h-3.5 w-3.5 shrink-0 opacity-50 transition-transform duration-300 ${privacyExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {privacyExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{
+                    height: {
+                      duration: 0.3,
+                      ease: [0.25, 0.1, 0.25, 1],
+                    },
+                    opacity: {
+                      duration: 0.25,
+                      delay: 0.1,
+                      ease: 'easeOut',
+                    },
+                  }}
+                  className="overflow-hidden"
+                >
+                  <p className="mt-2 text-left text-base leading-relaxed text-content-secondary">
+                    Your messages are encrypted directly to{' '}
+                    <a
+                      href="https://tinfoil.sh/technology"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+                    >
+                      secure hardware enclaves
+                    </a>{' '}
+                    — isolated environments powered by confidential computing
+                    GPUs where the AI models run. Not even Tinfoil can access
+                    your data. This applies to all chats, images, and documents.
+                    Our{' '}
+                    <a
+                      href="https://github.com/tinfoilsh"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+                    >
+                      open-source
+                    </a>{' '}
+                    stack lets you{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onOpenVerifier?.()
+                      }}
+                      className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+                    >
+                      verify this yourself
+                    </button>{' '}
+                    by inspecting the hardware attestation.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="mt-8">
             {/* Centered Chat Input - Desktop only */}
