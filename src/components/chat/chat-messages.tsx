@@ -51,6 +51,7 @@ type ChatMessagesProps = {
   showScrollButton?: boolean
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  onOpenVerifier?: () => void
 }
 
 // Optimized wrapper component that receives expanded state from parent
@@ -289,6 +290,7 @@ export function ChatMessages({
   showScrollButton,
   webSearchEnabled,
   onWebSearchToggle,
+  onOpenVerifier,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const [expandedThoughtsState, setExpandedThoughtsState] = useState<
@@ -407,6 +409,7 @@ export function ChatMessages({
             handleLabelClick={handleLabelClick}
             webSearchEnabled={webSearchEnabled}
             onWebSearchToggle={onWebSearchToggle}
+            onOpenVerifier={onOpenVerifier}
           />
         </div>
       </div>

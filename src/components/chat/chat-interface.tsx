@@ -2258,6 +2258,7 @@ export function ChatInterface({
                 showScrollButton={showScrollButton}
                 webSearchEnabled={webSearchEnabled}
                 onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+                onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
               />
             </div>
           </div>
