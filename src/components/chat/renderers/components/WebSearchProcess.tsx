@@ -41,8 +41,8 @@ function BouncingPlaceholder({
   style?: React.CSSProperties
 }) {
   return (
-    <div
-      className="h-4 w-4 shrink-0 animate-spring-horizontal rounded-full bg-content-primary/30"
+    <span
+      className="block h-4 w-4 shrink-0 animate-spring-horizontal rounded-full bg-content-primary/30"
       style={{
         ...style,
         animationDelay: BOUNCE_DELAYS[index] || '0ms',
@@ -88,7 +88,7 @@ function FadeInFavicon({
   if (error) return null
 
   return (
-    <div className="relative" style={style}>
+    <span className="relative block" style={style}>
       {showPlaceholder && !loaded && (
         <BouncingPlaceholder
           index={index ?? 0}
@@ -102,7 +102,7 @@ function FadeInFavicon({
         onLoad={handleLoad}
         onError={handleError}
       />
-    </div>
+    </span>
   )
 }
 

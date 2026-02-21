@@ -16,10 +16,12 @@ import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
 
-const CIPHER_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%'
-const DECRYPT_DURATION_MS = 800
-const DECRYPT_DELAY_MS = 100
-const DECRYPT_INITIAL_PROGRESS = 0.6
+const CIPHER_CHARS =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+const DECRYPT_DURATION_MS = 3000
+const DECRYPT_DELAY_MS = 300
+const DECRYPT_INITIAL_PROGRESS = 0.5
+const DECRYPT_ZIPF_EXPONENT = 20
 
 type Segment =
   | { type: 'text'; content: string }
@@ -42,6 +44,7 @@ function DecryptText({
   animate: boolean
 }) {
   const spanRefs = useRef<(HTMLSpanElement | null)[]>([])
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const animatingRef = useRef(false)
   const segmentsRef = useRef(segments)
   segmentsRef.current = segments
@@ -75,9 +78,9 @@ function DecryptText({
     const totalChars = flatChars.current.length
     const startTime = performance.now() + DECRYPT_DELAY_MS
 
-    // Generate a fixed cipher character for each position (no cycling)
-    const cipherMap = flatChars.current.map(
-      (_, i) => CIPHER_CHARS[(i * 7) % CIPHER_CHARS.length],
+    // Assign each character a random resolve threshold (0–1)
+    const resolveAt = flatChars.current.map(
+      (_, i) => ((i * 2654435761) >>> 0) / 4294967296,
     )
 
     const buffers = segs.map((seg) => [...seg.content])
@@ -87,19 +90,22 @@ function DecryptText({
 
       const elapsed = now - startTime
       const raw = Math.min(1, Math.max(0, elapsed / DECRYPT_DURATION_MS))
+      const done = raw >= 1
+      const eased = 1 - Math.pow(1 - raw, DECRYPT_ZIPF_EXPONENT)
       const progress =
-        DECRYPT_INITIAL_PROGRESS + raw * (1 - DECRYPT_INITIAL_PROGRESS)
+        DECRYPT_INITIAL_PROGRESS + eased * (1 - DECRYPT_INITIAL_PROGRESS)
 
-      const resolvedCount = Math.floor(progress * totalChars)
+      const cycleTick = Math.floor(now / 80)
 
       for (let i = 0; i < totalChars; i++) {
         const { segIdx, charIdx } = flatChars.current[i]
         const realChar = segs[segIdx].content[charIdx]
 
-        if (i < resolvedCount || realChar === ' ') {
+        if (done || progress >= resolveAt[i] || realChar === ' ') {
           buffers[segIdx][charIdx] = realChar
         } else {
-          buffers[segIdx][charIdx] = cipherMap[i]
+          const seed = (i * 13 + cycleTick) % CIPHER_CHARS.length
+          buffers[segIdx][charIdx] = CIPHER_CHARS[seed]
         }
       }
 
@@ -108,7 +114,7 @@ function DecryptText({
         if (span) span.textContent = buffers[i].join('')
       })
 
-      if (progress < 1) {
+      if (!done) {
         requestAnimationFrame(step)
       }
     }
@@ -123,45 +129,74 @@ function DecryptText({
   }, [])
 
   return (
-    <>
-      {segments.map((seg, i) => {
-        const ref = (el: HTMLSpanElement | null) => {
-          spanRefs.current[i] = el
-        }
+    <span ref={wrapperRef} className="relative block">
+      {/* Invisible layer to establish correct height */}
+      <span aria-hidden="true" className="invisible">
+        {segments.map((seg, i) => {
+          if (seg.type === 'link') {
+            return (
+              <a
+                key={i}
+                className="text-brand-accent-dark dark:text-brand-accent-light"
+              >
+                {seg.content}
+              </a>
+            )
+          }
+          if (seg.type === 'button') {
+            return (
+              <span
+                key={i}
+                className="text-brand-accent-dark dark:text-brand-accent-light"
+              >
+                {seg.content}
+              </span>
+            )
+          }
+          return <span key={i}>{seg.content}</span>
+        })}
+      </span>
+      {/* Visible animated layer */}
+      <span className="absolute inset-0">
+        {segments.map((seg, i) => {
+          const ref = (el: HTMLSpanElement | null) => {
+            spanRefs.current[i] = el
+          }
 
-        if (seg.type === 'link') {
-          return (
-            <a
-              key={i}
-              href={seg.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-            >
-              <span ref={ref} />
-            </a>
-          )
-        }
+          if (seg.type === 'link') {
+            return (
+              <a
+                key={i}
+                href={seg.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+              >
+                <span ref={ref} />
+              </a>
+            )
+          }
 
-        if (seg.type === 'button') {
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                seg.onClick()
-              }}
-              className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-            >
-              <span ref={ref} />
-            </button>
-          )
-        }
+          if (seg.type === 'button') {
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  seg.onClick()
+                }}
+                className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+              >
+                <span ref={ref} />
+              </button>
+            )
+          }
 
-        return <span key={i} ref={ref} />
-      })}
-    </>
+          return <span key={i} ref={ref} />
+        })}
+      </span>
+    </span>
   )
 }
 
@@ -222,6 +257,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   const [nickname, setNickname] = useState<string>('')
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const [privacyExpanded, setPrivacyExpanded] = useState(false)
+  const [lockPop, setLockPop] = useState(false)
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleImageError = useCallback((modelName: string) => {
@@ -297,7 +333,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
       <div className="flex w-full justify-center">
         <div className="w-full max-w-2xl">
           <motion.h1
-            className="flex items-center justify-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:justify-start md:text-3xl"
+            className={`flex items-center gap-3 text-2xl font-medium tracking-tight text-content-primary md:justify-start md:text-3xl ${privacyExpanded ? 'justify-start' : 'justify-center'}`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
@@ -322,10 +358,30 @@ export const WelcomeScreen = memo(function WelcomeScreen({
           >
             <button
               type="button"
-              onClick={() => setPrivacyExpanded((prev) => !prev)}
-              className="group flex w-full items-center justify-center gap-2 text-base text-content-secondary transition-colors hover:text-content-primary md:justify-start"
+              onClick={() => {
+                setPrivacyExpanded((prev) => {
+                  if (!prev) setLockPop(true)
+                  else setLockPop(false)
+                  return !prev
+                })
+              }}
+              className={`group flex w-full items-center gap-2 text-base text-content-secondary transition-colors hover:text-content-primary md:justify-start ${privacyExpanded ? 'justify-start' : 'justify-center'}`}
             >
-              <BiSolidLock className="h-4 w-4 shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
+              <motion.span
+                className="inline-flex shrink-0"
+                animate={lockPop ? { scale: [1, 1.5, 0.9, 1] } : { scale: 1 }}
+                transition={
+                  lockPop
+                    ? {
+                        duration: 0.7,
+                        times: [0, 0.3, 0.6, 1],
+                        ease: 'easeInOut',
+                      }
+                    : { duration: 0 }
+                }
+              >
+                <BiSolidLock className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light" />
+              </motion.span>
               <span>Your chats are private by design</span>
               <svg
                 className={`h-3.5 w-3.5 shrink-0 opacity-50 transition-transform duration-300 ${privacyExpanded ? 'rotate-180' : ''}`}
@@ -361,7 +417,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   }}
                   className="overflow-hidden"
                 >
-                  <p className="mt-2 text-justify text-base leading-relaxed text-content-secondary md:text-left">
+                  <p className="mt-2 text-left text-base leading-relaxed text-content-secondary">
                     <DecryptText
                       animate={privacyExpanded}
                       segments={[
