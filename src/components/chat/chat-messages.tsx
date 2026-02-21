@@ -433,7 +433,7 @@ export function ChatMessages({
 
   return (
     <div
-      className={`mx-auto w-full min-w-0 px-4 pb-6 pt-24 ${CHAT_FONT_CLASSES[chatFont]}`}
+      className={`mx-auto w-full min-w-0 px-0 pb-6 pt-24 md:px-4 ${CHAT_FONT_CLASSES[chatFont]}`}
     >
       {/* Archived Messages - only shown if there are more than the max prompt messages */}
       {archivedMessages.length > 0 && (
