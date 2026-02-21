@@ -44,7 +44,14 @@ import {
 } from '@/utils/project-upload-preference'
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
 import { ChatInput } from './chat-input'
@@ -1618,6 +1625,29 @@ export function ChatInterface({
     isWaitingForResponse,
     loadingState,
   ])
+
+  // Preserve scroll position when user has scrolled up during streaming.
+  // When new content appears below the viewport (e.g., thoughts start streaming),
+  // some mobile browsers may jump the scroll position. This saves scrollTop
+  // before React commits DOM changes and restores it after.
+  const savedScrollTopRef = useRef<number | null>(null)
+  if (showScrollButton && scrollContainerRef.current) {
+    savedScrollTopRef.current = scrollContainerRef.current.scrollTop
+  } else {
+    savedScrollTopRef.current = null
+  }
+  useLayoutEffect(() => {
+    if (
+      savedScrollTopRef.current !== null &&
+      scrollContainerRef.current &&
+      showScrollButton
+    ) {
+      const el = scrollContainerRef.current
+      if (el.scrollTop !== savedScrollTopRef.current) {
+        el.scrollTop = savedScrollTopRef.current
+      }
+    }
+  }, [currentChat?.messages, showScrollButton])
 
   // Nudge scroll slightly when content starts after thinking, only if near bottom
   const contentStartSnapshotRef = useRef<{

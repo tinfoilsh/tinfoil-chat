@@ -49,6 +49,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const [thoughtSummary, setThoughtSummary] = useState<string>('')
   const summaryGenerationRef = useRef<Promise<void> | null>(null)
   const isMountedRef = useRef<boolean>(true)
+  const wasExpandedRef = useRef<boolean>(isExpanded)
 
   const handleToggle = () => {
     if (messageId && setExpandedThoughtsState) {
@@ -146,7 +147,12 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
   // Fix main scroll container when thoughts collapse
   useEffect(() => {
-    if (!isExpanded && typeof window !== 'undefined') {
+    const wasExpanded = wasExpandedRef.current
+    wasExpandedRef.current = isExpanded
+
+    // Only run when thoughts actually collapse (expanded -> collapsed),
+    // not on initial mount when isExpanded is already false
+    if (!isExpanded && wasExpanded && typeof window !== 'undefined') {
       // When thoughts collapse, check if main scroll needs adjustment
       const checkAndFixScroll = () => {
         const mainScrollContainer = document.querySelector(

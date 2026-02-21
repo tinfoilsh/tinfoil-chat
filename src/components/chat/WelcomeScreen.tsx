@@ -361,7 +361,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   }}
                   className="overflow-hidden"
                 >
-                  <p className="mt-2 text-left text-base leading-relaxed text-content-secondary">
+                  <p className="mt-2 text-center text-base leading-relaxed text-content-secondary md:text-left">
                     <DecryptText
                       animate={privacyExpanded}
                       segments={[
