@@ -168,11 +168,12 @@ export const WebSearchProcess = memo(function WebSearchProcess({
         <div
           className={`flex min-w-0 flex-1 gap-3 ${isBlocked ? 'items-start' : 'items-center'}`}
         >
+          {/* Desktop favicons: before text */}
           {hasSources && (
-            <div className="flex shrink-0 items-center">
+            <div className="hidden shrink-0 items-center md:flex">
               {sourcesToShow.map((source, index) => (
                 <FadeInFavicon
-                  key={`${source.url}-${index}`}
+                  key={`desktop-${source.url}-${index}`}
                   url={source.url}
                   className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
                   style={{ marginLeft: index === 0 ? 0 : -6 }}
@@ -185,7 +186,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             </div>
           )}
           {!hasSources && isSearching && (
-            <div className="flex shrink-0 items-center">
+            <div className="hidden shrink-0 items-center md:flex">
               {[0, 1, 2, 3, 4].map((index) => (
                 <BouncingPlaceholder
                   key={index}
@@ -196,16 +197,48 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             </div>
           )}
           {isSearching ? (
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0 text-sm font-medium">
-                Searching the web...
-              </span>
+            <span className="min-w-0 text-sm leading-5">
+              <span className="font-medium">Searching the web...</span>
               {webSearch.query && (
-                <span className="truncate text-sm opacity-70">
+                <span className="opacity-70">
+                  {' '}
                   &quot;{webSearch.query}&quot;
                 </span>
               )}
-            </div>
+              {/* Mobile favicons: inline after text */}
+              {hasSources ? (
+                <span
+                  className="inline-flex items-center align-middle md:hidden"
+                  style={{ marginLeft: 6 }}
+                >
+                  {sourcesToShow.map((source, index) => (
+                    <FadeInFavicon
+                      key={`mobile-${source.url}-${index}`}
+                      url={source.url}
+                      className="h-3 w-3 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
+                      style={{ marginLeft: index === 0 ? 0 : -4 }}
+                      showPlaceholder={showPlaceholders}
+                      index={index}
+                      onLoad={() => handleFaviconLoad(index)}
+                      onError={() => handleFaviconError(index)}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center align-middle md:hidden"
+                  style={{ marginLeft: 6 }}
+                >
+                  {[0, 1, 2, 3, 4].map((index) => (
+                    <BouncingPlaceholder
+                      key={index}
+                      index={index}
+                      style={{ marginLeft: index === 0 ? 0 : -6 }}
+                    />
+                  ))}
+                </span>
+              )}
+            </span>
           ) : isFailed ? (
             <span className="min-w-0 truncate text-sm leading-5">
               <span className="font-medium opacity-70">Search failed</span>
@@ -230,6 +263,26 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                 <span className="font-normal opacity-70">
                   {' '}
                   for &quot;{webSearch.query}&quot;
+                </span>
+              )}
+              {/* Mobile favicons: inline after text */}
+              {hasSources && (
+                <span
+                  className="inline-flex items-center align-middle md:hidden"
+                  style={{ marginLeft: 6 }}
+                >
+                  {sourcesToShow.map((source, index) => (
+                    <FadeInFavicon
+                      key={`mobile-${source.url}-${index}`}
+                      url={source.url}
+                      className="h-3 w-3 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
+                      style={{ marginLeft: index === 0 ? 0 : -4 }}
+                      showPlaceholder={showPlaceholders}
+                      index={index}
+                      onLoad={() => handleFaviconLoad(index)}
+                      onError={() => handleFaviconError(index)}
+                    />
+                  ))}
                 </span>
               )}
             </span>
