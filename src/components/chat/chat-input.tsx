@@ -90,8 +90,11 @@ export function ChatInput({
       const min = Number.parseInt(inputMinHeight, 10) || 0
       const max = 240
 
-      // Reset to auto so the browser recomputes content height.
-      el.style.height = 'auto'
+      // Reset to 0 so the browser recomputes content height.
+      // Using '0' instead of 'auto' forces scrollHeight to reflect the
+      // full content height on mobile Safari, even when the textarea is
+      // unfocused (e.g. after programmatic value changes like transcription).
+      el.style.height = '0'
 
       const raw = el.scrollHeight
       const next = Math.max(min, Math.min(raw, max))
@@ -236,6 +239,14 @@ export function ChatInput({
           } else {
             setInput(newText)
           }
+          // Focus the textarea so the user can edit or send the transcription,
+          // then explicitly resize after React commits the new value to the DOM.
+          // The layout effect should handle this, but mobile Safari can report
+          // stale scrollHeight for programmatic value changes.
+          inputRef.current?.focus()
+          requestAnimationFrame(() => {
+            resizeTextarea(inputRef.current)
+          })
         } else {
           throw new Error('No transcription text received')
         }
@@ -251,7 +262,7 @@ export function ChatInput({
         setIsTranscribing(false)
       }
     },
-    [setInput, toast, input, audioModel],
+    [setInput, toast, input, audioModel, inputRef, resizeTextarea],
   )
 
   const isWebMAudioSupported = () => {

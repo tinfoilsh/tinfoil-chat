@@ -1,12 +1,169 @@
 import { type BaseModel } from '@/config/models'
 import { useClerk, useUser } from '@clerk/nextjs'
-import { motion } from 'framer-motion'
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
+import { BiSolidLock } from 'react-icons/bi'
 import { ChatInput } from './chat-input'
 import { CONSTANTS } from './constants'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
+
+const CIPHER_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%'
+const DECRYPT_DURATION_MS = 800
+const DECRYPT_DELAY_MS = 100
+const DECRYPT_INITIAL_PROGRESS = 0.6
+
+type Segment =
+  | { type: 'text'; content: string }
+  | {
+      type: 'link'
+      content: string
+      href: string
+    }
+  | {
+      type: 'button'
+      content: string
+      onClick: () => void
+    }
+
+function DecryptText({
+  segments,
+  animate,
+}: {
+  segments: Segment[]
+  animate: boolean
+}) {
+  const spanRefs = useRef<(HTMLSpanElement | null)[]>([])
+  const animatingRef = useRef(false)
+  const segmentsRef = useRef(segments)
+  segmentsRef.current = segments
+
+  // Pre-compute flat character list with segment/char indices
+  const flatChars = useRef<{ segIdx: number; charIdx: number }[]>([])
+
+  useLayoutEffect(() => {
+    const chars: { segIdx: number; charIdx: number }[] = []
+    segments.forEach((seg, segIdx) => {
+      for (let i = 0; i < seg.content.length; i++) {
+        chars.push({ segIdx, charIdx: i })
+      }
+    })
+    flatChars.current = chars
+  }, [segments])
+
+  useEffect(() => {
+    const segs = segmentsRef.current
+    const isMobile = window.matchMedia('(max-width: 767px)').matches
+
+    if (!animate || isMobile) {
+      segs.forEach((seg, i) => {
+        const span = spanRefs.current[i]
+        if (span) span.textContent = seg.content
+      })
+      return
+    }
+
+    animatingRef.current = true
+    const totalChars = flatChars.current.length
+    const startTime = performance.now() + DECRYPT_DELAY_MS
+
+    // Generate a fixed cipher character for each position (no cycling)
+    const cipherMap = flatChars.current.map(
+      (_, i) => CIPHER_CHARS[(i * 7) % CIPHER_CHARS.length],
+    )
+
+    const buffers = segs.map((seg) => [...seg.content])
+
+    const step = (now: number) => {
+      if (!animatingRef.current) return
+
+      const elapsed = now - startTime
+      const raw = Math.min(1, Math.max(0, elapsed / DECRYPT_DURATION_MS))
+      const progress =
+        DECRYPT_INITIAL_PROGRESS + raw * (1 - DECRYPT_INITIAL_PROGRESS)
+
+      const resolvedCount = Math.floor(progress * totalChars)
+
+      for (let i = 0; i < totalChars; i++) {
+        const { segIdx, charIdx } = flatChars.current[i]
+        const realChar = segs[segIdx].content[charIdx]
+
+        if (i < resolvedCount || realChar === ' ') {
+          buffers[segIdx][charIdx] = realChar
+        } else {
+          buffers[segIdx][charIdx] = cipherMap[i]
+        }
+      }
+
+      segs.forEach((_, i) => {
+        const span = spanRefs.current[i]
+        if (span) span.textContent = buffers[i].join('')
+      })
+
+      if (progress < 1) {
+        requestAnimationFrame(step)
+      }
+    }
+
+    requestAnimationFrame(step)
+
+    return () => {
+      animatingRef.current = false
+    }
+    // Only run on mount (animate is always true when mounted)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <>
+      {segments.map((seg, i) => {
+        const ref = (el: HTMLSpanElement | null) => {
+          spanRefs.current[i] = el
+        }
+
+        if (seg.type === 'link') {
+          return (
+            <a
+              key={i}
+              href={seg.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+            >
+              <span ref={ref} />
+            </a>
+          )
+        }
+
+        if (seg.type === 'button') {
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                seg.onClick()
+              }}
+              className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+            >
+              <span ref={ref} />
+            </button>
+          )
+        }
+
+        return <span key={i} ref={ref} />
+      })}
+    </>
+  )
+}
 
 interface WelcomeScreenProps {
   isDarkMode: boolean
@@ -33,6 +190,7 @@ interface WelcomeScreenProps {
   ) => void
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  onOpenVerifier?: () => void
 }
 
 export const WelcomeScreen = memo(function WelcomeScreen({
@@ -57,11 +215,13 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   handleLabelClick,
   webSearchEnabled,
   onWebSearchToggle,
+  onOpenVerifier,
 }: WelcomeScreenProps) {
   const { user, isSignedIn } = useUser()
   const { openSignIn } = useClerk()
   const [nickname, setNickname] = useState<string>('')
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
+  const [privacyExpanded, setPrivacyExpanded] = useState(false)
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleImageError = useCallback((modelName: string) => {
@@ -148,6 +308,103 @@ export const WelcomeScreen = memo(function WelcomeScreen({
           >
             {getGreeting()}
           </motion.h1>
+
+          {/* Privacy explainer */}
+          <motion.div
+            className="mt-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{
+              duration: 0.5,
+              ease: 'easeOut',
+              delay: 0.3,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setPrivacyExpanded((prev) => !prev)}
+              className="group flex w-full items-center justify-center gap-2 text-base text-content-secondary transition-colors hover:text-content-primary md:justify-start"
+            >
+              <BiSolidLock className="h-4 w-4 shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
+              <span>Your chats are private by design</span>
+              <svg
+                className={`h-3.5 w-3.5 shrink-0 opacity-50 transition-transform duration-300 ${privacyExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {privacyExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{
+                    height: {
+                      duration: 0.3,
+                      ease: [0.25, 0.1, 0.25, 1],
+                    },
+                    opacity: {
+                      duration: 0.25,
+                      delay: 0.1,
+                      ease: 'easeOut',
+                    },
+                  }}
+                  className="overflow-hidden"
+                >
+                  <p className="mt-2 text-justify text-base leading-relaxed text-content-secondary md:text-left">
+                    <DecryptText
+                      animate={privacyExpanded}
+                      segments={[
+                        {
+                          type: 'text',
+                          content:
+                            'Your messages are encrypted directly to the AI models running in ',
+                        },
+                        {
+                          type: 'link',
+                          content: 'secure hardware enclaves. ',
+                          href: 'https://tinfoil.sh/technology',
+                        },
+                        {
+                          type: 'text',
+                          content:
+                            'These are hardware-isolated environments powered by confidential computing GPUs with verifiable confidentiality and integrity guarantees. Not even Tinfoil can access your data. This applies to all chats, images, documents, and voice input. Our ',
+                        },
+                        {
+                          type: 'link',
+                          content: 'open-source',
+                          href: 'https://github.com/tinfoilsh',
+                        },
+                        {
+                          type: 'text',
+                          content: ' stack lets you ',
+                        },
+                        {
+                          type: 'button',
+                          content: 'verify this yourself',
+                          onClick: () => onOpenVerifier?.(),
+                        },
+                        {
+                          type: 'text',
+                          content: ' by inspecting the hardware attestation.',
+                        },
+                      ]}
+                    />
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="mt-8">
             {/* Centered Chat Input - Desktop only */}

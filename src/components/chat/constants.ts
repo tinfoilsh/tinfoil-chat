@@ -41,7 +41,6 @@ export const CONSTANTS = {
     "What's on your mind?",
     'Ask me anything...',
     'How can I help you today?',
-    "Go ahead, I won't tell anyone...",
-    'Your secrets are safe with me...',
+    'Your secrets are safe here...',
   ],
 } as const

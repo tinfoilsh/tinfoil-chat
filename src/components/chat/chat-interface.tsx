@@ -44,7 +44,14 @@ import {
 } from '@/utils/project-upload-preference'
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
 import { ChatInput } from './chat-input'
@@ -749,13 +756,26 @@ export function ChatInterface({
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
     if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
+      // Skip auto-focus when sidebar is open on mobile — focusing the input
+      // triggers handleInputFocus which closes the sidebar
+      if (isSidebarOpen && windowWidth < CONSTANTS.MOBILE_BREAKPOINT) {
+        return
+      }
       // Small delay to ensure DOM is ready and input is rendered
       const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 200)
       return () => clearTimeout(timer)
     }
-  }, [isClient, isLoadingConfig, subscriptionLoading, currentChat, inputRef])
+  }, [
+    isClient,
+    isLoadingConfig,
+    subscriptionLoading,
+    currentChat,
+    inputRef,
+    isSidebarOpen,
+    windowWidth,
+  ])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1606,6 +1626,29 @@ export function ChatInterface({
     loadingState,
   ])
 
+  // Preserve scroll position when user has scrolled up during streaming.
+  // When new content appears below the viewport (e.g., thoughts start streaming),
+  // some mobile browsers may jump the scroll position. This saves scrollTop
+  // before React commits DOM changes and restores it after.
+  const savedScrollTopRef = useRef<number | null>(null)
+  if (showScrollButton && scrollContainerRef.current) {
+    savedScrollTopRef.current = scrollContainerRef.current.scrollTop
+  } else {
+    savedScrollTopRef.current = null
+  }
+  useLayoutEffect(() => {
+    if (
+      savedScrollTopRef.current !== null &&
+      scrollContainerRef.current &&
+      showScrollButton
+    ) {
+      const el = scrollContainerRef.current
+      if (el.scrollTop !== savedScrollTopRef.current) {
+        el.scrollTop = savedScrollTopRef.current
+      }
+    }
+  }, [currentChat?.messages, showScrollButton])
+
   // Nudge scroll slightly when content starts after thinking, only if near bottom
   const contentStartSnapshotRef = useRef<{
     key: string
@@ -2258,6 +2301,7 @@ export function ChatInterface({
                 showScrollButton={showScrollButton}
                 webSearchEnabled={webSearchEnabled}
                 onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+                onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
               />
             </div>
           </div>
