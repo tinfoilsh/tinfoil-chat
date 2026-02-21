@@ -1,13 +1,169 @@
 import { type BaseModel } from '@/config/models'
 import { useClerk, useUser } from '@clerk/nextjs'
 import { AnimatePresence, motion } from 'framer-motion'
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { BiSolidLock } from 'react-icons/bi'
 import { ChatInput } from './chat-input'
 import { CONSTANTS } from './constants'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
+
+const CIPHER_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%'
+const DECRYPT_DURATION_MS = 800
+const DECRYPT_DELAY_MS = 100
+const DECRYPT_INITIAL_PROGRESS = 0.6
+
+type Segment =
+  | { type: 'text'; content: string }
+  | {
+      type: 'link'
+      content: string
+      href: string
+    }
+  | {
+      type: 'button'
+      content: string
+      onClick: () => void
+    }
+
+function DecryptText({
+  segments,
+  animate,
+}: {
+  segments: Segment[]
+  animate: boolean
+}) {
+  const spanRefs = useRef<(HTMLSpanElement | null)[]>([])
+  const animatingRef = useRef(false)
+  const segmentsRef = useRef(segments)
+  segmentsRef.current = segments
+
+  // Pre-compute flat character list with segment/char indices
+  const flatChars = useRef<{ segIdx: number; charIdx: number }[]>([])
+
+  useLayoutEffect(() => {
+    const chars: { segIdx: number; charIdx: number }[] = []
+    segments.forEach((seg, segIdx) => {
+      for (let i = 0; i < seg.content.length; i++) {
+        chars.push({ segIdx, charIdx: i })
+      }
+    })
+    flatChars.current = chars
+  }, [segments])
+
+  useEffect(() => {
+    const segs = segmentsRef.current
+    const isMobile = window.matchMedia('(max-width: 767px)').matches
+
+    if (!animate || isMobile) {
+      segs.forEach((seg, i) => {
+        const span = spanRefs.current[i]
+        if (span) span.textContent = seg.content
+      })
+      return
+    }
+
+    animatingRef.current = true
+    const totalChars = flatChars.current.length
+    const startTime = performance.now() + DECRYPT_DELAY_MS
+
+    // Generate a fixed cipher character for each position (no cycling)
+    const cipherMap = flatChars.current.map(
+      (_, i) => CIPHER_CHARS[(i * 7) % CIPHER_CHARS.length],
+    )
+
+    const buffers = segs.map((seg) => [...seg.content])
+
+    const step = (now: number) => {
+      if (!animatingRef.current) return
+
+      const elapsed = now - startTime
+      const raw = Math.min(1, Math.max(0, elapsed / DECRYPT_DURATION_MS))
+      const progress =
+        DECRYPT_INITIAL_PROGRESS + raw * (1 - DECRYPT_INITIAL_PROGRESS)
+
+      const resolvedCount = Math.floor(progress * totalChars)
+
+      for (let i = 0; i < totalChars; i++) {
+        const { segIdx, charIdx } = flatChars.current[i]
+        const realChar = segs[segIdx].content[charIdx]
+
+        if (i < resolvedCount || realChar === ' ') {
+          buffers[segIdx][charIdx] = realChar
+        } else {
+          buffers[segIdx][charIdx] = cipherMap[i]
+        }
+      }
+
+      segs.forEach((_, i) => {
+        const span = spanRefs.current[i]
+        if (span) span.textContent = buffers[i].join('')
+      })
+
+      if (progress < 1) {
+        requestAnimationFrame(step)
+      }
+    }
+
+    requestAnimationFrame(step)
+
+    return () => {
+      animatingRef.current = false
+    }
+    // Only run on mount (animate is always true when mounted)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <>
+      {segments.map((seg, i) => {
+        const ref = (el: HTMLSpanElement | null) => {
+          spanRefs.current[i] = el
+        }
+
+        if (seg.type === 'link') {
+          return (
+            <a
+              key={i}
+              href={seg.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+            >
+              <span ref={ref} />
+            </a>
+          )
+        }
+
+        if (seg.type === 'button') {
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                seg.onClick()
+              }}
+              className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+            >
+              <span ref={ref} />
+            </button>
+          )
+        }
+
+        return <span key={i} ref={ref} />
+      })}
+    </>
+  )
+}
 
 interface WelcomeScreenProps {
   isDarkMode: boolean
@@ -206,39 +362,43 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   className="overflow-hidden"
                 >
                   <p className="mt-2 text-left text-base leading-relaxed text-content-secondary">
-                    Your messages are encrypted directly to{' '}
-                    <a
-                      href="https://tinfoil.sh/technology"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-                    >
-                      secure hardware enclaves
-                    </a>{' '}
-                    — isolated environments powered by confidential computing
-                    GPUs where the AI models run. Not even Tinfoil can access
-                    your data. This applies to all chats, images, and documents.
-                    Our{' '}
-                    <a
-                      href="https://github.com/tinfoilsh"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-                    >
-                      open-source
-                    </a>{' '}
-                    stack lets you{' '}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onOpenVerifier?.()
-                      }}
-                      className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-                    >
-                      verify this yourself
-                    </button>{' '}
-                    by inspecting the hardware attestation.
+                    <DecryptText
+                      animate={privacyExpanded}
+                      segments={[
+                        {
+                          type: 'text',
+                          content: 'Your messages are encrypted directly to ',
+                        },
+                        {
+                          type: 'link',
+                          content: 'secure hardware enclaves',
+                          href: 'https://tinfoil.sh/technology',
+                        },
+                        {
+                          type: 'text',
+                          content:
+                            ' — isolated environments powered by confidential computing GPUs where the AI models run. Not even Tinfoil can access your data. This applies to all chats, images, and documents. Our ',
+                        },
+                        {
+                          type: 'link',
+                          content: 'open-source',
+                          href: 'https://github.com/tinfoilsh',
+                        },
+                        {
+                          type: 'text',
+                          content: ' stack lets you ',
+                        },
+                        {
+                          type: 'button',
+                          content: 'verify this yourself',
+                          onClick: () => onOpenVerifier?.(),
+                        },
+                        {
+                          type: 'text',
+                          content: ' by inspecting the hardware attestation.',
+                        },
+                      ]}
+                    />
                   </p>
                 </motion.div>
               )}
