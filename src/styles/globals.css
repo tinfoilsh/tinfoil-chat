@@ -145,6 +145,17 @@
   transition: max-width 0.3s ease;
 }
 
+/* On mobile, disable breakout positioning to prevent horizontal page scroll.
+   Tables stay within bounds and scroll horizontally inside their own container. */
+@media (max-width: 767px) {
+  .table-breakout {
+    width: 100%;
+    left: 0;
+    transform: none;
+    max-width: 100% !important;
+  }
+}
+
 /* Prevent horizontal scroll at message level */
 .prose > *:not(.table-breakout) {
   max-width: 100%;
