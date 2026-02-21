@@ -361,23 +361,24 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   }}
                   className="overflow-hidden"
                 >
-                  <p className="mt-2 text-center text-base leading-relaxed text-content-secondary md:text-left">
+                  <p className="mt-2 text-justify text-base leading-relaxed text-content-secondary md:text-left">
                     <DecryptText
                       animate={privacyExpanded}
                       segments={[
                         {
                           type: 'text',
-                          content: 'Your messages are encrypted directly to ',
+                          content:
+                            'Your messages are encrypted directly to the AI models running inside ',
                         },
                         {
                           type: 'link',
-                          content: 'secure hardware enclaves',
+                          content: 'secure hardware enclaves. ',
                           href: 'https://tinfoil.sh/technology',
                         },
                         {
                           type: 'text',
                           content:
-                            ' — isolated environments powered by confidential computing GPUs where the AI models run. Not even Tinfoil can access your data. This applies to all chats, images, and documents. Our ',
+                            'These are hardware-isolated environments powered by confidential computing GPUs with verifiable confidentiality and integrity guarantees. Not even Tinfoil can access your data. This applies to all chats, images, documents, and voice input. Our ',
                         },
                         {
                           type: 'link',
