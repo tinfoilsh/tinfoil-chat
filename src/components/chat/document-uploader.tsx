@@ -297,11 +297,19 @@ export const useDocumentUploader = (
       formData.append('model', modelName)
 
       const client = new SecureClient()
+      const controller = new AbortController()
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        CONSTANTS.DOCUMENT_PROCESSING_TIMEOUT_MS,
+      )
 
-      const response = await client.fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-      })
+      const response = await client
+        .fetch(endpoint, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        })
+        .finally(() => clearTimeout(timeoutId))
 
       // Handle 204 No Content response
       if (response.status === 204) {
