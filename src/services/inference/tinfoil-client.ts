@@ -104,65 +104,54 @@ async function getRawClient(): Promise<TinfoilAI> {
 /**
  * Returns a proxy that behaves like TinfoilAI but automatically retries
  * once on AuthenticationError (refreshing the API key in between).
- * The proxy resolves the client lazily on each call so it always
- * delegates to the current clientInstance.
+ *
+ * Property accesses build up a path (e.g. ['chat','completions','create']).
+ * The actual call is intercepted in the `apply` trap, which resolves the
+ * full path on the live clientInstance, invokes the method, and retries
+ * with a fresh client on AuthenticationError.
  */
 export async function getTinfoilClient(): Promise<TinfoilAI> {
-  // Ensure the client is initialized before returning the proxy
   await getRawClient()
 
-  function resolve(path: PropertyKey[]): { target: any; parent: any } {
-    let parent: any = clientInstance
-    let target: any = clientInstance
+  function resolvePath(path: PropertyKey[]): { fn: any; thisArg: any } {
+    let thisArg: any = clientInstance
+    let fn: any = clientInstance
     for (const p of path) {
-      parent = target
-      target = target[p]
+      thisArg = fn
+      fn = fn[p]
     }
-    return { target, parent }
+    return { fn, thisArg }
   }
 
   function proxyWithRetry(pathFromRoot: PropertyKey[]): any {
-    return new Proxy(Object.create(null), {
+    // Target must be a function so the `apply` trap can fire
+    return new Proxy(function () {}, {
       get(_, prop) {
-        // Avoid interfering with Promise resolution or inspection
         if (
           prop === 'then' ||
           prop === Symbol.toPrimitive ||
           prop === Symbol.toStringTag
         ) {
-          const { target } = resolve(pathFromRoot)
-          return Reflect.get(target, prop)
+          return undefined
         }
-
-        const { target } = resolve(pathFromRoot)
-        const value = Reflect.get(target, prop)
-
-        if (typeof value === 'function') {
-          const currentPath = [...pathFromRoot, prop]
-          return (...args: any[]) => {
-            const { target: thisArg } = resolve(pathFromRoot)
-            const result = thisArg[prop].apply(thisArg, args)
-            // Only wrap thenables (async API calls), not sync helpers
-            if (result && typeof result.then === 'function') {
-              return result.catch(async (err: unknown) => {
-                if (err instanceof AuthenticationError) {
-                  resetTinfoilClient()
-                  await getRawClient()
-                  const { target: freshThis } = resolve(pathFromRoot)
-                  return freshThis[prop].apply(freshThis, args)
-                }
-                throw err
-              })
+        return proxyWithRetry([...pathFromRoot, prop])
+      },
+      apply(_, __, args) {
+        const { fn, thisArg } = resolvePath(pathFromRoot)
+        const result = fn.apply(thisArg, args)
+        if (result && typeof result.then === 'function') {
+          return result.catch(async (err: unknown) => {
+            if (err instanceof AuthenticationError) {
+              resetTinfoilClient()
+              await getRawClient()
+              const { fn: freshFn, thisArg: freshThis } =
+                resolvePath(pathFromRoot)
+              return freshFn.apply(freshThis, args)
             }
-            return result
-          }
+            throw err
+          })
         }
-
-        if (typeof value === 'object' && value !== null) {
-          return proxyWithRetry([...pathFromRoot, prop])
-        }
-
-        return value
+        return result
       },
     })
   }
