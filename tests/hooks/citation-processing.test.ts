@@ -29,7 +29,7 @@ describe('processCitationMarkers', () => {
   it('converts citation with number 3', () => {
     const input = 'Info【3】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('[3](#cite-3~https://third.com~Third%20Source)')
+    expect(result).toContain('[3](#cite-3~https://third.com~Third%20Source).')
   })
 
   it('handles adjacent citations without space', () => {
@@ -50,13 +50,15 @@ describe('processCitationMarkers', () => {
   it('handles citation markers with extra text inside brackets', () => {
     const input = 'Fact【1†source】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('.[1](#cite-1~')
+    expect(result).toContain('[1](#cite-1~')
+    expect(result).toMatch(/Example%20Page\)\.$/)
   })
 
   it('handles citation markers with colon inside brackets', () => {
     const input = 'Fact【1:3†source】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('.[1](#cite-1~')
+    expect(result).toContain('[1](#cite-1~')
+    expect(result).toMatch(/Example%20Page\)\.$/)
   })
 
   it('produces correct format [num](#cite-num~url~title)', () => {
@@ -74,66 +76,66 @@ describe('processCitationMarkers', () => {
 
   // ── Trailing punctuation handling ─────────────────────────────────
 
-  it('moves trailing period before the citation', () => {
+  it('places trailing period after the citation', () => {
     const input = 'This is a fact【1】.'
     const result = processCitationMarkers(input, sources)
     expect(result).toBe(
-      'This is a fact.[1](#cite-1~https://example.com/page~Example%20Page)',
+      'This is a fact[1](#cite-1~https://example.com/page~Example%20Page).',
     )
   })
 
-  it('moves trailing comma before the citation', () => {
+  it('places trailing comma after the citation', () => {
     const input = 'First point【1】, second point.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^First point,\[1\]\(#cite-1~/)
+    expect(result).toMatch(/^First point\[1\]\(#cite-1~[^)]+\), second/)
   })
 
-  it('moves trailing semicolon before the citation', () => {
+  it('places trailing semicolon after the citation', () => {
     const input = 'Statement【2】; more text.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^Statement;\[2\]\(#cite-2~/)
+    expect(result).toMatch(/^Statement\[2\]\(#cite-2~[^)]+\); more/)
   })
 
-  it('moves trailing colon before the citation', () => {
+  it('places trailing colon after the citation', () => {
     const input = 'Key fact【1】: details follow.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^Key fact:\[1\]\(#cite-1~/)
+    expect(result).toMatch(/^Key fact\[1\]\(#cite-1~[^)]+\): details/)
   })
 
-  it('moves trailing exclamation mark before the citation', () => {
+  it('places trailing exclamation mark after the citation', () => {
     const input = 'Amazing【1】!'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^Amazing!\[1\]\(#cite-1~/)
+    expect(result).toMatch(/^Amazing\[1\]\(#cite-1~[^)]+\)!$/)
   })
 
-  it('moves trailing question mark before the citation', () => {
+  it('places trailing question mark after the citation', () => {
     const input = 'Is this true【1】?'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^Is this true\?\[1\]\(#cite-1~/)
+    expect(result).toMatch(/^Is this true\[1\]\(#cite-1~[^)]+\)\?$/)
   })
 
-  it('moves CJK period before the citation', () => {
+  it('places CJK period after the citation', () => {
     const input = 'Some text【1】。More text.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('Some text。[1](#cite-1~')
+    expect(result).toContain('Example%20Page)。More')
   })
 
-  it('moves CJK comma before the citation', () => {
+  it('places CJK comma after the citation', () => {
     const input = 'Some text【1】，more text.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('Some text，[1](#cite-1~')
+    expect(result).toContain('Example%20Page)，more')
   })
 
-  it('moves CJK exclamation before the citation', () => {
+  it('places CJK exclamation after the citation', () => {
     const input = 'Wow【1】！'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^Wow！\[1\]\(#cite-1~/)
+    expect(result).toMatch(/Example%20Page\)！$/)
   })
 
-  it('moves CJK question mark before the citation', () => {
+  it('places CJK question mark after the citation', () => {
     const input = 'Really【1】？'
     const result = processCitationMarkers(input, sources)
-    expect(result).toMatch(/^Really？\[1\]\(#cite-1~/)
+    expect(result).toMatch(/Example%20Page\)？$/)
   })
 
   it('handles no trailing punctuation', () => {
@@ -146,8 +148,41 @@ describe('processCitationMarkers', () => {
   it('only captures one punctuation character, not two', () => {
     const input = 'Fact【1】..'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('Fact.[1](#cite-1~')
-    expect(result).toMatch(/Page\)\.$/)
+    expect(result).toMatch(/Example%20Page\)\.\.$/)
+  })
+
+  // ── Adjacent citations with punctuation (the bug fix) ─────────────
+
+  it('places period after all adjacent citations, not between them', () => {
+    const input = 'Fact【1】【2】.'
+    const result = processCitationMarkers(input, sources)
+    // Period should come after the last citation, not between them
+    expect(result).toMatch(/\[1\]\(#cite-1~[^)]+\)\[2\]\(#cite-2~[^)]+\)\./)
+    // Should NOT have period between citations
+    expect(result).not.toMatch(/\)\.\[/)
+  })
+
+  it('places period after three adjacent citations', () => {
+    const input = 'Fact【1】【2】【3】.'
+    const result = processCitationMarkers(input, sources)
+    // Period after last citation only
+    expect(result).toMatch(/Third%20Source\)\./)
+    // No period between any citations
+    expect(result).not.toMatch(/\)\.\[/)
+  })
+
+  it('handles adjacent citations with comma after last', () => {
+    const input = 'Thing【1】【2】, and more.'
+    const result = processCitationMarkers(input, sources)
+    expect(result).toMatch(/Another%20Source\), and/)
+    expect(result).not.toMatch(/\),\[/)
+  })
+
+  it('handles period between non-adjacent citations correctly', () => {
+    const input = 'First fact【1】. Second fact【2】.'
+    const result = processCitationMarkers(input, sources)
+    expect(result).toContain('Example%20Page).')
+    expect(result).toContain('Another%20Source).')
   })
 
   // ── URL encoding ──────────────────────────────────────────────────
@@ -206,8 +241,8 @@ describe('processCitationMarkers', () => {
       { title: 'User Page', url: 'https://example.com/~user/page' },
     ]
     const result = processCitationMarkers('Content【1】.', src)
-    // Tilde is NOT encoded (matches web behavior), but URL is still present
-    expect(result).toContain('~user/page')
+    expect(result).toContain('%7Euser/page')
+    expect(result).not.toContain('~user/page')
   })
 
   it('handles very long URLs', () => {
@@ -246,7 +281,6 @@ describe('processCitationMarkers', () => {
       { title: 'A & B: "test" <value>', url: 'https://example.com' },
     ]
     const result = processCitationMarkers('Text【1】.', src)
-    // Should not contain raw angle brackets or ampersands
     expect(result).toContain('%26')
     expect(result).toContain('%3C')
     expect(result).toContain('%3E')
@@ -257,11 +291,8 @@ describe('processCitationMarkers', () => {
       { title: 'Approx ~100 items', url: 'https://example.com' },
     ]
     const result = processCitationMarkers('Text【1】.', src)
-    // Tilde in title - encodeURIComponent does not encode ~
-    // This is a known limitation: ~ in titles could break delimiter parsing
-    // The test documents current behavior
-    const match = result.match(/#cite-1~[^~]+~(.+)\)/)
-    expect(match).not.toBeNull()
+    expect(result).toContain('%7E100')
+    expect(result).not.toContain('~100')
   })
 
   it('handles empty title', () => {
@@ -346,7 +377,7 @@ describe('processCitationMarkers', () => {
     const input = 'Fact【12】.'
     const result = processCitationMarkers(input, manySources)
     expect(result).toContain(
-      '[12](#cite-12~https://example.com/12~Source%2012)',
+      '[12](#cite-12~https://example.com/12~Source%2012).',
     )
   })
 
@@ -363,7 +394,7 @@ describe('processCitationMarkers', () => {
       'problems (notably reduced semen volume or "dry" orgasms)【1】.'
     const result = processCitationMarkers(input, src)
     expect(result).toBe(
-      'problems (notably reduced semen volume or "dry" orgasms).[1](#cite-1~https://nhs.uk/medicines/finasteride/side-effects~Side%20effects%20of%20finasteride%20-%20NHS)',
+      'problems (notably reduced semen volume or "dry" orgasms)[1](#cite-1~https://nhs.uk/medicines/finasteride/side-effects~Side%20effects%20of%20finasteride%20-%20NHS).',
     )
   })
 
@@ -371,7 +402,8 @@ describe('processCitationMarkers', () => {
     const input = 'Effect (type A)【1】 and (type B)【2】.'
     const result = processCitationMarkers(input, sources)
     expect(result).toContain('(type A)[1](#cite-1~')
-    expect(result).toContain('(type B).[2](#cite-2~')
+    expect(result).toContain('(type B)[2](#cite-2~')
+    expect(result).toMatch(/Another%20Source\)\.$/)
   })
 
   it('handles citation with both URL parens and text parens', () => {
@@ -396,32 +428,34 @@ describe('processCitationMarkers', () => {
   it('preserves surrounding bold markdown', () => {
     const input = '**Bold text**【1】. Regular text.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('**Bold text**.[1](#cite-1~')
+    expect(result).toContain('**Bold text**[1](#cite-1~')
+    expect(result).toContain('Example%20Page). Regular')
   })
 
   it('preserves surrounding italic markdown', () => {
     const input = '*Italic text*【1】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('*Italic text*.[1](#cite-1~')
+    expect(result).toContain('*Italic text*[1](#cite-1~')
+    expect(result).toMatch(/Example%20Page\)\.$/)
   })
 
   it('preserves list item context', () => {
     const input = '- Item one【1】.\n- Item two【2】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('- Item one.[1](#cite-1~')
-    expect(result).toContain('- Item two.[2](#cite-2~')
+    expect(result).toContain('- Item one[1](#cite-1~')
+    expect(result).toContain('- Item two[2](#cite-2~')
   })
 
   it('preserves newlines around citations', () => {
     const input = 'Paragraph one【1】.\n\nParagraph two【2】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('Paragraph one.[1](#cite-1~')
-    expect(result).toContain('\n\nParagraph two.[2](#cite-2~')
+    expect(result).toContain('Example%20Page).\n\nParagraph two')
   })
 
   it('handles citation inside a markdown link context', () => {
     const input = 'See [this article](https://example.com)【1】.'
     const result = processCitationMarkers(input, sources)
-    expect(result).toContain('(https://example.com).[1](#cite-1~')
+    expect(result).toContain('(https://example.com)[1](#cite-1~')
+    expect(result).toMatch(/Example%20Page\)\.$/)
   })
 })
