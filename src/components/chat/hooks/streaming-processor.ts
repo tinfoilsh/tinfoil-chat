@@ -23,7 +23,7 @@ import type {
  * Process citation markers (e.g. 【1】) into markdown links.
  * Called once at stream end to store processed content.
  */
-function processCitationMarkers(
+export function processCitationMarkers(
   content: string,
   sources: WebSearchSource[],
 ): string {
@@ -40,6 +40,8 @@ function processCitationMarkers(
         .replace(/\)/g, '%29')
         .replace(/\|/g, '%7C')
       const encodedTitle = encodeURIComponent(source.title || '')
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29')
       return `${punct}[${num}](#cite-${num}~${encodedUrl}~${encodedTitle})`
     },
   )
