@@ -165,7 +165,8 @@ export async function hasPasskeyCredentials(): Promise<boolean> {
 
 /**
  * Encrypt the key bundle and upsert a credential entry, then save to backend.
- * If a credential with the same ID already exists, it is replaced.
+ * If a credential with the same ID already exists, it is replaced (preserving
+ * the original `created_at` value).
  */
 export async function storeEncryptedKeys(
   credentialId: string,
@@ -174,14 +175,17 @@ export async function storeEncryptedKeys(
 ): Promise<boolean> {
   try {
     const encrypted = await encryptKeyBundle(kek, keys)
+
+    const existing = await loadPasskeyCredentials()
+    const previous = existing.find((e) => e.id === credentialId)
+
     const entry: PasskeyCredentialEntry = {
       id: credentialId,
       encrypted_keys: encrypted.data,
       iv: encrypted.iv,
-      created_at: new Date().toISOString(),
+      created_at: previous?.created_at ?? new Date().toISOString(),
     }
 
-    const existing = await loadPasskeyCredentials()
     const updated = existing.filter((e) => e.id !== credentialId)
     updated.push(entry)
 
