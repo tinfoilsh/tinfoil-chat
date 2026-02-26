@@ -49,7 +49,9 @@ next-env.d.ts
 
 .idea/
 
+# other 
 CLAUDE.md
+napkin.md 
 
 # test results
 /coverage
