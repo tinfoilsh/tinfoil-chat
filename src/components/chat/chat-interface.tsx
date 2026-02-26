@@ -277,6 +277,11 @@ export function ChatInterface({
     retryDecryptionWithNewKey,
     clearFirstTimeUser,
     decryptionProgress,
+    passkeyActive,
+    passkeyRecoveryNeeded,
+    passkeySetupAvailable,
+    setupPasskey,
+    recoverWithPasskey,
   } = useCloudSync()
 
   // Initialize profile sync
@@ -2211,6 +2216,9 @@ export function ChatInterface({
             window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
           }
         }}
+        passkeyActive={passkeyActive}
+        passkeySetupAvailable={passkeySetupAvailable}
+        onSetupPasskey={setupPasskey}
         initialTab={settingsInitialTab}
         chats={chats}
       />
@@ -2464,6 +2472,21 @@ export function ChatInterface({
           }}
           isDarkMode={isDarkMode}
           initialCloudSyncEnabled={true}
+          passkeyRecoveryNeeded={passkeyRecoveryNeeded}
+          onRecoverWithPasskey={async () => {
+            const key = await recoverWithPasskey()
+            if (key) {
+              const syncResult = await setEncryptionKey(key)
+              if (syncResult) {
+                await retryProfileDecryption()
+                await reloadChats()
+                window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
+              }
+              setShowCloudSyncSetupModal(false)
+              return true
+            }
+            return false
+          }}
         />
       )}
 
