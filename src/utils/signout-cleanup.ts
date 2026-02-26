@@ -96,53 +96,39 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   }
 }
 
-export async function performSignoutCleanup(): Promise<void> {
+export async function performSignoutCleanup(opts?: {
+  preserveEncryptionKey?: boolean
+}): Promise<void> {
+  const preserveKey = opts?.preserveEncryptionKey ?? false
+  const action = preserveKey
+    ? 'performSignoutCleanup(preserveKey)'
+    : 'performSignoutCleanup'
+
   try {
-    logInfo('Starting signout cleanup', {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanup',
-    })
-
-    await clearAllUserData({ context: 'signoutCleanup' })
-
-    logInfo('Signout cleanup completed', {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanup',
-    })
-  } catch (error) {
-    logError('Error during signout cleanup', error, {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanup',
-    })
-    throw error
-  }
-}
-
-/**
- * Clear all user data except the encryption key.
- * Used when signing out without a passkey backup — the key stays in localStorage
- * so the modal can offer a download before final deletion.
- */
-export async function performSignoutCleanupExceptKey(): Promise<void> {
-  try {
-    logInfo('Starting signout cleanup (preserving encryption key)', {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanupExceptKey',
-    })
+    logInfo(
+      `Starting signout cleanup${preserveKey ? ' (preserving encryption key)' : ''}`,
+      {
+        component: 'signoutCleanup',
+        action,
+      },
+    )
 
     await clearAllUserData({
       context: 'signoutCleanup',
-      preserveEncryptionKey: true,
+      preserveEncryptionKey: preserveKey,
     })
 
-    logInfo('Signout cleanup completed (encryption key preserved)', {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanupExceptKey',
-    })
+    logInfo(
+      `Signout cleanup completed${preserveKey ? ' (encryption key preserved)' : ''}`,
+      {
+        component: 'signoutCleanup',
+        action,
+      },
+    )
   } catch (error) {
-    logError('Error during signout cleanup (preserveKey)', error, {
+    logError('Error during signout cleanup', error, {
       component: 'signoutCleanup',
-      action: 'performSignoutCleanupExceptKey',
+      action,
     })
     throw error
   }
