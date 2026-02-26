@@ -47,7 +47,6 @@ import {
   CreditCardIcon,
   EyeIcon,
   EyeSlashIcon,
-  LockClosedIcon,
   MoonIcon,
   SparklesIcon,
   SunIcon,
@@ -65,7 +64,9 @@ import {
 import { BsQrCode } from 'react-icons/bs'
 import { GoPasskeyFill } from 'react-icons/go'
 import { HiOutlineAdjustmentsVertical } from 'react-icons/hi2'
+import { IoShieldCheckmark } from 'react-icons/io5'
 import { PiSignIn } from 'react-icons/pi'
+import { RiLightbulbFill, RiShieldKeyholeFill } from 'react-icons/ri'
 import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
 import type { Chat } from './types'
@@ -216,6 +217,8 @@ export function SettingsModal({
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
   const [isKeyVisible, setIsKeyVisible] = useState(false)
   const [isSettingUpPasskey, setIsSettingUpPasskey] = useState(false)
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false)
+  const [isEncryptionKeyOpen, setIsEncryptionKeyOpen] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Structured personalization fields
@@ -2320,66 +2323,77 @@ ${encryptionKey.replace('key_', '')}
               {/* Cloud Sync Tab */}
               {activeTab === 'cloud-sync' && (
                 <>
-                  {/* How It Works */}
-                  <div className="space-y-3">
-                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                      How It Works
-                    </h3>
-                    <div
-                      className={cn(
-                        'space-y-3 rounded-lg border border-border-subtle p-4',
-                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                      )}
+                  {/* How It Works - Collapsible */}
+                  <div
+                    className={cn(
+                      'rounded-lg border border-border-subtle',
+                      isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsHowItWorksOpen(!isHowItWorksOpen)}
+                      className="flex w-full items-center justify-between p-4"
                     >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          1
+                      <div className="flex items-center gap-2">
+                        <RiLightbulbFill className="h-4 w-4 text-content-muted" />
+                        <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                          How It Works
+                        </h3>
+                      </div>
+                      <ChevronDownIcon
+                        className={cn(
+                          'h-4 w-4 text-content-muted transition-transform duration-200',
+                          isHowItWorksOpen && 'rotate-180',
+                        )}
+                      />
+                    </button>
+                    {isHowItWorksOpen && (
+                      <div className="space-y-3 border-t border-border-subtle p-4">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={cn(
+                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
+                              'bg-content-muted/20 text-content-secondary',
+                            )}
+                          >
+                            1
+                          </div>
+                          <div className="font-aeonik-fono text-sm text-content-muted">
+                            Your chats are encrypted on your device before being
+                            sent to the cloud.
+                          </div>
                         </div>
-                        <div className="font-aeonik-fono text-sm text-content-muted">
-                          Your chats are encrypted on your device before being
-                          sent to the cloud.
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={cn(
+                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
+                              'bg-content-muted/20 text-content-secondary',
+                            )}
+                          >
+                            2
+                          </div>
+                          <div className="font-aeonik-fono text-sm text-content-muted">
+                            Only you have the encryption key. Tinfoil cannot
+                            read your messages.
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={cn(
+                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
+                              'bg-content-muted/20 text-content-secondary',
+                            )}
+                          >
+                            3
+                          </div>
+                          <div className="font-aeonik-fono text-sm text-content-muted">
+                            Use a passkey to seamlessly sync your chats across
+                            devices, or manually enter your encryption key.
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          2
-                        </div>
-                        <div className="font-aeonik-fono text-sm text-content-muted">
-                          Only you have the encryption key. Tinfoil cannot read
-                          your messages.
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
-                            isDarkMode
-                              ? 'bg-content-muted/20 text-content-secondary'
-                              : 'bg-content-muted/20 text-content-secondary',
-                          )}
-                        >
-                          3
-                        </div>
-                        <div className="font-aeonik-fono text-sm text-content-muted">
-                          To access your chats on a new device, you&apos;ll need
-                          to enter or scan your personal encryption key.
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Cloud Sync */}
@@ -2419,201 +2433,323 @@ ${encryptionKey.replace('key_', '')}
                     </div>
                   </div>
 
-                  {/* Encryption Key Management */}
+                  {/* Your Personal Encryption Key - Collapsible */}
                   {cloudSyncEnabled && (
-                    <div className="space-y-3">
-                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Current Encryption Key
-                      </h3>
-                      <div
-                        className={cn(
-                          'rounded-lg border border-border-subtle p-4',
-                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                        )}
+                    <div
+                      className={cn(
+                        'rounded-lg border border-border-subtle',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIsEncryptionKeyOpen(!isEncryptionKeyOpen)
+                        }
+                        className="flex w-full items-center justify-between p-4"
                       >
-                        {encryptionKey ? (
-                          <div className="flex w-full items-end gap-2">
-                            <motion.div
-                              layout="size"
-                              transition={{
-                                type: 'spring',
-                                damping: 25,
-                                stiffness: 400,
-                                mass: 0.5,
-                              }}
-                              className={cn(
-                                'relative min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface-chat transition-colors duration-300 hover:border-blue-500/50',
-                                isQRCodeExpanded ? 'p-3' : 'pr-2',
-                              )}
-                            >
-                              {/* Key row (always visible) */}
-                              <div className="flex items-center">
-                                <div
-                                  onClick={handleCopyKey}
-                                  className="min-w-0 flex-1 cursor-pointer overflow-hidden px-3 py-2 text-left"
-                                >
-                                  <code className="block h-5 overflow-hidden whitespace-nowrap font-mono text-sm leading-5 text-blue-500">
-                                    <ScrambleText
-                                      text={encryptionKey}
-                                      isKeyVisible={isKeyVisible}
-                                    />
-                                  </code>
-                                </div>
-                                <div className="group relative z-10 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setIsKeyVisible(!isKeyVisible)
-                                    }
-                                    aria-label={
-                                      isKeyVisible ? 'Hide key' : 'Show key'
-                                    }
-                                    className="flex items-center justify-center rounded-lg p-2 text-content-muted transition-all hover:text-content-primary"
-                                  >
-                                    {isKeyVisible ? (
-                                      <EyeSlashIcon className="h-4 w-4" />
-                                    ) : (
-                                      <EyeIcon className="h-4 w-4" />
-                                    )}
-                                  </button>
-                                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                                    {isKeyVisible ? 'Hide key' : 'Show key'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* QR code (below key, pushes container open) */}
+                        <div className="flex items-center gap-2">
+                          <RiShieldKeyholeFill className="h-4 w-4 text-content-muted" />
+                          <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                            Your Personal Encryption Key
+                          </h3>
+                        </div>
+                        <ChevronDownIcon
+                          className={cn(
+                            'h-4 w-4 text-content-muted transition-transform duration-200',
+                            isEncryptionKeyOpen && 'rotate-180',
+                          )}
+                        />
+                      </button>
+                      {isEncryptionKeyOpen && (
+                        <div className="space-y-3 border-t border-border-subtle p-4">
+                          {encryptionKey ? (
+                            <div className="flex w-full items-end gap-2">
                               <motion.div
-                                initial={false}
-                                animate={isQRCodeExpanded ? 'open' : 'closed'}
-                                variants={{
-                                  open: {
-                                    height: 140,
-                                    marginTop: 12,
-                                    opacity: 1,
-                                  },
-                                  closed: {
-                                    height: 0,
-                                    marginTop: 0,
-                                    opacity: 0,
-                                  },
-                                }}
+                                layout="size"
                                 transition={{
                                   type: 'spring',
                                   damping: 25,
                                   stiffness: 400,
                                   mass: 0.5,
                                 }}
-                                className="overflow-hidden"
+                                className={cn(
+                                  'relative min-w-0 flex-1 rounded-lg border border-border-subtle bg-surface-chat transition-colors duration-300 hover:border-blue-500/50',
+                                  isQRCodeExpanded ? 'p-3' : 'pr-2',
+                                )}
                               >
+                                {/* Key row (always visible) */}
+                                <div className="flex items-center">
+                                  <div
+                                    onClick={handleCopyKey}
+                                    className="min-w-0 flex-1 cursor-pointer overflow-hidden px-3 py-2 text-left"
+                                  >
+                                    <code className="block h-5 overflow-hidden whitespace-nowrap font-mono text-sm leading-5 text-blue-500">
+                                      <ScrambleText
+                                        text={encryptionKey}
+                                        isKeyVisible={isKeyVisible}
+                                      />
+                                    </code>
+                                  </div>
+                                  <div className="group relative z-10 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setIsKeyVisible(!isKeyVisible)
+                                      }
+                                      aria-label={
+                                        isKeyVisible ? 'Hide key' : 'Show key'
+                                      }
+                                      className="flex items-center justify-center rounded-lg p-2 text-content-muted transition-all hover:text-content-primary"
+                                    >
+                                      {isKeyVisible ? (
+                                        <EyeSlashIcon className="h-4 w-4" />
+                                      ) : (
+                                        <EyeIcon className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                    <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                      {isKeyVisible ? 'Hide key' : 'Show key'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* QR code (below key, pushes container open) */}
                                 <motion.div
                                   initial={false}
-                                  animate={
-                                    isQRCodeExpanded
-                                      ? { scale: 1 }
-                                      : { scale: 0.85 }
-                                  }
+                                  animate={isQRCodeExpanded ? 'open' : 'closed'}
+                                  variants={{
+                                    open: {
+                                      height: 140,
+                                      marginTop: 12,
+                                      opacity: 1,
+                                    },
+                                    closed: {
+                                      height: 0,
+                                      marginTop: 0,
+                                      opacity: 0,
+                                    },
+                                  }}
                                   transition={{
                                     type: 'spring',
                                     damping: 25,
                                     stiffness: 400,
                                     mass: 0.5,
                                   }}
-                                  style={{ transformOrigin: 'top' }}
-                                  className="flex justify-center"
+                                  className="overflow-hidden"
                                 >
-                                  <QRCode
-                                    value={encryptionKey}
-                                    size={140}
-                                    level="H"
-                                    bgColor={
-                                      isDarkMode
-                                        ? TINFOIL_COLORS.surface.cardDark
-                                        : TINFOIL_COLORS.surface.cardLight
+                                  <motion.div
+                                    initial={false}
+                                    animate={
+                                      isQRCodeExpanded
+                                        ? { scale: 1 }
+                                        : { scale: 0.85 }
                                     }
-                                    fgColor="#3b82f6"
-                                  />
-                                </motion.div>
-                              </motion.div>
-
-                              {/* Copied overlay */}
-                              <AnimatePresence>
-                                {isCopied && (
-                                  <motion.span
-                                    initial={{
-                                      opacity: 0,
-                                      filter: 'blur(4px)',
-                                      scale: 0.9,
+                                    transition={{
+                                      type: 'spring',
+                                      damping: 25,
+                                      stiffness: 400,
+                                      mass: 0.5,
                                     }}
-                                    animate={{
-                                      opacity: 1,
-                                      filter: 'blur(0px)',
-                                      scale: 1,
-                                    }}
-                                    exit={{
-                                      opacity: 0,
-                                      filter: 'blur(4px)',
-                                      scale: 1.1,
-                                    }}
-                                    className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-blue-500/90 text-sm font-medium text-white backdrop-blur-sm"
+                                    style={{ transformOrigin: 'top' }}
+                                    className="flex justify-center"
                                   >
-                                    Copied!
-                                  </motion.span>
-                                )}
-                              </AnimatePresence>
-                            </motion.div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              <div className="group relative">
-                                <button
-                                  onClick={() =>
-                                    setIsQRCodeExpanded(!isQRCodeExpanded)
-                                  }
-                                  aria-label="Show QR code"
-                                  className={cn(
-                                    'flex items-center justify-center rounded-lg p-2 transition-all hover:text-content-primary',
-                                    isQRCodeExpanded
-                                      ? 'text-blue-500'
-                                      : 'text-content-muted',
+                                    <QRCode
+                                      value={encryptionKey}
+                                      size={140}
+                                      level="H"
+                                      bgColor={
+                                        isDarkMode
+                                          ? TINFOIL_COLORS.surface.cardDark
+                                          : TINFOIL_COLORS.surface.cardLight
+                                      }
+                                      fgColor="#3b82f6"
+                                    />
+                                  </motion.div>
+                                </motion.div>
+
+                                {/* Copied overlay */}
+                                <AnimatePresence>
+                                  {isCopied && (
+                                    <motion.span
+                                      initial={{
+                                        opacity: 0,
+                                        filter: 'blur(4px)',
+                                        scale: 0.9,
+                                      }}
+                                      animate={{
+                                        opacity: 1,
+                                        filter: 'blur(0px)',
+                                        scale: 1,
+                                      }}
+                                      exit={{
+                                        opacity: 0,
+                                        filter: 'blur(4px)',
+                                        scale: 1.1,
+                                      }}
+                                      className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-blue-500/90 text-sm font-medium text-white backdrop-blur-sm"
+                                    >
+                                      Copied!
+                                    </motion.span>
                                   )}
-                                >
-                                  <BsQrCode className="h-4 w-4" />
-                                </button>
-                                <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                                  QR code
-                                </span>
-                              </div>
-                              <div className="group relative">
-                                <button
-                                  onClick={downloadKeyAsPEM}
-                                  aria-label="Download encryption key as PEM file"
-                                  className="flex items-center justify-center rounded-lg p-2 text-content-muted transition-all hover:text-content-primary"
-                                >
-                                  <ArrowDownTrayIcon className="h-4 w-4" />
-                                </button>
-                                <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                                  Download
-                                </span>
+                                </AnimatePresence>
+                              </motion.div>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <div className="group relative">
+                                  <button
+                                    onClick={() =>
+                                      setIsQRCodeExpanded(!isQRCodeExpanded)
+                                    }
+                                    aria-label="Show QR code"
+                                    className={cn(
+                                      'flex items-center justify-center rounded-lg p-2 transition-all hover:text-content-primary',
+                                      isQRCodeExpanded
+                                        ? 'text-blue-500'
+                                        : 'text-content-muted',
+                                    )}
+                                  >
+                                    <BsQrCode className="h-4 w-4" />
+                                  </button>
+                                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                    QR code
+                                  </span>
+                                </div>
+                                <div className="group relative">
+                                  <button
+                                    onClick={downloadKeyAsPEM}
+                                    aria-label="Download encryption key as PEM file"
+                                    className="flex items-center justify-center rounded-lg p-2 text-content-muted transition-all hover:text-content-primary"
+                                  >
+                                    <ArrowDownTrayIcon className="h-4 w-4" />
+                                  </button>
+                                  <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                                    Download
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-content-muted">
-                            No encryption key set
+                          ) : (
+                            <p className="text-sm text-content-muted">
+                              No encryption key set
+                            </p>
+                          )}
+                          <p className="text-xs text-content-muted">
+                            Do not share this key with anyone. Only save it in a
+                            secure location.
                           </p>
-                        )}
-                      </div>
-                      <p className="text-xs text-content-muted">
-                        Save this key securely. You&apos;ll need it to access
-                        your chats and projects on other devices.
-                      </p>
 
-                      {/* Passkey Backup Status */}
+                          {/* Restore or Update Encryption Key */}
+                          <div className="space-y-2 pt-2">
+                            <h4 className="font-aeonik text-xs font-medium text-content-secondary">
+                              Restore or Update Encryption Key
+                            </h4>
+                            <p className="text-xs text-content-muted">
+                              Enter or import your existing encryption key to
+                              access your chats on this device.
+                            </p>
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault()
+                                if (!isUpdating && inputKey.trim()) {
+                                  handleUpdateKey()
+                                }
+                              }}
+                              onDragOver={handleDragOver}
+                              onDragLeave={handleDragLeave}
+                              onDrop={handleDrop}
+                              className="space-y-2"
+                              id="encryption-key-form"
+                            >
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                  <input
+                                    type="hidden"
+                                    name="username"
+                                    autoComplete="username"
+                                    value="encryption-key"
+                                    readOnly
+                                  />
+                                  <input
+                                    type="password"
+                                    name="password"
+                                    value={inputKey}
+                                    onChange={(e) =>
+                                      setInputKey(e.target.value)
+                                    }
+                                    placeholder={
+                                      isDragging
+                                        ? ''
+                                        : 'Enter key (e.g., key_abc123...)'
+                                    }
+                                    autoComplete="current-password"
+                                    aria-label="Encryption key input"
+                                    className={cn(
+                                      'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
+                                      isDragging && 'ring-2 ring-blue-500',
+                                    )}
+                                  />
+                                  {isDragging && (
+                                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/10">
+                                      <span className="text-sm text-blue-500">
+                                        Drop your PEM file here
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="submit"
+                                  disabled={isUpdating || !inputKey.trim()}
+                                  aria-label="Update encryption key"
+                                  className={cn(
+                                    'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                                    isUpdating || !inputKey.trim()
+                                      ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                      : 'bg-blue-500 text-white hover:bg-blue-600',
+                                  )}
+                                >
+                                  {isUpdating ? 'Updating...' : 'Update'}
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Passkey Section */}
+                  {cloudSyncEnabled && (
+                    <div className="space-y-3">
+                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                        Passkey
+                      </h3>
+
+                      {/* Passkey Active Status */}
                       {passkeyActive && (
-                        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-                          <LockClosedIcon className="h-4 w-4 text-emerald-500" />
-                          <span className="text-xs font-medium text-emerald-500">
-                            Protected with passkey backup
-                          </span>
+                        <div
+                          className={cn(
+                            'rounded-lg border border-border-subtle p-4',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          )}
+                        >
+                          <div className="flex items-start gap-2">
+                            <GoPasskeyFill className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent-light" />
+                            <div>
+                              <span className="text-sm font-medium text-content-primary">
+                                Sync and backup using Passkeys
+                              </span>
+                              <p className="text-xs text-content-muted">
+                                Use Face ID or Touch ID to sync chats across
+                                devices
+                              </p>
+                            </div>
+                          </div>
+                          <div className="ml-6 mt-2 flex items-center gap-1.5">
+                            <IoShieldCheckmark className="h-3.5 w-3.5 text-brand-accent-light" />
+                            <span className="text-xs font-medium text-brand-accent-light">
+                              Passkey active
+                            </span>
+                          </div>
                         </div>
                       )}
 
@@ -2646,104 +2782,29 @@ ${encryptionKey.replace('key_', '')}
                             }}
                             disabled={isSettingUpPasskey}
                             className={cn(
-                              'w-full rounded-lg border border-border-subtle px-3 py-2 text-left transition-colors',
+                              'w-full rounded-lg border border-border-subtle p-4 text-left transition-colors',
+                              isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
                               isSettingUpPasskey
                                 ? 'cursor-not-allowed opacity-50'
                                 : 'hover:bg-surface-chat/80',
                             )}
                           >
-                            <div className="flex items-center gap-2">
-                              <GoPasskeyFill className="h-4 w-4 text-content-secondary" />
+                            <div className="flex items-start gap-2">
+                              <GoPasskeyFill className="mt-0.5 h-4 w-4 shrink-0 text-content-secondary" />
                               <div>
                                 <span className="text-sm font-medium text-content-primary">
                                   {isSettingUpPasskey
                                     ? 'Setting up...'
-                                    : 'Back up with passkey'}
+                                    : 'Sync and backup using Passkeys'}
                                 </span>
                                 <p className="text-xs text-content-muted">
-                                  Use Face ID or Touch ID to protect your key
-                                  across devices
+                                  Use Face ID or Touch ID to sync chats across
+                                  devices
                                 </p>
                               </div>
                             </div>
                           </button>
                         )}
-                    </div>
-                  )}
-
-                  {/* Restore or Sync Key Section */}
-                  {cloudSyncEnabled && (
-                    <div className="space-y-3">
-                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Restore or Update Encryption Key
-                      </h3>
-                      <p className="text-xs text-content-muted">
-                        Enter or import your existing encryption key to access
-                        your chats on this device.
-                      </p>
-
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault()
-                          if (!isUpdating && inputKey.trim()) {
-                            handleUpdateKey()
-                          }
-                        }}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        className="space-y-2"
-                        id="encryption-key-form"
-                      >
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <input
-                              type="hidden"
-                              name="username"
-                              autoComplete="username"
-                              value="encryption-key"
-                              readOnly
-                            />
-                            <input
-                              type="password"
-                              name="password"
-                              value={inputKey}
-                              onChange={(e) => setInputKey(e.target.value)}
-                              placeholder={
-                                isDragging
-                                  ? ''
-                                  : 'Enter key (e.g., key_abc123...)'
-                              }
-                              autoComplete="current-password"
-                              aria-label="Encryption key input"
-                              className={cn(
-                                'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
-                                isDragging && 'ring-2 ring-blue-500',
-                              )}
-                            />
-                            {isDragging && (
-                              <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/10">
-                                <span className="text-sm text-blue-500">
-                                  Drop your PEM file here
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="submit"
-                            disabled={isUpdating || !inputKey.trim()}
-                            aria-label="Update encryption key"
-                            className={cn(
-                              'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                              isUpdating || !inputKey.trim()
-                                ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                                : 'bg-blue-500 text-white hover:bg-blue-600',
-                            )}
-                          >
-                            {isUpdating ? 'Updating...' : 'Update'}
-                          </button>
-                        </div>
-                      </form>
                     </div>
                   )}
                 </>
@@ -2858,7 +2919,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -2886,7 +2947,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -2902,7 +2963,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -2917,7 +2978,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -2974,7 +3035,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -3002,7 +3063,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -3018,7 +3079,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
@@ -3033,7 +3094,7 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start gap-3">
                         <div
                           className={cn(
-                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium',
+                            'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
                             isDarkMode
                               ? 'bg-content-muted/20 text-content-secondary'
                               : 'bg-content-muted/20 text-content-secondary',
