@@ -33,7 +33,7 @@ export interface CloudSyncState {
     current: number
     total: number
   } | null
-  /** Passkey-based key management is active (keys were loaded or stored via passkey) */
+  /** Passkey backup exists on the backend or was used/stored this session */
   passkeyActive: boolean
   /** Backend has passkey credentials but auth failed on this device */
   passkeyRecoveryNeeded: boolean
@@ -217,15 +217,29 @@ export function useCloudSync() {
         const prfSupported = await isPrfSupported()
 
         if (key) {
-          // localStorage has keys — use them directly.
-          // Offer passkey setup so this device/ecosystem can create a backup.
-          // Even if credentials exist on the backend, they may be from a different
-          // ecosystem (e.g. Android) and not recoverable from this device.
-          if (prfSupported && isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupAvailable: true,
-            }))
+          if (prfSupported) {
+            const credentialsExist = await hasPasskeyCredentials()
+
+            if (credentialsExist) {
+              // Already backed up — show green badge, hide setup button
+              if (isMountedRef.current) {
+                setState((prev) => ({
+                  ...prev,
+                  passkeyActive: true,
+                }))
+              }
+            } else if (
+              localStorage.getItem('tinfoil-passkey-setup-dismissed') !== 'true'
+            ) {
+              // Existing user with no passkey backup — prompt immediately
+              await promptExistingUserPasskeySetup()
+            } else if (isMountedRef.current) {
+              // Previously dismissed — still show option in settings
+              setState((prev) => ({
+                ...prev,
+                passkeySetupAvailable: true,
+              }))
+            }
           }
         } else if (prfSupported) {
           // No localStorage keys — try passkey recovery
@@ -351,6 +365,14 @@ export function useCloudSync() {
           component: 'useCloudSync',
           action: 'promptExistingUserPasskeySetup',
         })
+
+        // Show the settings button so the user has a retry path
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            passkeySetupAvailable: true,
+          }))
+        }
       }
     }
 
