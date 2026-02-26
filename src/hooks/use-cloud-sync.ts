@@ -300,10 +300,14 @@ export function useCloudSync() {
           const credentialsExist = await hasPasskeyCredentials()
 
           if (credentialsExist) {
-            // Backend has passkey credentials — try to recover keys
+            // Backend has passkey credentials — try to recover keys.
+            // If recovery fails (user cancelled, wrong device, etc.),
+            // cloud sync stays off. When the user manually enables it,
+            // the setup modal will start at the passkey-recovery step
+            // to give them another chance before falling back to
+            // generate/restore.
             const recovered = await tryPasskeyRecovery()
             if (!recovered && isMountedRef.current) {
-              // Auth failed or user cancelled — mark for recovery UI
               setState((prev) => ({
                 ...prev,
                 passkeyRecoveryNeeded: true,
