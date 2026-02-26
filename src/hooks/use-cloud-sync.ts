@@ -20,7 +20,10 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
-import { PASSKEY_BACKED_UP_KEY } from '@/utils/signout-cleanup'
+import {
+  hasPasskeyBackup,
+  PASSKEY_BACKED_UP_KEY,
+} from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -103,6 +106,40 @@ export function useCloudSync() {
     await storeEncryptedKeys(passkeyResult.credentialId, kek, keys)
     localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
     return true
+  }
+
+  /**
+   * Re-encrypt the passkey backup with the current key bundle.
+   * Called after key changes to keep the backup in sync.
+   */
+  const updatePasskeyBackup = async (): Promise<void> => {
+    try {
+      const entries = await loadPasskeyCredentials()
+      if (entries.length === 0) return
+
+      const credentialIds = entries.map((e) => e.id)
+      const result = await authenticatePrfPasskey(credentialIds)
+      if (!result) return
+
+      const kek = await deriveKeyEncryptionKey(result.prfOutput)
+      const keys = encryptionService.getAllKeys()
+      if (!keys.primary) return
+
+      await storeEncryptedKeys(result.credentialId, kek, {
+        primary: keys.primary,
+        alternatives: keys.alternatives,
+      })
+
+      logInfo('Updated passkey backup after key change', {
+        component: 'useCloudSync',
+        action: 'updatePasskeyBackup',
+      })
+    } catch (error) {
+      logError('Failed to update passkey backup after key change', error, {
+        component: 'useCloudSync',
+        action: 'updatePasskeyBackup',
+      })
+    }
   }
 
   const passkeyIntroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -681,6 +718,11 @@ export function useCloudSync() {
           void retryDecryptionWithNewKey({
             runInBackground: true,
           })
+
+          // If passkey backup exists, re-encrypt it with the updated key bundle
+          if (hasPasskeyBackup()) {
+            void updatePasskeyBackup()
+          }
 
           return true // Always return true to trigger reload
         }
