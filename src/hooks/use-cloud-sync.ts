@@ -60,6 +60,7 @@ export function useCloudSync() {
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
+  const passkeyFlowInProgressRef = useRef(false)
   const isMountedRef = useRef(true)
   const userRef = useRef(user)
   userRef.current = user
@@ -242,7 +243,7 @@ export function useCloudSync() {
                   passkeyActive: true,
                 }))
               }
-            } else {
+            } else if (!passkeyFlowInProgressRef.current) {
               const hasSeen =
                 userRef.current?.unsafeMetadata?.has_seen_passkey_intro === true
               if (!hasSeen) {
@@ -781,38 +782,44 @@ export function useCloudSync() {
 
   /**
    * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
-   * On success: mark intro as seen in Clerk metadata.
-   * On cancel/failure: mark intro as seen and fall back to settings button
-   * so the user isn't trapped in a loop.
+   * Writes Clerk metadata after the WebAuthn flow completes (success or cancel)
+   * to avoid triggering a Clerk state change that re-runs the init effect mid-flow.
    */
   const acceptPasskeyIntro = useCallback(async (): Promise<void> => {
+    passkeyFlowInProgressRef.current = true
+
     if (isMountedRef.current) {
       setState((prev) => ({ ...prev, passkeyIntroNeeded: false }))
     }
 
-    // Mark the intro as seen regardless of outcome — the user clicked
-    // "Let's go!" so they've seen the explanation.
     try {
-      const u = userRef.current
-      if (u) {
-        await u.update({
-          unsafeMetadata: {
-            ...u.unsafeMetadata,
-            has_seen_passkey_intro: true,
-          },
+      const success = await setupPasskey()
+      if (!success && isMountedRef.current) {
+        // User cancelled the browser WebAuthn prompt — show option in settings
+        setState((prev) => ({ ...prev, passkeySetupAvailable: true }))
+      }
+
+      // Mark the intro as seen regardless of outcome — the user clicked
+      // "Let's go!" so they've seen the explanation. Done after setupPasskey
+      // to avoid Clerk state changes re-triggering the init effect mid-flow.
+      try {
+        const u = userRef.current
+        if (u) {
+          await u.update({
+            unsafeMetadata: {
+              ...u.unsafeMetadata,
+              has_seen_passkey_intro: true,
+            },
+          })
+        }
+      } catch (error) {
+        logError('Failed to persist passkey intro seen flag', error, {
+          component: 'useCloudSync',
+          action: 'acceptPasskeyIntro',
         })
       }
-    } catch (error) {
-      logError('Failed to persist passkey intro seen flag', error, {
-        component: 'useCloudSync',
-        action: 'acceptPasskeyIntro',
-      })
-    }
-
-    const success = await setupPasskey()
-    if (!success && isMountedRef.current) {
-      // User cancelled the browser WebAuthn prompt — show option in settings
-      setState((prev) => ({ ...prev, passkeySetupAvailable: true }))
+    } finally {
+      passkeyFlowInProgressRef.current = false
     }
   }, [setupPasskey])
 

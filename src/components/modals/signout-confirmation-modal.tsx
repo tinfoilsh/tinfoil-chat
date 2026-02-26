@@ -113,20 +113,12 @@ ${encryptionKey.replace('key_', '')}
                   )}
 
                   {/* Done button — always visible so user can dismiss */}
-                  <Transition
-                    show={hasDownloadedKey || !encryptionKey}
-                    as="div"
-                    enter="transition-all duration-300 ease-out"
-                    enterFrom="opacity-0 -translate-y-2"
-                    enterTo="opacity-100 translate-y-0"
+                  <button
+                    onClick={onDone}
+                    className="w-full rounded-lg border border-brand-accent-dark/40 bg-brand-accent-dark px-4 py-3 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90"
                   >
-                    <button
-                      onClick={onDone}
-                      className="w-full rounded-lg border border-brand-accent-dark/40 bg-brand-accent-dark px-4 py-3 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90"
-                    >
-                      Done
-                    </button>
-                  </Transition>
+                    Done
+                  </button>
                 </div>
               </Dialog.Panel>
             </Transition.Child>

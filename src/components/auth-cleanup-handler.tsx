@@ -6,7 +6,6 @@ import {
   getEncryptionKey,
   hasPasskeyBackup,
   performSignoutCleanup,
-  performSignoutCleanupExceptKey,
   performUserSwitchCleanup,
 } from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
@@ -65,7 +64,7 @@ export function AuthCleanupHandler() {
         component: 'AuthCleanupHandler',
         action: 'signoutWithoutPasskey',
       })
-      performSignoutCleanupExceptKey()
+      performSignoutCleanup({ preserveEncryptionKey: true })
         .catch((error) => {
           logError('Failed to cleanup on signout (preserving key)', error, {
             component: 'AuthCleanupHandler',
