@@ -367,6 +367,39 @@ export class EncryptionService {
   }
 
   /**
+   * Get all keys (primary + alternatives) for external backup.
+   * Used by passkey key storage to encrypt the full key bundle.
+   */
+  getAllKeys(): { primary: string | null; alternatives: string[] } {
+    return {
+      primary: this.currentKeyString,
+      alternatives: [...this.fallbackKeyStrings],
+    }
+  }
+
+  /**
+   * Bulk-load primary + alternative keys from an external source (e.g. passkey recovery).
+   * Sets the primary key and populates the fallback list, persisting both to localStorage.
+   */
+  async setAllKeys(primary: string, alternatives: string[]): Promise<void> {
+    await this.setKey(primary)
+
+    const deduplicated = alternatives.filter(
+      (k) => k !== primary && k.startsWith('key_'),
+    )
+    // Merge with any existing fallback keys (from setKey's history management),
+    // preserving order and deduplicating
+    const merged = [...this.fallbackKeyStrings]
+    for (const key of deduplicated) {
+      if (!merged.includes(key)) {
+        merged.push(key)
+      }
+    }
+    this.fallbackKeyStrings = merged
+    this.saveKeyHistoryToStorage(merged)
+  }
+
+  /**
    * Register a callback to be called when a fallback key is added.
    * Returns an unsubscribe function.
    */
