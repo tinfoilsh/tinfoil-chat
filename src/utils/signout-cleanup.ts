@@ -2,7 +2,6 @@ import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACTIVE_USER_ID,
   SECRET_PASSKEY_BACKED_UP,
-  SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
@@ -55,19 +54,10 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 
   // Clear localStorage, preserving only non-user-specific keys
   try {
-    const hasSeenWebSearchIntro = localStorage.getItem(
-      SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
-    )
     const encryptionKey = preserveEncryptionKey
       ? localStorage.getItem(USER_ENCRYPTION_KEY)
       : null
     localStorage.clear()
-    if (hasSeenWebSearchIntro) {
-      localStorage.setItem(
-        SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
-        hasSeenWebSearchIntro,
-      )
-    }
     if (preserveUserId) {
       localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
     }

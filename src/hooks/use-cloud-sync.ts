@@ -40,6 +40,8 @@ export interface CloudSyncState {
   passkeyRecoveryNeeded: boolean
   /** PRF supported + keys exist locally; user can register a passkey backup from settings */
   passkeySetupAvailable: boolean
+  /** True when the intro modal should be shown before the first passkey prompt */
+  passkeyIntroNeeded: boolean
 }
 
 export function useCloudSync() {
@@ -54,6 +56,7 @@ export function useCloudSync() {
     passkeyActive: false,
     passkeyRecoveryNeeded: false,
     passkeySetupAvailable: false,
+    passkeyIntroNeeded: false,
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
@@ -101,10 +104,17 @@ export function useCloudSync() {
     return true
   }
 
+  const passkeyIntroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      if (passkeyIntroTimerRef.current) {
+        clearTimeout(passkeyIntroTimerRef.current)
+      }
     }
   }, [])
 
@@ -232,17 +242,19 @@ export function useCloudSync() {
                   passkeyActive: true,
                 }))
               }
-            } else if (
-              localStorage.getItem('tinfoil-passkey-setup-dismissed') !== 'true'
-            ) {
-              // Existing user with no passkey backup — prompt immediately
-              await promptExistingUserPasskeySetup()
-            } else if (isMountedRef.current) {
-              // Previously dismissed — still show option in settings
-              setState((prev) => ({
-                ...prev,
-                passkeySetupAvailable: true,
-              }))
+            } else {
+              const hasSeen =
+                userRef.current?.unsafeMetadata?.has_seen_passkey_intro === true
+              if (!hasSeen) {
+                // Existing user with no passkey backup — show intro modal
+                promptExistingUserPasskeySetup()
+              } else if (isMountedRef.current) {
+                // Already seen intro but hasn't set up — show option in settings
+                setState((prev) => ({
+                  ...prev,
+                  passkeySetupAvailable: true,
+                }))
+              }
             }
           }
         } else if (prfSupported) {
@@ -322,62 +334,19 @@ export function useCloudSync() {
     }
 
     /**
-     * Existing user with local keys but no passkey backup — prompt to create one.
+     * Existing user with local keys but no passkey backup — show the intro modal.
      */
-    const promptExistingUserPasskeySetup = async (): Promise<void> => {
-      const userInfo = getPasskeyUserInfo()
-      if (!userInfo) return
+    const PASSKEY_INTRO_DELAY_MS = 2000
 
-      try {
-        const keys = encryptionService.getAllKeys()
-        const created = await createAndStorePasskeyBackup(userInfo, {
-          primary: keys.primary!,
-          alternatives: keys.alternatives,
-        })
-
-        if (created) {
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeyActive: true,
-              passkeySetupAvailable: false,
-            }))
-          }
-
-          logInfo('Existing user passkey backup complete', {
-            component: 'useCloudSync',
-            action: 'promptExistingUserPasskeySetup',
-          })
-        } else {
-          // User cancelled — don't re-prompt on next load
-          localStorage.setItem('tinfoil-passkey-setup-dismissed', 'true')
-
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupAvailable: true,
-            }))
-          }
-
-          logInfo('User dismissed passkey backup prompt', {
-            component: 'useCloudSync',
-            action: 'promptExistingUserPasskeySetup',
-          })
-        }
-      } catch (error) {
-        logError('Passkey backup prompt failed', error, {
-          component: 'useCloudSync',
-          action: 'promptExistingUserPasskeySetup',
-        })
-
-        // Show the settings button so the user has a retry path
+    const promptExistingUserPasskeySetup = (): void => {
+      passkeyIntroTimerRef.current = setTimeout(() => {
         if (isMountedRef.current) {
           setState((prev) => ({
             ...prev,
-            passkeySetupAvailable: true,
+            passkeyIntroNeeded: true,
           }))
         }
-      }
+      }, PASSKEY_INTRO_DELAY_MS)
     }
 
     /**
@@ -810,6 +779,43 @@ export function useCloudSync() {
     }
   }, [])
 
+  /**
+   * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
+   * On success: mark intro as seen in Clerk metadata.
+   * On cancel/failure: mark intro as seen and fall back to settings button
+   * so the user isn't trapped in a loop.
+   */
+  const acceptPasskeyIntro = useCallback(async (): Promise<void> => {
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, passkeyIntroNeeded: false }))
+    }
+
+    // Mark the intro as seen regardless of outcome — the user clicked
+    // "Let's go!" so they've seen the explanation.
+    try {
+      const u = userRef.current
+      if (u) {
+        await u.update({
+          unsafeMetadata: {
+            ...u.unsafeMetadata,
+            has_seen_passkey_intro: true,
+          },
+        })
+      }
+    } catch (error) {
+      logError('Failed to persist passkey intro seen flag', error, {
+        component: 'useCloudSync',
+        action: 'acceptPasskeyIntro',
+      })
+    }
+
+    const success = await setupPasskey()
+    if (!success && isMountedRef.current) {
+      // User cancelled the browser WebAuthn prompt — show option in settings
+      setState((prev) => ({ ...prev, passkeySetupAvailable: true }))
+    }
+  }, [setupPasskey])
+
   return {
     ...state,
     syncChats,
@@ -821,5 +827,6 @@ export function useCloudSync() {
     clearFirstTimeUser,
     setupPasskey,
     recoverWithPasskey,
+    acceptPasskeyIntro,
   }
 }
