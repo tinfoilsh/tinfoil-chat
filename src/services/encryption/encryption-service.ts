@@ -384,19 +384,33 @@ export class EncryptionService {
   async setAllKeys(primary: string, alternatives: string[]): Promise<void> {
     await this.setKey(primary)
 
-    const deduplicated = alternatives.filter(
-      (k) => k !== primary && k.startsWith('key_'),
-    )
+    const validated: string[] = []
+    for (const k of alternatives) {
+      if (k === primary) continue
+      try {
+        this.getKeyBytes(k)
+        validated.push(k)
+      } catch {
+        // Skip keys that fail format validation (prefix, charset, length)
+      }
+    }
+
     // Merge with any existing fallback keys (from setKey's history management),
     // preserving order and deduplicating
     const merged = [...this.fallbackKeyStrings]
-    for (const key of deduplicated) {
+    let addedNew = false
+    for (const key of validated) {
       if (!merged.includes(key)) {
         merged.push(key)
+        addedNew = true
       }
     }
     this.fallbackKeyStrings = merged
     this.saveKeyHistoryToStorage(merged)
+
+    if (addedNew) {
+      this.notifyFallbackKeyAdded()
+    }
   }
 
   /**
