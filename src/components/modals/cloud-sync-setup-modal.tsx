@@ -12,14 +12,16 @@ import {
   ChevronDownIcon,
   CloudArrowUpIcon,
   DocumentDuplicateIcon,
+  ExclamationTriangleIcon,
   KeyIcon,
   LockClosedIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { GoPasskeyFill } from 'react-icons/go'
 import QRCode from 'react-qr-code'
 
-interface CloudSyncSetupModalProps {
+interface CloudSyncSetupModalBaseProps {
   isOpen: boolean
   onClose: () => void
   onSetupComplete: (encryptionKey: string) => void
@@ -27,7 +29,24 @@ interface CloudSyncSetupModalProps {
   initialCloudSyncEnabled?: boolean
 }
 
-type SetupStep = 'intro' | 'generate-or-restore' | 'key-display' | 'restore-key'
+type CloudSyncSetupModalProps = CloudSyncSetupModalBaseProps &
+  (
+    | {
+        passkeyRecoveryNeeded: true
+        onRecoverWithPasskey: () => Promise<boolean>
+      }
+    | {
+        passkeyRecoveryNeeded?: false
+        onRecoverWithPasskey?: () => Promise<boolean>
+      }
+  )
+
+type SetupStep =
+  | 'intro'
+  | 'generate-or-restore'
+  | 'key-display'
+  | 'restore-key'
+  | 'passkey-recovery'
 
 export function CloudSyncSetupModal({
   isOpen,
@@ -35,14 +54,20 @@ export function CloudSyncSetupModal({
   onSetupComplete,
   isDarkMode,
   initialCloudSyncEnabled = false,
+  passkeyRecoveryNeeded = false,
+  onRecoverWithPasskey,
 }: CloudSyncSetupModalProps) {
-  const [currentStep, setCurrentStep] = useState<SetupStep>('intro')
+  const [currentStep, setCurrentStep] = useState<SetupStep>(
+    passkeyRecoveryNeeded ? 'passkey-recovery' : 'intro',
+  )
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(
     initialCloudSyncEnabled,
   )
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [inputKey, setInputKey] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isRecovering, setIsRecovering] = useState(false)
+  const [recoveryFailed, setRecoveryFailed] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
@@ -577,6 +602,82 @@ ${generatedKey.replace('key_', '')}
     </div>
   )
 
+  const handlePasskeyRecovery = async () => {
+    if (!onRecoverWithPasskey) return
+    setIsRecovering(true)
+    setRecoveryFailed(false)
+    try {
+      const success = await onRecoverWithPasskey()
+      if (success) {
+        onClose()
+      } else {
+        setRecoveryFailed(true)
+      }
+    } catch (error) {
+      logError('Passkey recovery failed', error, {
+        component: 'CloudSyncSetupModal',
+        action: 'handlePasskeyRecovery',
+      })
+      setRecoveryFailed(true)
+    } finally {
+      setIsRecovering(false)
+    }
+  }
+
+  const renderPasskeyRecoveryStep = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-center">
+        <div className="rounded-full bg-content-muted/20 p-3">
+          <GoPasskeyFill className="h-8 w-8 text-content-secondary" />
+        </div>
+      </div>
+
+      <h2 className="text-center text-xl font-bold">Unlock Your Chats</h2>
+
+      <p className="text-sm text-content-secondary">
+        Your encrypted chats are stored in the cloud. Authenticate with your
+        passkey to recover your encryption key on this device.
+      </p>
+
+      {recoveryFailed && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Passkey authentication failed. You can try again or enter your
+            encryption key manually.
+          </p>
+        </div>
+      )}
+
+      <button
+        onClick={handlePasskeyRecovery}
+        disabled={isRecovering}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-accent-dark px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <GoPasskeyFill className="h-4 w-4" />
+        {isRecovering ? 'Authenticating...' : 'Unlock with Passkey'}
+      </button>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border-subtle" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-surface-card px-2 text-content-muted">or</span>
+        </div>
+      </div>
+
+      <button
+        onClick={() => setCurrentStep('restore-key')}
+        disabled={isRecovering}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+      >
+        <KeyIcon className="h-4 w-4" />
+        Enter Key Manually
+      </button>
+    </div>
+  )
+
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={() => {}}>
@@ -604,20 +705,23 @@ ${generatedKey.replace('key_', '')}
               leaveTo="opacity-0 scale-95"
             >
               <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-card p-6 text-left align-middle shadow-xl transition-all">
-                {currentStep !== 'intro' && (
-                  <button
-                    onClick={onClose}
-                    className="absolute right-4 top-4 rounded-lg p-1 text-content-secondary transition-colors hover:bg-surface-chat"
-                  >
-                    <XMarkIcon className="h-5 w-5" />
-                  </button>
-                )}
+                {currentStep !== 'intro' &&
+                  currentStep !== 'passkey-recovery' && (
+                    <button
+                      onClick={onClose}
+                      className="absolute right-4 top-4 rounded-lg p-1 text-content-secondary transition-colors hover:bg-surface-chat"
+                    >
+                      <XMarkIcon className="h-5 w-5" />
+                    </button>
+                  )}
 
                 {currentStep === 'intro' && renderIntroStep()}
                 {currentStep === 'generate-or-restore' &&
                   renderGenerateOrRestoreStep()}
                 {currentStep === 'key-display' && renderKeyDisplayStep()}
                 {currentStep === 'restore-key' && renderRestoreKeyStep()}
+                {currentStep === 'passkey-recovery' &&
+                  renderPasskeyRecoveryStep()}
               </Dialog.Panel>
             </Transition.Child>
           </div>

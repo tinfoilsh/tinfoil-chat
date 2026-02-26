@@ -47,6 +47,7 @@ import {
   CreditCardIcon,
   EyeIcon,
   EyeSlashIcon,
+  LockClosedIcon,
   MoonIcon,
   SparklesIcon,
   SunIcon,
@@ -62,6 +63,7 @@ import {
   AiOutlineImport,
 } from 'react-icons/ai'
 import { BsQrCode } from 'react-icons/bs'
+import { GoPasskeyFill } from 'react-icons/go'
 import { HiOutlineAdjustmentsVertical } from 'react-icons/hi2'
 import { PiSignIn } from 'react-icons/pi'
 import QRCode from 'react-qr-code'
@@ -167,6 +169,9 @@ type SettingsModalProps = {
   isPremium?: boolean
   encryptionKey: string | null
   onKeyChange: (key: string) => Promise<void>
+  passkeyActive?: boolean
+  passkeySetupAvailable?: boolean
+  onSetupPasskey?: () => Promise<boolean>
   initialTab?: SettingsTab
   chats?: Chat[]
 }
@@ -185,6 +190,9 @@ export function SettingsModal({
   isPremium,
   encryptionKey,
   onKeyChange,
+  passkeyActive,
+  passkeySetupAvailable,
+  onSetupPasskey,
   initialTab,
   chats = [],
 }: SettingsModalProps) {
@@ -207,6 +215,7 @@ export function SettingsModal({
   const [isDragging, setIsDragging] = useState(false)
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
   const [isKeyVisible, setIsKeyVisible] = useState(false)
+  const [isSettingUpPasskey, setIsSettingUpPasskey] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Structured personalization fields
@@ -2597,6 +2606,68 @@ ${encryptionKey.replace('key_', '')}
                         Save this key securely. You&apos;ll need it to access
                         your chats and projects on other devices.
                       </p>
+
+                      {/* Passkey Backup Status */}
+                      {passkeyActive && (
+                        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                          <LockClosedIcon className="h-4 w-4 text-emerald-500" />
+                          <span className="text-xs font-medium text-emerald-500">
+                            Protected with passkey backup
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Passkey Setup Prompt */}
+                      {passkeySetupAvailable &&
+                        !passkeyActive &&
+                        onSetupPasskey && (
+                          <button
+                            onClick={async () => {
+                              setIsSettingUpPasskey(true)
+                              try {
+                                const success = await onSetupPasskey()
+                                if (success) {
+                                  toast({
+                                    title: 'Passkey created',
+                                    description:
+                                      'Your encryption key is now backed up with your passkey',
+                                  })
+                                }
+                              } catch {
+                                toast({
+                                  title: 'Passkey setup failed',
+                                  description:
+                                    'Could not create passkey backup. You can try again later.',
+                                  variant: 'destructive',
+                                })
+                              } finally {
+                                setIsSettingUpPasskey(false)
+                              }
+                            }}
+                            disabled={isSettingUpPasskey}
+                            className={cn(
+                              'w-full rounded-lg border border-border-subtle px-3 py-2 text-left transition-colors',
+                              isSettingUpPasskey
+                                ? 'cursor-not-allowed opacity-50'
+                                : 'hover:bg-surface-chat/80',
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GoPasskeyFill className="h-4 w-4 text-content-secondary" />
+                              <div>
+                                <span className="text-sm font-medium text-content-primary">
+                                  {isSettingUpPasskey
+                                    ? 'Setting up...'
+                                    : 'Back up with passkey'}
+                                </span>
+                                <p className="text-xs text-content-muted">
+                                  Use Face ID or Touch ID to protect your key
+                                  across devices
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        )}
                     </div>
                   )}
 
