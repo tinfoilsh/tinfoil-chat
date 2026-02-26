@@ -20,6 +20,7 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
+import { PASSKEY_BACKED_UP_KEY } from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -96,6 +97,7 @@ export function useCloudSync() {
 
     const kek = await deriveKeyEncryptionKey(passkeyResult.prfOutput)
     await storeEncryptedKeys(passkeyResult.credentialId, kek, keys)
+    localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
     return true
   }
 
@@ -167,6 +169,7 @@ export function useCloudSync() {
     )
 
     setCloudSyncEnabled(true)
+    localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
     return keyBundle
   }
 
@@ -222,6 +225,7 @@ export function useCloudSync() {
 
             if (credentialsExist) {
               // Already backed up — show green badge, hide setup button
+              localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
               if (isMountedRef.current) {
                 setState((prev) => ({
                   ...prev,

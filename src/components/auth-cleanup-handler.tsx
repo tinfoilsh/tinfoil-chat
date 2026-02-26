@@ -1,8 +1,12 @@
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
+import { logError, logInfo } from '@/utils/error-handling'
 import {
+  deleteEncryptionKey,
   getEncryptionKey,
+  hasPasskeyBackup,
   performSignoutCleanup,
+  performSignoutCleanupExceptKey,
   performUserSwitchCleanup,
 } from '@/utils/signout-cleanup'
 import { useAuth, useUser } from '@clerk/nextjs'
@@ -36,11 +40,44 @@ export function AuthCleanupHandler() {
     if (!isSignedIn && storedUserId && !hasCheckedRef.current) {
       hasCheckedRef.current = true
 
-      // Check theme from data-theme attribute (source of truth)
-      const dataTheme = document.documentElement.getAttribute('data-theme')
-      setIsDarkMode(dataTheme === 'dark')
+      if (hasPasskeyBackup()) {
+        // Keys are safely backed up via passkey — delete everything immediately
+        logInfo('Passkey backup exists, auto-clearing all data on signout', {
+          component: 'AuthCleanupHandler',
+          action: 'signoutWithPasskey',
+        })
+        performSignoutCleanup()
+          .catch((error) => {
+            logError('Failed to cleanup on signout with passkey', error, {
+              component: 'AuthCleanupHandler',
+              action: 'signoutWithPasskey',
+            })
+          })
+          .finally(() => {
+            window.location.reload()
+          })
+        return
+      }
 
-      setShowModal(true)
+      // No passkey backup — clear everything except the encryption key,
+      // then show modal so user can download it before final deletion.
+      logInfo('No passkey backup, preserving key for download prompt', {
+        component: 'AuthCleanupHandler',
+        action: 'signoutWithoutPasskey',
+      })
+      performSignoutCleanupExceptKey()
+        .catch((error) => {
+          logError('Failed to cleanup on signout (preserving key)', error, {
+            component: 'AuthCleanupHandler',
+            action: 'signoutWithoutPasskey',
+          })
+        })
+        .finally(() => {
+          // Check theme from data-theme attribute (source of truth)
+          const dataTheme = document.documentElement.getAttribute('data-theme')
+          setIsDarkMode(dataTheme === 'dark')
+          setShowModal(true)
+        })
     }
 
     // Reset the check flag when user signs in
@@ -49,17 +86,9 @@ export function AuthCleanupHandler() {
     }
   }, [isSignedIn, isLoaded, user?.id])
 
-  const handleKeepData = () => {
-    localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+  const handleDone = () => {
+    deleteEncryptionKey()
     setShowModal(false)
-    // Force reload to clear all React state
-    window.location.reload()
-  }
-
-  const handleDeleteData = async () => {
-    await performSignoutCleanup()
-    setShowModal(false)
-    // Force reload to clear all React state
     window.location.reload()
   }
 
@@ -70,8 +99,7 @@ export function AuthCleanupHandler() {
   return (
     <SignoutConfirmationModal
       isOpen={showModal}
-      onClose={handleKeepData}
-      onConfirm={handleDeleteData}
+      onDone={handleDone}
       encryptionKey={getEncryptionKey()}
       isDarkMode={isDarkMode}
     />
