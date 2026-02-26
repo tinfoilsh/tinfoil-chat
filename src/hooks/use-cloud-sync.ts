@@ -392,31 +392,8 @@ export function useCloudSync() {
           }
 
           // Run decryption in background to avoid UI hang
-          const decryptionPromise = retryDecryptionWithNewKey({
+          void retryDecryptionWithNewKey({
             runInBackground: true,
-          })
-
-          void decryptionPromise.finally(async () => {
-            try {
-              const reencryptResult = await cloudSync.reencryptAndUploadChats()
-
-              logInfo('Re-encrypted chats after key change', {
-                component: 'useCloudSync',
-                action: 'setEncryptionKey',
-                metadata: {
-                  reencrypted: reencryptResult.reencrypted,
-                  uploaded: reencryptResult.uploaded,
-                  errors: reencryptResult.errors.length,
-                },
-              })
-
-              await syncChats()
-            } catch (error) {
-              logError('Failed to re-encrypt chats', error, {
-                component: 'useCloudSync',
-                action: 'setEncryptionKey',
-              })
-            }
           })
 
           return true // Always return true to trigger reload
