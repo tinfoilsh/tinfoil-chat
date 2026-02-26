@@ -102,11 +102,9 @@ const ShareModalLazy = dynamic(
   () => import('./share-modal').then((m) => m.ShareModal),
   { ssr: false },
 )
-const WebSearchIntroModal = dynamic(
+const PasskeyIntroModal = dynamic(
   () =>
-    import('../tutorial/WebSearchIntroModal').then(
-      (m) => m.WebSearchIntroModal,
-    ),
+    import('../tutorial/PasskeyIntroModal').then((m) => m.PasskeyIntroModal),
   { ssr: false },
 )
 
@@ -280,8 +278,10 @@ export function ChatInterface({
     passkeyActive,
     passkeyRecoveryNeeded,
     passkeySetupAvailable,
+    passkeyIntroNeeded,
     setupPasskey,
     recoverWithPasskey,
+    acceptPasskeyIntro,
   } = useCloudSync()
 
   // Initialize profile sync
@@ -2507,8 +2507,9 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
-      <WebSearchIntroModal
-        onEnableWebSearch={() => setWebSearchEnabled(true)}
+      <PasskeyIntroModal
+        isOpen={passkeyIntroNeeded}
+        onAccept={acceptPasskeyIntro}
       />
     </div>
   )

@@ -1,1 +1,1 @@
-export { WebSearchIntroModal } from './WebSearchIntroModal'
+export { PasskeyIntroModal } from './PasskeyIntroModal'
