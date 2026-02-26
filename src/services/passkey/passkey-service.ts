@@ -26,9 +26,7 @@ export interface PrfPasskeyResult {
   prfOutput: ArrayBuffer
 }
 
-function getRpId(): string {
-  return window.location.hostname
-}
+const RP_ID = 'tinfoil.sh'
 
 /**
  * Base64url-encode a Uint8Array (no padding, URL-safe alphabet).
@@ -87,7 +85,7 @@ export async function createPrfPasskey(
     const credential = (await navigator.credentials.create({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rp: { id: getRpId(), name: RP_NAME },
+        rp: { id: RP_ID, name: RP_NAME },
         user: {
           id: userIdBytes,
           name: userEmail,
@@ -183,7 +181,7 @@ export async function authenticatePrfPasskey(
     const assertion = (await navigator.credentials.get({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rpId: getRpId(),
+        rpId: RP_ID,
         allowCredentials,
         userVerification: 'required',
         extensions: {
