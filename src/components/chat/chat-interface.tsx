@@ -281,6 +281,7 @@ export function ChatInterface({
     passkeyIntroNeeded,
     setupPasskey,
     recoverWithPasskey,
+    setupNewKeySplit,
     acceptPasskeyIntro,
   } = useCloudSync()
 
@@ -1019,6 +1020,13 @@ export function ChatInterface({
   const handleOpenCloudSyncSetup = () => {
     setShowCloudSyncSetupModal(true)
   }
+
+  // Auto-show recovery modal when passkey recovery is needed
+  useEffect(() => {
+    if (passkeyRecoveryNeeded) {
+      setShowCloudSyncSetupModal(true)
+    }
+  }, [passkeyRecoveryNeeded])
 
   // Handler for creating a new project with a random name
   const handleCreateProject = useCallback(async () => {
@@ -2482,6 +2490,17 @@ export function ChatInterface({
                 await reloadChats()
                 window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
               }
+              setShowCloudSyncSetupModal(false)
+              return true
+            }
+            return false
+          }}
+          onSetupNewKey={async () => {
+            const key = await setupNewKeySplit()
+            if (key) {
+              await retryProfileDecryption()
+              await reloadChats()
+              window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
               setShowCloudSyncSetupModal(false)
               return true
             }
