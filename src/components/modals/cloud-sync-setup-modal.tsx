@@ -544,19 +544,11 @@ ${generatedKey.replace('key_', '')}
       >
         <div className="flex gap-2">
           <input
-            type="hidden"
-            name="username"
-            autoComplete="username"
-            value="encryption-key"
-            readOnly
-          />
-          <input
-            type="password"
-            name="password"
+            type="text"
             value={inputKey}
             onChange={(e) => setInputKey(e.target.value)}
             placeholder="Enter encryption key"
-            autoComplete="current-password"
+            autoComplete="off"
             className="flex-1 rounded-lg border border-blue-500 bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <input
