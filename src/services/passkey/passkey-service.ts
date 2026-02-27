@@ -99,7 +99,7 @@ export async function createPrfPasskey(
           { type: 'public-key', alg: -257 }, // RS256 (broader compat)
         ],
         authenticatorSelection: {
-          residentKey: 'required',
+          residentKey: 'discouraged',
           userVerification: 'required',
         },
         extensions: {
