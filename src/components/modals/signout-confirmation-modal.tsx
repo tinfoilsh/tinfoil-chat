@@ -112,10 +112,14 @@ ${encryptionKey.replace('key_', '')}
                     </div>
                   )}
 
-                  {/* Done button — always visible so user can dismiss */}
+                  {/* Done button — highlighted only after key is downloaded */}
                   <button
                     onClick={onDone}
-                    className="w-full rounded-lg border border-brand-accent-dark/40 bg-brand-accent-dark px-4 py-3 text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90"
+                    className={`w-full rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                      hasDownloadedKey
+                        ? 'border-brand-accent-dark/40 bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
+                        : 'border-border-subtle bg-surface-chat text-content-muted hover:bg-surface-chat/80'
+                    }`}
                   >
                     Done
                   </button>
