@@ -114,6 +114,30 @@ export function useCloudSync() {
   }
 
   /**
+   * Generate a new encryption key, back it up with a new passkey, persist it,
+   * and enable cloud sync. Returns the new key on success, null on cancel/failure.
+   * Shared by first-time setup and "Start Fresh" flows.
+   */
+  const generateKeyWithPasskeyBackup = useCallback(async (): Promise<
+    string | null
+  > => {
+    const userInfo = getPasskeyUserInfo()
+    if (!userInfo) return null
+
+    const newKey = await encryptionService.generateKey()
+
+    const created = await createAndStorePasskeyBackup(userInfo, {
+      primary: newKey,
+      alternatives: [],
+    })
+    if (!created) return null
+
+    await encryptionService.setKey(newKey)
+    setCloudSyncEnabled(true)
+    return newKey
+  }, [])
+
+  /**
    * Re-encrypt the passkey backup with the current key bundle.
    * Called after key changes to keep the backup in sync.
    */
@@ -402,21 +426,10 @@ export function useCloudSync() {
      * and cloud sync stays OFF.
      */
     const setupFirstTimePasskeyUser = async (): Promise<void> => {
-      const userInfo = getPasskeyUserInfo()
-      if (!userInfo) return
-
       try {
-        const newKey = await encryptionService.generateKey()
+        const newKey = await generateKeyWithPasskeyBackup()
 
-        const created = await createAndStorePasskeyBackup(userInfo, {
-          primary: newKey,
-          alternatives: [],
-        })
-
-        if (created) {
-          await encryptionService.setKey(newKey)
-          setCloudSyncEnabled(true)
-
+        if (newKey) {
           if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
@@ -453,7 +466,7 @@ export function useCloudSync() {
     }
 
     initializeSync()
-  }, [isSignedIn, getToken])
+  }, [isSignedIn, getToken, generateKeyWithPasskeyBackup])
 
   // Full sync chats (always fetches first page)
   const syncChats = useCallback(async () => {
@@ -816,21 +829,9 @@ export function useCloudSync() {
    * Returns the new primary key on success, null on failure/cancel.
    */
   const setupNewKeySplit = useCallback(async (): Promise<string | null> => {
-    const userInfo = getPasskeyUserInfo()
-    if (!userInfo) return null
-
     try {
-      const newKey = await encryptionService.generateKey()
-
-      const created = await createAndStorePasskeyBackup(userInfo, {
-        primary: newKey,
-        alternatives: [],
-      })
-
-      if (!created) return null
-
-      await encryptionService.setKey(newKey)
-      setCloudSyncEnabled(true)
+      const newKey = await generateKeyWithPasskeyBackup()
+      if (!newKey) return null
 
       if (isMountedRef.current) {
         setState((prev) => ({
@@ -854,7 +855,7 @@ export function useCloudSync() {
       })
       return null
     }
-  }, [])
+  }, [generateKeyWithPasskeyBackup])
 
   /**
    * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
