@@ -2789,13 +2789,13 @@ ${encryptionKey.replace('key_', '')}
                                 : 'hover:bg-surface-chat/80',
                             )}
                           >
-                            <div className="flex items-start gap-2">
-                              <GoPasskeyFill className="mt-0.5 h-4 w-4 shrink-0 text-content-secondary" />
+                            <div className="flex gap-2">
+                              <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
                               <div>
-                                <span className="text-sm font-medium text-content-primary">
+                                <span className="text-sm font-medium leading-tight text-content-primary">
                                   {isSettingUpPasskey
                                     ? 'Setting up...'
-                                    : 'Sync and backup using Passkeys'}
+                                    : 'Add Passkey for seamless sync'}
                                 </span>
                                 <p className="text-xs text-content-muted">
                                   Use Face ID or Touch ID to sync chats across

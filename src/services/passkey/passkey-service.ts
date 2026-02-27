@@ -26,7 +26,10 @@ export interface PrfPasskeyResult {
   prfOutput: ArrayBuffer
 }
 
-const RP_ID = 'tinfoil.sh'
+const RP_ID =
+  typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'localhost'
+    : 'tinfoil.sh'
 
 /**
  * Base64url-encode a Uint8Array (no padding, URL-safe alphabet).
