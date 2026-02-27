@@ -58,8 +58,28 @@ export function AuthCleanupHandler() {
         return
       }
 
-      // No passkey backup — clear everything except the encryption key,
-      // then show modal so user can download it before final deletion.
+      const encryptionKey = getEncryptionKey()
+
+      if (!encryptionKey) {
+        // No key and no passkey — nothing to save, clear everything
+        logInfo('No encryption key, clearing all data on signout', {
+          component: 'AuthCleanupHandler',
+          action: 'signoutWithoutKey',
+        })
+        performSignoutCleanup()
+          .catch((error) => {
+            logError('Failed to cleanup on signout (no key)', error, {
+              component: 'AuthCleanupHandler',
+              action: 'signoutWithoutKey',
+            })
+          })
+          .finally(() => {
+            window.location.reload()
+          })
+        return
+      }
+
+      // Key exists but no passkey backup — preserve key and show download modal
       logInfo('No passkey backup, preserving key for download prompt', {
         component: 'AuthCleanupHandler',
         action: 'signoutWithoutPasskey',
