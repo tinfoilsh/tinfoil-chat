@@ -49,6 +49,7 @@ type SetupStep =
   | 'key-display'
   | 'restore-key'
   | 'passkey-recovery'
+  | 'confirm-start-fresh'
 
 export function CloudSyncSetupModal({
   isOpen,
@@ -693,11 +694,11 @@ ${generatedKey.replace('key_', '')}
 
       {onSetupNewKey && (
         <button
-          onClick={handleStartFresh}
+          onClick={() => setCurrentStep('confirm-start-fresh')}
           disabled={isRecovering || isStartingFresh}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isStartingFresh ? 'Creating...' : 'Start Fresh with New Key'}
+          Start Fresh with New Key
         </button>
       )}
 
@@ -707,6 +708,43 @@ ${generatedKey.replace('key_', '')}
         className="text-sm text-content-muted transition-colors hover:text-content-secondary"
       >
         Skip for Now
+      </button>
+    </div>
+  )
+
+  const renderConfirmStartFreshStep = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-center">
+        <div className="rounded-full bg-amber-500/20 p-3">
+          <ExclamationTriangleIcon className="h-8 w-8 text-amber-500" />
+        </div>
+      </div>
+
+      <h2 className="text-center text-xl font-bold">Are you sure?</h2>
+
+      <div className="space-y-3 text-sm text-content-secondary">
+        <p>
+          Starting fresh will generate a{' '}
+          <strong className="text-content-primary">new encryption key</strong>{' '}
+          that is not compatible with your existing one.
+        </p>
+        <p>Chats encrypted with the old key will not decrypt on this device.</p>
+      </div>
+
+      <button
+        onClick={handleStartFresh}
+        disabled={isStartingFresh}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isStartingFresh ? 'Creating...' : 'Start Fresh'}
+      </button>
+
+      <button
+        onClick={() => setCurrentStep('passkey-recovery')}
+        disabled={isStartingFresh}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+      >
+        Go Back
       </button>
     </div>
   )
@@ -739,7 +777,8 @@ ${generatedKey.replace('key_', '')}
             >
               <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-card p-6 text-left align-middle shadow-xl transition-all">
                 {currentStep !== 'intro' &&
-                  currentStep !== 'passkey-recovery' && (
+                  currentStep !== 'passkey-recovery' &&
+                  currentStep !== 'confirm-start-fresh' && (
                     <button
                       onClick={onClose}
                       className="absolute right-4 top-4 rounded-lg p-1 text-content-secondary transition-colors hover:bg-surface-chat"
@@ -755,6 +794,8 @@ ${generatedKey.replace('key_', '')}
                 {currentStep === 'restore-key' && renderRestoreKeyStep()}
                 {currentStep === 'passkey-recovery' &&
                   renderPasskeyRecoveryStep()}
+                {currentStep === 'confirm-start-fresh' &&
+                  renderConfirmStartFreshStep()}
               </Dialog.Panel>
             </Transition.Child>
           </div>
