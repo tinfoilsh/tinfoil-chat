@@ -103,7 +103,12 @@ export function useCloudSync() {
     if (!passkeyResult) return false
 
     const kek = await deriveKeyEncryptionKey(passkeyResult.prfOutput)
-    await storeEncryptedKeys(passkeyResult.credentialId, kek, keys)
+    const saved = await storeEncryptedKeys(
+      passkeyResult.credentialId,
+      kek,
+      keys,
+    )
+    if (!saved) return false
     localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
     return true
   }
