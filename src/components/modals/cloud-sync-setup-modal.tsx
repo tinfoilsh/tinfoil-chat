@@ -34,10 +34,12 @@ type CloudSyncSetupModalProps = CloudSyncSetupModalBaseProps &
     | {
         passkeyRecoveryNeeded: true
         onRecoverWithPasskey: () => Promise<boolean>
+        onSetupNewKey?: () => Promise<boolean>
       }
     | {
         passkeyRecoveryNeeded?: false
         onRecoverWithPasskey?: () => Promise<boolean>
+        onSetupNewKey?: () => Promise<boolean>
       }
   )
 
@@ -56,6 +58,7 @@ export function CloudSyncSetupModal({
   initialCloudSyncEnabled = false,
   passkeyRecoveryNeeded = false,
   onRecoverWithPasskey,
+  onSetupNewKey,
 }: CloudSyncSetupModalProps) {
   const [currentStep, setCurrentStep] = useState<SetupStep>(
     passkeyRecoveryNeeded ? 'passkey-recovery' : 'intro',
@@ -602,6 +605,8 @@ ${generatedKey.replace('key_', '')}
     </div>
   )
 
+  const [isStartingFresh, setIsStartingFresh] = useState(false)
+
   const handlePasskeyRecovery = async () => {
     if (!onRecoverWithPasskey) return
     setIsRecovering(true)
@@ -621,6 +626,24 @@ ${generatedKey.replace('key_', '')}
       setRecoveryFailed(true)
     } finally {
       setIsRecovering(false)
+    }
+  }
+
+  const handleStartFresh = async () => {
+    if (!onSetupNewKey) return
+    setIsStartingFresh(true)
+    try {
+      const success = await onSetupNewKey()
+      if (success) {
+        onClose()
+      }
+    } catch (error) {
+      logError('Start fresh failed', error, {
+        component: 'CloudSyncSetupModal',
+        action: 'handleStartFresh',
+      })
+    } finally {
+      setIsStartingFresh(false)
     }
   }
 
@@ -669,11 +692,29 @@ ${generatedKey.replace('key_', '')}
 
       <button
         onClick={() => setCurrentStep('restore-key')}
-        disabled={isRecovering}
+        disabled={isRecovering || isStartingFresh}
         className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
       >
         <KeyIcon className="h-4 w-4" />
         Enter Key Manually
+      </button>
+
+      {onSetupNewKey && (
+        <button
+          onClick={handleStartFresh}
+          disabled={isRecovering || isStartingFresh}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isStartingFresh ? 'Creating...' : 'Start Fresh with New Key'}
+        </button>
+      )}
+
+      <button
+        onClick={onClose}
+        disabled={isRecovering || isStartingFresh}
+        className="text-sm text-content-muted transition-colors hover:text-content-secondary"
+      >
+        Skip for Now
       </button>
     </div>
   )

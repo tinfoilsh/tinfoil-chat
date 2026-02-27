@@ -392,25 +392,24 @@ export function useCloudSync() {
     }
 
     /**
-     * First-time user with PRF support: generate key, create passkey, store encrypted bundle.
+     * First-time user with PRF support: generate key in memory, only persist
+     * after passkey creation succeeds. If passkey is cancelled, key is discarded
+     * and cloud sync stays OFF.
      */
     const setupFirstTimePasskeyUser = async (): Promise<void> => {
       const userInfo = getPasskeyUserInfo()
       if (!userInfo) return
 
-      let newKey: string | null = null
       try {
-        newKey = await encryptionService.generateKey()
-        await encryptionService.setKey(newKey)
+        const newKey = await encryptionService.generateKey()
 
-        const keys = encryptionService.getAllKeys()
         const created = await createAndStorePasskeyBackup(userInfo, {
-          primary: keys.primary!,
-          alternatives: keys.alternatives,
+          primary: newKey,
+          alternatives: [],
         })
 
         if (created) {
-          // Auto-enable cloud sync
+          await encryptionService.setKey(newKey)
           setCloudSyncEnabled(true)
 
           if (isMountedRef.current) {
@@ -427,44 +426,24 @@ export function useCloudSync() {
             action: 'setupFirstTimePasskeyUser',
           })
         } else {
-          // User cancelled or PRF not actually supported — key is generated
-          // but no passkey backup. Fall through to normal flow.
-          setCloudSyncEnabled(true)
-
+          // User cancelled — discard key, cloud sync stays OFF
           if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
-              encryptionKey: newKey,
-              isFirstTimeUser: false,
               passkeySetupAvailable: true,
             }))
           }
 
-          logInfo(
-            'Passkey creation cancelled by user, key generated without passkey backup',
-            {
-              component: 'useCloudSync',
-              action: 'setupFirstTimePasskeyUser',
-            },
-          )
+          logInfo('Passkey creation cancelled, key discarded', {
+            component: 'useCloudSync',
+            action: 'setupFirstTimePasskeyUser',
+          })
         }
       } catch (error) {
         logError('First-time passkey user setup failed', error, {
           component: 'useCloudSync',
           action: 'setupFirstTimePasskeyUser',
         })
-
-        // Key may already be persisted to localStorage before the error.
-        // Update state so the UI isn't stuck showing first-time-user flow.
-        if (newKey && isMountedRef.current) {
-          setCloudSyncEnabled(true)
-          setState((prev) => ({
-            ...prev,
-            encryptionKey: newKey,
-            isFirstTimeUser: false,
-            passkeySetupAvailable: true,
-          }))
-        }
       }
     }
 
@@ -827,6 +806,52 @@ export function useCloudSync() {
   }, [])
 
   /**
+   * Generate a new key + create a new passkey (explicit split).
+   * Called from the recovery choice screen's "Start Fresh" button.
+   * Returns the new primary key on success, null on failure/cancel.
+   */
+  const setupNewKeySplit = useCallback(async (): Promise<string | null> => {
+    const userInfo = getPasskeyUserInfo()
+    if (!userInfo) return null
+
+    try {
+      const newKey = await encryptionService.generateKey()
+
+      const created = await createAndStorePasskeyBackup(userInfo, {
+        primary: newKey,
+        alternatives: [],
+      })
+
+      if (!created) return null
+
+      await encryptionService.setKey(newKey)
+      setCloudSyncEnabled(true)
+
+      if (isMountedRef.current) {
+        setState((prev) => ({
+          ...prev,
+          encryptionKey: newKey,
+          isFirstTimeUser: false,
+          passkeyActive: true,
+          passkeyRecoveryNeeded: false,
+        }))
+      }
+
+      logInfo('New key split created with passkey', {
+        component: 'useCloudSync',
+        action: 'setupNewKeySplit',
+      })
+      return newKey
+    } catch (error) {
+      logError('Failed to create new key split', error, {
+        component: 'useCloudSync',
+        action: 'setupNewKeySplit',
+      })
+      return null
+    }
+  }, [])
+
+  /**
    * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
    * Writes Clerk metadata after the WebAuthn flow completes (success or cancel)
    * to avoid triggering a Clerk state change that re-runs the init effect mid-flow.
@@ -880,6 +905,7 @@ export function useCloudSync() {
     clearFirstTimeUser,
     setupPasskey,
     recoverWithPasskey,
+    setupNewKeySplit,
     acceptPasskeyIntro,
   }
 }
