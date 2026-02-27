@@ -10,7 +10,6 @@ import {
   ArrowUpTrayIcon,
   CheckIcon,
   ChevronDownIcon,
-  CloudArrowUpIcon,
   DocumentDuplicateIcon,
   ExclamationTriangleIcon,
   KeyIcon,
@@ -18,7 +17,11 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { AiOutlineCloudSync } from 'react-icons/ai'
 import { GoPasskeyFill } from 'react-icons/go'
+import { IoMdCheckmarkCircleOutline } from 'react-icons/io'
+import { IoQrCodeOutline } from 'react-icons/io5'
+import { MdOutlineSettingsBackupRestore } from 'react-icons/md'
 import QRCode from 'react-qr-code'
 
 interface CloudSyncSetupModalBaseProps {
@@ -27,6 +30,7 @@ interface CloudSyncSetupModalBaseProps {
   onSetupComplete: (encryptionKey: string) => void
   isDarkMode: boolean
   initialCloudSyncEnabled?: boolean
+  prfSupported?: boolean
 }
 
 type CloudSyncSetupModalProps = CloudSyncSetupModalBaseProps &
@@ -58,12 +62,16 @@ export function CloudSyncSetupModal({
   isDarkMode,
   initialCloudSyncEnabled = false,
   passkeyRecoveryNeeded = false,
+  prfSupported = false,
   onRecoverWithPasskey,
   onSetupNewKey,
 }: CloudSyncSetupModalProps) {
-  const [currentStep, setCurrentStep] = useState<SetupStep>(
-    passkeyRecoveryNeeded ? 'passkey-recovery' : 'intro',
-  )
+  const initialStep: SetupStep = passkeyRecoveryNeeded
+    ? 'passkey-recovery'
+    : prfSupported
+      ? 'generate-or-restore'
+      : 'intro'
+  const [currentStep, setCurrentStep] = useState<SetupStep>(initialStep)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(
     initialCloudSyncEnabled,
   )
@@ -319,19 +327,11 @@ ${generatedKey.replace('key_', '')}
     <div className="space-y-4">
       <div className="flex items-center justify-center">
         <div className="rounded-full bg-content-muted/20 p-3">
-          <CloudArrowUpIcon className="h-8 w-8 text-content-secondary" />
+          <AiOutlineCloudSync className="h-8 w-8 text-content-secondary" />
         </div>
       </div>
 
-      <p className="text-center text-xs font-medium uppercase tracking-wide text-content-muted">
-        Step 1
-      </p>
-      <h2 className="text-center text-2xl font-bold">Enable Cloud Sync?</h2>
-
-      <p className="text-sm text-content-secondary">
-        Cloud sync enables encrypted syncing of chats and projects across your
-        devices.
-      </p>
+      <h2 className="text-center text-xl font-bold">Cloud Sync</h2>
 
       <div className="space-y-3">
         <div className="flex items-start space-x-3">
@@ -393,9 +393,12 @@ ${generatedKey.replace('key_', '')}
 
   const renderGenerateOrRestoreStep = () => (
     <div className="space-y-4">
-      <p className="text-center text-xs font-medium uppercase tracking-wide text-content-muted">
-        Step 2
-      </p>
+      <div className="flex items-center justify-center">
+        <div className="rounded-full bg-content-muted/20 p-3">
+          <KeyIcon className="h-8 w-8 text-content-secondary" />
+        </div>
+      </div>
+
       <h2 className="text-center text-xl font-bold">Encryption Key</h2>
 
       <p className="text-sm text-content-secondary">
@@ -406,7 +409,7 @@ ${generatedKey.replace('key_', '')}
       <button
         onClick={() => setCurrentStep('restore-key')}
         disabled={isProcessing}
-        className="w-full rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
+        className="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600"
       >
         Restore Encryption Key
       </button>
@@ -421,7 +424,7 @@ ${generatedKey.replace('key_', '')}
         <button
           onClick={handleGenerateKey}
           disabled={isProcessing}
-          className="flex-1 rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
+          className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
         >
           {isProcessing ? 'Generating...' : 'Generate Key'}
         </button>
@@ -432,8 +435,8 @@ ${generatedKey.replace('key_', '')}
   const renderKeyDisplayStep = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-center">
-        <div className="rounded-full bg-emerald-500/20 p-3">
-          <CheckIcon className="h-8 w-8 text-emerald-400" />
+        <div className="rounded-full bg-content-muted/20 p-3">
+          <IoMdCheckmarkCircleOutline className="h-8 w-8 text-content-secondary" />
         </div>
       </div>
 
@@ -444,39 +447,46 @@ ${generatedKey.replace('key_', '')}
         projects on other devices.
       </p>
 
-      <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
-        {generatedKey && (
-          <div className="flex items-center justify-between gap-2">
-            <code className="min-w-0 flex-1 truncate font-mono text-xs text-blue-500">
-              {generatedKey.substring(0, 20)}...
+      {generatedKey && (
+        <div className="rounded-lg border border-border-subtle bg-surface-chat p-3">
+          <div className="max-h-24 overflow-y-auto">
+            <code className="break-all font-mono text-sm text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.5)]">
+              {generatedKey}
             </code>
-            <div className="flex flex-shrink-0 gap-2">
-              <button
-                onClick={downloadKeyAsPEM}
-                className="rounded-lg bg-surface-chat p-2 text-content-primary transition-all hover:bg-surface-chat/80"
-                title="Download as PEM file"
-              >
-                <ArrowDownTrayIcon className="h-4 w-4" />
-              </button>
-              <button
-                onClick={handleCopyKey}
-                className={`rounded-lg p-2 transition-all ${
-                  isCopied
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-surface-chat text-content-primary hover:bg-surface-chat/80'
-                }`}
-                title="Copy to clipboard"
-              >
-                {isCopied ? (
-                  <CheckIcon className="h-4 w-4" />
-                ) : (
-                  <DocumentDuplicateIcon className="h-4 w-4" />
-                )}
-              </button>
-            </div>
           </div>
-        )}
-      </div>
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={downloadKeyAsPEM}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-card px-3 py-2 text-sm font-medium text-content-primary transition-all hover:bg-surface-chat/80"
+              title="Download as PEM file"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              Download
+            </button>
+            <button
+              onClick={handleCopyKey}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+                isCopied
+                  ? 'bg-emerald-500 text-white'
+                  : 'border border-border-subtle bg-surface-card text-content-primary hover:bg-surface-chat/80'
+              }`}
+              title="Copy to clipboard"
+            >
+              {isCopied ? (
+                <>
+                  <CheckIcon className="h-4 w-4" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <DocumentDuplicateIcon className="h-4 w-4" />
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {generatedKey && (
         <div className="rounded-lg border border-border-subtle">
@@ -484,7 +494,10 @@ ${generatedKey.replace('key_', '')}
             onClick={() => setIsQRCodeExpanded(!isQRCodeExpanded)}
             className="flex w-full items-center justify-between p-3 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-chat/50"
           >
-            <span>Key QR Code</span>
+            <span className="flex items-center gap-2">
+              <IoQrCodeOutline className="h-4 w-4" />
+              Key QR Code
+            </span>
             <ChevronDownIcon
               className={`h-4 w-4 transition-transform ${
                 isQRCodeExpanded ? 'rotate-180' : ''
@@ -515,7 +528,7 @@ ${generatedKey.replace('key_', '')}
 
       <button
         onClick={handleComplete}
-        className="w-full rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
+        className="w-full rounded-lg bg-brand-accent-dark px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
       >
         Done
       </button>
@@ -524,6 +537,12 @@ ${generatedKey.replace('key_', '')}
 
   const renderRestoreKeyStep = () => (
     <div className="space-y-4">
+      <div className="flex items-center justify-center">
+        <div className="rounded-full bg-content-muted/20 p-3">
+          <MdOutlineSettingsBackupRestore className="h-8 w-8 text-content-secondary" />
+        </div>
+      </div>
+
       <h2 className="text-center text-xl font-bold">Restore Encryption Key</h2>
 
       <p className="text-center text-sm text-content-secondary">
@@ -577,7 +596,13 @@ ${generatedKey.replace('key_', '')}
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setCurrentStep('generate-or-restore')}
+            onClick={() =>
+              setCurrentStep(
+                passkeyRecoveryNeeded
+                  ? 'passkey-recovery'
+                  : 'generate-or-restore',
+              )
+            }
             className="flex-1 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
           >
             Back
@@ -705,7 +730,7 @@ ${generatedKey.replace('key_', '')}
       <button
         onClick={onClose}
         disabled={isRecovering || isStartingFresh}
-        className="text-sm text-content-muted transition-colors hover:text-content-secondary"
+        className="w-full text-center text-sm text-content-muted transition-colors hover:text-content-secondary"
       >
         Skip for Now
       </button>
@@ -728,7 +753,9 @@ ${generatedKey.replace('key_', '')}
           <strong className="text-content-primary">new encryption key</strong>{' '}
           that is not compatible with your existing one.
         </p>
-        <p>Chats encrypted with the old key will not decrypt on this device.</p>
+        <p className="font-semibold text-content-primary">
+          Chats encrypted with the old key will not decrypt on this device.
+        </p>
       </div>
 
       <button
@@ -736,7 +763,7 @@ ${generatedKey.replace('key_', '')}
         disabled={isStartingFresh}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isStartingFresh ? 'Creating...' : 'Start Fresh'}
+        {isStartingFresh ? 'Creating...' : 'Yes, start fresh'}
       </button>
 
       <button
