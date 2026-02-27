@@ -769,6 +769,13 @@ export function SettingsModal({
     if (enabled) {
       // Check if encryption key exists
       if (!encryptionService.getKey()) {
+        // Prefer passkey setup when available
+        if (passkeySetupAvailable && onSetupPasskey) {
+          setIsOpen(false)
+          await onSetupPasskey()
+          return
+        }
+
         // Close settings modal and show the cloud sync setup modal
         setIsOpen(false)
         if (onCloudSyncSetupClick) {
@@ -2718,7 +2725,7 @@ ${encryptionKey.replace('key_', '')}
                   )}
 
                   {/* Passkey Section */}
-                  {cloudSyncEnabled && (
+                  {cloudSyncEnabled && onSetupPasskey && (
                     <div className="space-y-3">
                       <h3 className="font-aeonik text-sm font-medium text-content-secondary">
                         Passkey
@@ -2754,57 +2761,55 @@ ${encryptionKey.replace('key_', '')}
                       )}
 
                       {/* Passkey Setup Prompt */}
-                      {passkeySetupAvailable &&
-                        !passkeyActive &&
-                        onSetupPasskey && (
-                          <button
-                            onClick={async () => {
-                              setIsSettingUpPasskey(true)
-                              try {
-                                const success = await onSetupPasskey()
-                                if (success) {
-                                  toast({
-                                    title: 'Passkey created',
-                                    description:
-                                      'Your encryption key is now backed up with your passkey',
-                                  })
-                                }
-                              } catch {
+                      {!passkeyActive && (
+                        <button
+                          onClick={async () => {
+                            setIsSettingUpPasskey(true)
+                            try {
+                              const success = await onSetupPasskey()
+                              if (success) {
                                 toast({
-                                  title: 'Passkey setup failed',
+                                  title: 'Passkey created',
                                   description:
-                                    'Could not create passkey backup. You can try again later.',
-                                  variant: 'destructive',
+                                    'Your encryption key is now backed up with your passkey',
                                 })
-                              } finally {
-                                setIsSettingUpPasskey(false)
                               }
-                            }}
-                            disabled={isSettingUpPasskey}
-                            className={cn(
-                              'w-full rounded-lg border border-border-subtle p-4 text-left transition-colors',
-                              isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                              isSettingUpPasskey
-                                ? 'cursor-not-allowed opacity-50'
-                                : 'hover:bg-surface-chat/80',
-                            )}
-                          >
-                            <div className="flex gap-2">
-                              <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
-                              <div>
-                                <span className="text-sm font-medium leading-tight text-content-primary">
-                                  {isSettingUpPasskey
-                                    ? 'Setting up...'
-                                    : 'Add Passkey for seamless sync'}
-                                </span>
-                                <p className="text-xs text-content-muted">
-                                  Use Face ID or Touch ID to sync chats across
-                                  devices
-                                </p>
-                              </div>
+                            } catch {
+                              toast({
+                                title: 'Passkey setup failed',
+                                description:
+                                  'Could not create passkey backup. You can try again later.',
+                                variant: 'destructive',
+                              })
+                            } finally {
+                              setIsSettingUpPasskey(false)
+                            }
+                          }}
+                          disabled={isSettingUpPasskey}
+                          className={cn(
+                            'w-full rounded-lg border border-border-subtle p-4 text-left transition-colors',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                            isSettingUpPasskey
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'hover:bg-surface-chat/80',
+                          )}
+                        >
+                          <div className="flex gap-2">
+                            <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
+                            <div>
+                              <span className="text-sm font-medium leading-tight text-content-primary">
+                                {isSettingUpPasskey
+                                  ? 'Setting up...'
+                                  : 'Add Passkey for seamless sync'}
+                              </span>
+                              <p className="text-xs text-content-muted">
+                                Use Face ID or Touch ID to sync chats across
+                                devices
+                              </p>
                             </div>
-                          </button>
-                        )}
+                          </div>
+                        </button>
+                      )}
                     </div>
                   )}
                 </>

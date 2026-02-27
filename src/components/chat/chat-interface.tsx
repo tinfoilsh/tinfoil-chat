@@ -1021,13 +1021,6 @@ export function ChatInterface({
     setShowCloudSyncSetupModal(true)
   }
 
-  // Auto-show recovery modal when passkey recovery is needed
-  useEffect(() => {
-    if (passkeyRecoveryNeeded) {
-      setShowCloudSyncSetupModal(true)
-    }
-  }, [passkeyRecoveryNeeded])
-
   // Handler for creating a new project with a random name
   const handleCreateProject = useCallback(async () => {
     try {
@@ -2145,6 +2138,8 @@ export function ChatInterface({
                 onCloudSyncSetupClick={
                   isSignedIn ? handleOpenCloudSyncSetup : undefined
                 }
+                onSetupPasskey={setupPasskey}
+                passkeySetupAvailable={passkeySetupAvailable}
                 onChatsUpdated={reloadChats}
                 isProjectMode={isProjectMode}
                 activeProjectName={activeProject?.name}
@@ -2480,6 +2475,9 @@ export function ChatInterface({
           }}
           isDarkMode={isDarkMode}
           initialCloudSyncEnabled={true}
+          prfSupported={
+            passkeyActive || passkeyRecoveryNeeded || passkeySetupAvailable
+          }
           passkeyRecoveryNeeded={passkeyRecoveryNeeded}
           onRecoverWithPasskey={async () => {
             const key = await recoverWithPasskey()
