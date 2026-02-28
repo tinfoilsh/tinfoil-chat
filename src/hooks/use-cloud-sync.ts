@@ -1,6 +1,6 @@
 import {
-  SECRET_ENCRYPTION_KEY,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
+  USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
@@ -89,7 +89,7 @@ export function useCloudSync() {
         authTokenManager.initialize(getToken)
 
         // Check if user already has a key before initializing
-        const existingKey = localStorage.getItem(SECRET_ENCRYPTION_KEY)
+        const existingKey = localStorage.getItem(USER_ENCRYPTION_KEY)
         const isFirstTime = !existingKey
 
         // Backwards compatibility: if an encryption key exists but cloud sync is not enabled,

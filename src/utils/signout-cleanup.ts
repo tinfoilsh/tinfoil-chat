@@ -1,8 +1,8 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACTIVE_USER_ID,
-  SECRET_ENCRYPTION_KEY,
   SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
+  USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { profileSync } from '@/services/cloud/profile-sync'
@@ -141,5 +141,5 @@ export function performUserSwitchCleanup(newUserId: string): void {
 
 export function getEncryptionKey(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem(SECRET_ENCRYPTION_KEY)
+  return localStorage.getItem(USER_ENCRYPTION_KEY)
 }

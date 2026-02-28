@@ -1,8 +1,8 @@
 // Encryption service for end-to-end encryption of chat data
 
 import {
-  SECRET_ENCRYPTION_KEY,
-  SECRET_ENCRYPTION_KEY_HISTORY,
+  USER_ENCRYPTION_KEY,
+  USER_ENCRYPTION_KEY_HISTORY,
 } from '@/constants/storage-keys'
 import {
   base64ToUint8Array,
@@ -100,7 +100,7 @@ export class EncryptionService {
 
   private loadKeyHistoryFromStorage(): string[] {
     const rawHistory =
-      localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY) ??
+      localStorage.getItem(USER_ENCRYPTION_KEY_HISTORY) ??
       localStorage.getItem('tinfoil-encryption-key-history')
 
     if (!rawHistory) {
@@ -130,7 +130,7 @@ export class EncryptionService {
   }
 
   private saveKeyHistoryToStorage(history: string[]): void {
-    localStorage.setItem(SECRET_ENCRYPTION_KEY_HISTORY, JSON.stringify(history))
+    localStorage.setItem(USER_ENCRYPTION_KEY_HISTORY, JSON.stringify(history))
   }
 
   private pruneFallbackCache(validKeys: string[]): void {
@@ -186,7 +186,7 @@ export class EncryptionService {
   // Initialize with existing key - does NOT generate a new key automatically
   async initialize(): Promise<string | null> {
     const storedKey =
-      localStorage.getItem(SECRET_ENCRYPTION_KEY) ??
+      localStorage.getItem(USER_ENCRYPTION_KEY) ??
       localStorage.getItem('tinfoil-encryption-key')
     this.fallbackKeyStrings = this.loadKeyHistoryFromStorage()
     this.pruneFallbackCache(this.fallbackKeyStrings)
@@ -204,7 +204,7 @@ export class EncryptionService {
     try {
       const previousKey =
         this.currentKeyString ??
-        localStorage.getItem(SECRET_ENCRYPTION_KEY) ??
+        localStorage.getItem(USER_ENCRYPTION_KEY) ??
         localStorage.getItem('tinfoil-encryption-key')
 
       const previousHistory = this.loadKeyHistoryFromStorage()
@@ -225,14 +225,14 @@ export class EncryptionService {
       }
 
       try {
-        localStorage.setItem(SECRET_ENCRYPTION_KEY, keyString)
+        localStorage.setItem(USER_ENCRYPTION_KEY, keyString)
         this.saveKeyHistoryToStorage(history)
       } catch (persistError) {
         try {
           if (previousKey) {
-            localStorage.setItem(SECRET_ENCRYPTION_KEY, previousKey)
+            localStorage.setItem(USER_ENCRYPTION_KEY, previousKey)
           } else {
-            localStorage.removeItem(SECRET_ENCRYPTION_KEY)
+            localStorage.removeItem(USER_ENCRYPTION_KEY)
           }
           this.saveKeyHistoryToStorage(previousHistory)
         } catch (rollbackError) {
@@ -280,7 +280,7 @@ export class EncryptionService {
   // Get current encryption key as alphanumeric string
   getKey(): string | null {
     return (
-      localStorage.getItem(SECRET_ENCRYPTION_KEY) ??
+      localStorage.getItem(USER_ENCRYPTION_KEY) ??
       localStorage.getItem('tinfoil-encryption-key')
     )
   }
@@ -295,8 +295,8 @@ export class EncryptionService {
     this.fallbackKeyAddedCallbacks.clear()
     if (persist) {
       try {
-        localStorage.removeItem(SECRET_ENCRYPTION_KEY)
-        localStorage.removeItem(SECRET_ENCRYPTION_KEY_HISTORY)
+        localStorage.removeItem(USER_ENCRYPTION_KEY)
+        localStorage.removeItem(USER_ENCRYPTION_KEY_HISTORY)
         localStorage.removeItem('tinfoil-encryption-key')
         localStorage.removeItem('tinfoil-encryption-key-history')
       } catch (error) {
