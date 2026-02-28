@@ -2506,21 +2506,17 @@ export function ChatInterface({
           passkeyRecoveryNeeded={passkeyRecoveryNeeded}
           onRecoverWithPasskey={async () => {
             const key = await recoverWithPasskey()
-            if (key) {
-              await handleKeyChanged(key)
-              setShowCloudSyncSetupModal(false)
-              return true
-            }
-            return false
+            if (!key) return false
+            await handleKeyChanged(key)
+            setShowCloudSyncSetupModal(false)
+            return true
           }}
           onSetupNewKey={async () => {
             const key = await setupNewKeySplit()
-            if (key) {
-              await handleKeyChanged(key)
-              setShowCloudSyncSetupModal(false)
-              return true
-            }
-            return false
+            if (!key) return false
+            await handleKeyChanged(key)
+            setShowCloudSyncSetupModal(false)
+            return true
           }}
         />
       )}
