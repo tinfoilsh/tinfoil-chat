@@ -145,6 +145,11 @@ const ScrambleText = ({
   )
 }
 
+const STEP_CIRCLE_CLASSES = cn(
+  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
+  'bg-content-muted/20 text-content-secondary',
+)
+
 export type SettingsTab =
   | 'general'
   | 'chat'
@@ -211,6 +216,7 @@ export function SettingsModal({
 
   // Encryption key management state
   const [inputKey, setInputKey] = useState('')
+  const [isInputKeyVisible, setIsInputKeyVisible] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -2358,42 +2364,21 @@ ${encryptionKey.replace('key_', '')}
                     {isHowItWorksOpen && (
                       <div className="space-y-3 border-t border-border-subtle p-4">
                         <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                              'bg-content-muted/20 text-content-secondary',
-                            )}
-                          >
-                            1
-                          </div>
+                          <div className={STEP_CIRCLE_CLASSES}>1</div>
                           <div className="font-aeonik-fono text-sm text-content-muted">
                             Your chats are encrypted on your device before being
                             sent to the cloud.
                           </div>
                         </div>
                         <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                              'bg-content-muted/20 text-content-secondary',
-                            )}
-                          >
-                            2
-                          </div>
+                          <div className={STEP_CIRCLE_CLASSES}>2</div>
                           <div className="font-aeonik-fono text-sm text-content-muted">
                             Only you have the encryption key. Tinfoil cannot
                             read your messages.
                           </div>
                         </div>
                         <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              'flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-aeonik-fono text-xs font-medium leading-none',
-                              'bg-content-muted/20 text-content-secondary',
-                            )}
-                          >
-                            3
-                          </div>
+                          <div className={STEP_CIRCLE_CLASSES}>3</div>
                           <div className="font-aeonik-fono text-sm text-content-muted">
                             Use a passkey to seamlessly sync your chats across
                             devices, or manually enter your encryption key.
@@ -2670,7 +2655,9 @@ ${encryptionKey.replace('key_', '')}
                               <div className="flex gap-2">
                                 <div className="relative flex-1">
                                   <input
-                                    type="password"
+                                    type={
+                                      isInputKeyVisible ? 'text' : 'password'
+                                    }
                                     name="encryption-key"
                                     value={inputKey}
                                     onChange={(e) =>
@@ -2684,10 +2671,28 @@ ${encryptionKey.replace('key_', '')}
                                     autoComplete="off"
                                     aria-label="Encryption key input"
                                     className={cn(
-                                      'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
+                                      'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 pr-9 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',
                                       isDragging && 'ring-2 ring-blue-500',
                                     )}
                                   />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setIsInputKeyVisible(!isInputKeyVisible)
+                                    }
+                                    aria-label={
+                                      isInputKeyVisible
+                                        ? 'Hide key'
+                                        : 'Show key'
+                                    }
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-content-muted transition-all hover:text-content-primary"
+                                  >
+                                    {isInputKeyVisible ? (
+                                      <EyeSlashIcon className="h-4 w-4" />
+                                    ) : (
+                                      <EyeIcon className="h-4 w-4" />
+                                    )}
+                                  </button>
                                   {isDragging && (
                                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-blue-500/10">
                                       <span className="text-sm text-blue-500">
