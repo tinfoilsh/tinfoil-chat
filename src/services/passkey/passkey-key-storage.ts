@@ -191,12 +191,14 @@ export async function storeEncryptedKeys(
   credentialId: string,
   kek: CryptoKey,
   keys: KeyBundle,
-): Promise<boolean> {
+): Promise<{ syncVersion: number } | null> {
   try {
     const encrypted = await encryptKeyBundle(kek, keys)
 
     const existing = await loadPasskeyCredentials()
     const previous = existing.find((e) => e.id === credentialId)
+
+    const newSyncVersion = previous ? previous.sync_version + 1 : 1
 
     const entry: PasskeyCredentialEntry = {
       id: credentialId,
@@ -204,7 +206,7 @@ export async function storeEncryptedKeys(
       iv: encrypted.iv,
       created_at: previous?.created_at ?? new Date().toISOString(),
       version: CURRENT_CREDENTIAL_VERSION,
-      sync_version: previous ? previous.sync_version + 1 : 1,
+      sync_version: newSyncVersion,
     }
 
     const updated = existing.filter((e) => e.id !== credentialId)
@@ -217,14 +219,15 @@ export async function storeEncryptedKeys(
         action: 'storeEncryptedKeys',
         metadata: { credentialId, totalEntries: updated.length },
       })
+      return { syncVersion: newSyncVersion }
     }
-    return saved
+    return null
   } catch (error) {
     logError('Failed to store encrypted keys', error, {
       component: 'PasskeyKeyStorage',
       action: 'storeEncryptedKeys',
     })
-    return false
+    return null
   }
 }
 
