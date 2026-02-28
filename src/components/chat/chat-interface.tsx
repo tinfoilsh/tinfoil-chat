@@ -4,6 +4,7 @@ import {
   type BaseModel,
 } from '@/config/models'
 import {
+  SETTINGS_CACHED_SUBSCRIPTION_STATUS,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_WEB_SEARCH_ENABLED,
   UI_EXPAND_PROJECT_DOCUMENTS,
@@ -399,25 +400,28 @@ export function ChatInterface({
     initializeRenderers()
   }, [])
 
-  // Load models and system prompt immediately in parallel
-  // Use cached subscription status to load the right models from the start
+  // Load models and system prompt immediately in parallel.
+  // Use cached subscription status to pick the right model tier on first load.
   useEffect(() => {
     let cancelled = false
     const loadInitial = async () => {
       try {
-        // Check if we have cached subscription status to use the right endpoint immediately
-        const cachedStatus =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('cached_subscription_status')
-            : null
-        const isPremiumCached = cachedStatus
-          ? JSON.parse(cachedStatus).chat_subscription_active
-          : false
+        let isPremiumCached = false
+        try {
+          const raw =
+            typeof window !== 'undefined'
+              ? localStorage.getItem(SETTINGS_CACHED_SUBSCRIPTION_STATUS)
+              : null
+          if (raw) {
+            isPremiumCached = JSON.parse(raw).chat_subscription_active === true
+          }
+        } catch {
+          // ignore parse errors
+        }
 
-        // Fetch everything in parallel with best guess for model endpoint
         const [promptData, models] = await Promise.all([
           getSystemPromptAndRules(),
-          getAIModels(isPremiumCached), // Use cached status or default to free
+          getAIModels(isPremiumCached),
         ])
 
         if (!cancelled) {
@@ -443,40 +447,31 @@ export function ChatInterface({
     }
   }, [])
 
-  // Update models if subscription status changes from cached value
+  // Reload models if subscription status differs from cached value
   useEffect(() => {
     if (subscriptionLoading || isLoadingConfig) return
 
     let cancelled = false
     const updateModelsIfNeeded = async () => {
       try {
-        // Check if we need to reload models based on actual subscription status
-        const cachedStatus =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('cached_subscription_status')
-            : null
+        const isPremium = chat_subscription_active ?? false
 
-        const isPremiumNow = chat_subscription_active ?? false
+        // Check if cached status matches actual — skip reload if it does
+        let wasPremiumCached = false
+        try {
+          const raw = localStorage.getItem(SETTINGS_CACHED_SUBSCRIPTION_STATUS)
+          if (raw) {
+            wasPremiumCached = JSON.parse(raw).chat_subscription_active === true
+          }
+        } catch {
+          // ignore parse errors
+        }
 
-        // Reload models if:
-        // 1. No cache exists (post-logout scenario)
-        // 2. Cached status differs from actual status
-        if (!cachedStatus) {
-          // No cache means user just logged in/out - always reload to ensure correct models
-          const updatedModels = await getAIModels(isPremiumNow)
-          if (!cancelled) {
-            setModels(updatedModels)
-          }
-        } else {
-          // Cache exists - only reload if status changed
-          const wasPremiumCached =
-            JSON.parse(cachedStatus).chat_subscription_active
-          if (wasPremiumCached !== isPremiumNow) {
-            const updatedModels = await getAIModels(isPremiumNow)
-            if (!cancelled) {
-              setModels(updatedModels)
-            }
-          }
+        if (wasPremiumCached === isPremium) return
+
+        const updatedModels = await getAIModels(isPremium)
+        if (!cancelled) {
+          setModels(updatedModels)
         }
       } catch (error) {
         logError('Failed to update models', error, {

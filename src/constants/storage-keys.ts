@@ -28,6 +28,8 @@ export const SETTINGS_PII_CHECK_ENABLED = 'tinfoil-settings-pii-check-enabled'
 export const SETTINGS_THEME_MODE = 'tinfoil-settings-theme-mode'
 export const SETTINGS_THEME = 'tinfoil-settings-theme'
 export const SETTINGS_CHAT_FONT = 'tinfoil-settings-chat-font'
+export const SETTINGS_CACHED_SUBSCRIPTION_STATUS =
+  'tinfoil-settings-cached-subscription-status'
 export const SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO =
   'tinfoil-settings-has-seen-web-search-intro'
 

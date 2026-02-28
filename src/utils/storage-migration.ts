@@ -29,6 +29,7 @@ const LOCAL_STORAGE_KEY_MAP: Record<string, string> = {
   theme: 'tinfoil-settings-theme',
   chatFont: 'tinfoil-settings-chat-font',
   has_seen_web_search_intro: 'tinfoil-settings-has-seen-web-search-intro',
+  cached_subscription_status: 'tinfoil-settings-cached-subscription-status',
   enableDebugLogs: 'tinfoil-dev-enable-debug-logs',
 
   // User preferences
