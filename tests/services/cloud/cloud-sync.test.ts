@@ -1,3 +1,4 @@
+import { SYNC_CHAT_STATUS } from '@/constants/storage-keys'
 import { CloudSyncService } from '@/services/cloud/cloud-sync'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -66,7 +67,7 @@ vi.mock('@/services/storage/chat-events', () => ({
 describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    localStorage.removeItem('tinfoil-chat-sync-status')
+    localStorage.removeItem(SYNC_CHAT_STATUS)
     mockSaveChat.mockResolvedValue(undefined)
     mockMarkAsSynced.mockResolvedValue(undefined)
     mockDeleteChat.mockResolvedValue(undefined)
@@ -285,7 +286,7 @@ describe('CloudSyncService', () => {
       })
 
       localStorage.setItem(
-        'tinfoil-chat-sync-status',
+        SYNC_CHAT_STATUS,
         JSON.stringify({
           count: 5,
           lastUpdated: '2024-01-01T00:00:00.000Z',

@@ -1,4 +1,8 @@
 import {
+  SECRET_ENCRYPTION_KEY,
+  SECRET_ENCRYPTION_KEY_HISTORY,
+} from '@/constants/storage-keys'
+import {
   EncryptionService,
   type EncryptedData,
 } from '@/services/encryption/encryption-service'
@@ -58,7 +62,7 @@ describe('EncryptionService', () => {
     it('should persist key to localStorage', async () => {
       const key = await service.generateKey()
       await service.setKey(key)
-      expect(localStorage.getItem('tinfoil-encryption-key')).toBe(key)
+      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY)).toBe(key)
     })
 
     it('should store previous key in history when setting new key', async () => {
@@ -69,7 +73,7 @@ describe('EncryptionService', () => {
       await service.setKey(key2)
 
       const history = JSON.parse(
-        localStorage.getItem('tinfoil-encryption-key-history') || '[]',
+        localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY) || '[]',
       )
       expect(history).toContain(key1)
     })
@@ -95,7 +99,7 @@ describe('EncryptionService', () => {
       service.clearKey()
 
       expect(service.getKey()).toBeNull()
-      expect(localStorage.getItem('tinfoil-encryption-key')).toBeNull()
+      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY)).toBeNull()
     })
 
     it('should clear key history', async () => {
@@ -106,7 +110,7 @@ describe('EncryptionService', () => {
 
       service.clearKey()
 
-      expect(localStorage.getItem('tinfoil-encryption-key-history')).toBeNull()
+      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY)).toBeNull()
     })
 
     it('should support clearing without persisting', async () => {
@@ -116,7 +120,7 @@ describe('EncryptionService', () => {
       service.clearKey({ persist: false })
 
       // Key should still be in localStorage
-      expect(localStorage.getItem('tinfoil-encryption-key')).toBe(key)
+      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY)).toBe(key)
     })
   })
 
@@ -450,7 +454,7 @@ describe('EncryptionService', () => {
       service.addDecryptionKey(fallbackKey)
 
       // Check storage
-      const stored = localStorage.getItem('tinfoil-encryption-key-history')
+      const stored = localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY)
       expect(stored).toBeTruthy()
 
       const parsed = JSON.parse(stored!)
