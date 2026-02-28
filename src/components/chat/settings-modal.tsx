@@ -1,6 +1,20 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
+import {
+  SETTINGS_CHAT_FONT,
+  SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
+  SETTINGS_MAX_PROMPT_MESSAGES,
+  SETTINGS_PII_CHECK_ENABLED,
+  USER_PREFS_ADDITIONAL_CONTEXT,
+  USER_PREFS_CUSTOM_PROMPT_ENABLED,
+  USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+  USER_PREFS_LANGUAGE,
+  USER_PREFS_NICKNAME,
+  USER_PREFS_PERSONALIZATION_ENABLED,
+  USER_PREFS_PROFESSION,
+  USER_PREFS_TRAITS,
+} from '@/constants/storage-keys'
 import { useProjects } from '@/hooks/use-projects'
 import { useToast } from '@/hooks/use-toast'
 import { authTokenManager } from '@/services/auth'
@@ -365,7 +379,7 @@ export function SettingsModal({
   // Shared function to load settings from localStorage
   const loadSettingsFromStorage = useCallback(() => {
     // Load max messages setting
-    const savedMaxMessages = localStorage.getItem('maxPromptMessages')
+    const savedMaxMessages = localStorage.getItem(SETTINGS_MAX_PROMPT_MESSAGES)
     if (savedMaxMessages) {
       const parsedValue = parseInt(savedMaxMessages, 10)
       if (
@@ -378,12 +392,12 @@ export function SettingsModal({
     }
 
     // Load personalization settings
-    const savedNickname = localStorage.getItem('userNickname')
-    const savedProfession = localStorage.getItem('userProfession')
-    const savedTraits = localStorage.getItem('userTraits')
-    const savedContext = localStorage.getItem('userAdditionalContext')
+    const savedNickname = localStorage.getItem(USER_PREFS_NICKNAME)
+    const savedProfession = localStorage.getItem(USER_PREFS_PROFESSION)
+    const savedTraits = localStorage.getItem(USER_PREFS_TRAITS)
+    const savedContext = localStorage.getItem(USER_PREFS_ADDITIONAL_CONTEXT)
     const savedUsingPersonalization = localStorage.getItem(
-      'isUsingPersonalization',
+      USER_PREFS_PERSONALIZATION_ENABLED,
     )
 
     if (savedNickname !== null) setNickname(savedNickname)
@@ -401,14 +415,18 @@ export function SettingsModal({
     }
 
     // Load language setting
-    const savedLanguage = localStorage.getItem('userLanguage')
+    const savedLanguage = localStorage.getItem(USER_PREFS_LANGUAGE)
     if (savedLanguage) {
       setLanguage(savedLanguage)
     }
 
     // Load custom system prompt settings
-    const savedUsingCustomPrompt = localStorage.getItem('isUsingCustomPrompt')
-    const savedCustomPrompt = localStorage.getItem('customSystemPrompt')
+    const savedUsingCustomPrompt = localStorage.getItem(
+      USER_PREFS_CUSTOM_PROMPT_ENABLED,
+    )
+    const savedCustomPrompt = localStorage.getItem(
+      USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+    )
     if (savedUsingCustomPrompt !== null) {
       setIsUsingCustomPrompt(savedUsingCustomPrompt === 'true')
     }
@@ -422,11 +440,11 @@ export function SettingsModal({
     setCloudSyncEnabledState(isCloudSyncEnabled())
 
     // Load PII check setting (defaults to true if not set)
-    const savedPiiCheck = localStorage.getItem('piiCheckEnabled')
+    const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
 
     // Load chat font setting
-    const savedChatFont = localStorage.getItem('chatFont')
+    const savedChatFont = localStorage.getItem(SETTINGS_CHAT_FONT)
     if (
       savedChatFont === 'default' ||
       savedChatFont === 'mono' ||
@@ -443,10 +461,10 @@ export function SettingsModal({
       loadSettingsFromStorage()
 
       // Set default language if not already set
-      const savedLanguage = localStorage.getItem('userLanguage')
+      const savedLanguage = localStorage.getItem(USER_PREFS_LANGUAGE)
       if (!savedLanguage) {
         setLanguage('English')
-        localStorage.setItem('userLanguage', 'English')
+        localStorage.setItem(USER_PREFS_LANGUAGE, 'English')
       }
     }
   }, [isClient, loadSettingsFromStorage])
@@ -505,7 +523,7 @@ export function SettingsModal({
     if (value > 0 && value <= CONSTANTS.MAX_PROMPT_MESSAGES_LIMIT) {
       setMaxMessages(value)
       if (isClient) {
-        localStorage.setItem('maxPromptMessages', value.toString())
+        localStorage.setItem(SETTINGS_MAX_PROMPT_MESSAGES, value.toString())
         // Trigger a custom event to notify other components
         window.dispatchEvent(
           new CustomEvent('maxPromptMessagesChanged', {
@@ -531,11 +549,14 @@ export function SettingsModal({
       const currentContext = values?.additionalContext ?? additionalContext
       const currentEnabled = values?.isEnabled ?? isUsingPersonalization
 
-      localStorage.setItem('userNickname', currentNickname)
-      localStorage.setItem('userProfession', currentProfession)
-      localStorage.setItem('userTraits', JSON.stringify(currentTraits))
-      localStorage.setItem('userAdditionalContext', currentContext)
-      localStorage.setItem('isUsingPersonalization', currentEnabled.toString())
+      localStorage.setItem(USER_PREFS_NICKNAME, currentNickname)
+      localStorage.setItem(USER_PREFS_PROFESSION, currentProfession)
+      localStorage.setItem(USER_PREFS_TRAITS, JSON.stringify(currentTraits))
+      localStorage.setItem(USER_PREFS_ADDITIONAL_CONTEXT, currentContext)
+      localStorage.setItem(
+        USER_PREFS_PERSONALIZATION_ENABLED,
+        currentEnabled.toString(),
+      )
 
       // Trigger event to notify other components
       window.dispatchEvent(
@@ -557,7 +578,7 @@ export function SettingsModal({
   // Save language setting separately
   const saveLanguageSetting = (newLanguage: string) => {
     if (isClient) {
-      localStorage.setItem('userLanguage', newLanguage)
+      localStorage.setItem(USER_PREFS_LANGUAGE, newLanguage)
 
       // Trigger event to notify other components about language change
       window.dispatchEvent(
@@ -625,11 +646,11 @@ export function SettingsModal({
     setLanguage('English')
 
     if (isClient) {
-      localStorage.removeItem('userNickname')
-      localStorage.removeItem('userProfession')
-      localStorage.removeItem('userTraits')
-      localStorage.removeItem('userAdditionalContext')
-      localStorage.setItem('userLanguage', 'English')
+      localStorage.removeItem(USER_PREFS_NICKNAME)
+      localStorage.removeItem(USER_PREFS_PROFESSION)
+      localStorage.removeItem(USER_PREFS_TRAITS)
+      localStorage.removeItem(USER_PREFS_ADDITIONAL_CONTEXT)
+      localStorage.setItem(USER_PREFS_LANGUAGE, 'English')
       saveLanguageSetting('English')
       savePersonalizationSettings({
         nickname: '',
@@ -646,7 +667,7 @@ export function SettingsModal({
   ) => {
     setChatFont(font)
     if (isClient) {
-      localStorage.setItem('chatFont', font)
+      localStorage.setItem(SETTINGS_CHAT_FONT, font)
       window.dispatchEvent(
         new CustomEvent('chatFontChanged', {
           detail: font,
@@ -675,7 +696,7 @@ export function SettingsModal({
   const handleToggleCustomPrompt = (enabled: boolean) => {
     setIsUsingCustomPrompt(enabled)
     if (isClient) {
-      localStorage.setItem('isUsingCustomPrompt', enabled.toString())
+      localStorage.setItem(USER_PREFS_CUSTOM_PROMPT_ENABLED, enabled.toString())
       // Only dispatch event when toggling the feature
       const promptWithTags = ensureSystemTags(customSystemPrompt)
       window.dispatchEvent(
@@ -697,7 +718,7 @@ export function SettingsModal({
     if (isClient) {
       // Store with system tags
       const promptWithTags = ensureSystemTags(customSystemPrompt)
-      localStorage.setItem('customSystemPrompt', promptWithTags)
+      localStorage.setItem(USER_PREFS_CUSTOM_SYSTEM_PROMPT, promptWithTags)
       // Only dispatch if currently enabled
       if (isUsingCustomPrompt) {
         window.dispatchEvent(
@@ -718,7 +739,7 @@ export function SettingsModal({
     setCustomSystemPrompt(restoredWithoutTags)
     if (isClient) {
       const promptWithTags = ensureSystemTags(restoredWithoutTags)
-      localStorage.setItem('customSystemPrompt', promptWithTags)
+      localStorage.setItem(USER_PREFS_CUSTOM_SYSTEM_PROMPT, promptWithTags)
       if (isUsingCustomPrompt) {
         window.dispatchEvent(
           new CustomEvent('customSystemPromptChanged', {
@@ -749,14 +770,14 @@ export function SettingsModal({
       setCloudSyncEnabled(true)
 
       // Clear the explicit disable flag when re-enabling
-      localStorage.removeItem('cloudSyncExplicitlyDisabled')
+      localStorage.removeItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED)
     } else {
       // Disabling cloud sync
       setCloudSyncEnabledState(false)
       setCloudSyncEnabled(false)
 
       // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
-      localStorage.setItem('cloudSyncExplicitlyDisabled', 'true')
+      localStorage.setItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED, 'true')
 
       try {
         const deletedCount = await chatStorage.deleteAllNonLocalChats()

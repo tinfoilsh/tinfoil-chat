@@ -1,13 +1,12 @@
 import type { Chat } from '@/components/chat/types'
+import { SYNC_SESSION_CHATS } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
-
-const SESSION_CHATS_KEY = 'tinfoil_session_chats'
 
 export const sessionChatStorage = {
   // Get all chats from session storage
   getAllChats(): Chat[] {
     try {
-      const chatsJson = sessionStorage.getItem(SESSION_CHATS_KEY)
+      const chatsJson = sessionStorage.getItem(SYNC_SESSION_CHATS)
       if (!chatsJson) return []
 
       const chats = JSON.parse(chatsJson)
@@ -71,7 +70,7 @@ export const sessionChatStorage = {
         chats.push(chat)
       }
 
-      sessionStorage.setItem(SESSION_CHATS_KEY, JSON.stringify(chats))
+      sessionStorage.setItem(SYNC_SESSION_CHATS, JSON.stringify(chats))
     } catch (error) {
       logError('Failed to save chat to session storage', error, {
         component: 'sessionChatStorage',
@@ -86,7 +85,7 @@ export const sessionChatStorage = {
     try {
       const chats = this.getAllChats()
       const filteredChats = chats.filter((c) => c.id !== chatId)
-      sessionStorage.setItem(SESSION_CHATS_KEY, JSON.stringify(filteredChats))
+      sessionStorage.setItem(SYNC_SESSION_CHATS, JSON.stringify(filteredChats))
     } catch (error) {
       logError('Failed to delete chat from session storage', error, {
         component: 'sessionChatStorage',
@@ -99,7 +98,7 @@ export const sessionChatStorage = {
   // Clear all chats from session storage
   clearAll(): void {
     try {
-      sessionStorage.removeItem(SESSION_CHATS_KEY)
+      sessionStorage.removeItem(SYNC_SESSION_CHATS)
     } catch (error) {
       logError('Failed to clear session storage', error, {
         component: 'sessionChatStorage',

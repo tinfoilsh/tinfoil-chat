@@ -10,7 +10,8 @@ import {
   PiMonitor,
 } from 'react-icons/pi'
 
-const STORAGE_KEY = 'has_seen_web_search_intro'
+import { SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO } from '@/constants/storage-keys'
+
 const METADATA_KEY = 'has_seen_web_search_intro'
 
 interface WebSearchIntroModalProps {
@@ -43,7 +44,7 @@ export function WebSearchIntroModal({
 
   const markAsSeen = useCallback(async () => {
     // Always set localStorage so the flag persists after signout
-    localStorage.setItem(STORAGE_KEY, 'true')
+    localStorage.setItem(SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO, 'true')
 
     if (user) {
       await user.update({

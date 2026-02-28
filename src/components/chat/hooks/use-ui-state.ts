@@ -1,4 +1,9 @@
 import {
+  SETTINGS_THEME,
+  SETTINGS_THEME_MODE,
+  UI_SIDEBAR_OPEN,
+} from '@/constants/storage-keys'
+import {
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -25,13 +30,11 @@ interface UseUIStateReturn {
 const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-const SIDEBAR_OPEN_KEY = 'sidebarOpen'
-
 export function useUIState(): UseUIStateReturn {
   const [isClient, setIsClient] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
-      return sessionStorage.getItem(SIDEBAR_OPEN_KEY) === 'true'
+      return sessionStorage.getItem(UI_SIDEBAR_OPEN) === 'true'
     }
     return false
   })
@@ -48,7 +51,9 @@ export function useUIState(): UseUIStateReturn {
     setIsClient(true)
 
     // Check localStorage for theme mode
-    const savedThemeMode = localStorage.getItem('themeMode') as ThemeMode | null
+    const savedThemeMode = localStorage.getItem(
+      SETTINGS_THEME_MODE,
+    ) as ThemeMode | null
     if (
       savedThemeMode &&
       ['light', 'dark', 'system'].includes(savedThemeMode)
@@ -65,14 +70,14 @@ export function useUIState(): UseUIStateReturn {
       return
     }
 
-    // Legacy: check old 'theme' key for backwards compatibility
-    const savedTheme = localStorage.getItem('theme')
+    // Legacy: check old SETTINGS_THEME key for backwards compatibility
+    const savedTheme = localStorage.getItem(SETTINGS_THEME)
     if (savedTheme !== null) {
       const mode = savedTheme === 'dark' ? 'dark' : 'light'
       setThemeModeState(mode)
       setIsDarkMode(savedTheme === 'dark')
       // Migrate to new key
-      localStorage.setItem('themeMode', mode)
+      localStorage.setItem(SETTINGS_THEME_MODE, mode)
       return
     }
 
@@ -157,13 +162,13 @@ export function useUIState(): UseUIStateReturn {
 
   // Persist sidebar open state to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem(SIDEBAR_OPEN_KEY, isSidebarOpen ? 'true' : 'false')
+    sessionStorage.setItem(UI_SIDEBAR_OPEN, isSidebarOpen ? 'true' : 'false')
   }, [isSidebarOpen])
 
   // Set theme mode (light, dark, or system)
   const setThemeMode = useCallback((mode: ThemeMode) => {
     setThemeModeState(mode)
-    localStorage.setItem('themeMode', mode)
+    localStorage.setItem(SETTINGS_THEME_MODE, mode)
 
     if (mode === 'system') {
       const prefersDark = window.matchMedia(
@@ -171,10 +176,10 @@ export function useUIState(): UseUIStateReturn {
       ).matches
       setIsDarkMode(prefersDark)
       // Also update legacy key for backwards compatibility
-      localStorage.setItem('theme', prefersDark ? 'dark' : 'light')
+      localStorage.setItem(SETTINGS_THEME, prefersDark ? 'dark' : 'light')
     } else {
       setIsDarkMode(mode === 'dark')
-      localStorage.setItem('theme', mode)
+      localStorage.setItem(SETTINGS_THEME, mode)
     }
 
     // Trigger theme change event for profile sync

@@ -1,4 +1,9 @@
 import { PAGINATION } from '@/config'
+import {
+  SYNC_ALL_CHATS_STATUS,
+  SYNC_CHAT_STATUS,
+  SYNC_PROJECT_CHAT_STATUS_PREFIX,
+} from '@/constants/storage-keys'
 import { logError, logInfo } from '@/utils/error-handling'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
@@ -35,11 +40,6 @@ export interface SyncStatusResult {
   remoteLastUpdated?: string | null
 }
 
-const SYNC_STATUS_STORAGE_KEY = 'tinfoil-chat-sync-status'
-const ALL_CHATS_SYNC_STATUS_STORAGE_KEY = 'tinfoil-all-chats-sync-status'
-const PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX =
-  'tinfoil-project-chat-sync-status-'
-
 const UPLOAD_BASE_DELAY_MS = 1000
 const UPLOAD_MAX_DELAY_MS = 8000
 const UPLOAD_MAX_RETRIES = 3
@@ -51,11 +51,9 @@ export class CloudSyncService {
   private syncLockResolve: (() => void) | null = null
   private uploadCoalescer: UploadCoalescer
   private streamingCallbacks: Set<string> = new Set()
-  private chatSyncCache = new SyncStatusCache<ChatSyncStatus>(
-    SYNC_STATUS_STORAGE_KEY,
-  )
+  private chatSyncCache = new SyncStatusCache<ChatSyncStatus>(SYNC_CHAT_STATUS)
   private allChatsSyncCache = new SyncStatusCache<ChatSyncStatus>(
-    ALL_CHATS_SYNC_STATUS_STORAGE_KEY,
+    SYNC_ALL_CHATS_STATUS,
   )
   private projectSyncCaches = new Map<string, SyncStatusCache<ChatSyncStatus>>()
 
@@ -72,16 +70,14 @@ export class CloudSyncService {
     // Listen for storage changes from other tabs to invalidate sync status cache
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', (e) => {
-        if (e.key === SYNC_STATUS_STORAGE_KEY) {
+        if (e.key === SYNC_CHAT_STATUS) {
           // Another tab updated sync status, invalidate our cache
           this.chatSyncCache.invalidate()
-        } else if (e.key === ALL_CHATS_SYNC_STATUS_STORAGE_KEY) {
+        } else if (e.key === SYNC_ALL_CHATS_STATUS) {
           this.allChatsSyncCache.invalidate()
-        } else if (e.key?.startsWith(PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX)) {
+        } else if (e.key?.startsWith(SYNC_PROJECT_CHAT_STATUS_PREFIX)) {
           // Another tab updated project sync status, invalidate that project's cache
-          const projectId = e.key.slice(
-            PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX.length,
-          )
+          const projectId = e.key.slice(SYNC_PROJECT_CHAT_STATUS_PREFIX.length)
           const existingCache = this.projectSyncCaches.get(projectId)
           if (existingCache) {
             existingCache.invalidate()
@@ -96,9 +92,7 @@ export class CloudSyncService {
   ): SyncStatusCache<ChatSyncStatus> {
     let cache = this.projectSyncCaches.get(projectId)
     if (!cache) {
-      cache = new SyncStatusCache(
-        PROJECT_SYNC_STATUS_STORAGE_KEY_PREFIX + projectId,
-      )
+      cache = new SyncStatusCache(SYNC_PROJECT_CHAT_STATUS_PREFIX + projectId)
       this.projectSyncCaches.set(projectId, cache)
     }
     return cache

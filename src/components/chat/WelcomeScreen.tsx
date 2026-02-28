@@ -1,4 +1,5 @@
 import { type BaseModel } from '@/config/models'
+import { USER_PREFS_NICKNAME } from '@/constants/storage-keys'
 import { useClerk, useUser } from '@clerk/nextjs'
 import { AnimatePresence, motion } from 'framer-motion'
 import React, {
@@ -274,7 +275,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
         return
       }
 
-      const savedNickname = localStorage.getItem('userNickname')
+      const savedNickname = localStorage.getItem(USER_PREFS_NICKNAME)
       if (savedNickname) {
         setNickname(savedNickname)
       }

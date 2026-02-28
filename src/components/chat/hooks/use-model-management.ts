@@ -1,4 +1,5 @@
 import { isModelNameAvailable, type BaseModel } from '@/config/models'
+import { SETTINGS_SELECTED_MODEL } from '@/constants/storage-keys'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logWarning } from '@/utils/error-handling'
 import { useCallback, useEffect, useState } from 'react'
@@ -38,7 +39,7 @@ export function useModelManagement({
   // Model state - initialize with saved model or empty string as placeholder
   const [selectedModel, setSelectedModel] = useState<AIModel>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('selectedModel')
+      const saved = localStorage.getItem(SETTINGS_SELECTED_MODEL)
       if (saved) {
         return saved as AIModel
       }
@@ -161,7 +162,7 @@ export function useModelManagement({
       }
 
       // Always save the validated model
-      localStorage.setItem('selectedModel', targetModel)
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, targetModel)
     }
   }, [
     models,
@@ -204,7 +205,7 @@ export function useModelManagement({
       setExpandedLabel(null)
 
       // Save to local storage
-      localStorage.setItem('selectedModel', modelName)
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, modelName)
     },
     [storeHistory, models, isPremium, selectedModel],
   )

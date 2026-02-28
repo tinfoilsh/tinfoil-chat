@@ -1,3 +1,4 @@
+import { SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL } from '@/constants/storage-keys'
 import { useToast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { TINFOIL_COLORS } from '@/theme/colors'
@@ -67,7 +68,7 @@ export function CloudSyncSetupModal({
 
   const handleMaybeLater = () => {
     persistCloudSyncEnabled(false)
-    localStorage.setItem('hasSeenCloudSyncModal', 'true')
+    localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
     onClose()
   }
 
@@ -123,7 +124,7 @@ export function CloudSyncSetupModal({
       await encryptionService.setKey(inputKey)
       setCloudSyncEnabled(true)
       persistCloudSyncEnabled(true)
-      localStorage.setItem('hasSeenCloudSyncModal', 'true')
+      localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
 
       logInfo('Restored encryption key for cloud sync', {
         component: 'CloudSyncSetupModal',
@@ -278,7 +279,7 @@ ${generatedKey.replace('key_', '')}
   }
 
   const handleComplete = () => {
-    localStorage.setItem('hasSeenCloudSyncModal', 'true')
+    localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
     if (generatedKey) {
       onSetupComplete(generatedKey)
     }

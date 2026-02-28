@@ -1,3 +1,4 @@
+import { SYNC_CHATS } from '@/constants/storage-keys'
 import React from 'react'
 import type { Chat } from './types'
 
@@ -27,7 +28,7 @@ export function updateChatTitle(
     )
 
     // Save updated chats to localStorage
-    localStorage.setItem('chats', JSON.stringify(updatedChats))
+    localStorage.setItem(SYNC_CHATS, JSON.stringify(updatedChats))
 
     return updatedChats
   })

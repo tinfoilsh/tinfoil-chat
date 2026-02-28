@@ -1,3 +1,4 @@
+import { SETTINGS_MAX_PROMPT_MESSAGES } from '@/constants/storage-keys'
 import { useEffect, useState } from 'react'
 import { CONSTANTS } from '../constants'
 
@@ -10,7 +11,7 @@ export const useMaxMessages = () => {
     // Load setting from localStorage on mount
     const loadMaxMessages = () => {
       if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('maxPromptMessages')
+        const saved = localStorage.getItem(SETTINGS_MAX_PROMPT_MESSAGES)
         if (saved) {
           const parsedValue = parseInt(saved, 10)
           if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
@@ -31,11 +32,11 @@ export const useMaxMessages = () => {
         key = e.key
         newValue = e.newValue
       } else if (e.type === 'maxPromptMessagesChanged') {
-        key = 'maxPromptMessages'
+        key = SETTINGS_MAX_PROMPT_MESSAGES
         newValue = (e as CustomEvent).detail.toString()
       }
 
-      if (key === 'maxPromptMessages' && newValue) {
+      if (key === SETTINGS_MAX_PROMPT_MESSAGES && newValue) {
         const parsedValue = parseInt(newValue, 10)
         if (!isNaN(parsedValue) && parsedValue > 0 && parsedValue <= 50) {
           setMaxMessages(parsedValue)

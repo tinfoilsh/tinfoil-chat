@@ -1,3 +1,4 @@
+import { SETTINGS_CHAT_FONT } from '@/constants/storage-keys'
 import { useEffect, useState } from 'react'
 
 export type ChatFont = 'default' | 'mono' | 'system' | 'dyslexic'
@@ -15,7 +16,7 @@ export const useChatFont = () => {
   useEffect(() => {
     const loadChatFont = () => {
       if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('chatFont')
+        const saved = localStorage.getItem(SETTINGS_CHAT_FONT)
         if (
           saved &&
           (saved === 'default' ||
@@ -38,12 +39,12 @@ export const useChatFont = () => {
         key = e.key
         newValue = e.newValue
       } else if (e.type === 'chatFontChanged') {
-        key = 'chatFont'
+        key = SETTINGS_CHAT_FONT
         newValue = (e as CustomEvent).detail
       }
 
       if (
-        key === 'chatFont' &&
+        key === SETTINGS_CHAT_FONT &&
         newValue &&
         (newValue === 'default' ||
           newValue === 'mono' ||

@@ -1,4 +1,12 @@
 import { API_BASE_URL, PAGINATION } from '@/config'
+import {
+  SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
+  UI_EXPAND_PROJECTS_ON_MOUNT,
+  UI_SIDEBAR_ACTIVE_TAB,
+  UI_SIDEBAR_CHAT_HISTORY_EXPANDED,
+  UI_SIDEBAR_EXPAND_SECTION,
+  UI_SIDEBAR_PROJECTS_EXPANDED,
+} from '@/constants/storage-keys'
 import { useProjects } from '@/hooks/use-projects'
 import { toast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -138,15 +146,15 @@ export function ChatSidebar({
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
-      const shouldExpand = sessionStorage.getItem('expandProjectsOnMount')
+      const shouldExpand = sessionStorage.getItem(UI_EXPAND_PROJECTS_ON_MOUNT)
       if (shouldExpand === 'true') {
         return true
       }
-      const expandSection = sessionStorage.getItem('sidebarExpandSection')
+      const expandSection = sessionStorage.getItem(UI_SIDEBAR_EXPAND_SECTION)
       if (expandSection === 'projects') {
         return true
       }
-      const stored = sessionStorage.getItem('sidebarProjectsExpanded')
+      const stored = sessionStorage.getItem(UI_SIDEBAR_PROJECTS_EXPANDED)
       if (stored !== null) {
         return stored === 'true'
       }
@@ -157,17 +165,17 @@ export function ChatSidebar({
   const [isChatHistoryExpanded, setIsChatHistoryExpanded] = useState(() => {
     if (typeof window !== 'undefined') {
       const shouldExpandProjects = sessionStorage.getItem(
-        'expandProjectsOnMount',
+        UI_EXPAND_PROJECTS_ON_MOUNT,
       )
       if (shouldExpandProjects === 'true') {
-        sessionStorage.removeItem('expandProjectsOnMount')
+        sessionStorage.removeItem(UI_EXPAND_PROJECTS_ON_MOUNT)
         return false
       }
-      const expandSection = sessionStorage.getItem('sidebarExpandSection')
+      const expandSection = sessionStorage.getItem(UI_SIDEBAR_EXPAND_SECTION)
       if (expandSection === 'projects') {
         return false
       }
-      const stored = sessionStorage.getItem('sidebarChatHistoryExpanded')
+      const stored = sessionStorage.getItem(UI_SIDEBAR_CHAT_HISTORY_EXPANDED)
       if (stored !== null) {
         return stored === 'true'
       }
@@ -185,7 +193,7 @@ export function ChatSidebar({
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'cloud' | 'local'>(() => {
     if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem('chatSidebarActiveTab')
+      const stored = sessionStorage.getItem(UI_SIDEBAR_ACTIVE_TAB)
       if (stored === 'cloud' || stored === 'local') {
         return stored
       }
@@ -258,13 +266,13 @@ export function ChatSidebar({
 
   // Persist active tab selection to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem('chatSidebarActiveTab', activeTab)
+    sessionStorage.setItem(UI_SIDEBAR_ACTIVE_TAB, activeTab)
   }, [activeTab])
 
   // Persist projects expanded state to sessionStorage
   useEffect(() => {
     sessionStorage.setItem(
-      'sidebarProjectsExpanded',
+      UI_SIDEBAR_PROJECTS_EXPANDED,
       isProjectsExpanded ? 'true' : 'false',
     )
   }, [isProjectsExpanded])
@@ -272,7 +280,7 @@ export function ChatSidebar({
   // Persist chat history expanded state to sessionStorage
   useEffect(() => {
     sessionStorage.setItem(
-      'sidebarChatHistoryExpanded',
+      UI_SIDEBAR_CHAT_HISTORY_EXPANDED,
       isChatHistoryExpanded ? 'true' : 'false',
     )
   }, [isChatHistoryExpanded])
@@ -382,7 +390,7 @@ export function ChatSidebar({
   // Handle sidebar expand section when sidebar opens
   useEffect(() => {
     if (isOpen) {
-      const expandSection = sessionStorage.getItem('sidebarExpandSection')
+      const expandSection = sessionStorage.getItem(UI_SIDEBAR_EXPAND_SECTION)
       if (expandSection === 'projects') {
         setIsProjectsExpanded(true)
         setIsChatHistoryExpanded(false)
@@ -391,7 +399,7 @@ export function ChatSidebar({
         setIsProjectsExpanded(false)
         setIsChatHistoryExpanded(true)
       }
-      sessionStorage.removeItem('sidebarExpandSection')
+      sessionStorage.removeItem(UI_SIDEBAR_EXPAND_SECTION)
     }
   }, [isOpen, refreshProjects])
 
@@ -616,14 +624,14 @@ export function ChatSidebar({
       setCloudSyncEnabledSetting(true)
 
       // Clear the explicit disable flag when re-enabling
-      localStorage.removeItem('cloudSyncExplicitlyDisabled')
+      localStorage.removeItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED)
     } else {
       // Disabling cloud sync
       setCloudSyncEnabled(false)
       setCloudSyncEnabledSetting(false)
 
       // Mark that user explicitly disabled cloud sync (to prevent auto-enable)
-      localStorage.setItem('cloudSyncExplicitlyDisabled', 'true')
+      localStorage.setItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED, 'true')
 
       try {
         const deletedCount = await chatStorage.deleteAllNonLocalChats()
@@ -761,7 +769,10 @@ export function ChatSidebar({
               <div className="group relative">
                 <button
                   onClick={() => {
-                    sessionStorage.setItem('sidebarExpandSection', 'projects')
+                    sessionStorage.setItem(
+                      UI_SIDEBAR_EXPAND_SECTION,
+                      'projects',
+                    )
                     setIsProjectsExpanded(true)
                     setIsChatHistoryExpanded(false)
                     setIsOpen(true)
@@ -784,7 +795,7 @@ export function ChatSidebar({
             <div className="group relative">
               <button
                 onClick={() => {
-                  sessionStorage.setItem('sidebarExpandSection', 'chats')
+                  sessionStorage.setItem(UI_SIDEBAR_EXPAND_SECTION, 'chats')
                   setIsChatHistoryExpanded(true)
                   setIsProjectsExpanded(false)
                   setIsOpen(true)

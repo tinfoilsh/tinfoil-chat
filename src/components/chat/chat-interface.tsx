@@ -3,6 +3,11 @@ import {
   getSystemPromptAndRules,
   type BaseModel,
 } from '@/config/models'
+import {
+  SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_WEB_SEARCH_ENABLED,
+  UI_EXPAND_PROJECT_DOCUMENTS,
+} from '@/constants/storage-keys'
 import { useChatRouter } from '@/hooks/use-chat-router'
 import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
@@ -309,14 +314,14 @@ export function ChatInterface({
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
     if (typeof window === 'undefined') return true
-    const saved = localStorage.getItem('webSearchEnabled')
+    const saved = localStorage.getItem(SETTINGS_WEB_SEARCH_ENABLED)
     return saved === null ? true : saved === 'true'
   })
 
   // PII check setting (controlled from settings modal, defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
     if (typeof window === 'undefined') return true
-    const saved = localStorage.getItem('piiCheckEnabled')
+    const saved = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     return saved === null ? true : saved === 'true'
   })
 
@@ -719,7 +724,7 @@ export function ChatInterface({
 
   // Persist web search toggle to localStorage
   useEffect(() => {
-    localStorage.setItem('webSearchEnabled', String(webSearchEnabled))
+    localStorage.setItem(SETTINGS_WEB_SEARCH_ENABLED, String(webSearchEnabled))
   }, [webSearchEnabled])
 
   // Listen for PII check setting changes from settings modal
@@ -1307,7 +1312,7 @@ export function ChatInterface({
       })
 
       // Open sidebar and expand documents section immediately
-      sessionStorage.setItem('expandProjectDocuments', 'true')
+      sessionStorage.setItem(UI_EXPAND_PROJECT_DOCUMENTS, 'true')
       setIsSidebarOpen(true)
 
       await handleDocumentUpload(

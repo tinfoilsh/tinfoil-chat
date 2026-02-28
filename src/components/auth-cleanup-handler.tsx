@@ -1,6 +1,6 @@
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
+import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import {
-  ACTIVE_USER_ID_KEY,
   getEncryptionKey,
   performSignoutCleanup,
   performUserSwitchCleanup,
@@ -19,7 +19,7 @@ export function AuthCleanupHandler() {
     if (!isLoaded) return
 
     if (isSignedIn && user?.id) {
-      const storedUserId = localStorage.getItem(ACTIVE_USER_ID_KEY)
+      const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
 
       if (storedUserId && storedUserId !== user.id) {
         // Different user signed in — clear all previous user data + reload
@@ -28,11 +28,11 @@ export function AuthCleanupHandler() {
       }
 
       // Same user or fresh sign-in — persist the active user ID
-      localStorage.setItem(ACTIVE_USER_ID_KEY, user.id)
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, user.id)
     }
 
     // Check if user just signed out (stored user ID exists but no longer signed in)
-    const storedUserId = localStorage.getItem(ACTIVE_USER_ID_KEY)
+    const storedUserId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
     if (!isSignedIn && storedUserId && !hasCheckedRef.current) {
       hasCheckedRef.current = true
 
@@ -50,7 +50,7 @@ export function AuthCleanupHandler() {
   }, [isSignedIn, isLoaded, user?.id])
 
   const handleKeepData = () => {
-    localStorage.removeItem(ACTIVE_USER_ID_KEY)
+    localStorage.removeItem(AUTH_ACTIVE_USER_ID)
     setShowModal(false)
     // Force reload to clear all React state
     window.location.reload()
