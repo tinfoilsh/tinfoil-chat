@@ -219,10 +219,13 @@ export function usePasskeyBackup({
       if (entries.length === 0) return
 
       // Use the cached PRF result to avoid re-prompting biometrics.
-      // Falls back to a full WebAuthn authentication if no cache is available.
+      // Falls back to a full WebAuthn authentication if no cache is available
+      // or if the cached credential is no longer registered on the backend.
       const cached = getCachedPrfResult()
       const result =
-        cached ?? (await authenticatePrfPasskey(entries.map((e) => e.id)))
+        cached && entries.some((e) => e.id === cached.credentialId)
+          ? cached
+          : await authenticatePrfPasskey(entries.map((e) => e.id))
       if (!result) return
 
       const kek = await deriveKeyEncryptionKey(result.prfOutput)
