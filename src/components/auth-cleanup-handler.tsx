@@ -39,38 +39,22 @@ export function AuthCleanupHandler() {
     if (!isSignedIn && storedUserId && !hasCheckedRef.current) {
       hasCheckedRef.current = true
 
-      if (hasPasskeyBackup()) {
-        // Keys are safely backed up via passkey — delete everything immediately
-        logInfo('Passkey backup exists, auto-clearing all data on signout', {
-          component: 'AuthCleanupHandler',
-          action: 'signoutWithPasskey',
-        })
-        performSignoutCleanup()
-          .catch((error) => {
-            logError('Failed to cleanup on signout with passkey', error, {
-              component: 'AuthCleanupHandler',
-              action: 'signoutWithPasskey',
-            })
-          })
-          .finally(() => {
-            window.location.reload()
-          })
-        return
-      }
-
       const encryptionKey = getEncryptionKey()
 
-      if (!encryptionKey) {
-        // No key and no passkey — nothing to save, clear everything
-        logInfo('No encryption key, clearing all data on signout', {
+      if (hasPasskeyBackup() || !encryptionKey) {
+        // Keys are safely backed up via passkey, or no key exists — clear everything
+        const action = hasPasskeyBackup()
+          ? 'signoutWithPasskey'
+          : 'signoutWithoutKey'
+        logInfo('Auto-clearing all data on signout', {
           component: 'AuthCleanupHandler',
-          action: 'signoutWithoutKey',
+          action,
         })
         performSignoutCleanup()
           .catch((error) => {
-            logError('Failed to cleanup on signout (no key)', error, {
+            logError('Failed to cleanup on signout', error, {
               component: 'AuthCleanupHandler',
-              action: 'signoutWithoutKey',
+              action,
             })
           })
           .finally(() => {
