@@ -1021,6 +1021,18 @@ export function ChatInterface({
     setShowCloudSyncSetupModal(true)
   }
 
+  const handleKeyChanged = useCallback(
+    async (key: string) => {
+      const syncResult = await setEncryptionKey(key)
+      if (syncResult) {
+        await retryProfileDecryption()
+        await reloadChats()
+        window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
+      }
+    },
+    [setEncryptionKey, retryProfileDecryption, reloadChats],
+  )
+
   // Handler for creating a new project with a random name
   const handleCreateProject = useCallback(async () => {
     try {
@@ -2211,14 +2223,7 @@ export function ChatInterface({
         isSignedIn={isSignedIn}
         isPremium={isPremium}
         encryptionKey={encryptionKey}
-        onKeyChange={async (key: string) => {
-          const syncResult = await setEncryptionKey(key)
-          if (syncResult) {
-            await reloadChats()
-            await retryProfileDecryption()
-            window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
-          }
-        }}
+        onKeyChange={handleKeyChanged}
         passkeyActive={passkeyActive}
         passkeySetupAvailable={passkeySetupAvailable}
         onSetupPasskey={setupPasskey}
@@ -2464,13 +2469,7 @@ export function ChatInterface({
             }
           }}
           onSetupComplete={async (key: string) => {
-            const syncResult = await setEncryptionKey(key)
-            if (syncResult) {
-              await retryProfileDecryption()
-              await reloadChats()
-              // Notify projects to retry decryption
-              window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
-            }
+            await handleKeyChanged(key)
             setShowCloudSyncSetupModal(false)
           }}
           isDarkMode={isDarkMode}
@@ -2482,12 +2481,7 @@ export function ChatInterface({
           onRecoverWithPasskey={async () => {
             const key = await recoverWithPasskey()
             if (key) {
-              const syncResult = await setEncryptionKey(key)
-              if (syncResult) {
-                await retryProfileDecryption()
-                await reloadChats()
-                window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
-              }
+              await handleKeyChanged(key)
               setShowCloudSyncSetupModal(false)
               return true
             }
@@ -2496,9 +2490,7 @@ export function ChatInterface({
           onSetupNewKey={async () => {
             const key = await setupNewKeySplit()
             if (key) {
-              await retryProfileDecryption()
-              await reloadChats()
-              window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
+              await handleKeyChanged(key)
               setShowCloudSyncSetupModal(false)
               return true
             }
