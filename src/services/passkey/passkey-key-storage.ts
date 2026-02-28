@@ -27,7 +27,10 @@ export interface PasskeyCredentialEntry {
   encrypted_keys: string // base64
   iv: string // base64
   created_at: string
+  version: number // schema version (1 = AES-256-GCM + HKDF-SHA256 KEK)
 }
+
+const CURRENT_CREDENTIAL_VERSION = 1
 
 // --- Encrypt / Decrypt ---
 
@@ -94,7 +97,8 @@ function isValidCredentialEntry(
     typeof e.id === 'string' &&
     typeof e.encrypted_keys === 'string' &&
     typeof e.iv === 'string' &&
-    typeof e.created_at === 'string'
+    typeof e.created_at === 'string' &&
+    typeof e.version === 'number'
   )
 }
 
@@ -121,7 +125,7 @@ export async function loadPasskeyCredentials(): Promise<
 
   const data = await response.json()
   if (!Array.isArray(data)) {
-    return []
+    throw new Error('Invalid passkey credentials response: expected array')
   }
 
   return data.filter(isValidCredentialEntry)
@@ -197,6 +201,7 @@ export async function storeEncryptedKeys(
       encrypted_keys: encrypted.data,
       iv: encrypted.iv,
       created_at: previous?.created_at ?? new Date().toISOString(),
+      version: CURRENT_CREDENTIAL_VERSION,
     }
 
     const updated = existing.filter((e) => e.id !== credentialId)
