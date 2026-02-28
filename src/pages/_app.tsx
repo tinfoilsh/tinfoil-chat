@@ -2,6 +2,7 @@ import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
 import { Toaster } from '@/components/ui/toaster'
 import '@/styles/globals.css'
 import '@/styles/tailwind.css'
+import { migrateStorageKeys } from '@/utils/storage-migration'
 import { ClerkProvider } from '@clerk/nextjs'
 import type { AppProps } from 'next/app'
 import localFont from 'next/font/local'
@@ -93,6 +94,8 @@ const openDyslexic = localFont({
   variable: '--font-opendyslexic',
   display: 'swap',
 })
+
+migrateStorageKeys()
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
