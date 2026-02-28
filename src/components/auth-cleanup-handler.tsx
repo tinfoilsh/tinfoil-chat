@@ -50,6 +50,9 @@ export function AuthCleanupHandler() {
           component: 'AuthCleanupHandler',
           action,
         })
+        // Remove the active user ID first so that if cleanup throws before
+        // localStorage.clear(), the reload won't re-enter this branch and loop.
+        localStorage.removeItem(ACTIVE_USER_ID_KEY)
         performSignoutCleanup()
           .catch((error) => {
             logError('Failed to cleanup on signout', error, {
