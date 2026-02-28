@@ -12,6 +12,7 @@ import React, {
 import { BiSolidLock } from 'react-icons/bi'
 import { ChatInput } from './chat-input'
 import { CONSTANTS } from './constants'
+import { DataFlowDiagram } from './DataFlowDiagram'
 import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
@@ -321,7 +322,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 
   return (
     <motion.div
-      className="flex min-h-[60vh] w-full items-center justify-center md:min-h-0 md:items-start"
+      className={`flex w-full justify-center ${privacyExpanded ? 'items-start' : 'min-h-[60vh] items-center md:min-h-0 md:items-start'}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
@@ -457,6 +458,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                       ]}
                     />
                   </p>
+                  <DataFlowDiagram />
                 </motion.div>
               )}
             </AnimatePresence>
