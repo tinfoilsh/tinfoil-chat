@@ -33,7 +33,7 @@ export interface PrfPasskeyResult {
   prfOutput: ArrayBuffer
 }
 
-const PRF_CACHE_KEY = 'tinfoil-passkey-prf-cache'
+const PRF_CACHE_KEY = 'tinfoil-secret-passkey-prf-output'
 
 interface PrfCacheEntry {
   credentialId: string
