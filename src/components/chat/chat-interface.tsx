@@ -33,6 +33,7 @@ import {
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
+import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 
 import { cloudSync } from '@/services/cloud/cloud-sync'
@@ -263,18 +264,30 @@ export function ChatInterface({
   const { chat_subscription_active, isLoading: subscriptionLoading } =
     useSubscriptionStatus()
 
-  // Initialize cloud sync
+  // Initialize cloud sync and passkey backup as two separate hooks.
+  // usePasskeyBackup depends on useCloudSync's `initialized` and `encryptionKey`,
+  // and bridges key changes back via onEncryptionKeyRecovered / updatePasskeyBackup.
+  // Ref bridges the forward dependency: useCloudSync needs updatePasskeyBackup (from
+  // usePasskeyBackup), which is defined after useCloudSync returns.
+  const updatePasskeyBackupRef = useRef<() => Promise<void>>()
+
   const {
     syncing,
     syncChats,
     smartSyncChats,
     syncProjectChats,
     encryptionKey,
-    isFirstTimeUser,
+    initialized: cloudSyncInitialized,
     setEncryptionKey,
     retryDecryptionWithNewKey,
-    clearFirstTimeUser,
     decryptionProgress,
+  } = useCloudSync({
+    onKeyChanged: () => {
+      void updatePasskeyBackupRef.current?.()
+    },
+  })
+
+  const {
     passkeyActive,
     passkeyRecoveryNeeded,
     passkeySetupAvailable,
@@ -283,7 +296,20 @@ export function ChatInterface({
     recoverWithPasskey,
     setupNewKeySplit,
     acceptPasskeyIntro,
-  } = useCloudSync()
+    updatePasskeyBackup,
+  } = usePasskeyBackup({
+    encryptionKey,
+    initialized: cloudSyncInitialized,
+    isSignedIn,
+    user,
+    onEncryptionKeyRecovered: useCallback(
+      (key: string) => {
+        void setEncryptionKey(key)
+      },
+      [setEncryptionKey],
+    ),
+  })
+  updatePasskeyBackupRef.current = updatePasskeyBackup
 
   // Initialize profile sync
   const {

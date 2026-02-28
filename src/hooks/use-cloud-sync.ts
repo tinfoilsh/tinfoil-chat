@@ -6,186 +6,53 @@ import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import {
-  authenticatePrfPasskey,
-  createPrfPasskey,
-  deriveKeyEncryptionKey,
-  getCachedPrfResult,
-  hasPasskeyCredentials,
-  loadPasskeyCredentials,
-  retrieveEncryptedKeys,
-  storeEncryptedKeys,
-} from '@/services/passkey'
-import { isPrfSupported } from '@/services/passkey/prf-support'
-import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
-import {
-  hasPasskeyBackup,
-  PASSKEY_BACKED_UP_KEY,
-} from '@/utils/signout-cleanup'
-import { useAuth, useUser } from '@clerk/nextjs'
+import { hasPasskeyBackup } from '@/utils/signout-cleanup'
+import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface CloudSyncState {
   syncing: boolean
   lastSyncTime: number | null
   encryptionKey: string | null
-  isFirstTimeUser: boolean
+  /** True once the init effect has finished (encryption key resolved) */
+  initialized: boolean
   decryptionProgress: {
     isDecrypting: boolean
     current: number
     total: number
   } | null
-  /** Passkey backup exists on the backend or was used/stored this session */
-  passkeyActive: boolean
-  /** Backend has passkey credentials but auth failed on this device */
-  passkeyRecoveryNeeded: boolean
-  /** PRF supported + keys exist locally; user can register a passkey backup from settings */
-  passkeySetupAvailable: boolean
-  /** True when the intro modal should be shown before the first passkey prompt */
-  passkeyIntroNeeded: boolean
 }
 
-export function useCloudSync() {
+interface UseCloudSyncOptions {
+  /** Called after a key change so the passkey hook can re-encrypt the backup */
+  onKeyChanged?: () => void
+}
+
+export function useCloudSync(options?: UseCloudSyncOptions) {
   const { getToken, isSignedIn } = useAuth()
-  const { user } = useUser()
   const [state, setState] = useState<CloudSyncState>({
     syncing: false,
     lastSyncTime: null,
     encryptionKey: null,
-    isFirstTimeUser: false,
+    initialized: false,
     decryptionProgress: null,
-    passkeyActive: false,
-    passkeyRecoveryNeeded: false,
-    passkeySetupAvailable: false,
-    passkeyIntroNeeded: false,
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
-  const passkeyFlowInProgressRef = useRef(false)
   const isMountedRef = useRef(true)
-  const userRef = useRef(user)
-  userRef.current = user
-
-  /**
-   * Build the (userId, userName, displayName) tuple for createPrfPasskey
-   * from the current Clerk user, or return null if no user is available.
-   */
-  const getPasskeyUserInfo = (): {
-    userId: string
-    userName: string
-    displayName: string
-  } | null => {
-    const u = userRef.current
-    if (!u) return null
-    return {
-      userId: u.id,
-      userName: u.primaryEmailAddress?.emailAddress ?? u.id,
-      displayName: u.fullName ?? u.primaryEmailAddress?.emailAddress ?? u.id,
-    }
-  }
-
-  /**
-   * Create a PRF passkey and encrypt the given key bundle to the backend.
-   * Returns true if the passkey was created and keys stored, false if the user
-   * cancelled or PRF wasn't supported, throws on unexpected errors.
-   */
-  const createAndStorePasskeyBackup = async (
-    userInfo: { userId: string; userName: string; displayName: string },
-    keys: { primary: string; alternatives: string[] },
-  ): Promise<boolean> => {
-    const passkeyResult = await createPrfPasskey(
-      userInfo.userId,
-      userInfo.userName,
-      userInfo.displayName,
-    )
-    if (!passkeyResult) return false
-
-    const kek = await deriveKeyEncryptionKey(passkeyResult.prfOutput)
-    const saved = await storeEncryptedKeys(
-      passkeyResult.credentialId,
-      kek,
-      keys,
-    )
-    if (!saved) return false
-    localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
-    return true
-  }
-
-  /**
-   * Generate a new encryption key, back it up with a new passkey, persist it,
-   * and enable cloud sync. Returns the new key on success, null on cancel/failure.
-   * Shared by first-time setup and "Start Fresh" flows.
-   */
-  const generateKeyWithPasskeyBackup = useCallback(async (): Promise<
-    string | null
-  > => {
-    const userInfo = getPasskeyUserInfo()
-    if (!userInfo) return null
-
-    const newKey = await encryptionService.generateKey()
-
-    const created = await createAndStorePasskeyBackup(userInfo, {
-      primary: newKey,
-      alternatives: [],
-    })
-    if (!created) return null
-
-    await encryptionService.setKey(newKey)
-    setCloudSyncEnabled(true)
-    return newKey
-  }, [])
-
-  /**
-   * Re-encrypt the passkey backup with the current key bundle.
-   * Called after key changes to keep the backup in sync.
-   */
-  const updatePasskeyBackup = async (): Promise<void> => {
-    try {
-      const entries = await loadPasskeyCredentials()
-      if (entries.length === 0) return
-
-      // Use the cached PRF result to avoid re-prompting biometrics.
-      // Falls back to a full WebAuthn authentication if no cache is available.
-      const cached = getCachedPrfResult()
-      const result =
-        cached ?? (await authenticatePrfPasskey(entries.map((e) => e.id)))
-      if (!result) return
-
-      const kek = await deriveKeyEncryptionKey(result.prfOutput)
-      const keys = encryptionService.getAllKeys()
-      if (!keys.primary) return
-
-      await storeEncryptedKeys(result.credentialId, kek, {
-        primary: keys.primary,
-        alternatives: keys.alternatives,
-      })
-
-      logInfo('Updated passkey backup after key change', {
-        component: 'useCloudSync',
-        action: 'updatePasskeyBackup',
-      })
-    } catch (error) {
-      logError('Failed to update passkey backup after key change', error, {
-        component: 'useCloudSync',
-        action: 'updatePasskeyBackup',
-      })
-    }
-  }
-
-  const passkeyIntroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
+  // Ref avoids putting `options` in useCallback dep arrays, which would
+  // recreate setEncryptionKey every render (options is a fresh object each time).
+  const onKeyChangedRef = useRef(options?.onKeyChanged)
+  onKeyChangedRef.current = options?.onKeyChanged
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       isMountedRef.current = false
-      if (passkeyIntroTimerRef.current) {
-        clearTimeout(passkeyIntroTimerRef.current)
-      }
     }
   }, [])
 
@@ -224,71 +91,6 @@ export function useCloudSync() {
     return unsubscribe
   }, [])
 
-  /**
-   * Core passkey recovery: load credentials, authenticate, derive KEK, decrypt bundle.
-   * Returns the recovered KeyBundle on success, null on failure/cancellation.
-   * Throws on unexpected errors (callers decide how to handle).
-   */
-  const performPasskeyRecovery = async (): Promise<{
-    primary: string
-    alternatives: string[]
-  } | null> => {
-    const entries = await loadPasskeyCredentials()
-    if (entries.length === 0) return null
-
-    const credentialIds = entries.map((e) => e.id)
-    const result = await authenticatePrfPasskey(credentialIds)
-    if (!result) return null
-
-    const kek = await deriveKeyEncryptionKey(result.prfOutput)
-    const keyBundle = await retrieveEncryptedKeys(result.credentialId, kek)
-    if (!keyBundle) return null
-
-    await encryptionService.setAllKeys(
-      keyBundle.primary,
-      keyBundle.alternatives,
-    )
-
-    setCloudSyncEnabled(true)
-    localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
-    return keyBundle
-  }
-
-  /**
-   * Apply recovered keys to component state. Shared by tryPasskeyRecovery
-   * (init effect) and recoverWithPasskey (UI-triggered retry).
-   */
-  const applyRecoveredKeys = (keyBundle: {
-    primary: string
-    alternatives: string[]
-  }): void => {
-    if (isMountedRef.current) {
-      setState((prev) => ({
-        ...prev,
-        encryptionKey: keyBundle.primary,
-        isFirstTimeUser: false,
-        passkeyActive: true,
-        passkeyRecoveryNeeded: false,
-      }))
-    }
-  }
-
-  /**
-   * Apply a newly generated key to component state. Shared by
-   * setupFirstTimePasskeyUser (init effect) and setupNewKeySplit (UI-triggered).
-   */
-  const applyNewPasskeyKey = (key: string): void => {
-    if (isMountedRef.current) {
-      setState((prev) => ({
-        ...prev,
-        encryptionKey: key,
-        isFirstTimeUser: false,
-        passkeyActive: true,
-        passkeyRecoveryNeeded: false,
-      }))
-    }
-  }
-
   // Initialize cloud sync when user is signed in
   useEffect(() => {
     const initializeSync = async () => {
@@ -300,9 +102,7 @@ export function useCloudSync() {
         // Initialize centralized auth token manager
         authTokenManager.initialize(getToken)
 
-        // Check if user already has a key before initializing
         const existingKey = localStorage.getItem(USER_ENCRYPTION_KEY)
-        const isFirstTime = !existingKey
 
         // Backwards compatibility: if an encryption key exists but cloud sync is not enabled,
         // automatically enable it (existing users should have sync enabled by default)
@@ -328,66 +128,9 @@ export function useCloudSync() {
           setState((prev) => ({
             ...prev,
             encryptionKey: key,
-            isFirstTimeUser: isFirstTime,
+            initialized: true,
           }))
         }
-
-        // --- Passkey PRF flow ---
-        const prfSupported = await isPrfSupported()
-
-        if (key) {
-          if (prfSupported) {
-            const credentialsExist = await hasPasskeyCredentials()
-
-            if (credentialsExist) {
-              // Already backed up — show green badge, hide setup button
-              localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
-              if (isMountedRef.current) {
-                setState((prev) => ({
-                  ...prev,
-                  passkeyActive: true,
-                }))
-              }
-            } else if (!passkeyFlowInProgressRef.current) {
-              const hasSeen =
-                userRef.current?.unsafeMetadata?.has_seen_passkey_intro === true
-              if (!hasSeen) {
-                // Existing user with no passkey backup — show intro modal
-                promptExistingUserPasskeySetup()
-              } else if (isMountedRef.current) {
-                // Already seen intro but hasn't set up — show option in settings
-                setState((prev) => ({
-                  ...prev,
-                  passkeySetupAvailable: true,
-                }))
-              }
-            }
-          }
-        } else if (prfSupported) {
-          // No localStorage keys — try passkey recovery
-          const credentialsExist = await hasPasskeyCredentials()
-
-          if (credentialsExist) {
-            // Backend has passkey credentials — try to recover keys.
-            // If recovery fails (user cancelled, wrong device, etc.),
-            // cloud sync stays off. When the user manually enables it,
-            // the setup modal will start at the passkey-recovery step
-            // to give them another chance before falling back to
-            // generate/restore.
-            const recovered = await tryPasskeyRecovery()
-            if (!recovered && isMountedRef.current) {
-              setState((prev) => ({
-                ...prev,
-                passkeyRecoveryNeeded: true,
-              }))
-            }
-          } else {
-            // First-time user with PRF support: auto-generate key + create passkey
-            await setupFirstTimePasskeyUser()
-          }
-        }
-        // If PRF not supported and no localStorage key: current flow unchanged
-        // (isFirstTimeUser=true, cloud sync disabled, setup modal when user opts in)
 
         // Only perform sync operations if cloud sync is enabled
         if (!isCloudSyncEnabled()) {
@@ -402,95 +145,17 @@ export function useCloudSync() {
           component: 'useCloudSync',
           action: 'initializeSync',
         })
+        // Still mark as initialized so passkey hook can proceed
+        if (isMountedRef.current) {
+          setState((prev) => ({ ...prev, initialized: true }))
+        }
       } finally {
         initializingRef.current = false
       }
     }
 
-    /**
-     * Attempt to recover keys from backend using passkey authentication.
-     * Returns true if recovery succeeded, false otherwise.
-     */
-    const tryPasskeyRecovery = async (): Promise<boolean> => {
-      try {
-        const keyBundle = await performPasskeyRecovery()
-        if (!keyBundle) return false
-
-        applyRecoveredKeys(keyBundle)
-
-        logInfo('Recovered encryption keys via passkey', {
-          component: 'useCloudSync',
-          action: 'tryPasskeyRecovery',
-          metadata: {
-            alternativeKeys: keyBundle.alternatives.length,
-          },
-        })
-        return true
-      } catch (error) {
-        logError('Passkey recovery failed', error, {
-          component: 'useCloudSync',
-          action: 'tryPasskeyRecovery',
-        })
-        return false
-      }
-    }
-
-    /**
-     * Existing user with local keys but no passkey backup — show the intro modal.
-     */
-    const PASSKEY_INTRO_DELAY_MS = 2000
-
-    const promptExistingUserPasskeySetup = (): void => {
-      passkeyIntroTimerRef.current = setTimeout(() => {
-        if (isMountedRef.current) {
-          setState((prev) => ({
-            ...prev,
-            passkeyIntroNeeded: true,
-          }))
-        }
-      }, PASSKEY_INTRO_DELAY_MS)
-    }
-
-    /**
-     * First-time user with PRF support: generate key in memory, only persist
-     * after passkey creation succeeds. If passkey is cancelled, key is discarded
-     * and cloud sync stays OFF.
-     */
-    const setupFirstTimePasskeyUser = async (): Promise<void> => {
-      try {
-        const newKey = await generateKeyWithPasskeyBackup()
-
-        if (newKey) {
-          applyNewPasskeyKey(newKey)
-
-          logInfo('First-time passkey setup complete', {
-            component: 'useCloudSync',
-            action: 'setupFirstTimePasskeyUser',
-          })
-        } else {
-          // User cancelled — discard key, cloud sync stays OFF
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupAvailable: true,
-            }))
-          }
-
-          logInfo('Passkey creation cancelled, key discarded', {
-            component: 'useCloudSync',
-            action: 'setupFirstTimePasskeyUser',
-          })
-        }
-      } catch (error) {
-        logError('First-time passkey user setup failed', error, {
-          component: 'useCloudSync',
-          action: 'setupFirstTimePasskeyUser',
-        })
-      }
-    }
-
     initializeSync()
-  }, [isSignedIn, getToken, generateKeyWithPasskeyBackup])
+  }, [isSignedIn, getToken])
 
   // Full sync chats (always fetches first page)
   const syncChats = useCallback(async () => {
@@ -671,8 +336,8 @@ export function useCloudSync() {
 
   // Retry decryption for failed chats
   const retryDecryptionWithNewKey = useCallback(
-    (options?: { runInBackground?: boolean }) => {
-      const { runInBackground = false } = options || {}
+    (opts?: { runInBackground?: boolean }) => {
+      const { runInBackground = false } = opts || {}
 
       if (runInBackground) {
         if (isMountedRef.current) {
@@ -718,16 +383,27 @@ export function useCloudSync() {
   const setEncryptionKey = useCallback(
     async (key: string) => {
       try {
-        // Store the old key to detect if it changed
-        const oldKey = encryptionService.getKey()
+        // Check both encryptionService (source of truth for the crypto layer) and
+        // React state (source of truth for the hook). The passkey init effect may
+        // have already persisted the key to encryptionService before the consumer
+        // calls setEncryptionKey, so encryptionService.getKey() would match — but
+        // the hook's encryptionKey state is still null and needs a sync + decrypt.
+        const serviceKey = encryptionService.getKey()
+        let stateKey: string | null = null
+        setState((prev) => {
+          stateKey = prev.encryptionKey
+          return prev
+        })
 
         await encryptionService.setKey(key)
         if (isMountedRef.current) {
           setState((prev) => ({ ...prev, encryptionKey: key }))
         }
 
-        // If the key changed OR this is the first time setting a key, retry decryption and sync
-        if (!oldKey || oldKey !== key) {
+        const keyValueChanged = !serviceKey || serviceKey !== key
+        const stateNeedsSync = !stateKey
+
+        if (keyValueChanged || stateNeedsSync) {
           // Sync immediately to fetch encrypted chats from cloud
           // Don't let sync failures block key updates
           try {
@@ -744,9 +420,12 @@ export function useCloudSync() {
             runInBackground: true,
           })
 
-          // If passkey backup exists, re-encrypt it with the updated key bundle
-          if (hasPasskeyBackup()) {
-            void updatePasskeyBackup()
+          // Re-encrypt the passkey backup only when the key VALUE actually changed
+          // (not when state is merely catching up to what encryptionService already holds,
+          // e.g. after passkey auto-recovery which sets the key via encryptionService
+          // before this function is called).
+          if (keyValueChanged && hasPasskeyBackup()) {
+            onKeyChangedRef.current?.()
           }
 
           return true // Always return true to trigger reload
@@ -764,150 +443,6 @@ export function useCloudSync() {
     [syncChats, retryDecryptionWithNewKey],
   )
 
-  // Clear first time user flag
-  const clearFirstTimeUser = useCallback(() => {
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, isFirstTimeUser: false }))
-    }
-  }, [])
-
-  /**
-   * Create a passkey and encrypt existing localStorage keys to the backend.
-   * Called from UI when passkeySetupAvailable=true (user has keys but no passkey backup).
-   * Returns true on success.
-   */
-  const setupPasskey = useCallback(async (): Promise<boolean> => {
-    const userInfo = getPasskeyUserInfo()
-    if (!userInfo) return false
-
-    try {
-      const keys = encryptionService.getAllKeys()
-      if (!keys.primary) return false
-
-      const created = await createAndStorePasskeyBackup(userInfo, {
-        primary: keys.primary,
-        alternatives: keys.alternatives,
-      })
-      if (!created) return false
-
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          passkeyActive: true,
-          passkeySetupAvailable: false,
-        }))
-      }
-
-      logInfo('Passkey setup completed for existing keys', {
-        component: 'useCloudSync',
-        action: 'setupPasskey',
-      })
-      return true
-    } catch (error) {
-      logError('Passkey setup failed', error, {
-        component: 'useCloudSync',
-        action: 'setupPasskey',
-      })
-      return false
-    }
-  }, [])
-
-  /**
-   * Retry passkey authentication to recover keys from the backend.
-   * Called from UI when passkeyRecoveryNeeded=true (e.g. passkey-recovery modal step).
-   * Returns the recovered primary key on success, null on failure.
-   */
-  const recoverWithPasskey = useCallback(async (): Promise<string | null> => {
-    try {
-      const keyBundle = await performPasskeyRecovery()
-      if (!keyBundle) return null
-
-      applyRecoveredKeys(keyBundle)
-
-      logInfo('Recovered encryption keys via passkey retry', {
-        component: 'useCloudSync',
-        action: 'recoverWithPasskey',
-        metadata: { alternativeKeys: keyBundle.alternatives.length },
-      })
-      return keyBundle.primary
-    } catch (error) {
-      logError('Passkey recovery retry failed', error, {
-        component: 'useCloudSync',
-        action: 'recoverWithPasskey',
-      })
-      return null
-    }
-  }, [])
-
-  /**
-   * Generate a new key + create a new passkey (explicit split).
-   * Called from the recovery choice screen's "Start Fresh" button.
-   * Returns the new primary key on success, null on failure/cancel.
-   */
-  const setupNewKeySplit = useCallback(async (): Promise<string | null> => {
-    try {
-      const newKey = await generateKeyWithPasskeyBackup()
-      if (!newKey) return null
-
-      applyNewPasskeyKey(newKey)
-
-      logInfo('New key split created with passkey', {
-        component: 'useCloudSync',
-        action: 'setupNewKeySplit',
-      })
-      return newKey
-    } catch (error) {
-      logError('Failed to create new key split', error, {
-        component: 'useCloudSync',
-        action: 'setupNewKeySplit',
-      })
-      return null
-    }
-  }, [generateKeyWithPasskeyBackup])
-
-  /**
-   * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
-   * Writes Clerk metadata after the WebAuthn flow completes (success or cancel)
-   * to avoid triggering a Clerk state change that re-runs the init effect mid-flow.
-   */
-  const acceptPasskeyIntro = useCallback(async (): Promise<void> => {
-    passkeyFlowInProgressRef.current = true
-
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, passkeyIntroNeeded: false }))
-    }
-
-    try {
-      const success = await setupPasskey()
-      if (!success && isMountedRef.current) {
-        // User cancelled the browser WebAuthn prompt — show option in settings
-        setState((prev) => ({ ...prev, passkeySetupAvailable: true }))
-      }
-
-      // Mark the intro as seen regardless of outcome — the user clicked
-      // "Let's go!" so they've seen the explanation. Done after setupPasskey
-      // to avoid Clerk state changes re-triggering the init effect mid-flow.
-      try {
-        const u = userRef.current
-        if (u) {
-          await u.update({
-            unsafeMetadata: {
-              ...u.unsafeMetadata,
-              has_seen_passkey_intro: true,
-            },
-          })
-        }
-      } catch (error) {
-        logError('Failed to persist passkey intro seen flag', error, {
-          component: 'useCloudSync',
-          action: 'acceptPasskeyIntro',
-        })
-      }
-    } finally {
-      passkeyFlowInProgressRef.current = false
-    }
-  }, [setupPasskey])
-
   return {
     ...state,
     syncChats,
@@ -916,10 +451,5 @@ export function useCloudSync() {
     backupChat,
     setEncryptionKey,
     retryDecryptionWithNewKey,
-    clearFirstTimeUser,
-    setupPasskey,
-    recoverWithPasskey,
-    setupNewKeySplit,
-    acceptPasskeyIntro,
   }
 }
