@@ -7,8 +7,9 @@ const MIGRATION_FLAG = 'tinfoil-storage-migrated'
 
 const LOCAL_STORAGE_KEY_MAP: Record<string, string> = {
   // Sensitive
-  'tinfoil-encryption-key': 'tinfoil-secret-encryption-key',
-  'tinfoil-encryption-key-history': 'tinfoil-secret-encryption-key-history',
+  'tinfoil-encryption-key': 'tinfoil-user-personal-encryption-key',
+  'tinfoil-encryption-key-history':
+    'tinfoil-user-personal-encryption-key-history',
   'tinfoil-passkey-prf-cache': 'tinfoil-secret-passkey-prf-output',
   'tinfoil-passkey-backed-up': 'tinfoil-secret-passkey-backed-up',
 

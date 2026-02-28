@@ -4,9 +4,9 @@
 // ---------------------------------------------------------------------------
 
 // --- localStorage: Sensitive values (encryption keys, passkey data) --------
-export const SECRET_ENCRYPTION_KEY = 'tinfoil-secret-encryption-key'
-export const SECRET_ENCRYPTION_KEY_HISTORY =
-  'tinfoil-secret-encryption-key-history'
+export const USER_ENCRYPTION_KEY = 'tinfoil-user-personal-encryption-key'
+export const USER_ENCRYPTION_KEY_HISTORY =
+  'tinfoil-user-personal-encryption-key-history'
 export const SECRET_PASSKEY_PRF_OUTPUT = 'tinfoil-secret-passkey-prf-output'
 export const SECRET_PASSKEY_BACKED_UP = 'tinfoil-secret-passkey-backed-up'
 

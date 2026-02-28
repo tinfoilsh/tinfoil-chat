@@ -1,6 +1,6 @@
 import {
-  SECRET_ENCRYPTION_KEY,
-  SECRET_ENCRYPTION_KEY_HISTORY,
+  USER_ENCRYPTION_KEY,
+  USER_ENCRYPTION_KEY_HISTORY,
 } from '@/constants/storage-keys'
 import {
   EncryptionService,
@@ -62,7 +62,7 @@ describe('EncryptionService', () => {
     it('should persist key to localStorage', async () => {
       const key = await service.generateKey()
       await service.setKey(key)
-      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY)).toBe(key)
+      expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBe(key)
     })
 
     it('should store previous key in history when setting new key', async () => {
@@ -73,7 +73,7 @@ describe('EncryptionService', () => {
       await service.setKey(key2)
 
       const history = JSON.parse(
-        localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY) || '[]',
+        localStorage.getItem(USER_ENCRYPTION_KEY_HISTORY) || '[]',
       )
       expect(history).toContain(key1)
     })
@@ -99,7 +99,7 @@ describe('EncryptionService', () => {
       service.clearKey()
 
       expect(service.getKey()).toBeNull()
-      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY)).toBeNull()
+      expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBeNull()
     })
 
     it('should clear key history', async () => {
@@ -110,7 +110,7 @@ describe('EncryptionService', () => {
 
       service.clearKey()
 
-      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY)).toBeNull()
+      expect(localStorage.getItem(USER_ENCRYPTION_KEY_HISTORY)).toBeNull()
     })
 
     it('should support clearing without persisting', async () => {
@@ -120,7 +120,7 @@ describe('EncryptionService', () => {
       service.clearKey({ persist: false })
 
       // Key should still be in localStorage
-      expect(localStorage.getItem(SECRET_ENCRYPTION_KEY)).toBe(key)
+      expect(localStorage.getItem(USER_ENCRYPTION_KEY)).toBe(key)
     })
   })
 
@@ -454,7 +454,7 @@ describe('EncryptionService', () => {
       service.addDecryptionKey(fallbackKey)
 
       // Check storage
-      const stored = localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY)
+      const stored = localStorage.getItem(USER_ENCRYPTION_KEY_HISTORY)
       expect(stored).toBeTruthy()
 
       const parsed = JSON.parse(stored!)
