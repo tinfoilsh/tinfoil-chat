@@ -249,6 +249,33 @@ export function usePasskeyBackup({
     }
   }, [])
 
+  /**
+   * Retry passkey authentication to recover keys from the backend.
+   * Called from UI when passkeyRecoveryNeeded=true (e.g. passkey-recovery modal step).
+   * Returns the recovered primary key on success, null on failure.
+   */
+  const recoverWithPasskey = useCallback(async (): Promise<string | null> => {
+    try {
+      const keyBundle = await performPasskeyRecovery()
+      if (!keyBundle) return null
+
+      applyRecoveredKeys(keyBundle)
+
+      logInfo('Recovered encryption keys via passkey retry', {
+        component: 'usePasskeyBackup',
+        action: 'recoverWithPasskey',
+        metadata: { alternativeKeys: keyBundle.alternatives.length },
+      })
+      return keyBundle.primary
+    } catch (error) {
+      logError('Passkey recovery retry failed', error, {
+        component: 'usePasskeyBackup',
+        action: 'recoverWithPasskey',
+      })
+      return null
+    }
+  }, [])
+
   // --- Passkey initialization (runs once after cloud sync init completes) ---
   useEffect(() => {
     if (!initialized || !isSignedIn || hasInitializedPasskeyRef.current) return
@@ -313,31 +340,16 @@ export function usePasskeyBackup({
 
     /**
      * Attempt to recover keys from backend using passkey authentication.
-     * Returns true if recovery succeeded, false otherwise.
+     * Delegates to recoverWithPasskey (stable useCallback) and forwards
+     * the recovered key to the onEncryptionKeyRecovered callback.
      */
     const tryPasskeyRecovery = async (): Promise<boolean> => {
-      try {
-        const keyBundle = await performPasskeyRecovery()
-        if (!keyBundle) return false
-
-        applyRecoveredKeys(keyBundle)
-        onEncryptionKeyRecoveredRef.current?.(keyBundle.primary)
-
-        logInfo('Recovered encryption keys via passkey', {
-          component: 'usePasskeyBackup',
-          action: 'tryPasskeyRecovery',
-          metadata: {
-            alternativeKeys: keyBundle.alternatives.length,
-          },
-        })
+      const key = await recoverWithPasskey()
+      if (key) {
+        onEncryptionKeyRecoveredRef.current?.(key)
         return true
-      } catch (error) {
-        logError('Passkey recovery failed', error, {
-          component: 'usePasskeyBackup',
-          action: 'tryPasskeyRecovery',
-        })
-        return false
       }
+      return false
     }
 
     /**
@@ -380,7 +392,13 @@ export function usePasskeyBackup({
     }
 
     initializePasskey()
-  }, [initialized, isSignedIn, encryptionKey, generateKeyWithPasskeyBackup])
+  }, [
+    initialized,
+    isSignedIn,
+    encryptionKey,
+    generateKeyWithPasskeyBackup,
+    recoverWithPasskey,
+  ])
 
   /**
    * Create a passkey and encrypt existing localStorage keys to the backend.
@@ -420,33 +438,6 @@ export function usePasskeyBackup({
         action: 'setupPasskey',
       })
       return false
-    }
-  }, [])
-
-  /**
-   * Retry passkey authentication to recover keys from the backend.
-   * Called from UI when passkeyRecoveryNeeded=true (e.g. passkey-recovery modal step).
-   * Returns the recovered primary key on success, null on failure.
-   */
-  const recoverWithPasskey = useCallback(async (): Promise<string | null> => {
-    try {
-      const keyBundle = await performPasskeyRecovery()
-      if (!keyBundle) return null
-
-      applyRecoveredKeys(keyBundle)
-
-      logInfo('Recovered encryption keys via passkey retry', {
-        component: 'usePasskeyBackup',
-        action: 'recoverWithPasskey',
-        metadata: { alternativeKeys: keyBundle.alternatives.length },
-      })
-      return keyBundle.primary
-    } catch (error) {
-      logError('Passkey recovery retry failed', error, {
-        component: 'usePasskeyBackup',
-        action: 'recoverWithPasskey',
-      })
-      return null
     }
   }, [])
 
