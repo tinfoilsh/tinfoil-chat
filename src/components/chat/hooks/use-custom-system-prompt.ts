@@ -1,3 +1,13 @@
+import {
+  USER_PREFS_ADDITIONAL_CONTEXT,
+  USER_PREFS_CUSTOM_PROMPT_ENABLED,
+  USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+  USER_PREFS_LANGUAGE,
+  USER_PREFS_NICKNAME,
+  USER_PREFS_PERSONALIZATION_ENABLED,
+  USER_PREFS_PROFESSION,
+  USER_PREFS_TRAITS,
+} from '@/constants/storage-keys'
 import { useEffect, useState } from 'react'
 
 type PersonalizationSettings = {
@@ -35,13 +45,14 @@ export const useCustomSystemPrompt = (
   // Load personalization settings from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedNickname = localStorage.getItem('userNickname') || ''
-      const savedProfession = localStorage.getItem('userProfession') || ''
-      const savedTraits = localStorage.getItem('userTraits')
-      const savedContext = localStorage.getItem('userAdditionalContext') || ''
-      const savedLanguage = localStorage.getItem('userLanguage')
+      const savedNickname = localStorage.getItem(USER_PREFS_NICKNAME) || ''
+      const savedProfession = localStorage.getItem(USER_PREFS_PROFESSION) || ''
+      const savedTraits = localStorage.getItem(USER_PREFS_TRAITS)
+      const savedContext =
+        localStorage.getItem(USER_PREFS_ADDITIONAL_CONTEXT) || ''
+      const savedLanguage = localStorage.getItem(USER_PREFS_LANGUAGE)
       const savedEnabled =
-        localStorage.getItem('isUsingPersonalization') === 'true'
+        localStorage.getItem(USER_PREFS_PERSONALIZATION_ENABLED) === 'true'
 
       let traits: string[] = []
       if (savedTraits) {
@@ -64,8 +75,12 @@ export const useCustomSystemPrompt = (
       })
 
       // Load custom system prompt settings
-      const savedUsingCustomPrompt = localStorage.getItem('isUsingCustomPrompt')
-      const savedCustomPrompt = localStorage.getItem('customSystemPrompt')
+      const savedUsingCustomPrompt = localStorage.getItem(
+        USER_PREFS_CUSTOM_PROMPT_ENABLED,
+      )
+      const savedCustomPrompt = localStorage.getItem(
+        USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+      )
 
       setIsUsingCustomPrompt(savedUsingCustomPrompt === 'true')
       setCustomPrompt(savedCustomPrompt || defaultSystemPrompt || '')

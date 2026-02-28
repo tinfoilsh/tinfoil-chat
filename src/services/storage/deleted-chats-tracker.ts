@@ -1,6 +1,5 @@
+import { SYNC_DELETED_CHATS } from '@/constants/storage-keys'
 import { logInfo } from '@/utils/error-handling'
-
-const DELETED_CHATS_KEY = 'tinfoil-deleted-chats'
 
 /**
  * Tracks deleted chats to prevent resurrection during sync.
@@ -17,7 +16,7 @@ class DeletedChatsTracker {
   private loadFromStorage(): void {
     if (typeof window === 'undefined') return
     try {
-      const stored = sessionStorage.getItem(DELETED_CHATS_KEY)
+      const stored = sessionStorage.getItem(SYNC_DELETED_CHATS)
       if (stored) {
         const parsed: unknown[] = JSON.parse(stored)
         parsed.forEach((entry) => {
@@ -40,9 +39,9 @@ class DeletedChatsTracker {
     try {
       const ids = Array.from(this.deletedChats)
       if (ids.length > 0) {
-        sessionStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(ids))
+        sessionStorage.setItem(SYNC_DELETED_CHATS, JSON.stringify(ids))
       } else {
-        sessionStorage.removeItem(DELETED_CHATS_KEY)
+        sessionStorage.removeItem(SYNC_DELETED_CHATS)
       }
     } catch (error) {
       // Silently fail - storage may be unavailable or full
@@ -79,7 +78,7 @@ class DeletedChatsTracker {
   clear(): void {
     this.deletedChats.clear()
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(DELETED_CHATS_KEY)
+      sessionStorage.removeItem(SYNC_DELETED_CHATS)
     }
   }
 

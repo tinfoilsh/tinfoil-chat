@@ -1,3 +1,5 @@
+import { DEV_ENABLE_DEBUG_LOGS } from '@/constants/storage-keys'
+
 /**
  * Error handling utilities for production-ready logging
  */
@@ -29,7 +31,7 @@ export function logError(
     // Only log stack trace if debug logs are enabled
     if (
       typeof window !== 'undefined' &&
-      localStorage.getItem('enableDebugLogs') === 'true' &&
+      localStorage.getItem(DEV_ENABLE_DEBUG_LOGS) === 'true' &&
       error instanceof Error
     ) {
       console.log('Stack trace:', error.stack)
@@ -70,7 +72,7 @@ export function logError(
 export function logWarning(message: string, context?: ErrorContext): void {
   const debugEnabled =
     typeof window !== 'undefined' &&
-    localStorage.getItem('enableDebugLogs') === 'true'
+    localStorage.getItem(DEV_ENABLE_DEBUG_LOGS) === 'true'
 
   if (process.env.NODE_ENV === 'development' || debugEnabled) {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0]
@@ -88,15 +90,15 @@ export function logWarning(message: string, context?: ErrorContext): void {
  * Log info - replace console.log calls with this
  *
  * To enable in production, run in browser console:
- * localStorage.setItem('enableDebugLogs', 'true')
+ * localStorage.setItem('tinfoil-dev-enable-debug-logs', 'true')
  *
  * To disable:
- * localStorage.removeItem('enableDebugLogs')
+ * localStorage.removeItem('tinfoil-dev-enable-debug-logs')
  */
 export function logInfo(message: string, context?: ErrorContext): void {
   const debugEnabled =
     typeof window !== 'undefined' &&
-    localStorage.getItem('enableDebugLogs') === 'true'
+    localStorage.getItem(DEV_ENABLE_DEBUG_LOGS) === 'true'
 
   if (process.env.NODE_ENV === 'development' || debugEnabled) {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0]

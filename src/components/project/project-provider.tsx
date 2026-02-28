@@ -1,5 +1,6 @@
 'use client'
 
+import { UI_EXPAND_PROJECTS_ON_MOUNT } from '@/constants/storage-keys'
 import { useMemory } from '@/hooks/use-memory'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -229,7 +230,7 @@ export function ProjectProvider({
     setError(null)
 
     // Signal to ChatSidebar that projects should be expanded
-    sessionStorage.setItem('expandProjectsOnMount', 'true')
+    sessionStorage.setItem(UI_EXPAND_PROJECTS_ON_MOUNT, 'true')
 
     logInfo('Exited project mode', {
       component: 'ProjectProvider',

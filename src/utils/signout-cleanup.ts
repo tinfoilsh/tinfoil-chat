@@ -1,4 +1,9 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
+import {
+  AUTH_ACTIVE_USER_ID,
+  SECRET_ENCRYPTION_KEY,
+  SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
+} from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { profileSync } from '@/services/cloud/profile-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -7,8 +12,6 @@ import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { logError, logInfo } from '@/utils/error-handling'
-
-export const ACTIVE_USER_ID_KEY = 'tinfoil-active-user-id'
 
 interface ClearUserDataOptions {
   /** If set, preserve this user ID in localStorage after clearing */
@@ -48,14 +51,17 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear localStorage, preserving only non-user-specific keys
   try {
     const hasSeenWebSearchIntro = localStorage.getItem(
-      'has_seen_web_search_intro',
+      SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
     )
     localStorage.clear()
     if (hasSeenWebSearchIntro) {
-      localStorage.setItem('has_seen_web_search_intro', hasSeenWebSearchIntro)
+      localStorage.setItem(
+        SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
+        hasSeenWebSearchIntro,
+      )
     }
     if (preserveUserId) {
-      localStorage.setItem(ACTIVE_USER_ID_KEY, preserveUserId)
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
     }
   } catch {
     // best-effort — don't let localStorage failures skip remaining cleanup
@@ -135,5 +141,5 @@ export function performUserSwitchCleanup(newUserId: string): void {
 
 export function getEncryptionKey(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem('tinfoil-encryption-key')
+  return localStorage.getItem(SECRET_ENCRYPTION_KEY)
 }

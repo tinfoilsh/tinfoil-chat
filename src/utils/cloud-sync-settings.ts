@@ -1,7 +1,9 @@
+import { SETTINGS_CLOUD_SYNC_ENABLED } from '@/constants/storage-keys'
+
 export function isCloudSyncEnabled(): boolean {
   if (typeof window === 'undefined') return false
   try {
-    const setting = localStorage.getItem('cloudSyncEnabled')
+    const setting = localStorage.getItem(SETTINGS_CLOUD_SYNC_ENABLED)
     return setting === 'true'
   } catch {
     return false
@@ -11,7 +13,7 @@ export function isCloudSyncEnabled(): boolean {
 export function setCloudSyncEnabled(enabled: boolean): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem('cloudSyncEnabled', enabled.toString())
+    localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, enabled.toString())
     // Dispatch event to notify listeners of the change
     window.dispatchEvent(new Event('cloudSyncSettingChanged'))
   } catch {

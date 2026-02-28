@@ -1,15 +1,16 @@
 // Encryption service for end-to-end encryption of chat data
 
 import {
+  SECRET_ENCRYPTION_KEY,
+  SECRET_ENCRYPTION_KEY_HISTORY,
+} from '@/constants/storage-keys'
+import {
   base64ToUint8Array,
   compressAndEncrypt,
   decryptAndDecompress,
   uint8ArrayToBase64,
 } from '@/utils/binary-codec'
 import { logInfo } from '@/utils/error-handling'
-
-const ENCRYPTION_KEY_STORAGE_KEY = 'tinfoil-encryption-key'
-const ENCRYPTION_KEY_HISTORY_STORAGE_KEY = 'tinfoil-encryption-key-history'
 
 export interface EncryptedData {
   iv: string // Base64 encoded initialization vector
@@ -98,7 +99,7 @@ export class EncryptionService {
   }
 
   private loadKeyHistoryFromStorage(): string[] {
-    const rawHistory = localStorage.getItem(ENCRYPTION_KEY_HISTORY_STORAGE_KEY)
+    const rawHistory = localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY)
 
     if (!rawHistory) {
       return []
@@ -127,10 +128,7 @@ export class EncryptionService {
   }
 
   private saveKeyHistoryToStorage(history: string[]): void {
-    localStorage.setItem(
-      ENCRYPTION_KEY_HISTORY_STORAGE_KEY,
-      JSON.stringify(history),
-    )
+    localStorage.setItem(SECRET_ENCRYPTION_KEY_HISTORY, JSON.stringify(history))
   }
 
   private pruneFallbackCache(validKeys: string[]): void {
@@ -185,7 +183,7 @@ export class EncryptionService {
 
   // Initialize with existing key - does NOT generate a new key automatically
   async initialize(): Promise<string | null> {
-    const storedKey = localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
+    const storedKey = localStorage.getItem(SECRET_ENCRYPTION_KEY)
     this.fallbackKeyStrings = this.loadKeyHistoryFromStorage()
     this.pruneFallbackCache(this.fallbackKeyStrings)
 
@@ -201,8 +199,7 @@ export class EncryptionService {
   async setKey(keyString: string): Promise<void> {
     try {
       const previousKey =
-        this.currentKeyString ??
-        localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
+        this.currentKeyString ?? localStorage.getItem(SECRET_ENCRYPTION_KEY)
 
       const previousHistory = this.loadKeyHistoryFromStorage()
 
@@ -222,14 +219,14 @@ export class EncryptionService {
       }
 
       try {
-        localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, keyString)
+        localStorage.setItem(SECRET_ENCRYPTION_KEY, keyString)
         this.saveKeyHistoryToStorage(history)
       } catch (persistError) {
         try {
           if (previousKey) {
-            localStorage.setItem(ENCRYPTION_KEY_STORAGE_KEY, previousKey)
+            localStorage.setItem(SECRET_ENCRYPTION_KEY, previousKey)
           } else {
-            localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
+            localStorage.removeItem(SECRET_ENCRYPTION_KEY)
           }
           this.saveKeyHistoryToStorage(previousHistory)
         } catch (rollbackError) {
@@ -276,7 +273,7 @@ export class EncryptionService {
 
   // Get current encryption key as alphanumeric string
   getKey(): string | null {
-    return localStorage.getItem(ENCRYPTION_KEY_STORAGE_KEY)
+    return localStorage.getItem(SECRET_ENCRYPTION_KEY)
   }
 
   // Remove encryption key
@@ -289,8 +286,8 @@ export class EncryptionService {
     this.fallbackKeyAddedCallbacks.clear()
     if (persist) {
       try {
-        localStorage.removeItem(ENCRYPTION_KEY_STORAGE_KEY)
-        localStorage.removeItem(ENCRYPTION_KEY_HISTORY_STORAGE_KEY)
+        localStorage.removeItem(SECRET_ENCRYPTION_KEY)
+        localStorage.removeItem(SECRET_ENCRYPTION_KEY_HISTORY)
       } catch (error) {
         logInfo('Failed to remove encryption keys from storage', {
           component: 'EncryptionService',

@@ -1,3 +1,16 @@
+import {
+  SETTINGS_MAX_PROMPT_MESSAGES,
+  SETTINGS_THEME,
+  SETTINGS_THEME_MODE,
+  USER_PREFS_ADDITIONAL_CONTEXT,
+  USER_PREFS_CUSTOM_PROMPT_ENABLED,
+  USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+  USER_PREFS_LANGUAGE,
+  USER_PREFS_NICKNAME,
+  USER_PREFS_PERSONALIZATION_ENABLED,
+  USER_PREFS_PROFESSION,
+  USER_PREFS_TRAITS,
+} from '@/constants/storage-keys'
 import type { ProfileData } from '@/services/cloud/profile-sync'
 
 /**
@@ -31,11 +44,11 @@ export function loadLocalSettings(): ProfileData {
   const settings: ProfileData = {}
 
   // Theme
-  const savedTheme = localStorage.getItem('theme')
+  const savedTheme = localStorage.getItem(SETTINGS_THEME)
   if (savedTheme) {
     settings.isDarkMode = savedTheme === 'dark'
   }
-  const savedThemeMode = localStorage.getItem('themeMode')
+  const savedThemeMode = localStorage.getItem(SETTINGS_THEME_MODE)
   if (
     savedThemeMode === 'light' ||
     savedThemeMode === 'dark' ||
@@ -45,7 +58,7 @@ export function loadLocalSettings(): ProfileData {
   }
 
   // Chat settings
-  const maxMessages = localStorage.getItem('maxPromptMessages')
+  const maxMessages = localStorage.getItem(SETTINGS_MAX_PROMPT_MESSAGES)
   if (maxMessages) {
     const parsed = parseInt(maxMessages, 10)
     if (!isNaN(parsed)) {
@@ -53,19 +66,19 @@ export function loadLocalSettings(): ProfileData {
     }
   }
 
-  const language = localStorage.getItem('userLanguage')
+  const language = localStorage.getItem(USER_PREFS_LANGUAGE)
   if (language) {
     settings.language = language
   }
 
   // Personalization
-  const nickname = localStorage.getItem('userNickname')
+  const nickname = localStorage.getItem(USER_PREFS_NICKNAME)
   if (nickname) settings.nickname = nickname
 
-  const profession = localStorage.getItem('userProfession')
+  const profession = localStorage.getItem(USER_PREFS_PROFESSION)
   if (profession) settings.profession = profession
 
-  const traits = localStorage.getItem('userTraits')
+  const traits = localStorage.getItem(USER_PREFS_TRAITS)
   if (traits) {
     try {
       settings.traits = JSON.parse(traits)
@@ -74,21 +87,27 @@ export function loadLocalSettings(): ProfileData {
     }
   }
 
-  const additionalContext = localStorage.getItem('userAdditionalContext')
+  const additionalContext = localStorage.getItem(USER_PREFS_ADDITIONAL_CONTEXT)
   if (additionalContext) settings.additionalContext = additionalContext
 
-  const isUsingPersonalization = localStorage.getItem('isUsingPersonalization')
+  const isUsingPersonalization = localStorage.getItem(
+    USER_PREFS_PERSONALIZATION_ENABLED,
+  )
   if (isUsingPersonalization) {
     settings.isUsingPersonalization = isUsingPersonalization === 'true'
   }
 
   // Custom system prompt settings
-  const isUsingCustomPrompt = localStorage.getItem('isUsingCustomPrompt')
+  const isUsingCustomPrompt = localStorage.getItem(
+    USER_PREFS_CUSTOM_PROMPT_ENABLED,
+  )
   if (isUsingCustomPrompt) {
     settings.isUsingCustomPrompt = isUsingCustomPrompt === 'true'
   }
 
-  const customSystemPrompt = localStorage.getItem('customSystemPrompt')
+  const customSystemPrompt = localStorage.getItem(
+    USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+  )
   if (customSystemPrompt) {
     settings.customSystemPrompt = customSystemPrompt
   }
@@ -103,15 +122,15 @@ export function loadLocalSettings(): ProfileData {
 export function applySettingsToLocal(settings: ProfileData): void {
   // Theme - prefer themeMode if available, fall back to isDarkMode for backwards compatibility
   if (settings.themeMode) {
-    localStorage.setItem('themeMode', settings.themeMode)
+    localStorage.setItem(SETTINGS_THEME_MODE, settings.themeMode)
     // Also set legacy theme key
     if (settings.themeMode === 'system') {
       const prefersDark = window.matchMedia(
         '(prefers-color-scheme: dark)',
       ).matches
-      localStorage.setItem('theme', prefersDark ? 'dark' : 'light')
+      localStorage.setItem(SETTINGS_THEME, prefersDark ? 'dark' : 'light')
     } else {
-      localStorage.setItem('theme', settings.themeMode)
+      localStorage.setItem(SETTINGS_THEME, settings.themeMode)
     }
     // Trigger theme change event
     window.dispatchEvent(
@@ -122,8 +141,8 @@ export function applySettingsToLocal(settings: ProfileData): void {
   } else if (settings.isDarkMode !== undefined) {
     // Legacy: only isDarkMode available (old profile data)
     const theme = settings.isDarkMode ? 'dark' : 'light'
-    localStorage.setItem('theme', theme)
-    localStorage.setItem('themeMode', theme)
+    localStorage.setItem(SETTINGS_THEME, theme)
+    localStorage.setItem(SETTINGS_THEME_MODE, theme)
     // Trigger theme change event
     window.dispatchEvent(
       new CustomEvent('themeChanged', {
@@ -135,7 +154,7 @@ export function applySettingsToLocal(settings: ProfileData): void {
   // Chat settings
   if (settings.maxPromptMessages !== undefined) {
     localStorage.setItem(
-      'maxPromptMessages',
+      SETTINGS_MAX_PROMPT_MESSAGES,
       settings.maxPromptMessages.toString(),
     )
     window.dispatchEvent(
@@ -146,7 +165,7 @@ export function applySettingsToLocal(settings: ProfileData): void {
   }
 
   if (settings.language !== undefined) {
-    localStorage.setItem('userLanguage', settings.language)
+    localStorage.setItem(USER_PREFS_LANGUAGE, settings.language)
     window.dispatchEvent(
       new CustomEvent('languageChanged', {
         detail: { language: settings.language },
@@ -156,24 +175,27 @@ export function applySettingsToLocal(settings: ProfileData): void {
 
   // Personalization
   if (settings.nickname !== undefined) {
-    localStorage.setItem('userNickname', settings.nickname)
+    localStorage.setItem(USER_PREFS_NICKNAME, settings.nickname)
   }
 
   if (settings.profession !== undefined) {
-    localStorage.setItem('userProfession', settings.profession)
+    localStorage.setItem(USER_PREFS_PROFESSION, settings.profession)
   }
 
   if (settings.traits !== undefined) {
-    localStorage.setItem('userTraits', JSON.stringify(settings.traits))
+    localStorage.setItem(USER_PREFS_TRAITS, JSON.stringify(settings.traits))
   }
 
   if (settings.additionalContext !== undefined) {
-    localStorage.setItem('userAdditionalContext', settings.additionalContext)
+    localStorage.setItem(
+      USER_PREFS_ADDITIONAL_CONTEXT,
+      settings.additionalContext,
+    )
   }
 
   if (settings.isUsingPersonalization !== undefined) {
     localStorage.setItem(
-      'isUsingPersonalization',
+      USER_PREFS_PERSONALIZATION_ENABLED,
       settings.isUsingPersonalization.toString(),
     )
   }
@@ -181,13 +203,16 @@ export function applySettingsToLocal(settings: ProfileData): void {
   // Custom system prompt settings
   if (settings.isUsingCustomPrompt !== undefined) {
     localStorage.setItem(
-      'isUsingCustomPrompt',
+      USER_PREFS_CUSTOM_PROMPT_ENABLED,
       settings.isUsingCustomPrompt.toString(),
     )
   }
 
   if (settings.customSystemPrompt !== undefined) {
-    localStorage.setItem('customSystemPrompt', settings.customSystemPrompt)
+    localStorage.setItem(
+      USER_PREFS_CUSTOM_SYSTEM_PROMPT,
+      settings.customSystemPrompt,
+    )
   }
 
   // Trigger custom system prompt change event
@@ -200,10 +225,10 @@ export function applySettingsToLocal(settings: ProfileData): void {
         detail: {
           isEnabled:
             settings.isUsingCustomPrompt ??
-            localStorage.getItem('isUsingCustomPrompt') === 'true',
+            localStorage.getItem(USER_PREFS_CUSTOM_PROMPT_ENABLED) === 'true',
           customPrompt:
             settings.customSystemPrompt ||
-            localStorage.getItem('customSystemPrompt') ||
+            localStorage.getItem(USER_PREFS_CUSTOM_SYSTEM_PROMPT) ||
             '',
         },
       }),
@@ -222,29 +247,35 @@ export function applySettingsToLocal(settings: ProfileData): void {
       new CustomEvent('personalizationChanged', {
         detail: {
           nickname:
-            settings.nickname || localStorage.getItem('userNickname') || '',
+            settings.nickname ||
+            localStorage.getItem(USER_PREFS_NICKNAME) ||
+            '',
           profession:
-            settings.profession || localStorage.getItem('userProfession') || '',
+            settings.profession ||
+            localStorage.getItem(USER_PREFS_PROFESSION) ||
+            '',
           traits:
             settings.traits ||
             (() => {
               try {
-                return JSON.parse(localStorage.getItem('userTraits') || '[]')
+                return JSON.parse(
+                  localStorage.getItem(USER_PREFS_TRAITS) || '[]',
+                )
               } catch {
                 return []
               }
             })(),
           additionalContext:
             settings.additionalContext ||
-            localStorage.getItem('userAdditionalContext') ||
+            localStorage.getItem(USER_PREFS_ADDITIONAL_CONTEXT) ||
             '',
           language:
             settings.language ||
-            localStorage.getItem('userLanguage') ||
+            localStorage.getItem(USER_PREFS_LANGUAGE) ||
             'English',
           isEnabled:
             settings.isUsingPersonalization ??
-            localStorage.getItem('isUsingPersonalization') === 'true',
+            localStorage.getItem(USER_PREFS_PERSONALIZATION_ENABLED) === 'true',
         },
       }),
     )

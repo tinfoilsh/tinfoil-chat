@@ -28,6 +28,7 @@ const LOCAL_STORAGE_KEY_MAP: Record<string, string> = {
   themeMode: 'tinfoil-settings-theme-mode',
   theme: 'tinfoil-settings-theme',
   chatFont: 'tinfoil-settings-chat-font',
+  has_seen_web_search_intro: 'tinfoil-settings-has-seen-web-search-intro',
   enableDebugLogs: 'tinfoil-dev-enable-debug-logs',
 
   // User preferences
@@ -59,6 +60,10 @@ const SESSION_STORAGE_KEY_MAP: Record<string, string> = {
   expandProjectDocuments: 'tinfoil-ui-expand-project-documents',
 }
 
+const LOCAL_STORAGE_PREFIX_MAP: Record<string, string> = {
+  'tinfoil-project-chat-sync-status-': 'tinfoil-sync-project-chat-status-',
+}
+
 function migrateStorage(
   storage: Storage,
   keyMap: Record<string, string>,
@@ -74,6 +79,32 @@ function migrateStorage(
   }
 }
 
+function migratePrefixedKeys(
+  storage: Storage,
+  prefixMap: Record<string, string>,
+): void {
+  for (const [oldPrefix, newPrefix] of Object.entries(prefixMap)) {
+    const keysToMigrate: string[] = []
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i)
+      if (key?.startsWith(oldPrefix)) {
+        keysToMigrate.push(key)
+      }
+    }
+    for (const oldKey of keysToMigrate) {
+      const suffix = oldKey.slice(oldPrefix.length)
+      const newKey = newPrefix + suffix
+      const value = storage.getItem(oldKey)
+      if (value !== null && storage.getItem(newKey) === null) {
+        storage.setItem(newKey, value)
+      }
+      if (value !== null) {
+        storage.removeItem(oldKey)
+      }
+    }
+  }
+}
+
 export function migrateStorageKeys(): void {
   if (typeof window === 'undefined') return
 
@@ -81,6 +112,7 @@ export function migrateStorageKeys(): void {
     if (localStorage.getItem(MIGRATION_FLAG) === 'true') return
 
     migrateStorage(localStorage, LOCAL_STORAGE_KEY_MAP)
+    migratePrefixedKeys(localStorage, LOCAL_STORAGE_PREFIX_MAP)
     migrateStorage(sessionStorage, SESSION_STORAGE_KEY_MAP)
 
     localStorage.setItem(MIGRATION_FLAG, 'true')

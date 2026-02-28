@@ -9,6 +9,7 @@ import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
 import { cn } from '@/components/ui/utils'
+import { UI_EXPAND_PROJECT_DOCUMENTS } from '@/constants/storage-keys'
 import { toast } from '@/hooks/use-toast'
 import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
@@ -291,10 +292,12 @@ export function ProjectSidebar({
   // Expand documents section when signal is set (from file upload to project context)
   useEffect(() => {
     if (isOpen) {
-      const shouldExpandDocs = sessionStorage.getItem('expandProjectDocuments')
+      const shouldExpandDocs = sessionStorage.getItem(
+        UI_EXPAND_PROJECT_DOCUMENTS,
+      )
       if (shouldExpandDocs === 'true') {
         setDocumentsExpanded(true)
-        sessionStorage.removeItem('expandProjectDocuments')
+        sessionStorage.removeItem(UI_EXPAND_PROJECT_DOCUMENTS)
       }
     }
   }, [isOpen])

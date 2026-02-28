@@ -1,3 +1,7 @@
+import {
+  SECRET_ENCRYPTION_KEY,
+  SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
+} from '@/constants/storage-keys'
 import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -85,7 +89,7 @@ export function useCloudSync() {
         authTokenManager.initialize(getToken)
 
         // Check if user already has a key before initializing
-        const existingKey = localStorage.getItem('tinfoil-encryption-key')
+        const existingKey = localStorage.getItem(SECRET_ENCRYPTION_KEY)
         const isFirstTime = !existingKey
 
         // Backwards compatibility: if an encryption key exists but cloud sync is not enabled,
@@ -93,7 +97,8 @@ export function useCloudSync() {
         // BUT respect if user explicitly disabled it
         let cloudSyncEnabled = isCloudSyncEnabled()
         const explicitlyDisabled =
-          localStorage.getItem('cloudSyncExplicitlyDisabled') === 'true'
+          localStorage.getItem(SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED) ===
+          'true'
 
         if (existingKey && !cloudSyncEnabled && !explicitlyDisabled) {
           const { setCloudSyncEnabled } = await import(

@@ -1,11 +1,11 @@
-const PREFERENCE_KEY = 'projectUploadPreference'
+import { USER_PREFS_PROJECT_UPLOAD } from '@/constants/storage-keys'
 
 export type ProjectUploadPreference = 'project' | 'chat'
 
 export function getProjectUploadPreference(): ProjectUploadPreference | null {
   if (typeof window === 'undefined') return null
   try {
-    const value = localStorage.getItem(PREFERENCE_KEY)
+    const value = localStorage.getItem(USER_PREFS_PROJECT_UPLOAD)
     if (value === 'project' || value === 'chat') {
       return value
     }
@@ -20,7 +20,7 @@ export function setProjectUploadPreference(
 ): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.setItem(PREFERENCE_KEY, preference)
+    localStorage.setItem(USER_PREFS_PROJECT_UPLOAD, preference)
   } catch {
     // Storage unavailable (e.g., Safari private mode) - silently fail
   }
@@ -29,7 +29,7 @@ export function setProjectUploadPreference(
 export function clearProjectUploadPreference(): void {
   if (typeof window === 'undefined') return
   try {
-    localStorage.removeItem(PREFERENCE_KEY)
+    localStorage.removeItem(USER_PREFS_PROJECT_UPLOAD)
   } catch {
     // Storage unavailable - silently fail
   }
