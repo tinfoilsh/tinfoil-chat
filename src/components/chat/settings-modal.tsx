@@ -2664,8 +2664,13 @@ ${encryptionKey.replace('key_', '')}
                               <div className="flex gap-2">
                                 <div className="relative flex-1">
                                   <input
-                                    type={
-                                      isInputKeyVisible ? 'text' : 'password'
+                                    type="text"
+                                    style={
+                                      isInputKeyVisible
+                                        ? undefined
+                                        : ({
+                                            WebkitTextSecurity: 'disc',
+                                          } as React.CSSProperties)
                                     }
                                     name="encryption-key"
                                     value={inputKey}
