@@ -1,7 +1,7 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
   AUTH_ACTIVE_USER_ID,
-  SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
+  SECRET_PASSKEY_BACKED_UP,
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
@@ -16,16 +16,20 @@ import { logError, logInfo } from '@/utils/error-handling'
 interface ClearUserDataOptions {
   /** If set, preserve this user ID in localStorage after clearing */
   preserveUserId?: string
+  /** If true, keep the encryption key in localStorage (for signout without passkey backup) */
+  preserveEncryptionKey?: boolean
   /** Logging context label */
   context: string
 }
 
 async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
-  const { context, preserveUserId } = options
+  const { context, preserveUserId, preserveEncryptionKey } = options
 
   // Clear encryption key immediately (in-memory + localStorage) before any
   // async work, so concurrent code cannot re-persist a stale key.
-  encryptionService.clearKey({ persist: true })
+  if (!preserveEncryptionKey) {
+    encryptionService.clearKey({ persist: true })
+  }
 
   // Reset renderer registry to clear any cached renderers
   resetRendererRegistry()
@@ -50,18 +54,15 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 
   // Clear localStorage, preserving only non-user-specific keys
   try {
-    const hasSeenWebSearchIntro = localStorage.getItem(
-      SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
-    )
+    const encryptionKey = preserveEncryptionKey
+      ? localStorage.getItem(USER_ENCRYPTION_KEY)
+      : null
     localStorage.clear()
-    if (hasSeenWebSearchIntro) {
-      localStorage.setItem(
-        SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
-        hasSeenWebSearchIntro,
-      )
-    }
     if (preserveUserId) {
       localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
+    }
+    if (encryptionKey) {
+      localStorage.setItem(USER_ENCRYPTION_KEY, encryptionKey)
     }
   } catch {
     // best-effort — don't let localStorage failures skip remaining cleanup
@@ -95,26 +96,50 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   }
 }
 
-export async function performSignoutCleanup(): Promise<void> {
+export async function performSignoutCleanup(opts?: {
+  preserveEncryptionKey?: boolean
+}): Promise<void> {
+  const preserveKey = opts?.preserveEncryptionKey ?? false
+  const action = preserveKey
+    ? 'performSignoutCleanup(preserveKey)'
+    : 'performSignoutCleanup'
+
   try {
-    logInfo('Starting signout cleanup', {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanup',
+    logInfo(
+      `Starting signout cleanup${preserveKey ? ' (preserving encryption key)' : ''}`,
+      {
+        component: 'signoutCleanup',
+        action,
+      },
+    )
+
+    await clearAllUserData({
+      context: 'signoutCleanup',
+      preserveEncryptionKey: preserveKey,
     })
 
-    await clearAllUserData({ context: 'signoutCleanup' })
-
-    logInfo('Signout cleanup completed', {
-      component: 'signoutCleanup',
-      action: 'performSignoutCleanup',
-    })
+    logInfo(
+      `Signout cleanup completed${preserveKey ? ' (encryption key preserved)' : ''}`,
+      {
+        component: 'signoutCleanup',
+        action,
+      },
+    )
   } catch (error) {
     logError('Error during signout cleanup', error, {
       component: 'signoutCleanup',
-      action: 'performSignoutCleanup',
+      action,
     })
     throw error
   }
+}
+
+/**
+ * Delete just the encryption key from localStorage and clear the in-memory copy.
+ * Called after the user downloads their key from the signout modal.
+ */
+export function deleteEncryptionKey(): void {
+  encryptionService.clearKey({ persist: true })
 }
 
 export function performUserSwitchCleanup(newUserId: string): void {
@@ -142,4 +167,9 @@ export function performUserSwitchCleanup(newUserId: string): void {
 export function getEncryptionKey(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem(USER_ENCRYPTION_KEY)
+}
+
+export function hasPasskeyBackup(): boolean {
+  if (typeof window === 'undefined') return false
+  return localStorage.getItem(SECRET_PASSKEY_BACKED_UP) === 'true'
 }

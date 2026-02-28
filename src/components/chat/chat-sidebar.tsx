@@ -78,6 +78,8 @@ type ChatSidebarProps = {
   isPremium?: boolean
   onEncryptionKeyClick?: () => void
   onCloudSyncSetupClick?: () => void
+  onSetupPasskey?: () => Promise<boolean>
+  passkeySetupAvailable?: boolean
   onChatsUpdated?: () => void
   verificationComplete?: boolean
   verificationSuccess?: boolean
@@ -131,6 +133,8 @@ export function ChatSidebar({
   isPremium = true,
   onEncryptionKeyClick,
   onCloudSyncSetupClick,
+  onSetupPasskey,
+  passkeySetupAvailable,
   onChatsUpdated,
   isProjectMode,
   activeProjectName,
@@ -609,6 +613,12 @@ export function ChatSidebar({
     if (enabled) {
       // Check if encryption key exists
       if (!encryptionService.getKey()) {
+        // Prefer passkey setup when available
+        if (passkeySetupAvailable && onSetupPasskey) {
+          await onSetupPasskey()
+          return
+        }
+
         // Turn on the toggle visually (but don't persist yet)
         setCloudSyncEnabled(true)
 
@@ -1143,12 +1153,11 @@ export function ChatSidebar({
                             cloud sync to be enabled on this device.
                           </p>
                           <button
-                            onClick={() => {
-                              if (onCloudSyncSetupClick) {
+                            onClick={async () => {
+                              if (passkeySetupAvailable && onSetupPasskey) {
+                                await onSetupPasskey()
+                              } else if (onCloudSyncSetupClick) {
                                 onCloudSyncSetupClick()
-                              } else {
-                                setCloudSyncEnabledSetting(true)
-                                setCloudSyncEnabled(true)
                               }
                             }}
                             className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"
@@ -1685,12 +1694,11 @@ export function ChatSidebar({
                         your data across multiple devices.
                       </p>
                       <button
-                        onClick={() => {
-                          if (onCloudSyncSetupClick) {
+                        onClick={async () => {
+                          if (passkeySetupAvailable && onSetupPasskey) {
+                            await onSetupPasskey()
+                          } else if (onCloudSyncSetupClick) {
                             onCloudSyncSetupClick()
-                          } else {
-                            setCloudSyncEnabledSetting(true)
-                            setCloudSyncEnabled(true)
                           }
                         }}
                         className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-3 py-2 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat/80"

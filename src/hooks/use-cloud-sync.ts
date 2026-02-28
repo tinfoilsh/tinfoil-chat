@@ -5,8 +5,12 @@ import {
 import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import {
+  isCloudSyncEnabled,
+  setCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
+import { hasPasskeyBackup } from '@/utils/signout-cleanup'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -14,7 +18,8 @@ export interface CloudSyncState {
   syncing: boolean
   lastSyncTime: number | null
   encryptionKey: string | null
-  isFirstTimeUser: boolean
+  /** True once the init effect has finished (encryption key resolved) */
+  initialized: boolean
   decryptionProgress: {
     isDecrypting: boolean
     current: number
@@ -22,18 +27,27 @@ export interface CloudSyncState {
   } | null
 }
 
-export function useCloudSync() {
+interface UseCloudSyncOptions {
+  /** Called after a key change so the passkey hook can re-encrypt the backup */
+  onKeyChanged?: () => void
+}
+
+export function useCloudSync(options?: UseCloudSyncOptions) {
   const { getToken, isSignedIn } = useAuth()
   const [state, setState] = useState<CloudSyncState>({
     syncing: false,
     lastSyncTime: null,
     encryptionKey: null,
-    isFirstTimeUser: false,
+    initialized: false,
     decryptionProgress: null,
   })
   const syncingRef = useRef(false)
   const initializingRef = useRef(false)
   const isMountedRef = useRef(true)
+  // Ref avoids putting `options` in useCallback dep arrays, which would
+  // recreate setEncryptionKey every render (options is a fresh object each time).
+  const onKeyChangedRef = useRef(options?.onKeyChanged)
+  onKeyChangedRef.current = options?.onKeyChanged
 
   // Cleanup on unmount
   useEffect(() => {
@@ -88,9 +102,7 @@ export function useCloudSync() {
         // Initialize centralized auth token manager
         authTokenManager.initialize(getToken)
 
-        // Check if user already has a key before initializing
         const existingKey = localStorage.getItem(USER_ENCRYPTION_KEY)
-        const isFirstTime = !existingKey
 
         // Backwards compatibility: if an encryption key exists but cloud sync is not enabled,
         // automatically enable it (existing users should have sync enabled by default)
@@ -101,9 +113,6 @@ export function useCloudSync() {
           'true'
 
         if (existingKey && !cloudSyncEnabled && !explicitlyDisabled) {
-          const { setCloudSyncEnabled } = await import(
-            '@/utils/cloud-sync-settings'
-          )
           setCloudSyncEnabled(true)
           cloudSyncEnabled = true
           logInfo('Automatically enabled cloud sync for existing user', {
@@ -119,12 +128,12 @@ export function useCloudSync() {
           setState((prev) => ({
             ...prev,
             encryptionKey: key,
-            isFirstTimeUser: isFirstTime,
+            initialized: true,
           }))
         }
 
         // Only perform sync operations if cloud sync is enabled
-        if (!cloudSyncEnabled) {
+        if (!isCloudSyncEnabled()) {
           logInfo('Cloud sync is disabled, skipping sync operations', {
             component: 'useCloudSync',
             action: 'initializeSync',
@@ -136,6 +145,10 @@ export function useCloudSync() {
           component: 'useCloudSync',
           action: 'initializeSync',
         })
+        // Still mark as initialized so passkey hook can proceed
+        if (isMountedRef.current) {
+          setState((prev) => ({ ...prev, initialized: true }))
+        }
       } finally {
         initializingRef.current = false
       }
@@ -323,8 +336,8 @@ export function useCloudSync() {
 
   // Retry decryption for failed chats
   const retryDecryptionWithNewKey = useCallback(
-    (options?: { runInBackground?: boolean }) => {
-      const { runInBackground = false } = options || {}
+    (opts?: { runInBackground?: boolean }) => {
+      const { runInBackground = false } = opts || {}
 
       if (runInBackground) {
         if (isMountedRef.current) {
@@ -370,16 +383,27 @@ export function useCloudSync() {
   const setEncryptionKey = useCallback(
     async (key: string) => {
       try {
-        // Store the old key to detect if it changed
-        const oldKey = encryptionService.getKey()
+        // Check both encryptionService (source of truth for the crypto layer) and
+        // React state (source of truth for the hook). The passkey init effect may
+        // have already persisted the key to encryptionService before the consumer
+        // calls setEncryptionKey, so encryptionService.getKey() would match — but
+        // the hook's encryptionKey state is still null and needs a sync + decrypt.
+        const serviceKey = encryptionService.getKey()
+        let stateKey: string | null = null
+        setState((prev) => {
+          stateKey = prev.encryptionKey
+          return prev
+        })
 
         await encryptionService.setKey(key)
         if (isMountedRef.current) {
           setState((prev) => ({ ...prev, encryptionKey: key }))
         }
 
-        // If the key changed OR this is the first time setting a key, retry decryption and sync
-        if (!oldKey || oldKey !== key) {
+        const keyValueChanged = !serviceKey || serviceKey !== key
+        const stateNeedsSync = !stateKey
+
+        if (keyValueChanged || stateNeedsSync) {
           // Sync immediately to fetch encrypted chats from cloud
           // Don't let sync failures block key updates
           try {
@@ -392,32 +416,17 @@ export function useCloudSync() {
           }
 
           // Run decryption in background to avoid UI hang
-          const decryptionPromise = retryDecryptionWithNewKey({
+          void retryDecryptionWithNewKey({
             runInBackground: true,
           })
 
-          void decryptionPromise.finally(async () => {
-            try {
-              const reencryptResult = await cloudSync.reencryptAndUploadChats()
-
-              logInfo('Re-encrypted chats after key change', {
-                component: 'useCloudSync',
-                action: 'setEncryptionKey',
-                metadata: {
-                  reencrypted: reencryptResult.reencrypted,
-                  uploaded: reencryptResult.uploaded,
-                  errors: reencryptResult.errors.length,
-                },
-              })
-
-              await syncChats()
-            } catch (error) {
-              logError('Failed to re-encrypt chats', error, {
-                component: 'useCloudSync',
-                action: 'setEncryptionKey',
-              })
-            }
-          })
+          // Re-encrypt the passkey backup only when the key VALUE actually changed
+          // (not when state is merely catching up to what encryptionService already holds,
+          // e.g. after passkey auto-recovery which sets the key via encryptionService
+          // before this function is called).
+          if (keyValueChanged && hasPasskeyBackup()) {
+            onKeyChangedRef.current?.()
+          }
 
           return true // Always return true to trigger reload
         }
@@ -434,13 +443,6 @@ export function useCloudSync() {
     [syncChats, retryDecryptionWithNewKey],
   )
 
-  // Clear first time user flag
-  const clearFirstTimeUser = useCallback(() => {
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, isFirstTimeUser: false }))
-    }
-  }, [])
-
   return {
     ...state,
     syncChats,
@@ -449,6 +451,5 @@ export function useCloudSync() {
     backupChat,
     setEncryptionKey,
     retryDecryptionWithNewKey,
-    clearFirstTimeUser,
   }
 }

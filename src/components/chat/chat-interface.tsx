@@ -33,6 +33,7 @@ import {
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
+import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 
 import { cloudSync } from '@/services/cloud/cloud-sync'
@@ -102,11 +103,9 @@ const ShareModalLazy = dynamic(
   () => import('./share-modal').then((m) => m.ShareModal),
   { ssr: false },
 )
-const WebSearchIntroModal = dynamic(
+const PasskeyIntroModal = dynamic(
   () =>
-    import('../tutorial/WebSearchIntroModal').then(
-      (m) => m.WebSearchIntroModal,
-    ),
+    import('../tutorial/PasskeyIntroModal').then((m) => m.PasskeyIntroModal),
   { ssr: false },
 )
 
@@ -265,19 +264,52 @@ export function ChatInterface({
   const { chat_subscription_active, isLoading: subscriptionLoading } =
     useSubscriptionStatus()
 
-  // Initialize cloud sync
+  // Initialize cloud sync and passkey backup as two separate hooks.
+  // usePasskeyBackup depends on useCloudSync's `initialized` and `encryptionKey`,
+  // and bridges key changes back via onEncryptionKeyRecovered / updatePasskeyBackup.
+  // Ref bridges the forward dependency: useCloudSync needs updatePasskeyBackup (from
+  // usePasskeyBackup), which is defined after useCloudSync returns.
+  const updatePasskeyBackupRef = useRef<() => Promise<void>>()
+
   const {
     syncing,
     syncChats,
     smartSyncChats,
     syncProjectChats,
     encryptionKey,
-    isFirstTimeUser,
+    initialized: cloudSyncInitialized,
     setEncryptionKey,
     retryDecryptionWithNewKey,
-    clearFirstTimeUser,
     decryptionProgress,
-  } = useCloudSync()
+  } = useCloudSync({
+    onKeyChanged: () => {
+      void updatePasskeyBackupRef.current?.()
+    },
+  })
+
+  const {
+    passkeyActive,
+    passkeyRecoveryNeeded,
+    passkeySetupAvailable,
+    passkeyIntroNeeded,
+    setupPasskey,
+    recoverWithPasskey,
+    setupNewKeySplit,
+    acceptPasskeyIntro,
+    updatePasskeyBackup,
+  } = usePasskeyBackup({
+    encryptionKey,
+    initialized: cloudSyncInitialized,
+    isSignedIn,
+    user,
+    onEncryptionKeyRecovered: useCallback(
+      (key: string) => {
+        void setEncryptionKey(key)
+      },
+      [setEncryptionKey],
+    ),
+  })
+  updatePasskeyBackupRef.current = updatePasskeyBackup
 
   // Initialize profile sync
   const {
@@ -1014,6 +1046,18 @@ export function ChatInterface({
   const handleOpenCloudSyncSetup = () => {
     setShowCloudSyncSetupModal(true)
   }
+
+  const handleKeyChanged = useCallback(
+    async (key: string) => {
+      const syncResult = await setEncryptionKey(key)
+      if (syncResult) {
+        await retryProfileDecryption()
+        await reloadChats()
+        window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
+      }
+    },
+    [setEncryptionKey, retryProfileDecryption, reloadChats],
+  )
 
   // Handler for creating a new project with a random name
   const handleCreateProject = useCallback(async () => {
@@ -2132,6 +2176,8 @@ export function ChatInterface({
                 onCloudSyncSetupClick={
                   isSignedIn ? handleOpenCloudSyncSetup : undefined
                 }
+                onSetupPasskey={setupPasskey}
+                passkeySetupAvailable={passkeySetupAvailable}
                 onChatsUpdated={reloadChats}
                 isProjectMode={isProjectMode}
                 activeProjectName={activeProject?.name}
@@ -2203,14 +2249,10 @@ export function ChatInterface({
         isSignedIn={isSignedIn}
         isPremium={isPremium}
         encryptionKey={encryptionKey}
-        onKeyChange={async (key: string) => {
-          const syncResult = await setEncryptionKey(key)
-          if (syncResult) {
-            await reloadChats()
-            await retryProfileDecryption()
-            window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
-          }
-        }}
+        onKeyChange={handleKeyChanged}
+        passkeyActive={passkeyActive}
+        passkeySetupAvailable={passkeySetupAvailable}
+        onSetupPasskey={setupPasskey}
         initialTab={settingsInitialTab}
         chats={chats}
       />
@@ -2453,17 +2495,29 @@ export function ChatInterface({
             }
           }}
           onSetupComplete={async (key: string) => {
-            const syncResult = await setEncryptionKey(key)
-            if (syncResult) {
-              await retryProfileDecryption()
-              await reloadChats()
-              // Notify projects to retry decryption
-              window.dispatchEvent(new CustomEvent('encryptionKeyChanged'))
-            }
+            await handleKeyChanged(key)
             setShowCloudSyncSetupModal(false)
           }}
           isDarkMode={isDarkMode}
           initialCloudSyncEnabled={true}
+          prfSupported={
+            passkeyActive || passkeyRecoveryNeeded || passkeySetupAvailable
+          }
+          passkeyRecoveryNeeded={passkeyRecoveryNeeded}
+          onRecoverWithPasskey={async () => {
+            const key = await recoverWithPasskey()
+            if (!key) return false
+            await handleKeyChanged(key)
+            setShowCloudSyncSetupModal(false)
+            return true
+          }}
+          onSetupNewKey={async () => {
+            const key = await setupNewKeySplit()
+            if (!key) return false
+            await handleKeyChanged(key)
+            setShowCloudSyncSetupModal(false)
+            return true
+          }}
         />
       )}
 
@@ -2484,8 +2538,9 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
-      <WebSearchIntroModal
-        onEnableWebSearch={() => setWebSearchEnabled(true)}
+      <PasskeyIntroModal
+        isOpen={passkeyIntroNeeded}
+        onAccept={acceptPasskeyIntro}
       />
     </div>
   )
