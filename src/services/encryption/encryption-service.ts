@@ -384,13 +384,25 @@ export class EncryptionService {
   async setAllKeys(primary: string, alternatives: string[]): Promise<void> {
     await this.setKey(primary)
 
+    let addedNew = false
     for (const k of alternatives) {
       if (k === primary) continue
       try {
-        this.addDecryptionKey(k)
+        this.getKeyBytes(k)
       } catch {
         // Skip keys that fail format validation (prefix, charset, length)
+        continue
       }
+      if (k === this.currentKeyString || this.fallbackKeyStrings.includes(k)) {
+        continue
+      }
+      this.fallbackKeyStrings.push(k)
+      addedNew = true
+    }
+
+    if (addedNew) {
+      this.saveKeyHistoryToStorage(this.fallbackKeyStrings)
+      this.notifyFallbackKeyAdded()
     }
   }
 
