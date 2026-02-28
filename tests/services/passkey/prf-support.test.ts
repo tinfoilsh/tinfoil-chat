@@ -12,14 +12,13 @@ describe('prf-support', () => {
   })
 
   afterEach(() => {
-    // Restore original
-    if (originalPublicKeyCredential) {
-      Object.defineProperty(globalThis, 'PublicKeyCredential', {
-        value: originalPublicKeyCredential,
-        writable: true,
-        configurable: true,
-      })
-    }
+    // Restore original — always run even if the original was undefined,
+    // otherwise a test that defines PublicKeyCredential will leak it.
+    Object.defineProperty(globalThis, 'PublicKeyCredential', {
+      value: originalPublicKeyCredential,
+      writable: true,
+      configurable: true,
+    })
     vi.restoreAllMocks()
   })
 
