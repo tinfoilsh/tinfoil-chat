@@ -2,6 +2,7 @@ import { encryptionService } from '@/services/encryption/encryption-service'
 import {
   authenticatePrfPasskey,
   createPrfPasskey,
+  decryptKeyBundle,
   deriveKeyEncryptionKey,
   getCachedPrfResult,
   hasPasskeyCredentials,
@@ -43,6 +44,39 @@ export interface UsePasskeyBackupOptions {
 }
 
 const PASSKEY_INTRO_DELAY_MS = 2000
+const SYNC_VERSION_STORAGE_KEY = 'tinfoil-passkey-sync-version'
+const SYNC_CHECK_INTERVAL_MS = 30_000
+
+/**
+ * Read the locally remembered sync_version for a credential ID.
+ */
+function getLocalSyncVersion(credentialId: string): number | null {
+  try {
+    const raw = localStorage.getItem(SYNC_VERSION_STORAGE_KEY)
+    if (!raw) return null
+    const map = JSON.parse(raw) as Record<string, number>
+    return map[credentialId] ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Persist the sync_version for a credential ID so we can detect remote changes.
+ */
+function setLocalSyncVersion(credentialId: string, version: number): void {
+  try {
+    let map: Record<string, number> = {}
+    const raw = localStorage.getItem(SYNC_VERSION_STORAGE_KEY)
+    if (raw) {
+      map = JSON.parse(raw) as Record<string, number>
+    }
+    map[credentialId] = version
+    localStorage.setItem(SYNC_VERSION_STORAGE_KEY, JSON.stringify(map))
+  } catch {
+    // best-effort
+  }
+}
 
 export function usePasskeyBackup({
   encryptionKey,
@@ -114,13 +148,14 @@ export function usePasskeyBackup({
     if (!passkeyResult) return false
 
     const kek = await deriveKeyEncryptionKey(passkeyResult.prfOutput)
-    const saved = await storeEncryptedKeys(
+    const result = await storeEncryptedKeys(
       passkeyResult.credentialId,
       kek,
       keys,
     )
-    if (!saved) return false
+    if (!result) return false
     localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
+    setLocalSyncVersion(passkeyResult.credentialId, result.syncVersion)
     return true
   }
 
@@ -175,6 +210,13 @@ export function usePasskeyBackup({
 
     setCloudSyncEnabled(true)
     localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
+
+    // Record sync_version so the periodic check has a baseline
+    const entry = entries.find((e) => e.id === result.credentialId)
+    if (entry) {
+      setLocalSyncVersion(result.credentialId, entry.sync_version)
+    }
+
     return keyBundle
   }
 
@@ -232,10 +274,14 @@ export function usePasskeyBackup({
       const keys = encryptionService.getAllKeys()
       if (!keys.primary) return
 
-      await storeEncryptedKeys(result.credentialId, kek, {
+      const stored = await storeEncryptedKeys(result.credentialId, kek, {
         primary: keys.primary,
         alternatives: keys.alternatives,
       })
+
+      if (stored) {
+        setLocalSyncVersion(result.credentialId, stored.syncVersion)
+      }
 
       logInfo('Updated passkey backup after key change', {
         component: 'usePasskeyBackup',
@@ -245,6 +291,56 @@ export function usePasskeyBackup({
       logError('Failed to update passkey backup after key change', error, {
         component: 'usePasskeyBackup',
         action: 'updatePasskeyBackup',
+      })
+    }
+  }, [])
+
+  /**
+   * Check if the passkey backup has been updated by another device (sync_version
+   * changed). If so, decrypt the updated backup using the cached PRF and apply
+   * the new keys locally. This avoids prompting biometrics — if no cached PRF
+   * is available, the check is skipped silently.
+   */
+  const refreshKeyFromPasskeyBackup = useCallback(async (): Promise<void> => {
+    try {
+      const cached = getCachedPrfResult()
+      if (!cached) return
+
+      const entries = await loadPasskeyCredentials()
+      const entry = entries.find((e) => e.id === cached.credentialId)
+      if (!entry) return
+
+      const localVersion = getLocalSyncVersion(cached.credentialId)
+      if (localVersion !== null && entry.sync_version <= localVersion) return
+
+      // sync_version increased — another device updated the backup
+      const kek = await deriveKeyEncryptionKey(cached.prfOutput)
+      const bundle = await decryptKeyBundle(kek, {
+        iv: entry.iv,
+        data: entry.encrypted_keys,
+      })
+
+      const localKey = encryptionService.getKey()
+      if (bundle.primary === localKey) {
+        // Key matches — just record the version
+        setLocalSyncVersion(cached.credentialId, entry.sync_version)
+        return
+      }
+
+      // Key differs — apply the recovered key bundle
+      await encryptionService.setAllKeys(bundle.primary, bundle.alternatives)
+      setLocalSyncVersion(cached.credentialId, entry.sync_version)
+      onEncryptionKeyRecoveredRef.current?.(bundle.primary)
+
+      logInfo('Refreshed encryption key from passkey backup', {
+        component: 'usePasskeyBackup',
+        action: 'refreshKeyFromPasskeyBackup',
+        metadata: { syncVersion: entry.sync_version },
+      })
+    } catch (error) {
+      logError('Failed to refresh key from passkey backup', error, {
+        component: 'usePasskeyBackup',
+        action: 'refreshKeyFromPasskeyBackup',
       })
     }
   }, [])
@@ -399,6 +495,17 @@ export function usePasskeyBackup({
     generateKeyWithPasskeyBackup,
     recoverWithPasskey,
   ])
+
+  // --- Periodic sync_version check ---
+  useEffect(() => {
+    if (!state.passkeyActive || !isSignedIn) return
+
+    const interval = setInterval(() => {
+      refreshKeyFromPasskeyBackup()
+    }, SYNC_CHECK_INTERVAL_MS)
+
+    return () => clearInterval(interval)
+  }, [state.passkeyActive, isSignedIn, refreshKeyFromPasskeyBackup])
 
   /**
    * Create a passkey and encrypt existing localStorage keys to the backend.
