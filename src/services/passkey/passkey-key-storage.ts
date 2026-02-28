@@ -28,6 +28,7 @@ export interface PasskeyCredentialEntry {
   iv: string // base64
   created_at: string
   version: number // schema version (1 = AES-256-GCM + HKDF-SHA256 KEK)
+  sync_version: number // monotonic counter, incremented each time the key bundle is re-encrypted
 }
 
 const CURRENT_CREDENTIAL_VERSION = 1
@@ -98,7 +99,8 @@ function isValidCredentialEntry(
     typeof e.encrypted_keys === 'string' &&
     typeof e.iv === 'string' &&
     typeof e.created_at === 'string' &&
-    typeof e.version === 'number'
+    typeof e.version === 'number' &&
+    typeof e.sync_version === 'number'
   )
 }
 
@@ -202,6 +204,7 @@ export async function storeEncryptedKeys(
       iv: encrypted.iv,
       created_at: previous?.created_at ?? new Date().toISOString(),
       version: CURRENT_CREDENTIAL_VERSION,
+      sync_version: previous ? previous.sync_version + 1 : 1,
     }
 
     const updated = existing.filter((e) => e.id !== credentialId)
