@@ -83,6 +83,7 @@ export function CloudSyncSetupModal({
   const [isCopied, setIsCopied] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
+  const [isStartingFresh, setIsStartingFresh] = useState(false)
   const { toast } = useToast()
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -623,8 +624,6 @@ ${generatedKey.replace('key_', '')}
     </div>
   )
 
-  const [isStartingFresh, setIsStartingFresh] = useState(false)
-
   const handlePasskeyRecovery = async () => {
     if (!onRecoverWithPasskey) return
     setIsRecovering(true)
@@ -654,11 +653,23 @@ ${generatedKey.replace('key_', '')}
       const success = await onSetupNewKey()
       if (success) {
         onClose()
+      } else {
+        toast({
+          title: 'Setup failed',
+          description:
+            'Could not create a new encryption key. Please try again.',
+          variant: 'destructive',
+        })
       }
     } catch (error) {
       logError('Start fresh failed', error, {
         component: 'CloudSyncSetupModal',
         action: 'handleStartFresh',
+      })
+      toast({
+        title: 'Setup failed',
+        description: 'Could not create a new encryption key. Please try again.',
+        variant: 'destructive',
       })
     } finally {
       setIsStartingFresh(false)
