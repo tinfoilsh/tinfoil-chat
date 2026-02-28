@@ -2670,15 +2670,8 @@ ${encryptionKey.replace('key_', '')}
                               <div className="flex gap-2">
                                 <div className="relative flex-1">
                                   <input
-                                    type="hidden"
-                                    name="username"
-                                    autoComplete="username"
-                                    value="encryption-key"
-                                    readOnly
-                                  />
-                                  <input
                                     type="password"
-                                    name="password"
+                                    name="encryption-key"
                                     value={inputKey}
                                     onChange={(e) =>
                                       setInputKey(e.target.value)
@@ -2688,7 +2681,7 @@ ${encryptionKey.replace('key_', '')}
                                         ? ''
                                         : 'Enter key (e.g., key_abc123...)'
                                     }
-                                    autoComplete="current-password"
+                                    autoComplete="off"
                                     aria-label="Encryption key input"
                                     className={cn(
                                       'w-full rounded-lg border border-blue-500 bg-surface-input px-3 py-2 font-mono text-sm text-blue-500 placeholder:font-sans placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-blue-500',

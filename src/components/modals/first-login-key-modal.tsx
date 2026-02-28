@@ -302,22 +302,15 @@ export function FirstLoginKeyModal({
                           Or paste your key directly:
                         </label>
                         <input
-                          type="hidden"
-                          name="username"
-                          autoComplete="username"
-                          value="encryption-key"
-                          readOnly
-                        />
-                        <input
                           type="password"
-                          name="password"
+                          name="encryption-key"
                           value={inputKey}
                           onChange={(e) => {
                             setInputKey(e.target.value)
                             setError(null)
                           }}
                           placeholder="Enter encryption key (e.g., key_abc123...)"
-                          autoComplete="current-password"
+                          autoComplete="off"
                           className="mt-1 w-full rounded-lg border border-border-subtle bg-surface-input px-3 py-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-2 focus:ring-brand-accent-light"
                         />
 
