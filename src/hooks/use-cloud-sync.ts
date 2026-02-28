@@ -254,6 +254,41 @@ export function useCloudSync() {
     return keyBundle
   }
 
+  /**
+   * Apply recovered keys to component state. Shared by tryPasskeyRecovery
+   * (init effect) and recoverWithPasskey (UI-triggered retry).
+   */
+  const applyRecoveredKeys = (keyBundle: {
+    primary: string
+    alternatives: string[]
+  }): void => {
+    if (isMountedRef.current) {
+      setState((prev) => ({
+        ...prev,
+        encryptionKey: keyBundle.primary,
+        isFirstTimeUser: false,
+        passkeyActive: true,
+        passkeyRecoveryNeeded: false,
+      }))
+    }
+  }
+
+  /**
+   * Apply a newly generated key to component state. Shared by
+   * setupFirstTimePasskeyUser (init effect) and setupNewKeySplit (UI-triggered).
+   */
+  const applyNewPasskeyKey = (key: string): void => {
+    if (isMountedRef.current) {
+      setState((prev) => ({
+        ...prev,
+        encryptionKey: key,
+        isFirstTimeUser: false,
+        passkeyActive: true,
+        passkeyRecoveryNeeded: false,
+      }))
+    }
+  }
+
   // Initialize cloud sync when user is signed in
   useEffect(() => {
     const initializeSync = async () => {
@@ -381,15 +416,7 @@ export function useCloudSync() {
         const keyBundle = await performPasskeyRecovery()
         if (!keyBundle) return false
 
-        if (isMountedRef.current) {
-          setState((prev) => ({
-            ...prev,
-            encryptionKey: keyBundle.primary,
-            isFirstTimeUser: false,
-            passkeyActive: true,
-            passkeyRecoveryNeeded: false,
-          }))
-        }
+        applyRecoveredKeys(keyBundle)
 
         logInfo('Recovered encryption keys via passkey', {
           component: 'useCloudSync',
@@ -434,14 +461,7 @@ export function useCloudSync() {
         const newKey = await generateKeyWithPasskeyBackup()
 
         if (newKey) {
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              encryptionKey: newKey,
-              isFirstTimeUser: false,
-              passkeyActive: true,
-            }))
-          }
+          applyNewPasskeyKey(newKey)
 
           logInfo('First-time passkey setup complete', {
             component: 'useCloudSync',
@@ -802,15 +822,7 @@ export function useCloudSync() {
       const keyBundle = await performPasskeyRecovery()
       if (!keyBundle) return null
 
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          encryptionKey: keyBundle.primary,
-          isFirstTimeUser: false,
-          passkeyActive: true,
-          passkeyRecoveryNeeded: false,
-        }))
-      }
+      applyRecoveredKeys(keyBundle)
 
       logInfo('Recovered encryption keys via passkey retry', {
         component: 'useCloudSync',
@@ -837,15 +849,7 @@ export function useCloudSync() {
       const newKey = await generateKeyWithPasskeyBackup()
       if (!newKey) return null
 
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          encryptionKey: newKey,
-          isFirstTimeUser: false,
-          passkeyActive: true,
-          passkeyRecoveryNeeded: false,
-        }))
-      }
+      applyNewPasskeyKey(newKey)
 
       logInfo('New key split created with passkey', {
         component: 'useCloudSync',
