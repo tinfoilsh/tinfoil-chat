@@ -10,6 +10,7 @@
  * - RFC 5869 (HKDF): https://tools.ietf.org/html/rfc5869
  */
 
+import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
 
 // Salt passed to PRF eval.first — the client internally computes:
@@ -24,6 +25,55 @@ const RP_NAME = 'Tinfoil Chat'
 export interface PrfPasskeyResult {
   credentialId: string
   prfOutput: ArrayBuffer
+}
+
+const PRF_CACHE_KEY = 'tinfoil-passkey-prf-cache'
+
+interface PrfCacheEntry {
+  credentialId: string
+  prfOutput: string // base64-encoded
+}
+
+function cachePrfResult(result: PrfPasskeyResult): void {
+  try {
+    const entry: PrfCacheEntry = {
+      credentialId: result.credentialId,
+      prfOutput: uint8ArrayToBase64(new Uint8Array(result.prfOutput)),
+    }
+    localStorage.setItem(PRF_CACHE_KEY, JSON.stringify(entry))
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Get the cached PRF result from localStorage if available.
+ * The PRF output is deterministic for a given passkey, so we can reuse it
+ * to avoid re-prompting biometrics on key updates.
+ */
+export function getCachedPrfResult(): PrfPasskeyResult | null {
+  try {
+    const raw = localStorage.getItem(PRF_CACHE_KEY)
+    if (!raw) return null
+    const entry = JSON.parse(raw) as PrfCacheEntry
+    return {
+      credentialId: entry.credentialId,
+      prfOutput: base64ToUint8Array(entry.prfOutput).buffer as ArrayBuffer,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Clear the cached PRF result (e.g., on sign-out).
+ */
+export function clearCachedPrfResult(): void {
+  try {
+    localStorage.removeItem(PRF_CACHE_KEY)
+  } catch {
+    // best-effort
+  }
 }
 
 const RP_ID =
@@ -130,10 +180,12 @@ export async function createPrfPasskey(
     // creation so outputs may, or may not, be provided."
     // — https://w3c.github.io/webauthn/#prf-extension (eval description)
     if (prfResults.results?.first) {
-      return {
+      const result = {
         credentialId,
         prfOutput: toArrayBuffer(prfResults.results.first),
       }
+      cachePrfResult(result)
+      return result
     }
 
     // PRF enabled but no results during create — do an immediate get()
@@ -208,10 +260,12 @@ export async function authenticatePrfPasskey(
       return null
     }
 
-    return {
+    const result = {
       credentialId: toBase64Url(assertion.rawId),
       prfOutput: toArrayBuffer(prfOutput),
     }
+    cachePrfResult(result)
+    return result
   } catch (error) {
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
       logInfo('User cancelled passkey authentication', {
