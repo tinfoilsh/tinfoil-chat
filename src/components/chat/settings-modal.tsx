@@ -778,7 +778,16 @@ export function SettingsModal({
         // Prefer passkey setup when available
         if (passkeySetupAvailable && onSetupPasskey) {
           setIsOpen(false)
-          await onSetupPasskey()
+          try {
+            await onSetupPasskey()
+          } catch {
+            toast({
+              title: 'Passkey setup failed',
+              description:
+                'Could not create passkey backup. You can try again later.',
+              variant: 'destructive',
+            })
+          }
           return
         }
 
