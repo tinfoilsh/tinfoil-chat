@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { BiSolidLock } from 'react-icons/bi'
 import { HiOutlineServer } from 'react-icons/hi'
 import { HiOutlineKey, HiShieldCheck } from 'react-icons/hi2'
@@ -12,7 +12,7 @@ function Arrow({ d }: { d: string }) {
   return (
     <path
       d={d}
-      stroke={ARROW_COLOR}
+      style={{ stroke: ARROW_COLOR }}
       strokeWidth="1.5"
       strokeDasharray="4 5"
       strokeLinecap="round"
@@ -37,37 +37,46 @@ function Arrow({ d }: { d: string }) {
  */
 export const DataFlowDiagram = memo(function DataFlowDiagram() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(1)
+  const [scale, setScale] = useState<number | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
 
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? DESIGN_W
-      setScale(Math.min(width / DESIGN_W, 1))
-    })
+    const measure = () => {
+      const width = el.getBoundingClientRect().width
+      if (width > 0) {
+        setScale(Math.min(width / DESIGN_W, 1))
+      }
+    }
+
+    measure()
+
+    const observer = new ResizeObserver(() => measure())
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
 
   // SVG arrow connection points
-  const pillLeft = { x: 150, y: 10 }
-  const pillRight = { x: 310, y: 10 }
+  const pillLeft = { x: 140, y: 10 }
+  const pillRight = { x: 320, y: 10 }
 
   const appTop = { x: 65, y: 187 }
-  const appRightUpper = { x: 130, y: 205 }
-  const appRightLower = { x: 130, y: 230 }
+  const appRightUpper = { x: 170, y: 210 }
+  const appRightLower = { x: 170, y: 230 }
 
-  const enclaveTopRight = { x: 430, y: 185 }
-  const enclaveLeftUpper = { x: 280, y: 205 }
+  const enclaveTopRight = { x: 465, y: 185 }
+  const enclaveLeftUpper = { x: 280, y: 210 }
   const enclaveLeftLower = { x: 280, y: 230 }
 
   return (
     <div
       ref={containerRef}
       className="relative mt-5 w-full select-none overflow-hidden"
-      style={{ height: DESIGN_H * scale }}
+      style={{
+        height: scale !== null ? DESIGN_H * scale : 0,
+        visibility: scale !== null ? 'visible' : 'hidden',
+      }}
     >
       <style>{`
         @keyframes df-dash {
@@ -83,7 +92,8 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
         style={{
           width: DESIGN_W,
           height: DESIGN_H,
-          transform: `scale(${scale})`,
+          transform: `scale(${scale ?? 1})`,
+          willChange: 'transform',
         }}
       >
         <svg
@@ -101,7 +111,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
               markerHeight="4"
               orient="auto-start-reverse"
             >
-              <path d="M 0 1 L 8 5 L 0 9 z" fill={ARROW_COLOR} />
+              <path d="M 0 1 L 8 5 L 0 9 z" style={{ fill: ARROW_COLOR }} />
             </marker>
           </defs>
 
@@ -144,19 +154,19 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
             left: 236,
             top: 72,
             width: 284,
-            height: 208,
+            height: 260,
           }}
         >
-          <div className="flex items-center gap-2">
-            <HiOutlineServer className="h-4 w-4 text-content-muted" />
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <HiOutlineServer className="h-4 w-4 shrink-0 text-content-muted" />
             <span className="text-base font-medium text-content-primary">
               Tinfoil Server
             </span>
           </div>
           <ul className="mt-1 list-disc pl-4 text-sm text-content-muted">
-            <li>Does not see user data</li>
-            <li>Cannot access enclave</li>
-            <li>Does not have decryption key</li>
+            <li className="whitespace-nowrap">Does not see user data</li>
+            <li className="whitespace-nowrap">Cannot access enclave</li>
+            <li className="whitespace-nowrap">Does not have decryption key</li>
           </ul>
         </div>
 
@@ -169,8 +179,8 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
             top: 185,
           }}
         >
-          <div className="flex items-center gap-2">
-            <BiSolidLock className="h-3.5 w-3.5 text-brand-accent-dark dark:text-brand-accent-light" />
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <BiSolidLock className="h-3.5 w-3.5 shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
             <span className="text-base font-medium text-content-primary">
               Inference Processing
             </span>
@@ -183,18 +193,18 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
         {/* Tinfoil Chat App */}
         <div
           className="absolute rounded border border-brand-accent-light/40 bg-white px-4 py-3 shadow-sm dark:border-brand-accent-light/30 dark:bg-surface-card"
-          style={{ left: 0, top: 190, width: 155 }}
+          style={{ left: 0, top: 190, width: 170 }}
         >
-          <div className="flex items-center gap-2">
-            <HiOutlineKey className="h-4 w-4 text-content-muted" />
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <HiOutlineKey className="h-4 w-4 shrink-0 text-content-muted" />
             <span className="text-base font-medium text-content-primary">
               Tinfoil Chat App
             </span>
           </div>
           <ul className="mt-1 list-disc pl-4 text-sm text-content-muted">
-            <li>Sees user data</li>
-            <li>Has decryption key</li>
-            <li>Checks proof</li>
+            <li className="whitespace-nowrap">Sees user data</li>
+            <li className="whitespace-nowrap">Has decryption key</li>
+            <li className="whitespace-nowrap">Checks proof</li>
           </ul>
         </div>
       </div>
