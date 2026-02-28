@@ -92,8 +92,12 @@ export function useSubscriptionStatus() {
 
   // Persist subscription status so next page load can use it immediately
   useEffect(() => {
-    if (!isLoaded || !user) return
+    if (!isLoaded) return
     try {
+      if (!user) {
+        localStorage.removeItem(SETTINGS_CACHED_SUBSCRIPTION_STATUS)
+        return
+      }
       localStorage.setItem(
         SETTINGS_CACHED_SUBSCRIPTION_STATUS,
         JSON.stringify(subscriptionStatus),

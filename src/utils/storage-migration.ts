@@ -47,6 +47,7 @@ const LOCAL_STORAGE_KEY_MAP: Record<string, string> = {
   chats: 'tinfoil-sync-chats',
   'tinfoil-chat-sync-status': 'tinfoil-sync-chat-status',
   'tinfoil-all-chats-sync-status': 'tinfoil-sync-all-chats-status',
+  'tinfoil-profile-sync-status': 'tinfoil-sync-profile-status',
 }
 
 const SESSION_STORAGE_KEY_MAP: Record<string, string> = {
