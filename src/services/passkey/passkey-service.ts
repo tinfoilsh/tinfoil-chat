@@ -10,7 +10,13 @@
  * - RFC 5869 (HKDF): https://tools.ietf.org/html/rfc5869
  */
 
-import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
+import {
+  base64ToUint8Array,
+  base64UrlToUint8Array,
+  bufferSourceToArrayBuffer,
+  uint8ArrayToBase64,
+  uint8ArrayToBase64Url,
+} from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
 
 // Salt passed to PRF eval.first — the client internally computes:
@@ -82,46 +88,6 @@ const RP_ID =
     : 'tinfoil.sh'
 
 /**
- * Base64url-encode a Uint8Array (no padding, URL-safe alphabet).
- */
-function toBase64Url(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-/**
- * Decode a base64url string back to a Uint8Array.
- */
-function fromBase64Url(base64url: string): Uint8Array<ArrayBuffer> {
-  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
-  const binary = atob(padded)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
-
-/**
- * Convert a BufferSource (ArrayBuffer or ArrayBufferView) to a plain ArrayBuffer.
- */
-function toArrayBuffer(source: BufferSource): ArrayBuffer {
-  if (source instanceof ArrayBuffer) {
-    return source
-  }
-  // ArrayBufferView (e.g. Uint8Array)
-  return source.buffer.slice(
-    source.byteOffset,
-    source.byteOffset + source.byteLength,
-  ) as ArrayBuffer
-}
-
-/**
  * Create a new PRF-capable passkey for the given user.
  *
  * Returns the credential ID and PRF output, or null if PRF is not supported
@@ -173,7 +139,7 @@ export async function createPrfPasskey(
       return null
     }
 
-    const credentialId = toBase64Url(credential.rawId)
+    const credentialId = uint8ArrayToBase64Url(new Uint8Array(credential.rawId))
 
     // Some authenticators return PRF results during creation, others don't.
     // "Not all authenticators support evaluating the PRFs during credential
@@ -182,7 +148,7 @@ export async function createPrfPasskey(
     if (prfResults.results?.first) {
       const result = {
         credentialId,
-        prfOutput: toArrayBuffer(prfResults.results.first),
+        prfOutput: bufferSourceToArrayBuffer(prfResults.results.first),
       }
       cachePrfResult(result)
       return result
@@ -227,7 +193,7 @@ export async function authenticatePrfPasskey(
 ): Promise<PrfPasskeyResult | null> {
   const allowCredentials: PublicKeyCredentialDescriptor[] = credentialIds.map(
     (id) => ({
-      id: fromBase64Url(id),
+      id: base64UrlToUint8Array(id),
       type: 'public-key',
     }),
   )
@@ -261,8 +227,8 @@ export async function authenticatePrfPasskey(
     }
 
     const result = {
-      credentialId: toBase64Url(assertion.rawId),
-      prfOutput: toArrayBuffer(prfOutput),
+      credentialId: uint8ArrayToBase64Url(new Uint8Array(assertion.rawId)),
+      prfOutput: bufferSourceToArrayBuffer(prfOutput),
     }
     cachePrfResult(result)
     return result

@@ -56,6 +56,34 @@ export function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(chunks.join(''))
 }
 
+/** Convert a Uint8Array to a base64url string (no padding, URL-safe alphabet). */
+export function uint8ArrayToBase64Url(bytes: Uint8Array): string {
+  return uint8ArrayToBase64(bytes)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+/** Convert a base64url string to a Uint8Array. */
+export function base64UrlToUint8Array(
+  base64url: string,
+): Uint8Array<ArrayBuffer> {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+  return base64ToUint8Array(padded)
+}
+
+/** Convert a BufferSource (ArrayBuffer or ArrayBufferView) to a plain ArrayBuffer. */
+export function bufferSourceToArrayBuffer(source: BufferSource): ArrayBuffer {
+  if (source instanceof ArrayBuffer) {
+    return source
+  }
+  return source.buffer.slice(
+    source.byteOffset,
+    source.byteOffset + source.byteLength,
+  ) as ArrayBuffer
+}
+
 /**
  * Compress and encrypt a JSON-serialisable object into raw binary.
  * Pipeline: JSON.stringify → gzip → AES-GCM encrypt → IV(12) || ciphertext
