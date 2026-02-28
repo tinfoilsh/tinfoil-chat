@@ -3,11 +3,14 @@ import { logError } from '@/utils/error-handling'
 import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
-const PLACEHOLDER_API_KEY = 'tinfoil-placeholder-api-key'
+const PLACEHOLDER_SESSION_TOKEN = 'tinfoil-placeholder-api-key'
+
+const SESSION_TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000
 
 let clientInstance: TinfoilAI | null = null
-let lastApiKey: string | null = null
-let cachedApiKey: string | null = null
+let lastSessionToken: string | null = null
+let cachedSessionToken: string | null = null
+let cachedSessionTokenExpiresAt: number | null = null
 let hasSubscriptionFn: (() => boolean) | null = null
 
 export function setSubscriptionChecker(hasSubscription: () => boolean): void {
@@ -15,22 +18,29 @@ export function setSubscriptionChecker(hasSubscription: () => boolean): void {
   resetTinfoilClient()
 }
 
-async function fetchApiKey(): Promise<string> {
+async function fetchSessionToken(): Promise<string> {
   if (hasSubscriptionFn && !hasSubscriptionFn()) {
-    cachedApiKey = null
-    return PLACEHOLDER_API_KEY
+    cachedSessionToken = null
+    return PLACEHOLDER_SESSION_TOKEN
   }
 
-  if (cachedApiKey) {
-    return cachedApiKey
+  if (cachedSessionToken) {
+    const isExpired =
+      cachedSessionTokenExpiresAt !== null &&
+      Date.now() > cachedSessionTokenExpiresAt - SESSION_TOKEN_EXPIRY_BUFFER_MS
+    if (!isExpired) {
+      return cachedSessionToken
+    }
+    cachedSessionToken = null
+    cachedSessionTokenExpiresAt = null
   }
 
   if (!authTokenManager.isInitialized()) {
     logError('Auth token manager not initialized', undefined, {
       component: 'tinfoil-client',
-      action: 'fetchApiKey',
+      action: 'fetchSessionToken',
     })
-    return PLACEHOLDER_API_KEY
+    return PLACEHOLDER_SESSION_TOKEN
   }
 
   try {
@@ -44,43 +54,47 @@ async function fetchApiKey(): Promise<string> {
 
     if (!response.ok) {
       const errorText = await response.text()
-      logError('Failed to fetch API key from server', undefined, {
+      logError('Failed to fetch session token from server', undefined, {
         component: 'tinfoil-client',
-        action: 'fetchApiKey',
+        action: 'fetchSessionToken',
         metadata: {
           status: response.status,
           statusText: response.statusText,
           error: errorText,
         },
       })
-      throw new Error(`Failed to get API key: ${response.status}`)
+      throw new Error(`Failed to get session token: ${response.status}`)
     }
 
     const data = await response.json()
-    cachedApiKey = data.key
+    cachedSessionToken = data.key
+    if (data.expires_at) {
+      cachedSessionTokenExpiresAt = new Date(data.expires_at).getTime()
+    }
     return data.key
   } catch (error) {
-    logError('Failed to fetch API key', error, {
+    logError('Failed to fetch session token', error, {
       component: 'tinfoil-client',
-      action: 'fetchApiKey',
+      action: 'fetchSessionToken',
     })
-    return PLACEHOLDER_API_KEY
+    return PLACEHOLDER_SESSION_TOKEN
   }
 }
 
 export function resetTinfoilClient(): void {
   clientInstance = null
-  lastApiKey = null
-  cachedApiKey = null
+  lastSessionToken = null
+  cachedSessionToken = null
+  cachedSessionTokenExpiresAt = null
 }
 
-async function initClient(apiKey: string): Promise<TinfoilAI> {
+async function initClient(sessionToken: string): Promise<TinfoilAI> {
   try {
     clientInstance = new TinfoilAI({
-      apiKey: apiKey,
+      apiKey: sessionToken,
       dangerouslyAllowBrowser: true,
     })
-    lastApiKey = apiKey
+    lastSessionToken = sessionToken
     return clientInstance
   } catch (error) {
     logError('Failed to initialize TinfoilAI client', error, {
@@ -92,10 +106,10 @@ async function initClient(apiKey: string): Promise<TinfoilAI> {
 }
 
 async function getRawClient(): Promise<TinfoilAI> {
-  const apiKey = await fetchApiKey()
+  const sessionToken = await fetchSessionToken()
 
-  if (!clientInstance || lastApiKey !== apiKey) {
-    await initClient(apiKey)
+  if (!clientInstance || lastSessionToken !== sessionToken) {
+    await initClient(sessionToken)
   }
 
   return clientInstance!
@@ -103,7 +117,7 @@ async function getRawClient(): Promise<TinfoilAI> {
 
 /**
  * Returns a proxy that behaves like TinfoilAI but automatically retries
- * once on AuthenticationError (refreshing the API key in between).
+ * once on AuthenticationError (refreshing the session token in between).
  *
  * Property accesses build up a path (e.g. ['chat','completions','create']).
  * The actual call is intercepted in the `apply` trap, which resolves the
