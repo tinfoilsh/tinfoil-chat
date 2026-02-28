@@ -1,5 +1,6 @@
 import { useModelManagement } from '@/components/chat/hooks/use-model-management'
 import type { BaseModel } from '@/config/models'
+import { SETTINGS_SELECTED_MODEL } from '@/constants/storage-keys'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -57,7 +58,7 @@ describe('useModelManagement', () => {
     })
 
     it('should use saved model from localStorage if available', () => {
-      localStorage.setItem('selectedModel', 'gpt-oss-120b')
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'gpt-oss-120b')
 
       const { result } = renderHook(() =>
         useModelManagement({
@@ -111,7 +112,7 @@ describe('useModelManagement', () => {
     })
 
     it('should switch from premium to free model for non-premium users', async () => {
-      localStorage.setItem('selectedModel', 'claude-sonnet-4')
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'claude-sonnet-4')
 
       const { result } = renderHook(() =>
         useModelManagement({
@@ -131,7 +132,7 @@ describe('useModelManagement', () => {
     })
 
     it('should keep valid free model for non-premium users', async () => {
-      localStorage.setItem('selectedModel', 'gpt-oss-120b')
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'gpt-oss-120b')
 
       const { result } = renderHook(() =>
         useModelManagement({
@@ -171,7 +172,7 @@ describe('useModelManagement', () => {
     })
 
     it('should upgrade from free to premium model for premium users', async () => {
-      localStorage.setItem('selectedModel', 'gpt-oss-120b')
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'gpt-oss-120b')
 
       const { result } = renderHook(() =>
         useModelManagement({
@@ -253,7 +254,7 @@ describe('useModelManagement', () => {
 
   describe('invalid saved model handling', () => {
     it('should handle non-existent saved model', async () => {
-      localStorage.setItem('selectedModel', 'non-existent-model')
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, 'non-existent-model')
 
       const { result } = renderHook(() =>
         useModelManagement({
@@ -273,7 +274,7 @@ describe('useModelManagement', () => {
     })
 
     it('should handle empty saved model', async () => {
-      localStorage.setItem('selectedModel', '')
+      localStorage.setItem(SETTINGS_SELECTED_MODEL, '')
 
       const { result } = renderHook(() =>
         useModelManagement({
@@ -314,7 +315,7 @@ describe('useModelManagement', () => {
       })
 
       expect(result.current.selectedModel).toBe('gpt-oss-120b')
-      expect(localStorage.getItem('selectedModel')).toBe('gpt-oss-120b')
+      expect(localStorage.getItem(SETTINGS_SELECTED_MODEL)).toBe('gpt-oss-120b')
     })
 
     it('should not allow premium model selection for free users', async () => {
@@ -358,7 +359,7 @@ describe('useModelManagement', () => {
         expect(result.current.hasValidatedModel).toBe(true)
       })
 
-      expect(localStorage.getItem('selectedModel')).toBe('gpt-oss-120b')
+      expect(localStorage.getItem(SETTINGS_SELECTED_MODEL)).toBe('gpt-oss-120b')
     })
 
     it('should update localStorage when model changes', async () => {
@@ -378,7 +379,7 @@ describe('useModelManagement', () => {
         expect(result.current.hasValidatedModel).toBe(true)
       })
 
-      expect(localStorage.getItem('selectedModel')).toBe('gpt-oss-120b')
+      expect(localStorage.getItem(SETTINGS_SELECTED_MODEL)).toBe('gpt-oss-120b')
 
       rerender({ isPremium: true })
 
@@ -386,7 +387,9 @@ describe('useModelManagement', () => {
         expect(result.current.selectedModel).toBe('claude-sonnet-4')
       })
 
-      expect(localStorage.getItem('selectedModel')).toBe('claude-sonnet-4')
+      expect(localStorage.getItem(SETTINGS_SELECTED_MODEL)).toBe(
+        'claude-sonnet-4',
+      )
     })
   })
 })
