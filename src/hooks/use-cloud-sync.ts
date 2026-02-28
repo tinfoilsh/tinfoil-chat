@@ -9,6 +9,7 @@ import {
   authenticatePrfPasskey,
   createPrfPasskey,
   deriveKeyEncryptionKey,
+  getCachedPrfResult,
   hasPasskeyCredentials,
   loadPasskeyCredentials,
   retrieveEncryptedKeys,
@@ -146,8 +147,11 @@ export function useCloudSync() {
       const entries = await loadPasskeyCredentials()
       if (entries.length === 0) return
 
-      const credentialIds = entries.map((e) => e.id)
-      const result = await authenticatePrfPasskey(credentialIds)
+      // Use the cached PRF result to avoid re-prompting biometrics.
+      // Falls back to a full WebAuthn authentication if no cache is available.
+      const cached = getCachedPrfResult()
+      const result =
+        cached ?? (await authenticatePrfPasskey(entries.map((e) => e.id)))
       if (!result) return
 
       const kek = await deriveKeyEncryptionKey(result.prfOutput)
