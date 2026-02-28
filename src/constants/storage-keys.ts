@@ -54,6 +54,7 @@ export const SYNC_CHAT_STATUS = 'tinfoil-sync-chat-status'
 export const SYNC_ALL_CHATS_STATUS = 'tinfoil-sync-all-chats-status'
 export const SYNC_PROJECT_CHAT_STATUS_PREFIX =
   'tinfoil-sync-project-chat-status-'
+export const SYNC_PROFILE_STATUS = 'tinfoil-sync-profile-status'
 
 // --- localStorage: Development ---------------------------------------------
 export const DEV_ENABLE_DEBUG_LOGS = 'tinfoil-dev-enable-debug-logs'

@@ -5,12 +5,14 @@ export default function Document() {
   // Inline script to set theme before first paint to prevent flash
   const themeScript = `
     (function() {
-      var themeMode = localStorage.getItem('tinfoil-settings-theme-mode');
+      var themeMode = localStorage.getItem('tinfoil-settings-theme-mode')
+        || localStorage.getItem('themeMode');
       var theme;
 
-      // If no themeMode, check legacy 'tinfoil-settings-theme' key
+      // If no themeMode, check 'tinfoil-settings-theme' / pre-migration 'theme' key
       if (!themeMode) {
-        var legacyTheme = localStorage.getItem('tinfoil-settings-theme');
+        var legacyTheme = localStorage.getItem('tinfoil-settings-theme')
+          || localStorage.getItem('theme');
         if (legacyTheme === 'dark' || legacyTheme === 'light') {
           themeMode = legacyTheme;
         }

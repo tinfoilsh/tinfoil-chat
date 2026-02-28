@@ -70,8 +70,9 @@ export function useUIState(): UseUIStateReturn {
       return
     }
 
-    // Legacy: check old SETTINGS_THEME key for backwards compatibility
-    const savedTheme = localStorage.getItem(SETTINGS_THEME)
+    // Legacy: check old 'theme' key for backwards compatibility
+    const savedTheme =
+      localStorage.getItem(SETTINGS_THEME) ?? localStorage.getItem('theme')
     if (savedTheme !== null) {
       const mode = savedTheme === 'dark' ? 'dark' : 'light'
       setThemeModeState(mode)

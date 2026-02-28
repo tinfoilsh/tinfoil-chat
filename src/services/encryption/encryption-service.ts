@@ -99,7 +99,9 @@ export class EncryptionService {
   }
 
   private loadKeyHistoryFromStorage(): string[] {
-    const rawHistory = localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY)
+    const rawHistory =
+      localStorage.getItem(SECRET_ENCRYPTION_KEY_HISTORY) ??
+      localStorage.getItem('tinfoil-encryption-key-history')
 
     if (!rawHistory) {
       return []
@@ -183,7 +185,9 @@ export class EncryptionService {
 
   // Initialize with existing key - does NOT generate a new key automatically
   async initialize(): Promise<string | null> {
-    const storedKey = localStorage.getItem(SECRET_ENCRYPTION_KEY)
+    const storedKey =
+      localStorage.getItem(SECRET_ENCRYPTION_KEY) ??
+      localStorage.getItem('tinfoil-encryption-key')
     this.fallbackKeyStrings = this.loadKeyHistoryFromStorage()
     this.pruneFallbackCache(this.fallbackKeyStrings)
 
@@ -199,7 +203,9 @@ export class EncryptionService {
   async setKey(keyString: string): Promise<void> {
     try {
       const previousKey =
-        this.currentKeyString ?? localStorage.getItem(SECRET_ENCRYPTION_KEY)
+        this.currentKeyString ??
+        localStorage.getItem(SECRET_ENCRYPTION_KEY) ??
+        localStorage.getItem('tinfoil-encryption-key')
 
       const previousHistory = this.loadKeyHistoryFromStorage()
 
@@ -273,7 +279,10 @@ export class EncryptionService {
 
   // Get current encryption key as alphanumeric string
   getKey(): string | null {
-    return localStorage.getItem(SECRET_ENCRYPTION_KEY)
+    return (
+      localStorage.getItem(SECRET_ENCRYPTION_KEY) ??
+      localStorage.getItem('tinfoil-encryption-key')
+    )
   }
 
   // Remove encryption key
@@ -288,6 +297,8 @@ export class EncryptionService {
       try {
         localStorage.removeItem(SECRET_ENCRYPTION_KEY)
         localStorage.removeItem(SECRET_ENCRYPTION_KEY_HISTORY)
+        localStorage.removeItem('tinfoil-encryption-key')
+        localStorage.removeItem('tinfoil-encryption-key-history')
       } catch (error) {
         logInfo('Failed to remove encryption keys from storage', {
           component: 'EncryptionService',

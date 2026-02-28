@@ -2121,7 +2121,7 @@ ${encryptionKey.replace('key_', '')}
                                   setPiiCheckEnabled(newValue)
                                   if (isClient) {
                                     localStorage.setItem(
-                                      'piiCheckEnabled',
+                                      SETTINGS_PII_CHECK_ENABLED,
                                       newValue.toString(),
                                     )
                                     window.dispatchEvent(

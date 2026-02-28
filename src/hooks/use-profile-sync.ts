@@ -1,4 +1,5 @@
 import { CLOUD_SYNC } from '@/config'
+import { SYNC_PROFILE_STATUS } from '@/constants/storage-keys'
 import type { ProfileSyncStatus } from '@/services/cloud/cloud-storage'
 import {
   applySettingsToLocal,
@@ -12,7 +13,7 @@ import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const PROFILE_SYNC_STATUS_KEY = 'tinfoil-profile-sync-status'
+const PROFILE_SYNC_STATUS_KEY = SYNC_PROFILE_STATUS
 
 export function useProfileSync() {
   const { isSignedIn } = useAuth()
