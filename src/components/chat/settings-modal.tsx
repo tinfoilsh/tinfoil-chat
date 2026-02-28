@@ -2725,93 +2725,97 @@ ${encryptionKey.replace('key_', '')}
                   )}
 
                   {/* Passkey Section */}
-                  {cloudSyncEnabled && onSetupPasskey && (
-                    <div className="space-y-3">
-                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
-                        Passkey
-                      </h3>
+                  {cloudSyncEnabled &&
+                    (passkeyActive ||
+                      (passkeySetupAvailable && onSetupPasskey)) && (
+                      <div className="space-y-3">
+                        <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                          Passkey
+                        </h3>
 
-                      {/* Passkey Active Status */}
-                      {passkeyActive && (
-                        <div
-                          className={cn(
-                            'rounded-lg border border-border-subtle p-4',
-                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                          )}
-                        >
-                          <div className="flex items-start gap-2">
-                            <GoPasskeyFill className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent-light" />
-                            <div>
-                              <span className="text-sm font-medium text-content-primary">
-                                Sync and backup using Passkeys
+                        {/* Passkey Active Status */}
+                        {passkeyActive && (
+                          <div
+                            className={cn(
+                              'rounded-lg border border-border-subtle p-4',
+                              isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                            )}
+                          >
+                            <div className="flex items-start gap-2">
+                              <GoPasskeyFill className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent-light" />
+                              <div>
+                                <span className="text-sm font-medium text-content-primary">
+                                  Sync and backup using Passkeys
+                                </span>
+                                <p className="text-xs text-content-muted">
+                                  Use Face ID or Touch ID to sync chats across
+                                  devices
+                                </p>
+                              </div>
+                            </div>
+                            <div className="ml-6 mt-2 flex items-center gap-1.5">
+                              <IoShieldCheckmark className="h-3.5 w-3.5 text-brand-accent-light" />
+                              <span className="text-xs font-medium text-brand-accent-light">
+                                Passkey active
                               </span>
-                              <p className="text-xs text-content-muted">
-                                Use Face ID or Touch ID to sync chats across
-                                devices
-                              </p>
                             </div>
                           </div>
-                          <div className="ml-6 mt-2 flex items-center gap-1.5">
-                            <IoShieldCheckmark className="h-3.5 w-3.5 text-brand-accent-light" />
-                            <span className="text-xs font-medium text-brand-accent-light">
-                              Passkey active
-                            </span>
-                          </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Passkey Setup Prompt */}
-                      {!passkeyActive && (
-                        <button
-                          onClick={async () => {
-                            setIsSettingUpPasskey(true)
-                            try {
-                              const success = await onSetupPasskey()
-                              if (success) {
-                                toast({
-                                  title: 'Passkey created',
-                                  description:
-                                    'Your encryption key is now backed up with your passkey',
-                                })
-                              }
-                            } catch {
-                              toast({
-                                title: 'Passkey setup failed',
-                                description:
-                                  'Could not create passkey backup. You can try again later.',
-                                variant: 'destructive',
-                              })
-                            } finally {
-                              setIsSettingUpPasskey(false)
-                            }
-                          }}
-                          disabled={isSettingUpPasskey}
-                          className={cn(
-                            'w-full rounded-lg border border-border-subtle p-4 text-left transition-colors',
-                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
-                            isSettingUpPasskey
-                              ? 'cursor-not-allowed opacity-50'
-                              : 'hover:bg-surface-chat/80',
+                        {/* Passkey Setup Prompt */}
+                        {!passkeyActive &&
+                          passkeySetupAvailable &&
+                          onSetupPasskey && (
+                            <button
+                              onClick={async () => {
+                                setIsSettingUpPasskey(true)
+                                try {
+                                  const success = await onSetupPasskey()
+                                  if (success) {
+                                    toast({
+                                      title: 'Passkey created',
+                                      description:
+                                        'Your encryption key is now backed up with your passkey',
+                                    })
+                                  }
+                                } catch {
+                                  toast({
+                                    title: 'Passkey setup failed',
+                                    description:
+                                      'Could not create passkey backup. You can try again later.',
+                                    variant: 'destructive',
+                                  })
+                                } finally {
+                                  setIsSettingUpPasskey(false)
+                                }
+                              }}
+                              disabled={isSettingUpPasskey}
+                              className={cn(
+                                'w-full rounded-lg border border-border-subtle p-4 text-left transition-colors',
+                                isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                                isSettingUpPasskey
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : 'hover:bg-surface-chat/80',
+                              )}
+                            >
+                              <div className="flex gap-2">
+                                <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
+                                <div>
+                                  <span className="text-sm font-medium leading-tight text-content-primary">
+                                    {isSettingUpPasskey
+                                      ? 'Setting up...'
+                                      : 'Add Passkey for seamless sync'}
+                                  </span>
+                                  <p className="text-xs text-content-muted">
+                                    Use Face ID or Touch ID to sync chats across
+                                    devices
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
                           )}
-                        >
-                          <div className="flex gap-2">
-                            <GoPasskeyFill className="mt-[3px] h-4 w-4 shrink-0 text-content-secondary" />
-                            <div>
-                              <span className="text-sm font-medium leading-tight text-content-primary">
-                                {isSettingUpPasskey
-                                  ? 'Setting up...'
-                                  : 'Add Passkey for seamless sync'}
-                              </span>
-                              <p className="text-xs text-content-muted">
-                                Use Face ID or Touch ID to sync chats across
-                                devices
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
                 </>
               )}
 
