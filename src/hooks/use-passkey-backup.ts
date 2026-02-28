@@ -1,3 +1,4 @@
+import { SECRET_PASSKEY_BACKED_UP } from '@/constants/storage-keys'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import {
   authenticatePrfPasskey,
@@ -13,7 +14,6 @@ import {
 import { isPrfSupported } from '@/services/passkey/prf-support'
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
-import { PASSKEY_BACKED_UP_KEY } from '@/utils/signout-cleanup'
 import type { UserResource } from '@clerk/types'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -154,7 +154,7 @@ export function usePasskeyBackup({
       keys,
     )
     if (!result) return false
-    localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
     setLocalSyncVersion(passkeyResult.credentialId, result.syncVersion)
     return true
   }
@@ -209,7 +209,7 @@ export function usePasskeyBackup({
     )
 
     setCloudSyncEnabled(true)
-    localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
+    localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
 
     // Record sync_version so the periodic check has a baseline
     const entry = entries.find((e) => e.id === result.credentialId)
@@ -387,7 +387,7 @@ export function usePasskeyBackup({
 
         if (credentialsExist) {
           // Already backed up — show green badge, hide setup button
-          localStorage.setItem(PASSKEY_BACKED_UP_KEY, 'true')
+          localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
           if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
