@@ -1,5 +1,6 @@
+import { SETTINGS_CACHED_SUBSCRIPTION_STATUS } from '@/constants/storage-keys'
 import { useUser } from '@clerk/nextjs'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 
 type StripeSubscriptionStatus =
   | 'active'
@@ -88,6 +89,19 @@ export function useSubscriptionStatus() {
 
     return { chat_subscription_active: chatActive }
   }, [user, isLoaded])
+
+  // Persist subscription status so next page load can use it immediately
+  useEffect(() => {
+    if (!isLoaded || !user) return
+    try {
+      localStorage.setItem(
+        SETTINGS_CACHED_SUBSCRIPTION_STATUS,
+        JSON.stringify(subscriptionStatus),
+      )
+    } catch {
+      // best-effort
+    }
+  }, [isLoaded, user, subscriptionStatus])
 
   return {
     isLoading: !isLoaded,
