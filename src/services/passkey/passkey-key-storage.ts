@@ -85,6 +85,19 @@ export async function decryptKeyBundle(
 
 // --- Backend API ---
 
+function isValidCredentialEntry(
+  entry: unknown,
+): entry is PasskeyCredentialEntry {
+  if (typeof entry !== 'object' || entry === null) return false
+  const e = entry as Record<string, unknown>
+  return (
+    typeof e.id === 'string' &&
+    typeof e.encrypted_keys === 'string' &&
+    typeof e.iv === 'string' &&
+    typeof e.created_at === 'string'
+  )
+}
+
 /**
  * Load all passkey credential entries for the authenticated user.
  */
@@ -111,7 +124,7 @@ export async function loadPasskeyCredentials(): Promise<
     return []
   }
 
-  return data as PasskeyCredentialEntry[]
+  return data.filter(isValidCredentialEntry)
 }
 
 /**
