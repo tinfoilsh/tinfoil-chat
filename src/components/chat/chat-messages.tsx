@@ -68,6 +68,8 @@ const ChatMessage = memo(
     titleModelName,
     onEditMessage,
     onRegenerateMessage,
+    isPremium,
+    ttsModelName,
   }: {
     message: Message
     messageIndex: number
@@ -82,6 +84,8 @@ const ChatMessage = memo(
     titleModelName?: string
     onEditMessage?: (messageIndex: number, newContent: string) => void
     onRegenerateMessage?: (messageIndex: number) => void
+    isPremium?: boolean
+    ttsModelName?: string
   }) {
     // Get renderer from registry
     const renderer = getRendererRegistry().getMessageRenderer(message, model)
@@ -101,6 +105,8 @@ const ChatMessage = memo(
         titleModelName={titleModelName}
         onEditMessage={onEditMessage}
         onRegenerateMessage={onRegenerateMessage}
+        isPremium={isPremium}
+        ttsModelName={ttsModelName}
       />
     )
   },
@@ -174,7 +180,9 @@ const ChatMessage = memo(
         nextProps.setExpandedThoughtsState &&
       prevProps.titleModelName === nextProps.titleModelName &&
       prevProps.onEditMessage === nextProps.onEditMessage &&
-      prevProps.onRegenerateMessage === nextProps.onRegenerateMessage
+      prevProps.onRegenerateMessage === nextProps.onRegenerateMessage &&
+      prevProps.isPremium === nextProps.isPremium &&
+      prevProps.ttsModelName === nextProps.ttsModelName
     )
   },
 )
@@ -366,6 +374,11 @@ export function ChatMessages({
     return titleModel?.modelName
   }, [models])
 
+  const ttsModelName = useMemo(() => {
+    const ttsModel = models?.find((m) => m.type === 'tts')
+    return ttsModel?.modelName
+  }, [models])
+
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
@@ -453,6 +466,8 @@ export function ChatMessages({
                 titleModelName={titleModelName}
                 onEditMessage={onEditMessage}
                 onRegenerateMessage={onRegenerateMessage}
+                isPremium={isPremium}
+                ttsModelName={ttsModelName}
               />
             ))}
           </div>
@@ -477,6 +492,8 @@ export function ChatMessages({
           titleModelName={titleModelName}
           onEditMessage={onEditMessage}
           onRegenerateMessage={onRegenerateMessage}
+          isPremium={isPremium}
+          ttsModelName={ttsModelName}
         />
       ))}
       {showLoadingPlaceholder && (

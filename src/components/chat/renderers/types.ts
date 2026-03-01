@@ -30,6 +30,8 @@ export interface MessageRenderProps {
   titleModelName?: string
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
+  isPremium?: boolean
+  ttsModelName?: string
 }
 
 export interface InputRenderProps {

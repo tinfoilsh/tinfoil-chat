@@ -14,6 +14,8 @@ export const CONSTANTS = {
   RECORDING_TIMEOUT_MS: 600000,
   // Default audio model for voice transcription
   DEFAULT_AUDIO_MODEL: 'voxtral-small-24b',
+  // Default TTS voice
+  DEFAULT_TTS_VOICE: 'vivian',
   // Copy button timeout in milliseconds (2 seconds)
   COPY_TIMEOUT_MS: 2000,
   // Chat initialization delay in milliseconds

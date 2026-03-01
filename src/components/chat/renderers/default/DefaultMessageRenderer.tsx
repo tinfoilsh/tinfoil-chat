@@ -14,6 +14,7 @@ import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
+import { TTSButton } from '../components/TTSButton'
 import { WebSearchProcess } from '../components/WebSearchProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
@@ -28,6 +29,8 @@ const DefaultMessageComponent = ({
   titleModelName,
   onEditMessage,
   onRegenerateMessage,
+  isPremium,
+  ttsModelName,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
   const [isEditing, setIsEditing] = React.useState(false)
@@ -475,6 +478,9 @@ const DefaultMessageComponent = ({
                 content={message.content}
                 isDarkMode={isDarkMode}
               />
+              {isPremium && ttsModelName && (
+                <TTSButton content={message.content} model={ttsModelName} />
+              )}
               {/* Regenerate button - only on last assistant message */}
               {isLastMessage && onRegenerateMessage && messageIndex > 0 && (
                 <div className="group/regen relative">
