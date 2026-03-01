@@ -1,9 +1,12 @@
 import { DEFAULT_TTS_VOICE } from '@/config/tts-voices'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
+import { sanitizeTextForTTS } from '@/utils/tts-text-processing'
 import { SpeakerWaveIcon, StopIcon } from '@heroicons/react/24/outline'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { PiSpinner } from 'react-icons/pi'
+
+const PCM_SAMPLE_RATE = 24000
 
 type TTSState = 'idle' | 'loading' | 'playing'
 
@@ -19,37 +22,54 @@ export const TTSButton = memo(function TTSButton({
   voice,
 }: TTSButtonProps) {
   const [state, setState] = useState<TTSState>('idle')
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const objectUrlRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const nextStartTimeRef = useRef(0)
 
   const cleanup = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = null
-    }
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current)
-      objectUrlRef.current = null
-    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {})
+      audioContextRef.current = null
+    }
+    nextStartTimeRef.current = 0
   }, [])
 
   useEffect(() => {
     return cleanup
   }, [cleanup])
 
-  const handleClick = useCallback(async () => {
-    if (state === 'loading') {
-      cleanup()
-      setState('idle')
-      return
-    }
+  const scheduleChunk = useCallback(
+    (pcmData: Int16Array, audioContext: AudioContext) => {
+      const floatData = new Float32Array(pcmData.length)
+      for (let i = 0; i < pcmData.length; i++) {
+        floatData[i] = pcmData[i] / 32768
+      }
 
-    if (state === 'playing') {
+      const buffer = audioContext.createBuffer(
+        1,
+        floatData.length,
+        PCM_SAMPLE_RATE,
+      )
+      buffer.getChannelData(0).set(floatData)
+
+      const source = audioContext.createBufferSource()
+      source.buffer = buffer
+      source.connect(audioContext.destination)
+
+      const now = audioContext.currentTime
+      const startTime = Math.max(nextStartTimeRef.current, now)
+      source.start(startTime)
+      nextStartTimeRef.current = startTime + buffer.duration
+    },
+    [],
+  )
+
+  const handleClick = useCallback(async () => {
+    if (state === 'loading' || state === 'playing') {
       cleanup()
       setState('idle')
       return
@@ -66,35 +86,75 @@ export const TTSButton = memo(function TTSButton({
         {
           model,
           voice: voice ?? DEFAULT_TTS_VOICE,
-          input: content,
-          response_format: 'mp3',
+          input: sanitizeTextForTTS(content),
+          response_format: 'pcm',
+          stream: true,
+        } as Parameters<typeof client.audio.speech.create>[0] & {
+          stream: boolean
         },
         { signal: abortController.signal },
       )
 
       if (abortController.signal.aborted) return
 
-      const blob = await response.blob()
-      if (abortController.signal.aborted) return
-
-      const url = URL.createObjectURL(blob)
-      objectUrlRef.current = url
-
-      const audio = new Audio(url)
-      audioRef.current = audio
-
-      audio.addEventListener('ended', () => {
+      const body = (response as unknown as Response).body
+      if (!body) {
         cleanup()
         setState('idle')
-      })
+        return
+      }
 
-      audio.addEventListener('error', () => {
-        cleanup()
-        setState('idle')
-      })
+      const audioContext = new AudioContext({ sampleRate: PCM_SAMPLE_RATE })
+      audioContextRef.current = audioContext
+      nextStartTimeRef.current = 0
 
-      await audio.play()
       setState('playing')
+
+      const reader = body.getReader()
+      let leftover = new Uint8Array(0)
+
+      while (true) {
+        if (abortController.signal.aborted) return
+
+        const { done, value } = await reader.read()
+        if (done) break
+
+        // Combine leftover bytes with new chunk
+        const combined = new Uint8Array(leftover.length + value.length)
+        combined.set(leftover)
+        combined.set(value, leftover.length)
+
+        // PCM 16-bit = 2 bytes per sample, process only complete samples
+        const usableBytes = combined.length - (combined.length % 2)
+        if (usableBytes > 0) {
+          const pcmData = new Int16Array(
+            combined.buffer.slice(
+              combined.byteOffset,
+              combined.byteOffset + usableBytes,
+            ),
+          )
+          scheduleChunk(pcmData, audioContext)
+        }
+
+        leftover = combined.slice(usableBytes)
+      }
+
+      // Wait for all scheduled audio to finish playing
+      const remainingTime = nextStartTimeRef.current - audioContext.currentTime
+      if (remainingTime > 0) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, remainingTime * 1000)
+          abortController.signal.addEventListener('abort', () => {
+            clearTimeout(timer)
+            resolve()
+          })
+        })
+      }
+
+      if (!abortController.signal.aborted) {
+        cleanup()
+        setState('idle')
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
 
@@ -105,7 +165,7 @@ export const TTSButton = memo(function TTSButton({
       cleanup()
       setState('idle')
     }
-  }, [state, content, model, voice, cleanup])
+  }, [state, content, model, voice, cleanup, scheduleChunk])
 
   return (
     <div className="group/tts relative">
