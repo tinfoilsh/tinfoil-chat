@@ -31,6 +31,7 @@ const DefaultMessageComponent = ({
   onRegenerateMessage,
   isPremium,
   ttsModelName,
+  ttsVoice,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
   const [isEditing, setIsEditing] = React.useState(false)
@@ -479,7 +480,11 @@ const DefaultMessageComponent = ({
                 isDarkMode={isDarkMode}
               />
               {isPremium && ttsModelName && (
-                <TTSButton content={message.content} model={ttsModelName} />
+                <TTSButton
+                  content={message.content}
+                  model={ttsModelName}
+                  voice={ttsVoice}
+                />
               )}
               {/* Regenerate button - only on last assistant message */}
               {isLastMessage && onRegenerateMessage && messageIndex > 0 && (

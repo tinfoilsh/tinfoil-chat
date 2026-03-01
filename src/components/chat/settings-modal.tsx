@@ -1,11 +1,13 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { API_BASE_URL } from '@/config'
+import { DEFAULT_TTS_VOICE, TTS_VOICES } from '@/config/tts-voices'
 import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_MAX_PROMPT_MESSAGES,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_TTS_VOICE,
   USER_PREFS_ADDITIONAL_CONTEXT,
   USER_PREFS_CUSTOM_PROMPT_ENABLED,
   USER_PREFS_CUSTOM_SYSTEM_PROMPT,
@@ -230,6 +232,9 @@ export function SettingsModal({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
+  // TTS voice setting
+  const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE)
+
   // Chat font setting
   const [chatFont, setChatFont] = useState<
     'default' | 'mono' | 'system' | 'dyslexic'
@@ -442,6 +447,10 @@ export function SettingsModal({
     // Load PII check setting (defaults to true if not set)
     const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
+
+    // Load TTS voice setting
+    const savedTtsVoice = localStorage.getItem(SETTINGS_TTS_VOICE)
+    if (savedTtsVoice) setTtsVoice(savedTtsVoice)
 
     // Load chat font setting
     const savedChatFont = localStorage.getItem(SETTINGS_CHAT_FONT)
@@ -1991,6 +2000,59 @@ ${encryptionKey.replace('key_', '')}
                       </div>
                     </div>
                   </div>
+
+                  {/* Text-to-Speech Voice - premium only */}
+                  {isPremium && (
+                    <div className="space-y-3">
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-4',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        <div className="space-y-3">
+                          <div>
+                            <div className="font-aeonik text-sm font-medium text-content-primary">
+                              Text-to-Speech Voice
+                            </div>
+                            <div className="font-aeonik-fono text-xs text-content-muted">
+                              Voice used for reading messages aloud
+                            </div>
+                          </div>
+                          <select
+                            value={ttsVoice}
+                            onChange={(e) => {
+                              const newValue = e.target.value
+                              setTtsVoice(newValue)
+                              if (isClient) {
+                                localStorage.setItem(
+                                  SETTINGS_TTS_VOICE,
+                                  newValue,
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent('ttsVoiceChanged', {
+                                    detail: { voice: newValue },
+                                  }),
+                                )
+                              }
+                            }}
+                            className={cn(
+                              'w-full rounded-md border py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                              isDarkMode
+                                ? 'border-border-strong bg-surface-chat text-content-secondary'
+                                : 'border-border-subtle bg-surface-sidebar text-content-primary',
+                            )}
+                          >
+                            {TTS_VOICES.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.name} - {v.description} ({v.language})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Advanced Settings */}
                   <div className="space-y-3">

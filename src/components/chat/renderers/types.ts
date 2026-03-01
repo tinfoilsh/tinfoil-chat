@@ -32,6 +32,7 @@ export interface MessageRenderProps {
   onRegenerateMessage?: (messageIndex: number) => void
   isPremium?: boolean
   ttsModelName?: string
+  ttsVoice?: string
 }
 
 export interface InputRenderProps {

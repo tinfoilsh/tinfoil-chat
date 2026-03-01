@@ -6,6 +6,7 @@ import {
 import {
   SETTINGS_CACHED_SUBSCRIPTION_STATUS,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_TTS_VOICE,
   SETTINGS_WEB_SEARCH_ENABLED,
   UI_EXPAND_PROJECT_DOCUMENTS,
 } from '@/constants/storage-keys'
@@ -32,6 +33,7 @@ import {
 } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
+import { DEFAULT_TTS_VOICE } from '@/config/tts-voices'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 
@@ -324,6 +326,12 @@ export function ChatInterface({
     if (typeof window === 'undefined') return true
     const saved = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     return saved === null ? true : saved === 'true'
+  })
+
+  // TTS voice setting (controlled from settings modal)
+  const [ttsVoice, setTtsVoice] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_TTS_VOICE
+    return localStorage.getItem(SETTINGS_TTS_VOICE) ?? DEFAULT_TTS_VOICE
   })
 
   // State for tracking processed documents
@@ -737,6 +745,25 @@ export function ChatInterface({
       window.removeEventListener(
         'piiCheckEnabledChanged',
         handlePiiCheckChange as EventListener,
+      )
+    }
+  }, [])
+
+  // Listen for TTS voice setting changes from settings modal
+  useEffect(() => {
+    const handleTtsVoiceChange = (event: CustomEvent<{ voice: string }>) => {
+      setTtsVoice(event.detail.voice)
+    }
+
+    window.addEventListener(
+      'ttsVoiceChanged',
+      handleTtsVoiceChange as EventListener,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'ttsVoiceChanged',
+        handleTtsVoiceChange as EventListener,
       )
     }
   }, [])
@@ -2302,6 +2329,7 @@ export function ChatInterface({
                 webSearchEnabled={webSearchEnabled}
                 onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
                 onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
+                ttsVoice={ttsVoice}
               />
             </div>
           </div>

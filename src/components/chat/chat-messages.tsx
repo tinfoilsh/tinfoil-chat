@@ -52,6 +52,7 @@ type ChatMessagesProps = {
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
   onOpenVerifier?: () => void
+  ttsVoice?: string
 }
 
 // Optimized wrapper component that receives expanded state from parent
@@ -70,6 +71,7 @@ const ChatMessage = memo(
     onRegenerateMessage,
     isPremium,
     ttsModelName,
+    ttsVoice,
   }: {
     message: Message
     messageIndex: number
@@ -86,6 +88,7 @@ const ChatMessage = memo(
     onRegenerateMessage?: (messageIndex: number) => void
     isPremium?: boolean
     ttsModelName?: string
+    ttsVoice?: string
   }) {
     // Get renderer from registry
     const renderer = getRendererRegistry().getMessageRenderer(message, model)
@@ -107,6 +110,7 @@ const ChatMessage = memo(
         onRegenerateMessage={onRegenerateMessage}
         isPremium={isPremium}
         ttsModelName={ttsModelName}
+        ttsVoice={ttsVoice}
       />
     )
   },
@@ -182,7 +186,8 @@ const ChatMessage = memo(
       prevProps.onEditMessage === nextProps.onEditMessage &&
       prevProps.onRegenerateMessage === nextProps.onRegenerateMessage &&
       prevProps.isPremium === nextProps.isPremium &&
-      prevProps.ttsModelName === nextProps.ttsModelName
+      prevProps.ttsModelName === nextProps.ttsModelName &&
+      prevProps.ttsVoice === nextProps.ttsVoice
     )
   },
 )
@@ -299,6 +304,7 @@ export function ChatMessages({
   webSearchEnabled,
   onWebSearchToggle,
   onOpenVerifier,
+  ttsVoice,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const [expandedThoughtsState, setExpandedThoughtsState] = useState<
@@ -468,6 +474,7 @@ export function ChatMessages({
                 onRegenerateMessage={onRegenerateMessage}
                 isPremium={isPremium}
                 ttsModelName={ttsModelName}
+                ttsVoice={ttsVoice}
               />
             ))}
           </div>
@@ -494,6 +501,7 @@ export function ChatMessages({
           onRegenerateMessage={onRegenerateMessage}
           isPremium={isPremium}
           ttsModelName={ttsModelName}
+          ttsVoice={ttsVoice}
         />
       ))}
       {showLoadingPlaceholder && (

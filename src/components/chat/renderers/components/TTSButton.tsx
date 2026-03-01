@@ -1,4 +1,4 @@
-import { CONSTANTS } from '@/components/chat/constants'
+import { DEFAULT_TTS_VOICE } from '@/config/tts-voices'
 import { getTinfoilClient } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import { SpeakerWaveIcon, StopIcon } from '@heroicons/react/24/outline'
@@ -10,11 +10,13 @@ type TTSState = 'idle' | 'loading' | 'playing'
 interface TTSButtonProps {
   content: string
   model: string
+  voice?: string
 }
 
 export const TTSButton = memo(function TTSButton({
   content,
   model,
+  voice,
 }: TTSButtonProps) {
   const [state, setState] = useState<TTSState>('idle')
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -63,7 +65,7 @@ export const TTSButton = memo(function TTSButton({
       const response = await client.audio.speech.create(
         {
           model,
-          voice: CONSTANTS.DEFAULT_TTS_VOICE,
+          voice: voice ?? DEFAULT_TTS_VOICE,
           input: content,
           response_format: 'mp3',
         },
@@ -103,7 +105,7 @@ export const TTSButton = memo(function TTSButton({
       cleanup()
       setState('idle')
     }
-  }, [state, content, model, cleanup])
+  }, [state, content, model, voice, cleanup])
 
   return (
     <div className="group/tts relative">
