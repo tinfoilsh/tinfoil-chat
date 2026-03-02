@@ -16,6 +16,42 @@ interface TTSButtonProps {
   voice?: string
 }
 
+/**
+ * Converts 16-bit signed PCM bytes (little-endian) to Float32 samples
+ * and schedules them for gapless playback on an AudioContext.
+ */
+function schedulePcmChunk(
+  pcmBytes: Uint8Array,
+  audioContext: AudioContext,
+  nextStartTime: { value: number },
+) {
+  // 16-bit PCM = 2 bytes per sample
+  const sampleCount = Math.floor(pcmBytes.length / 2)
+  if (sampleCount === 0) return
+
+  const view = new DataView(
+    pcmBytes.buffer,
+    pcmBytes.byteOffset,
+    sampleCount * 2,
+  )
+  const floatData = new Float32Array(sampleCount)
+  for (let i = 0; i < sampleCount; i++) {
+    floatData[i] = view.getInt16(i * 2, true) / 32768
+  }
+
+  const buffer = audioContext.createBuffer(1, sampleCount, PCM_SAMPLE_RATE)
+  buffer.getChannelData(0).set(floatData)
+
+  const source = audioContext.createBufferSource()
+  source.buffer = buffer
+  source.connect(audioContext.destination)
+
+  const now = audioContext.currentTime
+  const startTime = Math.max(nextStartTime.value, now)
+  source.start(startTime)
+  nextStartTime.value = startTime + buffer.duration
+}
+
 export const TTSButton = memo(function TTSButton({
   content,
   model,
@@ -24,7 +60,7 @@ export const TTSButton = memo(function TTSButton({
   const [state, setState] = useState<TTSState>('idle')
   const abortControllerRef = useRef<AbortController | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
-  const nextStartTimeRef = useRef(0)
+  const nextStartTimeRef = useRef({ value: 0 })
 
   const cleanup = useCallback(() => {
     if (abortControllerRef.current) {
@@ -35,38 +71,12 @@ export const TTSButton = memo(function TTSButton({
       audioContextRef.current.close().catch(() => {})
       audioContextRef.current = null
     }
-    nextStartTimeRef.current = 0
+    nextStartTimeRef.current = { value: 0 }
   }, [])
 
   useEffect(() => {
     return cleanup
   }, [cleanup])
-
-  const scheduleChunk = useCallback(
-    (pcmData: Int16Array, audioContext: AudioContext) => {
-      const floatData = new Float32Array(pcmData.length)
-      for (let i = 0; i < pcmData.length; i++) {
-        floatData[i] = pcmData[i] / 32768
-      }
-
-      const buffer = audioContext.createBuffer(
-        1,
-        floatData.length,
-        PCM_SAMPLE_RATE,
-      )
-      buffer.getChannelData(0).set(floatData)
-
-      const source = audioContext.createBufferSource()
-      source.buffer = buffer
-      source.connect(audioContext.destination)
-
-      const now = audioContext.currentTime
-      const startTime = Math.max(nextStartTimeRef.current, now)
-      source.start(startTime)
-      nextStartTimeRef.current = startTime + buffer.duration
-    },
-    [],
-  )
 
   const handleClick = useCallback(async () => {
     if (state === 'loading' || state === 'playing') {
@@ -97,16 +107,28 @@ export const TTSButton = memo(function TTSButton({
 
       if (abortController.signal.aborted) return
 
-      const body = (response as unknown as Response).body
+      // The SDK returns a Response object for speech (due to __binaryResponse)
+      const fetchResponse = response as unknown as Response
+      const body = fetchResponse.body
       if (!body) {
-        cleanup()
-        setState('idle')
+        // No streaming body — fall back to blob playback
+        const blob = await fetchResponse.blob()
+        if (abortController.signal.aborted) return
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+        audio.addEventListener('ended', () => {
+          URL.revokeObjectURL(url)
+          setState('idle')
+        })
+        await audio.play()
+        setState('playing')
         return
       }
 
       const audioContext = new AudioContext({ sampleRate: PCM_SAMPLE_RATE })
       audioContextRef.current = audioContext
-      nextStartTimeRef.current = 0
+      const nextStartTime = { value: 0 }
+      nextStartTimeRef.current = nextStartTime
 
       setState('playing')
 
@@ -124,23 +146,21 @@ export const TTSButton = memo(function TTSButton({
         combined.set(leftover)
         combined.set(value, leftover.length)
 
-        // PCM 16-bit = 2 bytes per sample, process only complete samples
+        // PCM 16-bit = 2 bytes per sample, only process complete samples
         const usableBytes = combined.length - (combined.length % 2)
         if (usableBytes > 0) {
-          const pcmData = new Int16Array(
-            combined.buffer.slice(
-              combined.byteOffset,
-              combined.byteOffset + usableBytes,
-            ),
+          schedulePcmChunk(
+            combined.subarray(0, usableBytes),
+            audioContext,
+            nextStartTime,
           )
-          scheduleChunk(pcmData, audioContext)
         }
 
         leftover = combined.slice(usableBytes)
       }
 
-      // Wait for all scheduled audio to finish playing
-      const remainingTime = nextStartTimeRef.current - audioContext.currentTime
+      // Wait for all scheduled audio to finish
+      const remainingTime = nextStartTime.value - audioContext.currentTime
       if (remainingTime > 0) {
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, remainingTime * 1000)
@@ -165,7 +185,7 @@ export const TTSButton = memo(function TTSButton({
       cleanup()
       setState('idle')
     }
-  }, [state, content, model, voice, cleanup, scheduleChunk])
+  }, [state, content, model, voice, cleanup])
 
   return (
     <div className="group/tts relative">
