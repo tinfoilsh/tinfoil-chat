@@ -6,7 +6,7 @@ import { HiOutlineKey, HiShieldCheck } from 'react-icons/hi2'
 const ARROW_COLOR = 'hsl(var(--content-muted) / 0.7)'
 
 const DESIGN_W = 591
-const DESIGN_H = 380
+const DESIGN_H = 410
 
 function Arrow({ d }: { d: string }) {
   return (
@@ -66,8 +66,8 @@ export const DataFlowDiagram = memo(function DataFlowDiagram({
   const pillRight = { x: 355, y: 10 }
 
   const appTop = { x: 65, y: 187 }
-  const appRightUpper = { x: 170, y: 210 }
-  const appRightLower = { x: 170, y: 230 }
+  const appRightUpper = { x: 195, y: 210 }
+  const appRightLower = { x: 195, y: 230 }
 
   const enclaveTopRight = { x: 536, y: 185 }
   const enclaveLeftUpper = { x: 280, y: 210 }
@@ -198,7 +198,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram({
         {/* Tinfoil Chat App */}
         <div
           className="absolute rounded border border-brand-accent-light/40 bg-white px-4 py-3 shadow-sm dark:border-brand-accent-light/30 dark:bg-surface-card"
-          style={{ left: 0, top: 190, width: 170 }}
+          style={{ left: 0, top: 190, width: 195 }}
         >
           <div className="flex items-center gap-2 whitespace-nowrap">
             <HiOutlineKey className="h-4 w-4 shrink-0 text-content-muted" />
@@ -218,7 +218,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram({
             type="button"
             onClick={onOpenVerifier}
             className="absolute rounded border border-brand-accent-light/40 bg-brand-accent-light/10 px-4 py-1.5 text-sm font-medium text-brand-accent-dark transition-colors hover:bg-brand-accent-light/20 dark:border-brand-accent-light/30 dark:text-brand-accent-light"
-            style={{ left: 0, top: 340, width: 170 }}
+            style={{ left: 0, top: 340, width: 195 }}
           >
             Open verification center
           </button>
