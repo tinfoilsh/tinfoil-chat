@@ -10,6 +10,7 @@
  * - RFC 5869 (HKDF): https://tools.ietf.org/html/rfc5869
  */
 
+import { SECRET_PASSKEY_PRF_OUTPUT } from '@/constants/storage-keys'
 import {
   base64ToUint8Array,
   base64UrlToUint8Array,
@@ -33,8 +34,6 @@ export interface PrfPasskeyResult {
   prfOutput: ArrayBuffer
 }
 
-const PRF_CACHE_KEY = 'tinfoil-secret-passkey-prf-output'
-
 interface PrfCacheEntry {
   credentialId: string
   prfOutput: string // base64-encoded
@@ -46,7 +45,7 @@ function cachePrfResult(result: PrfPasskeyResult): void {
       credentialId: result.credentialId,
       prfOutput: uint8ArrayToBase64(new Uint8Array(result.prfOutput)),
     }
-    localStorage.setItem(PRF_CACHE_KEY, JSON.stringify(entry))
+    localStorage.setItem(SECRET_PASSKEY_PRF_OUTPUT, JSON.stringify(entry))
   } catch {
     // best-effort
   }
@@ -59,7 +58,7 @@ function cachePrfResult(result: PrfPasskeyResult): void {
  */
 export function getCachedPrfResult(): PrfPasskeyResult | null {
   try {
-    const raw = localStorage.getItem(PRF_CACHE_KEY)
+    const raw = localStorage.getItem(SECRET_PASSKEY_PRF_OUTPUT)
     if (!raw) return null
     const entry = JSON.parse(raw) as PrfCacheEntry
     return {
@@ -76,7 +75,7 @@ export function getCachedPrfResult(): PrfPasskeyResult | null {
  */
 export function clearCachedPrfResult(): void {
   try {
-    localStorage.removeItem(PRF_CACHE_KEY)
+    localStorage.removeItem(SECRET_PASSKEY_PRF_OUTPUT)
   } catch {
     // best-effort
   }

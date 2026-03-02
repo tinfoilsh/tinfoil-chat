@@ -1,4 +1,7 @@
-import { SECRET_PASSKEY_BACKED_UP } from '@/constants/storage-keys'
+import {
+  PASSKEY_SYNC_VERSION,
+  SECRET_PASSKEY_BACKED_UP,
+} from '@/constants/storage-keys'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import {
   authenticatePrfPasskey,
@@ -44,7 +47,7 @@ export interface UsePasskeyBackupOptions {
 }
 
 const PASSKEY_INTRO_DELAY_MS = 2000
-const SYNC_VERSION_STORAGE_KEY = 'tinfoil-passkey-sync-version'
+
 const SYNC_CHECK_INTERVAL_MS = 30_000
 
 /**
@@ -52,7 +55,7 @@ const SYNC_CHECK_INTERVAL_MS = 30_000
  */
 function getLocalSyncVersion(credentialId: string): number | null {
   try {
-    const raw = localStorage.getItem(SYNC_VERSION_STORAGE_KEY)
+    const raw = localStorage.getItem(PASSKEY_SYNC_VERSION)
     if (!raw) return null
     const map = JSON.parse(raw) as Record<string, number>
     return map[credentialId] ?? null
@@ -67,12 +70,12 @@ function getLocalSyncVersion(credentialId: string): number | null {
 function setLocalSyncVersion(credentialId: string, version: number): void {
   try {
     let map: Record<string, number> = {}
-    const raw = localStorage.getItem(SYNC_VERSION_STORAGE_KEY)
+    const raw = localStorage.getItem(PASSKEY_SYNC_VERSION)
     if (raw) {
       map = JSON.parse(raw) as Record<string, number>
     }
     map[credentialId] = version
-    localStorage.setItem(SYNC_VERSION_STORAGE_KEY, JSON.stringify(map))
+    localStorage.setItem(PASSKEY_SYNC_VERSION, JSON.stringify(map))
   } catch {
     // best-effort
   }
