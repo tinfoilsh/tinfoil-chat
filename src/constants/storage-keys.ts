@@ -9,6 +9,7 @@ export const USER_ENCRYPTION_KEY_HISTORY =
   'tinfoil-user-personal-encryption-key-history'
 export const SECRET_PASSKEY_PRF_OUTPUT = 'tinfoil-secret-passkey-prf-output'
 export const SECRET_PASSKEY_BACKED_UP = 'tinfoil-secret-passkey-backed-up'
+export const PASSKEY_SYNC_VERSION = 'tinfoil-passkey-sync-version'
 
 // --- localStorage: Auth ----------------------------------------------------
 export const AUTH_ACTIVE_USER_ID = 'tinfoil-auth-active-user-id'
