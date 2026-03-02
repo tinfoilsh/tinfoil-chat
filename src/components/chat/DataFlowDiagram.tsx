@@ -5,8 +5,8 @@ import { HiOutlineKey, HiShieldCheck } from 'react-icons/hi2'
 
 const ARROW_COLOR = 'hsl(var(--content-muted) / 0.7)'
 
-const DESIGN_W = 520
-const DESIGN_H = 340
+const DESIGN_W = 591
+const DESIGN_H = 380
 
 function Arrow({ d }: { d: string }) {
   return (
@@ -35,7 +35,11 @@ function Arrow({ d }: { d: string }) {
  * All coordinates target a fixed 520x340 canvas. The diagram scales
  * down proportionally on smaller screens via ResizeObserver.
  */
-export const DataFlowDiagram = memo(function DataFlowDiagram() {
+export const DataFlowDiagram = memo(function DataFlowDiagram({
+  onOpenVerifier,
+}: {
+  onOpenVerifier?: () => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState<number | null>(null)
 
@@ -58,14 +62,14 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
   }, [])
 
   // SVG arrow connection points
-  const pillLeft = { x: 140, y: 10 }
-  const pillRight = { x: 320, y: 10 }
+  const pillLeft = { x: 175, y: 10 }
+  const pillRight = { x: 355, y: 10 }
 
   const appTop = { x: 65, y: 187 }
   const appRightUpper = { x: 170, y: 210 }
   const appRightLower = { x: 170, y: 230 }
 
-  const enclaveTopRight = { x: 465, y: 185 }
+  const enclaveTopRight = { x: 536, y: 185 }
   const enclaveLeftUpper = { x: 280, y: 210 }
   const enclaveLeftLower = { x: 280, y: 230 }
 
@@ -83,7 +87,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
           to { stroke-dashoffset: -18; }
         }
         .df-animated-arrow {
-          animation: df-dash 1.2s linear infinite;
+          animation: df-dash 2.4s linear infinite;
         }
       `}</style>
 
@@ -117,12 +121,12 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
 
           {/* Enclave top -> pill right */}
           <Arrow
-            d={`M ${enclaveTopRight.x} ${enclaveTopRight.y} C 500 85, 395 30, ${pillRight.x} ${pillRight.y + 14}`}
+            d={`M ${enclaveTopRight.x} ${enclaveTopRight.y} L ${enclaveTopRight.x} ${pillRight.y + 14} L ${pillRight.x} ${pillRight.y + 14}`}
           />
 
           {/* Pill left -> app top */}
           <Arrow
-            d={`M ${pillLeft.x} ${pillLeft.y + 14} C 80 30, 60 120, ${appTop.x} ${appTop.y}`}
+            d={`M ${pillLeft.x} ${pillLeft.y + 14} L ${appTop.x} ${pillLeft.y + 14} L ${appTop.x} ${appTop.y}`}
           />
 
           {/* App -> enclave (request) */}
@@ -143,7 +147,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
         >
           <div className="flex items-center gap-1.5 whitespace-nowrap rounded border border-brand-accent-light/40 bg-brand-accent-light/10 px-3 py-1.5 text-base font-medium text-brand-accent-dark dark:border-brand-accent-light/30 dark:bg-brand-accent-light/10 dark:text-brand-accent-light">
             <HiShieldCheck className="h-4 w-4" />
-            <span>Verification Proof</span>
+            <span>Attestation Proof</span>
           </div>
         </div>
 
@@ -153,7 +157,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
           style={{
             left: 236,
             top: 72,
-            width: 284,
+            width: 355,
             height: 260,
           }}
         >
@@ -164,9 +168,10 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
             </span>
           </div>
           <ul className="mt-1 list-disc pl-4 text-sm text-content-muted">
-            <li className="whitespace-nowrap">Does not see user data</li>
-            <li className="whitespace-nowrap">Cannot access enclave</li>
-            <li className="whitespace-nowrap">Does not have decryption key</li>
+            <li className="whitespace-nowrap">Cannot access user data</li>
+            <li className="whitespace-nowrap">
+              Cannot see inside of the enclave
+            </li>
           </ul>
         </div>
 
@@ -174,7 +179,7 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
         <div
           className="absolute rounded border border-brand-accent-light/40 bg-white px-4 py-3 shadow-sm dark:border-brand-accent-light/30 dark:bg-surface-card"
           style={{
-            width: 224,
+            width: 280,
             left: 280,
             top: 185,
           }}
@@ -182,11 +187,11 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
           <div className="flex items-center gap-2 whitespace-nowrap">
             <BiSolidLock className="h-3.5 w-3.5 shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
             <span className="text-base font-medium text-content-primary">
-              Inference Processing
+              Secure Enclave
             </span>
           </div>
           <p className="mt-1 text-sm leading-relaxed text-content-muted">
-            Data processed in secure hardware, isolated from the server.
+            Requests processed in secure hardware, isolated from the server.
           </p>
         </div>
 
@@ -202,11 +207,22 @@ export const DataFlowDiagram = memo(function DataFlowDiagram() {
             </span>
           </div>
           <ul className="mt-1 list-disc pl-4 text-sm text-content-muted">
-            <li className="whitespace-nowrap">Sees user data</li>
-            <li className="whitespace-nowrap">Has decryption key</li>
-            <li className="whitespace-nowrap">Checks proof</li>
+            <li className="whitespace-nowrap">Verifies attestation</li>
+            <li className="whitespace-nowrap">Encrypts requests</li>
           </ul>
         </div>
+
+        {/* Open verification center button */}
+        {onOpenVerifier && (
+          <button
+            type="button"
+            onClick={onOpenVerifier}
+            className="absolute rounded border border-brand-accent-light/40 bg-brand-accent-light/10 px-4 py-1.5 text-sm font-medium text-brand-accent-dark transition-colors hover:bg-brand-accent-light/20 dark:border-brand-accent-light/30 dark:text-brand-accent-light"
+            style={{ left: 0, top: 340, width: 170 }}
+          >
+            Open verification center
+          </button>
+        )}
       </div>
     </div>
   )
