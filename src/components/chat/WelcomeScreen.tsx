@@ -37,6 +37,12 @@ type Segment =
       content: string
       onClick: () => void
     }
+  | {
+      type: 'citation'
+      content: string
+      href?: string
+      onClick?: () => void
+    }
 
 function DecryptText({
   segments,
@@ -57,6 +63,7 @@ function DecryptText({
   useLayoutEffect(() => {
     const chars: { segIdx: number; charIdx: number }[] = []
     segments.forEach((seg, segIdx) => {
+      if (seg.type === 'citation') return
       for (let i = 0; i < seg.content.length; i++) {
         chars.push({ segIdx, charIdx: i })
       }
@@ -70,6 +77,7 @@ function DecryptText({
 
     if (!animate || isMobile) {
       segs.forEach((seg, i) => {
+        if (seg.type === 'citation') return
         const span = spanRefs.current[i]
         if (span) span.textContent = seg.content
       })
@@ -85,7 +93,9 @@ function DecryptText({
       (_, i) => ((i * 2654435761) >>> 0) / 4294967296,
     )
 
-    const buffers = segs.map((seg) => [...seg.content])
+    const buffers = segs.map((seg) =>
+      seg.type === 'citation' ? [] : [...seg.content],
+    )
 
     const step = (now: number) => {
       if (!animatingRef.current) return
@@ -135,6 +145,19 @@ function DecryptText({
       {/* Invisible layer to establish correct height */}
       <span aria-hidden="true" className="invisible">
         {segments.map((seg, i) => {
+          if (seg.type === 'citation') {
+            const domain = seg.href
+              ? new URL(seg.href).hostname.replace(/^www\./, '')
+              : null
+            return (
+              <span
+                key={i}
+                className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 align-baseline text-[10px] font-medium text-blue-500"
+              >
+                {domain || seg.content}
+              </span>
+            )
+          }
           if (seg.type === 'link') {
             return (
               <a
@@ -161,6 +184,52 @@ function DecryptText({
       {/* Visible animated layer */}
       <span className="absolute inset-0">
         {segments.map((seg, i) => {
+          if (seg.type === 'citation') {
+            const domain = seg.href
+              ? new URL(seg.href).hostname.replace(/^www\./, '')
+              : null
+            const pillClass =
+              'mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20'
+            const inner = (
+              <>
+                {seg.href && (
+                  <img
+                    src={`https://icons.duckduckgo.com/ip3/${new URL(seg.href).hostname}.ico`}
+                    alt=""
+                    className="h-[1.1em] w-[1.1em] shrink-0 rounded-full bg-white p-[1px]"
+                  />
+                )}
+                <span>{domain || seg.content}</span>
+              </>
+            )
+            if (seg.onClick) {
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    seg.onClick?.()
+                  }}
+                  className={pillClass}
+                >
+                  {inner}
+                </button>
+              )
+            }
+            return (
+              <a
+                key={i}
+                href={seg.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={pillClass}
+              >
+                {inner}
+              </a>
+            )
+          }
+
           const ref = (el: HTMLSpanElement | null) => {
             spanRefs.current[i] = el
           }
@@ -426,40 +495,27 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                         {
                           type: 'text',
                           content:
-                            'Your messages are encrypted directly to the AI models running inside ',
+                            'Your messages are encrypted directly to the AI models running inside secure hardware enclaves.',
                         },
                         {
-                          type: 'link',
-                          content: 'secure hardware enclaves. ',
+                          type: 'citation',
+                          content: 'Technology',
                           href: 'https://tinfoil.sh/technology',
                         },
                         {
                           type: 'text',
                           content:
-                            'These are hardware-isolated environments powered by confidential computing GPUs with verifiable confidentiality and integrity guarantees. Not even Tinfoil can access your data. This applies to all chats, images, documents, and voice input. Our ',
+                            ' These are hardware-isolated environments powered by confidential computing GPUs with verifiable confidentiality and integrity guarantees. Not even Tinfoil can access your data. This applies to all chats, images, documents, and voice input. Our open-source stack lets you verify this yourself by inspecting the hardware attestation.',
                         },
                         {
-                          type: 'link',
-                          content: 'open-source',
+                          type: 'citation',
+                          content: 'Source',
                           href: 'https://github.com/tinfoilsh',
-                        },
-                        {
-                          type: 'text',
-                          content: ' stack lets you ',
-                        },
-                        {
-                          type: 'button',
-                          content: 'verify this yourself',
-                          onClick: () => onOpenVerifier?.(),
-                        },
-                        {
-                          type: 'text',
-                          content: ' by inspecting the hardware attestation.',
                         },
                       ]}
                     />
                   </p>
-                  <DataFlowDiagram />
+                  <DataFlowDiagram onOpenVerifier={onOpenVerifier} />
                 </motion.div>
               )}
             </AnimatePresence>
