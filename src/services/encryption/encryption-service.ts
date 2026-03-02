@@ -61,7 +61,11 @@ export class EncryptionService {
         throw new Error('Invalid character in key')
       }
 
-      bytes[i / 2] = high * chars.length + low
+      const value = high * chars.length + low
+      if (value > 255) {
+        throw new Error('Invalid character pair in key')
+      }
+      bytes[i / 2] = value
     }
 
     return bytes
