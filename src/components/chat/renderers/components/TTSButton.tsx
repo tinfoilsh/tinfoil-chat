@@ -7,6 +7,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { PiSpinner } from 'react-icons/pi'
 
 const PCM_SAMPLE_RATE = 24000
+const BUFFER_DURATION_S = 3
+const BUFFER_THRESHOLD_BYTES = PCM_SAMPLE_RATE * 2 * BUFFER_DURATION_S
 
 type TTSState = 'idle' | 'loading' | 'playing'
 
@@ -133,7 +135,8 @@ export const TTSButton = memo(function TTSButton({
       setState('playing')
 
       const reader = body.getReader()
-      let leftover = new Uint8Array(0)
+      let pending = new Uint8Array(0)
+      let playbackStarted = false
 
       while (true) {
         if (abortController.signal.aborted) return
@@ -141,22 +144,39 @@ export const TTSButton = memo(function TTSButton({
         const { done, value } = await reader.read()
         if (done) break
 
-        // Combine leftover bytes with new chunk
-        const combined = new Uint8Array(leftover.length + value.length)
-        combined.set(leftover)
-        combined.set(value, leftover.length)
+        // Append new bytes to pending buffer
+        const merged = new Uint8Array(pending.length + value.length)
+        merged.set(pending)
+        merged.set(value, pending.length)
+        pending = merged
 
-        // PCM 16-bit = 2 bytes per sample, only process complete samples
-        const usableBytes = combined.length - (combined.length % 2)
-        if (usableBytes > 0) {
-          schedulePcmChunk(
-            combined.subarray(0, usableBytes),
-            audioContext,
-            nextStartTime,
-          )
+        // Align to 2-byte PCM samples
+        const usableBytes = pending.length - (pending.length % 2)
+        if (usableBytes === 0) continue
+
+        if (!playbackStarted) {
+          // Accumulate until we have enough to absorb network jitter
+          if (usableBytes < BUFFER_THRESHOLD_BYTES) continue
+          playbackStarted = true
         }
 
-        leftover = combined.slice(usableBytes)
+        schedulePcmChunk(
+          pending.subarray(0, usableBytes),
+          audioContext,
+          nextStartTime,
+        )
+        pending = pending.slice(usableBytes)
+      }
+
+      // Flush any remaining buffered audio (including short responses
+      // that never reached the buffer threshold)
+      const finalUsable = pending.length - (pending.length % 2)
+      if (finalUsable > 0) {
+        schedulePcmChunk(
+          pending.subarray(0, finalUsable),
+          audioContext,
+          nextStartTime,
+        )
       }
 
       // Wait for all scheduled audio to finish
