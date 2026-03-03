@@ -13,6 +13,7 @@ import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
   isCloudSyncEnabled,
+  isLocalOnlyModeEnabled,
   setCloudSyncEnabled as setCloudSyncEnabledSetting,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
@@ -205,6 +206,9 @@ export function ChatSidebar({
     return 'cloud'
   })
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
+  const [localOnlyModeEnabled, setLocalOnlyModeEnabled] = useState(
+    isLocalOnlyModeEnabled(),
+  )
   const { isSignedIn } = useAuth()
   const { user } = useUser()
 
@@ -308,9 +312,28 @@ export function ChatSidebar({
     }
   }, [])
 
+  // Listen for local-only mode setting changes
+  useEffect(() => {
+    const handleLocalOnlyModeChange = () => {
+      const enabled = isLocalOnlyModeEnabled()
+      setLocalOnlyModeEnabled(enabled)
+      if (!enabled && activeTab === 'local') {
+        setActiveTab('cloud')
+      }
+    }
+
+    window.addEventListener('localOnlyModeChanged', handleLocalOnlyModeChange)
+    return () => {
+      window.removeEventListener(
+        'localOnlyModeChanged',
+        handleLocalOnlyModeChange,
+      )
+    }
+  }, [activeTab])
+
   // Update blank chat's isLocalOnly when active tab changes
   useEffect(() => {
-    if (!isSignedIn || !cloudSyncEnabled) return
+    if (!isSignedIn || !cloudSyncEnabled || !localOnlyModeEnabled) return
 
     const shouldBeLocal = activeTab === 'local'
 
@@ -323,6 +346,7 @@ export function ChatSidebar({
     activeTab,
     isSignedIn,
     cloudSyncEnabled,
+    localOnlyModeEnabled,
     createNewChat,
     currentChat?.isBlankChat,
     currentChat?.isLocalOnly,
@@ -581,14 +605,14 @@ export function ChatSidebar({
     // Also exclude chats that belong to a project
     const filteredChats =
       isSignedIn && cloudSyncEnabled
-        ? activeTab === 'cloud'
+        ? localOnlyModeEnabled && activeTab === 'local'
           ? chats.filter((chat) => {
-              // Filter for cloud chats (not local-only) and not in a project
-              return !chat.isLocalOnly && !chat.projectId
-            })
-          : chats.filter((chat) => {
               // Filter for local-only chats and not in a project
               return chat.isLocalOnly && !chat.projectId
+            })
+          : chats.filter((chat) => {
+              // Filter for cloud chats (not local-only) and not in a project
+              return !chat.isLocalOnly && !chat.projectId
             })
         : chats.filter((chat) => {
             // When cloud sync is disabled, only show local chats that aren't in a project
@@ -607,7 +631,14 @@ export function ChatSidebar({
       const timeB = getChatSortTimestamp(b)
       return timeB - timeA
     })
-  }, [chats, getChatSortTimestamp, activeTab, isSignedIn, cloudSyncEnabled])
+  }, [
+    chats,
+    getChatSortTimestamp,
+    activeTab,
+    isSignedIn,
+    cloudSyncEnabled,
+    localOnlyModeEnabled,
+  ])
 
   const handleCloudSyncToggle = async (enabled: boolean) => {
     if (enabled) {
@@ -1526,8 +1557,8 @@ export function ChatSidebar({
                   transition={{ duration: 0.2, ease: 'easeInOut' }}
                   className="overflow-hidden"
                 >
-                  {/* Tabs for Cloud/Local chats - show when signed in and cloud sync is enabled */}
-                  {isSignedIn && cloudSyncEnabled && (
+                  {/* Tabs for Cloud/Local chats - show when signed in, cloud sync enabled, and local-only mode enabled */}
+                  {isSignedIn && cloudSyncEnabled && localOnlyModeEnabled && (
                     <div className="relative mx-4 mt-2 flex rounded-lg bg-surface-chat p-1">
                       {/* Sliding background indicator */}
                       <div
@@ -1673,7 +1704,7 @@ export function ChatSidebar({
                     <div className="font-base mx-4 mt-1 min-h-[52px] pb-3 font-aeonik-fono text-xs text-content-muted">
                       {!isSignedIn ? (
                         'Your chats are stored temporarily in this browser tab. Create an account for persistent storage.'
-                      ) : activeTab === 'local' ? (
+                      ) : localOnlyModeEnabled && activeTab === 'local' ? (
                         "Local chats are stored only on this device and won't sync across devices."
                       ) : (
                         <>
