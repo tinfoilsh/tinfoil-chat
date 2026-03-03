@@ -199,8 +199,8 @@ export function ChatSidebar({
   const [activeTab, setActiveTab] = useState<'cloud' | 'local'>(() => {
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem(UI_SIDEBAR_ACTIVE_TAB)
-      if (stored === 'cloud' || stored === 'local') {
-        return stored
+      if (stored === 'local' && isLocalOnlyModeEnabled()) {
+        return 'local'
       }
     }
     return 'cloud'
