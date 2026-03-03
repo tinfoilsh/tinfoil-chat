@@ -12,6 +12,8 @@ export function indentCodeBlocksInLists(content: string): string {
   let inList = false
   let indentDelta = 0
   let inReindentedBlock = false
+  let openingFenceChar = ''
+  let openingFenceLength = 0
 
   for (const line of lines) {
     // Detect list item start (ordered: "1. ", "2.  ", unordered: "- ", "* ")
@@ -27,11 +29,13 @@ export function indentCodeBlocksInLists(content: string): string {
 
     // Detect under-indented code fence in list context
     if (inList && !inReindentedBlock) {
-      const fenceMatch = line.match(/^(\s*)(```|~~~)/)
+      const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})/)
       if (fenceMatch) {
         const fenceIndent = fenceMatch[1].length
         if (fenceIndent < listContentIndent) {
           indentDelta = listContentIndent - fenceIndent
+          openingFenceChar = fenceMatch[2][0]
+          openingFenceLength = fenceMatch[2].length
           result.push(' '.repeat(indentDelta) + line)
           inReindentedBlock = true
           continue
@@ -42,7 +46,11 @@ export function indentCodeBlocksInLists(content: string): string {
     // Process lines inside a re-indented code block
     if (inReindentedBlock) {
       const trimmed = line.trim()
-      const isClosingFence = /^(`{3,}|~{3,})\s*$/.test(trimmed)
+      const closingMatch = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      const isClosingFence =
+        closingMatch !== null &&
+        closingMatch[1][0] === openingFenceChar &&
+        closingMatch[1].length >= openingFenceLength
       if (isClosingFence) {
         result.push(' '.repeat(listContentIndent) + trimmed)
         inReindentedBlock = false
@@ -84,8 +92,8 @@ export function preprocessMarkdown(content: string): string {
   const codeBlocks: string[] = []
   const inlineCode: string[] = []
 
-  // Protect fenced code blocks (```...```)
-  let processed = indented.replace(/```[\s\S]*?```/g, (match) => {
+  // Protect fenced code blocks (``` and ~~~)
+  let processed = indented.replace(/(`{3,}|~{3,})[\s\S]*?\1/g, (match) => {
     codeBlocks.push(match)
     return `__CODE_BLOCK_${codeBlocks.length - 1}__`
   })
