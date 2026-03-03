@@ -1749,8 +1749,12 @@ export function ChatInterface({
     )
   }
 
-  // Show sign-in required message when accessing a chat URL while not signed in
-  if ((initialChatId || initialProjectId) && isAuthLoaded && !isSignedIn) {
+  // Show sign-in required message when accessing a cloud chat/project URL while not signed in
+  if (
+    ((initialChatId && !isLocalChatUrl) || initialProjectId) &&
+    isAuthLoaded &&
+    !isSignedIn
+  ) {
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-surface-chat-background px-4 font-aeonik">
         <div className="max-w-md text-center">
