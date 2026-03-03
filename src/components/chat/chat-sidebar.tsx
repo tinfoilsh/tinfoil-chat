@@ -12,9 +12,11 @@ import { toast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
+  hasUserSetLocalOnlyPreference,
   isCloudSyncEnabled,
   isLocalOnlyModeEnabled,
   setCloudSyncEnabled as setCloudSyncEnabledSetting,
+  setLocalOnlyModeEnabled as setLocalOnlyModeSetting,
 } from '@/utils/cloud-sync-settings'
 import { logInfo } from '@/utils/error-handling'
 import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
@@ -333,6 +335,21 @@ export function ChatSidebar({
       )
     }
   }, [activeTab])
+
+  // Auto-enable local-only mode if user has existing local chats and hasn't
+  // explicitly set the preference (matches iOS ChatViewModel behavior)
+  useEffect(() => {
+    if (!isSignedIn || !cloudSyncEnabled || hasUserSetLocalOnlyPreference()) {
+      return
+    }
+    const hasLocalChats = chats.some(
+      (chat) => chat.isLocalOnly && !chat.isBlankChat,
+    )
+    if (hasLocalChats) {
+      setLocalOnlyModeSetting(true)
+      setLocalOnlyModeEnabled(true)
+    }
+  }, [isSignedIn, cloudSyncEnabled, chats])
 
   // Update blank chat's isLocalOnly when active tab changes
   useEffect(() => {
