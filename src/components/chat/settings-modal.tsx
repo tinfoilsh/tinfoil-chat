@@ -225,6 +225,7 @@ export function SettingsModal({
   const [isQRCodeExpanded, setIsQRCodeExpanded] = useState(false)
   const [isKeyVisible, setIsKeyVisible] = useState(false)
   const [isSettingUpPasskey, setIsSettingUpPasskey] = useState(false)
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false)
   const [isEncryptionKeyOpen, setIsEncryptionKeyOpen] = useState(false)
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -3397,7 +3398,13 @@ ${encryptionKey.replace('key_', '')}
                             </div>
                           </div>
                           <button
-                            onClick={() => signOut()}
+                            onClick={() => {
+                              if (localOnlyModeEnabledState) {
+                                setShowSignOutConfirm(true)
+                              } else {
+                                signOut()
+                              }
+                            }}
                             className={cn(
                               'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                               'w-full border md:w-auto md:border-0',
@@ -3532,6 +3539,54 @@ ${encryptionKey.replace('key_', '')}
           </div>
         </div>
       </motion.div>
+
+      {/* Sign-out confirmation when local-only mode is enabled */}
+      {showSignOutConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-border-subtle bg-surface-card p-6 shadow-xl">
+            <h3 className="font-aeonik text-lg font-medium text-content-primary">
+              Sign Out
+            </h3>
+            <div className="mt-3 space-y-2 text-sm text-content-secondary">
+              <p>
+                {passkeyActive
+                  ? 'All local data will be cleared. You can recover your cloud chats by signing back in.'
+                  : 'All local data will be cleared. You will need your encryption key to recover your cloud chats.'}
+              </p>
+              <p className="font-medium text-orange-500">
+                Your local chats will be deleted forever.
+              </p>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowSignOutConfirm(false)}
+                className={cn(
+                  'flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors',
+                  isDarkMode
+                    ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
+                    : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
+                )}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowSignOutConfirm(false)
+                  signOut()
+                }}
+                className={cn(
+                  'flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors',
+                  isDarkMode
+                    ? 'border-red-500/30 bg-red-950/30 text-red-400 hover:bg-red-950/50'
+                    : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
+                )}
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
