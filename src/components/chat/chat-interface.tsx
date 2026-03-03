@@ -12,7 +12,8 @@ import { useChatRouter } from '@/hooks/use-chat-router'
 import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
-import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
+import type { RateLimitInfo } from '@/services/inference/tinfoil-client'
+import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   ChatBubbleLeftRightIcon,
@@ -23,6 +24,10 @@ import { GoSidebarCollapse } from 'react-icons/go'
 import { IoShareOutline } from 'react-icons/io5'
 import { PiFilePlusLight, PiNotePencilLight, PiSpinner } from 'react-icons/pi'
 
+import {
+  RateLimitBanner,
+  shouldShowRateLimitBanner,
+} from '@/components/chat/rate-limit-banner'
 import {
   ProjectModeBanner,
   ProjectSidebar,
@@ -221,7 +226,9 @@ export function ChatInterface({
   const { toast } = useToast()
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
   const { user } = useUser()
+  const { openSignIn } = useClerk()
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null)
 
   // iOS Safari keyboard fix: keep a CSS var in sync with the *visual* viewport height.
   // Without this, fixed full-screen layouts can leave an untouchable "dead zone"
@@ -689,6 +696,21 @@ export function ChatInterface({
     }
     initTinfoil()
   }, [setVerificationComplete, setVerificationSuccess])
+
+  // Sync rate limit info from tinfoil-client via custom events
+  useEffect(() => {
+    const handleRateLimitUpdate = () => {
+      import('@/services/inference/tinfoil-client').then(
+        ({ getRateLimitInfo }) => {
+          setRateLimit(getRateLimitInfo())
+        },
+      )
+    }
+    window.addEventListener('rateLimitUpdated', handleRateLimitUpdate)
+    return () => {
+      window.removeEventListener('rateLimitUpdated', handleRateLimitUpdate)
+    }
+  }, [])
 
   // Persist web search toggle to localStorage
   useEffect(() => {
@@ -1470,6 +1492,20 @@ export function ChatInterface({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (rateLimit && rateLimit.remaining <= 0) {
+      if (!isSignedIn) {
+        void openSignIn()
+      } else {
+        setIsSidebarOpen(true)
+        window.dispatchEvent(
+          new CustomEvent('highlightSidebarBox', {
+            detail: { isPremium },
+          }),
+        )
+      }
+      return
+    }
+
     // Filter out documents that are still uploading or generating descriptions
     const completedDocuments = processedDocuments.filter(
       (doc) => !doc.isUploading && !doc.isGeneratingDescription,
@@ -1508,6 +1544,14 @@ export function ChatInterface({
       })
 
     handleQuery(messageText, attachments.length > 0 ? attachments : undefined)
+
+    if (rateLimit) {
+      import('@/services/inference/tinfoil-client').then(
+        ({ decrementRemainingRequests }) => {
+          decrementRemainingRequests()
+        },
+      )
+    }
 
     // Keep documents that are still uploading or generating descriptions
     const remainingDocuments = processedDocuments.filter(
@@ -2225,6 +2269,11 @@ export function ChatInterface({
               isDarkMode={isDarkMode}
             />
           ) : null}
+
+          {/* Rate Limit Banner */}
+          {shouldShowRateLimitBanner(rateLimit) && (
+            <RateLimitBanner rateLimit={rateLimit} isDarkMode={isDarkMode} />
+          )}
 
           {/* Decryption Progress Banner */}
           {decryptionProgress && decryptionProgress.isDecrypting && (

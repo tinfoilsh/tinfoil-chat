@@ -1,0 +1,49 @@
+'use client'
+
+import { cn } from '@/components/ui/utils'
+import type { RateLimitInfo } from '@/services/inference/tinfoil-client'
+
+const RATE_LIMIT_WARNING_THRESHOLD = 3
+
+interface RateLimitBannerProps {
+  rateLimit: RateLimitInfo
+  isDarkMode: boolean
+}
+
+export function shouldShowRateLimitBanner(
+  rateLimit: RateLimitInfo | null,
+): rateLimit is RateLimitInfo {
+  return (
+    rateLimit !== null && rateLimit.remaining <= RATE_LIMIT_WARNING_THRESHOLD
+  )
+}
+
+export function RateLimitBanner({
+  rateLimit,
+  isDarkMode,
+}: RateLimitBannerProps) {
+  const exhausted = rateLimit.remaining <= 0
+
+  return (
+    <div className="pointer-events-none relative z-10 hidden w-full flex-none justify-center md:flex">
+      <div
+        className={cn(
+          'pointer-events-auto flex items-center gap-2 rounded-b-xl border-x border-b px-4 py-1.5 transition-colors',
+          exhausted
+            ? isDarkMode
+              ? 'border-red-500/30 bg-red-950/20 text-red-400'
+              : 'border-red-300 bg-red-50 text-red-600'
+            : isDarkMode
+              ? 'border-amber-500/30 bg-amber-950/20 text-amber-400'
+              : 'border-amber-300 bg-amber-50 text-amber-600',
+        )}
+      >
+        <span className="font-aeonik text-xs font-medium">
+          {exhausted
+            ? "You've used all your free requests for today"
+            : `You have ${rateLimit.remaining} free request${rateLimit.remaining === 1 ? '' : 's'} left today`}
+        </span>
+      </div>
+    </div>
+  )
+}

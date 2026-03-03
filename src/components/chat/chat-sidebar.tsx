@@ -195,6 +195,8 @@ export function ChatSidebar({
   const [isIOS, setIsIOS] = useState(false)
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
+  const [highlightBox, setHighlightBox] = useState(false)
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTab, setActiveTab] = useState<'cloud' | 'local'>(() => {
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem(UI_SIDEBAR_ACTIVE_TAB)
@@ -346,6 +348,27 @@ export function ChatSidebar({
       setLocalOnlyModeEnabled(true)
     }
   }, [isSignedIn, cloudSyncEnabled, chats])
+
+  // Listen for highlight CTA events (triggered when user hits send at rate limit)
+  useEffect(() => {
+    const handleHighlight = () => {
+      setHighlightBox(true)
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current)
+      }
+      highlightTimeoutRef.current = setTimeout(() => {
+        setHighlightBox(false)
+        highlightTimeoutRef.current = null
+      }, 2400)
+    }
+    window.addEventListener('highlightSidebarBox', handleHighlight)
+    return () => {
+      window.removeEventListener('highlightSidebarBox', handleHighlight)
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // Update blank chat's isLocalOnly when active tab changes
   useEffect(() => {
@@ -908,11 +931,20 @@ export function ChatSidebar({
           {/* Message for non-premium users (signed in or not) */}
           {!isPremium && (
             <div
-              className={`relative z-10 m-2 flex-none rounded-lg border p-4 ${
-                isDarkMode
-                  ? 'border-emerald-500/30 bg-emerald-950/20'
-                  : 'border-emerald-500/30 bg-emerald-50/50'
+              className={`relative z-10 m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
+                highlightBox
+                  ? isDarkMode
+                    ? 'border-emerald-400/50 bg-emerald-900/30'
+                    : 'border-emerald-500/50 bg-emerald-100/60'
+                  : isDarkMode
+                    ? 'border-emerald-500/30 bg-emerald-950/20'
+                    : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
+              style={{
+                animation: highlightBox
+                  ? 'subtlePulse 1.2s ease-in-out infinite'
+                  : undefined,
+              }}
             >
               <div className="flex-1">
                 <h4 className="mb-3 text-sm font-semibold text-content-primary">
@@ -1949,6 +1981,21 @@ export function ChatSidebar({
           onClick={() => setIsOpen(false)}
         />
       )}
+
+      {}
+      <style jsx global>{`
+        @keyframes subtlePulse {
+          0% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.88;
+          }
+          100% {
+            opacity: 1;
+          }
+        }
+      `}</style>
     </>
   )
 }
