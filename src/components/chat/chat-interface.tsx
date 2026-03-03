@@ -706,6 +706,9 @@ export function ChatInterface({
         },
       )
     }
+    // Sync any already-cached value (the initial fetchSessionToken may
+    // have resolved before this listener was registered).
+    handleRateLimitUpdate()
     window.addEventListener('rateLimitUpdated', handleRateLimitUpdate)
     return () => {
       window.removeEventListener('rateLimitUpdated', handleRateLimitUpdate)
