@@ -50,6 +50,7 @@ export type Message = {
   isThinking?: boolean
   thinkingDuration?: number // Duration in seconds
   isError?: boolean
+  isRateLimitError?: boolean
   webSearch?: WebSearchState
   webSearchBeforeThinking?: boolean // True if web search started before thinking
   annotations?: Annotation[] // URL citations from web search
