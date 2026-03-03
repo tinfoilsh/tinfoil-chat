@@ -46,8 +46,8 @@ export function setLocalOnlyModeEnabled(enabled: boolean): void {
 }
 
 /**
- * Returns true if the user has never explicitly set the local-only mode
- * preference (i.e. the key doesn't exist in localStorage at all).
+ * Returns true if the user has explicitly set the local-only mode
+ * preference (i.e. the key exists in localStorage).
  */
 export function hasUserSetLocalOnlyPreference(): boolean {
   if (typeof window === 'undefined') return false
