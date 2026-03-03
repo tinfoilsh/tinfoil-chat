@@ -3,27 +3,14 @@ import { logError } from '@/utils/error-handling'
 import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
-const PLACEHOLDER_SESSION_TOKEN = 'tinfoil-placeholder-api-key'
-
 const SESSION_TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000
 
 let clientInstance: TinfoilAI | null = null
 let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
-let hasSubscriptionFn: (() => boolean) | null = null
-
-export function setSubscriptionChecker(hasSubscription: () => boolean): void {
-  hasSubscriptionFn = hasSubscription
-  resetTinfoilClient()
-}
 
 async function fetchSessionToken(): Promise<string> {
-  if (hasSubscriptionFn && !hasSubscriptionFn()) {
-    cachedSessionToken = null
-    return PLACEHOLDER_SESSION_TOKEN
-  }
-
   if (cachedSessionToken) {
     const isExpired =
       cachedSessionTokenExpiresAt !== null &&
@@ -35,50 +22,48 @@ async function fetchSessionToken(): Promise<string> {
     cachedSessionTokenExpiresAt = null
   }
 
-  if (!authTokenManager.isInitialized()) {
-    logError('Auth token manager not initialized', undefined, {
-      component: 'tinfoil-client',
-      action: 'fetchSessionToken',
-    })
-    return PLACEHOLDER_SESSION_TOKEN
+  // Build request headers: include auth if signed in, omit for anonymous users
+  const headers: Record<string, string> = {}
+  if (authTokenManager.isInitialized()) {
+    try {
+      const token = await authTokenManager.getValidToken()
+      headers['Authorization'] = `Bearer ${token}`
+    } catch (error) {
+      logError(
+        'Failed to get auth token, falling back to anonymous key',
+        error,
+        {
+          component: 'tinfoil-client',
+          action: 'fetchSessionToken',
+        },
+      )
+    }
   }
 
-  try {
-    const token = await authTokenManager.getValidToken()
+  const response = await fetch(`${API_BASE_URL}/api/keys/chat`, {
+    headers,
+  })
 
-    const response = await fetch(`${API_BASE_URL}/api/keys/chat`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
+  if (!response.ok) {
+    const errorText = await response.text()
+    logError('Failed to fetch session token from server', undefined, {
+      component: 'tinfoil-client',
+      action: 'fetchSessionToken',
+      metadata: {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
       },
     })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      logError('Failed to fetch session token from server', undefined, {
-        component: 'tinfoil-client',
-        action: 'fetchSessionToken',
-        metadata: {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText,
-        },
-      })
-      throw new Error(`Failed to get session token: ${response.status}`)
-    }
-
-    const data = await response.json()
-    cachedSessionToken = data.key
-    if (data.expires_at) {
-      cachedSessionTokenExpiresAt = new Date(data.expires_at).getTime()
-    }
-    return data.key
-  } catch (error) {
-    logError('Failed to fetch session token', error, {
-      component: 'tinfoil-client',
-      action: 'fetchSessionToken',
-    })
-    return PLACEHOLDER_SESSION_TOKEN
+    throw new Error(`Failed to get session token: ${response.status}`)
   }
+
+  const data = await response.json()
+  cachedSessionToken = data.key
+  if (data.expires_at) {
+    cachedSessionTokenExpiresAt = new Date(data.expires_at).getTime()
+  }
+  return data.key
 }
 
 export function resetTinfoilClient(): void {

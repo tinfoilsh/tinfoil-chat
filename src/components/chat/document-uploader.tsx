@@ -41,8 +41,7 @@ export const useDocumentUploader = (
     modelName: string
   }> => {
     try {
-      // Try to get models based on user's subscription status
-      const models = await getAIModels(isPremium ?? false)
+      const models = await getAIModels()
       const doclingModel = models.find(
         (model) => model.modelName === 'docling' || model.type === 'document',
       )
@@ -96,7 +95,7 @@ export const useDocumentUploader = (
     base64: string,
     mimeType: string,
   ): Promise<string> => {
-    const models = await getAIModels(true)
+    const models = await getAIModels()
     const multimodalModel = models.find(
       (m) => m.multimodal && m.chat && m.type === 'chat',
     )
@@ -236,7 +235,7 @@ export const useDocumentUploader = (
           return
         }
 
-        const models = await getAIModels(true)
+        const models = await getAIModels()
         const audioModel = (
           models.find((m) => m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL) ||
           models.find((m) => m.type === 'audio')

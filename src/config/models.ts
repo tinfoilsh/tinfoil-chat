@@ -16,44 +16,16 @@ export type BaseModel = {
   supportedLanguages?: string
   type: 'chat' | 'code' | 'embedding' | 'audio' | 'tts' | 'document' | 'title'
   chat?: boolean
-  paid?: boolean
   multimodal?: boolean
   endpoint?: string
 }
 
-// Helper function to determine if a model is available for a given subscription status
-export const isModelAvailable = (
-  model: BaseModel,
-  isPremium: boolean,
-): boolean => {
-  // If paid is explicitly false, it's a free model - always available
-  if (model.paid === false) {
-    return true
-  }
-
-  // If paid is true, it's only available for premium users
-  return isPremium
-}
-
-// Helper function to filter models for chat interface
-export const getAvailableChatModels = (
-  models: BaseModel[],
-  isPremium: boolean,
-): BaseModel[] => {
-  return models.filter((model) => isModelAvailable(model, isPremium))
-}
-
-// Helper function to validate if a specific model name is available for a user
+// Helper function to validate if a specific model name exists in the models list
 export const isModelNameAvailable = (
   modelName: string,
   models: BaseModel[],
-  isPremium: boolean,
 ): boolean => {
-  const model = models.find((m) => m.modelName === modelName)
-  if (!model) {
-    return false
-  }
-  return isModelAvailable(model, isPremium)
+  return models.some((m) => m.modelName === modelName)
 }
 
 // Helper function to check if running in local development
@@ -68,9 +40,7 @@ export const isLocalDevelopment = (): boolean => {
 }
 
 // Fetch models from the API
-export const getAIModels = async (
-  isPremiumUser: boolean,
-): Promise<BaseModel[]> => {
+export const getAIModels = async (): Promise<BaseModel[]> => {
   const isLocalDev = isLocalDevelopment()
 
   try {
@@ -91,7 +61,6 @@ export const getAIModels = async (
   } catch (error) {
     logError('Failed to fetch AI models', error, {
       component: 'getAIModels',
-      metadata: { isPremiumUser },
     })
     return []
   }

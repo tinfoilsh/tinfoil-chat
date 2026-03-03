@@ -14,7 +14,6 @@ export const DEV_SIMULATOR_MODEL: BaseModel = {
   recommendedUse: 'Testing and development only',
   type: 'chat',
   chat: true,
-  paid: false,
   multimodal: false,
   endpoint: '/api/dev/simulator',
 }
