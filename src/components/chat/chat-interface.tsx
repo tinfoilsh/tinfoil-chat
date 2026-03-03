@@ -4,7 +4,6 @@ import {
   type BaseModel,
 } from '@/config/models'
 import {
-  SETTINGS_CACHED_SUBSCRIPTION_STATUS,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_WEB_SEARCH_ENABLED,
   UI_EXPAND_PROJECT_DOCUMENTS,
@@ -13,7 +12,7 @@ import { useChatRouter } from '@/hooks/use-chat-router'
 import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
-import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
+import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
   ChatBubbleLeftRightIcon,
@@ -221,7 +220,6 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
-  const { openSignIn } = useClerk()
   const { user } = useUser()
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
 
@@ -261,8 +259,7 @@ export function ChatInterface({
 
   // Track whether we've loaded the initial chat from URL (to prevent URL flickering)
   const initialUrlChatLoadedRef = useRef(false)
-  const { chat_subscription_active, isLoading: subscriptionLoading } =
-    useSubscriptionStatus()
+  const { chat_subscription_active } = useSubscriptionStatus()
 
   // Initialize cloud sync and passkey backup as two separate hooks.
   // usePasskeyBackup depends on useCloudSync's `initialized` and `encryptionKey`,
@@ -433,27 +430,13 @@ export function ChatInterface({
   }, [])
 
   // Load models and system prompt immediately in parallel.
-  // Use cached subscription status to pick the right model tier on first load.
   useEffect(() => {
     let cancelled = false
     const loadInitial = async () => {
       try {
-        let isPremiumCached = false
-        try {
-          const raw =
-            typeof window !== 'undefined'
-              ? localStorage.getItem(SETTINGS_CACHED_SUBSCRIPTION_STATUS)
-              : null
-          if (raw) {
-            isPremiumCached = JSON.parse(raw).chat_subscription_active === true
-          }
-        } catch {
-          // ignore parse errors
-        }
-
         const [promptData, models] = await Promise.all([
           getSystemPromptAndRules(),
-          getAIModels(isPremiumCached),
+          getAIModels(),
         ])
 
         if (!cancelled) {
@@ -478,46 +461,6 @@ export function ChatInterface({
       cancelled = true
     }
   }, [])
-
-  // Reload models if subscription status differs from cached value
-  useEffect(() => {
-    if (subscriptionLoading || isLoadingConfig) return
-
-    let cancelled = false
-    const updateModelsIfNeeded = async () => {
-      try {
-        const isPremium = chat_subscription_active ?? false
-
-        // Check if cached status matches actual — skip reload if it does
-        let wasPremiumCached = false
-        try {
-          const raw = localStorage.getItem(SETTINGS_CACHED_SUBSCRIPTION_STATUS)
-          if (raw) {
-            wasPremiumCached = JSON.parse(raw).chat_subscription_active === true
-          }
-        } catch {
-          // ignore parse errors
-        }
-
-        if (wasPremiumCached === isPremium) return
-
-        const updatedModels = await getAIModels(isPremium)
-        if (!cancelled) {
-          setModels(updatedModels)
-        }
-      } catch (error) {
-        logError('Failed to update models', error, {
-          component: 'ChatInterface',
-          action: 'updateModels',
-        })
-      }
-    }
-
-    updateModelsIfNeeded()
-    return () => {
-      cancelled = true
-    }
-  }, [subscriptionLoading, chat_subscription_active, isLoadingConfig])
 
   // State for scroll button - define early so it can be used in useChatState
   const [showScrollButton, setShowScrollButton] = useState(false)
@@ -628,9 +571,7 @@ export function ChatInterface({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
     storeHistory: isSignedIn || !isCloudSyncEnabled(), // Enable storage for signed-in users OR local-only mode
-    isPremium: isPremium,
     models: models,
-    subscriptionLoading: subscriptionLoading,
     // Scroll user message to top of viewport when sending
     scrollToBottom: scrollUserMessageToTop,
     reasoningEffort,
@@ -787,7 +728,7 @@ export function ChatInterface({
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
-    if (isClient && !isLoadingConfig && !subscriptionLoading && currentChat) {
+    if (isClient && !isLoadingConfig && currentChat) {
       // Skip auto-focus when sidebar is open on mobile — focusing the input
       // triggers handleInputFocus which closes the sidebar
       if (isSidebarOpen && windowWidth < CONSTANTS.MOBILE_BREAKPOINT) {
@@ -802,7 +743,6 @@ export function ChatInterface({
   }, [
     isClient,
     isLoadingConfig,
-    subscriptionLoading,
     currentChat,
     inputRef,
     isSidebarOpen,
@@ -2322,7 +2262,6 @@ export function ChatInterface({
                 isStreamingResponse={isStreaming}
                 isPremium={isPremium}
                 models={models}
-                subscriptionLoading={subscriptionLoading}
                 onSubmit={handleSubmit}
                 input={input}
                 setInput={setInput}
@@ -2436,21 +2375,7 @@ export function ChatInterface({
                               selectedModel={selectedModel}
                               onSelect={handleModelSelect}
                               isDarkMode={isDarkMode}
-                              isPremium={isPremium}
                               models={models}
-                              onPremiumModelClick={() => {
-                                if (!isSignedIn) {
-                                  handleLabelClick('model', () => {})
-                                  void openSignIn()
-                                  return
-                                }
-                                setIsSidebarOpen(true)
-                                window.dispatchEvent(
-                                  new CustomEvent('highlightSidebarBox', {
-                                    detail: { isPremium },
-                                  }),
-                                )
-                              }}
                             />
                           )}
                         </div>
