@@ -33,6 +33,8 @@ export const SETTINGS_CACHED_SUBSCRIPTION_STATUS =
   'tinfoil-settings-cached-subscription-status'
 export const SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO =
   'tinfoil-settings-has-seen-web-search-intro'
+export const SETTINGS_LOCAL_ONLY_MODE_ENABLED =
+  'tinfoil-settings-local-only-mode-enabled'
 
 // --- localStorage: User personalization preferences ------------------------
 export const USER_PREFS_NICKNAME = 'tinfoil-user-prefs-nickname'
