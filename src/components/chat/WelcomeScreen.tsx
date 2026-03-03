@@ -4,7 +4,6 @@ import { useUser } from '@clerk/nextjs'
 import { AnimatePresence, motion } from 'framer-motion'
 import React, {
   memo,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -273,7 +272,6 @@ function DecryptText({
 
 interface WelcomeScreenProps {
   isDarkMode: boolean
-  setIsSidebarOpen?: (isOpen: boolean) => void
   isPremium?: boolean
   models?: BaseModel[]
   onSubmit?: (e: React.FormEvent) => void
@@ -300,7 +298,6 @@ interface WelcomeScreenProps {
 
 export const WelcomeScreen = memo(function WelcomeScreen({
   isDarkMode,
-  setIsSidebarOpen,
   isPremium,
   models,
   onSubmit,
@@ -323,14 +320,9 @@ export const WelcomeScreen = memo(function WelcomeScreen({
 }: WelcomeScreenProps) {
   const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const [privacyExpanded, setPrivacyExpanded] = useState(false)
   const [lockPop, setLockPop] = useState(false)
   const fallbackInputRef = useRef<HTMLTextAreaElement>(null)
-
-  const handleImageError = useCallback((modelName: string) => {
-    setFailedImages((prev) => ({ ...prev, [modelName]: true }))
-  }, [])
 
   // Load nickname from localStorage and listen for changes
   useEffect(() => {

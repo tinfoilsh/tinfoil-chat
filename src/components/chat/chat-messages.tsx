@@ -22,7 +22,6 @@ type ChatMessagesProps = {
   isDarkMode: boolean
   chatId: string
   messagesEndRef?: React.RefObject<HTMLDivElement>
-  setIsSidebarOpen?: (isOpen: boolean) => void
   isWaitingForResponse?: boolean
   isStreamingResponse?: boolean
   isPremium?: boolean
@@ -263,7 +262,6 @@ export function ChatMessages({
   messages,
   isDarkMode,
   chatId,
-  setIsSidebarOpen,
   isWaitingForResponse = false,
   isStreamingResponse = false,
   isPremium,
@@ -387,7 +385,6 @@ export function ChatMessages({
         <div className="my-auto w-full max-w-4xl px-8 pb-8 pt-16">
           <WelcomeScreen
             isDarkMode={isDarkMode}
-            setIsSidebarOpen={setIsSidebarOpen}
             isPremium={isPremium}
             models={models}
             onSubmit={onSubmit}

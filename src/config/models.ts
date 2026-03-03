@@ -29,7 +29,7 @@ export const isModelNameAvailable = (
 }
 
 // Helper function to check if running in local development
-export const isLocalDevelopment = (): boolean => {
+const isLocalDevelopment = (): boolean => {
   return (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' ||
