@@ -3,12 +3,19 @@ import { logError } from '@/utils/error-handling'
 import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
+export interface RateLimitInfo {
+  maxRequests: number
+  remaining: number
+  resetsAt: string
+}
+
 const SESSION_TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000
 
 let clientInstance: TinfoilAI | null = null
 let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
+let cachedRateLimit: RateLimitInfo | null = null
 
 async function fetchSessionToken(): Promise<string> {
   if (cachedSessionToken) {
@@ -63,7 +70,37 @@ async function fetchSessionToken(): Promise<string> {
   if (data.expires_at) {
     cachedSessionTokenExpiresAt = new Date(data.expires_at).getTime()
   }
+
+  if (data.is_free_tier && data.rate_limit) {
+    cachedRateLimit = {
+      maxRequests: data.rate_limit.max_requests,
+      remaining: data.rate_limit.remaining,
+      resetsAt: data.rate_limit.resets_at,
+    }
+  } else {
+    cachedRateLimit = null
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('rateLimitUpdated'))
+  }
+
   return data.key
+}
+
+export function getRateLimitInfo(): RateLimitInfo | null {
+  return cachedRateLimit ? { ...cachedRateLimit } : null
+}
+
+export function decrementRemainingRequests(): void {
+  if (!cachedRateLimit) return
+  cachedRateLimit = {
+    ...cachedRateLimit,
+    remaining: Math.max(0, cachedRateLimit.remaining - 1),
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('rateLimitUpdated'))
+  }
 }
 
 export function resetTinfoilClient(): void {
@@ -71,6 +108,7 @@ export function resetTinfoilClient(): void {
   lastSessionToken = null
   cachedSessionToken = null
   cachedSessionTokenExpiresAt = null
+  cachedRateLimit = null
 }
 
 async function initClient(sessionToken: string): Promise<TinfoilAI> {
