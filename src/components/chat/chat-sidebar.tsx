@@ -322,8 +322,11 @@ export function ChatSidebar({
       }
     }
 
+    // Listen for both storage events (cross-tab) and custom events (same-tab)
+    window.addEventListener('storage', handleLocalOnlyModeChange)
     window.addEventListener('localOnlyModeChanged', handleLocalOnlyModeChange)
     return () => {
+      window.removeEventListener('storage', handleLocalOnlyModeChange)
       window.removeEventListener(
         'localOnlyModeChanged',
         handleLocalOnlyModeChange,
