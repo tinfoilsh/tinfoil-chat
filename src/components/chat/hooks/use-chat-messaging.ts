@@ -664,12 +664,18 @@ export function useChatMessaging({
 
           const errorMsg =
             error instanceof Error ? error.message : 'Unknown error occurred'
+          const lowerMsg = errorMsg.toLowerCase()
+          const isRateLimitError =
+            lowerMsg.includes('rate limit') ||
+            lowerMsg.includes('request limit') ||
+            lowerMsg.includes('insufficient_quota')
 
           const errorMessage: Message = {
             role: 'assistant',
             content: `Error: ${errorMsg}`,
             timestamp: new Date(),
             isError: true,
+            isRateLimitError,
           }
 
           // Use the current chat ID from ref which has the correct (possibly server) ID

@@ -255,10 +255,48 @@ const DefaultMessageComponent = ({
                   isUser &&
                     'rounded-2xl bg-surface-message-user/90 px-4 py-2 shadow-sm backdrop-blur-sm',
                   message.isError &&
+                    !message.isRateLimitError &&
                     'rounded-lg border-2 border-red-500/30 bg-red-500/5 px-4 py-3',
+                  message.isRateLimitError &&
+                    'rounded-lg border-2 border-brand-accent-dark/30 bg-brand-accent-dark/5 px-4 py-3',
                 )}
               >
-                {message.isError && (
+                {message.isRateLimitError && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <svg
+                        className="h-5 w-5 flex-shrink-0 text-brand-accent-dark dark:text-brand-accent-light"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 10V3L4 14h7v7l9-11h-7z"
+                        />
+                      </svg>
+                      <span className="font-semibold text-brand-accent-dark dark:text-brand-accent-light">
+                        Daily limit reached
+                      </span>
+                    </div>
+                    <p className="text-sm text-content-secondary">
+                      You&apos;ve used all your free requests for today. Upgrade
+                      to Premium for unlimited access.
+                    </p>
+                    <button
+                      type="button"
+                      className="w-fit rounded-md bg-brand-accent-dark px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('requestUpgrade'))
+                      }}
+                    >
+                      Upgrade to Premium
+                    </button>
+                  </div>
+                )}
+                {message.isError && !message.isRateLimitError && (
                   <div className="mb-3 flex items-center gap-2 border-b border-red-500/20 pb-2">
                     <svg
                       className="h-5 w-5 flex-shrink-0 text-red-500"
@@ -279,71 +317,75 @@ const DefaultMessageComponent = ({
                   </div>
                 )}
 
-                <div className="relative">
-                  <div
-                    ref={isUser ? userMessageContentRef : undefined}
-                    style={
-                      isUser &&
-                      isUserMessageOverflowing &&
-                      !isUserMessageExpanded
-                        ? {
-                            maxHeight: USER_MESSAGE_MAX_HEIGHT,
-                            overflow: 'hidden',
-                          }
-                        : undefined
-                    }
-                  >
-                    <div
-                      className={cn(
-                        'prose w-full max-w-none text-lg prose-pre:bg-transparent prose-pre:p-0',
-                        'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
-                        'prose-a:text-blue-500 hover:prose-a:text-blue-600',
-                      )}
-                    >
-                      {!isUser && isStreaming && isLastMessage ? (
-                        <StreamingContentWrapper isStreaming={true}>
-                          <StreamingChunkedText
-                            content={message.content}
-                            isDarkMode={isDarkMode}
-                            isUser={isUser}
-                            isStreaming={isStreaming}
-                          />
-                        </StreamingContentWrapper>
-                      ) : (
-                        <StreamingChunkedText
-                          content={message.content}
-                          isDarkMode={isDarkMode}
-                          isUser={isUser}
-                          isStreaming={isStreaming}
-                        />
-                      )}
+                {!message.isRateLimitError && (
+                  <>
+                    <div className="relative">
+                      <div
+                        ref={isUser ? userMessageContentRef : undefined}
+                        style={
+                          isUser &&
+                          isUserMessageOverflowing &&
+                          !isUserMessageExpanded
+                            ? {
+                                maxHeight: USER_MESSAGE_MAX_HEIGHT,
+                                overflow: 'hidden',
+                              }
+                            : undefined
+                        }
+                      >
+                        <div
+                          className={cn(
+                            'prose w-full max-w-none text-lg prose-pre:bg-transparent prose-pre:p-0',
+                            'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
+                            'prose-a:text-blue-500 hover:prose-a:text-blue-600',
+                          )}
+                        >
+                          {!isUser && isStreaming && isLastMessage ? (
+                            <StreamingContentWrapper isStreaming={true}>
+                              <StreamingChunkedText
+                                content={message.content}
+                                isDarkMode={isDarkMode}
+                                isUser={isUser}
+                                isStreaming={isStreaming}
+                              />
+                            </StreamingContentWrapper>
+                          ) : (
+                            <StreamingChunkedText
+                              content={message.content}
+                              isDarkMode={isDarkMode}
+                              isUser={isUser}
+                              isStreaming={isStreaming}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {isUser &&
+                        isUserMessageOverflowing &&
+                        !isUserMessageExpanded && (
+                          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface-message-user/90 to-transparent" />
+                        )}
                     </div>
-                  </div>
 
-                  {isUser &&
-                    isUserMessageOverflowing &&
-                    !isUserMessageExpanded && (
-                      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface-message-user/90 to-transparent" />
+                    {isUser && isUserMessageOverflowing && (
+                      <button
+                        onClick={() =>
+                          setIsUserMessageExpanded(!isUserMessageExpanded)
+                        }
+                        className="mt-1 flex w-full items-center justify-center gap-1 py-1 text-xs font-medium text-content-secondary transition-colors hover:text-content-primary"
+                      >
+                        <span>
+                          {isUserMessageExpanded ? 'Show less' : 'Show more'}
+                        </span>
+                        <ChevronDownIcon
+                          className={cn(
+                            'h-3 w-3 transition-transform',
+                            isUserMessageExpanded && 'rotate-180',
+                          )}
+                        />
+                      </button>
                     )}
-                </div>
-
-                {isUser && isUserMessageOverflowing && (
-                  <button
-                    onClick={() =>
-                      setIsUserMessageExpanded(!isUserMessageExpanded)
-                    }
-                    className="mt-1 flex w-full items-center justify-center gap-1 py-1 text-xs font-medium text-content-secondary transition-colors hover:text-content-primary"
-                  >
-                    <span>
-                      {isUserMessageExpanded ? 'Show less' : 'Show more'}
-                    </span>
-                    <ChevronDownIcon
-                      className={cn(
-                        'h-3 w-3 transition-transform',
-                        isUserMessageExpanded && 'rotate-180',
-                      )}
-                    />
-                  </button>
+                  </>
                 )}
               </div>
             </div>

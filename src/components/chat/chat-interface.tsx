@@ -712,6 +712,26 @@ export function ChatInterface({
     }
   }, [])
 
+  // Handle upgrade requests from error CTA buttons
+  useEffect(() => {
+    const handleRequestUpgrade = () => {
+      if (!isSignedIn) {
+        void openSignIn()
+      } else {
+        setIsSidebarOpen(true)
+        window.dispatchEvent(
+          new CustomEvent('highlightSidebarBox', {
+            detail: { isPremium },
+          }),
+        )
+      }
+    }
+    window.addEventListener('requestUpgrade', handleRequestUpgrade)
+    return () => {
+      window.removeEventListener('requestUpgrade', handleRequestUpgrade)
+    }
+  }, [isSignedIn, isPremium, openSignIn, setIsSidebarOpen])
+
   // Persist web search toggle to localStorage
   useEffect(() => {
     localStorage.setItem(SETTINGS_WEB_SEARCH_ENABLED, String(webSearchEnabled))
