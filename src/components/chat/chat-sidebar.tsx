@@ -193,9 +193,6 @@ export function ChatSidebar({
   const chatListRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   const [isIOS, setIsIOS] = useState(false)
-  const [highlightBox, setHighlightBox] = useState<'signin' | 'premium' | null>(
-    null,
-  )
   const [upgradeLoading, setUpgradeLoading] = useState(false)
   const [upgradeError, setUpgradeError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'cloud' | 'local'>(() => {
@@ -266,7 +263,6 @@ export function ChatSidebar({
     userId: user?.id,
   })
   const previousChatCount = useRef(chats.length)
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -371,45 +367,6 @@ export function ChatSidebar({
     currentChat?.isBlankChat,
     currentChat?.isLocalOnly,
   ])
-
-  // Listen for highlight events
-  useEffect(() => {
-    const handleHighlightEvent = (event: CustomEvent) => {
-      const { isPremium: userIsPremium } = event.detail
-      // Determine which box to highlight based on user state
-      if (!isSignedIn) {
-        setHighlightBox('signin')
-      } else if (!userIsPremium) {
-        setHighlightBox('premium')
-      }
-
-      // Clear any existing timeout to prevent race conditions
-      if (highlightTimeoutRef.current) {
-        clearTimeout(highlightTimeoutRef.current)
-      }
-
-      // Clear highlight after 2 pulses (2.4 seconds total)
-      highlightTimeoutRef.current = setTimeout(() => {
-        setHighlightBox(null)
-        highlightTimeoutRef.current = null
-      }, 2400)
-    }
-
-    window.addEventListener(
-      'highlightSidebarBox',
-      handleHighlightEvent as EventListener,
-    )
-    return () => {
-      window.removeEventListener(
-        'highlightSidebarBox',
-        handleHighlightEvent as EventListener,
-      )
-      // Clear timeout on cleanup
-      if (highlightTimeoutRef.current) {
-        clearTimeout(highlightTimeoutRef.current)
-      }
-    }
-  }, [isSignedIn])
 
   // Calculate if we should show the Load More button
   const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
@@ -762,21 +719,6 @@ export function ChatSidebar({
 
   return (
     <>
-      {/* CSS for subtle pulse animation */}
-      <style jsx global>{`
-        @keyframes subtlePulse {
-          0% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.88;
-          }
-          100% {
-            opacity: 1;
-          }
-        }
-      `}</style>
-
       {/* Collapsed sidebar rail - always visible on desktop when sidebar is closed */}
       {!isMobile && !isOpen && (
         <div
@@ -966,21 +908,11 @@ export function ChatSidebar({
           {/* Message for non-premium users (signed in or not) */}
           {!isPremium && (
             <div
-              className={`relative z-10 m-2 flex-none rounded-lg border p-4 transition-all duration-300 ${
-                highlightBox === 'premium'
-                  ? isDarkMode
-                    ? 'border-emerald-400/50 bg-emerald-900/30'
-                    : 'border-emerald-500/50 bg-emerald-100/60'
-                  : isDarkMode
-                    ? 'border-emerald-500/30 bg-emerald-950/20'
-                    : 'border-emerald-500/30 bg-emerald-50/50'
+              className={`relative z-10 m-2 flex-none rounded-lg border p-4 ${
+                isDarkMode
+                  ? 'border-emerald-500/30 bg-emerald-950/20'
+                  : 'border-emerald-500/30 bg-emerald-50/50'
               }`}
-              style={{
-                animation:
-                  highlightBox === 'premium'
-                    ? 'subtlePulse 1.2s ease-in-out infinite'
-                    : undefined,
-              }}
             >
               <div className="flex-1">
                 <h4 className="mb-3 text-sm font-semibold text-content-primary">
