@@ -72,9 +72,7 @@ export function useChatState({
   systemPrompt,
   rules = '',
   storeHistory = true,
-  isPremium = true,
   models = [],
-  subscriptionLoading = false,
   scrollToBottom,
   reasoningEffort,
   initialChatId,
@@ -85,9 +83,7 @@ export function useChatState({
   systemPrompt: string
   rules?: string
   storeHistory?: boolean
-  isPremium?: boolean
   models?: BaseModel[]
-  subscriptionLoading?: boolean
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   initialChatId?: string | null
@@ -158,10 +154,7 @@ export function useChatState({
     handleLabelClick,
   } = useModelManagement({
     models,
-    isPremium,
     isClient,
-    storeHistory,
-    subscriptionLoading,
   })
 
   // Chat Messaging
@@ -183,7 +176,6 @@ export function useChatState({
     systemPrompt,
     rules,
     storeHistory,
-    isPremium,
     models,
     selectedModel,
     chats,
@@ -251,7 +243,7 @@ export function useChatState({
       hasCreatedInitialChatRef.current = true
 
       if (!storeHistory) {
-        // For non-premium users, just clear the loading state
+        // For users without persistent storage, just clear the loading state
         setIsInitialLoad(false)
       } else if (chats.length === 0) {
         // Only create a new chat if there are no chats
