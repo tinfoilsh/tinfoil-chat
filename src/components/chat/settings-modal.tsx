@@ -31,7 +31,9 @@ import {
 } from '@/utils/chat-import-parsers'
 import {
   isCloudSyncEnabled,
+  isLocalOnlyModeEnabled,
   setCloudSyncEnabled,
+  setLocalOnlyModeEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
@@ -244,6 +246,8 @@ export function SettingsModal({
 
   // Cloud sync setting
   const [cloudSyncEnabled, setCloudSyncEnabledState] = useState<boolean>(false)
+  const [localOnlyModeEnabledState, setLocalOnlyModeEnabledState] =
+    useState<boolean>(false)
 
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
@@ -456,6 +460,7 @@ export function SettingsModal({
 
     // Load cloud sync setting
     setCloudSyncEnabledState(isCloudSyncEnabled())
+    setLocalOnlyModeEnabledState(isLocalOnlyModeEnabled())
 
     // Load PII check setting (defaults to true if not set)
     const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
@@ -2828,6 +2833,56 @@ ${encryptionKey.replace('key_', '')}
                           )}
                       </div>
                     )}
+
+                  {/* Local Chats Section */}
+                  {cloudSyncEnabled && (
+                    <div className="space-y-3">
+                      <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                        Local Chats
+                      </h3>
+                      <div
+                        className={cn(
+                          'rounded-lg border border-border-subtle p-4',
+                          isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                        )}
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between">
+                            <div className="mr-3 flex-1">
+                              <div className="font-aeonik text-sm font-medium text-content-primary">
+                                Enable local chats
+                              </div>
+                              <div className="font-aeonik-fono text-xs text-content-muted">
+                                Enable to create chats that stay only on this
+                                device and are never synced to the cloud.
+                              </div>
+                            </div>
+                            <label className="relative inline-flex cursor-pointer items-center">
+                              <input
+                                type="checkbox"
+                                checked={localOnlyModeEnabledState}
+                                onChange={(e) => {
+                                  const newValue = e.target.checked
+                                  setLocalOnlyModeEnabledState(newValue)
+                                  setLocalOnlyModeEnabled(newValue)
+                                }}
+                                className="peer sr-only"
+                              />
+                              <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none" />
+                            </label>
+                          </div>
+                          {localOnlyModeEnabledState && (
+                            <div className="rounded-md border border-orange-500/30 bg-orange-500/10 px-3 py-2">
+                              <p className="text-xs font-medium text-orange-500">
+                                Local chats will be permanently erased when you
+                                sign out. Treat local chats as temporary.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
