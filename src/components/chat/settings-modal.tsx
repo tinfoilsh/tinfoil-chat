@@ -3400,7 +3400,7 @@ ${encryptionKey.replace('key_', '')}
                           </div>
                           <button
                             onClick={() => {
-                              if (localOnlyModeEnabledState) {
+                              if (isLocalOnlyModeEnabled()) {
                                 setShowSignOutConfirm(true)
                               } else {
                                 signOut()
