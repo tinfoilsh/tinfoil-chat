@@ -27,7 +27,6 @@ type ChatMessagesProps = {
   isStreamingResponse?: boolean
   isPremium?: boolean
   models?: BaseModel[]
-  subscriptionLoading?: boolean
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -269,7 +268,6 @@ export function ChatMessages({
   isStreamingResponse = false,
   isPremium,
   models,
-  subscriptionLoading,
   onSubmit,
   input,
   setInput,
@@ -392,7 +390,6 @@ export function ChatMessages({
             setIsSidebarOpen={setIsSidebarOpen}
             isPremium={isPremium}
             models={models}
-            subscriptionLoading={subscriptionLoading}
             onSubmit={onSubmit}
             input={input}
             setInput={setInput}

@@ -1,8 +1,4 @@
-import {
-  type BaseModel,
-  isLocalDevelopment,
-  isModelAvailable,
-} from '@/config/models'
+import { type BaseModel } from '@/config/models'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { AIModel } from './types'
 
@@ -10,20 +6,16 @@ type ModelSelectorProps = {
   selectedModel: AIModel
   onSelect: (model: AIModel) => void
   isDarkMode: boolean
-  isPremium: boolean
   models: BaseModel[]
   preferredPosition?: 'above' | 'below' // Optional prop to prefer a position
-  onPremiumModelClick?: () => void // Called when a non-premium user clicks a premium model
 }
 
 export function ModelSelector({
   selectedModel,
   onSelect,
   isDarkMode,
-  isPremium,
   models,
   preferredPosition = 'above', // Default to above
-  onPremiumModelClick,
 }: ModelSelectorProps) {
   // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
@@ -161,23 +153,10 @@ export function ModelSelector({
     }
   }, [preferredPosition])
 
-  // Filter models based on subscription status
-  // Premium users: show only premium models (plus free models in dev mode)
-  // Free users: show all models (free models enabled, premium models disabled)
-  const isDevMode = isLocalDevelopment()
-  const displayModels = models.filter((model) => {
-    const isChatOrCodeModel =
-      (model.type === 'chat' || model.type === 'code') && model.chat === true
-    if (!isChatOrCodeModel) return false
-
-    // For premium users, only show premium models (but include free models in dev mode)
-    if (isPremium && !model.paid && !isDevMode) {
-      return false
-    }
-
-    // For free users, show all models
-    return true
-  })
+  const displayModels = models.filter(
+    (model) =>
+      (model.type === 'chat' || model.type === 'code') && model.chat === true,
+  )
 
   return (
     <div
@@ -203,48 +182,17 @@ export function ModelSelector({
       onMouseDown={(e) => e.stopPropagation()}
     >
       {displayModels.map((model) => {
-        const isAvailable = isModelAvailable(model, isPremium)
         const isSelected = model.modelName === selectedModel
-        const isPremiumModel = model.paid === true
-
-        const buttonClasses = [
-          'relative flex w-full items-start gap-3 rounded-md px-3 py-3 text-left text-sm transition-colors',
-          'text-content-secondary',
-        ]
-
-        if (isSelected) {
-          buttonClasses.push('bg-surface-card text-content-primary')
-        }
-
-        if (isAvailable) {
-          buttonClasses.push('cursor-pointer')
-          if (!isSelected) {
-            buttonClasses.push('hover:bg-surface-card/70')
-          }
-        } else {
-          if (!isSelected) {
-            buttonClasses.push('text-content-muted')
-          }
-          if (isPremiumModel && !isPremium && onPremiumModelClick) {
-            buttonClasses.push('cursor-pointer hover:bg-surface-card/60')
-          } else {
-            buttonClasses.push('cursor-not-allowed')
-          }
-        }
 
         return (
           <button
             type="button"
             key={model.modelName}
-            className={buttonClasses.join(' ')}
+            className={`relative flex w-full items-start gap-3 rounded-md px-3 py-3 text-left text-sm text-content-secondary transition-colors ${isSelected ? 'bg-surface-card text-content-primary' : 'cursor-pointer hover:bg-surface-card/70'}`}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              if (isAvailable) {
-                onSelect(model.modelName as AIModel)
-              } else if (isPremiumModel && !isPremium && onPremiumModelClick) {
-                onPremiumModelClick()
-              }
+              onSelect(model.modelName as AIModel)
             }}
             onTouchEnd={(e) => {
               e.stopPropagation()
@@ -253,16 +201,8 @@ export function ModelSelector({
                 return
               }
               e.preventDefault()
-              if (isAvailable) {
-                onSelect(model.modelName as AIModel)
-              } else if (isPremiumModel && !isPremium && onPremiumModelClick) {
-                onPremiumModelClick()
-              }
+              onSelect(model.modelName as AIModel)
             }}
-            disabled={
-              !isAvailable &&
-              (!isPremiumModel || isPremium || !onPremiumModelClick)
-            }
           >
             <div className="relative mt-0.5 flex h-5 w-5 flex-none items-center justify-center">
               {!loadedImages[model.modelName] &&
@@ -280,27 +220,14 @@ export function ModelSelector({
                         : `/model-icons/${model.image}`
                 }
                 alt=""
-                className={`h-5 w-5 transition-opacity duration-200 ${!isAvailable ? 'opacity-70 grayscale' : ''} ${!loadedImages[model.modelName] && !failedImages[model.modelName] ? 'opacity-0' : ''}`}
+                className={`h-5 w-5 transition-opacity duration-200 ${!loadedImages[model.modelName] && !failedImages[model.modelName] ? 'opacity-0' : ''}`}
                 onLoad={() => handleImageLoad(model.modelName)}
                 onError={() => handleImageError(model.modelName)}
               />
             </div>
-            {isPremiumModel && !isPremium && (
-              <div
-                className={`absolute right-2 top-2 inline-flex items-center rounded px-1 text-[10px] ${isDarkMode ? 'text-emerald-500' : 'text-brand-accent-dark'}`}
-              >
-                <span className="font-medium">Premium</span>
-              </div>
-            )}
             <div className="flex flex-1 flex-col">
-              <span
-                className={`font-medium ${!isAvailable ? 'opacity-70' : ''}`}
-              >
-                {model.name}
-              </span>
-              <span
-                className={`text-xs text-content-muted ${!isAvailable ? 'opacity-70' : ''}`}
-              >
+              <span className="font-medium">{model.name}</span>
+              <span className="text-xs text-content-muted">
                 {model.description}
               </span>
             </div>
