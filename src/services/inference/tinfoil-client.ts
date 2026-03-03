@@ -103,6 +103,24 @@ export function decrementRemainingRequests(): void {
   }
 }
 
+/**
+ * Forces a fresh fetch of the session token (and rate limit info) from
+ * the server, bypassing the local cache.  Called after each stream
+ * completes so the UI reflects the server's actual remaining count.
+ */
+export async function refreshRateLimit(): Promise<void> {
+  cachedSessionToken = null
+  cachedSessionTokenExpiresAt = null
+  try {
+    await fetchSessionToken()
+  } catch (error) {
+    logError('Failed to refresh rate limit from server', error, {
+      component: 'tinfoil-client',
+      action: 'refreshRateLimit',
+    })
+  }
+}
+
 export function resetTinfoilClient(): void {
   clientInstance = null
   lastSessionToken = null
