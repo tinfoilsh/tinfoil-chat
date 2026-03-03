@@ -29,13 +29,9 @@ export function RateLimitBanner({
       <div
         className={cn(
           'pointer-events-auto flex items-center gap-2 rounded-b-xl border-x border-b px-4 py-1.5 transition-colors',
-          exhausted
-            ? isDarkMode
-              ? 'border-red-500/30 bg-red-950/20 text-red-400'
-              : 'border-red-300 bg-red-50 text-red-600'
-            : isDarkMode
-              ? 'border-amber-500/30 bg-amber-950/20 text-amber-400'
-              : 'border-amber-300 bg-amber-50 text-amber-600',
+          isDarkMode
+            ? 'border-amber-500/30 bg-amber-950/20 text-amber-400'
+            : 'border-amber-300 bg-amber-50 text-amber-600',
         )}
       >
         <span className="font-aeonik text-xs font-medium">

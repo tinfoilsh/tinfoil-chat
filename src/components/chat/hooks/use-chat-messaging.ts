@@ -16,6 +16,10 @@
 import { useProject } from '@/components/project'
 import { type BaseModel } from '@/config/models'
 import { sendChatStream } from '@/services/inference/inference-client'
+import {
+  getRateLimitInfo,
+  refreshRateLimit,
+} from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -544,6 +548,12 @@ export function useChatMessaging({
               },
             )
             return
+          }
+
+          // Refresh rate limit from server for free-tier users so the
+          // banner/send-blocking reflects the server's actual count.
+          if (getRateLimitInfo() !== null) {
+            refreshRateLimit()
           }
 
           logInfo('[handleQuery] Streaming completed, processing response', {
