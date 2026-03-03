@@ -1,6 +1,6 @@
 import { type BaseModel } from '@/config/models'
 import { USER_PREFS_NICKNAME } from '@/constants/storage-keys'
-import { useClerk, useUser } from '@clerk/nextjs'
+import { useUser } from '@clerk/nextjs'
 import { AnimatePresence, motion } from 'framer-motion'
 import React, {
   memo,
@@ -276,7 +276,6 @@ interface WelcomeScreenProps {
   setIsSidebarOpen?: (isOpen: boolean) => void
   isPremium?: boolean
   models?: BaseModel[]
-  subscriptionLoading?: boolean
   onSubmit?: (e: React.FormEvent) => void
   input?: string
   setInput?: (value: string) => void
@@ -304,7 +303,6 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   setIsSidebarOpen,
   isPremium,
   models,
-  subscriptionLoading,
   onSubmit,
   input,
   setInput,
@@ -323,8 +321,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   onWebSearchToggle,
   onOpenVerifier,
 }: WelcomeScreenProps) {
-  const { user, isSignedIn } = useUser()
-  const { openSignIn } = useClerk()
+  const { user } = useUser()
   const [nickname, setNickname] = useState<string>('')
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const [privacyExpanded, setPrivacyExpanded] = useState(false)
@@ -607,26 +604,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                             selectedModel={selectedModel}
                             onSelect={handleModelSelect}
                             isDarkMode={isDarkMode}
-                            isPremium={isPremium ?? false}
                             models={models}
                             preferredPosition="below"
-                            onPremiumModelClick={() => {
-                              if (!isSignedIn) {
-                                if (handleLabelClick) {
-                                  handleLabelClick('model', () => {})
-                                }
-                                void openSignIn()
-                                return
-                              }
-                              if (setIsSidebarOpen) {
-                                setIsSidebarOpen(true)
-                                window.dispatchEvent(
-                                  new CustomEvent('highlightSidebarBox', {
-                                    detail: { isPremium },
-                                  }),
-                                )
-                              }
-                            }}
                           />
                         )}
                       </div>
