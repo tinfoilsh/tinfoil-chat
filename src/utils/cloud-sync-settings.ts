@@ -44,3 +44,16 @@ export function setLocalOnlyModeEnabled(enabled: boolean): void {
     // Storage unavailable (e.g., Safari private mode) - silently fail
   }
 }
+
+/**
+ * Returns true if the user has never explicitly set the local-only mode
+ * preference (i.e. the key doesn't exist in localStorage at all).
+ */
+export function hasUserSetLocalOnlyPreference(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(SETTINGS_LOCAL_ONLY_MODE_ENABLED) !== null
+  } catch {
+    return false
+  }
+}
