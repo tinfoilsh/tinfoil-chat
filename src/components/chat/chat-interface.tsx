@@ -2257,7 +2257,6 @@ export function ChatInterface({
                 messages={currentChat?.messages || []}
                 isDarkMode={isDarkMode}
                 chatId={currentChat.id}
-                setIsSidebarOpen={setIsSidebarOpen}
                 isWaitingForResponse={isWaitingForResponse}
                 isStreamingResponse={isStreaming}
                 isPremium={isPremium}

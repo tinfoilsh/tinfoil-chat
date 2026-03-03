@@ -926,7 +926,7 @@ export function ChatSidebar({
 
                   <div className="flex items-center gap-3 text-xs text-content-secondary">
                     <PiSparkle className="h-4 w-4 flex-shrink-0 text-content-muted" />
-                    <span>Selection of premium AI models</span>
+                    <span>Generous rate limits</span>
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-content-secondary">
