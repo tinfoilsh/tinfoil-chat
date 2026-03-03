@@ -16,6 +16,7 @@ export type BaseModel = {
   supportedLanguages?: string
   type: 'chat' | 'code' | 'embedding' | 'audio' | 'tts' | 'document' | 'title'
   chat?: boolean
+  paid?: boolean
   multimodal?: boolean
   endpoint?: string
 }

@@ -1,4 +1,5 @@
 import { type BaseModel } from '@/config/models'
+import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { AIModel } from './types'
 
@@ -7,7 +8,7 @@ type ModelSelectorProps = {
   onSelect: (model: AIModel) => void
   isDarkMode: boolean
   models: BaseModel[]
-  preferredPosition?: 'above' | 'below' // Optional prop to prefer a position
+  preferredPosition?: 'above' | 'below'
 }
 
 export function ModelSelector({
@@ -15,17 +16,14 @@ export function ModelSelector({
   onSelect,
   isDarkMode,
   models,
-  preferredPosition = 'above', // Default to above
+  preferredPosition = 'above',
 }: ModelSelectorProps) {
-  // Track images that failed to load
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
-  // Track images that have loaded
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const menuRef = useRef<HTMLDivElement>(null)
-  // Track if user is scrolling to prevent accidental selection on touch end
   const isScrollingRef = useRef(false)
+  const [showOtherModels, setShowOtherModels] = useState(false)
 
-  // Start with sensible defaults based on preferred positioning
   const [dynamicStyles, setDynamicStyles] = useState<{
     maxHeight: string
     bottom?: string
@@ -45,8 +43,6 @@ export function ModelSelector({
     setLoadedImages((prev) => ({ ...prev, [modelName]: true }))
   }
 
-  // Calculate optimal positioning and height
-  // useLayoutEffect ensures positioning is calculated before browser paints (prevents visual jump on mobile)
   useLayoutEffect(() => {
     let animationFrameId: number | null = null
 
@@ -54,20 +50,16 @@ export function ModelSelector({
       const menuElement = menuRef.current
       if (!menuElement) return
 
-      // Get the parent button's position
       const buttonElement = menuElement.parentElement
       if (!buttonElement) return
 
       const buttonRect = buttonElement.getBoundingClientRect()
 
-      // Calculate available space
-      const spaceAbove = buttonRect.top - 20 // 20px for padding
-      const spaceBelow = window.innerHeight - buttonRect.bottom - 20 // 20px for padding
+      const spaceAbove = buttonRect.top - 20
+      const spaceBelow = window.innerHeight - buttonRect.bottom - 20
 
-      // Determine position based on preference and available space
       let useAbove = preferredPosition === 'above'
 
-      // Override preference if there's not enough space
       if (
         preferredPosition === 'above' &&
         spaceAbove < 150 &&
@@ -82,12 +74,10 @@ export function ModelSelector({
         useAbove = true
       }
 
-      // On mobile, use a smaller max height to ensure scrollability
       const isMobile = window.innerWidth < 768
       const maxHeightCap = isMobile ? 300 : window.innerHeight * 0.7
 
-      // Calculate horizontal positioning to prevent overflow
-      const menuWidth = 280 // Fixed width from className
+      const menuWidth = 280
       const viewportWidth = window.innerWidth
       const buttonLeft = buttonRect.left
       const buttonRight = buttonRect.right
@@ -95,13 +85,10 @@ export function ModelSelector({
       let horizontalStyles: { left?: string; right?: string } = {}
 
       if (isMobile) {
-        // On mobile, check if dropdown would overflow right edge
         if (buttonLeft + menuWidth > viewportWidth - 10) {
-          // Anchor to right edge of button, but ensure it doesn't overflow left
           const rightOffset = viewportWidth - buttonRight
           const dropdownLeft = viewportWidth - rightOffset - menuWidth
           if (dropdownLeft < 10) {
-            // Would overflow left, center it in viewport instead
             horizontalStyles = { left: `${-buttonLeft + 10}px` }
           } else {
             horizontalStyles = { right: '0' }
@@ -117,7 +104,6 @@ export function ModelSelector({
           ...horizontalStyles,
         })
       } else {
-        // Position below
         setDynamicStyles({
           maxHeight: `${Math.min(Math.max(0, spaceBelow), maxHeightCap)}px`,
           top: '100%',
@@ -127,7 +113,6 @@ export function ModelSelector({
       }
     }
 
-    // Throttled version using requestAnimationFrame
     const throttledCalculatePosition = () => {
       if (animationFrameId !== null) {
         return
@@ -138,7 +123,6 @@ export function ModelSelector({
       })
     }
 
-    // Run immediately without delay
     calculatePosition()
 
     window.addEventListener('resize', throttledCalculatePosition)
@@ -155,8 +139,67 @@ export function ModelSelector({
 
   const displayModels = models.filter(
     (model) =>
-      (model.type === 'chat' || model.type === 'code') && model.chat === true,
+      (model.type === 'chat' || model.type === 'code') &&
+      model.chat === true &&
+      model.paid !== false,
   )
+
+  const TOP_MODEL_COUNT = 1
+  const topModels = displayModels.slice(0, TOP_MODEL_COUNT)
+  const otherModels = displayModels.slice(TOP_MODEL_COUNT)
+
+  const getModelIcon = (model: BaseModel) => {
+    if (failedImages[model.modelName]) return '/icon.png'
+    if (model.image === 'openai.png')
+      return `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
+    if (model.image === 'moonshot.png')
+      return `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
+    return `/model-icons/${model.image}`
+  }
+
+  const renderModelItem = (model: BaseModel) => {
+    const isSelected = model.modelName === selectedModel
+    return (
+      <button
+        type="button"
+        key={model.modelName}
+        className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${isSelected ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onSelect(model.modelName as AIModel)
+        }}
+        onTouchEnd={(e) => {
+          e.stopPropagation()
+          if (isScrollingRef.current) return
+          e.preventDefault()
+          onSelect(model.modelName as AIModel)
+        }}
+      >
+        <div className="relative flex h-5 w-5 flex-none items-center justify-center">
+          {!loadedImages[model.modelName] && !failedImages[model.modelName] && (
+            <div className="absolute h-5 w-5 rounded-full bg-gray-300 dark:bg-gray-600" />
+          )}
+          <img
+            src={getModelIcon(model)}
+            alt=""
+            className={`h-5 w-5 transition-opacity duration-200 ${!loadedImages[model.modelName] && !failedImages[model.modelName] ? 'opacity-0' : ''}`}
+            onLoad={() => handleImageLoad(model.modelName)}
+            onError={() => handleImageError(model.modelName)}
+          />
+        </div>
+        <div className="flex flex-1 flex-col">
+          <span className="font-medium">{model.name}</span>
+          <span className="text-xs text-content-muted">
+            {model.description}
+          </span>
+        </div>
+        {isSelected && (
+          <CheckIcon className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light" />
+        )}
+      </button>
+    )
+  }
 
   return (
     <div
@@ -181,59 +224,31 @@ export function ModelSelector({
       onTouchEnd={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {displayModels.map((model) => {
-        const isSelected = model.modelName === selectedModel
+      {topModels.map((model) => renderModelItem(model))}
 
-        return (
+      {otherModels.length > 0 && (
+        <>
+          <div className="mx-3 my-1 border-t border-border-subtle" />
           <button
             type="button"
-            key={model.modelName}
-            className={`relative flex w-full items-start gap-3 rounded-md px-3 py-3 text-left text-sm text-content-secondary transition-colors ${isSelected ? 'bg-surface-card text-content-primary' : 'cursor-pointer hover:bg-surface-card/70'}`}
+            className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              onSelect(model.modelName as AIModel)
+              setShowOtherModels(!showOtherModels)
             }}
-            onTouchEnd={(e) => {
-              e.stopPropagation()
-              // Don't select if user was scrolling
-              if (isScrollingRef.current) {
-                return
-              }
-              e.preventDefault()
-              onSelect(model.modelName as AIModel)
-            }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="relative mt-0.5 flex h-5 w-5 flex-none items-center justify-center">
-              {!loadedImages[model.modelName] &&
-                !failedImages[model.modelName] && (
-                  <div className="absolute h-5 w-5 rounded-full bg-gray-300 dark:bg-gray-600" />
-                )}
-              <img
-                src={
-                  failedImages[model.modelName]
-                    ? '/icon.png'
-                    : model.image === 'openai.png'
-                      ? `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
-                      : model.image === 'moonshot.png'
-                        ? `/model-icons/moonshot-${isDarkMode ? 'dark' : 'light'}.png`
-                        : `/model-icons/${model.image}`
-                }
-                alt=""
-                className={`h-5 w-5 transition-opacity duration-200 ${!loadedImages[model.modelName] && !failedImages[model.modelName] ? 'opacity-0' : ''}`}
-                onLoad={() => handleImageLoad(model.modelName)}
-                onError={() => handleImageError(model.modelName)}
-              />
-            </div>
-            <div className="flex flex-1 flex-col">
-              <span className="font-medium">{model.name}</span>
-              <span className="text-xs text-content-muted">
-                {model.description}
-              </span>
-            </div>
+            <span>Other models</span>
+            <ChevronDownIcon
+              className={`h-4 w-4 text-content-muted transition-transform ${showOtherModels ? 'rotate-180' : ''}`}
+            />
           </button>
-        )
-      })}
+
+          {showOtherModels &&
+            otherModels.map((model) => renderModelItem(model))}
+        </>
+      )}
     </div>
   )
 }
