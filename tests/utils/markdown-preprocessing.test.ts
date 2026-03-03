@@ -65,6 +65,39 @@ describe('markdown-preprocessing', () => {
         const result = preprocessMarkdown(input)
         expect(result).toBe('**bold**\n~~~\n<b>not bold</b>\n~~~\n**bold**')
       })
+
+      it('preserves code blocks closed with a longer fence than the opening', () => {
+        const input = '```\n<b>code</b>\n`````'
+        expect(preprocessMarkdown(input)).toBe(input)
+      })
+
+      it('does not close a block with a shorter fence than the opening', () => {
+        const input =
+          '`````\n<b>still code</b>\n```\n<b>still code</b>\n`````\n<b>bold</b>'
+        const result = preprocessMarkdown(input)
+        expect(result).toBe(
+          '`````\n<b>still code</b>\n```\n<b>still code</b>\n`````\n**bold**',
+        )
+      })
+
+      it('preserves HTML inside blockquoted code fences', () => {
+        const input = '> ```html\n> <a href="url">link</a>\n> ```'
+        expect(preprocessMarkdown(input)).toBe(input)
+      })
+
+      it('converts HTML outside blockquoted code fences', () => {
+        const input =
+          '<b>bold</b>\n> ```\n> <b>not bold</b>\n> ```\n<b>bold</b>'
+        const result = preprocessMarkdown(input)
+        expect(result).toBe(
+          '**bold**\n> ```\n> <b>not bold</b>\n> ```\n**bold**',
+        )
+      })
+
+      it('preserves nested blockquoted code fences', () => {
+        const input = '> > ```\n> > <b>code</b>\n> > ```'
+        expect(preprocessMarkdown(input)).toBe(input)
+      })
     })
 
     describe('pass-through behavior', () => {
@@ -317,6 +350,31 @@ describe('markdown-preprocessing', () => {
         const input = '```python\nprint("hi")\n```'
         expect(indentCodeBlocksInLists(input)).toBe(input)
       })
+
+      it('does not corrupt list-like content inside a top-level code block', () => {
+        const input = [
+          '```markdown',
+          '1. Item',
+          '```bash',
+          'echo hello',
+          '```',
+        ].join('\n')
+        expect(indentCodeBlocksInLists(input)).toBe(input)
+      })
+    })
+
+    describe('properly indented code blocks in lists', () => {
+      it('does not corrupt content that looks like list items inside a code block', () => {
+        const input = [
+          '1. Example:',
+          '   ```markdown',
+          '   1. list inside code',
+          '   ```bash',
+          '   echo hello',
+          '   ```',
+        ].join('\n')
+        expect(indentCodeBlocksInLists(input)).toBe(input)
+      })
     })
 
     describe('empty code blocks', () => {
@@ -381,6 +439,27 @@ describe('markdown-preprocessing', () => {
         // "Not in list" exits the list
         // Standalone code block should NOT be indented
         expect(lines[7]).toBe('```bash')
+      })
+
+      it('does not reindent a fence after a blank line', () => {
+        const input = ['1. Item', '', '```bash', 'echo hello', '```'].join('\n')
+        expect(indentCodeBlocksInLists(input)).toBe(input)
+      })
+
+      it('still reindents after a blank line + new list item', () => {
+        const input = [
+          '1. First item',
+          '',
+          '2. Second item:',
+          '```bash',
+          'echo hello',
+          '```',
+        ].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        expect(lines[3]).toBe('   ```bash')
+        expect(lines[4]).toBe('   echo hello')
+        expect(lines[5]).toBe('   ```')
       })
     })
 
