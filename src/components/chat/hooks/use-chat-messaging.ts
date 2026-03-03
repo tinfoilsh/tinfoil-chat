@@ -16,7 +16,6 @@
 import { useProject } from '@/components/project'
 import { type BaseModel } from '@/config/models'
 import { sendChatStream } from '@/services/inference/inference-client'
-import { setSubscriptionChecker } from '@/services/inference/tinfoil-client'
 import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -38,7 +37,6 @@ interface UseChatMessagingProps {
   systemPrompt: string
   rules?: string
   storeHistory: boolean
-  isPremium: boolean
   models: BaseModel[]
   selectedModel: string
   chats: Chat[]
@@ -77,7 +75,6 @@ export function useChatMessaging({
   systemPrompt,
   rules = '',
   storeHistory,
-  isPremium,
   models,
   selectedModel,
   chats,
@@ -93,17 +90,6 @@ export function useChatMessaging({
   const { isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
   const { isProjectMode, activeProject } = useProject()
-
-  // Track isPremium in a ref so the subscription checker always has current value
-  const isPremiumRef = useRef(isPremium)
-  useEffect(() => {
-    isPremiumRef.current = isPremium
-  }, [isPremium])
-
-  // Initialize subscription checker for tinfoil client
-  useEffect(() => {
-    setSubscriptionChecker(() => isPremiumRef.current)
-  }, [])
 
   const [input, setInput] = useState('')
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
@@ -132,33 +118,6 @@ export function useChatMessaging({
     thinkingStartTimeRef.current = null
     return duration
   }
-
-  // For users without storeHistory (free/non-signed-in), validate the selected model
-  // Ensures we only hit free chat models; always allow 'dev-simulator' for local testing
-  const effectiveModel = !storeHistory
-    ? (() => {
-        // Allow Dev Simulator for testing even when not signed in
-        if (selectedModel === 'dev-simulator') {
-          return selectedModel
-        }
-
-        // Check if the selected model is available for free users
-        const selectedModelData = models.find(
-          (model) => model.modelName === selectedModel,
-        )
-
-        // If selected model is free and available, use it
-        if (selectedModelData && selectedModelData.paid === false) {
-          return selectedModel
-        }
-
-        // Otherwise fall back to first free chat model
-        const firstFreeModel = models.find((model) => model.paid === false)
-
-        // Use first free model if found, otherwise fallback to selected model as last resort
-        return firstFreeModel?.modelName || selectedModel
-      })()
-    : selectedModel
 
   // A modified version of updateChat that respects the storeHistory flag
   // During streaming, we persist to IndexedDB but defer cloud backup unless immediate=true
@@ -510,16 +469,16 @@ export function useChatMessaging({
       // }
 
       try {
-        const model = models.find((m) => m.modelName === effectiveModel)
+        const model = models.find((m) => m.modelName === selectedModel)
         if (!model) {
-          throw new Error(`Model ${effectiveModel} not found`)
+          throw new Error(`Model ${selectedModel} not found`)
         }
 
         logInfo('[handleQuery] Starting streaming with model', {
           component: 'useChatMessaging',
           action: 'handleQuery.startStreaming',
           metadata: {
-            model: effectiveModel,
+            model: selectedModel,
             chatId: currentChatIdRef.current,
             startingChatId,
             isLocalOnly: updatedChat.isLocalOnly,
@@ -738,7 +697,7 @@ export function useChatMessaging({
       setChats,
       setCurrentChat,
       models,
-      effectiveModel,
+      selectedModel,
       systemPrompt,
       maxMessages,
       rules,
