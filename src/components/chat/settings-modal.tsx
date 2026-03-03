@@ -1507,10 +1507,11 @@ export function SettingsModal({
     }
   }, [])
 
-  // Reset QR code expansion state when modal closes
+  // Reset transient state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setIsQRCodeExpanded(false)
+      setShowSignOutConfirm(false)
     }
   }, [isOpen])
 
