@@ -54,6 +54,17 @@ describe('markdown-preprocessing', () => {
         const result = preprocessMarkdown(input)
         expect(result).toBe('**bold**\n```\n<b>not bold</b>\n```\n**bold**')
       })
+
+      it('preserves HTML inside tilde-fenced code blocks', () => {
+        const input = '~~~html\n<a href="url">link</a>\n~~~'
+        expect(preprocessMarkdown(input)).toBe(input)
+      })
+
+      it('converts HTML outside tilde code blocks while preserving code', () => {
+        const input = '<b>bold</b>\n~~~\n<b>not bold</b>\n~~~\n<b>bold</b>'
+        const result = preprocessMarkdown(input)
+        expect(result).toBe('**bold**\n~~~\n<b>not bold</b>\n~~~\n**bold**')
+      })
     })
 
     describe('pass-through behavior', () => {
@@ -229,6 +240,70 @@ describe('markdown-preprocessing', () => {
         expect(lines[1]).toBe('   ~~~bash')
         expect(lines[2]).toBe('   echo hi')
         expect(lines[3]).toBe('   ~~~')
+      })
+    })
+
+    describe('fence type and length matching', () => {
+      it('does not close a backtick block with tildes', () => {
+        const input = [
+          '1. Example:',
+          '```',
+          'line with ~~~',
+          '~~~',
+          'still in block',
+          '```',
+        ].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        // ~~~ should be treated as content, not a closing fence
+        expect(lines[3]).toBe('   ~~~')
+        expect(lines[4]).toBe('   still in block')
+        // ``` is the real closing fence
+        expect(lines[5]).toBe('   ```')
+      })
+
+      it('does not close a tilde block with backticks', () => {
+        const input = [
+          '1. Example:',
+          '~~~',
+          'line with ```',
+          '```',
+          'still in block',
+          '~~~',
+        ].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        // ``` should be treated as content, not a closing fence
+        expect(lines[3]).toBe('   ```')
+        expect(lines[4]).toBe('   still in block')
+        // ~~~ is the real closing fence
+        expect(lines[5]).toBe('   ~~~')
+      })
+
+      it('requires closing fence to be at least as long as opening', () => {
+        const input = [
+          '1. Example:',
+          '`````python',
+          'code',
+          '```',
+          'still in block',
+          '`````',
+        ].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        // ``` (3 backticks) is too short to close ````` (5 backticks)
+        expect(lines[3]).toBe('   ```')
+        expect(lines[4]).toBe('   still in block')
+        // ````` closes the block
+        expect(lines[5]).toBe('   `````')
+      })
+
+      it('allows closing fence longer than opening', () => {
+        const input = ['1. Example:', '```python', 'code', '`````'].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        // ````` (5) >= ``` (3), so it closes the block
+        expect(lines[3]).toBe('   `````')
       })
     })
 
