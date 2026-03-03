@@ -11,40 +11,16 @@ export function indentCodeBlocksInLists(content: string): string {
   let listContentIndent = 0
   let inList = false
   let indentDelta = 0
-  let inReindentedBlock = false
+  let inFencedBlock = false
+  let reindentingBlock = false
   let openingFenceChar = ''
   let openingFenceLength = 0
 
-  for (const line of lines) {
-    // Detect list item start (ordered: "1. ", "2.  ", unordered: "- ", "* ")
-    if (!inReindentedBlock) {
-      const listMatch = line.match(/^(\s*)(\d+[.)]\s+|[-*+]\s+)/)
-      if (listMatch) {
-        inList = true
-        listContentIndent = listMatch[1].length + listMatch[2].length
-        result.push(line)
-        continue
-      }
-    }
-
-    // Detect under-indented code fence in list context
-    if (inList && !inReindentedBlock) {
-      const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})/)
-      if (fenceMatch) {
-        const fenceIndent = fenceMatch[1].length
-        if (fenceIndent < listContentIndent) {
-          indentDelta = listContentIndent - fenceIndent
-          openingFenceChar = fenceMatch[2][0]
-          openingFenceLength = fenceMatch[2].length
-          result.push(' '.repeat(indentDelta) + line)
-          inReindentedBlock = true
-          continue
-        }
-      }
-    }
-
-    // Process lines inside a re-indented code block
-    if (inReindentedBlock) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const prevLineBlank = i > 0 && lines[i - 1].trim() === ''
+    // If inside any fenced block, check for closing fence and pass through
+    if (inFencedBlock) {
       const trimmed = line.trim()
       const closingMatch = trimmed.match(/^(`{3,}|~{3,})\s*$/)
       const isClosingFence =
@@ -52,11 +28,49 @@ export function indentCodeBlocksInLists(content: string): string {
         closingMatch[1][0] === openingFenceChar &&
         closingMatch[1].length >= openingFenceLength
       if (isClosingFence) {
-        result.push(' '.repeat(listContentIndent) + trimmed)
-        inReindentedBlock = false
-      } else {
+        if (reindentingBlock) {
+          result.push(' '.repeat(listContentIndent) + trimmed)
+        } else {
+          result.push(line)
+        }
+        inFencedBlock = false
+        reindentingBlock = false
+      } else if (reindentingBlock) {
         result.push(' '.repeat(indentDelta) + line)
+      } else {
+        result.push(line)
       }
+      continue
+    }
+
+    // Check for opening fence (must be checked before list detection to avoid
+    // false list matches inside top-level code blocks)
+    const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})/)
+    if (fenceMatch) {
+      openingFenceChar = fenceMatch[2][0]
+      openingFenceLength = fenceMatch[2].length
+      inFencedBlock = true
+      if (
+        inList &&
+        !prevLineBlank &&
+        fenceMatch[1].length < listContentIndent
+      ) {
+        indentDelta = listContentIndent - fenceMatch[1].length
+        reindentingBlock = true
+        result.push(' '.repeat(indentDelta) + line)
+      } else {
+        reindentingBlock = false
+        result.push(line)
+      }
+      continue
+    }
+
+    // Detect list item start (ordered: "1. ", "2.  ", unordered: "- ", "* ")
+    const listMatch = line.match(/^(\s*)(\d+[.)]\s+|[-*+]\s+)/)
+    if (listMatch) {
+      inList = true
+      listContentIndent = listMatch[1].length + listMatch[2].length
+      result.push(line)
       continue
     }
 
@@ -79,6 +93,42 @@ export function indentCodeBlocksInLists(content: string): string {
   return result.join('\n')
 }
 
+function extractFencedCodeBlocks(text: string, codeBlocks: string[]): string {
+  const lines = text.split('\n')
+  const result: string[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    const openMatch = lines[i].match(/^((?:\s*>)*\s*)(`{3,}|~{3,})/)
+    if (openMatch) {
+      const fenceChar = openMatch[2][0]
+      const fenceLen = openMatch[2].length
+      const blockLines = [lines[i]]
+      i++
+      while (i < lines.length) {
+        blockLines.push(lines[i])
+        const closeMatch = lines[i].match(/^(?:\s*>)*\s*(`{3,}|~{3,})\s*$/)
+        if (
+          closeMatch &&
+          closeMatch[1][0] === fenceChar &&
+          closeMatch[1].length >= fenceLen
+        ) {
+          i++
+          break
+        }
+        i++
+      }
+      codeBlocks.push(blockLines.join('\n'))
+      result.push(`__CODE_BLOCK_${codeBlocks.length - 1}__`)
+    } else {
+      result.push(lines[i])
+      i++
+    }
+  }
+
+  return result.join('\n')
+}
+
 /**
  * Preprocesses markdown content to fix common formatting issues
  * and convert HTML tags to markdown equivalents.
@@ -93,10 +143,8 @@ export function preprocessMarkdown(content: string): string {
   const inlineCode: string[] = []
 
   // Protect fenced code blocks (``` and ~~~)
-  let processed = indented.replace(/(`{3,}|~{3,})[\s\S]*?\1/g, (match) => {
-    codeBlocks.push(match)
-    return `__CODE_BLOCK_${codeBlocks.length - 1}__`
-  })
+  // A closing fence must use the same char and be >= the opening fence length (CommonMark spec)
+  let processed = extractFencedCodeBlocks(indented, codeBlocks)
 
   // Protect inline code (`...`)
   processed = processed.replace(/`[^`]+`/g, (match) => {
