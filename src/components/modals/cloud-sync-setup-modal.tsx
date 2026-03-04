@@ -1,6 +1,7 @@
 import { SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL } from '@/constants/storage-keys'
 import { useToast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { PrfNotSupportedError } from '@/services/passkey'
 import { TINFOIL_COLORS } from '@/theme/colors'
 import { setCloudSyncEnabled as persistCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
@@ -662,15 +663,24 @@ ${generatedKey.replace('key_', '')}
         })
       }
     } catch (error) {
-      logError('Start fresh failed', error, {
-        component: 'CloudSyncSetupModal',
-        action: 'handleStartFresh',
-      })
-      toast({
-        title: 'Setup failed',
-        description: 'Could not create a new encryption key. Please try again.',
-        variant: 'destructive',
-      })
+      if (error instanceof PrfNotSupportedError) {
+        toast({
+          title: 'Passkey provider not supported',
+          description: error.message,
+          variant: 'destructive',
+        })
+      } else {
+        logError('Start fresh failed', error, {
+          component: 'CloudSyncSetupModal',
+          action: 'handleStartFresh',
+        })
+        toast({
+          title: 'Setup failed',
+          description:
+            'Could not create a new encryption key. Please try again.',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setIsStartingFresh(false)
     }

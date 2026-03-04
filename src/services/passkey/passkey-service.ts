@@ -20,6 +20,15 @@ import {
 } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
 
+export class PrfNotSupportedError extends Error {
+  constructor() {
+    super(
+      "Your passkey provider doesn't support the security features required by Tinfoil. Try using iCloud Keychain, Chrome's built-in passkey manager, or the Passwords app in your device settings.",
+    )
+    this.name = 'PrfNotSupportedError'
+  }
+}
+
 // Salt passed to PRF eval.first — the client internally computes:
 // SHA-256("WebAuthn PRF" || 0x00 || PRF_EVAL_FIRST)
 const PRF_EVAL_FIRST = new TextEncoder().encode('tinfoil-chat-key-encryption')
@@ -135,7 +144,7 @@ export async function createPrfPasskey(
         component: 'PasskeyService',
         action: 'createPrfPasskey',
       })
-      return null
+      throw new PrfNotSupportedError()
     }
 
     const credentialId = uint8ArrayToBase64Url(new Uint8Array(credential.rawId))
@@ -163,6 +172,8 @@ export async function createPrfPasskey(
     )
     return await authenticatePrfPasskey([credentialId])
   } catch (error) {
+    if (error instanceof PrfNotSupportedError) throw error
+
     // DOMException with name "NotAllowedError" means the user cancelled
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
       logInfo('User cancelled passkey creation', {
