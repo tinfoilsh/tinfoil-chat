@@ -139,9 +139,7 @@ export function ModelSelector({
 
   const displayModels = models.filter(
     (model) =>
-      (model.type === 'chat' || model.type === 'code') &&
-      model.chat === true &&
-      model.paid !== false,
+      (model.type === 'chat' || model.type === 'code') && model.chat === true,
   )
 
   const TOP_MODEL_COUNT = 1
