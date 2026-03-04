@@ -988,7 +988,7 @@ export function ChatSidebar({
                       >
                         {upgradeLoading
                           ? 'Redirecting…'
-                          : 'Start 7 day free trial'}
+                          : 'Subscribe to Premium'}
                         {!upgradeLoading && (
                           <svg
                             className="h-3 w-3"
@@ -1015,7 +1015,7 @@ export function ChatSidebar({
                     <div className="space-y-2">
                       <SignInButton mode="modal">
                         <span className="relative block w-full cursor-pointer rounded-md bg-brand-accent-dark px-4 py-2 text-center text-sm font-medium text-white transition-all hover:bg-brand-accent-dark/90">
-                          Start 7 day free trial
+                          Subscribe to Premium
                         </span>
                       </SignInButton>
                       <p className="text-center text-xs text-content-secondary">

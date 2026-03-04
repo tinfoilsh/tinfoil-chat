@@ -271,8 +271,7 @@ const DefaultMessageComponent = ({
                       </span>
                     </div>
                     <p className="text-sm text-brand-accent-dark/70 dark:text-brand-accent-light/70">
-                      You&apos;ve used all your free requests for today. Upgrade
-                      to Premium for unlimited access.
+                      You&apos;ve used all your free requests for today.
                     </p>
                     <button
                       type="button"
