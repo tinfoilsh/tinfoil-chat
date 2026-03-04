@@ -550,12 +550,6 @@ export function useChatMessaging({
             return
           }
 
-          // Refresh rate limit from server for free-tier users so the
-          // banner/send-blocking reflects the server's actual count.
-          if (getRateLimitInfo() !== null) {
-            refreshRateLimit()
-          }
-
           logInfo('[handleQuery] Streaming completed, processing response', {
             component: 'useChatMessaging',
             action: 'handleQuery.streamingComplete',
@@ -700,6 +694,13 @@ export function useChatMessaging({
           )
         }
       } finally {
+        // Refresh rate limit from server for free-tier users so the
+        // banner/send-blocking reflects the server's actual count
+        // (covers both success and error paths, e.g. 429 responses).
+        if (getRateLimitInfo() !== null) {
+          refreshRateLimit()
+        }
+
         // Ensure loading state is reset regardless of where failure occurs
         setLoadingState('idle')
         setRetryInfo(null)

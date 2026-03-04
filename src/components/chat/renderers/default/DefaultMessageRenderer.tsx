@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/outline'
 import React, { memo } from 'react'
 import { BsCheckLg } from 'react-icons/bs'
+import { GoClockFill } from 'react-icons/go'
 import { RxCopy } from 'react-icons/rx'
 import { hasMessageAttachments } from '../../attachment-helpers'
 import { DocumentList } from '../components/DocumentList'
@@ -264,24 +265,12 @@ const DefaultMessageComponent = ({
                 {message.isRateLimitError && (
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
-                      <svg
-                        className="h-5 w-5 flex-shrink-0 text-brand-accent-dark dark:text-brand-accent-light"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M13 10V3L4 14h7v7l9-11h-7z"
-                        />
-                      </svg>
+                      <GoClockFill className="h-5 w-5 flex-shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
                       <span className="font-semibold text-brand-accent-dark dark:text-brand-accent-light">
                         Daily limit reached
                       </span>
                     </div>
-                    <p className="text-sm text-content-secondary">
+                    <p className="text-sm text-brand-accent-dark/70 dark:text-brand-accent-light/70">
                       You&apos;ve used all your free requests for today. Upgrade
                       to Premium for unlimited access.
                     </p>
