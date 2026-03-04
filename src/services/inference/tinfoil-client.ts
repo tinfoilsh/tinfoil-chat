@@ -18,6 +18,7 @@ let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
 let cachedRateLimit: RateLimitInfo | null = null
+let refreshInFlight: Promise<void> | null = null
 
 async function fetchSessionToken(): Promise<string> {
   if (cachedSessionToken) {
@@ -120,18 +121,27 @@ export function decrementRemainingRequests(): void {
  * Forces a fresh fetch of the session token (and rate limit info) from
  * the server, bypassing the local cache.  Called after each stream
  * completes so the UI reflects the server's actual remaining count.
+ * Concurrent calls are coalesced into a single in-flight request.
  */
 export async function refreshRateLimit(): Promise<void> {
-  cachedSessionToken = null
-  cachedSessionTokenExpiresAt = null
-  try {
-    await fetchSessionToken()
-  } catch (error) {
-    logError('Failed to refresh rate limit from server', error, {
-      component: 'tinfoil-client',
-      action: 'refreshRateLimit',
-    })
-  }
+  if (refreshInFlight) return refreshInFlight
+
+  refreshInFlight = (async () => {
+    cachedSessionToken = null
+    cachedSessionTokenExpiresAt = null
+    try {
+      await fetchSessionToken()
+    } catch (error) {
+      logError('Failed to refresh rate limit from server', error, {
+        component: 'tinfoil-client',
+        action: 'refreshRateLimit',
+      })
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+
+  return refreshInFlight
 }
 
 export function resetTinfoilClient(): void {
