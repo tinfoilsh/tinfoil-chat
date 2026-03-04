@@ -12,7 +12,11 @@ import { useChatRouter } from '@/hooks/use-chat-router'
 import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
-import type { RateLimitInfo } from '@/services/inference/tinfoil-client'
+import {
+  decrementRemainingRequests,
+  getRateLimitInfo,
+  type RateLimitInfo,
+} from '@/services/inference/tinfoil-client'
 import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
@@ -700,11 +704,7 @@ export function ChatInterface({
   // Sync rate limit info from tinfoil-client via custom events
   useEffect(() => {
     const handleRateLimitUpdate = () => {
-      import('@/services/inference/tinfoil-client').then(
-        ({ getRateLimitInfo }) => {
-          setRateLimit(getRateLimitInfo())
-        },
-      )
+      setRateLimit(getRateLimitInfo())
     }
     // Sync any already-cached value (the initial fetchSessionToken may
     // have resolved before this listener was registered).
@@ -1569,11 +1569,7 @@ export function ChatInterface({
     handleQuery(messageText, attachments.length > 0 ? attachments : undefined)
 
     if (rateLimit) {
-      import('@/services/inference/tinfoil-client').then(
-        ({ decrementRemainingRequests }) => {
-          decrementRemainingRequests()
-        },
-      )
+      decrementRemainingRequests()
     }
 
     // Keep documents that are still uploading or generating descriptions
