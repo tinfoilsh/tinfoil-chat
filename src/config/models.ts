@@ -51,7 +51,13 @@ export const getAIModels = async (): Promise<BaseModel[]> => {
       throw new Error(`Failed to fetch models: ${response.status}`)
     }
 
-    const models: BaseModel[] = await response.json()
+    const allModels: BaseModel[] = await response.json()
+
+    // Remove free chat models — they are handled server-side via
+    // free-tier API keys and should never appear in the UI.
+    const models = allModels.filter(
+      (m) => !(m.paid === false && m.chat === true),
+    )
 
     // Add Dev Simulator model when running locally
     if (isLocalDev) {
