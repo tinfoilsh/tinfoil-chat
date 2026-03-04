@@ -22,6 +22,7 @@ import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { PrfNotSupportedError } from '@/services/passkey'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { TINFOIL_COLORS } from '@/theme/colors'
 import {
@@ -786,11 +787,16 @@ export function SettingsModal({
           setIsOpen(false)
           try {
             await onSetupPasskey()
-          } catch {
+          } catch (error) {
             toast({
-              title: 'Passkey setup failed',
+              title:
+                error instanceof PrfNotSupportedError
+                  ? 'Passkey provider not supported'
+                  : 'Passkey setup failed',
               description:
-                'Could not create passkey backup. You can try again later.',
+                error instanceof PrfNotSupportedError
+                  ? error.message
+                  : 'Could not create passkey backup. You can try again later.',
               variant: 'destructive',
             })
           }
@@ -2797,11 +2803,16 @@ ${encryptionKey.replace('key_', '')}
                                         'Your encryption key is now backed up with your passkey',
                                     })
                                   }
-                                } catch {
+                                } catch (error) {
                                   toast({
-                                    title: 'Passkey setup failed',
+                                    title:
+                                      error instanceof PrfNotSupportedError
+                                        ? 'Passkey provider not supported'
+                                        : 'Passkey setup failed',
                                     description:
-                                      'Could not create passkey backup. You can try again later.',
+                                      error instanceof PrfNotSupportedError
+                                        ? error.message
+                                        : 'Could not create passkey backup. You can try again later.',
                                     variant: 'destructive',
                                   })
                                 } finally {

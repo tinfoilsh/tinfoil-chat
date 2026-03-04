@@ -11,6 +11,7 @@ import {
   getCachedPrfResult,
   hasPasskeyCredentials,
   loadPasskeyCredentials,
+  PrfNotSupportedError,
   retrieveEncryptedKeys,
   storeEncryptedKeys,
 } from '@/services/passkey'
@@ -483,6 +484,22 @@ export function usePasskeyBackup({
           })
         }
       } catch (error) {
+        if (error instanceof PrfNotSupportedError) {
+          logInfo(
+            'Authenticator does not support PRF during first-time setup',
+            {
+              component: 'usePasskeyBackup',
+              action: 'setupFirstTimePasskeyUser',
+            },
+          )
+          if (isMountedRef.current) {
+            setState((prev) => ({
+              ...prev,
+              passkeySetupAvailable: true,
+            }))
+          }
+          return
+        }
         logError('First-time passkey user setup failed', error, {
           component: 'usePasskeyBackup',
           action: 'setupFirstTimePasskeyUser',
@@ -543,6 +560,7 @@ export function usePasskeyBackup({
       })
       return true
     } catch (error) {
+      if (error instanceof PrfNotSupportedError) throw error
       logError('Passkey setup failed', error, {
         component: 'usePasskeyBackup',
         action: 'setupPasskey',
@@ -569,6 +587,7 @@ export function usePasskeyBackup({
       })
       return newKey
     } catch (error) {
+      if (error instanceof PrfNotSupportedError) throw error
       logError('Failed to create new key split', error, {
         component: 'usePasskeyBackup',
         action: 'setupNewKeySplit',
@@ -590,9 +609,21 @@ export function usePasskeyBackup({
     }
 
     try {
-      const success = await setupPasskey()
+      let success = false
+      try {
+        success = await setupPasskey()
+      } catch (error) {
+        if (error instanceof PrfNotSupportedError) {
+          logInfo('Authenticator does not support PRF during intro setup', {
+            component: 'usePasskeyBackup',
+            action: 'acceptPasskeyIntro',
+          })
+        } else {
+          throw error
+        }
+      }
       if (!success && isMountedRef.current) {
-        // User cancelled the browser WebAuthn prompt — show option in settings
+        // User cancelled or provider unsupported — show option in settings
         setState((prev) => ({ ...prev, passkeySetupAvailable: true }))
       }
 

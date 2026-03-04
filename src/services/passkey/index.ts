@@ -9,6 +9,7 @@ export {
 } from './passkey-key-storage'
 export type { KeyBundle, PasskeyCredentialEntry } from './passkey-key-storage'
 export {
+  PrfNotSupportedError,
   authenticatePrfPasskey,
   clearCachedPrfResult,
   createPrfPasskey,
