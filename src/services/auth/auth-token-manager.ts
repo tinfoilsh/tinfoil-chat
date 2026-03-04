@@ -26,11 +26,20 @@ class AuthTokenManager {
   waitForInit(timeoutMs: number): Promise<boolean> {
     if (this.getToken !== null) return Promise.resolve(true)
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), timeoutMs)
-      this.initResolvers.push(() => {
+      let settled = false
+      const resolver = () => {
+        if (settled) return
+        settled = true
         clearTimeout(timer)
         resolve(true)
-      })
+      }
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        this.initResolvers = this.initResolvers.filter((r) => r !== resolver)
+        resolve(false)
+      }, timeoutMs)
+      this.initResolvers.push(resolver)
     })
   }
 
