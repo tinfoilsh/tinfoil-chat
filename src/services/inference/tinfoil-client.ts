@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/config'
+import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
 import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
@@ -10,6 +11,7 @@ export interface RateLimitInfo {
 }
 
 const SESSION_TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000
+const AUTH_INIT_WAIT_MS = 3000
 
 let clientInstance: TinfoilAI | null = null
 let lastSessionToken: string | null = null
@@ -27,6 +29,17 @@ async function fetchSessionToken(): Promise<string> {
     }
     cachedSessionToken = null
     cachedSessionTokenExpiresAt = null
+  }
+
+  // If the user was previously signed in, wait for Clerk to initialize
+  // the auth token manager before fetching — otherwise we'd get an
+  // anonymous free-tier key that gets cached until expiry.
+  if (
+    !authTokenManager.isInitialized() &&
+    typeof window !== 'undefined' &&
+    localStorage.getItem(AUTH_ACTIVE_USER_ID) !== null
+  ) {
+    await authTokenManager.waitForInit(AUTH_INIT_WAIT_MS)
   }
 
   // Build request headers: include auth if signed in, omit for anonymous users
