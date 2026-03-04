@@ -4,13 +4,34 @@ type TokenGetter = () => Promise<string | null>
 
 class AuthTokenManager {
   private getToken: TokenGetter | null = null
+  private initResolvers: Array<() => void> = []
 
   initialize(getToken: TokenGetter) {
     this.getToken = getToken
+    for (const resolve of this.initResolvers) {
+      resolve()
+    }
+    this.initResolvers = []
   }
 
   isInitialized(): boolean {
     return this.getToken !== null
+  }
+
+  /**
+   * Returns a promise that resolves to `true` when `initialize()` is called,
+   * or `false` if the timeout expires first.  If already initialized,
+   * resolves immediately.
+   */
+  waitForInit(timeoutMs: number): Promise<boolean> {
+    if (this.getToken !== null) return Promise.resolve(true)
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), timeoutMs)
+      this.initResolvers.push(() => {
+        clearTimeout(timer)
+        resolve(true)
+      })
+    })
   }
 
   async getValidToken(): Promise<string> {
