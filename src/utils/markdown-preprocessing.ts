@@ -15,21 +15,27 @@ export function indentCodeBlocksInLists(content: string): string {
   let reindentingBlock = false
   let openingFenceChar = ''
   let openingFenceLength = 0
+  let openingFenceIndent = 0
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     const prevLineBlank = i > 0 && lines[i - 1].trim() === ''
     // If inside any fenced block, check for closing fence and pass through
     if (inFencedBlock) {
-      const trimmed = line.trim()
-      const closingMatch = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      // Closing fence: 0-3 spaces relative to the container.  We approximate
+      // the container margin from the opening fence's indentation.
+      const leadingSpaces = line.search(/\S/)
+      const closingMatch =
+        leadingSpaces >= 0 && leadingSpaces <= openingFenceIndent + 3
+          ? line.match(/^ *(`{3,}|~{3,})\s*$/)
+          : null
       const isClosingFence =
         closingMatch !== null &&
         closingMatch[1][0] === openingFenceChar &&
         closingMatch[1].length >= openingFenceLength
       if (isClosingFence) {
         if (reindentingBlock) {
-          result.push(' '.repeat(listContentIndent) + trimmed)
+          result.push(' '.repeat(listContentIndent) + line.trim())
         } else {
           result.push(line)
         }
@@ -46,9 +52,14 @@ export function indentCodeBlocksInLists(content: string): string {
     // Check for opening fence (must be checked before list detection to avoid
     // false list matches inside top-level code blocks)
     const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})/)
-    if (fenceMatch) {
+    // Per CommonMark, backtick fence info strings must not contain backticks
+    const infoString = fenceMatch
+      ? line.slice(fenceMatch[1].length + fenceMatch[2].length)
+      : ''
+    if (fenceMatch && !(fenceMatch[2][0] === '`' && infoString.includes('`'))) {
       openingFenceChar = fenceMatch[2][0]
       openingFenceLength = fenceMatch[2].length
+      openingFenceIndent = fenceMatch[1].length
       inFencedBlock = true
       if (
         inList &&
@@ -99,15 +110,19 @@ function extractFencedCodeBlocks(text: string, codeBlocks: string[]): string {
   let i = 0
 
   while (i < lines.length) {
-    const openMatch = lines[i].match(/^((?:\s*>)*\s*)(`{3,}|~{3,})/)
-    if (openMatch) {
+    const openMatch = lines[i].match(/^((?:\s*>)* {0,3})(`{3,}|~{3,})/)
+    // Per CommonMark, backtick fence info strings must not contain backticks
+    const infoStr = openMatch
+      ? lines[i].slice(openMatch[1].length + openMatch[2].length)
+      : ''
+    if (openMatch && !(openMatch[2][0] === '`' && infoStr.includes('`'))) {
       const fenceChar = openMatch[2][0]
       const fenceLen = openMatch[2].length
       const blockLines = [lines[i]]
       i++
       while (i < lines.length) {
         blockLines.push(lines[i])
-        const closeMatch = lines[i].match(/^(?:\s*>)*\s*(`{3,}|~{3,})\s*$/)
+        const closeMatch = lines[i].match(/^(?:\s*>)* {0,3}(`{3,}|~{3,})\s*$/)
         if (
           closeMatch &&
           closeMatch[1][0] === fenceChar &&
