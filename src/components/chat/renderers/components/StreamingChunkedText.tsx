@@ -108,25 +108,106 @@ function findTableBoundaries(
   return null
 }
 
+// Find fenced code blocks whose opening and closing fences are at column 0.
+// Fences indented 1+ spaces may belong to list items, so we only match
+// column 0 to avoid splitting list-contained code blocks into separate chunks.
+function findTopLevelCodeBlocks(
+  content: string,
+): Array<{ start: number; end: number; content: string }> {
+  const lines = content.split('\n')
+  const blocks: Array<{ start: number; end: number; content: string }> = []
+  let i = 0
+  let lineStart = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const openMatch = line.match(/^(`{3,}|~{3,})/)
+    // Per CommonMark, backtick fence info strings must not contain backticks
+    const infoStr = openMatch ? line.slice(openMatch[1].length) : ''
+    if (openMatch && !(openMatch[1][0] === '`' && infoStr.includes('`'))) {
+      const fenceChar = openMatch[1][0]
+      const fenceLen = openMatch[1].length
+      const blockStart = lineStart
+      i++
+      lineStart += line.length + 1
+
+      while (i < lines.length) {
+        const closeLine = lines[i]
+        const closeMatch = closeLine.match(/^ {0,3}(`{3,}|~{3,})\s*$/)
+        if (
+          closeMatch &&
+          closeMatch[1][0] === fenceChar &&
+          closeMatch[1].length >= fenceLen
+        ) {
+          const blockEnd = lineStart + closeLine.length
+          blocks.push({
+            start: blockStart,
+            end: blockEnd,
+            content: content.substring(blockStart, blockEnd),
+          })
+          i++
+          lineStart += closeLine.length + 1
+          break
+        }
+        i++
+        lineStart += closeLine.length + 1
+      }
+      continue
+    }
+    i++
+    lineStart += line.length + 1
+  }
+
+  return blocks
+}
+
+// Find the position of an unclosed top-level fence (column 0) in the text.
+// Returns -1 if all fences are closed or there are no top-level fences.
+function findIncompleteTopLevelFence(text: string): number {
+  const lines = text.split('\n')
+  let pos = 0
+  let inFence = false
+  let fenceChar = ''
+  let fenceLen = 0
+  let lastOpenPos = -1
+
+  for (const line of lines) {
+    if (inFence) {
+      const closeMatch = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/)
+      if (
+        closeMatch &&
+        closeMatch[1][0] === fenceChar &&
+        closeMatch[1].length >= fenceLen
+      ) {
+        inFence = false
+      }
+    } else {
+      const openMatch = line.match(/^(`{3,}|~{3,})/)
+      // Per CommonMark, backtick fence info strings must not contain backticks
+      const infoStr = openMatch ? line.slice(openMatch[1].length) : ''
+      if (openMatch && !(openMatch[1][0] === '`' && infoStr.includes('`'))) {
+        fenceChar = openMatch[1][0]
+        fenceLen = openMatch[1].length
+        inFence = true
+        lastOpenPos = pos
+      }
+    }
+    pos += line.length + 1
+  }
+
+  return inFence ? lastOpenPos : -1
+}
+
 function splitIntoChunks(
   content: string,
   isStreaming: boolean,
 ): ContentChunk[] {
   if (!content) return []
 
-  // Find all complete code blocks (opening and closing ```)
-  const codeBlockRegex = /```[\s\S]*?```/g
-  const codeMatches = Array.from(content.matchAll(codeBlockRegex))
-
   const chunks: ContentChunk[] = []
 
-  // First, process code blocks as they take precedence
-  const codeBlocks = codeMatches.map((m) => ({
-    type: 'code' as const,
-    start: m.index!,
-    end: m.index! + m[0].length,
-    content: m[0],
-  }))
+  // Find top-level code blocks (fences at column 0-3, not indented inside lists)
+  const codeBlocks = findTopLevelCodeBlocks(content)
 
   // Now process content, looking for tables between/after code blocks
   let currentPos = 0
@@ -157,23 +238,17 @@ function splitIntoChunks(
   if (currentPos < content.length) {
     const remaining = content.substring(currentPos)
 
-    // Check for incomplete code block in remaining
-    const hasIncompleteCodeBlock =
-      remaining.includes('```') &&
-      (remaining.match(/```/g) || []).length % 2 !== 0
+    // Check for an incomplete top-level code block (unclosed fence at column 0-3)
+    const incompletePos = findIncompleteTopLevelFence(remaining)
 
-    if (hasIncompleteCodeBlock) {
-      const lastTripleBacktick = remaining.lastIndexOf('```')
-      if (lastTripleBacktick > 0) {
-        const beforeCode = remaining.substring(0, lastTripleBacktick)
-        // Content before the incomplete code block is complete
+    if (incompletePos >= 0) {
+      if (incompletePos > 0) {
+        const beforeCode = remaining.substring(0, incompletePos)
         processContentForTables(beforeCode, currentPos, chunks, false)
       }
       chunks.push({
-        id: `code-incomplete-${currentPos + (lastTripleBacktick > 0 ? lastTripleBacktick : 0)}`,
-        content: remaining.substring(
-          lastTripleBacktick > 0 ? lastTripleBacktick : 0,
-        ),
+        id: `code-incomplete-${currentPos + incompletePos}`,
+        content: remaining.substring(incompletePos),
         isComplete: false,
       })
     } else {

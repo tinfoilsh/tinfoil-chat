@@ -71,6 +71,16 @@ describe('markdown-preprocessing', () => {
         expect(preprocessMarkdown(input)).toBe(input)
       })
 
+      it('does not close a block when closing fence is indented 4+ spaces', () => {
+        // Per CommonMark, a closing fence indented 4+ spaces is content, not a fence
+        const input =
+          '```\n<b>still code</b>\n    ```\n<b>still code</b>\n```\n<b>bold</b>'
+        const result = preprocessMarkdown(input)
+        expect(result).toBe(
+          '```\n<b>still code</b>\n    ```\n<b>still code</b>\n```\n**bold**',
+        )
+      })
+
       it('does not close a block with a shorter fence than the opening', () => {
         const input =
           '`````\n<b>still code</b>\n```\n<b>still code</b>\n`````\n<b>bold</b>'
@@ -96,6 +106,18 @@ describe('markdown-preprocessing', () => {
 
       it('preserves nested blockquoted code fences', () => {
         const input = '> > ```\n> > <b>code</b>\n> > ```'
+        expect(preprocessMarkdown(input)).toBe(input)
+      })
+
+      it('does not treat backtick fence with backtick in info string as code block', () => {
+        const input = '``` foo `bar`\n<b>bold</b>\n```'
+        const result = preprocessMarkdown(input)
+        // The opening fence is invalid, so <b> should be converted
+        expect(result).toContain('**bold**')
+      })
+
+      it('allows backticks in tilde fence info strings', () => {
+        const input = '~~~ foo `bar`\n<b>not bold</b>\n~~~'
         expect(preprocessMarkdown(input)).toBe(input)
       })
     })
@@ -340,6 +362,35 @@ describe('markdown-preprocessing', () => {
       })
     })
 
+    describe('backtick info string validation (CommonMark)', () => {
+      it('does not treat backtick fence as opening if info string contains backtick', () => {
+        const input = [
+          '1. Example:',
+          '``` foo `bar`',
+          'this is not code',
+          '```',
+        ].join('\n')
+        // The first line with backticks has a backtick in the info string,
+        // so it's not a valid fence — nothing should be reindented
+        expect(indentCodeBlocksInLists(input)).toBe(input)
+      })
+
+      it('tilde fence info string may contain backticks', () => {
+        const input = [
+          '1. Example:',
+          '~~~ foo `bar`',
+          'this is code',
+          '~~~',
+        ].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        // Tilde fences allow backticks in info strings
+        expect(lines[1]).toBe('   ~~~ foo `bar`')
+        expect(lines[2]).toBe('   this is code')
+        expect(lines[3]).toBe('   ~~~')
+      })
+    })
+
     describe('code blocks outside lists', () => {
       it('does not modify code blocks that are not in a list', () => {
         const input = ['Some text:', '```bash', 'echo hello', '```'].join('\n')
@@ -373,6 +424,37 @@ describe('markdown-preprocessing', () => {
           '   echo hello',
           '   ```',
         ].join('\n')
+        expect(indentCodeBlocksInLists(input)).toBe(input)
+      })
+    })
+
+    describe('closing fence indentation', () => {
+      it('does not treat a 4+ space indented fence as closing fence in column-0 block', () => {
+        const input = [
+          '1. Example:',
+          '```',
+          '    ```',
+          'still in block',
+          '```',
+        ].join('\n')
+        const result = indentCodeBlocksInLists(input)
+        const lines = result.split('\n')
+        // "    ```" is content (4 spaces beyond column-0 opening), not a closing fence
+        expect(lines[2]).toBe('       ```')
+        expect(lines[3]).toBe('   still in block')
+        // Real closing fence
+        expect(lines[4]).toBe('   ```')
+      })
+
+      it('correctly closes fences in nested lists where indent > 3', () => {
+        const input = [
+          '  1. Inner item:',
+          '     ```python',
+          '     code here',
+          '     ```',
+          '  2. Next item:',
+        ].join('\n')
+        // Fences at column 5 are properly indented — should pass through unchanged
         expect(indentCodeBlocksInLists(input)).toBe(input)
       })
     })
