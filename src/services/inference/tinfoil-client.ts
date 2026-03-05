@@ -150,6 +150,7 @@ export function resetTinfoilClient(): void {
   cachedSessionToken = null
   cachedSessionTokenExpiresAt = null
   cachedRateLimit = null
+  refreshInFlight = null
 }
 
 async function initClient(sessionToken: string): Promise<TinfoilAI> {
