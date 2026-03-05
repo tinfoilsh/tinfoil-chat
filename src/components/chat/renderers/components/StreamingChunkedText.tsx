@@ -108,9 +108,10 @@ function findTableBoundaries(
   return null
 }
 
-// Find fenced code blocks whose opening and closing fences are at column 0.
-// Fences indented 1+ spaces may belong to list items, so we only match
-// column 0 to avoid splitting list-contained code blocks into separate chunks.
+// Find fenced code blocks whose opening fence is at column 0.
+// Opening fences indented 1+ spaces may belong to list items, so we only match
+// column 0 openings to avoid splitting list-contained code blocks into separate
+// chunks.  Per CommonMark, closing fences may have 0-3 spaces of indentation.
 function findTopLevelCodeBlocks(
   content: string,
 ): Array<{ start: number; end: number; content: string }> {
@@ -133,7 +134,7 @@ function findTopLevelCodeBlocks(
 
       while (i < lines.length) {
         const closeLine = lines[i]
-        const closeMatch = closeLine.match(/^(`{3,}|~{3,})\s*$/)
+        const closeMatch = closeLine.match(/^ {0,3}(`{3,}|~{3,})\s*$/)
         if (
           closeMatch &&
           closeMatch[1][0] === fenceChar &&
@@ -173,7 +174,7 @@ function findIncompleteTopLevelFence(text: string): number {
 
   for (const line of lines) {
     if (inFence) {
-      const closeMatch = line.match(/^(`{3,}|~{3,})\s*$/)
+      const closeMatch = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/)
       if (
         closeMatch &&
         closeMatch[1][0] === fenceChar &&
