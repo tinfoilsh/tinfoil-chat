@@ -13,8 +13,8 @@ import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useToast } from '@/hooks/use-toast'
 import {
-  decrementRemainingRequests,
   getRateLimitInfo,
+  snapshotAndDecrementRemaining,
   type RateLimitInfo,
 } from '@/services/inference/tinfoil-client'
 import { SignInButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
@@ -1569,7 +1569,7 @@ export function ChatInterface({
     handleQuery(messageText, attachments.length > 0 ? attachments : undefined)
 
     if (rateLimit) {
-      decrementRemainingRequests()
+      snapshotAndDecrementRemaining()
     }
 
     // Keep documents that are still uploading or generating descriptions
