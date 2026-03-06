@@ -18,7 +18,14 @@ let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
 let cachedRateLimit: RateLimitInfo | null = null
+let remainingBeforeRequest: number | null = null
 let refreshInFlight: Promise<void> | null = null
+
+function dispatchRateLimitUpdate(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('rateLimitUpdated'))
+  }
+}
 
 async function fetchSessionToken(): Promise<string> {
   if (cachedSessionToken) {
@@ -95,9 +102,7 @@ async function fetchSessionToken(): Promise<string> {
     cachedRateLimit = null
   }
 
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('rateLimitUpdated'))
-  }
+  dispatchRateLimitUpdate()
 
   return data.key
 }
@@ -106,31 +111,51 @@ export function getRateLimitInfo(): RateLimitInfo | null {
   return cachedRateLimit ? { ...cachedRateLimit } : null
 }
 
-export function decrementRemainingRequests(): void {
+/**
+ * Snapshots the current remaining count and optimistically decrements it.
+ * Called when a request starts so the UI updates immediately and
+ * refreshRateLimit can later detect stale server responses.
+ */
+export function snapshotAndDecrementRemaining(): void {
   if (!cachedRateLimit) return
+  remainingBeforeRequest = cachedRateLimit.remaining
   cachedRateLimit = {
     ...cachedRateLimit,
     remaining: Math.max(0, cachedRateLimit.remaining - 1),
   }
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('rateLimitUpdated'))
-  }
+  dispatchRateLimitUpdate()
 }
 
 /**
  * Forces a fresh fetch of the session token (and rate limit info) from
  * the server, bypassing the local cache.  Called after each stream
  * completes so the UI reflects the server's actual remaining count.
+ *
+ * If the server returns a stale count (>= the pre-request snapshot),
+ * falls back to snapshot - 1 so the UI stays accurate.
  * Concurrent calls are coalesced into a single in-flight request.
  */
 export async function refreshRateLimit(): Promise<void> {
   if (refreshInFlight) return refreshInFlight
 
   refreshInFlight = (async () => {
+    const snapshot = remainingBeforeRequest
+    remainingBeforeRequest = null
     cachedSessionToken = null
     cachedSessionTokenExpiresAt = null
     try {
       await fetchSessionToken()
+      if (
+        snapshot !== null &&
+        cachedRateLimit &&
+        cachedRateLimit.remaining >= snapshot
+      ) {
+        cachedRateLimit = {
+          ...cachedRateLimit,
+          remaining: Math.max(0, snapshot - 1),
+        }
+        dispatchRateLimitUpdate()
+      }
     } catch (error) {
       logError('Failed to refresh rate limit from server', error, {
         component: 'tinfoil-client',
@@ -150,6 +175,7 @@ export function resetTinfoilClient(): void {
   cachedSessionToken = null
   cachedSessionTokenExpiresAt = null
   cachedRateLimit = null
+  remainingBeforeRequest = null
   refreshInFlight = null
 }
 
