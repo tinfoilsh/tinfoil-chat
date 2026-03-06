@@ -1,5 +1,6 @@
 import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
+import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
 import {
   SETTINGS_CHAT_FONT,
@@ -38,7 +39,7 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { generateReverseId } from '@/utils/reverse-id'
-import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs'
+import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -1758,12 +1759,8 @@ ${encryptionKey.replace('key_', '')}
                     : 'text-content-secondary hover:bg-surface-chat/50',
                 )}
               >
-                {item.id === 'account' && isSignedIn && user?.imageUrl ? (
-                  <img
-                    src={user.imageUrl}
-                    alt=""
-                    className="h-4 w-4 rounded-full object-cover"
-                  />
+                {item.id === 'account' && isSignedIn ? (
+                  <UserAvatar size={16} />
                 ) : (
                   <item.icon className="h-4 w-4" />
                 )}
@@ -1798,12 +1795,8 @@ ${encryptionKey.replace('key_', '')}
                     : 'text-content-secondary hover:bg-surface-chat/50',
                 )}
               >
-                {item.id === 'account' && isSignedIn && user?.imageUrl ? (
-                  <img
-                    src={user.imageUrl}
-                    alt=""
-                    className="h-5 w-5 rounded-full object-cover"
-                  />
+                {item.id === 'account' && isSignedIn ? (
+                  <UserAvatar size={20} />
                 ) : (
                   <item.icon className="h-5 w-5" />
                 )}
@@ -3390,13 +3383,7 @@ ${encryptionKey.replace('key_', '')}
                       >
                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
                           <div className="flex items-center gap-4">
-                            <UserButton
-                              appearance={{
-                                elements: {
-                                  avatarBox: 'w-12 h-12',
-                                },
-                              }}
-                            />
+                            <UserAvatar size={48} />
                             <div>
                               <div className="font-aeonik text-base font-medium text-content-primary">
                                 {user?.firstName
