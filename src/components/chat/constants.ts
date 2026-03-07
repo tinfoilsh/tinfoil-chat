@@ -16,6 +16,8 @@ export const CONSTANTS = {
   DEFAULT_AUDIO_MODEL: 'voxtral-small-24b',
   // Copy button timeout in milliseconds (2 seconds)
   COPY_TIMEOUT_MS: 2000,
+  // Maximum width for table columns in pixels
+  TABLE_COLUMN_MAX_WIDTH_PX: 300,
   // Chat initialization delay in milliseconds
   CHAT_INIT_DELAY_MS: 300,
   // State update delay for async operations

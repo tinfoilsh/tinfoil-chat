@@ -1,3 +1,4 @@
+import { CONSTANTS } from '@/components/chat/constants'
 import { CodeBlock } from '@/components/code-block'
 import {
   Tooltip,
@@ -193,6 +194,7 @@ export function createMarkdownComponents({
           {...props}
           className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-content-primary"
           style={{
+            maxWidth: CONSTANTS.TABLE_COLUMN_MAX_WIDTH_PX,
             wordWrap: 'break-word',
             whiteSpace: 'normal',
           }}
@@ -208,6 +210,7 @@ export function createMarkdownComponents({
           {...props}
           className="px-4 py-3 text-sm text-content-primary"
           style={{
+            maxWidth: CONSTANTS.TABLE_COLUMN_MAX_WIDTH_PX,
             wordWrap: 'break-word',
             whiteSpace: 'normal',
           }}
