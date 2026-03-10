@@ -85,22 +85,15 @@ export class ChatQueryBuilder {
       if (msg.role === 'user') {
         let userContent = this.buildUserContent(msg, model.multimodal)
 
-        // For models that don't use system role: prepend system instructions to the FIRST user message only
+        // For models that don't use system role (e.g. DeepSeek): inject system instructions as a separate user message before the first user message
         if (!addedSystemInstructions) {
-          const instructions = processedRules
+          const rawInstructions = processedRules
             ? `${processedSystemPrompt}\n\n${processedRules}`
             : processedSystemPrompt
-
-          if (Array.isArray(userContent)) {
-            // For multimodal content, prepend instructions to the text part
-            const textPart = userContent.find((part) => part.type === 'text')
-            if (textPart && textPart.text) {
-              textPart.text = `${instructions}\n\n${textPart.text}`
-            }
-          } else {
-            // String content
-            userContent = `${instructions}\n\n${userContent}`
-          }
+          result.push({
+            role: 'user',
+            content: `<system>\n${rawInstructions}\n</system>`,
+          } as ChatCompletionUserMessageParam)
           addedSystemInstructions = true
         }
 
@@ -131,61 +124,22 @@ export class ChatQueryBuilder {
   }
 
   /**
-   * Determine if the model should use system role or prepend to user message
+   * Determine if the model should use system role or prepend to user message.
+   * Most models support system role; DeepSeek is the known exception.
    */
   private static shouldUseSystemRole(modelId: string): boolean {
-    return (
-      modelId.startsWith('llama') ||
-      modelId.startsWith('gpt-oss') ||
-      modelId.startsWith('qwen') ||
-      modelId.startsWith('mistral')
-    )
+    return !modelId.startsWith('deepseek')
   }
 
   /**
    * Build system content based on model requirements
    */
   private static buildSystemContent(
-    modelId: string,
+    _modelId: string,
     systemPrompt: string,
     rules: string,
   ): string | null {
-    const fullPrompt = rules ? `${systemPrompt}\n${rules}` : systemPrompt
-
-    if (modelId.startsWith('deepseek')) {
-      // DeepSeek R1 deliberately does not support explicit system prompts
-      // According to Together.ai docs, the model performs worse if a separate system prompt is added
-      // All instructions should be placed in the user message
-      return null
-    }
-
-    if (modelId.startsWith('mistral')) {
-      // Mistral models support system prompts using ChatML-like format
-      // Compatible with OpenAI's message schema
-      return fullPrompt
-    }
-
-    if (modelId.startsWith('llama')) {
-      // Llama 3.3 uses Meta's structured chat template with header tokens
-      // <|start_header_id|>system<|end_header_id|> format
-      // APIs handle token insertion automatically when using standard message format
-      return fullPrompt
-    }
-
-    if (modelId.startsWith('gpt-oss')) {
-      // GPT-OSS models use the Harmony prompt format from OpenAI's open-weights family
-      // System prompts go in the "system" message field following OpenAI Chat Completions schema
-      return fullPrompt
-    }
-
-    if (modelId.startsWith('qwen')) {
-      // Qwen models support system prompts using ChatML template format
-      // Compatible with OpenAI's message schema
-      return fullPrompt
-    }
-
-    // Default fallback: prepend to first user message (safer for unknown models)
-    return null
+    return rules ? `${systemPrompt}\n${rules}` : systemPrompt
   }
 
   /**
