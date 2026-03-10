@@ -15,6 +15,7 @@ import type {
   Annotation,
   Chat,
   Message,
+  URLFetchState,
   WebSearchSource,
   WebSearchState,
 } from '../types'
@@ -123,6 +124,7 @@ export async function processStreamingResponse(
     let sseBuffer = ''
     let isUsingReasoningFormat = false
     let webSearchState: WebSearchState | undefined = undefined
+    let urlFetches: URLFetchState[] = []
     let collectedSources: WebSearchSource[] = []
     let collectedAnnotations: Annotation[] = []
     let searchReasoning = ''
@@ -278,6 +280,38 @@ export async function processStreamingResponse(
 
           // Handle web_search_call events
           if (json.type === 'web_search_call') {
+            // Handle URL fetch events (action.type === 'open_page')
+            if (json.action?.type === 'open_page' && json.action?.url) {
+              const fetchUrl = json.action.url as string
+              const fetchId = (json.id as string) || fetchUrl
+              const fetchStatus = json.status as string
+
+              if (fetchStatus === 'in_progress') {
+                urlFetches = [
+                  ...urlFetches,
+                  { id: fetchId, url: fetchUrl, status: 'fetching' },
+                ]
+              } else if (
+                fetchStatus === 'completed' ||
+                fetchStatus === 'failed'
+              ) {
+                urlFetches = urlFetches.map((f) =>
+                  f.id === fetchId
+                    ? { ...f, status: fetchStatus as 'completed' | 'failed' }
+                    : f,
+                )
+              }
+
+              assistantMessage = {
+                ...assistantMessage,
+                urlFetches: [...urlFetches],
+              }
+              if (isSameChat()) {
+                scheduleStreamingUpdate()
+              }
+              continue
+            }
+
             const searchQuery = json.action?.query
             const searchStatus = json.status
 

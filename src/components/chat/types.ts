@@ -22,6 +22,12 @@ export type WebSearchState = {
   reason?: string
 }
 
+export type URLFetchState = {
+  id: string
+  url: string
+  status: 'fetching' | 'completed' | 'failed'
+}
+
 export type Attachment = {
   id: string
   type: 'image' | 'document'
@@ -51,6 +57,7 @@ export type Message = {
   thinkingDuration?: number // Duration in seconds
   isError?: boolean
   isRateLimitError?: boolean
+  urlFetches?: URLFetchState[]
   webSearch?: WebSearchState
   webSearchBeforeThinking?: boolean // True if web search started before thinking
   annotations?: Annotation[] // URL citations from web search
