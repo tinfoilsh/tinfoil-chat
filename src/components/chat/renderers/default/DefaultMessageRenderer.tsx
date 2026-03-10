@@ -15,6 +15,7 @@ import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
+import { URLFetchProcess } from '../components/URLFetchProcess'
 import { WebSearchProcess } from '../components/WebSearchProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
@@ -201,6 +202,15 @@ const DefaultMessageComponent = ({
           documentContent={message.documentContent}
           imageData={message.imageData}
         />
+      )}
+
+      {/* Show URL fetch status for assistant messages */}
+      {!isUser && message.urlFetches && message.urlFetches.length > 0 && (
+        <div className="no-scroll-anchoring w-full px-4 py-2">
+          <div className="mb-2 w-full">
+            <URLFetchProcess urlFetches={message.urlFetches} />
+          </div>
+        </div>
       )}
 
       {/* Show web search for assistant messages - before thoughts if it started first */}
