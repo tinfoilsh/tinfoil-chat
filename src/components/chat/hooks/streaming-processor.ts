@@ -416,9 +416,11 @@ export async function processStreamingResponse(
           }
 
           const deltaReasoningContent =
-            json.choices?.[0]?.delta?.reasoning_content
+            json.choices?.[0]?.delta?.reasoning_content ??
+            json.choices?.[0]?.delta?.reasoning
           const messageReasoningContent =
-            json.choices?.[0]?.message?.reasoning_content
+            json.choices?.[0]?.message?.reasoning_content ??
+            json.choices?.[0]?.message?.reasoning
           const hasReasoningContent =
             (deltaReasoningContent !== undefined &&
               deltaReasoningContent !== null) ||
@@ -426,7 +428,9 @@ export async function processStreamingResponse(
               messageReasoningContent !== null)
           const reasoningContent =
             json.choices?.[0]?.message?.reasoning_content ||
+            json.choices?.[0]?.message?.reasoning ||
             json.choices?.[0]?.delta?.reasoning_content ||
+            json.choices?.[0]?.delta?.reasoning ||
             ''
           let content = json.choices?.[0]?.delta?.content || ''
 
