@@ -88,7 +88,7 @@ export const getSystemPromptAndRules = async (): Promise<{
 
     const data = await response.json()
     return {
-      systemPrompt: `<system>\n${data.systemPrompt}\n</system>`,
+      systemPrompt: data.systemPrompt,
       rules: data.rules,
     }
   } catch (error) {
@@ -97,7 +97,7 @@ export const getSystemPromptAndRules = async (): Promise<{
     })
     // Return a basic fallback
     return {
-      systemPrompt: `<system> You are an intelligent and helpful assistant named Tin. </system>`,
+      systemPrompt: 'You are an intelligent and helpful assistant named Tin.',
       rules: '',
     }
   }
