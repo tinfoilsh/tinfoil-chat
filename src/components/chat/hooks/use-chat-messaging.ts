@@ -448,17 +448,13 @@ export function useChatMessaging({
       // Fire title generation in parallel with streaming (based on user's message).
       // The promise is awaited after streaming completes, before the final save.
       if (isFirstMessage && userMessage) {
-        const titleModel = models.find((m) => m.type === 'title')
-        if (titleModel) {
-          const titlePromise = generateTitle(
-            [{ role: 'user', content: userMessage.content || '' }],
-            titleModel.modelName,
-          )
-          // Prevent unhandled rejection if streaming exits early and the
-          // promise is never awaited (e.g. abort, navigation, empty response)
-          titlePromise.catch(() => {})
-          earlyTitlePromiseRef.current = titlePromise
-        }
+        const titlePromise = generateTitle([
+          { role: 'user', content: userMessage.content || '' },
+        ])
+        // Prevent unhandled rejection if streaming exits early and the
+        // promise is never awaited (e.g. abort, navigation, empty response)
+        titlePromise.catch(() => {})
+        earlyTitlePromiseRef.current = titlePromise
       }
 
       // Project memory is currently disabled - uncomment to re-enable
