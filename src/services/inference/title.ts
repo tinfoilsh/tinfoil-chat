@@ -1,13 +1,11 @@
 import { CONSTANTS } from '@/components/chat/constants'
 import { logError } from '@/utils/error-handling'
-import { getTinfoilClient } from './tinfoil-client'
+import { summarize } from './summary-client'
 
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
-  titleModelName?: string,
 ): Promise<string> {
   if (!messages || messages.length === 0) return 'Untitled'
-  if (!titleModelName) return 'Untitled'
 
   try {
     const userMessage = messages.find((msg) => msg.role === 'user')
@@ -18,22 +16,11 @@ export async function generateTitle(
       .slice(0, CONSTANTS.TITLE_GENERATION_WORD_THRESHOLD)
       .join(' ')
 
-    const client = await getTinfoilClient()
-
-    const completion = await client.chat.completions.create({
-      model: titleModelName,
-      messages: [
-        { role: 'system', content: CONSTANTS.TITLE_GENERATION_PROMPT },
-        {
-          role: 'user',
-          content: truncatedContent,
-        },
-      ],
-      stream: false,
-      max_tokens: 50,
+    const title = await summarize({
+      content: truncatedContent,
+      style: 'title_summary',
     })
 
-    const title = completion.choices?.[0]?.message?.content?.trim() || ''
     const cleanTitle = title.replace(/^["']|["']$/g, '').trim()
     if (cleanTitle && cleanTitle.length > 0 && cleanTitle.length <= 50) {
       return cleanTitle
@@ -43,9 +30,6 @@ export async function generateTitle(
     logError('Failed to generate title', error, {
       component: 'title',
       action: 'generateTitle',
-      metadata: {
-        modelName: titleModelName,
-      },
     })
     return 'Untitled'
   }

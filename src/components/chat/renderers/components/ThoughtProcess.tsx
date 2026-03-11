@@ -1,6 +1,5 @@
-import { CONSTANTS } from '@/components/chat/constants'
 import { LoadingDots } from '@/components/loading-dots'
-import { getTinfoilClient } from '@/services/inference/tinfoil-client'
+import { summarize } from '@/services/inference/summary-client'
 import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
@@ -22,7 +21,6 @@ interface ThoughtProcessProps {
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
-  titleModelName?: string
 }
 
 export const ThoughtProcess = memo(function ThoughtProcess({
@@ -34,7 +32,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   messageId,
   expandedThoughtsState,
   setExpandedThoughtsState,
-  titleModelName,
 }: ThoughtProcessProps) {
   const isExpanded =
     messageId && expandedThoughtsState
@@ -65,7 +62,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       thoughtText: string,
       isMountedRef: React.MutableRefObject<boolean>,
     ) => {
-      if (!titleModelName || !thoughtText.trim()) {
+      if (!thoughtText.trim()) {
         if (isMountedRef.current) {
           setThoughtSummary('')
         }
@@ -73,25 +70,11 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       }
 
       try {
-        const client = await getTinfoilClient()
-        const completion = await client.chat.completions.create({
-          model: titleModelName,
-          messages: [
-            {
-              role: 'system',
-              content: CONSTANTS.THOUGHT_SUMMARY_GENERATION_PROMPT,
-            },
-            {
-              role: 'user',
-              content: thoughtText,
-            },
-          ],
-          stream: false,
-          max_tokens: 50,
+        const generatedSummary = await summarize({
+          content: thoughtText,
+          style: 'thoughts_summary',
         })
 
-        const generatedSummary =
-          completion.choices?.[0]?.message?.content?.trim() || ''
         const cleaned = generatedSummary
           .replace(/[".]/g, '')
           .replace(
@@ -114,7 +97,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         }
       }
     },
-    [titleModelName],
+    [],
   )
 
   useEffect(() => {

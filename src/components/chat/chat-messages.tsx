@@ -63,7 +63,6 @@ const ChatMessage = memo(
     isStreaming = false,
     expandedThoughtsState,
     setExpandedThoughtsState,
-    titleModelName,
     onEditMessage,
     onRegenerateMessage,
   }: {
@@ -77,7 +76,6 @@ const ChatMessage = memo(
     setExpandedThoughtsState: React.Dispatch<
       React.SetStateAction<Record<string, boolean>>
     >
-    titleModelName?: string
     onEditMessage?: (messageIndex: number, newContent: string) => void
     onRegenerateMessage?: (messageIndex: number) => void
   }) {
@@ -96,7 +94,6 @@ const ChatMessage = memo(
         isStreaming={isStreaming}
         expandedThoughtsState={expandedThoughtsState}
         setExpandedThoughtsState={setExpandedThoughtsState}
-        titleModelName={titleModelName}
         onEditMessage={onEditMessage}
         onRegenerateMessage={onRegenerateMessage}
       />
@@ -126,8 +123,7 @@ const ChatMessage = memo(
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
-        prevExpanded === nextExpanded &&
-        prevProps.titleModelName === nextProps.titleModelName
+        prevExpanded === nextExpanded
       )
     }
 
@@ -147,8 +143,7 @@ const ChatMessage = memo(
         prevProps.isDarkMode === nextProps.isDarkMode &&
         prevProps.isLastMessage === nextProps.isLastMessage &&
         prevProps.isStreaming === nextProps.isStreaming &&
-        prevExpanded === nextExpanded &&
-        prevProps.titleModelName === nextProps.titleModelName
+        prevExpanded === nextExpanded
       )
     }
 
@@ -170,7 +165,6 @@ const ChatMessage = memo(
       prevExpanded === nextExpanded &&
       prevProps.setExpandedThoughtsState ===
         nextProps.setExpandedThoughtsState &&
-      prevProps.titleModelName === nextProps.titleModelName &&
       prevProps.onEditMessage === nextProps.onEditMessage &&
       prevProps.onRegenerateMessage === nextProps.onRegenerateMessage
     )
@@ -357,11 +351,6 @@ export function ChatMessages({
     return models.find((m) => m.modelName === selectedModel) || models[0]
   }, [models, selectedModel])
 
-  const titleModelName = useMemo(() => {
-    const titleModel = models?.find((m) => m.type === 'title')
-    return titleModel?.modelName
-  }, [models])
-
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const archived =
@@ -444,7 +433,6 @@ export function ChatMessages({
                 isStreaming={false}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
-                titleModelName={titleModelName}
                 onEditMessage={onEditMessage}
                 onRegenerateMessage={onRegenerateMessage}
               />
@@ -468,7 +456,6 @@ export function ChatMessages({
           isStreaming={i === liveMessages.length - 1 && isStreamingResponse}
           expandedThoughtsState={expandedThoughtsState}
           setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
-          titleModelName={titleModelName}
           onEditMessage={onEditMessage}
           onRegenerateMessage={onRegenerateMessage}
         />

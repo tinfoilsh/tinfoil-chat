@@ -27,7 +27,6 @@ const DefaultMessageComponent = ({
   isStreaming,
   expandedThoughtsState,
   setExpandedThoughtsState,
-  titleModelName,
   onEditMessage,
   onRegenerateMessage,
 }: MessageRenderProps) => {
@@ -237,7 +236,6 @@ const DefaultMessageComponent = ({
                 messageId={messageUniqueId}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={setExpandedThoughtsState}
-                titleModelName={titleModelName}
               />
             </div>
           </div>
