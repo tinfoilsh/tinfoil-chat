@@ -1,7 +1,7 @@
-import { processCitationMarkers } from '@/components/chat/hooks/streaming-processor'
 import type { WebSearchSource } from '@/components/chat/types'
 import { LoadingDots } from '@/components/loading-dots'
 import { summarize } from '@/services/inference/summary-client'
+import { processCitationMarkers } from '@/utils/citation-processing'
 import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
@@ -81,13 +81,8 @@ export const ThoughtProcess = memo(function ThoughtProcess({
           style: 'thoughts_summary',
         })
 
-        const cleaned = generatedSummary
-          .replace(/^["'\s]+|["'.\s]+$/g, '')
-          .replace(/\s+/g, ' ')
-          .trim()
-        const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
-        if (isMountedRef.current && capitalized) {
-          setThoughtSummary(capitalized)
+        if (isMountedRef.current && generatedSummary.trim()) {
+          setThoughtSummary(generatedSummary.trim())
         }
       } catch (error) {
         logError('Failed to generate thought summary', error, {
@@ -383,9 +378,14 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                     const secondTildeIndex = rest.indexOf('~')
                     if (secondTildeIndex !== -1) {
                       const url = rest.slice(0, secondTildeIndex)
-                      const title = decodeURIComponent(
-                        rest.slice(secondTildeIndex + 1),
-                      )
+                      let title: string
+                      try {
+                        title = decodeURIComponent(
+                          rest.slice(secondTildeIndex + 1),
+                        )
+                      } catch {
+                        title = rest.slice(secondTildeIndex + 1)
+                      }
                       const sanitizedHref = sanitizeUrl(url)
                       return (
                         <a
