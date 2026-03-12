@@ -1,3 +1,5 @@
+import { processCitationMarkers } from '@/components/chat/hooks/streaming-processor'
+import type { WebSearchSource } from '@/components/chat/types'
 import { LoadingDots } from '@/components/loading-dots'
 import { summarize } from '@/services/inference/summary-client'
 import { logError } from '@/utils/error-handling'
@@ -6,6 +8,7 @@ import {
   sanitizeUnsupportedMathBlocks,
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
+import { sanitizeUrl } from '@braintree/sanitize-url'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useMathPlugins } from './use-math-plugins'
@@ -21,6 +24,7 @@ interface ThoughtProcessProps {
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
+  sources?: WebSearchSource[]
 }
 
 export const ThoughtProcess = memo(function ThoughtProcess({
@@ -32,6 +36,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   messageId,
   expandedThoughtsState,
   setExpandedThoughtsState,
+  sources,
 }: ThoughtProcessProps) {
   const isExpanded =
     messageId && expandedThoughtsState
@@ -77,11 +82,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         })
 
         const cleaned = generatedSummary
-          .replace(/[".]/g, '')
-          .replace(
-            /\b(my|your|yours|mine|our|ours|their|theirs|his|her|hers)\b/gi,
-            '',
-          )
+          .replace(/^["'\s]+|["'.\s]+$/g, '')
           .replace(/\s+/g, ' ')
           .trim()
         const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
@@ -115,6 +116,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     if (summaryGenerationRef.current) return
 
+    const TAIL_WORD_COUNT = 200
+    const words = thoughts.split(/\s+/).filter(Boolean)
+    const tailText =
+      words.length > TAIL_WORD_COUNT
+        ? words.slice(-TAIL_WORD_COUNT).join(' ')
+        : thoughts
+
     const MIN_SUMMARY_INTERVAL_MS = 3000
     const timeSinceLastSummary = Date.now() - lastSummaryTimeRef.current
     if (timeSinceLastSummary < MIN_SUMMARY_INTERVAL_MS) {
@@ -124,7 +132,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         if (summaryGenerationRef.current) return
         lastSummaryTimeRef.current = Date.now()
         summaryGenerationRef.current = generateSummary(
-          thoughts,
+          tailText,
           isMountedRef,
         ).finally(() => {
           summaryGenerationRef.current = null
@@ -135,7 +143,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     lastSummaryTimeRef.current = Date.now()
     summaryGenerationRef.current = generateSummary(
-      thoughts,
+      tailText,
       isMountedRef,
     ).finally(() => {
       summaryGenerationRef.current = null
@@ -259,7 +267,10 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const preprocessed = preprocessMarkdown(thoughts)
   const processedThoughts = processLatexTags(preprocessed)
-  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
+  const withCitations = sources?.length
+    ? processCitationMarkers(processedThoughts, sources)
+    : processedThoughts
+  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(withCitations)
 
   if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
     return null
@@ -364,16 +375,54 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                     {children}
                   </code>
                 ),
-              a: ({ children, href }: any) => (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 underline hover:text-blue-600"
-                >
-                  {children}
-                </a>
-              ),
+              a: ({ children, href }: any) => {
+                if (href?.startsWith('#cite-')) {
+                  const tildeIndex = href.indexOf('~')
+                  if (tildeIndex !== -1) {
+                    const rest = href.slice(tildeIndex + 1)
+                    const secondTildeIndex = rest.indexOf('~')
+                    if (secondTildeIndex !== -1) {
+                      const url = rest.slice(0, secondTildeIndex)
+                      const title = decodeURIComponent(
+                        rest.slice(secondTildeIndex + 1),
+                      )
+                      const sanitizedHref = sanitizeUrl(url)
+                      return (
+                        <a
+                          href={sanitizedHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 px-1.5 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
+                          title={title || url}
+                        >
+                          {children}
+                        </a>
+                      )
+                    }
+                    const sanitizedHref = sanitizeUrl(rest)
+                    return (
+                      <a
+                        href={sanitizedHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 px-1.5 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
+                      >
+                        {children}
+                      </a>
+                    )
+                  }
+                }
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 underline hover:text-blue-600"
+                  >
+                    {children}
+                  </a>
+                )
+              },
             }}
           >
             {sanitizedThoughts}

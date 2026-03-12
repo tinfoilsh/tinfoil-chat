@@ -236,6 +236,7 @@ const DefaultMessageComponent = ({
                 messageId={messageUniqueId}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={setExpandedThoughtsState}
+                sources={message.webSearch?.sources}
               />
             </div>
           </div>
