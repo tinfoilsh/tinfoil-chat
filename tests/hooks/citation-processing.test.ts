@@ -1,5 +1,5 @@
-import { processCitationMarkers } from '@/components/chat/hooks/streaming-processor'
 import type { WebSearchSource } from '@/components/chat/types'
+import { processCitationMarkers } from '@/utils/citation-processing'
 import { describe, expect, it } from 'vitest'
 
 describe('processCitationMarkers', () => {

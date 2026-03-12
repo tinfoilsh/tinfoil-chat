@@ -10,6 +10,7 @@
  * to storage directly. All persistence goes through updateChatWithHistoryCheck.
  */
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
+import { processCitationMarkers } from '@/utils/citation-processing'
 import { logError } from '@/utils/error-handling'
 import type {
   Annotation,
@@ -19,33 +20,6 @@ import type {
   WebSearchSource,
   WebSearchState,
 } from '../types'
-
-/**
- * Process citation markers (e.g. 【1】) into markdown links.
- * Called once at stream end to store processed content.
- */
-export function processCitationMarkers(
-  content: string,
-  sources: WebSearchSource[],
-): string {
-  if (sources.length === 0) return content
-
-  return content.replace(/【(\d+)[^】]*】/g, (match, num) => {
-    const index = parseInt(num, 10) - 1
-    const source = sources[index]
-    if (!source) return match
-    const encodedUrl = source.url
-      .replace(/\(/g, '%28')
-      .replace(/\)/g, '%29')
-      .replace(/\|/g, '%7C')
-      .replace(/~/g, '%7E')
-    const encodedTitle = encodeURIComponent(source.title || '')
-      .replace(/\(/g, '%28')
-      .replace(/\)/g, '%29')
-      .replace(/~/g, '%7E')
-    return `[${num}](#cite-${num}~${encodedUrl}~${encodedTitle})`
-  })
-}
 
 export interface StreamingContext {
   updatedChat: Chat

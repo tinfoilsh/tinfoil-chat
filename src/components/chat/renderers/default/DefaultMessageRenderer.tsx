@@ -50,6 +50,15 @@ const DefaultMessageComponent = ({
       : Date.now()
     return `${message.role}-${timestamp}`
   }, [message.role, message.timestamp])
+  const thoughtSources = React.useMemo(
+    () =>
+      message.webSearch?.sources ??
+      message.annotations?.map((a) => ({
+        title: a.url_citation.title,
+        url: a.url_citation.url,
+      })),
+    [message.webSearch?.sources, message.annotations],
+  )
   const [showActions, setShowActions] = React.useState(false)
   const lastContentRef = React.useRef(message.content)
   const showActionsTimeoutRef = React.useRef<ReturnType<
@@ -236,7 +245,7 @@ const DefaultMessageComponent = ({
                 messageId={messageUniqueId}
                 expandedThoughtsState={expandedThoughtsState}
                 setExpandedThoughtsState={setExpandedThoughtsState}
-                sources={message.webSearch?.sources}
+                sources={thoughtSources}
               />
             </div>
           </div>
