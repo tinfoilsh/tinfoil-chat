@@ -45,6 +45,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const isUserScrollingRef = useRef<boolean>(false)
   const [thoughtSummary, setThoughtSummary] = useState<string>('')
   const summaryGenerationRef = useRef<Promise<void> | null>(null)
+  const lastSummaryTimeRef = useRef<number>(0)
   const isMountedRef = useRef<boolean>(true)
   const wasExpandedRef = useRef<boolean>(isExpanded)
 
@@ -114,6 +115,25 @@ export const ThoughtProcess = memo(function ThoughtProcess({
 
     if (summaryGenerationRef.current) return
 
+    const MIN_SUMMARY_INTERVAL_MS = 3000
+    const timeSinceLastSummary = Date.now() - lastSummaryTimeRef.current
+    if (timeSinceLastSummary < MIN_SUMMARY_INTERVAL_MS) {
+      const delay = MIN_SUMMARY_INTERVAL_MS - timeSinceLastSummary
+      const timeoutId = setTimeout(() => {
+        if (!isMountedRef.current || !isThinking) return
+        if (summaryGenerationRef.current) return
+        lastSummaryTimeRef.current = Date.now()
+        summaryGenerationRef.current = generateSummary(
+          thoughts,
+          isMountedRef,
+        ).finally(() => {
+          summaryGenerationRef.current = null
+        })
+      }, delay)
+      return () => clearTimeout(timeoutId)
+    }
+
+    lastSummaryTimeRef.current = Date.now()
     summaryGenerationRef.current = generateSummary(
       thoughts,
       isMountedRef,
