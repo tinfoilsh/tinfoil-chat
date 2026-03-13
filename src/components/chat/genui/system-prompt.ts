@@ -27,6 +27,15 @@ Available components:
 5. **progress-bar** - Show progress toward a goal.
    Props: { "label": string, "value": number, "max"?: number }
 
+6. **bar-chart** - Render a bar chart for categorical comparisons.
+   Props: { "data": [{ "xKey_value": string, "yKey_value": number }, ...], "xKey": string, "yKey": string, "title"?: string, "color"?: string }
+
+7. **line-chart** - Render a line chart for trends over time.
+   Props: { "data": [{ "xKey_value": string, "yKey_value": number }, ...], "xKey": string, "yKey": string, "title"?: string, "color"?: string }
+
+8. **pie-chart** - Render a pie chart for proportional data.
+   Props: { "data": [{ "nameKey_value": string, "valueKey_value": number }, ...], "nameKey": string, "valueKey": string, "title"?: string }
+
 Guidelines:
 - Only use genui blocks when visual structure adds clarity (comparisons, metrics, step-by-step processes, progress tracking).
 - For simple information, prefer regular text or markdown.

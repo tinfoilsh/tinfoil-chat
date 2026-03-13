@@ -1,5 +1,8 @@
+import { BarChart, validateBarChartProps } from './components/BarChart'
 import { DataTable, validateDataTableProps } from './components/DataTable'
 import { InfoCard, validateInfoCardProps } from './components/InfoCard'
+import { LineChart, validateLineChartProps } from './components/LineChart'
+import { PieChart, validatePieChartProps } from './components/PieChart'
 import { ProgressBar, validateProgressBarProps } from './components/ProgressBar'
 import { StatCards, validateStatCardsProps } from './components/StatCards'
 import { Steps, validateStepsProps } from './components/Steps'
@@ -14,6 +17,9 @@ const GENUI_COMPONENTS: Record<string, GenUIComponentDef> = {
     validate: validateProgressBarProps,
     component: ProgressBar,
   },
+  'bar-chart': { validate: validateBarChartProps, component: BarChart },
+  'line-chart': { validate: validateLineChartProps, component: LineChart },
+  'pie-chart': { validate: validatePieChartProps, component: PieChart },
 }
 
 export function registerGenUIComponent(
