@@ -23,6 +23,8 @@ import type {
  * - **Unknown models**: Prepends to first user message (safe default)
  */
 
+const GENUI_TOOL_HINT = `You have render_* tools for creating visual components (charts, tables, stat cards, etc.). When the user asks for a chart, table, or visual data presentation, always use the appropriate render tool instead of markdown, mermaid, or code blocks. Use them whenever visual structure adds clarity.`
+
 export interface ChatQueryBuilderParams {
   model: BaseModel
   systemPrompt: string
@@ -92,7 +94,7 @@ export class ChatQueryBuilder {
             : processedSystemPrompt
           result.push({
             role: 'user',
-            content: `<system>\n${rawInstructions}\n</system>`,
+            content: `<system>\n${rawInstructions}\n\n${GENUI_TOOL_HINT}\n</system>`,
           } as ChatCompletionUserMessageParam)
           addedSystemInstructions = true
         }
@@ -162,7 +164,8 @@ export class ChatQueryBuilder {
     systemPrompt: string,
     rules: string,
   ): string | null {
-    return rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    const base = rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    return `${base}\n\n${GENUI_TOOL_HINT}`
   }
 
   /**
