@@ -14,8 +14,8 @@ interface StatCardsProps {
 export function StatCards({ stats }: StatCardsProps) {
   return (
     <div className="my-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {stats.map((stat) => (
-        <Card key={stat.label}>
+      {stats.map((stat, index) => (
+        <Card key={index}>
           <CardContent className="p-4">
             <p className="text-xs font-medium text-content-muted">
               {stat.label}

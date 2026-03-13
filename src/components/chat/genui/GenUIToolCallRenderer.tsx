@@ -31,6 +31,17 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
               </div>
             )
           }
+          // Parsed but unrecognized tool or failed validation — show fallback
+          if (!isStreaming) {
+            return (
+              <div
+                key={tc.id}
+                className="my-4 rounded-lg border border-border-subtle bg-transparent px-4 py-3 text-sm text-content-muted"
+              >
+                Unable to render component: {tc.name}
+              </div>
+            )
+          }
         }
 
         if (isStreaming) {
@@ -47,7 +58,15 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           )
         }
 
-        return null
+        // Finished streaming but JSON never parsed — show fallback
+        return (
+          <div
+            key={tc.id}
+            className="my-4 rounded-lg border border-border-subtle bg-transparent px-4 py-3 text-sm text-content-muted"
+          >
+            Unable to render component: {tc.name}
+          </div>
+        )
       })}
     </>
   )

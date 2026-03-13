@@ -92,7 +92,7 @@ const GENUI_COMPONENTS: Record<string, GenUIComponentDef> = {
                 type: 'object',
                 properties: {
                   label: { type: 'string' },
-                  value: {},
+                  value: { type: ['string', 'number'] },
                   trend: { type: 'string', enum: ['up', 'down'] },
                 },
                 required: ['label', 'value'],

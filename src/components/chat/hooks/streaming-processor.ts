@@ -373,21 +373,19 @@ export async function processStreamingResponse(
           if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
             for (const tc of deltaToolCalls) {
               const idx = tc.index as number
-              if (tc.id) {
+              const existing = toolCallsInProgress.get(idx)
+              if (tc.id && !existing) {
                 toolCallsInProgress.set(idx, {
                   id: tc.id as string,
                   name: tc.function?.name || '',
                   arguments: tc.function?.arguments || '',
                 })
-              } else {
-                const existing = toolCallsInProgress.get(idx)
-                if (existing) {
-                  if (tc.function?.name) {
-                    existing.name += tc.function.name
-                  }
-                  if (tc.function?.arguments) {
-                    existing.arguments += tc.function.arguments
-                  }
+              } else if (existing) {
+                if (tc.function?.name) {
+                  existing.name += tc.function.name
+                }
+                if (tc.function?.arguments) {
+                  existing.arguments += tc.function.arguments
                 }
               }
             }
@@ -402,7 +400,7 @@ export async function processStreamingResponse(
             if (isSameChat()) {
               scheduleStreamingUpdate()
             }
-            continue
+            // Don't continue — the same chunk may also carry delta.content
           }
 
           // Handle search_reasoning field
