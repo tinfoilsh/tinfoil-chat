@@ -43,10 +43,11 @@ export function LineChart({
             <YAxis tick={{ fontSize: 12 }} stroke="currentColor" />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--color-surface-primary, #fff)',
-                border: '1px solid var(--color-border-subtle, #e5e7eb)',
+                backgroundColor: 'hsl(var(--surface-chat-background))',
+                border: '1px solid hsl(var(--border-subtle))',
                 borderRadius: '0.5rem',
                 fontSize: '0.875rem',
+                color: 'hsl(var(--content-primary))',
               }}
             />
             <Line
