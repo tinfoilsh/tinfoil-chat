@@ -2,6 +2,7 @@ import {
   getMessageDocuments,
   getMessageImages,
 } from '@/components/chat/attachment-helpers'
+import { GENUI_SYSTEM_PROMPT } from '@/components/chat/genui/system-prompt'
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import type {
@@ -92,7 +93,7 @@ export class ChatQueryBuilder {
             : processedSystemPrompt
           result.push({
             role: 'user',
-            content: `<system>\n${rawInstructions}\n</system>`,
+            content: `<system>\n${rawInstructions}\n\n${GENUI_SYSTEM_PROMPT}\n</system>`,
           } as ChatCompletionUserMessageParam)
           addedSystemInstructions = true
         }
@@ -139,7 +140,8 @@ export class ChatQueryBuilder {
     systemPrompt: string,
     rules: string,
   ): string | null {
-    return rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    const base = rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    return `${base}\n\n${GENUI_SYSTEM_PROMPT}`
   }
 
   /**
