@@ -272,49 +272,14 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   }
 
   return (
-    <div className="mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent">
+    <div>
       <button
         type="button"
         onClick={handleToggle}
-        className="hover:bg-surface-secondary/50 flex h-12 w-full items-center justify-between rounded-lg px-4 text-left text-content-primary transition-colors"
+        className="hover:bg-surface-secondary/50 group flex items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          {isThinking ? (
-            <div className="min-w-0 flex-1">
-              {thoughtSummary ? (
-                <span
-                  className="block animate-shimmer truncate bg-clip-text text-sm font-medium text-transparent"
-                  style={{
-                    backgroundImage: isDarkMode
-                      ? 'linear-gradient(90deg, #9ca3af 0%, #e5e7eb 25%, #f9fafb 50%, #e5e7eb 75%, #9ca3af 100%)'
-                      : 'linear-gradient(90deg, #4b5563 0%, #6b7280 25%, #9ca3af 50%, #6b7280 75%, #4b5563 100%)',
-                    backgroundSize: '200% 100%',
-                  }}
-                >
-                  {thoughtSummary}
-                </span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Thinking</span>
-                  <LoadingDots isThinking={true} />
-                </div>
-              )}
-            </div>
-          ) : (
-            <span className="text-sm leading-5">
-              <span className="font-medium opacity-70">Thought</span>
-              {thinkingDuration && (
-                <span className="font-normal opacity-70">
-                  {thinkingDuration < 60
-                    ? ` for ${thinkingDuration.toFixed(1)} seconds`
-                    : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
         <svg
-          className={`h-5 w-5 shrink-0 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 shrink-0 transform text-content-primary/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -325,9 +290,44 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M19 9l-7 7-7-7"
+            d="M9 5l7 7-7 7"
           />
         </svg>
+        <div className="flex min-w-0 items-center gap-2">
+          {isThinking ? (
+            <div className="min-w-0">
+              {thoughtSummary ? (
+                <span
+                  className="block animate-shimmer truncate bg-clip-text text-lg font-medium text-transparent"
+                  style={{
+                    backgroundImage: isDarkMode
+                      ? 'linear-gradient(90deg, #9ca3af 0%, #e5e7eb 25%, #f9fafb 50%, #e5e7eb 75%, #9ca3af 100%)'
+                      : 'linear-gradient(90deg, #4b5563 0%, #6b7280 25%, #9ca3af 50%, #6b7280 75%, #4b5563 100%)',
+                    backgroundSize: '200% 100%',
+                  }}
+                >
+                  {thoughtSummary}
+                </span>
+              ) : (
+                <div className="flex items-center gap-1.5 text-content-primary/50">
+                  <span className="text-lg font-medium">Thinking</span>
+                  <LoadingDots isThinking={true} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-lg text-content-primary/50">
+              <span className="font-medium">Thought</span>
+              {thinkingDuration && (
+                <span className="font-normal">
+                  {thinkingDuration < 60
+                    ? ` for ${thinkingDuration.toFixed(1)} seconds`
+                    : ` for ${(thinkingDuration / 60).toFixed(1)} minutes`}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
       </button>
 
       <div
@@ -339,7 +339,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       >
         <div
           ref={contentRef}
-          className="px-4 py-3 text-sm text-content-primary"
+          className="ml-2 border-l-2 border-border-subtle py-2 pl-3 pr-1 text-sm text-content-primary/70"
           translate="no"
         >
           <ReactMarkdown
@@ -347,10 +347,10 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             rehypePlugins={rehypePlugins}
             components={{
               p: ({ children }: { children?: React.ReactNode }) => (
-                <p className="mb-2 break-words last:mb-0">{children}</p>
+                <p className="mb-1.5 break-words last:mb-0">{children}</p>
               ),
               pre: ({ children }: { children?: React.ReactNode }) => (
-                <pre className="my-2 overflow-x-auto rounded-md border border-border-subtle bg-surface-chat p-3 font-mono text-xs text-content-primary">
+                <pre className="my-1.5 overflow-x-auto rounded-md border border-border-subtle bg-surface-chat p-2.5 font-mono text-[11px] text-content-primary">
                   {children}
                 </pre>
               ),
@@ -362,11 +362,11 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 children?: React.ReactNode
               }) =>
                 inline ? (
-                  <code className="inline break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 align-baseline font-mono text-xs text-content-primary">
+                  <code className="inline break-words rounded border border-border-subtle bg-surface-chat px-1 py-0.5 align-baseline font-mono text-[11px] text-content-primary">
                     {children}
                   </code>
                 ) : (
-                  <code className="block break-all font-mono text-xs text-content-primary">
+                  <code className="block break-all font-mono text-[11px] text-content-primary">
                     {children}
                   </code>
                 ),

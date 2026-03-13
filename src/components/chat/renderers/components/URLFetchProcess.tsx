@@ -52,12 +52,12 @@ export const URLFetchProcess = memo(function URLFetchProcess({
   )
 
   return (
-    <div className="mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent">
-      <div className="flex flex-col gap-0.5 px-4 py-2">
+    <div>
+      <div className="flex flex-col gap-0.5 px-1 py-1">
         {urlFetches.map((fetch) => (
           <div
             key={fetch.id}
-            className="flex min-h-7 items-center gap-2.5 text-sm"
+            className="flex min-h-7 items-center gap-2 text-lg"
           >
             {fetch.status === 'fetching' ? (
               <FetchSpinner />
@@ -72,22 +72,22 @@ export const URLFetchProcess = memo(function URLFetchProcess({
               />
             )}
             <span
-              className={`min-w-0 truncate leading-5 ${
+              className={`min-w-0 truncate ${
                 fetch.status === 'failed'
                   ? 'text-content-primary/40 line-through'
-                  : 'text-content-primary/70'
+                  : 'text-content-primary/50'
               }`}
             >
               {fetch.status === 'fetching' ? (
                 <>
-                  <span className="font-medium text-content-primary">
+                  <span className="font-medium text-content-primary/50">
                     Reading{' '}
                   </span>
                   {getHostname(fetch.url)}
                 </>
               ) : fetch.status === 'completed' ? (
                 <>
-                  <span className="font-medium text-content-primary/70">
+                  <span className="font-medium text-content-primary/50">
                     Read{' '}
                   </span>
                   {getHostname(fetch.url)}
