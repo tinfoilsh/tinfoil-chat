@@ -23,6 +23,8 @@ import type {
  * - **Unknown models**: Prepends to first user message (safe default)
  */
 
+const GENUI_TOOL_HINT = `You have render_* tools for rich visual components: charts (bar, line, pie, area), tables (data, comparison), source cards and link previews for web results, timelines, stat cards, progress bars, callouts (info/warning/tip/success/error), key-value lists, info cards, steps/checklists, and image grids. When content benefits from visual structure — comparisons, trends, proportions, chronologies, curated sources, highlighted takeaways, structured facts — always call the appropriate render tool instead of markdown, mermaid, or code blocks. After using web search, prefer render_source_cards or render_link_preview to surface the best sources. You may call multiple render tools in one response.`
+
 export interface ChatQueryBuilderParams {
   model: BaseModel
   systemPrompt: string
@@ -92,7 +94,7 @@ export class ChatQueryBuilder {
             : processedSystemPrompt
           result.push({
             role: 'user',
-            content: `<system>\n${rawInstructions}\n</system>`,
+            content: `<system>\n${rawInstructions}\n\n${GENUI_TOOL_HINT}\n</system>`,
           } as ChatCompletionUserMessageParam)
           addedSystemInstructions = true
         }
@@ -101,14 +103,19 @@ export class ChatQueryBuilder {
           role: 'user',
           content: userContent,
         } as ChatCompletionUserMessageParam)
-      } else if (msg.content) {
-        // Assistant messages - include annotations and searchReasoning for multi-turn context
+      } else if (msg.content || msg.toolCalls) {
+        // Assistant messages - include annotations, searchReasoning, and tool calls for multi-turn context
         const assistantParam: ChatCompletionAssistantMessageParam & {
           annotations?: Message['annotations']
           search_reasoning?: string
+          tool_calls?: Array<{
+            id: string
+            type: 'function'
+            function: { name: string; arguments: string }
+          }>
         } = {
           role: 'assistant',
-          content: msg.content,
+          content: msg.content || null,
         }
         if (msg.annotations && msg.annotations.length > 0) {
           assistantParam.annotations = msg.annotations
@@ -116,7 +123,25 @@ export class ChatQueryBuilder {
         if (msg.searchReasoning) {
           assistantParam.search_reasoning = msg.searchReasoning
         }
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          assistantParam.tool_calls = msg.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          }))
+        }
         result.push(assistantParam)
+
+        // Add tool result messages for each tool call (display-only acknowledgment)
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            result.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: 'displayed',
+            } as ChatCompletionMessageParam)
+          }
+        }
       }
     }
 
@@ -139,7 +164,8 @@ export class ChatQueryBuilder {
     systemPrompt: string,
     rules: string,
   ): string | null {
-    return rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    const base = rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    return `${base}\n\n${GENUI_TOOL_HINT}`
   }
 
   /**

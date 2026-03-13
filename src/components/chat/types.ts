@@ -63,6 +63,7 @@ export type Message = {
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
   quote?: string // Highlighted text the user is replying to
+  toolCalls?: Array<{ id: string; name: string; arguments: string }>
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'

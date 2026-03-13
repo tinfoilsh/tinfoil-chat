@@ -1,3 +1,4 @@
+import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
@@ -288,6 +289,16 @@ const DefaultMessageComponent = ({
       {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
         <div className="no-scroll-anchoring w-full px-4">
           <WebSearchProcess webSearch={message.webSearch} />
+        </div>
+      )}
+
+      {/* Tool call rendered components */}
+      {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
+        <div className="w-full px-4 py-2">
+          <GenUIToolCallRenderer
+            toolCalls={message.toolCalls}
+            isStreaming={!!(isStreaming && isLastMessage)}
+          />
         </div>
       )}
 
