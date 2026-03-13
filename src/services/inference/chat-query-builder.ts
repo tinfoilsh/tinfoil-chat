@@ -2,7 +2,6 @@ import {
   getMessageDocuments,
   getMessageImages,
 } from '@/components/chat/attachment-helpers'
-import { GENUI_SYSTEM_PROMPT } from '@/components/chat/genui/system-prompt'
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import type {
@@ -93,7 +92,7 @@ export class ChatQueryBuilder {
             : processedSystemPrompt
           result.push({
             role: 'user',
-            content: `<system>\n${rawInstructions}\n\n${GENUI_SYSTEM_PROMPT}\n</system>`,
+            content: `<system>\n${rawInstructions}\n</system>`,
           } as ChatCompletionUserMessageParam)
           addedSystemInstructions = true
         }
@@ -102,14 +101,19 @@ export class ChatQueryBuilder {
           role: 'user',
           content: userContent,
         } as ChatCompletionUserMessageParam)
-      } else if (msg.content) {
-        // Assistant messages - include annotations and searchReasoning for multi-turn context
+      } else if (msg.content || msg.toolCalls) {
+        // Assistant messages - include annotations, searchReasoning, and tool calls for multi-turn context
         const assistantParam: ChatCompletionAssistantMessageParam & {
           annotations?: Message['annotations']
           search_reasoning?: string
+          tool_calls?: Array<{
+            id: string
+            type: 'function'
+            function: { name: string; arguments: string }
+          }>
         } = {
           role: 'assistant',
-          content: msg.content,
+          content: msg.content || null,
         }
         if (msg.annotations && msg.annotations.length > 0) {
           assistantParam.annotations = msg.annotations
@@ -117,7 +121,25 @@ export class ChatQueryBuilder {
         if (msg.searchReasoning) {
           assistantParam.search_reasoning = msg.searchReasoning
         }
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          assistantParam.tool_calls = msg.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          }))
+        }
         result.push(assistantParam)
+
+        // Add tool result messages for each tool call (display-only acknowledgment)
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            result.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: 'displayed',
+            } as ChatCompletionMessageParam)
+          }
+        }
       }
     }
 
@@ -140,8 +162,7 @@ export class ChatQueryBuilder {
     systemPrompt: string,
     rules: string,
   ): string | null {
-    const base = rules ? `${systemPrompt}\n${rules}` : systemPrompt
-    return `${base}\n\n${GENUI_SYSTEM_PROMPT}`
+    return rules ? `${systemPrompt}\n${rules}` : systemPrompt
   }
 
   /**

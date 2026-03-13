@@ -1,4 +1,3 @@
-import { GeneratingUI } from '@/components/chat/genui/GeneratingUI'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { GeneratingTable } from './GeneratingTable'
 import { MessageContent } from './MessageContent'
@@ -341,10 +340,6 @@ function isTableChunk(chunk: ContentChunk): boolean {
   return trimmed.startsWith('|') || trimmed.startsWith('\n|')
 }
 
-function isGenUIChunk(chunk: ContentChunk): boolean {
-  return /^(`{3,}|~{3,})genui\b/.test(chunk.content.trimStart())
-}
-
 // Individual chunk component with proper memoization
 const ChunkRenderer = memo(
   function ChunkRenderer({
@@ -361,27 +356,18 @@ const ChunkRenderer = memo(
     const wasIncompleteRef = useRef(!chunk.isComplete)
     const [shouldAnimate, setShouldAnimate] = useState(false)
     const isTable = isTableChunk(chunk)
-    const isGenUI = isGenUIChunk(chunk)
 
-    // Track when a table or genui block transitions from incomplete to complete
+    // Track when a table transitions from incomplete to complete
     useEffect(() => {
-      if (
-        (isTable || isGenUI) &&
-        wasIncompleteRef.current &&
-        chunk.isComplete
-      ) {
+      if (isTable && wasIncompleteRef.current && chunk.isComplete) {
         setShouldAnimate(true)
       }
       wasIncompleteRef.current = !chunk.isComplete
-    }, [chunk.isComplete, isTable, isGenUI])
+    }, [chunk.isComplete, isTable])
 
     // If this is an incomplete table during streaming, show placeholder
     if (isTable && !chunk.isComplete && isStreaming) {
       return <GeneratingTable />
-    }
-
-    if (isGenUIChunk(chunk) && !chunk.isComplete && isStreaming) {
-      return <GeneratingUI />
     }
 
     // Render content, with fade-in animation for tables that just completed

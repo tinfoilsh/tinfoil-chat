@@ -1,5 +1,4 @@
 import { CONSTANTS } from '@/components/chat/constants'
-import { renderGenUIBlock } from '@/components/chat/genui/registry'
 import { CodeBlock } from '@/components/code-block'
 import {
   Tooltip,
@@ -147,16 +146,6 @@ export function createMarkdownComponents({
           (language === 'markdown' || language === 'md')
         ) {
           return null
-        }
-
-        if (language === 'genui') {
-          try {
-            const parsed = JSON.parse(code)
-            const rendered = renderGenUIBlock(parsed)
-            if (rendered) return rendered
-          } catch {
-            // Fall through to CodeBlock on parse failure
-          }
         }
 
         return (
