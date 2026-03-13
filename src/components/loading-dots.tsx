@@ -11,13 +11,12 @@ export const LoadingDots = memo(function LoadingDots({
     <div
       style={
         {
-          height: '5px',
-          aspectRatio: '5',
-          '--_g': `no-repeat radial-gradient(farthest-side,${dotColor} 94%,transparent)`,
-          background: 'var(--_g),var(--_g),var(--_g),var(--_g)',
-          backgroundSize: '20% 100%',
-          animation:
-            'loading-dots-position .75s infinite alternate, loading-dots-flip 1.5s infinite alternate',
+          width: '36px',
+          aspectRatio: '4',
+          '--_g': `no-repeat radial-gradient(circle closest-side,${dotColor} 90%,transparent)`,
+          background: 'var(--_g) 0% 50%, var(--_g) 50% 50%, var(--_g) 100% 50%',
+          backgroundSize: 'calc(100%/3) 100%',
+          animation: 'loading-dots 1s infinite linear',
         } as React.CSSProperties
       }
     />
