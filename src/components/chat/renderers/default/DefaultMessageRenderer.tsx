@@ -1,3 +1,4 @@
+import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { StreamingTracer } from '@/components/streaming-tracer'
 import { cn } from '@/components/ui/utils'
 import {
@@ -493,6 +494,16 @@ const DefaultMessageComponent = ({
               <WebSearchProcess webSearch={message.webSearch} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tool call rendered components */}
+      {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
+        <div className="w-full px-4 py-2">
+          <GenUIToolCallRenderer
+            toolCalls={message.toolCalls}
+            isStreaming={!!(isStreaming && isLastMessage)}
+          />
         </div>
       )}
 

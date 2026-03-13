@@ -1,0 +1,98 @@
+interface Source {
+  title: string
+  url: string
+  snippet?: string
+  publishedAt?: string
+  author?: string
+}
+
+interface SourceCardsProps {
+  sources: Source[]
+  title?: string
+}
+
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+function getFaviconUrl(url: string): string | null {
+  try {
+    const host = new URL(url).hostname
+    return `https://icons.duckduckgo.com/ip3/${host}.ico`
+  } catch {
+    return null
+  }
+}
+
+export function SourceCards({ sources, title }: SourceCardsProps) {
+  return (
+    <div className="my-3">
+      {title && (
+        <p className="mb-2 text-sm font-medium text-content-primary">{title}</p>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {sources.map((src, i) => {
+          const favicon = getFaviconUrl(src.url)
+          const domain = getDomain(src.url)
+          return (
+            <a
+              key={i}
+              href={src.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:border-border-primary group flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface-card p-3 transition-colors hover:bg-surface-chat-background"
+            >
+              <div className="flex items-center gap-2">
+                {favicon && (
+                  <img
+                    src={favicon}
+                    alt=""
+                    className="h-4 w-4 shrink-0 rounded"
+                    loading="lazy"
+                  />
+                )}
+                <span className="truncate text-xs text-content-muted">
+                  {domain}
+                </span>
+              </div>
+              <p className="line-clamp-2 text-sm font-medium text-content-primary group-hover:underline">
+                {src.title}
+              </p>
+              {src.snippet && (
+                <p className="line-clamp-3 text-xs text-content-muted">
+                  {src.snippet}
+                </p>
+              )}
+              {(src.publishedAt || src.author) && (
+                <div className="mt-auto flex items-center gap-2 text-xs text-content-muted">
+                  {src.author && <span className="truncate">{src.author}</span>}
+                  {src.author && src.publishedAt && <span>·</span>}
+                  {src.publishedAt && <span>{src.publishedAt}</span>}
+                </div>
+              )}
+            </a>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function validateSourceCardsProps(
+  props: Record<string, unknown>,
+): boolean {
+  return (
+    Array.isArray(props.sources) &&
+    props.sources.every(
+      (s: unknown) =>
+        s !== null &&
+        typeof s === 'object' &&
+        typeof (s as any).title === 'string' &&
+        typeof (s as any).url === 'string',
+    )
+  )
+}

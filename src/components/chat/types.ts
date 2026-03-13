@@ -78,6 +78,7 @@ export type Message = {
   // aggregate fields above.
   segments?: MessageSegment[]
   webSearches?: WebSearchInstance[]
+  toolCalls?: Array<{ id: string; name: string; arguments: string }>
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'
