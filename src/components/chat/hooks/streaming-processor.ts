@@ -104,6 +104,10 @@ export async function processStreamingResponse(
     let searchReasoning = ''
     let webSearchStarted = false
     let thinkingStarted = false
+    const toolCallsInProgress = new Map<
+      number,
+      { id: string; name: string; arguments: string }
+    >()
 
     // Process citations for display during streaming
     const getMessageWithCitations = (): Message => {
@@ -362,6 +366,41 @@ export async function processStreamingResponse(
               }
             }
             continue
+          }
+
+          // Handle tool_calls deltas
+          const deltaToolCalls = json.choices?.[0]?.delta?.tool_calls
+          if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
+            for (const tc of deltaToolCalls) {
+              const idx = tc.index as number
+              const existing = toolCallsInProgress.get(idx)
+              if (tc.id && !existing) {
+                toolCallsInProgress.set(idx, {
+                  id: tc.id as string,
+                  name: tc.function?.name || '',
+                  arguments: tc.function?.arguments || '',
+                })
+              } else if (existing) {
+                if (tc.function?.name) {
+                  existing.name += tc.function.name
+                }
+                if (tc.function?.arguments) {
+                  existing.arguments += tc.function.arguments
+                }
+              }
+            }
+            assistantMessage = {
+              ...assistantMessage,
+              toolCalls: Array.from(toolCallsInProgress.values()).map((t) => ({
+                id: t.id,
+                name: t.name,
+                arguments: t.arguments,
+              })),
+            }
+            if (isSameChat()) {
+              scheduleStreamingUpdate()
+            }
+            // Don't continue — the same chunk may also carry delta.content
           }
 
           // Handle search_reasoning field

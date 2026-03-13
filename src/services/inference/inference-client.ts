@@ -1,5 +1,6 @@
 import { ChatError } from '@/components/chat/chat-utils'
 import { CONSTANTS } from '@/components/chat/constants'
+import { GENUI_TOOL_DEFINITIONS } from '@/components/chat/genui/registry'
 import {
   isReasoningModel,
   type ReasoningEffort,
@@ -258,6 +259,8 @@ export async function sendChatStream(
       if (piiCheckEnabled) {
         requestBody.pii_check_options = {}
       }
+      requestBody.tools = GENUI_TOOL_DEFINITIONS
+      requestBody.tool_choice = 'auto'
 
       const client = await getTinfoilClient()
 
