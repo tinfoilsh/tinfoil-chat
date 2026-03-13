@@ -60,13 +60,17 @@ import {
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import {
+  useLayoutEffect as reactUseLayoutEffect,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
+
+const useLayoutEffect =
+  typeof window !== 'undefined' ? reactUseLayoutEffect : useEffect
+
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
 import { ChatInput } from './chat-input'

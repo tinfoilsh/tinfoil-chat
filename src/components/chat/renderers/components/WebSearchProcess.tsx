@@ -152,145 +152,20 @@ export const WebSearchProcess = memo(function WebSearchProcess({
   }
 
   return (
-    <div className="mb-2 mt-2 rounded-lg border border-border-subtle bg-transparent">
+    <div>
       <button
         type="button"
         onClick={handleToggle}
         disabled={!hasSources}
-        className={`flex min-h-10 w-full justify-between rounded-lg px-4 py-2 text-left text-content-primary transition-colors ${
-          isBlocked ? 'items-start' : 'items-center'
-        } ${
+        className={`group flex items-start gap-1.5 rounded-md px-1 py-1 text-left transition-colors ${
           hasSources
             ? 'hover:bg-surface-secondary/50 cursor-pointer'
             : 'cursor-default'
         }`}
       >
-        <div
-          className={`flex min-w-0 flex-1 gap-3 ${isBlocked ? 'items-start' : 'items-center'}`}
-        >
-          {/* Desktop favicons: before text */}
-          {hasSources && (
-            <div className="hidden shrink-0 items-center md:flex">
-              {sourcesToShow.map((source, index) => (
-                <FadeInFavicon
-                  key={`desktop-${source.url}-${index}`}
-                  url={source.url}
-                  className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
-                  style={{ marginLeft: index === 0 ? 0 : -6 }}
-                  showPlaceholder={showPlaceholders}
-                  index={index}
-                  onLoad={() => handleFaviconLoad(index)}
-                  onError={() => handleFaviconError(index)}
-                />
-              ))}
-            </div>
-          )}
-          {!hasSources && isSearching && (
-            <div className="hidden shrink-0 items-center md:flex">
-              {[0, 1, 2, 3, 4].map((index) => (
-                <BouncingPlaceholder
-                  key={index}
-                  index={index}
-                  style={{ marginLeft: index === 0 ? 0 : -6 }}
-                />
-              ))}
-            </div>
-          )}
-          {isSearching ? (
-            <span className="min-w-0 text-sm leading-5">
-              <span className="font-medium">Searching the web...</span>
-              {webSearch.query && (
-                <span className="opacity-70">
-                  {' '}
-                  &quot;{webSearch.query}&quot;
-                </span>
-              )}
-              {/* Mobile favicons: inline after text */}
-              {hasSources ? (
-                <span
-                  className="inline-flex items-center align-middle md:hidden"
-                  style={{ marginLeft: 6 }}
-                >
-                  {sourcesToShow.map((source, index) => (
-                    <FadeInFavicon
-                      key={`mobile-${source.url}-${index}`}
-                      url={source.url}
-                      className="h-3 w-3 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
-                      style={{ marginLeft: index === 0 ? 0 : -4 }}
-                      showPlaceholder={showPlaceholders}
-                      index={index}
-                      onLoad={() => handleFaviconLoad(index)}
-                      onError={() => handleFaviconError(index)}
-                    />
-                  ))}
-                </span>
-              ) : (
-                <span
-                  className="inline-flex items-center align-middle md:hidden"
-                  style={{ marginLeft: 6 }}
-                >
-                  {[0, 1, 2, 3, 4].map((index) => (
-                    <BouncingPlaceholder
-                      key={index}
-                      index={index}
-                      style={{ marginLeft: index === 0 ? 0 : -6 }}
-                    />
-                  ))}
-                </span>
-              )}
-            </span>
-          ) : isFailed ? (
-            <span className="min-w-0 truncate text-sm leading-5">
-              <span className="font-medium opacity-70">Search failed</span>
-              {webSearch.query && (
-                <span className="font-normal opacity-70">
-                  {' '}
-                  for &quot;{webSearch.query}&quot;
-                </span>
-              )}
-            </span>
-          ) : isBlocked ? (
-            <span className="min-w-0 text-sm leading-5 opacity-50">
-              <span className="font-medium">Web search blocked</span>
-              {webSearch.reason && (
-                <span className="font-normal"> — {webSearch.reason}</span>
-              )}
-            </span>
-          ) : (
-            <span className="min-w-0 text-sm leading-5">
-              <span className="font-medium opacity-70">Searched the web</span>
-              {webSearch.query && (
-                <span className="font-normal opacity-70">
-                  {' '}
-                  for &quot;{webSearch.query}&quot;
-                </span>
-              )}
-              {/* Mobile favicons: inline after text */}
-              {hasSources && (
-                <span
-                  className="inline-flex items-center align-middle md:hidden"
-                  style={{ marginLeft: 6 }}
-                >
-                  {sourcesToShow.map((source, index) => (
-                    <FadeInFavicon
-                      key={`mobile-${source.url}-${index}`}
-                      url={source.url}
-                      className="h-3 w-3 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
-                      style={{ marginLeft: index === 0 ? 0 : -4 }}
-                      showPlaceholder={showPlaceholders}
-                      index={index}
-                      onLoad={() => handleFaviconLoad(index)}
-                      onError={() => handleFaviconError(index)}
-                    />
-                  ))}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
         {hasSources && (
           <svg
-            className={`h-5 w-5 shrink-0 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            className={`mt-[5px] h-3.5 w-3.5 shrink-0 transform text-content-primary/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -301,10 +176,63 @@ export const WebSearchProcess = memo(function WebSearchProcess({
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M19 9l-7 7-7-7"
+              d="M9 5l7 7-7 7"
             />
           </svg>
         )}
+        <span className="min-w-0 text-lg text-content-primary/50">
+          {isSearching ? (
+            <>
+              <span className="font-medium">Searching the web...</span>
+            </>
+          ) : isFailed ? (
+            <>
+              <span className="font-medium">Search failed</span>
+              {webSearch.query && (
+                <span className="font-normal">
+                  {' '}
+                  for &quot;{webSearch.query}&quot;
+                </span>
+              )}
+            </>
+          ) : isBlocked ? (
+            <>
+              <span className="font-medium">Web search blocked</span>
+              {webSearch.reason && (
+                <span className="font-normal"> — {webSearch.reason}</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="font-medium">Searched the web</span>
+              {webSearch.query && (
+                <span className="font-normal">
+                  {' '}
+                  for &quot;{webSearch.query}&quot;
+                </span>
+              )}
+              {hasSources && (
+                <span
+                  className="inline-flex items-center align-middle"
+                  style={{ marginLeft: 6 }}
+                >
+                  {sourcesToShow.map((source, index) => (
+                    <FadeInFavicon
+                      key={`${source.url}-${index}`}
+                      url={source.url}
+                      className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
+                      style={{ marginLeft: index === 0 ? 0 : -6 }}
+                      showPlaceholder={false}
+                      index={index}
+                      onLoad={() => handleFaviconLoad(index)}
+                      onError={() => handleFaviconError(index)}
+                    />
+                  ))}
+                </span>
+              )}
+            </>
+          )}
+        </span>
       </button>
 
       {hasSources && (
@@ -314,15 +242,15 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             maxHeight: isExpanded ? '1000px' : '0px',
           }}
         >
-          <div className="px-4 py-3">
-            <div className="flex flex-col gap-3">
+          <div className="ml-2 border-l-2 border-border-subtle py-2 pl-3 pr-1">
+            <div className="flex flex-col gap-2">
               {uniqueSources.map((source, index) => (
                 <a
                   key={`${source.url}-${index}`}
                   href={sanitizeUrl(source.url)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:bg-surface-secondary/50 flex items-start gap-3 rounded-lg px-3 py-2 text-sm text-content-primary transition-colors"
+                  className="hover:bg-surface-secondary/50 flex items-start gap-3 rounded-md px-2 py-1.5 text-sm text-content-primary/70 transition-colors"
                 >
                   <FadeInFavicon
                     url={source.url}
