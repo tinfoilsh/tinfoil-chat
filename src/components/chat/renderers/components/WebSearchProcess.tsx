@@ -1,8 +1,6 @@
 import type { WebSearchState } from '@/components/chat/types'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useCallback, useMemo, useState } from 'react'
-
-const BOUNCE_DELAYS = ['0ms', '150ms', '300ms', '450ms', '600ms']
+import { memo, useMemo, useState } from 'react'
 
 const webSearchFaviconCache = new Map<
   string,
@@ -33,40 +31,14 @@ function getDomainName(url: string): string {
   }
 }
 
-function BouncingPlaceholder({
-  index,
-  style,
-}: {
-  index: number
-  style?: React.CSSProperties
-}) {
-  return (
-    <span
-      className="block h-4 w-4 shrink-0 animate-spring-horizontal rounded-full bg-content-primary/30"
-      style={{
-        ...style,
-        animationDelay: BOUNCE_DELAYS[index] || '0ms',
-      }}
-    />
-  )
-}
-
 function FadeInFavicon({
   url,
   className,
   style,
-  showPlaceholder,
-  index,
-  onLoad,
-  onError,
 }: {
   url: string
   className: string
   style?: React.CSSProperties
-  showPlaceholder?: boolean
-  index?: number
-  onLoad?: () => void
-  onError?: () => void
 }) {
   const faviconUrl = getFaviconUrl(url)
   const cached = webSearchFaviconCache.get(faviconUrl)
@@ -76,25 +48,17 @@ function FadeInFavicon({
   const handleLoad = () => {
     setLoaded(true)
     webSearchFaviconCache.set(faviconUrl, { loaded: true, error: false })
-    onLoad?.()
   }
 
   const handleError = () => {
     setError(true)
     webSearchFaviconCache.set(faviconUrl, { loaded: false, error: true })
-    onError?.()
   }
 
   if (error) return null
 
   return (
     <span className="relative block" style={style}>
-      {showPlaceholder && !loaded && (
-        <BouncingPlaceholder
-          index={index ?? 0}
-          style={{ position: 'absolute' }}
-        />
-      )}
       <img
         src={faviconUrl}
         alt=""
@@ -127,23 +91,6 @@ export const WebSearchProcess = memo(function WebSearchProcess({
 
   const hasSources = uniqueSources.length > 0
   const sourcesToShow = uniqueSources.slice(0, 5)
-
-  // Track which favicons have loaded/errored (by index)
-  const [loadedFavicons, setLoadedFavicons] = useState<Set<number>>(new Set())
-
-  // Show placeholders if still searching OR if not all favicons have loaded yet
-  const allFaviconsReady =
-    sourcesToShow.length > 0 && loadedFavicons.size >= sourcesToShow.length
-  const showPlaceholders = isSearching || !allFaviconsReady
-
-  const handleFaviconLoad = useCallback((index: number) => {
-    setLoadedFavicons((prev) => new Set(prev).add(index))
-  }, [])
-
-  const handleFaviconError = useCallback((index: number) => {
-    // Treat errors as "ready" so we don't wait forever
-    setLoadedFavicons((prev) => new Set(prev).add(index))
-  }, [])
 
   const handleToggle = () => {
     if (hasSources) {
@@ -222,10 +169,6 @@ export const WebSearchProcess = memo(function WebSearchProcess({
                       url={source.url}
                       className="h-4 w-4 shrink-0 rounded-full border border-surface-chat bg-surface-chat"
                       style={{ marginLeft: index === 0 ? 0 : -6 }}
-                      showPlaceholder={false}
-                      index={index}
-                      onLoad={() => handleFaviconLoad(index)}
-                      onError={() => handleFaviconError(index)}
                     />
                   ))}
                 </span>
