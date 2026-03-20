@@ -5,9 +5,12 @@ interface URLFetchProcessProps {
   urlFetches: URLFetchState[]
 }
 
-function getHostname(url: string): string {
+function getDisplayUrl(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\./, '')
+    const parsed = new URL(url)
+    const hostname = parsed.hostname.replace(/^www\./, '')
+    const path = parsed.pathname === '/' ? '' : parsed.pathname
+    return hostname + path
   } catch {
     return url
   }
@@ -83,19 +86,19 @@ export const URLFetchProcess = memo(function URLFetchProcess({
                   <span className="font-medium text-content-primary/50">
                     Reading{' '}
                   </span>
-                  {getHostname(fetch.url)}
+                  {getDisplayUrl(fetch.url)}
                 </>
               ) : fetch.status === 'completed' ? (
                 <>
                   <span className="font-medium text-content-primary/50">
                     Read{' '}
                   </span>
-                  {getHostname(fetch.url)}
+                  {getDisplayUrl(fetch.url)}
                 </>
               ) : (
                 <>
                   <span className="font-medium">Failed to read </span>
-                  {getHostname(fetch.url)}
+                  {getDisplayUrl(fetch.url)}
                 </>
               )}
             </span>
