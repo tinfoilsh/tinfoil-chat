@@ -276,7 +276,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       <button
         type="button"
         onClick={handleToggle}
-        className="hover:bg-surface-secondary/50 group flex items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
+        className="hover:bg-surface-secondary/50 group flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
       >
         <svg
           className={`h-3.5 w-3.5 shrink-0 transform text-content-primary/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
