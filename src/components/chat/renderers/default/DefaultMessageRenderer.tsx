@@ -214,19 +214,15 @@ const DefaultMessageComponent = ({
 
       {/* Show URL fetch status for assistant messages */}
       {!isUser && message.urlFetches && message.urlFetches.length > 0 && (
-        <div className="no-scroll-anchoring w-full px-4 py-2">
-          <div className="mb-2 w-full">
-            <URLFetchProcess urlFetches={message.urlFetches} />
-          </div>
+        <div className="no-scroll-anchoring w-full px-4">
+          <URLFetchProcess urlFetches={message.urlFetches} />
         </div>
       )}
 
       {/* Show web search for assistant messages - before thoughts if it started first */}
       {!isUser && message.webSearch && message.webSearchBeforeThinking && (
-        <div className="no-scroll-anchoring w-full px-4 py-2">
-          <div className="mb-2 w-full">
-            <WebSearchProcess webSearch={message.webSearch} />
-          </div>
+        <div className="no-scroll-anchoring w-full px-4">
+          <WebSearchProcess webSearch={message.webSearch} />
         </div>
       )}
 
@@ -235,28 +231,24 @@ const DefaultMessageComponent = ({
         (message.isThinking ||
           (typeof message.thoughts === 'string' &&
             message.thoughts.trim().length > 0)) && (
-          <div className="no-scroll-anchoring w-full px-4 py-2">
-            <div className="mb-2 w-full">
-              <ThoughtProcess
-                thoughts={message.thoughts || ''}
-                isDarkMode={isDarkMode}
-                isThinking={message.isThinking}
-                thinkingDuration={message.thinkingDuration}
-                messageId={messageUniqueId}
-                expandedThoughtsState={expandedThoughtsState}
-                setExpandedThoughtsState={setExpandedThoughtsState}
-                sources={thoughtSources}
-              />
-            </div>
+          <div className="no-scroll-anchoring w-full px-4">
+            <ThoughtProcess
+              thoughts={message.thoughts || ''}
+              isDarkMode={isDarkMode}
+              isThinking={message.isThinking}
+              thinkingDuration={message.thinkingDuration}
+              messageId={messageUniqueId}
+              expandedThoughtsState={expandedThoughtsState}
+              setExpandedThoughtsState={setExpandedThoughtsState}
+              sources={thoughtSources}
+            />
           </div>
         )}
 
       {/* Show web search for assistant messages - after thoughts if it started after */}
       {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
-        <div className="no-scroll-anchoring w-full px-4 py-2">
-          <div className="mb-2 w-full">
-            <WebSearchProcess webSearch={message.webSearch} />
-          </div>
+        <div className="no-scroll-anchoring w-full px-4">
+          <WebSearchProcess webSearch={message.webSearch} />
         </div>
       )}
 
