@@ -70,7 +70,7 @@ export function ExpandableTable({ children }: ExpandableTableProps) {
       <div ref={containerRef} className="relative z-0 overflow-x-auto">
         <table
           className="divide-y divide-border-subtle"
-          style={{ minWidth: 'max-content' }}
+          style={isMobile ? undefined : { minWidth: 'max-content' }}
         >
           {children}
         </table>

@@ -212,6 +212,7 @@ export function createMarkdownComponents({
           style={{
             maxWidth: CONSTANTS.TABLE_COLUMN_MAX_WIDTH_PX,
             wordWrap: 'break-word',
+            wordBreak: 'break-word',
             whiteSpace: 'normal',
           }}
         >
