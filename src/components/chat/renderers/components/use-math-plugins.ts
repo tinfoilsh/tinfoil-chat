@@ -35,7 +35,7 @@ async function loadPlugins(): Promise<PluginState> {
     .then(([remarkMathMod, rehypeKatexMod, remarkBreaksMod, rehypeRawMod]) => {
       cachedPlugins = {
         remarkPlugins: [
-          [remarkMathMod.default, { singleDollarTextMath: true }],
+          [remarkMathMod.default, { singleDollarTextMath: false }],
           remarkGfm,
           remarkBreaksMod.default,
         ],
