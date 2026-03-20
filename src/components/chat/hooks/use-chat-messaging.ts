@@ -158,7 +158,7 @@ export function useChatMessaging({
               (msg, idx) =>
                 !(idx === chat.messages.length - 1 && msg.isThinking),
             )
-            return { ...chat, messages }
+            return { ...chat, messages, pendingSave: false }
           }
           return chat
         })
@@ -200,7 +200,7 @@ export function useChatMessaging({
         const messages = prev.messages.filter(
           (msg, idx) => !(idx === prev.messages.length - 1 && msg.isThinking),
         )
-        return { ...prev, messages }
+        return { ...prev, messages, pendingSave: false }
       })
     }
 
