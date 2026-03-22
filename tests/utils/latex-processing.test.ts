@@ -494,6 +494,67 @@ describe('latex-processing', () => {
         const result = processLatexTags(input)
         expect(result).toBe('lost $$\\$-500$$ on the trade')
       })
+
+      // --- Dollar signs inside markdown link URLs ---
+
+      it('does not match $ inside a markdown link URL', () => {
+        const input =
+          "sold roughly $4.1M of common stock during the company's Series A[2](#cite-2~https://example.com/sells-$4.1m-stock~Title), though such transactions are unusual."
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('does not match $ across multiple markdown link URLs', () => {
+        const input =
+          '**$10M+ ARR and a nine-figure valuation**[6](#cite-6~https://example.com/sell-stock/~Title)[4](#cite-4~https://example.com/$guide~Guide). If the valuation is north of $80–100M, most firms will accommodate.'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('preserves math inside link text while skipping URL dollars', () => {
+        const input = 'See [$x > 0$](https://example.com/$path) for details'
+        const result = processLatexTags(input)
+        expect(result).toBe(
+          'See [$$x > 0$$](https://example.com/$path) for details',
+        )
+      })
+
+      it('does not match currency $ with closer inside URL', () => {
+        const input =
+          'raised $50M in funding[1](#cite~https://example.com/raises-$50m~Title) last year'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('handles $ in URL-encoded text within links', () => {
+        const input =
+          'costs $100 per unit[3](#cite~https://example.com/~Product%20costs%20$100%20per%20unit) in bulk'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('handles multiple citations with $ in URLs after currency', () => {
+        const input =
+          'The price is $500 and $1,000[1](#cite~url/$500)[2](#cite~url/$1000). End.'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('still converts valid $\\$...$ when links are present', () => {
+        const input =
+          'Cost is $\\$100$ per unit[1](#cite~https://example.com/price).'
+        const result = processLatexTags(input)
+        expect(result).toContain('$$\\$100$$')
+        expect(result).toContain('](#cite~https://example.com/price)')
+      })
+
+      it('handles links with nested parentheses in URL', () => {
+        const input =
+          'See $x$[1](#cite~https://example.com/path_(section)) for info'
+        const result = processLatexTags(input)
+        expect(result).toContain('$$x$$')
+        expect(result).toContain('(#cite~https://example.com/path_(section))')
+      })
     })
 
     describe('edge cases', () => {

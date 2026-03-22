@@ -237,6 +237,16 @@ function convertSingleDollarLatex(segment: string): string {
   let index = 0
 
   while (index < segment.length) {
+    // Skip past markdown link URLs: ](...)
+    if (segment[index] === ']' && segment[index + 1] === '(') {
+      const closeParen = findClosingParen(segment, index + 2)
+      if (closeParen !== -1) {
+        output += segment.slice(index, closeParen + 1)
+        index = closeParen + 1
+        continue
+      }
+    }
+
     // Skip past existing $$...$$ blocks
     if (segment[index] === '$' && segment[index + 1] === '$') {
       const closeIdx = segment.indexOf('$$', index + 2)
@@ -276,9 +286,32 @@ function convertSingleDollarLatex(segment: string): string {
   return output
 }
 
+function findClosingParen(segment: string, startIndex: number): number {
+  let depth = 1
+  let index = startIndex
+  while (index < segment.length) {
+    if (segment[index] === '(') depth++
+    if (segment[index] === ')') {
+      depth--
+      if (depth === 0) return index
+    }
+    index++
+  }
+  return -1
+}
+
 function findSingleDollarClose(segment: string, startIndex: number): number {
   let index = startIndex
   while (index < segment.length) {
+    // Skip past markdown link URLs: ](...)
+    if (segment[index] === ']' && segment[index + 1] === '(') {
+      const closeParen = findClosingParen(segment, index + 2)
+      if (closeParen !== -1) {
+        index = closeParen + 1
+        continue
+      }
+    }
+
     if (
       segment[index] === '$' &&
       (index + 1 >= segment.length || segment[index + 1] !== '$') &&
@@ -292,10 +325,6 @@ function findSingleDollarClose(segment: string, startIndex: number): number {
     index++
   }
   return -1
-}
-
-function hasLatexCommands(content: string): boolean {
-  return /\\[a-zA-Z$]/.test(content)
 }
 
 function hasUnescapedDollar(content: string): boolean {
