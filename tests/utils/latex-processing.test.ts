@@ -548,6 +548,55 @@ describe('latex-processing', () => {
         expect(result).toContain('](#cite~https://example.com/price)')
       })
 
+      // --- Currency $ followed by digits should not be treated as closers ---
+
+      it('does not match currency $ signs separated by long prose', () => {
+        const input =
+          'Before you celebrate the $2M, model the after-tax outcome. If your shares qualify for **QSBS** (federal 0% up to $10M gain), that $2M might be entirely tax-free. If QSBS has expired, you need to gross ~$3M+ in sale value to net $2M.'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('does not match currency $ signs across sentences with citations', () => {
+        const input =
+          "that $2M might be entirely tax-free[1](#cite-1~https://keystonegp.com/calculator/~Secondary%20Sale%20Calculator). If QSBS has expired or doesn't apply, you're looking at ~30–37% effective tax (federal + state), meaning you need to gross ~$3M+ in sale value to net $2M."
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('does not treat $DIGIT as a math closer', () => {
+        const input = 'between $5 and $15 dollars'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('does not treat ~$3M+ as a math closer', () => {
+        const input =
+          'that $2M might be tax-free, you need to gross ~$3M+ to net $2M.'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('does not match $10-$20 range as math', () => {
+        const input = 'costs $10-$20 per item'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('does not match $100/$200 as math', () => {
+        const input = 'the ratio is $100/$200 per unit'
+        const result = processLatexTags(input)
+        expect(result).toBe(input)
+      })
+
+      it('still converts short $...$ math despite nearby currency', () => {
+        const input =
+          'The cost is $500 per unit and the formula is $\\frac{a}{b}$ exactly.'
+        const result = processLatexTags(input)
+        expect(result).toContain('$500')
+        expect(result).toContain('$$\\frac{a}{b}$$')
+      })
+
       it('handles links with nested parentheses in URL', () => {
         const input =
           'See $x$[1](#cite~https://example.com/path_(section)) for info'

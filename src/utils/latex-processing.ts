@@ -227,11 +227,9 @@ function findMatchingInlineClose(segment: string, startIndex: number): number {
   return -1
 }
 
-// Convert $...$ to $$...$$ when the content contains LaTeX commands.
-// This handles cases where the model uses single-dollar math (e.g. $\$10,000$)
-// despite being prompted to use \(...\) syntax.
-// We only convert when LaTeX commands are detected to avoid treating
-// currency amounts like $10,000 as math.
+// Convert $...$ to $$...$$ for remark-math (singleDollarTextMath is off).
+// Skips markdown link URLs and checks for unescaped inner $ to avoid
+// false positives.
 function convertSingleDollarLatex(segment: string): string {
   let output = ''
   let index = 0
@@ -315,6 +313,8 @@ function findSingleDollarClose(segment: string, startIndex: number): number {
     if (
       segment[index] === '$' &&
       (index + 1 >= segment.length || segment[index + 1] !== '$') &&
+      // A $ followed by a digit is a currency opening ($3M, $100), not a math closer
+      (index + 1 >= segment.length || !/\d/.test(segment[index + 1])) &&
       segment[index - 1] !== '\\' &&
       segment[index - 1] !== ' ' &&
       segment[index - 1] !== '\t' &&
