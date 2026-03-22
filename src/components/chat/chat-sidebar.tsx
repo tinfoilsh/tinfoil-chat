@@ -646,8 +646,8 @@ export function ChatSidebar({
       if (!encryptionService.getKey()) {
         // Prefer passkey setup when available
         if (passkeySetupAvailable && onSetupPasskey) {
-          await onSetupPasskey()
-          return
+          const success = await onSetupPasskey()
+          if (success) return
         }
 
         // Turn on the toggle visually (but don't persist yet)
@@ -1170,8 +1170,10 @@ export function ChatSidebar({
                           <button
                             onClick={async () => {
                               if (passkeySetupAvailable && onSetupPasskey) {
-                                await onSetupPasskey()
-                              } else if (onCloudSyncSetupClick) {
+                                const success = await onSetupPasskey()
+                                if (success) return
+                              }
+                              if (onCloudSyncSetupClick) {
                                 onCloudSyncSetupClick()
                               }
                             }}
@@ -1711,8 +1713,10 @@ export function ChatSidebar({
                       <button
                         onClick={async () => {
                           if (passkeySetupAvailable && onSetupPasskey) {
-                            await onSetupPasskey()
-                          } else if (onCloudSyncSetupClick) {
+                            const success = await onSetupPasskey()
+                            if (success) return
+                          }
+                          if (onCloudSyncSetupClick) {
                             onCloudSyncSetupClick()
                           }
                         }}
