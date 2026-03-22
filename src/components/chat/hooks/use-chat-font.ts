@@ -1,10 +1,11 @@
 import { SETTINGS_CHAT_FONT } from '@/constants/storage-keys'
 import { useEffect, useState } from 'react'
 
-export type ChatFont = 'default' | 'mono' | 'system' | 'dyslexic'
+export type ChatFont = 'default' | 'serif' | 'mono' | 'system' | 'dyslexic'
 
 export const CHAT_FONT_CLASSES: Record<ChatFont, string> = {
   default: 'font-aeonik',
+  serif: 'font-lora',
   mono: 'font-aeonik-fono',
   system: 'font-sans',
   dyslexic: 'font-opendyslexic',
@@ -20,6 +21,7 @@ export const useChatFont = () => {
         if (
           saved &&
           (saved === 'default' ||
+            saved === 'serif' ||
             saved === 'mono' ||
             saved === 'system' ||
             saved === 'dyslexic')
@@ -47,6 +49,7 @@ export const useChatFont = () => {
         key === SETTINGS_CHAT_FONT &&
         newValue &&
         (newValue === 'default' ||
+          newValue === 'serif' ||
           newValue === 'mono' ||
           newValue === 'system' ||
           newValue === 'dyslexic')

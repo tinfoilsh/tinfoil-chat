@@ -23,6 +23,7 @@ module.exports = {
         'aeonik-fono': ['var(--font-aeonik-fono)', 'sans-serif'],
         aeonik: ['var(--font-aeonik)', 'sans-serif'],
         opendyslexic: ['var(--font-opendyslexic)', 'sans-serif'],
+        lora: ['var(--font-lora)', 'serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Consolas', 'monospace'],
       },
       borderRadius: {

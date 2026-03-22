@@ -257,7 +257,7 @@ export function SettingsModal({
 
   // Chat font setting
   const [chatFont, setChatFont] = useState<
-    'default' | 'mono' | 'system' | 'dyslexic'
+    'default' | 'serif' | 'mono' | 'system' | 'dyslexic'
   >('default')
 
   // Active tab state
@@ -473,6 +473,7 @@ export function SettingsModal({
     const savedChatFont = localStorage.getItem(SETTINGS_CHAT_FONT)
     if (
       savedChatFont === 'default' ||
+      savedChatFont === 'serif' ||
       savedChatFont === 'mono' ||
       savedChatFont === 'system' ||
       savedChatFont === 'dyslexic'
@@ -689,7 +690,7 @@ export function SettingsModal({
   }
 
   const handleChatFontChange = (
-    font: 'default' | 'mono' | 'system' | 'dyslexic',
+    font: 'default' | 'serif' | 'mono' | 'system' | 'dyslexic',
   ) => {
     setChatFont(font)
     if (isClient) {
@@ -1893,13 +1894,18 @@ ${encryptionKey.replace('key_', '')}
                           Choose the font for chat messages
                         </div>
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-5 gap-2">
                         {(
                           [
                             {
                               id: 'default',
                               label: 'Default',
                               fontClass: 'font-aeonik',
+                            },
+                            {
+                              id: 'serif',
+                              label: 'Serif',
+                              fontClass: 'font-lora',
                             },
                             {
                               id: 'mono',
