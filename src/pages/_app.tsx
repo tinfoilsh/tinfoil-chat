@@ -68,6 +68,21 @@ const aeonik = localFont({
   declarations: [{ prop: 'ascent-override', value: '90%' }],
 })
 
+const lora = localFont({
+  src: [
+    {
+      path: '../fonts/lora-variable.woff2',
+      style: 'normal',
+    },
+    {
+      path: '../fonts/lora-variable-italic.woff2',
+      style: 'italic',
+    },
+  ],
+  variable: '--font-lora',
+  display: 'swap',
+})
+
 const openDyslexic = localFont({
   src: [
     {
@@ -112,10 +127,11 @@ export default function App({ Component, pageProps }: AppProps) {
           --font-aeonik-fono: ${aeonikFono.style.fontFamily};
           --font-aeonik: ${aeonik.style.fontFamily};
           --font-opendyslexic: ${openDyslexic.style.fontFamily};
+          --font-lora: ${lora.style.fontFamily};
         }
       `}</style>
       <div
-        className={`${aeonikFono.variable} ${aeonik.variable} ${openDyslexic.variable}`}
+        className={`${aeonikFono.variable} ${aeonik.variable} ${openDyslexic.variable} ${lora.variable}`}
       >
         <ClerkProvider telemetry={false} afterSignOutUrl="/">
           <AuthCleanupHandler />
