@@ -787,7 +787,8 @@ export function SettingsModal({
         if (passkeySetupAvailable && onSetupPasskey) {
           setIsOpen(false)
           try {
-            await onSetupPasskey()
+            const success = await onSetupPasskey()
+            if (success) return
           } catch (error) {
             toast({
               title:
@@ -800,6 +801,10 @@ export function SettingsModal({
                   : 'Could not create passkey backup. You can try again later.',
               variant: 'destructive',
             })
+          }
+          // Passkey setup didn't succeed — fall through to manual key setup
+          if (onCloudSyncSetupClick) {
+            onCloudSyncSetupClick()
           }
           return
         }
