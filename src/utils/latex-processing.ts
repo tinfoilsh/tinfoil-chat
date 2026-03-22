@@ -89,7 +89,8 @@ export function processLatexTags(text: string): string {
         (part.startsWith('`') && part.endsWith('`'))
       if (isCodeBlock) return part
 
-      return transformMathDelimiters(part)
+      const withDelimiters = transformMathDelimiters(part)
+      return convertSingleDollarLatex(withDelimiters)
     })
     .join('')
 }
@@ -224,6 +225,86 @@ function findMatchingInlineClose(segment: string, startIndex: number): number {
   }
 
   return -1
+}
+
+// Convert $...$ to $$...$$ when the content contains LaTeX commands.
+// This handles cases where the model uses single-dollar math (e.g. $\$10,000$)
+// despite being prompted to use \(...\) syntax.
+// We only convert when LaTeX commands are detected to avoid treating
+// currency amounts like $10,000 as math.
+function convertSingleDollarLatex(segment: string): string {
+  let output = ''
+  let index = 0
+
+  while (index < segment.length) {
+    // Skip past existing $$...$$ blocks
+    if (segment[index] === '$' && segment[index + 1] === '$') {
+      const closeIdx = segment.indexOf('$$', index + 2)
+      if (closeIdx !== -1) {
+        output += segment.slice(index, closeIdx + 2)
+        index = closeIdx + 2
+        continue
+      }
+    }
+
+    // Look for opening single $
+    if (
+      segment[index] === '$' &&
+      index + 1 < segment.length &&
+      segment[index + 1] !== '$' &&
+      segment[index + 1] !== ' ' &&
+      segment[index + 1] !== '\t' &&
+      segment[index + 1] !== '\n' &&
+      (index === 0 || segment[index - 1] !== '\\') &&
+      (index === 0 || segment[index - 1] !== '$')
+    ) {
+      const closeIndex = findSingleDollarClose(segment, index + 1)
+      if (closeIndex !== -1) {
+        const inner = segment.slice(index + 1, closeIndex)
+        if (!hasUnescapedDollar(inner)) {
+          output += `$$${inner}$$`
+          index = closeIndex + 1
+          continue
+        }
+      }
+    }
+
+    output += segment[index]
+    index++
+  }
+
+  return output
+}
+
+function findSingleDollarClose(segment: string, startIndex: number): number {
+  let index = startIndex
+  while (index < segment.length) {
+    if (
+      segment[index] === '$' &&
+      (index + 1 >= segment.length || segment[index + 1] !== '$') &&
+      segment[index - 1] !== '\\' &&
+      segment[index - 1] !== ' ' &&
+      segment[index - 1] !== '\t' &&
+      segment[index - 1] !== '\n'
+    ) {
+      return index
+    }
+    index++
+  }
+  return -1
+}
+
+function hasLatexCommands(content: string): boolean {
+  return /\\[a-zA-Z$]/.test(content)
+}
+
+function hasUnescapedDollar(content: string): boolean {
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === '$' && (i === 0 || content[i - 1] !== '\\')) {
+      return true
+    }
+  }
+  return false
 }
 
 function isEscapedDelimiter(segment: string, delimiterIndex: number): boolean {
