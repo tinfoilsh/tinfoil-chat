@@ -333,7 +333,7 @@ const DefaultMessageComponent = ({
                       >
                         <div
                           className={cn(
-                            'prose w-full max-w-none text-lg prose-pre:bg-transparent prose-pre:p-0',
+                            'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
                             'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
                             'prose-a:text-blue-500 hover:prose-a:text-blue-600',
                           )}
@@ -405,7 +405,7 @@ const DefaultMessageComponent = ({
                       handleCancelEdit()
                     }
                   }}
-                  className="w-full resize-none bg-transparent text-lg leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
+                  className="w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
                   rows={Math.min(
                     10,
                     Math.max(3, editContent.split('\n').length),
