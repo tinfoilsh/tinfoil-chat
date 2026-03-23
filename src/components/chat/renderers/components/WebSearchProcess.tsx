@@ -127,7 +127,7 @@ export const WebSearchProcess = memo(function WebSearchProcess({
             />
           </svg>
         )}
-        <span className="min-w-0 text-lg text-content-primary/50">
+        <span className="min-w-0 text-base text-content-primary/50">
           {isSearching ? (
             <>
               <span className="font-medium">Searching the web...</span>

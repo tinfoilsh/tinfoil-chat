@@ -298,7 +298,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
             <div className="min-w-0">
               {thoughtSummary ? (
                 <span
-                  className="block animate-shimmer truncate bg-clip-text text-lg font-medium text-transparent"
+                  className="block animate-shimmer truncate bg-clip-text text-base font-medium text-transparent"
                   style={{
                     backgroundImage: isDarkMode
                       ? 'linear-gradient(90deg, #9ca3af 0%, #e5e7eb 25%, #f9fafb 50%, #e5e7eb 75%, #9ca3af 100%)'
@@ -310,13 +310,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                 </span>
               ) : (
                 <div className="flex items-center gap-1.5 text-content-primary/50">
-                  <span className="text-lg font-medium">Thinking</span>
+                  <span className="text-base font-medium">Thinking</span>
                   <LoadingDots isThinking={true} />
                 </div>
               )}
             </div>
           ) : (
-            <span className="text-lg text-content-primary/50">
+            <span className="text-base text-content-primary/50">
               <span className="font-medium">Thought</span>
               {thinkingDuration && (
                 <span className="font-normal">

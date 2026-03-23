@@ -60,7 +60,7 @@ export const URLFetchProcess = memo(function URLFetchProcess({
         {urlFetches.map((fetch) => (
           <div
             key={fetch.id}
-            className="flex min-h-7 items-center gap-2 text-lg"
+            className="flex min-h-7 items-center gap-2 text-base"
           >
             {fetch.status === 'fetching' ? (
               <FetchSpinner />
