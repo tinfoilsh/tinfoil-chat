@@ -280,6 +280,7 @@ const PreviewContainer = ({
 const SvgPreview = ({ code }: { code: string }) => {
   const sanitizedSvg = DOMPurify.sanitize(code, {
     USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ['style'],
   })
 
   return (
@@ -636,7 +637,7 @@ const MermaidPreview = ({
   code: string
   isDarkMode: boolean
 }) => {
-  const [svg, setSvg] = useState<string>('')
+  const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const idRef = useMemo(
     () => `mermaid-${Math.random().toString(36).slice(2, 11)}`,
@@ -656,14 +657,16 @@ const MermaidPreview = ({
         })
 
         const { svg: renderedSvg } = await mermaid.render(idRef, code)
-        if (!cancelled) {
-          setSvg(renderedSvg)
+        if (!cancelled && containerRef.current) {
+          containerRef.current.innerHTML = renderedSvg
           setError(null)
         }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
-          setSvg('')
+          if (containerRef.current) {
+            containerRef.current.innerHTML = ''
+          }
         }
       }
     }
@@ -678,14 +681,10 @@ const MermaidPreview = ({
     return <div className="text-sm text-red-500">Mermaid error: {error}</div>
   }
 
-  const sanitizedSvg = DOMPurify.sanitize(svg, {
-    USE_PROFILES: { svg: true, svgFilters: true },
-  })
-
   return (
     <div
+      ref={containerRef}
       className="flex w-full items-center justify-center [&>svg]:max-w-full"
-      dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
     />
   )
 }
