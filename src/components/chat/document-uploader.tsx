@@ -1,5 +1,8 @@
 import { getAIModels } from '@/config/models'
-import { getTinfoilClient } from '@/services/inference/tinfoil-client'
+import {
+  getSessionToken,
+  getTinfoilClient,
+} from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import {
   getDocumentFormat,
@@ -295,6 +298,7 @@ export const useDocumentUploader = (
       // Add model parameter to formData
       formData.append('model', modelName)
 
+      const apiKey = await getSessionToken()
       const client = new SecureClient()
       const controller = new AbortController()
       const timeoutId = setTimeout(
@@ -305,6 +309,9 @@ export const useDocumentUploader = (
       const response = await client
         .fetch(endpoint, {
           method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
           body: formData,
           signal: controller.signal,
         })

@@ -196,6 +196,10 @@ async function initClient(sessionToken: string): Promise<TinfoilAI> {
   }
 }
 
+export async function getSessionToken(): Promise<string> {
+  return fetchSessionToken()
+}
+
 async function getRawClient(): Promise<TinfoilAI> {
   const sessionToken = await fetchSessionToken()
 
