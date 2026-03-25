@@ -10,6 +10,7 @@ import { BsCheckLg } from 'react-icons/bs'
 import { GoClockFill } from 'react-icons/go'
 import { RxCopy } from 'react-icons/rx'
 import { hasMessageAttachments } from '../../attachment-helpers'
+import { CHAT_FONT_CLASSES, useChatFont } from '../../hooks/use-chat-font'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
@@ -31,6 +32,7 @@ const DefaultMessageComponent = ({
   onRegenerateMessage,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
+  const chatFont = useChatFont()
   const [isEditing, setIsEditing] = React.useState(false)
   const [editContent, setEditContent] = React.useState(message.content || '')
   const [copiedUser, setCopiedUser] = React.useState(false)
@@ -405,7 +407,10 @@ const DefaultMessageComponent = ({
                       handleCancelEdit()
                     }
                   }}
-                  className="w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none"
+                  className={cn(
+                    'w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
+                    CHAT_FONT_CLASSES[chatFont],
+                  )}
                   rows={Math.min(
                     10,
                     Math.max(3, editContent.split('\n').length),
