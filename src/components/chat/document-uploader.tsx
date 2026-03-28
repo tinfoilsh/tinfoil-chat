@@ -5,7 +5,6 @@ import {
 } from '@/services/inference/tinfoil-client'
 import { logError } from '@/utils/error-handling'
 import {
-  getDocumentFormat,
   getFileIconType as getFileIcon,
   isPlainTextFile,
 } from '@/utils/file-types'
@@ -65,11 +64,6 @@ export const useDocumentUploader = (
       })
       throw error
     }
-  }
-
-  // Determine the format based on file extension
-  const getFormatFromFileType = (file: File): string => {
-    return getDocumentFormat(file.name)
   }
 
   // Handle text files directly in the browser
@@ -277,26 +271,9 @@ export const useDocumentUploader = (
       // Create a FormData object for the file
       const formData = new FormData()
 
-      // Add the file - make sure it's correctly named as expected by the API
       formData.append('files', file)
 
-      // Add essential parameters - ensure they're formatted as arrays if needed
-      formData.append('to_formats[]', 'md')
-      formData.append('from_formats[]', getFormatFromFileType(file))
-      formData.append('pipeline', 'standard')
-      formData.append('return_as_file', 'false')
-
-      // Add parameters to control image handling
-      formData.append('include_images', 'false')
-      formData.append('do_picture_classification', 'false')
-      formData.append('do_picture_description', 'false')
-      formData.append('image_export_mode', 'placeholder')
-      formData.append('do_ocr', 'true')
-
-      const { endpoint, modelName } = await getDocUploadModel()
-
-      // Add model parameter to formData
-      formData.append('model', modelName)
+      const { endpoint } = await getDocUploadModel()
 
       const apiKey = await getSessionToken()
       const client = new SecureClient()
