@@ -1,33 +1,33 @@
 import { SETTINGS_CHAT_FONT } from '@/constants/storage-keys'
 import { useEffect, useState } from 'react'
 
-export type ChatFont = 'default' | 'serif' | 'mono' | 'system' | 'dyslexic'
+export type ChatFont = 'system' | 'serif' | 'mono' | 'dyslexic'
 
 export const CHAT_FONT_CLASSES: Record<ChatFont, string> = {
-  default: 'font-aeonik',
+  system: 'font-system',
   serif: 'font-lora',
   mono: 'font-aeonik-fono',
-  system: 'font-sans',
   dyslexic: 'font-opendyslexic',
 }
 
+export const normalizeChatFont = (
+  value: string | null | undefined,
+): ChatFont => {
+  if (value === 'serif' || value === 'mono' || value === 'dyslexic') {
+    return value
+  }
+
+  return 'system'
+}
+
 export const useChatFont = () => {
-  const [chatFont, setChatFont] = useState<ChatFont>('default')
+  const [chatFont, setChatFont] = useState<ChatFont>('system')
 
   useEffect(() => {
     const loadChatFont = () => {
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem(SETTINGS_CHAT_FONT)
-        if (
-          saved &&
-          (saved === 'default' ||
-            saved === 'serif' ||
-            saved === 'mono' ||
-            saved === 'system' ||
-            saved === 'dyslexic')
-        ) {
-          setChatFont(saved)
-        }
+        setChatFont(normalizeChatFont(saved))
       }
     }
 
@@ -45,16 +45,8 @@ export const useChatFont = () => {
         newValue = (e as CustomEvent).detail
       }
 
-      if (
-        key === SETTINGS_CHAT_FONT &&
-        newValue &&
-        (newValue === 'default' ||
-          newValue === 'serif' ||
-          newValue === 'mono' ||
-          newValue === 'system' ||
-          newValue === 'dyslexic')
-      ) {
-        setChatFont(newValue)
+      if (key === SETTINGS_CHAT_FONT) {
+        setChatFont(normalizeChatFont(newValue))
       }
     }
 
