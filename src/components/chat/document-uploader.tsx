@@ -9,6 +9,7 @@ import {
   isPlainTextFile,
 } from '@/utils/file-types'
 import {
+  generateThumbnailBase64,
   isAudioFile,
   isImageFile,
   scaleAndEncodeImage,
@@ -138,13 +139,21 @@ export const useDocumentUploader = (
     onSuccess: (
       content: string,
       documentId: string,
-      imageData?: { base64: string; mimeType: string },
+      imageData?: {
+        base64: string
+        mimeType: string
+        thumbnailBase64?: string
+      },
       hasDescription?: boolean,
     ) => void,
     onError: (error: Error, documentId: string) => void,
     onGeneratingDescription?: (
       documentId: string,
-      imageData?: { base64: string; mimeType: string },
+      imageData?: {
+        base64: string
+        mimeType: string
+        thumbnailBase64?: string
+      },
     ) => void,
   ) => {
     const documentId = getDocumentId()
@@ -185,11 +194,23 @@ export const useDocumentUploader = (
         }
 
         try {
-          const imageData = await scaleAndEncodeImage(file, {
+          const scaled = await scaleAndEncodeImage(file, {
             maxWidth: 768,
             maxHeight: 768,
             quality: 0.85,
           })
+
+          let thumbnailBase64: string | undefined
+          try {
+            thumbnailBase64 = await generateThumbnailBase64(
+              scaled.base64,
+              scaled.mimeType,
+            )
+          } catch {
+            // Non-fatal — proceed without thumbnail
+          }
+
+          const imageData = { ...scaled, thumbnailBase64 }
 
           // If current model is multimodal, skip description generation
           // The image will be sent directly to the model
