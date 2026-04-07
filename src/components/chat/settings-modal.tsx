@@ -73,6 +73,7 @@ import { PiSignIn } from 'react-icons/pi'
 import { RiLightbulbFill, RiShieldKeyholeFill } from 'react-icons/ri'
 import QRCode from 'react-qr-code'
 import { CONSTANTS } from './constants'
+import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import type { Chat } from './types'
 
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
@@ -256,9 +257,7 @@ export function SettingsModal({
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
   // Chat font setting
-  const [chatFont, setChatFont] = useState<
-    'default' | 'serif' | 'mono' | 'system' | 'dyslexic'
-  >('default')
+  const [chatFont, setChatFont] = useState<ChatFont>('system')
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<SettingsTab>(
@@ -471,15 +470,7 @@ export function SettingsModal({
 
     // Load chat font setting
     const savedChatFont = localStorage.getItem(SETTINGS_CHAT_FONT)
-    if (
-      savedChatFont === 'default' ||
-      savedChatFont === 'serif' ||
-      savedChatFont === 'mono' ||
-      savedChatFont === 'system' ||
-      savedChatFont === 'dyslexic'
-    ) {
-      setChatFont(savedChatFont)
-    }
+    setChatFont(normalizeChatFont(savedChatFont))
   }, [defaultSystemPrompt])
 
   // Initial load settings from localStorage
@@ -689,9 +680,7 @@ export function SettingsModal({
     }
   }
 
-  const handleChatFontChange = (
-    font: 'default' | 'serif' | 'mono' | 'system' | 'dyslexic',
-  ) => {
+  const handleChatFontChange = (font: ChatFont) => {
     setChatFont(font)
     if (isClient) {
       localStorage.setItem(SETTINGS_CHAT_FONT, font)
@@ -1899,13 +1888,13 @@ ${encryptionKey.replace('key_', '')}
                           Choose the font for chat messages
                         </div>
                       </div>
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-4 gap-2">
                         {(
                           [
                             {
-                              id: 'default',
-                              label: 'Default',
-                              fontClass: 'font-aeonik',
+                              id: 'system',
+                              label: 'System',
+                              fontClass: 'font-system',
                             },
                             {
                               id: 'serif',
@@ -1916,11 +1905,6 @@ ${encryptionKey.replace('key_', '')}
                               id: 'mono',
                               label: 'Mono',
                               fontClass: 'font-aeonik-fono',
-                            },
-                            {
-                              id: 'system',
-                              label: 'System',
-                              fontClass: 'font-sans',
                             },
                             {
                               id: 'dyslexic',
