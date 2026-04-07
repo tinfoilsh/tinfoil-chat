@@ -197,7 +197,7 @@ function generateProjectName(): string {
 function buildAttachment(opts: {
   id: string
   fileName: string
-  imageData?: { base64: string; mimeType: string }
+  imageData?: { base64: string; mimeType: string; thumbnailBase64?: string }
   textContent?: string
   description?: string
 }): Attachment | undefined {
@@ -208,6 +208,7 @@ function buildAttachment(opts: {
       fileName: opts.fileName,
       mimeType: opts.imageData.mimeType,
       base64: opts.imageData.base64,
+      thumbnailBase64: opts.imageData.thumbnailBase64,
       description: opts.description ?? opts.fileName,
     }
   }

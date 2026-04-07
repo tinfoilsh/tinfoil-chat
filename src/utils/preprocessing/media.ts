@@ -141,3 +141,67 @@ export async function scaleAndEncodeImage(
 
   return { base64, mimeType }
 }
+
+const THUMBNAIL_MAX_DIMENSION = 300
+const THUMBNAIL_QUALITY = 0.6
+
+/**
+ * Generate a small JPEG thumbnail from a base64-encoded image.
+ * Returns the thumbnail as a plain base64 string (no data-URL prefix).
+ */
+export async function generateThumbnailBase64(
+  base64: string,
+  mimeType: string,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) {
+      reject(new Error('Failed to get canvas context'))
+      return
+    }
+
+    img.onload = () => {
+      let width = img.width
+      let height = img.height
+
+      if (width > THUMBNAIL_MAX_DIMENSION || height > THUMBNAIL_MAX_DIMENSION) {
+        const ratio = THUMBNAIL_MAX_DIMENSION / Math.max(width, height)
+        width = Math.floor(width * ratio)
+        height = Math.floor(height * ratio)
+      }
+
+      canvas.width = width
+      canvas.height = height
+      ctx.drawImage(img, 0, 0, width, height)
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Failed to create thumbnail blob'))
+            return
+          }
+          const reader = new FileReader()
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              const dataUrl = e.target.result as string
+              resolve(dataUrl.split(',')[1])
+            } else {
+              reject(new Error('Failed to read thumbnail blob'))
+            }
+          }
+          reader.onerror = () =>
+            reject(new Error('Error reading thumbnail blob'))
+          reader.readAsDataURL(blob)
+        },
+        'image/jpeg',
+        THUMBNAIL_QUALITY,
+      )
+    }
+
+    img.onerror = () => reject(new Error('Failed to load image for thumbnail'))
+    img.src = `data:${mimeType};base64,${base64}`
+  })
+}
