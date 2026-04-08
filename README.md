@@ -1,4 +1,4 @@
-# Tinfoil Chat
+# Tinfoil AI Chat Web App
 
 **Live at:** [chat.tinfoil.sh](https://chat.tinfoil.sh)
 
@@ -7,8 +7,8 @@
 1. **Clone and install**
 
    ```bash
-   git clone https://github.com/tinfoilsh/tinfoil-chat.git
-   cd tinfoil-chat
+   git clone https://github.com/tinfoilsh/tinfoil-webapp.git
+   cd tinfoil-webapp
    npm install
    ```
 
