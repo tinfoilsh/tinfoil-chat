@@ -19,9 +19,7 @@ export function AuthCleanupHandler() {
   const [showModal, setShowModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const hasCheckedRef = useRef(false)
-  const pendingSignoutCleanupRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
+  const pendingSignoutCleanupRef = useRef<number | null>(null)
   const latestAuthStateRef = useRef({
     isLoaded,
     isSignedIn,
