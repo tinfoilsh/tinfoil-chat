@@ -1,6 +1,7 @@
 import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { act, render } from '@testing-library/react'
+import { createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockPerformSignoutCleanup = vi.fn()
@@ -68,7 +69,7 @@ describe('AuthCleanupHandler', () => {
   it('does not clear data for a transient signed-out state', async () => {
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
 
-    const { rerender } = render(<AuthCleanupHandler />)
+    const { rerender } = render(createElement(AuthCleanupHandler))
 
     await act(async () => {
       vi.advanceTimersByTime(1000)
@@ -82,7 +83,7 @@ describe('AuthCleanupHandler', () => {
       user: { id: 'user_123' },
     }
 
-    rerender(<AuthCleanupHandler />)
+    rerender(createElement(AuthCleanupHandler))
 
     await act(async () => {
       vi.advanceTimersByTime(2000)
@@ -96,7 +97,7 @@ describe('AuthCleanupHandler', () => {
   it('clears data after the grace period when still signed out', async () => {
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
 
-    render(<AuthCleanupHandler />)
+    render(createElement(AuthCleanupHandler))
 
     await act(async () => {
       vi.advanceTimersByTime(2000)
@@ -118,7 +119,7 @@ describe('AuthCleanupHandler', () => {
       user: { id: 'user_new' },
     }
 
-    render(<AuthCleanupHandler />)
+    render(createElement(AuthCleanupHandler))
 
     expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_new')
     expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
