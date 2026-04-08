@@ -4,7 +4,7 @@ import {
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
-import { logError, logInfo } from '@/utils/error-handling'
+import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
@@ -43,6 +43,7 @@ export interface SyncStatusResult {
 const UPLOAD_BASE_DELAY_MS = 1000
 const UPLOAD_MAX_DELAY_MS = 8000
 const UPLOAD_MAX_RETRIES = 3
+const REMOTE_LIST_MAX_ATTEMPTS = 2
 
 const isStreaming = (id: string) => streamingTracker.isStreaming(id)
 
@@ -624,6 +625,65 @@ export class CloudSyncService {
     return this.withSyncLock(() => this.doSyncAllChats())
   }
 
+  private async listChatsWithRetry(options: {
+    includeContent: boolean
+    limit: number
+  }) {
+    let lastError: unknown
+
+    for (let attempt = 1; attempt <= REMOTE_LIST_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await cloudStorage.listChats(options)
+      } catch (error) {
+        lastError = error
+
+        if (attempt < REMOTE_LIST_MAX_ATTEMPTS) {
+          logWarning('Failed to list remote chats, retrying', {
+            component: 'CloudSync',
+            action: 'listChatsWithRetry',
+            metadata: {
+              attempt,
+              maxAttempts: REMOTE_LIST_MAX_ATTEMPTS,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          })
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError))
+  }
+
+  private async listProjectChatsWithRetry(
+    projectId: string,
+    options: { includeContent: boolean; continuationToken?: string },
+  ) {
+    let lastError: unknown
+
+    for (let attempt = 1; attempt <= REMOTE_LIST_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await projectStorage.listProjectChats(projectId, options)
+      } catch (error) {
+        lastError = error
+
+        if (attempt < REMOTE_LIST_MAX_ATTEMPTS) {
+          logWarning('Failed to list project chats, retrying', {
+            component: 'CloudSync',
+            action: 'listProjectChatsWithRetry',
+            metadata: {
+              attempt,
+              maxAttempts: REMOTE_LIST_MAX_ATTEMPTS,
+              projectId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          })
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError))
+  }
+
   private async doSyncAllChats(): Promise<SyncResult> {
     const result: SyncResult = {
       uploaded: 0,
@@ -638,20 +698,10 @@ export class CloudSyncService {
       result.errors.push(...backupResult.errors)
 
       // Then, get list of remote chats with content
-      let remoteList
-      try {
-        remoteList = await cloudStorage.listChats({
-          includeContent: true,
-          limit: PAGINATION.CHATS_PER_PAGE,
-        })
-      } catch (error) {
-        // Log the error but continue with sync
-        logError('Failed to list remote chats', error, {
-          component: 'CloudSync',
-          action: 'syncAllChats',
-        })
-        return result
-      }
+      const remoteList = await this.listChatsWithRetry({
+        includeContent: true,
+        limit: PAGINATION.CHATS_PER_PAGE,
+      })
 
       const remoteConversations = [...(remoteList.conversations || [])]
 
@@ -699,9 +749,7 @@ export class CloudSyncService {
       // Detect cross-scope moves (chats moving between projects)
       await this.syncCrossScope(result)
     } catch (error) {
-      result.errors.push(
-        `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      throw error instanceof Error ? error : new Error(String(error))
     }
 
     return result
@@ -1006,7 +1054,7 @@ export class CloudSyncService {
 
       while (hasMore) {
         // Fetch project chats with content for decryption
-        const projectChatsResponse = await projectStorage.listProjectChats(
+        const projectChatsResponse = await this.listProjectChatsWithRetry(
           projectId,
           { includeContent: true, continuationToken },
         )
@@ -1077,14 +1125,12 @@ export class CloudSyncService {
         )
       }
     } catch (error) {
-      result.errors.push(
-        `Failed to sync project chats: ${error instanceof Error ? error.message : String(error)}`,
-      )
       logError('Failed to sync project chats', error, {
         component: 'CloudSync',
         action: 'syncProjectChats',
         metadata: { projectId },
       })
+      throw error instanceof Error ? error : new Error(String(error))
     }
 
     return result

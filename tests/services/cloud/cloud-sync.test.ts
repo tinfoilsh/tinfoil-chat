@@ -12,6 +12,12 @@ const mockDeleteChat = vi.fn()
 const mockIsAuthenticated = vi.fn()
 const mockUploadChat = vi.fn()
 const mockGetChatSyncStatus = vi.fn()
+const mockGetAllChatsSyncStatus = vi.fn()
+const mockGetAllChatsUpdatedSince = vi.fn()
+const mockListChats = vi.fn()
+
+const mockListProjectChats = vi.fn()
+const mockGetProjectChatsSyncStatus = vi.fn()
 
 const mockEncryptionInitialize = vi.fn()
 
@@ -19,6 +25,8 @@ const mockIsStreaming = vi.fn()
 const mockOnStreamEnd = vi.fn()
 
 const mockChatEventsEmit = vi.fn()
+const mockIngestRemoteChats = vi.fn()
+const mockSyncRemoteDeletions = vi.fn()
 
 vi.mock('@/utils/error-handling', () => ({
   logInfo: vi.fn(),
@@ -42,6 +50,19 @@ vi.mock('@/services/cloud/cloud-storage', () => ({
     isAuthenticated: (...args: any[]) => mockIsAuthenticated(...args),
     uploadChat: (...args: any[]) => mockUploadChat(...args),
     getChatSyncStatus: (...args: any[]) => mockGetChatSyncStatus(...args),
+    getAllChatsSyncStatus: (...args: any[]) =>
+      mockGetAllChatsSyncStatus(...args),
+    getAllChatsUpdatedSince: (...args: any[]) =>
+      mockGetAllChatsUpdatedSince(...args),
+    listChats: (...args: any[]) => mockListChats(...args),
+  },
+}))
+
+vi.mock('@/services/cloud/project-storage', () => ({
+  projectStorage: {
+    listProjectChats: (...args: any[]) => mockListProjectChats(...args),
+    getProjectChatsSyncStatus: (...args: any[]) =>
+      mockGetProjectChatsSyncStatus(...args),
   },
 }))
 
@@ -64,6 +85,11 @@ vi.mock('@/services/storage/chat-events', () => ({
   },
 }))
 
+vi.mock('@/services/cloud/chat-ingestion', () => ({
+  ingestRemoteChats: (...args: any[]) => mockIngestRemoteChats(...args),
+  syncRemoteDeletions: (...args: any[]) => mockSyncRemoteDeletions(...args),
+}))
+
 describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -74,9 +100,35 @@ describe('CloudSyncService', () => {
     mockIsAuthenticated.mockResolvedValue(true)
     mockUploadChat.mockResolvedValue(null)
     mockGetChatSyncStatus.mockResolvedValue({ count: 0, lastUpdated: null })
+    mockGetAllChatsSyncStatus.mockResolvedValue({
+      count: 0,
+      lastUpdated: null,
+    })
+    mockGetAllChatsUpdatedSince.mockResolvedValue({
+      conversations: [],
+      hasMore: false,
+    })
+    mockListChats.mockResolvedValue({
+      conversations: [],
+      hasMore: false,
+    })
+    mockListProjectChats.mockResolvedValue({
+      chats: [],
+      hasMore: false,
+    })
+    mockGetProjectChatsSyncStatus.mockResolvedValue({
+      count: 0,
+      lastUpdated: null,
+    })
     mockEncryptionInitialize.mockResolvedValue(null)
     mockIsStreaming.mockReturnValue(false)
     mockOnStreamEnd.mockImplementation(() => {})
+    mockIngestRemoteChats.mockResolvedValue({
+      downloaded: 0,
+      errors: [],
+      savedIds: [],
+    })
+    mockSyncRemoteDeletions.mockResolvedValue(undefined)
   })
 
   describe('reencryptAndUploadChats', () => {
@@ -345,6 +397,53 @@ describe('CloudSyncService', () => {
       const status = await service.checkSyncStatus()
 
       expect(status).toEqual({ needsSync: true, reason: 'error' })
+    })
+  })
+
+  describe('syncAllChats', () => {
+    it('retries listing remote chats before succeeding', async () => {
+      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetAllChats.mockResolvedValue([])
+      mockListChats
+        .mockRejectedValueOnce(new Error('temporary auth failure'))
+        .mockResolvedValue({
+          conversations: [],
+          hasMore: false,
+        })
+
+      const service = new CloudSyncService()
+      const result = await service.syncAllChats()
+
+      expect(mockListChats).toHaveBeenCalledTimes(2)
+      expect(result).toEqual({ uploaded: 0, downloaded: 0, errors: [] })
+    })
+
+    it('throws when remote chat listing still fails after retry', async () => {
+      mockGetUnsyncedChats.mockResolvedValue([])
+      mockListChats.mockRejectedValue(new Error('still failing'))
+
+      const service = new CloudSyncService()
+
+      await expect(service.syncAllChats()).rejects.toThrow('still failing')
+      expect(mockListChats).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('syncProjectChats', () => {
+    it('retries listing project chats before succeeding', async () => {
+      mockGetAllChats.mockResolvedValue([])
+      mockListProjectChats
+        .mockRejectedValueOnce(new Error('temporary auth failure'))
+        .mockResolvedValue({
+          chats: [],
+          hasMore: false,
+        })
+
+      const service = new CloudSyncService()
+      const result = await service.syncProjectChats('project-1')
+
+      expect(mockListProjectChats).toHaveBeenCalledTimes(2)
+      expect(result).toEqual({ uploaded: 0, downloaded: 0, errors: [] })
     })
   })
 
