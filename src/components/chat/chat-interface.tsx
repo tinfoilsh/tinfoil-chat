@@ -927,7 +927,7 @@ export function ChatInterface({
   // Profile sync is handled separately by useProfileSync hook
   // Context-aware: syncs personal chats when not in project mode, project chats when in project mode
   useEffect(() => {
-    if (!isSignedIn) return
+    if (!isAuthLoaded || !isSignedIn || !cloudSyncInitialized) return
 
     // Initial sync based on current mode
     const initialSync =
@@ -968,7 +968,9 @@ export function ChatInterface({
 
     return () => clearInterval(interval)
   }, [
+    isAuthLoaded,
     isSignedIn,
+    cloudSyncInitialized,
     isProjectMode,
     activeProject,
     syncChats,
