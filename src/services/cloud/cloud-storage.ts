@@ -1,4 +1,5 @@
 import type { Message } from '@/components/chat/types'
+import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import {
   base64ToUint8Array,
   decryptAttachment,
@@ -13,6 +14,7 @@ import { processRemoteChat, type RemoteChatData } from './chat-codec'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
+const AUTH_INIT_WAIT_MS = 3000
 
 export interface ChatListResponse {
   conversations: Array<{
@@ -73,6 +75,16 @@ function stripBase64FromMessages(messages: Message[]): Message[] {
 }
 
 export class CloudStorageService {
+  private async ensureAuthReady(): Promise<void> {
+    if (
+      !authTokenManager.isInitialized() &&
+      typeof window !== 'undefined' &&
+      localStorage.getItem(AUTH_ACTIVE_USER_ID) !== null
+    ) {
+      await authTokenManager.waitForInit(AUTH_INIT_WAIT_MS)
+    }
+  }
+
   async generateConversationId(timestamp?: string): Promise<{
     conversationId: string
     timestamp: string
@@ -94,10 +106,12 @@ export class CloudStorageService {
   }
 
   private async getHeaders(): Promise<Record<string, string>> {
+    await this.ensureAuthReady()
     return authTokenManager.getAuthHeaders()
   }
 
   async isAuthenticated(): Promise<boolean> {
+    await this.ensureAuthReady()
     return authTokenManager.isAuthenticated()
   }
 
