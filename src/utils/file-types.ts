@@ -100,6 +100,20 @@ const PLAIN_TEXT_EXTENSIONS = [
 // Archive extensions
 const ARCHIVE_EXTENSIONS = ['.zip', '.rar', '.tar']
 
+// All supported extensions combined
+const ALL_SUPPORTED_EXTENSIONS = [
+  ...IMAGE_EXTENSIONS,
+  ...Object.values(DOCUMENT_EXTENSIONS).flat(),
+  ...Object.values(MEDIA_EXTENSIONS).flat(),
+  ...Object.values(CODE_EXTENSIONS).flat(),
+  ...PLAIN_TEXT_EXTENSIONS,
+]
+
+export function isSupportedFile(filename: string): boolean {
+  const lowerFilename = filename.toLowerCase()
+  return ALL_SUPPORTED_EXTENSIONS.some((ext) => lowerFilename.endsWith(ext))
+}
+
 /**
  * Checks if a filename has an image extension
  * @param filename - The filename to check

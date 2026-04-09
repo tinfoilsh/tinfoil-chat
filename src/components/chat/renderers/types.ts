@@ -8,6 +8,7 @@ export type ProcessedDocument = {
   time: Date
   content?: string
   isUploading?: boolean
+  isUnsupported?: boolean
   attachment?: Attachment // The resolved attachment for this document
   isImageDescription?: boolean // True if content is from multimodal image description
   hasDescription?: boolean // True if a multimodal description has been generated

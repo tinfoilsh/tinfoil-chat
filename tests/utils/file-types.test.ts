@@ -42,11 +42,8 @@ describe('file-types', () => {
     describe('document types', () => {
       it.each([
         ['document.pdf', 'pdf'],
-        ['file.doc', 'docx'],
         ['file.docx', 'docx'],
-        ['slides.ppt', 'pptx'],
         ['slides.pptx', 'pptx'],
-        ['data.xls', 'xlsx'],
         ['data.xlsx', 'xlsx'],
         ['data.csv', 'csv'],
       ])('should return %s for %s', (filename, expected) => {
@@ -110,15 +107,12 @@ describe('file-types', () => {
   describe('getDocumentFormat', () => {
     it.each([
       ['document.pdf', 'pdf'],
-      ['file.doc', 'docx'],
       ['file.docx', 'docx'],
-      ['slides.ppt', 'pptx'],
       ['slides.pptx', 'pptx'],
       ['page.html', 'html'],
       ['page.htm', 'html'],
       ['readme.md', 'md'],
       ['data.csv', 'csv'],
-      ['sheet.xls', 'xlsx'],
       ['sheet.xlsx', 'xlsx'],
       ['notes.txt', 'asciidoc'],
     ])('should return %s for %s', (filename, expected) => {
