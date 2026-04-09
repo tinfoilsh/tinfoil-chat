@@ -53,6 +53,7 @@ import {
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
+import { isSupportedFile } from '@/utils/file-types'
 import {
   getProjectUploadPreference,
   setProjectUploadPreference,
@@ -1221,6 +1222,19 @@ export function ChatInterface({
     async (file: File) => {
       const tempDocId = crypto.randomUUID()
 
+      if (!isSupportedFile(file.name)) {
+        setProcessedDocuments((prev) => [
+          ...prev,
+          {
+            id: tempDocId,
+            name: file.name,
+            time: new Date(),
+            isUnsupported: true,
+          },
+        ])
+        return
+      }
+
       setProcessedDocuments((prev) => [
         ...prev,
         {
@@ -1538,7 +1552,8 @@ export function ChatInterface({
 
     // Filter out documents that are still uploading or generating descriptions
     const completedDocuments = processedDocuments.filter(
-      (doc) => !doc.isUploading && !doc.isGeneratingDescription,
+      (doc) =>
+        !doc.isUploading && !doc.isGeneratingDescription && !doc.isUnsupported,
     )
 
     const messageText = input.trim()

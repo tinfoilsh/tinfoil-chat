@@ -463,7 +463,12 @@ export function ChatInput({
               {processedDocuments.map((doc) => (
                 <div
                   key={doc.id}
-                  className="group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-2xl border border-border-subtle bg-surface-chat-background p-3 shadow-sm transition-colors"
+                  className={cn(
+                    'group relative flex min-w-[200px] max-w-[300px] flex-shrink-0 flex-col rounded-2xl border p-3 shadow-sm transition-colors',
+                    doc.isUnsupported
+                      ? 'border-red-400/50 bg-red-950/30'
+                      : 'border-border-subtle bg-surface-chat-background',
+                  )}
                 >
                   {removeDocument && (
                     <button
@@ -518,17 +523,31 @@ export function ChatInput({
                       />
                     )}
                     <div className="flex min-w-0 flex-col">
-                      <span className="truncate text-sm font-medium text-content-primary">
+                      <span
+                        className={cn(
+                          'truncate text-sm font-medium',
+                          doc.isUnsupported
+                            ? 'text-red-400'
+                            : 'text-content-primary',
+                        )}
+                      >
                         {doc.name}
                       </span>
-                      {!doc.isUploading && (
-                        <span className="text-xs text-content-muted">
-                          {doc.isGeneratingDescription
-                            ? 'Generating text description...'
-                            : doc.attachment?.type === 'image' || doc.imageData
-                              ? 'Image'
-                              : 'Document'}
+                      {doc.isUnsupported ? (
+                        <span className="text-xs font-medium text-red-400">
+                          Unsupported format
                         </span>
+                      ) : (
+                        !doc.isUploading && (
+                          <span className="text-xs text-content-muted">
+                            {doc.isGeneratingDescription
+                              ? 'Generating text description...'
+                              : doc.attachment?.type === 'image' ||
+                                  doc.imageData
+                                ? 'Image'
+                                : 'Document'}
+                          </span>
+                        )
                       )}
                     </div>
                   </div>
