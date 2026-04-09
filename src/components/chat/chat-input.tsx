@@ -450,8 +450,8 @@ export function ChatInput({
             multiple
             accept={
               isPremium
-                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt,.py,.js,.jsx,.ts,.tsx,.css,.json,.xml,.yaml,.yml,.toml,.sh,.rb,.java,.cpp,.c,.h,.hpp,.go,.rs,.swift,.kt,.r,.sql,.lua,.pl,.php,.env,.ini,.cfg,.conf,.log,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.wma'
-                : '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.txt,.py,.js,.jsx,.ts,.tsx,.css,.json,.xml,.yaml,.yml,.toml,.sh,.rb,.java,.cpp,.c,.h,.hpp,.go,.rs,.swift,.kt,.r,.sql,.lua,.pl,.php,.env,.ini,.cfg,.conf,.log'
+                ? '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.txt,.py,.js,.jsx,.ts,.tsx,.css,.json,.xml,.yaml,.yml,.toml,.sh,.rb,.java,.cpp,.c,.h,.hpp,.go,.rs,.swift,.kt,.r,.sql,.lua,.pl,.php,.env,.ini,.cfg,.conf,.log,.rtf,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm,.wma,.qfx,.qif,.ofx,.ifs,.qbo,.qbx,.bai,.bai2,.mt940,.sta,.tsv,.ics,.vcf'
+                : '.pdf,.docx,.xlsx,.pptx,.md,.html,.xhtml,.csv,.txt,.py,.js,.jsx,.ts,.tsx,.css,.json,.xml,.yaml,.yml,.toml,.sh,.rb,.java,.cpp,.c,.h,.hpp,.go,.rs,.swift,.kt,.r,.sql,.lua,.pl,.php,.env,.ini,.cfg,.conf,.log,.rtf,.qfx,.qif,.ofx,.ifs,.qbo,.qbx,.bai,.bai2,.mt940,.sta,.tsv,.ics,.vcf'
             }
           />
 
