@@ -31,7 +31,7 @@ const MEDIA_EXTENSIONS = {
 
 // Supported code extensions
 const CODE_EXTENSIONS = {
-  html: ['.html', '.htm'],
+  html: ['.html', '.htm', '.xhtml'],
   js: ['.js', '.jsx'],
   ts: ['.ts', '.tsx'],
   css: ['.css'],
@@ -188,7 +188,11 @@ export function getDocumentFormat(filename: string): string {
   if (lowerFilename.endsWith('.pdf')) return 'pdf'
   if (lowerFilename.endsWith('.docx')) return 'docx'
   if (lowerFilename.endsWith('.pptx')) return 'pptx'
-  if (lowerFilename.endsWith('.html') || lowerFilename.endsWith('.htm'))
+  if (
+    lowerFilename.endsWith('.html') ||
+    lowerFilename.endsWith('.htm') ||
+    lowerFilename.endsWith('.xhtml')
+  )
     return 'html'
   if (lowerFilename.endsWith('.md')) return 'md'
   if (lowerFilename.endsWith('.csv')) return 'csv'
