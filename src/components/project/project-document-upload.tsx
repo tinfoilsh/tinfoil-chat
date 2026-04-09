@@ -17,11 +17,8 @@ const ACCEPTED_FILE_TYPES = [
   '.json',
   '.csv',
   '.pdf',
-  '.doc',
   '.docx',
-  '.xls',
   '.xlsx',
-  '.ppt',
   '.pptx',
 ]
 

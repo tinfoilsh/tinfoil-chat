@@ -17,9 +17,9 @@ const IMAGE_EXTENSIONS = [
 // Supported document extensions
 const DOCUMENT_EXTENSIONS = {
   pdf: ['.pdf'],
-  docx: ['.doc', '.docx'],
-  pptx: ['.ppt', '.pptx'],
-  xlsx: ['.xls', '.xlsx'],
+  docx: ['.docx'],
+  pptx: ['.pptx'],
+  xlsx: ['.xlsx'],
   csv: ['.csv'],
 }
 
@@ -38,6 +38,23 @@ const CODE_EXTENSIONS = {
   md: ['.md'],
   txt: ['.txt'],
 }
+
+// Financial data extensions that can be read as plain text
+const FINANCIAL_EXTENSIONS = [
+  '.qfx',
+  '.qif',
+  '.ofx',
+  '.ifs',
+  '.qbo',
+  '.qbx',
+  '.bai',
+  '.bai2',
+  '.mt940',
+  '.sta',
+  '.tsv',
+  '.ics',
+  '.vcf',
+]
 
 // Plain text / code extensions that can be read directly in the browser
 const PLAIN_TEXT_EXTENSIONS = [
@@ -76,6 +93,8 @@ const PLAIN_TEXT_EXTENSIONS = [
   '.cfg',
   '.conf',
   '.log',
+  '.rtf',
+  ...FINANCIAL_EXTENSIONS,
 ]
 
 // Archive extensions
@@ -123,6 +142,11 @@ export function getFileIconType(filename: string): string {
     }
   }
 
+  // Check financial types
+  if (FINANCIAL_EXTENSIONS.some((ext) => lowerFilename.endsWith(ext))) {
+    return 'csv'
+  }
+
   // Check archive types
   if (ARCHIVE_EXTENSIONS.some((ext) => lowerFilename.endsWith(ext))) {
     return 'zip'
@@ -148,16 +172,13 @@ export function getDocumentFormat(filename: string): string {
   const lowerFilename = filename.toLowerCase()
 
   if (lowerFilename.endsWith('.pdf')) return 'pdf'
-  if (lowerFilename.endsWith('.docx') || lowerFilename.endsWith('.doc'))
-    return 'docx'
-  if (lowerFilename.endsWith('.pptx') || lowerFilename.endsWith('.ppt'))
-    return 'pptx'
+  if (lowerFilename.endsWith('.docx')) return 'docx'
+  if (lowerFilename.endsWith('.pptx')) return 'pptx'
   if (lowerFilename.endsWith('.html') || lowerFilename.endsWith('.htm'))
     return 'html'
   if (lowerFilename.endsWith('.md')) return 'md'
   if (lowerFilename.endsWith('.csv')) return 'csv'
-  if (lowerFilename.endsWith('.xlsx') || lowerFilename.endsWith('.xls'))
-    return 'xlsx'
+  if (lowerFilename.endsWith('.xlsx')) return 'xlsx'
   if (hasImageExtension(filename)) return 'image'
   if (lowerFilename.endsWith('.txt')) return 'asciidoc'
 
