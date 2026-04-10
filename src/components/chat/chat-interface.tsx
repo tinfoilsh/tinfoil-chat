@@ -38,6 +38,7 @@ import {
   useProject,
   useProjectSystemPrompt,
 } from '@/components/project'
+import { LogoLoading } from '@/components/ui/logo-loading'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
 import { useCloudSync } from '@/hooks/use-cloud-sync'
@@ -1785,7 +1786,7 @@ export function ChatInterface({
   if ((initialChatId || initialProjectId) && !isAuthLoaded) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-chat-background">
-        <PiSpinner className="h-10 w-10 animate-spin text-content-secondary" />
+        <LogoLoading />
       </div>
     )
   }
@@ -1836,7 +1837,7 @@ export function ChatInterface({
   if (isLoadingConfig) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-chat-background">
-        <PiSpinner className="h-10 w-10 animate-spin text-content-secondary" />
+        <LogoLoading />
       </div>
     )
   }
