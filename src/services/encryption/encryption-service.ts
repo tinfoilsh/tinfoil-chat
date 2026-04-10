@@ -410,6 +410,51 @@ export class EncryptionService {
     }
   }
 
+  async replaceKeyBundle(
+    primary: string | null,
+    alternatives: string[],
+  ): Promise<void> {
+    if (!primary) {
+      this.clearKey()
+      return
+    }
+
+    const keyBytes = this.getKeyBytes(primary)
+    this.encryptionKey = await crypto.subtle.importKey(
+      'raw',
+      keyBytes.buffer.slice(
+        keyBytes.byteOffset,
+        keyBytes.byteOffset + keyBytes.byteLength,
+      ) as ArrayBuffer,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt', 'decrypt'],
+    )
+
+    this.currentKeyString = primary
+    this.fallbackKeyCache.clear()
+    this.fallbackKeyStrings = Array.from(
+      new Set(
+        alternatives.filter(
+          (candidate) =>
+            candidate !== primary &&
+            (() => {
+              try {
+                this.getKeyBytes(candidate)
+                return true
+              } catch {
+                return false
+              }
+            })(),
+        ),
+      ),
+    )
+
+    localStorage.setItem(USER_ENCRYPTION_KEY, primary)
+    localStorage.setItem('tinfoil-encryption-key', primary)
+    this.saveKeyHistoryToStorage(this.fallbackKeyStrings)
+  }
+
   /**
    * Register a callback to be called when a fallback key is added.
    * Returns an unsubscribe function.

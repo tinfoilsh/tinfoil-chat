@@ -27,6 +27,7 @@ const mockOnStreamEnd = vi.fn()
 const mockChatEventsEmit = vi.fn()
 const mockIngestRemoteChats = vi.fn()
 const mockSyncRemoteDeletions = vi.fn()
+const mockCanWriteToCloud = vi.fn()
 
 vi.mock('@/utils/error-handling', () => ({
   logInfo: vi.fn(),
@@ -64,6 +65,10 @@ vi.mock('@/services/cloud/project-storage', () => ({
     getProjectChatsSyncStatus: (...args: any[]) =>
       mockGetProjectChatsSyncStatus(...args),
   },
+}))
+
+vi.mock('@/services/cloud/cloud-key-authorization', () => ({
+  canWriteToCloud: (...args: any[]) => mockCanWriteToCloud(...args),
 }))
 
 vi.mock('@/services/encryption/encryption-service', () => ({
@@ -128,6 +133,7 @@ describe('CloudSyncService', () => {
       errors: [],
       savedIds: [],
     })
+    mockCanWriteToCloud.mockResolvedValue(true)
     mockSyncRemoteDeletions.mockResolvedValue(undefined)
   })
 

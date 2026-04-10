@@ -14,6 +14,7 @@ import type {
 import { logError } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
 import { encryptionService } from '../encryption/encryption-service'
+import { canWriteToCloud } from './cloud-key-authorization'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -45,6 +46,12 @@ export class ProjectStorageService {
   }
 
   async createProject(data: CreateProjectData): Promise<Project> {
+    if (!(await canWriteToCloud())) {
+      throw new Error(
+        'Cloud writes are blocked until your encryption key is verified',
+      )
+    }
+
     const { projectId } = await this.generateProjectId()
 
     const projectData: ProjectData = {
@@ -84,6 +91,12 @@ export class ProjectStorageService {
     projectId: string,
     data: UpdateProjectData,
   ): Promise<void> {
+    if (!(await canWriteToCloud())) {
+      throw new Error(
+        'Cloud writes are blocked until your encryption key is verified',
+      )
+    }
+
     const existing = await this.getProject(projectId)
     if (!existing) {
       throw new Error('Project not found')
@@ -157,6 +170,12 @@ export class ProjectStorageService {
   }
 
   async deleteProject(projectId: string): Promise<void> {
+    if (!(await canWriteToCloud())) {
+      throw new Error(
+        'Cloud writes are blocked until your encryption key is verified',
+      )
+    }
+
     const response = await fetch(
       `${API_BASE_URL}/api/storage/project/${projectId}`,
       {
@@ -262,6 +281,12 @@ export class ProjectStorageService {
     contentType: string,
     content: string,
   ): Promise<ProjectDocument> {
+    if (!(await canWriteToCloud())) {
+      throw new Error(
+        'Cloud writes are blocked until your encryption key is verified',
+      )
+    }
+
     const { documentId } = await this.generateDocumentId(projectId)
 
     const encrypted = await encryptionService.encrypt({
@@ -351,6 +376,12 @@ export class ProjectStorageService {
   }
 
   async deleteDocument(projectId: string, documentId: string): Promise<void> {
+    if (!(await canWriteToCloud())) {
+      throw new Error(
+        'Cloud writes are blocked until your encryption key is verified',
+      )
+    }
+
     const response = await fetch(
       `${API_BASE_URL}/api/projects/${projectId}/documents/${documentId}`,
       {

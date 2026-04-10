@@ -3,6 +3,8 @@ import {
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { authTokenManager } from '@/services/auth'
+import { authorizeCurrentPrimaryKey } from '@/services/cloud/cloud-key-authorization'
+import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import {
@@ -31,6 +33,8 @@ interface UseCloudSyncOptions {
   /** Called after a key change so the passkey hook can re-encrypt the backup */
   onKeyChanged?: () => void
 }
+
+type CloudKeyActivationMode = 'recoverExisting' | 'explicitStartFresh'
 
 export function useCloudSync(options?: UseCloudSyncOptions) {
   const { getToken, isSignedIn } = useAuth()
@@ -381,8 +385,10 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
   // Set encryption key (for syncing across devices)
   const setEncryptionKey = useCallback(
-    async (key: string) => {
+    async (key: string, options?: { mode?: CloudKeyActivationMode }) => {
+      const mode = options?.mode ?? 'explicitStartFresh'
       try {
+        const previousKeys = encryptionService.getAllKeys()
         // Check both encryptionService (source of truth for the crypto layer) and
         // React state (source of truth for the hook). The passkey init effect may
         // have already persisted the key to encryptionService before the consumer
@@ -396,8 +402,29 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
         })
 
         await encryptionService.setKey(key)
+
+        if (mode === 'recoverExisting') {
+          const validation = await validateCurrentPrimaryKey()
+          if (!validation.canWrite) {
+            await encryptionService.replaceKeyBundle(
+              previousKeys.primary,
+              previousKeys.alternatives,
+            )
+            throw new Error(
+              validation.message ??
+                "This key doesn't match your existing cloud data.",
+            )
+          }
+          await authorizeCurrentPrimaryKey('validated')
+        } else {
+          await authorizeCurrentPrimaryKey('explicit_start_fresh')
+        }
+
         if (isMountedRef.current) {
-          setState((prev) => ({ ...prev, encryptionKey: key }))
+          setState((prev) => ({
+            ...prev,
+            encryptionKey: encryptionService.getKey(),
+          }))
         }
 
         const keyValueChanged = !serviceKey || serviceKey !== key
@@ -437,10 +464,34 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           component: 'useCloudSync',
           action: 'setEncryptionKey',
         })
-        throw new Error('Invalid encryption key')
+        throw new Error(
+          error instanceof Error ? error.message : 'Invalid encryption key',
+        )
       }
     },
     [syncChats, retryDecryptionWithNewKey],
+  )
+
+  const addRecoveryKey = useCallback(
+    async (key: string) => {
+      try {
+        encryptionService.addDecryptionKey(key)
+        void retryDecryptionWithNewKey({
+          runInBackground: true,
+        })
+
+        if (hasPasskeyBackup()) {
+          onKeyChangedRef.current?.()
+        }
+      } catch (error) {
+        logError('Failed to add recovery key', error, {
+          component: 'useCloudSync',
+          action: 'addRecoveryKey',
+        })
+        throw new Error('Invalid encryption key')
+      }
+    },
+    [retryDecryptionWithNewKey],
   )
 
   return {
@@ -450,6 +501,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     syncProjectChats,
     backupChat,
     setEncryptionKey,
+    addRecoveryKey,
     retryDecryptionWithNewKey,
   }
 }

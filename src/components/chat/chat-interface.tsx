@@ -293,6 +293,7 @@ export function ChatInterface({
     encryptionKey,
     initialized: cloudSyncInitialized,
     setEncryptionKey,
+    addRecoveryKey,
     retryDecryptionWithNewKey,
     decryptionProgress,
   } = useCloudSync({
@@ -304,6 +305,7 @@ export function ChatInterface({
   const {
     passkeyActive,
     passkeyRecoveryNeeded,
+    manualRecoveryNeeded,
     passkeySetupAvailable,
     passkeyIntroNeeded,
     setupPasskey,
@@ -318,7 +320,7 @@ export function ChatInterface({
     user,
     onEncryptionKeyRecovered: useCallback(
       (key: string) => {
-        void setEncryptionKey(key)
+        void setEncryptionKey(key, { mode: 'recoverExisting' })
       },
       [setEncryptionKey],
     ),
@@ -353,6 +355,12 @@ export function ChatInterface({
 
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
+
+  useEffect(() => {
+    if (manualRecoveryNeeded) {
+      setShowCloudSyncSetupModal(true)
+    }
+  }, [manualRecoveryNeeded])
 
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
@@ -1041,8 +1049,13 @@ export function ChatInterface({
   }
 
   const handleKeyChanged = useCallback(
-    async (key: string) => {
-      const syncResult = await setEncryptionKey(key)
+    async (
+      key: string,
+      options?: {
+        mode?: 'recoverExisting' | 'explicitStartFresh'
+      },
+    ) => {
+      const syncResult = await setEncryptionKey(key, options)
       if (syncResult) {
         await retryProfileDecryption()
         await reloadChats()
@@ -1050,6 +1063,15 @@ export function ChatInterface({
       }
     },
     [setEncryptionKey, retryProfileDecryption, reloadChats],
+  )
+
+  const handleAddRecoveryKey = useCallback(
+    async (key: string) => {
+      await addRecoveryKey(key)
+      await retryProfileDecryption()
+      await reloadChats()
+    },
+    [addRecoveryKey, retryProfileDecryption, reloadChats],
   )
 
   // Handler for creating a new project with a random name
@@ -2279,6 +2301,7 @@ export function ChatInterface({
         isPremium={isPremium}
         encryptionKey={encryptionKey}
         onKeyChange={handleKeyChanged}
+        onAddRecoveryKey={handleAddRecoveryKey}
         passkeyActive={passkeyActive}
         passkeySetupAvailable={passkeySetupAvailable}
         onSetupPasskey={setupPasskey}
@@ -2512,9 +2535,14 @@ export function ChatInterface({
               setCloudSyncEnabled(false)
             }
           }}
-          onSetupComplete={async (key: string) => {
-            await handleKeyChanged(key)
-            setShowCloudSyncSetupModal(false)
+          onSetupComplete={async (key: string, mode) => {
+            try {
+              await handleKeyChanged(key, { mode })
+              setShowCloudSyncSetupModal(false)
+              return true
+            } catch {
+              return false
+            }
           }}
           isDarkMode={isDarkMode}
           initialCloudSyncEnabled={true}
@@ -2522,17 +2550,18 @@ export function ChatInterface({
             passkeyActive || passkeyRecoveryNeeded || passkeySetupAvailable
           }
           passkeyRecoveryNeeded={passkeyRecoveryNeeded}
+          manualRecoveryNeeded={manualRecoveryNeeded}
           onRecoverWithPasskey={async () => {
             const key = await recoverWithPasskey()
             if (!key) return false
-            await handleKeyChanged(key)
+            await handleKeyChanged(key, { mode: 'recoverExisting' })
             setShowCloudSyncSetupModal(false)
             return true
           }}
           onSetupNewKey={async () => {
             const key = await setupNewKeySplit()
             if (!key) return false
-            await handleKeyChanged(key)
+            await handleKeyChanged(key, { mode: 'explicitStartFresh' })
             setShowCloudSyncSetupModal(false)
             return true
           }}
