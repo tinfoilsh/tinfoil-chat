@@ -1,5 +1,6 @@
 import { CLOUD_SYNC } from '@/config'
 import { SYNC_PROFILE_STATUS } from '@/constants/storage-keys'
+import { getCurrentCloudKeyAuthorizationMode } from '@/services/cloud/cloud-key-authorization'
 import type { ProfileSyncStatus } from '@/services/cloud/cloud-storage'
 import {
   applySettingsToLocal,
@@ -201,6 +202,20 @@ export function useProfileSync() {
       if (!isCloudSyncEnabled()) return
 
       try {
+        const authorizationMode = await getCurrentCloudKeyAuthorizationMode()
+        if (!authorizationMode) {
+          hasPendingChanges.current = false
+          return
+        }
+
+        if (
+          profileSync.hasFailedRemoteDecryption() &&
+          authorizationMode !== 'explicit_start_fresh'
+        ) {
+          hasPendingChanges.current = false
+          return
+        }
+
         const localSettings = loadLocalSettings()
 
         // Check if local settings are different from last synced profile
@@ -247,11 +262,11 @@ export function useProfileSync() {
         })
         // Keep pending changes flag on error
       } finally {
-        // Clear pending changes after a reasonable time even on error
-        // to prevent permanent blocking of cloud sync
-        setTimeout(() => {
-          hasPendingChanges.current = false
-        }, 10000) // 10 seconds
+        if (hasPendingChanges.current) {
+          setTimeout(() => {
+            hasPendingChanges.current = false
+          }, 10000)
+        }
       }
     }, 2000) // 2 second debounce
   }, [isSignedIn])
