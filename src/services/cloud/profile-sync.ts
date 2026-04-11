@@ -69,7 +69,6 @@ export class ProfileSyncService {
     try {
       const payload = await this.fetchEncryptedProfilePayload()
       if (!payload) {
-        this.failedDecryptionData = null
         logInfo('Skipping profile fetch - not authenticated', {
           component: 'ProfileSync',
           action: 'fetchProfile',
