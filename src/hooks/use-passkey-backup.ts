@@ -372,7 +372,6 @@ export function usePasskeyBackup({
           previousKeys.primary,
           previousKeys.alternatives,
         )
-        setLocalSyncVersion(cached.credentialId, entry.sync_version)
         return
       }
       if (validation.canWrite) {
@@ -384,7 +383,6 @@ export function usePasskeyBackup({
           previousKeys.primary,
           previousKeys.alternatives,
         )
-        setLocalSyncVersion(cached.credentialId, entry.sync_version)
         return
       }
 

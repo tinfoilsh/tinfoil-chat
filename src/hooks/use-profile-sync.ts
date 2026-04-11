@@ -204,7 +204,6 @@ export function useProfileSync() {
       try {
         const authorizationMode = await getCurrentCloudKeyAuthorizationMode()
         if (!authorizationMode) {
-          hasPendingChanges.current = false
           return
         }
 

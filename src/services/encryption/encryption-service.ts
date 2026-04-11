@@ -420,27 +420,65 @@ export class EncryptionService {
     }
 
     const importedKey = await this.importCryptoKey(primary)
+    const previousKey =
+      this.currentKeyString ??
+      localStorage.getItem(USER_ENCRYPTION_KEY) ??
+      localStorage.getItem('tinfoil-encryption-key')
+    const previousHistory = this.loadKeyHistoryFromStorage()
 
     const validAlternatives = Array.from(
       new Set(
-        alternatives.filter(
-          (candidate) =>
-            candidate !== primary &&
-            (() => {
-              try {
-                this.getKeyBytes(candidate)
-                return true
-              } catch {
-                return false
-              }
-            })(),
-        ),
+        alternatives.filter((candidate) => {
+          if (candidate === primary) return false
+          try {
+            this.getKeyBytes(candidate)
+            return true
+          } catch {
+            return false
+          }
+        }),
       ),
     )
 
-    localStorage.setItem(USER_ENCRYPTION_KEY, primary)
-    localStorage.setItem('tinfoil-encryption-key', primary)
-    this.saveKeyHistoryToStorage(validAlternatives)
+    try {
+      localStorage.setItem(USER_ENCRYPTION_KEY, primary)
+      localStorage.setItem('tinfoil-encryption-key', primary)
+      this.saveKeyHistoryToStorage(validAlternatives)
+    } catch (persistError) {
+      try {
+        if (previousKey) {
+          localStorage.setItem(USER_ENCRYPTION_KEY, previousKey)
+          localStorage.setItem('tinfoil-encryption-key', previousKey)
+        } else {
+          localStorage.removeItem(USER_ENCRYPTION_KEY)
+          localStorage.removeItem('tinfoil-encryption-key')
+        }
+        this.saveKeyHistoryToStorage(previousHistory)
+      } catch (rollbackError) {
+        logInfo('Failed to rollback key bundle persistence', {
+          component: 'EncryptionService',
+          action: 'replaceKeyBundleRollback',
+          metadata: {
+            persistError:
+              persistError instanceof Error
+                ? persistError.message
+                : String(persistError),
+            rollbackError:
+              rollbackError instanceof Error
+                ? rollbackError.message
+                : String(rollbackError),
+          },
+        })
+      }
+
+      throw new Error(
+        `Failed to persist encryption key bundle: ${
+          persistError instanceof Error
+            ? persistError.message
+            : String(persistError)
+        }`,
+      )
+    }
 
     this.encryptionKey = importedKey
     this.currentKeyString = primary

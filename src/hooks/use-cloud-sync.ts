@@ -3,7 +3,10 @@ import {
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
 import { authTokenManager } from '@/services/auth'
-import { authorizeCurrentPrimaryKey } from '@/services/cloud/cloud-key-authorization'
+import {
+  authorizeCurrentPrimaryKey,
+  clearCloudKeyAuthorization,
+} from '@/services/cloud/cloud-key-authorization'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -383,12 +386,37 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     [],
   )
 
+  const rollbackToPreviousKeys = useCallback(
+    async (previousKeys: {
+      primary: string | null
+      alternatives: string[]
+    }) => {
+      try {
+        await encryptionService.replaceKeyBundle(
+          previousKeys.primary,
+          previousKeys.alternatives,
+        )
+      } catch (rollbackError) {
+        encryptionService.clearKey()
+        clearCloudKeyAuthorization()
+        throw rollbackError
+      }
+    },
+    [],
+  )
+
   // Set encryption key (for syncing across devices)
   const setEncryptionKey = useCallback(
     async (key: string, options?: { mode?: CloudKeyActivationMode }) => {
       const mode = options?.mode ?? 'explicitStartFresh'
+      let previousKeys: {
+        primary: string | null
+        alternatives: string[]
+      } | null = null
+      let didSetKey = false
+      let rolledBack = false
       try {
-        const previousKeys = encryptionService.getAllKeys()
+        previousKeys = encryptionService.getAllKeys()
         // Check both encryptionService (source of truth for the crypto layer) and
         // React state (source of truth for the hook). The passkey init effect may
         // have already persisted the key to encryptionService before the consumer
@@ -402,23 +430,20 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
         })
 
         await encryptionService.setKey(key)
+        didSetKey = true
 
         if (mode === 'recoverExisting') {
           let validation: Awaited<ReturnType<typeof validateCurrentPrimaryKey>>
           try {
             validation = await validateCurrentPrimaryKey()
           } catch (validationError) {
-            await encryptionService.replaceKeyBundle(
-              previousKeys.primary,
-              previousKeys.alternatives,
-            )
+            await rollbackToPreviousKeys(previousKeys)
+            rolledBack = true
             throw validationError
           }
           if (!validation.canWrite) {
-            await encryptionService.replaceKeyBundle(
-              previousKeys.primary,
-              previousKeys.alternatives,
-            )
+            await rollbackToPreviousKeys(previousKeys)
+            rolledBack = true
             throw new Error(
               validation.message ??
                 "This key doesn't match your existing cloud data.",
@@ -426,7 +451,13 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           }
           await authorizeCurrentPrimaryKey('validated')
         } else {
-          await authorizeCurrentPrimaryKey('explicit_start_fresh')
+          try {
+            await authorizeCurrentPrimaryKey('explicit_start_fresh')
+          } catch (authorizationError) {
+            await rollbackToPreviousKeys(previousKeys)
+            rolledBack = true
+            throw authorizationError
+          }
         }
 
         if (isMountedRef.current) {
@@ -469,6 +500,20 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
         return false // Key didn't change
       } catch (error) {
+        if (didSetKey && previousKeys && !rolledBack) {
+          try {
+            await rollbackToPreviousKeys(previousKeys)
+          } catch (rollbackError) {
+            logError(
+              'Failed to rollback encryption key after setEncryptionKey error',
+              rollbackError,
+              {
+                component: 'useCloudSync',
+                action: 'setEncryptionKey.rollback',
+              },
+            )
+          }
+        }
         logError('Failed to set encryption key', error, {
           component: 'useCloudSync',
           action: 'setEncryptionKey',
@@ -478,7 +523,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
         )
       }
     },
-    [syncChats, retryDecryptionWithNewKey],
+    [rollbackToPreviousKeys, syncChats, retryDecryptionWithNewKey],
   )
 
   const addRecoveryKey = useCallback(
