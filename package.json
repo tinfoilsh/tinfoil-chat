@@ -51,6 +51,7 @@
     "react-markdown": "^9.0.3",
     "react-qr-code": "^2.0.18",
     "react-syntax-highlighter": "^16.1.0",
+    "recharts": "^3.8.0",
     "rehype-katex": "^7.0.1",
     "rehype-raw": "^7.0.0",
     "remark-breaks": "^4.0.0",
