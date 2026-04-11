@@ -43,10 +43,32 @@ export class ProfileSyncService {
     return authTokenManager.isAuthenticated()
   }
 
+  async fetchEncryptedProfilePayload(): Promise<string | null> {
+    if (!(await this.isAuthenticated())) {
+      return null
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/profile/`, {
+      headers: await this.getHeaders(),
+    })
+
+    if (response.status === 401 || response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch profile: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data.data as string
+  }
+
   // Get profile from cloud
   async fetchProfile(): Promise<ProfileData | null> {
     try {
-      if (!(await this.isAuthenticated())) {
+      const payload = await this.fetchEncryptedProfilePayload()
+      if (!payload) {
         logInfo('Skipping profile fetch - not authenticated', {
           component: 'ProfileSync',
           action: 'fetchProfile',
@@ -54,23 +76,9 @@ export class ProfileSyncService {
         return null
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/profile/`, {
-        headers: await this.getHeaders(),
-      })
-
-      if (response.status === 401 || response.status === 404) {
-        return null
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch profile: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-
       // Try to decrypt the profile data
       try {
-        const encrypted = JSON.parse(data.data)
+        const encrypted = JSON.parse(payload)
         const decrypted = await encryptionService.decrypt(encrypted)
 
         // Cache the decrypted profile
@@ -81,7 +89,7 @@ export class ProfileSyncService {
           component: 'ProfileSync',
           action: 'fetchProfile',
           metadata: {
-            version: data.version,
+            version: decrypted.version,
             hasNickname: !!decrypted.nickname,
             hasLanguage: !!decrypted.language,
             hasPersonalization: !!decrypted.isUsingPersonalization,
@@ -91,7 +99,7 @@ export class ProfileSyncService {
         return decrypted
       } catch (decryptError) {
         // Failed to decrypt - store for later retry
-        this.failedDecryptionData = data.data
+        this.failedDecryptionData = payload
         this.cachedProfile = null
 
         logInfo('Profile decryption failed, stored for retry', {
@@ -258,6 +266,10 @@ export class ProfileSyncService {
   // Get cached profile (for quick access)
   getCachedProfile(): ProfileData | null {
     return this.cachedProfile
+  }
+
+  hasFailedRemoteDecryption(): boolean {
+    return this.failedDecryptionData !== null
   }
 
   // Clear cache

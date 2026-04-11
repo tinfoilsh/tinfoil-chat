@@ -28,11 +28,17 @@ import QRCode from 'react-qr-code'
 interface CloudSyncSetupModalBaseProps {
   isOpen: boolean
   onClose: () => void
-  onSetupComplete: (encryptionKey: string) => void
+  onSetupComplete: (
+    encryptionKey: string,
+    mode: CloudKeySetupMode,
+  ) => Promise<boolean>
   isDarkMode: boolean
   initialCloudSyncEnabled?: boolean
   prfSupported?: boolean
+  manualRecoveryNeeded?: boolean
 }
+
+type CloudKeySetupMode = 'recoverExisting' | 'explicitStartFresh'
 
 type CloudSyncSetupModalProps = CloudSyncSetupModalBaseProps &
   (
@@ -64,19 +70,24 @@ export function CloudSyncSetupModal({
   initialCloudSyncEnabled = false,
   passkeyRecoveryNeeded = false,
   prfSupported = false,
+  manualRecoveryNeeded = false,
   onRecoverWithPasskey,
   onSetupNewKey,
 }: CloudSyncSetupModalProps) {
   const initialStep: SetupStep = passkeyRecoveryNeeded
     ? 'passkey-recovery'
-    : prfSupported
+    : manualRecoveryNeeded
       ? 'generate-or-restore'
-      : 'intro'
+      : prfSupported
+        ? 'generate-or-restore'
+        : 'intro'
   const [currentStep, setCurrentStep] = useState<SetupStep>(initialStep)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(
     initialCloudSyncEnabled,
   )
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
+  const [generatedKeyMode, setGeneratedKeyMode] =
+    useState<CloudKeySetupMode>('recoverExisting')
   const [inputKey, setInputKey] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isRecovering, setIsRecovering] = useState(false)
@@ -122,10 +133,10 @@ export function CloudSyncSetupModal({
     setIsProcessing(true)
     try {
       const newKey = await encryptionService.generateKey()
-      await encryptionService.setKey(newKey)
       setGeneratedKey(newKey)
-      setCloudSyncEnabled(true)
-      persistCloudSyncEnabled(true)
+      setGeneratedKeyMode(
+        manualRecoveryNeeded ? 'explicitStartFresh' : 'recoverExisting',
+      )
 
       logInfo('Generated new encryption key for cloud sync', {
         component: 'CloudSyncSetupModal',
@@ -160,7 +171,17 @@ export function CloudSyncSetupModal({
 
     setIsProcessing(true)
     try {
-      await encryptionService.setKey(inputKey)
+      const success = await onSetupComplete(inputKey, 'recoverExisting')
+
+      if (!success) {
+        toast({
+          title: 'Invalid key',
+          description: "This key doesn't match your existing cloud data",
+          variant: 'destructive',
+        })
+        return
+      }
+
       setCloudSyncEnabled(true)
       persistCloudSyncEnabled(true)
       localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
@@ -175,7 +196,6 @@ export function CloudSyncSetupModal({
         description: 'Encryption key restored successfully',
       })
 
-      onSetupComplete(inputKey)
       onClose()
     } catch (error) {
       logError('Failed to restore encryption key', error, {
@@ -318,11 +338,37 @@ ${generatedKey.replace('key_', '')}
   }
 
   const handleComplete = () => {
-    localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
-    if (generatedKey) {
-      onSetupComplete(generatedKey)
-    }
-    onClose()
+    if (!generatedKey) return
+
+    setIsProcessing(true)
+    void onSetupComplete(generatedKey, generatedKeyMode)
+      .then((success) => {
+        if (!success) {
+          toast({
+            title: 'Setup failed',
+            description: "This key couldn't be verified for cloud sync",
+            variant: 'destructive',
+          })
+          return
+        }
+
+        localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
+        persistCloudSyncEnabled(true)
+        onClose()
+      })
+      .catch((error) => {
+        toast({
+          title: 'Setup failed',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Failed to finish cloud sync setup',
+          variant: 'destructive',
+        })
+      })
+      .finally(() => {
+        setIsProcessing(false)
+      })
   }
 
   const renderIntroStep = () => (
@@ -404,8 +450,9 @@ ${generatedKey.replace('key_', '')}
       <h2 className="text-center text-xl font-bold">Encryption Key</h2>
 
       <p className="text-sm text-content-secondary">
-        Generate a new personal encryption key or restore an existing one. Your
-        chats will be encrypted and synced with this personal key.
+        {manualRecoveryNeeded
+          ? 'Restore your existing encryption key to unlock cloud data, or explicitly start fresh with a new key.'
+          : 'Generate a new personal encryption key or restore an existing one. Your chats will be encrypted and synced with this personal key.'}
       </p>
 
       <button
@@ -428,7 +475,11 @@ ${generatedKey.replace('key_', '')}
           disabled={isProcessing}
           className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
         >
-          {isProcessing ? 'Generating...' : 'Generate Key'}
+          {isProcessing
+            ? 'Generating...'
+            : manualRecoveryNeeded
+              ? 'Start Fresh with New Key'
+              : 'Generate Key'}
         </button>
       </div>
     </div>
@@ -445,8 +496,9 @@ ${generatedKey.replace('key_', '')}
       <h2 className="text-center text-xl font-bold">Success!</h2>
 
       <p className="text-center text-sm text-content-secondary">
-        Save this key securely. You&apos;ll need it to access your chats and
-        projects on other devices.
+        {generatedKeyMode === 'explicitStartFresh'
+          ? 'Save this key securely. Using it will start a new encrypted cloud history on this device.'
+          : "Save this key securely. You'll need it to access your chats and projects on other devices."}
       </p>
 
       {generatedKey && (

@@ -33,6 +33,8 @@ export interface PasskeyCredentialEntry {
 
 const CURRENT_CREDENTIAL_VERSION = 1
 
+export type PasskeyCredentialState = 'exists' | 'empty' | 'unknown'
+
 // --- Encrypt / Decrypt ---
 
 /**
@@ -177,6 +179,19 @@ export async function hasPasskeyCredentials(): Promise<boolean> {
       action: 'hasPasskeyCredentials',
     })
     return false
+  }
+}
+
+export async function getPasskeyCredentialState(): Promise<PasskeyCredentialState> {
+  try {
+    const entries = await loadPasskeyCredentials()
+    return entries.length > 0 ? 'exists' : 'empty'
+  } catch (error) {
+    logError('Failed to check passkey credentials', error, {
+      component: 'PasskeyKeyStorage',
+      action: 'getPasskeyCredentialState',
+    })
+    return 'unknown'
   }
 }
 

@@ -10,6 +10,7 @@ import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
 import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { processRemoteChat } from './chat-codec'
 import { ingestRemoteChats, syncRemoteDeletions } from './chat-ingestion'
+import { canWriteToCloud } from './cloud-key-authorization'
 import { cloudStorage, type ChatSyncStatus } from './cloud-storage'
 import {
   reencryptAndUploadChats as doReencryptAndUpload,
@@ -454,6 +455,10 @@ export class CloudSyncService {
       return
     }
 
+    if (!(await canWriteToCloud())) {
+      return
+    }
+
     // Use the upload coalescer - it handles:
     // - Coalescing rapid edits into a single upload
     // - Exponential backoff retry on failure
@@ -479,6 +484,10 @@ export class CloudSyncService {
 
   private async doBackupChat(chatId: string): Promise<void> {
     try {
+      if (!(await canWriteToCloud())) {
+        return
+      }
+
       // Check if chat is currently streaming
       if (streamingTracker.isStreaming(chatId)) {
         // Check if we already have a callback registered for this chat
@@ -573,6 +582,10 @@ export class CloudSyncService {
       uploaded: 0,
       downloaded: 0,
       errors: [],
+    }
+
+    if (!(await canWriteToCloud())) {
+      return result
     }
 
     try {
@@ -818,6 +831,10 @@ export class CloudSyncService {
       return
     }
 
+    if (!(await canWriteToCloud())) {
+      return
+    }
+
     try {
       await cloudStorage.deleteChat(chatId)
 
@@ -848,6 +865,10 @@ export class CloudSyncService {
     projectId: string | null,
   ): Promise<void> {
     if (!(await cloudStorage.isAuthenticated())) {
+      return
+    }
+
+    if (!(await canWriteToCloud())) {
       return
     }
 

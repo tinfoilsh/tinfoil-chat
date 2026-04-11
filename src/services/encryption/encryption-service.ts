@@ -228,42 +228,22 @@ export class EncryptionService {
         ]
       }
 
-      try {
-        localStorage.setItem(USER_ENCRYPTION_KEY, keyString)
-        this.saveKeyHistoryToStorage(history)
-      } catch (persistError) {
-        try {
-          if (previousKey) {
-            localStorage.setItem(USER_ENCRYPTION_KEY, previousKey)
-          } else {
-            localStorage.removeItem(USER_ENCRYPTION_KEY)
-          }
-          this.saveKeyHistoryToStorage(previousHistory)
-        } catch (rollbackError) {
-          logInfo('Failed to rollback encryption key persistence', {
-            component: 'EncryptionService',
-            action: 'setKeyRollback',
-            metadata: {
-              persistError:
-                persistError instanceof Error
-                  ? persistError.message
-                  : String(persistError),
-              rollbackError:
-                rollbackError instanceof Error
-                  ? rollbackError.message
-                  : String(rollbackError),
-            },
-          })
-        }
-
-        throw new Error(
-          `Failed to persist encryption key: ${
-            persistError instanceof Error
-              ? persistError.message
-              : String(persistError)
-          }`,
-        )
-      }
+      this.persistKeyState(
+        {
+          primaryKey: keyString,
+          history,
+          includeLegacyKey: false,
+        },
+        {
+          previousKey,
+          previousHistory,
+          includeLegacyKey: false,
+        },
+        {
+          failurePrefix: 'Failed to persist encryption key',
+          rollbackAction: 'setKeyRollback',
+        },
+      )
 
       this.encryptionKey = importedKey
       this.currentKeyString = keyString
@@ -410,6 +390,59 @@ export class EncryptionService {
     }
   }
 
+  async replaceKeyBundle(
+    primary: string | null,
+    alternatives: string[],
+  ): Promise<void> {
+    if (!primary) {
+      this.clearKey()
+      return
+    }
+
+    const importedKey = await this.importCryptoKey(primary)
+    const previousKey =
+      this.currentKeyString ??
+      localStorage.getItem(USER_ENCRYPTION_KEY) ??
+      localStorage.getItem('tinfoil-encryption-key')
+    const previousHistory = this.loadKeyHistoryFromStorage()
+
+    const validAlternatives = Array.from(
+      new Set(
+        alternatives.filter((candidate) => {
+          if (candidate === primary) return false
+          try {
+            this.getKeyBytes(candidate)
+            return true
+          } catch {
+            return false
+          }
+        }),
+      ),
+    )
+
+    this.persistKeyState(
+      {
+        primaryKey: primary,
+        history: validAlternatives,
+        includeLegacyKey: true,
+      },
+      {
+        previousKey,
+        previousHistory,
+        includeLegacyKey: true,
+      },
+      {
+        failurePrefix: 'Failed to persist encryption key bundle',
+        rollbackAction: 'replaceKeyBundleRollback',
+      },
+    )
+
+    this.encryptionKey = importedKey
+    this.currentKeyString = primary
+    this.fallbackKeyCache.clear()
+    this.fallbackKeyStrings = validAlternatives
+  }
+
   /**
    * Register a callback to be called when a fallback key is added.
    * Returns an unsubscribe function.
@@ -437,6 +470,72 @@ export class EncryptionService {
           },
         })
       }
+    }
+  }
+
+  private persistKeyState(
+    nextState: {
+      primaryKey: string
+      history: string[]
+      includeLegacyKey: boolean
+    },
+    previousState: {
+      previousKey: string | null
+      previousHistory: string[]
+      includeLegacyKey: boolean
+    },
+    options: {
+      failurePrefix: string
+      rollbackAction: 'setKeyRollback' | 'replaceKeyBundleRollback'
+    },
+  ): void {
+    try {
+      localStorage.setItem(USER_ENCRYPTION_KEY, nextState.primaryKey)
+      if (nextState.includeLegacyKey) {
+        localStorage.setItem('tinfoil-encryption-key', nextState.primaryKey)
+      }
+      this.saveKeyHistoryToStorage(nextState.history)
+    } catch (persistError) {
+      try {
+        if (previousState.previousKey) {
+          localStorage.setItem(USER_ENCRYPTION_KEY, previousState.previousKey)
+          if (previousState.includeLegacyKey) {
+            localStorage.setItem(
+              'tinfoil-encryption-key',
+              previousState.previousKey,
+            )
+          }
+        } else {
+          localStorage.removeItem(USER_ENCRYPTION_KEY)
+          if (previousState.includeLegacyKey) {
+            localStorage.removeItem('tinfoil-encryption-key')
+          }
+        }
+        this.saveKeyHistoryToStorage(previousState.previousHistory)
+      } catch (rollbackError) {
+        logInfo('Failed to rollback encryption key persistence', {
+          component: 'EncryptionService',
+          action: options.rollbackAction,
+          metadata: {
+            persistError:
+              persistError instanceof Error
+                ? persistError.message
+                : String(persistError),
+            rollbackError:
+              rollbackError instanceof Error
+                ? rollbackError.message
+                : String(rollbackError),
+          },
+        })
+      }
+
+      throw new Error(
+        `${options.failurePrefix}: ${
+          persistError instanceof Error
+            ? persistError.message
+            : String(persistError)
+        }`,
+      )
     }
   }
 

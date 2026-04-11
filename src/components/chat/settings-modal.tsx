@@ -180,6 +180,7 @@ type SettingsModalProps = {
   isPremium?: boolean
   encryptionKey: string | null
   onKeyChange: (key: string) => Promise<void>
+  onAddRecoveryKey: (key: string) => Promise<void>
   passkeyActive?: boolean
   passkeySetupAvailable?: boolean
   onSetupPasskey?: () => Promise<boolean>
@@ -201,6 +202,7 @@ export function SettingsModal({
   isPremium,
   encryptionKey,
   onKeyChange,
+  onAddRecoveryKey,
   passkeyActive,
   passkeySetupAvailable,
   onSetupPasskey,
@@ -1541,7 +1543,11 @@ export function SettingsModal({
     }
   }
 
-  const handleUpdateKey = async () => {
+  const handleKeyAction = async (
+    action: (key: string) => Promise<void>,
+    successTitle: string,
+    successDescription: string,
+  ) => {
     if (!inputKey.trim()) {
       toast({
         title: 'Invalid key',
@@ -1553,22 +1559,36 @@ export function SettingsModal({
 
     setIsUpdating(true)
     try {
-      await onKeyChange(inputKey)
-      toast({
-        title: 'Key updated',
-        description: 'Your encryption key has been updated successfully',
-      })
+      await action(inputKey)
+      toast({ title: successTitle, description: successDescription })
       setInputKey('')
-    } catch {
+    } catch (error) {
       toast({
         title: 'Invalid key',
-        description: 'The encryption key you entered is invalid',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'The encryption key you entered is invalid',
         variant: 'destructive',
       })
     } finally {
       setIsUpdating(false)
     }
   }
+
+  const handleUpdateKey = () =>
+    handleKeyAction(
+      onKeyChange,
+      'Primary key replaced',
+      'Future cloud writes will use the new primary key',
+    )
+
+  const handleAddRecoveryKey = () =>
+    handleKeyAction(
+      onAddRecoveryKey,
+      'Recovery key added',
+      'Older encrypted data can now be retried with this key',
+    )
 
   const downloadKeyAsPEM = () => {
     if (!encryptionKey) return
@@ -2643,11 +2663,12 @@ ${encryptionKey.replace('key_', '')}
                           {/* Restore or Update Encryption Key */}
                           <div className="space-y-2 pt-2">
                             <h4 className="font-aeonik text-xs font-medium text-content-secondary">
-                              Restore or Update Encryption Key
+                              Recovery and Primary Keys
                             </h4>
                             <p className="text-xs text-content-muted">
-                              Enter or import your existing encryption key to
-                              access your chats on this device.
+                              Add a recovery key to decrypt older data without
+                              changing your current primary key, or replace the
+                              primary key used for future cloud writes.
                             </p>
                             <form
                               onSubmit={(e) => {
@@ -2716,19 +2737,37 @@ ${encryptionKey.replace('key_', '')}
                                     </div>
                                   )}
                                 </div>
-                                <button
-                                  type="submit"
-                                  disabled={isUpdating || !inputKey.trim()}
-                                  aria-label="Update encryption key"
-                                  className={cn(
-                                    'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                                    isUpdating || !inputKey.trim()
-                                      ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                                      : 'bg-blue-500 text-white hover:bg-blue-600',
-                                  )}
-                                >
-                                  {isUpdating ? 'Updating...' : 'Update'}
-                                </button>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleAddRecoveryKey}
+                                    disabled={isUpdating || !inputKey.trim()}
+                                    aria-label="Add recovery key"
+                                    className={cn(
+                                      'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                                      isUpdating || !inputKey.trim()
+                                        ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                        : 'border border-border-subtle bg-surface-chat text-content-primary hover:bg-surface-chat/80',
+                                    )}
+                                  >
+                                    {isUpdating ? 'Saving...' : 'Add Recovery'}
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    disabled={isUpdating || !inputKey.trim()}
+                                    aria-label="Replace primary encryption key"
+                                    className={cn(
+                                      'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                                      isUpdating || !inputKey.trim()
+                                        ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                        : 'bg-blue-500 text-white hover:bg-blue-600',
+                                    )}
+                                  >
+                                    {isUpdating
+                                      ? 'Saving...'
+                                      : 'Replace Primary'}
+                                  </button>
+                                </div>
                               </div>
                             </form>
                           </div>
