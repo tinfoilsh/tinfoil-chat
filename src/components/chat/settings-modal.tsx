@@ -1543,7 +1543,11 @@ export function SettingsModal({
     }
   }
 
-  const handleUpdateKey = async () => {
+  const handleKeyAction = async (
+    action: (key: string) => Promise<void>,
+    successTitle: string,
+    successDescription: string,
+  ) => {
     if (!inputKey.trim()) {
       toast({
         title: 'Invalid key',
@@ -1555,11 +1559,8 @@ export function SettingsModal({
 
     setIsUpdating(true)
     try {
-      await onKeyChange(inputKey)
-      toast({
-        title: 'Primary key replaced',
-        description: 'Future cloud writes will use the new primary key',
-      })
+      await action(inputKey)
+      toast({ title: successTitle, description: successDescription })
       setInputKey('')
     } catch (error) {
       toast({
@@ -1575,37 +1576,19 @@ export function SettingsModal({
     }
   }
 
-  const handleAddRecoveryKey = async () => {
-    if (!inputKey.trim()) {
-      toast({
-        title: 'Invalid key',
-        description: 'Please enter a valid encryption key',
-        variant: 'destructive',
-      })
-      return
-    }
+  const handleUpdateKey = () =>
+    handleKeyAction(
+      onKeyChange,
+      'Primary key replaced',
+      'Future cloud writes will use the new primary key',
+    )
 
-    setIsUpdating(true)
-    try {
-      await onAddRecoveryKey(inputKey)
-      toast({
-        title: 'Recovery key added',
-        description: 'Older encrypted data can now be retried with this key',
-      })
-      setInputKey('')
-    } catch (error) {
-      toast({
-        title: 'Invalid key',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'The encryption key you entered is invalid',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsUpdating(false)
-    }
-  }
+  const handleAddRecoveryKey = () =>
+    handleKeyAction(
+      onAddRecoveryKey,
+      'Recovery key added',
+      'Older encrypted data can now be retried with this key',
+    )
 
   const downloadKeyAsPEM = () => {
     if (!encryptionKey) return
