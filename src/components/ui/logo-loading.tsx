@@ -31,9 +31,11 @@ function LogoAnimation({
     const container = containerRef.current
     if (!container) return
 
+    let unmounted = false
+
     animationDataPromise
       .then((animationData) => {
-        if (!animationData) return
+        if (!animationData || unmounted) return
         const anim = lottie.loadAnimation({
           container,
           renderer: 'svg',
@@ -46,6 +48,7 @@ function LogoAnimation({
       .catch(() => {})
 
     return () => {
+      unmounted = true
       animationRef.current?.destroy()
       animationRef.current = null
     }
