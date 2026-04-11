@@ -339,6 +339,10 @@ export function ChatInterface({
   const [systemPrompt, setSystemPrompt] = useState<string>('')
   const [rules, setRules] = useState<string>('')
   const [isLoadingConfig, setIsLoadingConfig] = useState(true)
+  const [logoAnimDone, setLogoAnimDone] = useState(false)
+  const handleLogoAnimFinished = useCallback(() => {
+    setLogoAnimDone(true)
+  }, [])
 
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
@@ -1782,12 +1786,15 @@ export function ChatInterface({
   // Removed all automatic scroll behaviors during streaming. Scrolling now only occurs
   // via the explicit button or when a chat is loaded/switched.
 
-  // Show loading while auth is still loading for URL-based access
-  if ((initialChatId || initialProjectId) && !isAuthLoaded) {
+  // Show loading while auth or config is still loading
+  const needsAuthLoading = (initialChatId || initialProjectId) && !isAuthLoaded
+  const needsLoading = needsAuthLoading || isLoadingConfig
+  if (needsLoading || !logoAnimDone) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface-chat-background">
-        <LogoLoading />
-      </div>
+      <LogoLoading
+        isLoading={!!needsLoading}
+        onFinished={handleLogoAnimFinished}
+      />
     )
   }
 
@@ -1833,14 +1840,7 @@ export function ChatInterface({
     )
   }
 
-  // Show loading state while critical config is loading. Do not block on subscription.
-  if (isLoadingConfig) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-surface-chat-background">
-        <LogoLoading />
-      </div>
-    )
-  }
+  // Config loading is handled by the combined loading screen above.
 
   // Show decryption failed message when accessing a chat that couldn't be decrypted
   if (initialChatId && initialChatDecryptionFailed) {

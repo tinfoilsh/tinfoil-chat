@@ -1,6 +1,12 @@
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const projectRoot = dirname(fileURLToPath(import.meta.url))
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
+  outputFileTracingRoot: projectRoot,
 
   // Disable image optimization for static export
   images: {
@@ -24,6 +30,14 @@ const nextConfig = {
     if (process.env.NODE_ENV === 'production') {
       config.cache = false
     }
+
+    if (!isServer) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: ['**/.next/**', '**/node_modules/**', '**/*.tsbuildinfo'],
+      }
+    }
+
     return config
   },
 
