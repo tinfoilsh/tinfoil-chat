@@ -404,7 +404,16 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
         await encryptionService.setKey(key)
 
         if (mode === 'recoverExisting') {
-          const validation = await validateCurrentPrimaryKey()
+          let validation: Awaited<ReturnType<typeof validateCurrentPrimaryKey>>
+          try {
+            validation = await validateCurrentPrimaryKey()
+          } catch (validationError) {
+            await encryptionService.replaceKeyBundle(
+              previousKeys.primary,
+              previousKeys.alternatives,
+            )
+            throw validationError
+          }
           if (!validation.canWrite) {
             await encryptionService.replaceKeyBundle(
               previousKeys.primary,
