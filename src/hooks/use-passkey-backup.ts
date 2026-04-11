@@ -364,7 +364,17 @@ export function usePasskeyBackup({
       // Key differs — apply the recovered key bundle
       await encryptionService.setAllKeys(bundle.primary, bundle.alternatives)
 
-      const validation = await validateCurrentPrimaryKey()
+      let validation: Awaited<ReturnType<typeof validateCurrentPrimaryKey>>
+      try {
+        validation = await validateCurrentPrimaryKey()
+      } catch {
+        await encryptionService.replaceKeyBundle(
+          previousKeys.primary,
+          previousKeys.alternatives,
+        )
+        setLocalSyncVersion(cached.credentialId, entry.sync_version)
+        return
+      }
       if (validation.canWrite) {
         await authorizeCurrentPrimaryKey('validated')
       } else if (previousMode === 'explicit_start_fresh') {
@@ -374,6 +384,7 @@ export function usePasskeyBackup({
           previousKeys.primary,
           previousKeys.alternatives,
         )
+        setLocalSyncVersion(cached.credentialId, entry.sync_version)
         return
       }
 
@@ -404,7 +415,16 @@ export function usePasskeyBackup({
       const recovery = await performPasskeyRecovery()
       if (!recovery) return null
 
-      const validation = await validateCurrentPrimaryKey()
+      let validation: Awaited<ReturnType<typeof validateCurrentPrimaryKey>>
+      try {
+        validation = await validateCurrentPrimaryKey()
+      } catch {
+        await encryptionService.replaceKeyBundle(
+          previousKeys.primary,
+          previousKeys.alternatives,
+        )
+        return null
+      }
       if (!validation.canWrite) {
         await encryptionService.replaceKeyBundle(
           previousKeys.primary,
@@ -535,7 +555,22 @@ export function usePasskeyBackup({
         const newKey = await generateKeyWithPasskeyBackup()
 
         if (newKey) {
-          const validation = await validateCurrentPrimaryKey()
+          let validation: Awaited<ReturnType<typeof validateCurrentPrimaryKey>>
+          try {
+            validation = await validateCurrentPrimaryKey()
+          } catch {
+            await encryptionService.replaceKeyBundle(
+              previousKeys.primary,
+              previousKeys.alternatives,
+            )
+            if (isMountedRef.current) {
+              setState((prev) => ({
+                ...prev,
+                manualRecoveryNeeded: true,
+              }))
+            }
+            return
+          }
           if (!validation.canWrite) {
             await encryptionService.replaceKeyBundle(
               previousKeys.primary,
