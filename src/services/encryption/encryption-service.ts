@@ -419,21 +419,9 @@ export class EncryptionService {
       return
     }
 
-    const keyBytes = this.getKeyBytes(primary)
-    this.encryptionKey = await crypto.subtle.importKey(
-      'raw',
-      keyBytes.buffer.slice(
-        keyBytes.byteOffset,
-        keyBytes.byteOffset + keyBytes.byteLength,
-      ) as ArrayBuffer,
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt'],
-    )
+    const importedKey = await this.importCryptoKey(primary)
 
-    this.currentKeyString = primary
-    this.fallbackKeyCache.clear()
-    this.fallbackKeyStrings = Array.from(
+    const validAlternatives = Array.from(
       new Set(
         alternatives.filter(
           (candidate) =>
@@ -452,7 +440,12 @@ export class EncryptionService {
 
     localStorage.setItem(USER_ENCRYPTION_KEY, primary)
     localStorage.setItem('tinfoil-encryption-key', primary)
-    this.saveKeyHistoryToStorage(this.fallbackKeyStrings)
+    this.saveKeyHistoryToStorage(validAlternatives)
+
+    this.encryptionKey = importedKey
+    this.currentKeyString = primary
+    this.fallbackKeyCache.clear()
+    this.fallbackKeyStrings = validAlternatives
   }
 
   /**
