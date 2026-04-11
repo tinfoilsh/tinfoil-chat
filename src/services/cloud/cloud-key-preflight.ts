@@ -37,23 +37,15 @@ export async function inspectRemoteEncryptedState(): Promise<CloudRemoteState> {
 
 export async function validateCurrentPrimaryKey(): Promise<CloudKeyValidationResult> {
   if (!encryptionService.getKey()) {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'none',
-      message: 'No encryption key is currently loaded.',
-    }
+    return unknownResult('none', 'No encryption key is currently loaded.')
   }
 
   const profileStatus = await profileSync.getSyncStatus()
   if (!profileStatus) {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'none',
-      message:
-        "We couldn't verify whether encrypted cloud data already exists.",
-    }
+    return unknownResult(
+      'none',
+      "We couldn't verify whether encrypted cloud data already exists.",
+    )
   }
 
   if (profileStatus.exists) {
@@ -66,13 +58,10 @@ export async function validateCurrentPrimaryKey(): Promise<CloudKeyValidationRes
       return validateProjectProbe()
     }
   } catch {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'none',
-      message:
-        "We couldn't verify whether encrypted cloud data already exists.",
-    }
+    return unknownResult(
+      'none',
+      "We couldn't verify whether encrypted cloud data already exists.",
+    )
   }
 
   try {
@@ -81,13 +70,10 @@ export async function validateCurrentPrimaryKey(): Promise<CloudKeyValidationRes
       return validateChatProbe()
     }
   } catch {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'none',
-      message:
-        "We couldn't verify whether encrypted cloud data already exists.",
-    }
+    return unknownResult(
+      'none',
+      "We couldn't verify whether encrypted cloud data already exists.",
+    )
   }
 
   return {
@@ -102,20 +88,16 @@ async function validateProfileProbe(): Promise<CloudKeyValidationResult> {
   try {
     payload = await profileSync.fetchEncryptedProfilePayload()
     if (!payload) {
-      return {
-        remoteState: 'unknown',
-        canWrite: false,
-        probe: 'profile',
-        message: "We couldn't verify your existing cloud profile.",
-      }
+      return unknownResult(
+        'profile',
+        "We couldn't verify your existing cloud profile.",
+      )
     }
   } catch {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'profile',
-      message: "We couldn't verify your existing cloud profile.",
-    }
+    return unknownResult(
+      'profile',
+      "We couldn't verify your existing cloud profile.",
+    )
   }
 
   try {
@@ -142,12 +124,10 @@ async function validateProjectProbe(): Promise<CloudKeyValidationResult> {
     })
 
     if (!response.projects.length) {
-      return {
-        remoteState: 'unknown',
-        canWrite: false,
-        probe: 'project',
-        message: "We couldn't verify your existing cloud projects.",
-      }
+      return unknownResult(
+        'project',
+        "We couldn't verify your existing cloud projects.",
+      )
     }
 
     let sawMismatch = false
@@ -177,19 +157,15 @@ async function validateProjectProbe(): Promise<CloudKeyValidationResult> {
 
     return sawMismatch
       ? blockedResult('project')
-      : {
-          remoteState: 'unknown',
-          canWrite: false,
-          probe: 'project',
-          message: "We couldn't verify your existing cloud projects.",
-        }
+      : unknownResult(
+          'project',
+          "We couldn't verify your existing cloud projects.",
+        )
   } catch {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'project',
-      message: "We couldn't verify your existing cloud projects.",
-    }
+    return unknownResult(
+      'project',
+      "We couldn't verify your existing cloud projects.",
+    )
   }
 }
 
@@ -201,12 +177,10 @@ async function validateChatProbe(): Promise<CloudKeyValidationResult> {
     })
 
     if (!response.conversations.length) {
-      return {
-        remoteState: 'unknown',
-        canWrite: false,
-        probe: 'chat',
-        message: "We couldn't verify your existing cloud chats.",
-      }
+      return unknownResult(
+        'chat',
+        "We couldn't verify your existing cloud chats.",
+      )
     }
 
     let sawMismatch = false
@@ -250,20 +224,20 @@ async function validateChatProbe(): Promise<CloudKeyValidationResult> {
 
     return sawMismatch
       ? blockedResult('chat')
-      : {
-          remoteState: 'unknown',
-          canWrite: false,
-          probe: 'chat',
-          message: "We couldn't verify your existing cloud chats.",
-        }
+      : unknownResult('chat', "We couldn't verify your existing cloud chats.")
   } catch {
-    return {
-      remoteState: 'unknown',
-      canWrite: false,
-      probe: 'chat',
-      message: "We couldn't verify your existing cloud chats.",
-    }
+    return unknownResult(
+      'chat',
+      "We couldn't verify your existing cloud chats.",
+    )
   }
+}
+
+function unknownResult(
+  probe: CloudKeyValidationProbe,
+  message: string,
+): CloudKeyValidationResult {
+  return { remoteState: 'unknown', canWrite: false, probe, message }
 }
 
 function blockedResult(
