@@ -2554,14 +2554,22 @@ export function ChatInterface({
           onRecoverWithPasskey={async () => {
             const key = await recoverWithPasskey()
             if (!key) return false
-            await handleKeyChanged(key, { mode: 'recoverExisting' })
+            try {
+              await handleKeyChanged(key, { mode: 'recoverExisting' })
+            } catch {
+              return false
+            }
             setShowCloudSyncSetupModal(false)
             return true
           }}
           onSetupNewKey={async () => {
             const key = await setupNewKeySplit()
             if (!key) return false
-            await handleKeyChanged(key, { mode: 'explicitStartFresh' })
+            try {
+              await handleKeyChanged(key, { mode: 'explicitStartFresh' })
+            } catch {
+              return false
+            }
             setShowCloudSyncSetupModal(false)
             return true
           }}
