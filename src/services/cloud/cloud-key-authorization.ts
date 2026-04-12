@@ -61,14 +61,29 @@ export async function canWriteToCloud(): Promise<boolean> {
 
 export async function authorizeCurrentPrimaryKey(
   mode: CloudKeyAuthorizationMode,
-): Promise<void> {
+): Promise<boolean> {
   const userId = getActiveUserId()
   const currentKey = encryptionService.getKey()
-  if (!userId || !currentKey || typeof window === 'undefined') return
+  if (!userId || !currentKey || typeof window === 'undefined') return false
 
-  const fingerprint = await fingerprintForKey(currentKey)
-  const record: CloudKeyAuthorizationRecord = { fingerprint, mode }
-  localStorage.setItem(storageKey(userId), JSON.stringify(record))
+  try {
+    const fingerprint = await fingerprintForKey(currentKey)
+    const record: CloudKeyAuthorizationRecord = { fingerprint, mode }
+    localStorage.setItem(storageKey(userId), JSON.stringify(record))
+    return true
+  } catch {
+    clearCloudKeyAuthorization(userId)
+    return false
+  }
+}
+
+export async function authorizeCurrentPrimaryKeyOrThrow(
+  mode: CloudKeyAuthorizationMode,
+): Promise<void> {
+  const authorized = await authorizeCurrentPrimaryKey(mode)
+  if (!authorized) {
+    throw new Error('Failed to authorize the current encryption key')
+  }
 }
 
 export function clearCloudKeyAuthorization(userId?: string | null): void {

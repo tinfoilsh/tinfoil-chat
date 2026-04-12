@@ -4,7 +4,7 @@ import {
 } from '@/constants/storage-keys'
 import { authTokenManager } from '@/services/auth'
 import {
-  authorizeCurrentPrimaryKey,
+  authorizeCurrentPrimaryKeyOrThrow,
   clearCloudKeyAuthorization,
 } from '@/services/cloud/cloud-key-authorization'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
@@ -449,10 +449,10 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
                 "This key doesn't match your existing cloud data.",
             )
           }
-          await authorizeCurrentPrimaryKey('validated')
+          await authorizeCurrentPrimaryKeyOrThrow('validated')
         } else {
           try {
-            await authorizeCurrentPrimaryKey('explicit_start_fresh')
+            await authorizeCurrentPrimaryKeyOrThrow('explicit_start_fresh')
           } catch (authorizationError) {
             await rollbackToPreviousKeys(previousKeys)
             rolledBack = true
