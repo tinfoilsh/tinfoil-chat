@@ -831,10 +831,6 @@ export class CloudSyncService {
       return
     }
 
-    if (!(await canWriteToCloud())) {
-      return
-    }
-
     try {
       await cloudStorage.deleteChat(chatId)
 

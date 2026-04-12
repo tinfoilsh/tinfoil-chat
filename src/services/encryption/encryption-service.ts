@@ -1,6 +1,8 @@
 // Encryption service for end-to-end encryption of chat data
 
 import {
+  LEGACY_ENCRYPTION_KEY,
+  LEGACY_ENCRYPTION_KEY_HISTORY,
   USER_ENCRYPTION_KEY,
   USER_ENCRYPTION_KEY_HISTORY,
 } from '@/constants/storage-keys'
@@ -105,7 +107,7 @@ export class EncryptionService {
   private loadKeyHistoryFromStorage(): string[] {
     const rawHistory =
       localStorage.getItem(USER_ENCRYPTION_KEY_HISTORY) ??
-      localStorage.getItem('tinfoil-encryption-key-history')
+      localStorage.getItem(LEGACY_ENCRYPTION_KEY_HISTORY)
 
     if (!rawHistory) {
       return []
@@ -191,7 +193,7 @@ export class EncryptionService {
   async initialize(): Promise<string | null> {
     const storedKey =
       localStorage.getItem(USER_ENCRYPTION_KEY) ??
-      localStorage.getItem('tinfoil-encryption-key')
+      localStorage.getItem(LEGACY_ENCRYPTION_KEY)
     this.fallbackKeyStrings = this.loadKeyHistoryFromStorage()
     this.pruneFallbackCache(this.fallbackKeyStrings)
 
@@ -209,7 +211,7 @@ export class EncryptionService {
       const previousKey =
         this.currentKeyString ??
         localStorage.getItem(USER_ENCRYPTION_KEY) ??
-        localStorage.getItem('tinfoil-encryption-key')
+        localStorage.getItem(LEGACY_ENCRYPTION_KEY)
 
       const previousHistory = this.loadKeyHistoryFromStorage()
 
@@ -265,7 +267,7 @@ export class EncryptionService {
   getKey(): string | null {
     return (
       localStorage.getItem(USER_ENCRYPTION_KEY) ??
-      localStorage.getItem('tinfoil-encryption-key')
+      localStorage.getItem(LEGACY_ENCRYPTION_KEY)
     )
   }
 
@@ -281,8 +283,8 @@ export class EncryptionService {
       try {
         localStorage.removeItem(USER_ENCRYPTION_KEY)
         localStorage.removeItem(USER_ENCRYPTION_KEY_HISTORY)
-        localStorage.removeItem('tinfoil-encryption-key')
-        localStorage.removeItem('tinfoil-encryption-key-history')
+        localStorage.removeItem(LEGACY_ENCRYPTION_KEY)
+        localStorage.removeItem(LEGACY_ENCRYPTION_KEY_HISTORY)
       } catch (error) {
         logInfo('Failed to remove encryption keys from storage', {
           component: 'EncryptionService',
@@ -403,7 +405,7 @@ export class EncryptionService {
     const previousKey =
       this.currentKeyString ??
       localStorage.getItem(USER_ENCRYPTION_KEY) ??
-      localStorage.getItem('tinfoil-encryption-key')
+      localStorage.getItem(LEGACY_ENCRYPTION_KEY)
     const previousHistory = this.loadKeyHistoryFromStorage()
 
     const validAlternatives = Array.from(
@@ -492,7 +494,7 @@ export class EncryptionService {
     try {
       localStorage.setItem(USER_ENCRYPTION_KEY, nextState.primaryKey)
       if (nextState.includeLegacyKey) {
-        localStorage.setItem('tinfoil-encryption-key', nextState.primaryKey)
+        localStorage.setItem(LEGACY_ENCRYPTION_KEY, nextState.primaryKey)
       }
       this.saveKeyHistoryToStorage(nextState.history)
     } catch (persistError) {
@@ -501,14 +503,14 @@ export class EncryptionService {
           localStorage.setItem(USER_ENCRYPTION_KEY, previousState.previousKey)
           if (previousState.includeLegacyKey) {
             localStorage.setItem(
-              'tinfoil-encryption-key',
+              LEGACY_ENCRYPTION_KEY,
               previousState.previousKey,
             )
           }
         } else {
           localStorage.removeItem(USER_ENCRYPTION_KEY)
           if (previousState.includeLegacyKey) {
-            localStorage.removeItem('tinfoil-encryption-key')
+            localStorage.removeItem(LEGACY_ENCRYPTION_KEY)
           }
         }
         this.saveKeyHistoryToStorage(previousState.previousHistory)
