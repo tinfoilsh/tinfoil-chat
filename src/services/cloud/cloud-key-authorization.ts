@@ -11,6 +11,12 @@ interface CloudKeyAuthorizationRecord {
   mode: CloudKeyAuthorizationMode
 }
 
+function isCloudKeyAuthorizationMode(
+  value: unknown,
+): value is CloudKeyAuthorizationMode {
+  return value === 'validated' || value === 'explicit_start_fresh'
+}
+
 function getActiveUserId(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem(AUTH_ACTIVE_USER_ID)
@@ -26,7 +32,17 @@ function loadRecord(userId: string): CloudKeyAuthorizationRecord | null {
   try {
     const raw = localStorage.getItem(storageKey(userId))
     if (!raw) return null
-    return JSON.parse(raw) as CloudKeyAuthorizationRecord
+    const parsed = JSON.parse(raw) as Partial<CloudKeyAuthorizationRecord>
+    if (
+      typeof parsed?.fingerprint !== 'string' ||
+      !isCloudKeyAuthorizationMode(parsed.mode)
+    ) {
+      return null
+    }
+    return {
+      fingerprint: parsed.fingerprint,
+      mode: parsed.mode,
+    }
   } catch {
     return null
   }
