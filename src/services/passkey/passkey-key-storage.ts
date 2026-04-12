@@ -11,6 +11,7 @@
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
+import type { CloudKeyAuthorizationMode } from '../cloud/cloud-key-authorization'
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.tinfoil.sh'
@@ -20,6 +21,7 @@ const AES_GCM_IV_BYTES = 12
 export interface KeyBundle {
   primary: string
   alternatives: string[]
+  authorizationMode?: CloudKeyAuthorizationMode
 }
 
 export interface PasskeyCredentialEntry {
@@ -81,7 +83,10 @@ export async function decryptKeyBundle(
 
   if (
     typeof parsed.primary !== 'string' ||
-    !Array.isArray(parsed.alternatives)
+    !Array.isArray(parsed.alternatives) ||
+    (parsed.authorizationMode !== undefined &&
+      parsed.authorizationMode !== 'validated' &&
+      parsed.authorizationMode !== 'explicit_start_fresh')
   ) {
     throw new Error('Invalid key bundle structure')
   }
