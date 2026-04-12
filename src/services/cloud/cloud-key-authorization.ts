@@ -67,8 +67,12 @@ export async function getCurrentCloudKeyAuthorizationMode(): Promise<CloudKeyAut
   const record = loadRecord(userId)
   if (!record) return null
 
-  const fingerprint = await fingerprintForKey(currentKey)
-  return record.fingerprint === fingerprint ? record.mode : null
+  try {
+    const fingerprint = await fingerprintForKey(currentKey)
+    return record.fingerprint === fingerprint ? record.mode : null
+  } catch {
+    return null
+  }
 }
 
 export async function canWriteToCloud(): Promise<boolean> {

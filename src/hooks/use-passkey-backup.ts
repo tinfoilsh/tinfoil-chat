@@ -742,9 +742,13 @@ export function usePasskeyBackup({
    * Returns the new primary key on success, null on failure/cancel.
    */
   const setupNewKeySplit = useCallback(async (): Promise<string | null> => {
+    const previousKeys = encryptionService.getAllKeys()
+    let didSetNewKey = false
+
     try {
       const newKey = await generateKeyWithPasskeyBackup('explicit_start_fresh')
       if (!newKey) return null
+      didSetNewKey = true
 
       await authorizeCurrentPrimaryKeyOrThrow('explicit_start_fresh')
       applyNewPasskeyKey()
@@ -756,13 +760,16 @@ export function usePasskeyBackup({
       return newKey
     } catch (error) {
       if (error instanceof PrfNotSupportedError) throw error
+      if (didSetNewKey) {
+        await rollbackToPreviousKeys(previousKeys)
+      }
       logError('Failed to create new key split', error, {
         component: 'usePasskeyBackup',
         action: 'setupNewKeySplit',
       })
       return null
     }
-  }, [generateKeyWithPasskeyBackup])
+  }, [generateKeyWithPasskeyBackup, rollbackToPreviousKeys])
 
   /**
    * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
