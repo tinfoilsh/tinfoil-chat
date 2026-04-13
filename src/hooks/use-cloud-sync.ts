@@ -5,6 +5,7 @@ import {
 import { authTokenManager } from '@/services/auth'
 import {
   authorizeCurrentPrimaryKeyOrThrow,
+  canWriteToCloud,
   clearCloudKeyAuthorization,
 } from '@/services/cloud/cloud-key-authorization'
 import { validateCurrentPrimaryKey } from '@/services/cloud/cloud-key-preflight'
@@ -130,6 +131,16 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
         // Initialize encryption (does not auto-generate keys)
         const key = await encryptionService.initialize()
+
+        // Ensure the current key is authorized for cloud writes.
+        // Existing users upgrading may have a valid key but no
+        // authorization record yet.
+        if (key && !(await canWriteToCloud())) {
+          const validation = await validateCurrentPrimaryKey()
+          if (validation.canWrite) {
+            await authorizeCurrentPrimaryKeyOrThrow('validated')
+          }
+        }
 
         if (isMountedRef.current) {
           setState((prev) => ({
