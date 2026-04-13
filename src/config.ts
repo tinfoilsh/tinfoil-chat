@@ -14,3 +14,7 @@ export const CLOUD_SYNC = {
   PROFILE_SYNC_INTERVAL: 300000, // 5 minutes - frequency for syncing profile (less frequent)
   KEY_VALIDATION_PROBE_LIMIT: 3,
 } as const
+
+export const PASSKEY = {
+  CREDENTIAL_SAVE_MAX_ATTEMPTS: 3,
+} as const

@@ -1,4 +1,5 @@
 export {
+  PasskeyCredentialConflictError,
   decryptKeyBundle,
   encryptKeyBundle,
   getPasskeyCredentialState,
@@ -12,6 +13,7 @@ export type {
   KeyBundle,
   PasskeyCredentialEntry,
   PasskeyCredentialState,
+  StoreEncryptedKeysOptions,
 } from './passkey-key-storage'
 export {
   PrfNotSupportedError,

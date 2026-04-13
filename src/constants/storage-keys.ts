@@ -12,6 +12,7 @@ export const LEGACY_ENCRYPTION_KEY_HISTORY = 'tinfoil-encryption-key-history'
 export const SECRET_PASSKEY_PRF_OUTPUT = 'tinfoil-secret-passkey-prf-output'
 export const SECRET_PASSKEY_BACKED_UP = 'tinfoil-secret-passkey-backed-up'
 export const PASSKEY_SYNC_VERSION = 'tinfoil-passkey-sync-version'
+export const PASSKEY_BUNDLE_VERSION = 'tinfoil-passkey-bundle-version'
 export const SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX =
   'tinfoil-secret-cloud-key-authorization-'
 
