@@ -1,4 +1,5 @@
 import {
+  PASSKEY_BUNDLE_VERSION,
   PASSKEY_SYNC_VERSION,
   SECRET_PASSKEY_BACKED_UP,
 } from '@/constants/storage-keys'
@@ -20,6 +21,7 @@ import {
   getCachedPrfResult,
   getPasskeyCredentialState,
   loadPasskeyCredentials,
+  PasskeyCredentialConflictError,
   PrfNotSupportedError,
   retrieveEncryptedKeys,
   storeEncryptedKeys,
@@ -93,6 +95,25 @@ function setLocalSyncVersion(credentialId: string, version: number): void {
   }
 }
 
+function getLocalBundleVersion(): number | null {
+  try {
+    const raw = localStorage.getItem(PASSKEY_BUNDLE_VERSION)
+    if (!raw) return null
+    const parsed = Number.parseInt(raw, 10)
+    return Number.isFinite(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function setLocalBundleVersion(version: number): void {
+  try {
+    localStorage.setItem(PASSKEY_BUNDLE_VERSION, String(version))
+  } catch {
+    // best-effort
+  }
+}
+
 export function usePasskeyBackup({
   encryptionKey,
   initialized,
@@ -159,6 +180,11 @@ export function usePasskeyBackup({
       alternatives: string[]
       authorizationMode: CloudKeyAuthorizationMode
     },
+    options?: {
+      knownBundleVersion?: number | null
+      incrementBundleVersion?: boolean
+      enforceRemoteBundleVersion?: boolean
+    },
   ): Promise<boolean> => {
     const passkeyResult = await createPrfPasskey(
       userInfo.userId,
@@ -172,10 +198,16 @@ export function usePasskeyBackup({
       passkeyResult.credentialId,
       kek,
       keys,
+      {
+        knownBundleVersion: options?.knownBundleVersion,
+        incrementBundleVersion: options?.incrementBundleVersion,
+        enforceRemoteBundleVersion: options?.enforceRemoteBundleVersion,
+      },
     )
     if (!result) return false
     localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
     setLocalSyncVersion(passkeyResult.credentialId, result.syncVersion)
+    setLocalBundleVersion(result.bundleVersion)
     return true
   }
 
@@ -187,17 +219,29 @@ export function usePasskeyBackup({
   const generateKeyWithPasskeyBackup = useCallback(
     async (
       authorizationMode: CloudKeyAuthorizationMode = 'validated',
+      options?: {
+        incrementBundleVersion?: boolean
+        enforceRemoteBundleVersion?: boolean
+      },
     ): Promise<string | null> => {
       const userInfo = getPasskeyUserInfo()
       if (!userInfo) return null
 
       const newKey = await encryptionService.generateKey()
 
-      const created = await createAndStorePasskeyBackup(userInfo, {
-        primary: newKey,
-        alternatives: [],
-        authorizationMode,
-      })
+      const created = await createAndStorePasskeyBackup(
+        userInfo,
+        {
+          primary: newKey,
+          alternatives: [],
+          authorizationMode,
+        },
+        {
+          knownBundleVersion: getLocalBundleVersion(),
+          incrementBundleVersion: options?.incrementBundleVersion,
+          enforceRemoteBundleVersion: options?.enforceRemoteBundleVersion,
+        },
+      )
       if (!created) return null
 
       await encryptionService.setKey(newKey)
@@ -219,6 +263,7 @@ export function usePasskeyBackup({
     }
     credentialId: string
     syncVersion: number | null
+    bundleVersion: number
   } | null> => {
     const entries = await loadPasskeyCredentials()
     if (entries.length === 0) return null
@@ -236,6 +281,7 @@ export function usePasskeyBackup({
       keyBundle,
       credentialId: result.credentialId,
       syncVersion: entry?.sync_version ?? null,
+      bundleVersion: entry?.bundle_version ?? 0,
     }
   }
 
@@ -251,12 +297,14 @@ export function usePasskeyBackup({
     }
     credentialId: string
     syncVersion: number | null
+    bundleVersion: number
   }): void => {
     setCloudSyncEnabled(true)
     localStorage.setItem(SECRET_PASSKEY_BACKED_UP, 'true')
     if (recovery.syncVersion !== null) {
       setLocalSyncVersion(recovery.credentialId, recovery.syncVersion)
     }
+    setLocalBundleVersion(recovery.bundleVersion)
 
     if (isMountedRef.current) {
       setState((prev) => ({
@@ -307,6 +355,49 @@ export function usePasskeyBackup({
         ? 'explicit_start_fresh'
         : 'validated',
     [],
+  )
+
+  const doesCurrentStateMatchBundle = useCallback(
+    async (bundle: {
+      primary: string
+      alternatives: string[]
+      authorizationMode?: CloudKeyAuthorizationMode
+    }): Promise<boolean> => {
+      const currentKeys = encryptionService.getAllKeys()
+      if (currentKeys.primary !== bundle.primary) {
+        return false
+      }
+
+      const normalizeAlternatives = (primary: string, alternatives: string[]) =>
+        alternatives
+          .filter((key) => key !== primary)
+          .slice()
+          .sort()
+
+      const currentAlternatives = normalizeAlternatives(
+        currentKeys.primary,
+        currentKeys.alternatives,
+      )
+      const bundleAlternatives = normalizeAlternatives(
+        bundle.primary,
+        bundle.alternatives,
+      )
+
+      if (
+        currentAlternatives.length !== bundleAlternatives.length ||
+        currentAlternatives.some(
+          (key, index) => key !== bundleAlternatives[index],
+        )
+      ) {
+        return false
+      }
+
+      const currentMode = await getCurrentCloudKeyAuthorizationMode()
+      return (
+        currentMode === getRecoveredAuthorizationMode(bundle.authorizationMode)
+      )
+    },
+    [getRecoveredAuthorizationMode],
   )
 
   const applyRecoveredKeyBundle = useCallback(
@@ -386,15 +477,45 @@ export function usePasskeyBackup({
       const kek = await deriveKeyEncryptionKey(result.prfOutput)
       const keys = encryptionService.getAllKeys()
       if (!keys.primary) return
+      const currentEntry = entries.find((e) => e.id === result.credentialId)
 
-      const stored = await storeEncryptedKeys(result.credentialId, kek, {
-        primary: keys.primary,
-        alternatives: keys.alternatives,
-        authorizationMode,
-      })
+      let localSyncVersion = getLocalSyncVersion(result.credentialId)
+      let localBundleVersion = getLocalBundleVersion()
+
+      if (
+        (localSyncVersion === null || localBundleVersion === null) &&
+        currentEntry
+      ) {
+        const currentRemoteBundle = await decryptKeyBundle(kek, {
+          iv: currentEntry.iv,
+          data: currentEntry.encrypted_keys,
+        })
+
+        if (await doesCurrentStateMatchBundle(currentRemoteBundle)) {
+          localSyncVersion ??= currentEntry.sync_version
+          localBundleVersion ??= currentEntry.bundle_version ?? 0
+        }
+      }
+
+      const stored = await storeEncryptedKeys(
+        result.credentialId,
+        kek,
+        {
+          primary: keys.primary,
+          alternatives: keys.alternatives,
+          authorizationMode,
+        },
+        {
+          expectedSyncVersion: localSyncVersion,
+          knownBundleVersion: localBundleVersion,
+          incrementBundleVersion: true,
+          enforceRemoteBundleVersion: true,
+        },
+      )
 
       if (stored) {
         setLocalSyncVersion(result.credentialId, stored.syncVersion)
+        setLocalBundleVersion(stored.bundleVersion)
       }
 
       logInfo('Updated passkey backup after key change', {
@@ -402,12 +523,26 @@ export function usePasskeyBackup({
         action: 'updatePasskeyBackup',
       })
     } catch (error) {
+      if (error instanceof PasskeyCredentialConflictError) {
+        logInfo(
+          'Skipped passkey backup update because a newer backup already exists',
+          {
+            component: 'usePasskeyBackup',
+            action: 'updatePasskeyBackup',
+            metadata: {
+              remoteSyncVersion: error.remoteSyncVersion,
+              remoteBundleVersion: error.remoteBundleVersion,
+            },
+          },
+        )
+        return
+      }
       logError('Failed to update passkey backup after key change', error, {
         component: 'usePasskeyBackup',
         action: 'updatePasskeyBackup',
       })
     }
-  }, [])
+  }, [doesCurrentStateMatchBundle])
 
   /**
    * Check if the passkey backup has been updated by another device (sync_version
@@ -434,10 +569,11 @@ export function usePasskeyBackup({
         data: entry.encrypted_keys,
       })
 
-      const localKey = encryptionService.getKey()
-      if (bundle.primary === localKey) {
-        // Key matches — just record the version
+      if (await doesCurrentStateMatchBundle(bundle)) {
         setLocalSyncVersion(cached.credentialId, entry.sync_version)
+        if (entry.bundle_version !== undefined) {
+          setLocalBundleVersion(entry.bundle_version)
+        }
         return
       }
 
@@ -446,7 +582,12 @@ export function usePasskeyBackup({
       if (!appliedMode) return
 
       setLocalSyncVersion(cached.credentialId, entry.sync_version)
-      onEncryptionKeyRecoveredRef.current?.(bundle.primary)
+      if (entry.bundle_version !== undefined) {
+        setLocalBundleVersion(entry.bundle_version)
+      }
+      if (bundle.primary !== previousKeys.primary) {
+        onEncryptionKeyRecoveredRef.current?.(bundle.primary)
+      }
 
       logInfo('Refreshed encryption key from passkey backup', {
         component: 'usePasskeyBackup',
@@ -459,7 +600,7 @@ export function usePasskeyBackup({
         action: 'refreshKeyFromPasskeyBackup',
       })
     }
-  }, [applyRecoveredKeyBundle])
+  }, [applyRecoveredKeyBundle, doesCurrentStateMatchBundle])
 
   /**
    * Retry passkey authentication to recover keys from the backend.
@@ -706,11 +847,19 @@ export function usePasskeyBackup({
       const keys = encryptionService.getAllKeys()
       if (!keys.primary) return false
 
-      const created = await createAndStorePasskeyBackup(userInfo, {
-        primary: keys.primary,
-        alternatives: keys.alternatives,
-        authorizationMode,
-      })
+      const created = await createAndStorePasskeyBackup(
+        userInfo,
+        {
+          primary: keys.primary,
+          alternatives: keys.alternatives,
+          authorizationMode,
+        },
+        {
+          knownBundleVersion: getLocalBundleVersion(),
+          incrementBundleVersion: false,
+          enforceRemoteBundleVersion: true,
+        },
+      )
       if (!created) return false
 
       if (isMountedRef.current) {
@@ -746,7 +895,13 @@ export function usePasskeyBackup({
     let didSetNewKey = false
 
     try {
-      const newKey = await generateKeyWithPasskeyBackup('explicit_start_fresh')
+      const newKey = await generateKeyWithPasskeyBackup(
+        'explicit_start_fresh',
+        {
+          incrementBundleVersion: true,
+          enforceRemoteBundleVersion: false,
+        },
+      )
       if (!newKey) return null
       didSetNewKey = true
 

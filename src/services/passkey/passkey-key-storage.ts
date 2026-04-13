@@ -8,6 +8,7 @@
  * The backend is a dumb JSONB store — all crypto happens client-side.
  */
 
+import { PASSKEY } from '@/config'
 import { base64ToUint8Array, uint8ArrayToBase64 } from '@/utils/binary-codec'
 import { logError, logInfo } from '@/utils/error-handling'
 import { authTokenManager } from '../auth'
@@ -31,11 +32,37 @@ export interface PasskeyCredentialEntry {
   created_at: string
   version: number // schema version (1 = AES-256-GCM + HKDF-SHA256 KEK)
   sync_version: number // monotonic counter, incremented each time the key bundle is re-encrypted
+  bundle_version?: number // logical key-bundle version shared across credential updates
 }
 
 const CURRENT_CREDENTIAL_VERSION = 1
 
 export type PasskeyCredentialState = 'exists' | 'empty' | 'unknown'
+
+export interface StoreEncryptedKeysOptions {
+  expectedSyncVersion?: number | null
+  knownBundleVersion?: number | null
+  incrementBundleVersion?: boolean
+  enforceRemoteBundleVersion?: boolean
+}
+
+export class PasskeyCredentialConflictError extends Error {
+  readonly remoteSyncVersion: number | null
+  readonly remoteBundleVersion: number
+
+  constructor(
+    message: string,
+    details: {
+      remoteSyncVersion?: number | null
+      remoteBundleVersion?: number
+    } = {},
+  ) {
+    super(message)
+    this.name = 'PasskeyCredentialConflictError'
+    this.remoteSyncVersion = details.remoteSyncVersion ?? null
+    this.remoteBundleVersion = details.remoteBundleVersion ?? 0
+  }
+}
 
 // --- Encrypt / Decrypt ---
 
@@ -107,7 +134,34 @@ function isValidCredentialEntry(
     typeof e.iv === 'string' &&
     typeof e.created_at === 'string' &&
     typeof e.version === 'number' &&
-    typeof e.sync_version === 'number'
+    typeof e.sync_version === 'number' &&
+    (e.bundle_version === undefined || typeof e.bundle_version === 'number')
+  )
+}
+
+function getCredentialBundleVersion(
+  entry: Pick<PasskeyCredentialEntry, 'bundle_version'>,
+): number {
+  return entry.bundle_version ?? 0
+}
+
+function getHighestBundleVersion(entries: PasskeyCredentialEntry[]): number {
+  return entries.reduce(
+    (highest, entry) => Math.max(highest, getCredentialBundleVersion(entry)),
+    0,
+  )
+}
+
+function hasStoredCredentialEntry(
+  entry: PasskeyCredentialEntry,
+  expected: PasskeyCredentialEntry,
+): boolean {
+  return (
+    entry.sync_version === expected.sync_version &&
+    getCredentialBundleVersion(entry) ===
+      getCredentialBundleVersion(expected) &&
+    entry.iv === expected.iv &&
+    entry.encrypted_keys === expected.encrypted_keys
   )
 }
 
@@ -211,38 +265,110 @@ export async function storeEncryptedKeys(
   credentialId: string,
   kek: CryptoKey,
   keys: KeyBundle,
-): Promise<{ syncVersion: number } | null> {
+  options: StoreEncryptedKeysOptions = {},
+): Promise<{ syncVersion: number; bundleVersion: number } | null> {
   try {
     const encrypted = await encryptKeyBundle(kek, keys)
 
-    const existing = await loadPasskeyCredentials()
-    const previous = existing.find((e) => e.id === credentialId)
+    for (
+      let attempt = 0;
+      attempt < PASSKEY.CREDENTIAL_SAVE_MAX_ATTEMPTS;
+      attempt++
+    ) {
+      const existing = await loadPasskeyCredentials()
+      const previous = existing.find((e) => e.id === credentialId)
+      const remoteBundleVersion = getHighestBundleVersion(existing)
 
-    const newSyncVersion = previous ? previous.sync_version + 1 : 1
+      if (
+        options.expectedSyncVersion !== undefined &&
+        options.expectedSyncVersion !== null &&
+        (!previous || previous.sync_version > options.expectedSyncVersion)
+      ) {
+        throw new PasskeyCredentialConflictError(
+          'A newer passkey backup already exists for this credential. Recover the latest backup before updating it.',
+          {
+            remoteSyncVersion: previous?.sync_version ?? null,
+            remoteBundleVersion,
+          },
+        )
+      }
 
-    const entry: PasskeyCredentialEntry = {
-      id: credentialId,
-      encrypted_keys: encrypted.data,
-      iv: encrypted.iv,
-      created_at: previous?.created_at ?? new Date().toISOString(),
-      version: CURRENT_CREDENTIAL_VERSION,
-      sync_version: newSyncVersion,
+      if (options.enforceRemoteBundleVersion) {
+        if (
+          options.knownBundleVersion === undefined ||
+          options.knownBundleVersion === null
+        ) {
+          if (remoteBundleVersion > 0) {
+            throw new PasskeyCredentialConflictError(
+              'This device needs the latest passkey backup before it can save changes.',
+              {
+                remoteSyncVersion: previous?.sync_version ?? null,
+                remoteBundleVersion,
+              },
+            )
+          }
+        } else if (remoteBundleVersion > options.knownBundleVersion) {
+          throw new PasskeyCredentialConflictError(
+            'A newer passkey backup already exists on another device. Recover the latest backup before updating it.',
+            {
+              remoteSyncVersion: previous?.sync_version ?? null,
+              remoteBundleVersion,
+            },
+          )
+        }
+      }
+
+      const newSyncVersion = previous ? previous.sync_version + 1 : 1
+      const baseBundleVersion = Math.max(
+        remoteBundleVersion,
+        options.knownBundleVersion ?? 0,
+      )
+      const newBundleVersion = options.incrementBundleVersion
+        ? Math.max(baseBundleVersion + 1, 1)
+        : Math.max(baseBundleVersion, 1)
+
+      const entry: PasskeyCredentialEntry = {
+        id: credentialId,
+        encrypted_keys: encrypted.data,
+        iv: encrypted.iv,
+        created_at: previous?.created_at ?? new Date().toISOString(),
+        version: CURRENT_CREDENTIAL_VERSION,
+        sync_version: newSyncVersion,
+        bundle_version: newBundleVersion,
+      }
+
+      const updated = existing.filter((e) => e.id !== credentialId)
+      updated.push(entry)
+
+      const saved = await savePasskeyCredentials(updated)
+      if (!saved) {
+        continue
+      }
+
+      const verifiedEntries = await loadPasskeyCredentials()
+      const verifiedEntry = verifiedEntries.find((e) => e.id === credentialId)
+      if (verifiedEntry && hasStoredCredentialEntry(verifiedEntry, entry)) {
+        logInfo('Stored encrypted keys for passkey credential', {
+          component: 'PasskeyKeyStorage',
+          action: 'storeEncryptedKeys',
+          metadata: {
+            credentialId,
+            totalEntries: updated.length,
+            bundleVersion: newBundleVersion,
+          },
+        })
+        return {
+          syncVersion: newSyncVersion,
+          bundleVersion: newBundleVersion,
+        }
+      }
     }
 
-    const updated = existing.filter((e) => e.id !== credentialId)
-    updated.push(entry)
-
-    const saved = await savePasskeyCredentials(updated)
-    if (saved) {
-      logInfo('Stored encrypted keys for passkey credential', {
-        component: 'PasskeyKeyStorage',
-        action: 'storeEncryptedKeys',
-        metadata: { credentialId, totalEntries: updated.length },
-      })
-      return { syncVersion: newSyncVersion }
-    }
-    return null
+    throw new Error('Failed to confirm the latest passkey backup update')
   } catch (error) {
+    if (error instanceof PasskeyCredentialConflictError) {
+      throw error
+    }
     logError('Failed to store encrypted keys', error, {
       component: 'PasskeyKeyStorage',
       action: 'storeEncryptedKeys',
