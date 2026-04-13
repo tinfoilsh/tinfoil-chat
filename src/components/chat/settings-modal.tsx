@@ -179,7 +179,10 @@ type SettingsModalProps = {
   isSignedIn?: boolean
   isPremium?: boolean
   encryptionKey: string | null
-  onKeyChange: (key: string) => Promise<void>
+  onKeyChange: (
+    key: string,
+    options?: { mode?: 'recoverExisting' | 'explicitStartFresh' },
+  ) => Promise<void>
   onAddRecoveryKey: (key: string) => Promise<void>
   passkeyActive?: boolean
   passkeySetupAvailable?: boolean
@@ -233,6 +236,9 @@ export function SettingsModal({
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false)
   const [isEncryptionKeyOpen, setIsEncryptionKeyOpen] = useState(false)
+  const [primaryKeyMode, setPrimaryKeyMode] = useState<
+    'recoverExisting' | 'explicitStartFresh'
+  >('recoverExisting')
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Structured personalization fields
@@ -1516,6 +1522,7 @@ export function SettingsModal({
     if (!isOpen) {
       setIsQRCodeExpanded(false)
       setShowSignOutConfirm(false)
+      setPrimaryKeyMode('recoverExisting')
     }
   }, [isOpen])
 
@@ -1578,9 +1585,13 @@ export function SettingsModal({
 
   const handleUpdateKey = () =>
     handleKeyAction(
-      onKeyChange,
-      'Primary key replaced',
-      'Future cloud writes will use the new primary key',
+      (key) => onKeyChange(key, { mode: primaryKeyMode }),
+      primaryKeyMode === 'recoverExisting'
+        ? 'Primary key verified'
+        : 'Primary key replaced',
+      primaryKeyMode === 'recoverExisting'
+        ? 'This device verified the key against your existing cloud data'
+        : 'Future cloud writes will use the new primary key on this device',
     )
 
   const handleAddRecoveryKey = () =>
@@ -2670,6 +2681,43 @@ ${encryptionKey.replace('key_', '')}
                               changing your current primary key, or replace the
                               primary key used for future cloud writes.
                             </p>
+                            <div className="space-y-2 rounded-lg border border-border-subtle bg-surface-chat p-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPrimaryKeyMode('recoverExisting')
+                                  }
+                                  className={cn(
+                                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    primaryKeyMode === 'recoverExisting'
+                                      ? 'border border-blue-500 bg-blue-500/10 text-blue-500'
+                                      : 'border border-border-subtle bg-surface-input text-content-secondary hover:text-content-primary',
+                                  )}
+                                >
+                                  Recover Existing
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPrimaryKeyMode('explicitStartFresh')
+                                  }
+                                  className={cn(
+                                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                    primaryKeyMode === 'explicitStartFresh'
+                                      ? 'border border-amber-500 bg-amber-500/10 text-amber-500'
+                                      : 'border border-border-subtle bg-surface-input text-content-secondary hover:text-content-primary',
+                                  )}
+                                >
+                                  Start Fresh
+                                </button>
+                              </div>
+                              <p className="text-xs text-content-muted">
+                                {primaryKeyMode === 'recoverExisting'
+                                  ? 'Verify this key against your existing cloud data before this device resumes writing.'
+                                  : 'Use this key for future cloud writes on this device without validating it against older cloud data.'}
+                              </p>
+                            </div>
                             <form
                               onSubmit={(e) => {
                                 e.preventDefault()
@@ -2760,12 +2808,17 @@ ${encryptionKey.replace('key_', '')}
                                       'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                                       isUpdating || !inputKey.trim()
                                         ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                                        : 'bg-blue-500 text-white hover:bg-blue-600',
+                                        : primaryKeyMode ===
+                                            'explicitStartFresh'
+                                          ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                          : 'bg-blue-500 text-white hover:bg-blue-600',
                                     )}
                                   >
                                     {isUpdating
                                       ? 'Saving...'
-                                      : 'Replace Primary'}
+                                      : primaryKeyMode === 'recoverExisting'
+                                        ? 'Recover Existing'
+                                        : 'Start Fresh'}
                                   </button>
                                 </div>
                               </div>
