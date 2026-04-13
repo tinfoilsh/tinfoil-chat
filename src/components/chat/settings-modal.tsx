@@ -2674,55 +2674,63 @@ ${encryptionKey.replace('key_', '')}
                           {/* Restore or Update Encryption Key */}
                           <div className="space-y-2 pt-2">
                             <h4 className="font-aeonik text-xs font-medium text-content-secondary">
-                              Recovery and Primary Keys
+                              {passkeyActive
+                                ? 'Add Decryption Key'
+                                : 'Recovery and Primary Keys'}
                             </h4>
                             <p className="text-xs text-content-muted">
-                              Add a recovery key to decrypt older data without
-                              changing your current primary key, or replace the
-                              primary key used for future cloud writes.
+                              {passkeyActive
+                                ? 'Add an older key to decrypt data from before a key rotation. Your passkey manages the primary key.'
+                                : 'Add a recovery key to decrypt older data without changing your current primary key, or replace the primary key used for future cloud writes.'}
                             </p>
-                            <div className="space-y-2 rounded-lg border border-border-subtle bg-surface-chat p-3">
-                              <div className="grid grid-cols-2 gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPrimaryKeyMode('recoverExisting')
-                                  }
-                                  className={cn(
-                                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                                    primaryKeyMode === 'recoverExisting'
-                                      ? 'border border-blue-500 bg-blue-500/10 text-blue-500'
-                                      : 'border border-border-subtle bg-surface-input text-content-secondary hover:text-content-primary',
-                                  )}
-                                >
-                                  Recover Existing
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPrimaryKeyMode('explicitStartFresh')
-                                  }
-                                  className={cn(
-                                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                                    primaryKeyMode === 'explicitStartFresh'
-                                      ? 'border border-amber-500 bg-amber-500/10 text-amber-500'
-                                      : 'border border-border-subtle bg-surface-input text-content-secondary hover:text-content-primary',
-                                  )}
-                                >
-                                  Start Fresh
-                                </button>
+                            {!passkeyActive && (
+                              <div className="space-y-2 rounded-lg border border-border-subtle bg-surface-chat p-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPrimaryKeyMode('recoverExisting')
+                                    }
+                                    className={cn(
+                                      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                      primaryKeyMode === 'recoverExisting'
+                                        ? 'border border-blue-500 bg-blue-500/10 text-blue-500'
+                                        : 'border border-border-subtle bg-surface-input text-content-secondary hover:text-content-primary',
+                                    )}
+                                  >
+                                    Recover Existing
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPrimaryKeyMode('explicitStartFresh')
+                                    }
+                                    className={cn(
+                                      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                                      primaryKeyMode === 'explicitStartFresh'
+                                        ? 'border border-amber-500 bg-amber-500/10 text-amber-500'
+                                        : 'border border-border-subtle bg-surface-input text-content-secondary hover:text-content-primary',
+                                    )}
+                                  >
+                                    Start Fresh
+                                  </button>
+                                </div>
+                                <p className="text-xs text-content-muted">
+                                  {primaryKeyMode === 'recoverExisting'
+                                    ? 'Verify this key against your existing cloud data before this device resumes writing.'
+                                    : 'Use this key for future cloud writes on this device without validating it against older cloud data.'}
+                                </p>
                               </div>
-                              <p className="text-xs text-content-muted">
-                                {primaryKeyMode === 'recoverExisting'
-                                  ? 'Verify this key against your existing cloud data before this device resumes writing.'
-                                  : 'Use this key for future cloud writes on this device without validating it against older cloud data.'}
-                              </p>
-                            </div>
+                            )}
                             <form
                               onSubmit={(e) => {
                                 e.preventDefault()
                                 if (!isUpdating && inputKey.trim()) {
-                                  handleUpdateKey()
+                                  if (passkeyActive) {
+                                    handleAddRecoveryKey()
+                                  } else {
+                                    handleUpdateKey()
+                                  }
                                 }
                               }}
                               onDragOver={handleDragOver}
@@ -2785,42 +2793,60 @@ ${encryptionKey.replace('key_', '')}
                                     </div>
                                   )}
                                 </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleAddRecoveryKey}
-                                    disabled={isUpdating || !inputKey.trim()}
-                                    aria-label="Add recovery key"
-                                    className={cn(
-                                      'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                                      isUpdating || !inputKey.trim()
-                                        ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                                        : 'border border-border-subtle bg-surface-chat text-content-primary hover:bg-surface-chat/80',
-                                    )}
-                                  >
-                                    {isUpdating ? 'Saving...' : 'Add Recovery'}
-                                  </button>
+                                {passkeyActive ? (
                                   <button
                                     type="submit"
                                     disabled={isUpdating || !inputKey.trim()}
-                                    aria-label="Replace primary encryption key"
+                                    aria-label="Add decryption key"
                                     className={cn(
                                       'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                                       isUpdating || !inputKey.trim()
                                         ? 'cursor-not-allowed bg-surface-chat text-content-muted'
-                                        : primaryKeyMode ===
-                                            'explicitStartFresh'
-                                          ? 'bg-amber-500 text-white hover:bg-amber-600'
-                                          : 'bg-blue-500 text-white hover:bg-blue-600',
+                                        : 'bg-blue-500 text-white hover:bg-blue-600',
                                     )}
                                   >
-                                    {isUpdating
-                                      ? 'Saving...'
-                                      : primaryKeyMode === 'recoverExisting'
-                                        ? 'Recover Existing'
-                                        : 'Start Fresh'}
+                                    {isUpdating ? 'Saving...' : 'Add Key'}
                                   </button>
-                                </div>
+                                ) : (
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleAddRecoveryKey}
+                                      disabled={isUpdating || !inputKey.trim()}
+                                      aria-label="Add recovery key"
+                                      className={cn(
+                                        'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                                        isUpdating || !inputKey.trim()
+                                          ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                          : 'border border-border-subtle bg-surface-chat text-content-primary hover:bg-surface-chat/80',
+                                      )}
+                                    >
+                                      {isUpdating
+                                        ? 'Saving...'
+                                        : 'Add Recovery'}
+                                    </button>
+                                    <button
+                                      type="submit"
+                                      disabled={isUpdating || !inputKey.trim()}
+                                      aria-label="Replace primary encryption key"
+                                      className={cn(
+                                        'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                                        isUpdating || !inputKey.trim()
+                                          ? 'cursor-not-allowed bg-surface-chat text-content-muted'
+                                          : primaryKeyMode ===
+                                              'explicitStartFresh'
+                                            ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                            : 'bg-blue-500 text-white hover:bg-blue-600',
+                                      )}
+                                    >
+                                      {isUpdating
+                                        ? 'Saving...'
+                                        : primaryKeyMode === 'recoverExisting'
+                                          ? 'Recover Existing'
+                                          : 'Start Fresh'}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </form>
                           </div>
