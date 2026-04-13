@@ -408,7 +408,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
   // Set encryption key (for syncing across devices)
   const setEncryptionKey = useCallback(
     async (key: string, options?: { mode?: CloudKeyActivationMode }) => {
-      const mode = options?.mode ?? 'explicitStartFresh'
+      const mode = options?.mode ?? 'recoverExisting'
       let previousKeys: {
         primary: string | null
         alternatives: string[]
