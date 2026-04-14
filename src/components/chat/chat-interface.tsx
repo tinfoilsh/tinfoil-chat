@@ -250,7 +250,8 @@ export function ChatInterface({
   const [showOnboarding, setShowOnboarding] = useState(false)
   const isExistingUser =
     !!user?.unsafeMetadata?.has_seen_passkey_intro ||
-    !!localStorage.getItem(SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO)
+    (typeof window !== 'undefined' &&
+      !!localStorage.getItem(SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO))
   const onboardingNeeded =
     isSignedIn &&
     !!user &&
