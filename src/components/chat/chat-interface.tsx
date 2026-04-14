@@ -4,6 +4,7 @@ import {
   type BaseModel,
 } from '@/config/models'
 import {
+  SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_WEB_SEARCH_ENABLED,
   UI_EXPAND_PROJECT_DOCUMENTS,
@@ -247,8 +248,14 @@ export function ChatInterface({
 
   // Onboarding state (must be defined before usePasskeyBackup so we can gate it)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const isExistingUser =
+    !!user?.unsafeMetadata?.has_seen_passkey_intro ||
+    !!localStorage.getItem(SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO)
   const onboardingNeeded =
-    isSignedIn && !!user && !user.unsafeMetadata?.has_completed_onboarding
+    isSignedIn &&
+    !!user &&
+    !user.unsafeMetadata?.has_completed_onboarding &&
+    !isExistingUser
 
   // iOS Safari keyboard fix: keep a CSS var in sync with the *visual* viewport height.
   // Without this, fixed full-screen layouts can leave an untouchable "dead zone"
