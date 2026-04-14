@@ -122,6 +122,10 @@ const PasskeyIntroModal = dynamic(
     import('../tutorial/PasskeyIntroModal').then((m) => m.PasskeyIntroModal),
   { ssr: false },
 )
+const OnboardingModal = dynamic(
+  () => import('../onboarding/onboarding-modal').then((m) => m.OnboardingModal),
+  { ssr: false },
+)
 
 type ChatInterfaceProps = {
   verificationState?: any
@@ -241,6 +245,11 @@ export function ChatInterface({
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null)
 
+  // Onboarding state (must be defined before usePasskeyBackup so we can gate it)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const onboardingNeeded =
+    isSignedIn && !!user && !user.unsafeMetadata?.has_completed_onboarding
+
   // iOS Safari keyboard fix: keep a CSS var in sync with the *visual* viewport height.
   // Without this, fixed full-screen layouts can leave an untouchable "dead zone"
   // after the keyboard is dismissed.
@@ -316,7 +325,7 @@ export function ChatInterface({
     updatePasskeyBackup,
   } = usePasskeyBackup({
     encryptionKey,
-    initialized: cloudSyncInitialized,
+    initialized: cloudSyncInitialized && !showOnboarding,
     isSignedIn,
     user,
     onEncryptionKeyRecovered: useCallback(
@@ -345,6 +354,13 @@ export function ChatInterface({
   const handleLogoAnimFinished = useCallback(() => {
     setLogoAnimDone(true)
   }, [])
+
+  // Show onboarding once models are loaded for new users
+  useEffect(() => {
+    if (onboardingNeeded && models.length > 0) {
+      setShowOnboarding(true)
+    }
+  }, [onboardingNeeded, models.length])
 
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
@@ -2595,8 +2611,15 @@ export function ChatInterface({
       />
 
       <PasskeyIntroModal
-        isOpen={passkeyIntroNeeded}
+        isOpen={passkeyIntroNeeded && !showOnboarding}
         onAccept={acceptPasskeyIntro}
+      />
+
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onComplete={() => setShowOnboarding(false)}
+        models={models}
+        isDarkMode={isDarkMode}
       />
     </div>
   )
