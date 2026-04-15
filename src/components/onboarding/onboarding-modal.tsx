@@ -223,14 +223,14 @@ function OnboardingPrivacyPage({
             >
               <ExplanationRow
                 icon={<PiEyeSlash className="h-4 w-4" />}
-                title="Zero Access"
-                description="Your messages are encrypted directly to AI models inside secure hardware. Tinfoil cannot read them."
+                title="Sealed Processing"
+                description="Your messages are end-to-end encrypted to AI models running inside secure hardware. Tinfoil cannot read them."
                 delay={0.1}
               />
               <ExplanationRow
                 icon={<PiShieldCheck className="h-4 w-4" />}
                 title="Verifiable Privacy"
-                description="Our infrastructure runs on confidential computing GPUs with hardware attestation you can verify."
+                description="Our infrastructure runs on confidential computing GPUs with hardware attestation and automatic client-side verification."
                 delay={0.2}
               />
               <ExplanationRow
@@ -393,7 +393,7 @@ function OnboardingEncryptionPage() {
           </h2>
           <p className="text-base text-content-secondary">
             Every chat is encrypted with a key that only exists on your device.
-            Nobody else can read your messages.
+            Nobody but you can read your conversations.
           </p>
         </div>
 
@@ -413,7 +413,7 @@ function OnboardingEncryptionPage() {
               </p>
               <p className="text-sm text-content-secondary">
                 Your encryption key never leaves your device. It&apos;s the only
-                way to decrypt your conversations.
+                way to decrypt your conversations - don&apos;t lose it!
               </p>
             </div>
           </div>
