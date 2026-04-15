@@ -258,6 +258,25 @@ export function ChatInterface({
     !user.unsafeMetadata?.has_completed_onboarding &&
     !isExistingUser
 
+  // Backfill: ensure existing users also get the onboarding flag set
+  useEffect(() => {
+    if (
+      isSignedIn &&
+      user &&
+      isExistingUser &&
+      !user.unsafeMetadata?.has_completed_onboarding
+    ) {
+      user
+        .update({
+          unsafeMetadata: {
+            ...user.unsafeMetadata,
+            has_completed_onboarding: true,
+          },
+        })
+        .catch(() => {})
+    }
+  }, [isSignedIn, user, isExistingUser])
+
   // iOS Safari keyboard fix: keep a CSS var in sync with the *visual* viewport height.
   // Without this, fixed full-screen layouts can leave an untouchable "dead zone"
   // after the keyboard is dismissed.
