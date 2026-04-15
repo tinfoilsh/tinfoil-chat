@@ -383,7 +383,7 @@ function OnboardingEncryptionPage() {
             animate={{ scale: 1 }}
             transition={{ delay: 0.3, type: 'spring', stiffness: 400 }}
           >
-            <PiLock className="h-4 w-4 text-content-primary" />
+            <FaLock className="h-3.5 w-3.5 text-content-primary" />
           </motion.div>
         </motion.div>
 
