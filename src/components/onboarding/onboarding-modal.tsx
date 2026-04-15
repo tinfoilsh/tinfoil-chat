@@ -203,7 +203,7 @@ function OnboardingPrivacyPage({
         </motion.div>
 
         <div className="space-y-2 text-center">
-          <h2 className="text-3xl font-bold text-content-primary">
+          <h2 className="font-aeonik text-3xl font-bold text-content-primary">
             Privacy First
           </h2>
           <p className="text-base text-content-secondary">
@@ -343,16 +343,18 @@ function ExplanationRow({
 }) {
   return (
     <motion.div
-      className="flex items-start gap-3"
+      className="flex items-start gap-3 rounded-xl border border-border-subtle bg-surface-chat p-4"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay, ease: 'easeOut' }}
     >
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-chat text-content-primary">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
         {icon}
       </div>
       <div>
-        <p className="text-sm font-semibold text-content-primary">{title}</p>
+        <p className="font-aeonik text-sm font-semibold text-content-primary">
+          {title}
+        </p>
         <p className="text-sm text-content-secondary">{description}</p>
       </div>
     </motion.div>
@@ -392,7 +394,7 @@ function OnboardingEncryptionPage() {
         </motion.div>
 
         <div className="space-y-2 text-center">
-          <h2 className="text-3xl font-bold text-content-primary">
+          <h2 className="font-aeonik text-3xl font-bold text-content-primary">
             Your Key, Your Data
           </h2>
           <p className="text-base text-content-secondary">
@@ -412,7 +414,7 @@ function OnboardingEncryptionPage() {
               <PiKey className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-content-primary">
+              <p className="font-aeonik text-sm font-semibold text-content-primary">
                 Device-Only Key
               </p>
               <p className="text-sm text-content-secondary">
@@ -481,7 +483,7 @@ function OnboardingModelsPage({
     >
       <div className="flex w-full flex-col items-center gap-5">
         <div className="space-y-2 text-center">
-          <h2 className="text-3xl font-bold text-content-primary">
+          <h2 className="font-aeonik text-3xl font-bold text-content-primary">
             Powerful Models
           </h2>
           <p className="text-base text-content-secondary">
@@ -494,7 +496,7 @@ function OnboardingModelsPage({
         {chatModels.length > 0 && (
           <div
             ref={scrollRef}
-            className="scrollbar-hide flex w-full gap-3 overflow-x-auto py-2"
+            className="scrollbar-hide flex w-full gap-3 overflow-x-auto px-1 py-2"
           >
             {chatModels.map((model, i) => (
               <button
