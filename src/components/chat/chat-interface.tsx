@@ -2644,7 +2644,10 @@ export function ChatInterface({
 
       <OnboardingModal
         isOpen={showOnboarding}
-        onComplete={() => setShowOnboarding(false)}
+        onComplete={(selectedModel) => {
+          if (selectedModel) handleModelSelect(selectedModel)
+          setShowOnboarding(false)
+        }}
         models={models}
         isDarkMode={isDarkMode}
       />

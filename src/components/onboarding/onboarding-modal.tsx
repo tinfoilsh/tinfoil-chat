@@ -19,7 +19,7 @@ import { TbBrain } from 'react-icons/tb'
 
 interface OnboardingModalProps {
   isOpen: boolean
-  onComplete: () => void
+  onComplete: (selectedModel?: string) => void
   models: BaseModel[]
   isDarkMode: boolean
 }
@@ -35,6 +35,9 @@ export function OnboardingModal({
   const { user } = useUser()
   const [currentPage, setCurrentPage] = useState(0)
   const [privacyEnabled, setPrivacyEnabled] = useState(false)
+  const [selectedModelName, setSelectedModelName] = useState<
+    string | undefined
+  >()
 
   const handleContinue = useCallback(() => {
     if (currentPage < TOTAL_PAGES - 1) {
@@ -49,9 +52,9 @@ export function OnboardingModal({
           },
         })
         .catch(() => {})
-      onComplete()
+      onComplete(selectedModelName)
     }
-  }, [currentPage, onComplete, user])
+  }, [currentPage, onComplete, user, selectedModelName])
 
   const handleSkip = useCallback(() => {
     user
@@ -113,6 +116,7 @@ export function OnboardingModal({
                           key="models"
                           models={models}
                           isDarkMode={isDarkMode}
+                          onSelectModel={setSelectedModelName}
                         />
                       )}
                     </AnimatePresence>
@@ -428,9 +432,11 @@ function OnboardingEncryptionPage() {
 function OnboardingModelsPage({
   models,
   isDarkMode,
+  onSelectModel,
 }: {
   models: BaseModel[]
   isDarkMode: boolean
+  onSelectModel: (modelName: string) => void
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -487,7 +493,10 @@ function OnboardingModelsPage({
             {chatModels.map((model, i) => (
               <button
                 key={model.modelName}
-                onClick={() => setSelectedIndex(i)}
+                onClick={() => {
+                  setSelectedIndex(i)
+                  onSelectModel(model.modelName)
+                }}
                 className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-3 py-2 transition-all ${
                   i === selectedIndex
                     ? 'bg-surface-chat ring-1 ring-border-subtle'
