@@ -445,6 +445,12 @@ function OnboardingModelsPage({
     (m) => (m.type === 'chat' || m.type === 'code') && m.chat === true,
   )
 
+  useEffect(() => {
+    if (chatModels.length > 0) {
+      onSelectModel(chatModels[0].modelName)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const getModelIcon = (model: BaseModel) => {
     if (model.image === 'openai.png')
       return `/model-icons/openai-${isDarkMode ? 'dark' : 'light'}.png`
