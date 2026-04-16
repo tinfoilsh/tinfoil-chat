@@ -646,7 +646,7 @@ function OnboardingModelsPage({
         {chatModels.length > 0 && (
           <div
             ref={scrollRef}
-            className={`scrollbar-hide flex w-full gap-3 overflow-x-auto px-1 ${isShort ? 'py-1' : 'py-2'}`}
+            className={`scrollbar-hide -mx-6 flex w-[calc(100%+3rem)] gap-3 overflow-x-auto px-6 ${isShort ? 'py-1' : 'py-2'}`}
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {chatModels.map((model, i) => (
