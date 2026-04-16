@@ -2,7 +2,14 @@ import type { BaseModel } from '@/config/models'
 import { useUser } from '@clerk/nextjs'
 import { Dialog, Transition } from '@headlessui/react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { FaLock, FaLockOpen } from 'react-icons/fa6'
 import {
   PiCamera,
@@ -171,6 +178,74 @@ export function OnboardingModal({
   )
 }
 
+// MARK: - Shared: Snap Carousel for compact viewports
+
+function useIsShortViewport(threshold = 700) {
+  const [isShort, setIsShort] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-height: ${threshold}px)`)
+    setIsShort(mql.matches)
+    const handler = (e: MediaQueryListEvent) => setIsShort(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [threshold])
+  return isShort
+}
+
+function FeatureCarousel({
+  items,
+  renderItem,
+}: {
+  items: { key: string }[]
+  renderItem: (item: { key: string }, index: number) => ReactNode
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const handleScroll = () => {
+      const scrollLeft = el.scrollLeft
+      const itemWidth = el.offsetWidth
+      const index = Math.round(scrollLeft / itemWidth)
+      setActiveIndex(Math.min(index, items.length - 1))
+    }
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [items.length])
+
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <div
+        ref={scrollRef}
+        className="scrollbar-hide flex w-full snap-x snap-mandatory overflow-x-auto"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {items.map((item, i) => (
+          <div key={item.key} className="w-full shrink-0 snap-center px-1">
+            {renderItem(item, i)}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-center gap-1.5">
+        {items.map((item, i) => (
+          <motion.div
+            key={item.key}
+            className={`h-1.5 rounded-full ${i === activeIndex ? 'bg-brand-accent-dark dark:bg-brand-accent-light' : 'bg-border-subtle'}`}
+            animate={{ width: i === activeIndex ? 16 : 6 }}
+            transition={{
+              type: 'spring',
+              stiffness: 300,
+              damping: 25,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // MARK: - Page 1: Privacy
 
 function OnboardingPrivacyPage({
@@ -180,6 +255,32 @@ function OnboardingPrivacyPage({
   privacyEnabled: boolean
   onToggle: () => void
 }) {
+  const isShort = useIsShortViewport()
+
+  const explanationItems = [
+    {
+      key: 'sealed',
+      icon: <PiEyeSlash className="h-4 w-4" />,
+      title: 'Sealed Processing',
+      description:
+        'Your messages are end-to-end encrypted to AI models running inside secure hardware. Tinfoil cannot read them.',
+    },
+    {
+      key: 'verifiable',
+      icon: <PiShieldCheck className="h-4 w-4" />,
+      title: 'Verifiable Privacy',
+      description:
+        'Our infrastructure runs on confidential computing GPUs with hardware attestation and automatic client-side verification.',
+    },
+    {
+      key: 'protected',
+      icon: <PiLock className="h-4 w-4" />,
+      title: 'Everything is Protected',
+      description:
+        'Chats, images, documents, and voice input are all encrypted end-to-end.',
+    },
+  ]
+
   return (
     <motion.div
       className="flex flex-col items-center px-6 py-8"
@@ -215,34 +316,45 @@ function OnboardingPrivacyPage({
         {/* Toggle card with animated border */}
         <PrivacyToggleCard enabled={privacyEnabled} onToggle={onToggle} />
 
-        {/* Explanation rows matching iOS: Zero Access, Verifiable Privacy, Everything is Protected */}
+        {/* Explanation rows - carousel on short viewports, stacked on tall */}
         <AnimatePresence>
           {privacyEnabled && (
             <motion.div
-              className="flex w-full flex-col gap-3"
+              className="w-full"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.5, ease: 'easeInOut' }}
             >
-              <ExplanationRow
-                icon={<PiEyeSlash className="h-4 w-4" />}
-                title="Sealed Processing"
-                description="Your messages are end-to-end encrypted to AI models running inside secure hardware. Tinfoil cannot read them."
-                delay={0.1}
-              />
-              <ExplanationRow
-                icon={<PiShieldCheck className="h-4 w-4" />}
-                title="Verifiable Privacy"
-                description="Our infrastructure runs on confidential computing GPUs with hardware attestation and automatic client-side verification."
-                delay={0.2}
-              />
-              <ExplanationRow
-                icon={<PiLock className="h-4 w-4" />}
-                title="Everything is Protected"
-                description="Chats, images, documents, and voice input are all encrypted end-to-end."
-                delay={0.3}
-              />
+              {isShort ? (
+                <FeatureCarousel
+                  items={explanationItems}
+                  renderItem={(item, _i) => {
+                    const data = explanationItems.find(
+                      (e) => e.key === item.key,
+                    )!
+                    return (
+                      <ExplanationRow
+                        icon={data.icon}
+                        title={data.title}
+                        description={data.description}
+                      />
+                    )
+                  }}
+                />
+              ) : (
+                <div className="flex w-full flex-col gap-3">
+                  {explanationItems.map((item, i) => (
+                    <ExplanationRow
+                      key={item.key}
+                      icon={item.icon}
+                      title={item.title}
+                      description={item.description}
+                      delay={0.1 * (i + 1)}
+                    />
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -461,16 +573,39 @@ function OnboardingModelsPage({
     return `/model-icons/${model.image}`
   }
 
+  const isShort = useIsShortViewport()
+
   const features = [
-    { icon: <PiCamera className="h-4 w-4" />, label: 'Image Upload' },
     {
+      key: 'image-upload',
+      icon: <PiCamera className="h-4 w-4" />,
+      label: 'Image Upload',
+    },
+    {
+      key: 'document-processing',
       icon: <PiFileText className="h-4 w-4" />,
       label: 'Document Processing',
     },
-    { icon: <PiGlobe className="h-4 w-4" />, label: 'Web Search' },
-    { icon: <PiWaveform className="h-4 w-4" />, label: 'Voice Input' },
-    { icon: <TbBrain className="h-4 w-4" />, label: 'Reasoning Models' },
-    { icon: <PiLightning className="h-4 w-4" />, label: 'Fast Responses' },
+    {
+      key: 'web-search',
+      icon: <PiGlobe className="h-4 w-4" />,
+      label: 'Web Search',
+    },
+    {
+      key: 'voice-input',
+      icon: <PiWaveform className="h-4 w-4" />,
+      label: 'Voice Input',
+    },
+    {
+      key: 'reasoning-models',
+      icon: <TbBrain className="h-4 w-4" />,
+      label: 'Reasoning Models',
+    },
+    {
+      key: 'fast-responses',
+      icon: <PiLightning className="h-4 w-4" />,
+      label: 'Fast Responses',
+    },
   ]
 
   return (
@@ -497,6 +632,7 @@ function OnboardingModelsPage({
           <div
             ref={scrollRef}
             className="scrollbar-hide flex w-full gap-3 overflow-x-auto px-1 py-2"
+            style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {chatModels.map((model, i) => (
               <button
@@ -530,29 +666,48 @@ function OnboardingModelsPage({
           </div>
         )}
 
-        {/* Feature grid */}
-        <div className="grid w-full grid-cols-2 gap-2">
-          {features.map((feature, i) => (
-            <motion.div
-              key={feature.label}
-              className="flex items-center gap-2.5 rounded-xl bg-surface-chat px-3 py-2.5"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: 0.15 + i * 0.06,
-                duration: 0.35,
-                ease: 'easeOut',
-              }}
-            >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
-                {feature.icon}
-              </div>
-              <span className="text-sm font-medium text-content-primary">
-                {feature.label}
-              </span>
-            </motion.div>
-          ))}
-        </div>
+        {/* Feature grid - carousel on short viewports, grid on tall */}
+        {isShort ? (
+          <FeatureCarousel
+            items={features}
+            renderItem={(item) => {
+              const data = features.find((f) => f.key === item.key)!
+              return (
+                <div className="flex items-center gap-3 rounded-xl bg-surface-chat px-4 py-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
+                    {data.icon}
+                  </div>
+                  <span className="text-sm font-medium text-content-primary">
+                    {data.label}
+                  </span>
+                </div>
+              )
+            }}
+          />
+        ) : (
+          <div className="grid w-full grid-cols-2 gap-2">
+            {features.map((feature, i) => (
+              <motion.div
+                key={feature.key}
+                className="flex items-center gap-2.5 rounded-xl bg-surface-chat px-3 py-2.5"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  delay: 0.15 + i * 0.06,
+                  duration: 0.35,
+                  ease: 'easeOut',
+                }}
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
+                  {feature.icon}
+                </div>
+                <span className="text-sm font-medium text-content-primary">
+                  {feature.label}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   )
