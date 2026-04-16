@@ -118,11 +118,7 @@ const ShareModalLazy = dynamic(
   () => import('./share-modal').then((m) => m.ShareModal),
   { ssr: false },
 )
-const PasskeyIntroModal = dynamic(
-  () =>
-    import('../tutorial/PasskeyIntroModal').then((m) => m.PasskeyIntroModal),
-  { ssr: false },
-)
+
 const OnboardingModal = dynamic(
   () => import('../onboarding/onboarding-modal').then((m) => m.OnboardingModal),
   { ssr: false },
@@ -344,11 +340,9 @@ export function ChatInterface({
     passkeyRecoveryNeeded,
     manualRecoveryNeeded,
     passkeySetupAvailable,
-    passkeyIntroNeeded,
     setupPasskey,
     recoverWithPasskey,
     setupNewKeySplit,
-    acceptPasskeyIntro,
     updatePasskeyBackup,
   } = usePasskeyBackup({
     encryptionKey,
@@ -2635,11 +2629,6 @@ export function ChatInterface({
         }
         projectName={activeProject?.name ?? ''}
         isDarkMode={isDarkMode}
-      />
-
-      <PasskeyIntroModal
-        isOpen={passkeyIntroNeeded && !showOnboarding}
-        onAccept={acceptPasskeyIntro}
       />
 
       <OnboardingModal

@@ -41,8 +41,6 @@ export interface PasskeyBackupState {
   manualRecoveryNeeded: boolean
   /** PRF supported + keys exist locally; user can register a passkey backup from settings */
   passkeySetupAvailable: boolean
-  /** True when the intro modal should be shown before the first passkey prompt */
-  passkeyIntroNeeded: boolean
 }
 
 export interface UsePasskeyBackupOptions {
@@ -59,8 +57,6 @@ export interface UsePasskeyBackupOptions {
    */
   onEncryptionKeyRecovered?: (key: string) => void
 }
-
-const PASSKEY_INTRO_DELAY_MS = 2000
 
 const SYNC_CHECK_INTERVAL_MS = 30_000
 
@@ -126,14 +122,10 @@ export function usePasskeyBackup({
     passkeyRecoveryNeeded: false,
     manualRecoveryNeeded: false,
     passkeySetupAvailable: false,
-    passkeyIntroNeeded: false,
   })
 
   const isMountedRef = useRef(true)
   const passkeyFlowInProgressRef = useRef(false)
-  const passkeyIntroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
   const userRef = useRef(user)
   userRef.current = user
   const onEncryptionKeyRecoveredRef = useRef(onEncryptionKeyRecovered)
@@ -144,9 +136,6 @@ export function usePasskeyBackup({
   useEffect(() => {
     return () => {
       isMountedRef.current = false
-      if (passkeyIntroTimerRef.current) {
-        clearTimeout(passkeyIntroTimerRef.current)
-      }
     }
   }, [])
 
@@ -663,20 +652,7 @@ export function usePasskeyBackup({
           credentialState === 'empty' &&
           !passkeyFlowInProgressRef.current
         ) {
-          const hasSeen =
-            userRef.current?.unsafeMetadata?.has_seen_passkey_intro === true
-          if (!hasSeen) {
-            // Existing user with no passkey backup — show intro modal after delay
-            passkeyIntroTimerRef.current = setTimeout(() => {
-              if (isMountedRef.current) {
-                setState((prev) => ({
-                  ...prev,
-                  passkeyIntroNeeded: true,
-                }))
-              }
-            }, PASSKEY_INTRO_DELAY_MS)
-          } else if (isMountedRef.current) {
-            // Already seen intro but hasn't set up — show option in settings
+          if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
               passkeySetupAvailable: true,
@@ -926,67 +902,11 @@ export function usePasskeyBackup({
     }
   }, [generateKeyWithPasskeyBackup, rollbackToPreviousKeys])
 
-  /**
-   * User accepted the passkey intro modal — trigger the actual WebAuthn passkey flow.
-   * Writes Clerk metadata after the WebAuthn flow completes (success or cancel)
-   * to avoid triggering a Clerk state change that re-runs the init effect mid-flow.
-   */
-  const acceptPasskeyIntro = useCallback(async (): Promise<void> => {
-    passkeyFlowInProgressRef.current = true
-
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, passkeyIntroNeeded: false }))
-    }
-
-    try {
-      let success = false
-      try {
-        success = await setupPasskey()
-      } catch (error) {
-        if (error instanceof PrfNotSupportedError) {
-          logInfo('Authenticator does not support PRF during intro setup', {
-            component: 'usePasskeyBackup',
-            action: 'acceptPasskeyIntro',
-          })
-        } else {
-          throw error
-        }
-      }
-      if (!success && isMountedRef.current) {
-        // User cancelled or provider unsupported — show option in settings
-        setState((prev) => ({ ...prev, passkeySetupAvailable: true }))
-      }
-
-      // Mark the intro as seen regardless of outcome — the user clicked
-      // "Let's go!" so they've seen the explanation. Done after setupPasskey
-      // to avoid Clerk state changes re-triggering the init effect mid-flow.
-      try {
-        const u = userRef.current
-        if (u) {
-          await u.update({
-            unsafeMetadata: {
-              ...u.unsafeMetadata,
-              has_seen_passkey_intro: true,
-            },
-          })
-        }
-      } catch (error) {
-        logError('Failed to persist passkey intro seen flag', error, {
-          component: 'usePasskeyBackup',
-          action: 'acceptPasskeyIntro',
-        })
-      }
-    } finally {
-      passkeyFlowInProgressRef.current = false
-    }
-  }, [setupPasskey])
-
   return {
     ...state,
     setupPasskey,
     recoverWithPasskey,
     setupNewKeySplit,
-    acceptPasskeyIntro,
     updatePasskeyBackup,
   }
 }
