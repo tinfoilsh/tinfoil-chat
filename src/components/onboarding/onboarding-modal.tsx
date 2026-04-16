@@ -621,13 +621,15 @@ function OnboardingModelsPage({
 
   return (
     <motion.div
-      className="flex flex-col items-center px-6 py-8"
+      className={`flex flex-col items-center px-6 ${isShort ? 'py-5' : 'py-8'}`}
       initial={{ opacity: 0, x: 40 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -40 }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
     >
-      <div className="flex w-full flex-col items-center gap-5">
+      <div
+        className={`flex w-full flex-col items-center ${isShort ? 'gap-3' : 'gap-5'}`}
+      >
         <div className="space-y-2 text-center">
           <h2 className="font-aeonik text-3xl font-bold text-content-primary">
             Powerful Models
@@ -642,7 +644,7 @@ function OnboardingModelsPage({
         {chatModels.length > 0 && (
           <div
             ref={scrollRef}
-            className="scrollbar-hide flex w-full gap-3 overflow-x-auto px-1 py-2"
+            className={`scrollbar-hide flex w-full gap-3 overflow-x-auto px-1 ${isShort ? 'py-1' : 'py-2'}`}
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {chatModels.map((model, i) => (
@@ -677,48 +679,29 @@ function OnboardingModelsPage({
           </div>
         )}
 
-        {/* Feature grid - carousel on short viewports, grid on tall */}
-        {isShort ? (
-          <FeatureCarousel
-            items={features}
-            renderItem={(item) => {
-              const data = features.find((f) => f.key === item.key)!
-              return (
-                <div className="flex h-full items-center gap-3 rounded-xl bg-surface-chat px-4 py-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
-                    {data.icon}
-                  </div>
-                  <span className="text-sm font-medium text-content-primary">
-                    {data.label}
-                  </span>
-                </div>
-              )
-            }}
-          />
-        ) : (
-          <div className="grid w-full grid-cols-2 gap-2">
-            {features.map((feature, i) => (
-              <motion.div
-                key={feature.key}
-                className="flex items-center gap-2.5 rounded-xl bg-surface-chat px-3 py-2.5"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: 0.15 + i * 0.06,
-                  duration: 0.35,
-                  ease: 'easeOut',
-                }}
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
-                  {feature.icon}
-                </div>
-                <span className="text-sm font-medium text-content-primary">
-                  {feature.label}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        )}
+        {/* Feature grid - 4 items on short viewports, all 6 on tall */}
+        <div className="grid w-full grid-cols-2 gap-2">
+          {(isShort ? features.slice(0, 4) : features).map((feature, i) => (
+            <motion.div
+              key={feature.key}
+              className="flex items-center gap-2.5 rounded-xl bg-surface-chat px-3 py-2.5"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: 0.15 + i * 0.06,
+                duration: 0.35,
+                ease: 'easeOut',
+              }}
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
+                {feature.icon}
+              </div>
+              <span className="text-sm font-medium text-content-primary">
+                {feature.label}
+              </span>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </motion.div>
   )
