@@ -247,6 +247,7 @@ function blockedResult(
     remoteState: 'exists',
     canWrite: false,
     probe,
-    message: "This key doesn't match your existing cloud data.",
+    message:
+      "This key doesn't match your existing cloud data. Try using your existing key instead.",
   }
 }

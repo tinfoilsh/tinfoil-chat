@@ -178,7 +178,8 @@ export function CloudSyncSetupModal({
       if (!success) {
         toast({
           title: 'Invalid key',
-          description: "This key doesn't match your existing cloud data",
+          description:
+            "This key doesn't match your existing cloud data. Try using your existing key instead.",
           variant: 'destructive',
         })
         return
@@ -348,7 +349,8 @@ ${generatedKey.replace('key_', '')}
         if (!success) {
           toast({
             title: 'Setup failed',
-            description: "This key couldn't be verified for cloud sync",
+            description:
+              "This key couldn't be verified for cloud sync. Try using your existing key instead.",
             variant: 'destructive',
           })
           return
