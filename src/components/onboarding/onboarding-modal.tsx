@@ -219,11 +219,11 @@ function FeatureCarousel({
     <div className="flex w-full flex-col gap-2">
       <div
         ref={scrollRef}
-        className="scrollbar-hide flex w-full snap-x snap-mandatory overflow-x-auto"
+        className="scrollbar-hide flex w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {items.map((item, i) => (
-          <div key={item.key} className="w-full shrink-0 snap-center px-1">
+          <div key={item.key} className="flex w-full shrink-0 snap-start">
             {renderItem(item, i)}
           </div>
         ))}
@@ -232,7 +232,7 @@ function FeatureCarousel({
         {items.map((item, i) => (
           <motion.div
             key={item.key}
-            className={`h-1.5 rounded-full ${i === activeIndex ? 'bg-brand-accent-dark dark:bg-brand-accent-light' : 'bg-border-subtle'}`}
+            className={`h-1.5 rounded-full ${i === activeIndex ? 'bg-content-secondary' : 'bg-border-subtle'}`}
             animate={{ width: i === activeIndex ? 16 : 6 }}
             transition={{
               type: 'spring',
@@ -338,6 +338,7 @@ function OnboardingPrivacyPage({
                         icon={data.icon}
                         title={data.title}
                         description={data.description}
+                        fillHeight
                       />
                     )
                   }}
@@ -447,15 +448,17 @@ function ExplanationRow({
   title,
   description,
   delay = 0,
+  fillHeight = false,
 }: {
   icon: React.ReactNode
   title: string
   description: string
   delay?: number
+  fillHeight?: boolean
 }) {
   return (
     <motion.div
-      className="flex items-start gap-3 rounded-xl border border-border-subtle bg-surface-chat p-4"
+      className={`flex items-start gap-3 rounded-xl border border-border-subtle bg-surface-chat p-4 ${fillHeight ? 'h-full' : ''}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay, ease: 'easeOut' }}
@@ -673,7 +676,7 @@ function OnboardingModelsPage({
             renderItem={(item) => {
               const data = features.find((f) => f.key === item.key)!
               return (
-                <div className="flex items-center gap-3 rounded-xl bg-surface-chat px-4 py-3">
+                <div className="flex h-full items-center gap-3 rounded-xl bg-surface-chat px-4 py-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-card text-content-primary">
                     {data.icon}
                   </div>
