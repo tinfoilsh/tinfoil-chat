@@ -3362,7 +3362,7 @@ ${encryptionKey.replace('key_', '')}
                           <ArrowUpTrayIcon className="h-4 w-4" />
                           Projects
                           {!isPremium && (
-                            <span className="ml-1 rounded-full bg-brand-accent-light/20 px-1.5 py-0.5 text-[10px] font-medium text-brand-accent-light">
+                            <span className="ml-1 rounded-full bg-brand-accent-light/20 px-1.5 py-px text-[10px] font-medium text-brand-accent-light">
                               Pro
                             </span>
                           )}
@@ -3439,7 +3439,7 @@ ${encryptionKey.replace('key_', '')}
                           <span className="text-xs text-content-muted">
                             Projects are a premium feature.
                           </span>
-                          <span className="rounded-full bg-brand-accent-light/20 px-1.5 py-0.5 text-[10px] font-medium text-brand-accent-light">
+                          <span className="rounded-full bg-brand-accent-light/20 px-1.5 py-px text-[10px] font-medium text-brand-accent-light">
                             Pro
                           </span>
                         </div>
