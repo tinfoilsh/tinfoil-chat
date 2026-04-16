@@ -635,8 +635,8 @@ function OnboardingModelsPage({
             Powerful Models
           </h2>
           <p className="text-base text-content-secondary">
-            Access leading AI models, all running inside secure hardware with
-            verified privacy.
+            Access leading AI models, all running inside secure hardware
+            enclaves with fully verified privacy.
           </p>
         </div>
 
