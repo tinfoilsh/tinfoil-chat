@@ -482,7 +482,7 @@ ${generatedKey.replace('key_', '')}
           {isProcessing
             ? 'Generating...'
             : manualRecoveryNeeded
-              ? 'Start Fresh with New Key'
+              ? 'Start Fresh'
               : 'Generate Key'}
         </button>
       </div>
@@ -800,7 +800,7 @@ ${generatedKey.replace('key_', '')}
           disabled={isRecovering || isStartingFresh}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat/80 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Start Fresh with New Key
+          Start Fresh
         </button>
       )}
 
