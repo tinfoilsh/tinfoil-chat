@@ -1,3 +1,7 @@
+import {
+  determineGeneratedKeySetupMode,
+  type CloudKeySetupMode,
+} from '@/components/modals/cloud-sync-setup-mode'
 import { SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL } from '@/constants/storage-keys'
 import { useToast } from '@/hooks/use-toast'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -37,9 +41,6 @@ interface CloudSyncSetupModalBaseProps {
   prfSupported?: boolean
   manualRecoveryNeeded?: boolean
 }
-
-type CloudKeySetupMode = 'recoverExisting' | 'explicitStartFresh'
-
 type CloudSyncSetupModalProps = CloudSyncSetupModalBaseProps &
   (
     | {
@@ -133,10 +134,11 @@ export function CloudSyncSetupModal({
     setIsProcessing(true)
     try {
       const newKey = await encryptionService.generateKey()
+      const keySetupMode = await determineGeneratedKeySetupMode({
+        manualRecoveryNeeded,
+      })
       setGeneratedKey(newKey)
-      setGeneratedKeyMode(
-        manualRecoveryNeeded ? 'explicitStartFresh' : 'recoverExisting',
-      )
+      setGeneratedKeyMode(keySetupMode)
 
       logInfo('Generated new encryption key for cloud sync', {
         component: 'CloudSyncSetupModal',
