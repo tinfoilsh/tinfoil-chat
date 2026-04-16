@@ -216,19 +216,21 @@ function FeatureCarousel({
   }, [items.length])
 
   return (
-    <div className="flex w-full flex-col gap-2">
-      <div className="w-full overflow-hidden">
-        <div
-          ref={scrollRef}
-          className="scrollbar-hide flex w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
-          style={{ WebkitOverflowScrolling: 'touch' }}
-        >
-          {items.map((item, i) => (
-            <div key={item.key} className="flex w-full shrink-0 snap-start">
-              {renderItem(item, i)}
-            </div>
-          ))}
-        </div>
+    <div className="-mx-6 flex w-[calc(100%+3rem)] flex-col gap-2">
+      <div
+        ref={scrollRef}
+        className="scrollbar-hide flex w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden px-6"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {items.map((item, i) => (
+          <div
+            key={item.key}
+            className="flex w-full shrink-0 snap-start"
+            style={{ paddingRight: i < items.length - 1 ? '0.75rem' : 0 }}
+          >
+            {renderItem(item, i)}
+          </div>
+        ))}
       </div>
       <div className="flex justify-center gap-1.5">
         {items.map((item, i) => (
