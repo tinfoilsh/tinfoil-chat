@@ -219,7 +219,7 @@ function FeatureCarousel({
     <div className="flex w-full flex-col gap-2">
       <div
         ref={scrollRef}
-        className="scrollbar-hide flex w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
+        className="scrollbar-hide flex w-full snap-x snap-mandatory gap-3 overflow-x-auto overflow-y-hidden"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {items.map((item, i) => (
@@ -290,18 +290,20 @@ function OnboardingPrivacyPage({
       transition={{ duration: 0.3, ease: 'easeInOut' }}
     >
       <div className="flex w-full flex-col items-center gap-5">
-        {/* Lock icon in circle */}
-        <motion.div
-          className="flex h-16 w-16 items-center justify-center rounded-full border border-border-subtle bg-surface-chat"
-          animate={privacyEnabled ? { scale: [1, 1.15, 1] } : {}}
-          transition={{ duration: 0.4 }}
-        >
-          {privacyEnabled ? (
-            <FaLock className="h-7 w-7 text-content-primary" />
-          ) : (
-            <FaLockOpen className="h-7 w-7 text-content-primary" />
-          )}
-        </motion.div>
+        {/* Lock icon in circle - hidden on short viewports */}
+        {!isShort && (
+          <motion.div
+            className="flex h-16 w-16 items-center justify-center rounded-full border border-border-subtle bg-surface-chat"
+            animate={privacyEnabled ? { scale: [1, 1.15, 1] } : {}}
+            transition={{ duration: 0.4 }}
+          >
+            {privacyEnabled ? (
+              <FaLock className="h-7 w-7 text-content-primary" />
+            ) : (
+              <FaLockOpen className="h-7 w-7 text-content-primary" />
+            )}
+          </motion.div>
+        )}
 
         <div className="space-y-2 text-center">
           <h2 className="font-aeonik text-3xl font-bold text-content-primary">
@@ -479,6 +481,8 @@ function ExplanationRow({
 // MARK: - Page 2: Encryption
 
 function OnboardingEncryptionPage() {
+  const isShort = useIsShortViewport()
+
   return (
     <motion.div
       className="flex flex-col items-center px-6 py-8"
@@ -488,25 +492,27 @@ function OnboardingEncryptionPage() {
       transition={{ duration: 0.3, ease: 'easeInOut' }}
     >
       <div className="flex w-full flex-col items-center gap-6">
-        {/* Animated icon */}
-        <motion.div
-          className="relative"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        >
-          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-border-subtle bg-surface-chat">
-            <PiKey className="h-9 w-9 text-content-primary" />
-          </div>
+        {/* Animated icon - hidden on short viewports */}
+        {!isShort && (
           <motion.div
-            className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full border border-border-subtle bg-surface-card"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.3, type: 'spring', stiffness: 400 }}
+            className="relative"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
           >
-            <FaLock className="h-3.5 w-3.5 text-content-primary" />
+            <div className="flex h-20 w-20 items-center justify-center rounded-full border border-border-subtle bg-surface-chat">
+              <PiKey className="h-9 w-9 text-content-primary" />
+            </div>
+            <motion.div
+              className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full border border-border-subtle bg-surface-card"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.3, type: 'spring', stiffness: 400 }}
+            >
+              <FaLock className="h-3.5 w-3.5 text-content-primary" />
+            </motion.div>
           </motion.div>
-        </motion.div>
+        )}
 
         <div className="space-y-2 text-center">
           <h2 className="font-aeonik text-3xl font-bold text-content-primary">
