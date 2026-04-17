@@ -15,6 +15,10 @@ interface MessageContentProps {
   isDarkMode: boolean
   isUser?: boolean
   isStreaming?: boolean
+  // Maps URL → source title for every inline citation the router attached to
+  // the current message. Used to render markdown links as citation pills so
+  // they match the visual style of legacy #cite- anchor links.
+  citationUrlTitles?: Map<string, string>
 }
 
 function hasStreamingMarkdownTableCodeBlock(content: string): boolean {
@@ -44,6 +48,7 @@ export const MessageContent = memo(function MessageContent({
   isDarkMode,
   isUser = false,
   isStreaming = false,
+  citationUrlTitles,
 }: MessageContentProps) {
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const preprocessed = preprocessMarkdown(content)
@@ -61,8 +66,9 @@ export const MessageContent = memo(function MessageContent({
         isDarkMode,
         isStreaming,
         showMarkdownTablePlaceholder,
+        citationUrlTitles,
       }),
-    [isDarkMode, isStreaming, showMarkdownTablePlaceholder],
+    [isDarkMode, isStreaming, showMarkdownTablePlaceholder, citationUrlTitles],
   )
 
   if (isUser) {
