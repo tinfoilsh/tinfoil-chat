@@ -142,7 +142,7 @@ export function ModelSelector({
       (model.type === 'chat' || model.type === 'code') && model.chat === true,
   )
 
-  const TOP_MODEL_COUNT = 1
+  const TOP_MODEL_COUNT = 3
   const topModels = displayModels.slice(0, TOP_MODEL_COUNT)
   const otherModels = displayModels.slice(TOP_MODEL_COUNT)
 
