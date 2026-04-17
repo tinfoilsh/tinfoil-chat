@@ -1,7 +1,6 @@
-import type { WebSearchSource } from '@/components/chat/types'
 import { LoadingDots } from '@/components/loading-dots'
 import { summarize } from '@/services/inference/summary-client'
-import { processCitationMarkers } from '@/utils/citation-processing'
+
 import { logError } from '@/utils/error-handling'
 import {
   processLatexTags,
@@ -24,7 +23,6 @@ interface ThoughtProcessProps {
   setExpandedThoughtsState?: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
-  sources?: WebSearchSource[]
 }
 
 export const ThoughtProcess = memo(function ThoughtProcess({
@@ -36,7 +34,6 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   messageId,
   expandedThoughtsState,
   setExpandedThoughtsState,
-  sources,
 }: ThoughtProcessProps) {
   const isExpanded =
     messageId && expandedThoughtsState
@@ -262,10 +259,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const preprocessed = preprocessMarkdown(thoughts)
   const processedThoughts = processLatexTags(preprocessed)
-  const withCitations = sources?.length
-    ? processCitationMarkers(processedThoughts, sources)
-    : processedThoughts
-  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(withCitations)
+  const sanitizedThoughts = sanitizeUnsupportedMathBlocks(processedThoughts)
 
   if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
     return null
