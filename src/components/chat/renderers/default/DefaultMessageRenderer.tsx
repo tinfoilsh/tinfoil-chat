@@ -52,6 +52,16 @@ const DefaultMessageComponent = ({
       : Date.now()
     return `${message.role}-${timestamp}`
   }, [message.role, message.timestamp])
+  const citationUrlTitles = React.useMemo(() => {
+    if (!message.annotations || message.annotations.length === 0)
+      return undefined
+    const map = new Map<string, string>()
+    for (const annotation of message.annotations) {
+      const { url, title } = annotation.url_citation
+      if (url) map.set(url, title || '')
+    }
+    return map.size > 0 ? map : undefined
+  }, [message.annotations])
   const [showActions, setShowActions] = React.useState(false)
   const lastContentRef = React.useRef(message.content)
   const showActionsTimeoutRef = React.useRef<ReturnType<
@@ -337,6 +347,7 @@ const DefaultMessageComponent = ({
                                 isDarkMode={isDarkMode}
                                 isUser={isUser}
                                 isStreaming={isStreaming}
+                                citationUrlTitles={citationUrlTitles}
                               />
                             </StreamingContentWrapper>
                           ) : (
@@ -345,6 +356,7 @@ const DefaultMessageComponent = ({
                               isDarkMode={isDarkMode}
                               isUser={isUser}
                               isStreaming={isStreaming}
+                              citationUrlTitles={citationUrlTitles}
                             />
                           )}
                         </div>
