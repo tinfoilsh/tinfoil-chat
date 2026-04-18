@@ -503,6 +503,7 @@ const DefaultMessageComponent = ({
           <GenUIToolCallRenderer
             toolCalls={message.toolCalls}
             isStreaming={!!(isStreaming && isLastMessage)}
+            isDarkMode={isDarkMode}
           />
         </div>
       )}

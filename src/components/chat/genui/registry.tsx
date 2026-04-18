@@ -24,6 +24,10 @@ import { LineChart, validateLineChartProps } from './components/LineChart'
 import { LinkPreview, validateLinkPreviewProps } from './components/LinkPreview'
 import { PieChart, validatePieChartProps } from './components/PieChart'
 import { ProgressBar, validateProgressBarProps } from './components/ProgressBar'
+import {
+  RenderedImage,
+  validateRenderedImageProps,
+} from './components/RenderedImage'
 import { SourceCards, validateSourceCardsProps } from './components/SourceCards'
 import { StatCards, validateStatCardsProps } from './components/StatCards'
 import { Steps, validateStepsProps } from './components/Steps'
@@ -62,16 +66,25 @@ const GENUI_COMPONENTS: Record<string, GenUIComponentDef> = {
     component: KeyValueList,
   },
   render_image_grid: { validate: validateImageGridProps, component: ImageGrid },
+  render_image: {
+    validate: validateRenderedImageProps,
+    component: RenderedImage,
+  },
+}
+
+export interface GenUIRenderContext {
+  isDarkMode?: boolean
 }
 
 export function renderGenUIToolCall(
   name: string,
   args: Record<string, unknown>,
+  ctx: GenUIRenderContext = {},
 ): JSX.Element | null {
   const def = GENUI_COMPONENTS[name]
   if (!def) return null
   if (!def.validate(args)) return null
 
   const Component = def.component
-  return <Component {...args} />
+  return <Component {...args} {...ctx} />
 }
