@@ -27,7 +27,7 @@ function dispatchRateLimitUpdate(): void {
   }
 }
 
-async function fetchSessionToken(): Promise<string> {
+export async function fetchSessionToken(): Promise<string> {
   if (cachedSessionToken) {
     const isExpired =
       cachedSessionTokenExpiresAt !== null &&
