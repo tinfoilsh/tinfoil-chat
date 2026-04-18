@@ -5,7 +5,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
-import { coerceChartData, isValidChartData } from './chart-utils'
+import { coerceArray, isNonEmptyArray, type ChartRow } from './input-coercion'
 
 const DEFAULT_COLORS = [
   '#3b82f6',
@@ -50,7 +50,7 @@ export function PieChart({
   valueKey: valueKeyProp,
   title,
 }: PieChartProps) {
-  const rows = coerceChartData(data)
+  const rows = coerceArray<ChartRow>(data)
   const { nameKey, valueKey } = inferPieKeys(rows, nameKeyProp, valueKeyProp)
   return (
     <div className="my-3">
@@ -96,5 +96,5 @@ export function PieChart({
 }
 
 export function validatePieChartProps(props: Record<string, unknown>): boolean {
-  return isValidChartData(props.data)
+  return isNonEmptyArray(props.data)
 }
