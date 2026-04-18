@@ -1,4 +1,5 @@
 import { ImageWithSkeleton } from '@/components/preview/image-with-skeleton'
+import { useOpenGraphImage } from '@/components/preview/use-opengraph-image'
 import { ExternalLink } from 'lucide-react'
 
 interface LinkPreviewProps {
@@ -35,6 +36,7 @@ export function LinkPreview({
 }: LinkPreviewProps) {
   const favicon = getFaviconUrl(url)
   const displayName = siteName || getDomain(url)
+  const resolvedImage = useOpenGraphImage(url, image)
 
   return (
     <a
@@ -43,9 +45,9 @@ export function LinkPreview({
       rel="noopener noreferrer"
       className="hover:border-border-primary my-3 flex max-w-2xl overflow-hidden rounded-lg border border-border-subtle bg-surface-card transition-colors hover:bg-surface-chat-background"
     >
-      {image && (
+      {resolvedImage && (
         <ImageWithSkeleton
-          src={image}
+          src={resolvedImage}
           alt=""
           wrapperClassName="relative h-32 w-32 shrink-0 overflow-hidden bg-surface-card sm:h-40 sm:w-40"
           className="h-full w-full object-cover"
