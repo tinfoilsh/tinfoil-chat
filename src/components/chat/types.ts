@@ -1,3 +1,5 @@
+import type { GenUIToolCall } from './genui/types'
+
 export type URLCitation = {
   title: string
   url: string
@@ -62,7 +64,7 @@ export type Message = {
   webSearchBeforeThinking?: boolean // True if web search started before thinking
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
-  toolCalls?: Array<{ id: string; name: string; arguments: string }>
+  toolCalls?: GenUIToolCall[]
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'
