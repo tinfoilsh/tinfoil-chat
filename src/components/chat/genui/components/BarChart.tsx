@@ -60,6 +60,7 @@ export function BarChart({
             />
             <YAxis tick={{ fontSize: 12 }} stroke="currentColor" />
             <Tooltip
+              cursor={{ fill: 'hsl(var(--content-primary) / 0.06)' }}
               contentStyle={{
                 backgroundColor: 'hsl(var(--surface-chat-background))',
                 border: '1px solid hsl(var(--border-subtle))',

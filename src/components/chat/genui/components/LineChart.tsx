@@ -60,6 +60,10 @@ export function LineChart({
             />
             <YAxis tick={{ fontSize: 12 }} stroke="currentColor" />
             <Tooltip
+              cursor={{
+                stroke: 'hsl(var(--content-primary) / 0.2)',
+                strokeWidth: 1,
+              }}
               contentStyle={{
                 backgroundColor: 'hsl(var(--surface-chat-background))',
                 border: '1px solid hsl(var(--border-subtle))',
