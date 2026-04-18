@@ -1,3 +1,4 @@
+import { ImageWithSkeleton } from '@/components/preview/image-with-skeleton'
 import { coerceArray } from './input-coercion'
 
 interface Source {
@@ -51,10 +52,11 @@ export function SourceCards({ sources, title }: SourceCardsProps) {
             >
               <div className="flex items-center gap-2">
                 {favicon && (
-                  <img
+                  <ImageWithSkeleton
                     src={favicon}
                     alt=""
-                    className="h-4 w-4 shrink-0 rounded"
+                    wrapperClassName="relative h-4 w-4 shrink-0 overflow-hidden rounded bg-surface-card"
+                    className="h-4 w-4 object-cover"
                     loading="lazy"
                   />
                 )}
