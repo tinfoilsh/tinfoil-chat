@@ -1,4 +1,5 @@
 import { LoadingDots } from '@/components/loading-dots'
+import { logError } from '@/utils/error-handling'
 import { memo } from 'react'
 import { renderGenUIToolCall } from './registry'
 import type { GenUIToolCall } from './types'
@@ -8,6 +9,22 @@ interface GenUIToolCallRendererProps {
   isStreaming: boolean
 }
 
+function resolveInput(tc: GenUIToolCall): Record<string, unknown> | null {
+  if (tc.input && typeof tc.input === 'object' && !Array.isArray(tc.input)) {
+    return tc.input as Record<string, unknown>
+  }
+  if (!tc.arguments) return null
+  try {
+    const parsed = JSON.parse(tc.arguments)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    // Arguments still streaming, JSON incomplete
+  }
+  return null
+}
+
 export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   toolCalls,
   isStreaming,
@@ -15,15 +32,10 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   return (
     <>
       {toolCalls.map((tc) => {
-        let parsed: Record<string, unknown> | null = null
-        try {
-          parsed = JSON.parse(tc.arguments)
-        } catch {
-          // Arguments still streaming, JSON incomplete
-        }
+        const input = resolveInput(tc)
 
-        if (parsed) {
-          const rendered = renderGenUIToolCall(tc.name, parsed)
+        if (input) {
+          const rendered = renderGenUIToolCall(tc.name, input)
           if (rendered) {
             return (
               <div key={tc.id} className="my-4">
@@ -31,9 +43,16 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
               </div>
             )
           }
-          // Parsed but unrecognized tool or failed validation — show fallback
           if (!isStreaming) {
-            console.warn('[GenUI] failed to render', tc.name, parsed)
+            logError(
+              'GenUI render failed',
+              new Error(`Unable to render component: ${tc.name}`),
+              {
+                component: 'GenUIToolCallRenderer',
+                action: 'render',
+                metadata: { toolName: tc.name },
+              },
+            )
             return (
               <div
                 key={tc.id}
@@ -59,8 +78,15 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           )
         }
 
-        // Finished streaming but JSON never parsed — show fallback
-        console.warn('[GenUI] args never parsed', tc.name, tc.arguments)
+        logError(
+          'GenUI arguments never parsed',
+          new Error(`Unable to render component: ${tc.name}`),
+          {
+            component: 'GenUIToolCallRenderer',
+            action: 'render',
+            metadata: { toolName: tc.name },
+          },
+        )
         return (
           <div
             key={tc.id}
