@@ -1,5 +1,4 @@
 import { toast } from '@/hooks/use-toast'
-import DOMPurify from 'isomorphic-dompurify'
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { BsFiletypeMd, BsFiletypePdf } from 'react-icons/bs'
 import ReactMarkdown from 'react-markdown'
@@ -10,6 +9,8 @@ import {
 } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 import remarkGfm from 'remark-gfm'
 import { CONSTANTS } from './chat/constants'
+import { MermaidPreview } from './preview/mermaid-preview'
+import { SvgPreview } from './preview/svg-preview'
 
 const CodeIcon = () => (
   <svg
@@ -276,19 +277,6 @@ const PreviewContainer = ({
     {children}
   </div>
 )
-
-const SvgPreview = ({ code }: { code: string }) => {
-  const sanitizedSvg = DOMPurify.sanitize(code, {
-    USE_PROFILES: { svg: true, svgFilters: true },
-  })
-
-  return (
-    <div
-      className="flex w-full items-center justify-center [&>svg]:h-auto [&>svg]:max-h-[400px] [&>svg]:w-full [&>svg]:max-w-full"
-      dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
-    />
-  )
-}
 
 const HtmlPreview = ({ code }: { code: string }) => {
   const [height, setHeight] = useState(100)
@@ -626,67 +614,6 @@ parent.postMessage({ type: 'python-preview-output', instanceId: '${instanceId}',
         </>
       )}
     </div>
-  )
-}
-
-const MermaidPreview = ({
-  code,
-  isDarkMode,
-}: {
-  code: string
-  isDarkMode: boolean
-}) => {
-  const [svg, setSvg] = useState<string>('')
-  const [error, setError] = useState<string | null>(null)
-  const idRef = useMemo(
-    () => `mermaid-${Math.random().toString(36).slice(2, 11)}`,
-    [],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-
-    const renderMermaid = async () => {
-      try {
-        const mermaid = (await import('mermaid')).default
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: isDarkMode ? 'dark' : 'default',
-          securityLevel: 'strict',
-        })
-
-        const { svg: renderedSvg } = await mermaid.render(idRef, code)
-        if (!cancelled) {
-          setSvg(renderedSvg)
-          setError(null)
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e))
-          setSvg('')
-        }
-      }
-    }
-
-    renderMermaid()
-    return () => {
-      cancelled = true
-    }
-  }, [code, isDarkMode, idRef])
-
-  if (error) {
-    return <div className="text-sm text-red-500">Mermaid error: {error}</div>
-  }
-
-  const sanitizedSvg = DOMPurify.sanitize(svg, {
-    USE_PROFILES: { svg: true, svgFilters: true },
-  })
-
-  return (
-    <div
-      className="flex w-full items-center justify-center [&>svg]:max-w-full"
-      dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
-    />
   )
 }
 
