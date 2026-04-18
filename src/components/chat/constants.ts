@@ -27,6 +27,7 @@ export const CONSTANTS = {
   CHAT_SIDEBAR_COLLAPSED_WIDTH_PX: 48,
   SETTINGS_SIDEBAR_WIDTH_PX: 345,
   VERIFIER_SIDEBAR_WIDTH_PX: 345,
+  ASK_SIDEBAR_WIDTH_PX: 420,
   // Long text paste threshold (characters) - texts longer than this will be converted to .txt file
   LONG_PASTE_THRESHOLD: 3000,
   // Title generation settings
