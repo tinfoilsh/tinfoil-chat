@@ -10,19 +10,35 @@ import {
 
 interface AreaChartProps {
   data: Record<string, string | number>[]
-  xKey: string
-  yKey: string
+  xKey?: string
+  yKey?: string
   title?: string
   color?: string
 }
 
+function inferChartKeys(
+  data: Record<string, string | number>[],
+  preferredX?: string,
+  preferredY?: string,
+): { xKey: string; yKey: string } {
+  const first = data[0] ?? {}
+  const keys = Object.keys(first)
+  let xKey = preferredX && preferredX in first ? preferredX : undefined
+  let yKey = preferredY && preferredY in first ? preferredY : undefined
+  if (!xKey) xKey = keys.find((k) => typeof first[k] === 'string') ?? keys[0]
+  if (!yKey) yKey = keys.find((k) => k !== xKey && typeof first[k] === 'number')
+  if (!yKey) yKey = keys.find((k) => k !== xKey) ?? keys[0]
+  return { xKey: xKey || 'label', yKey: yKey || 'value' }
+}
+
 export function AreaChart({
   data,
-  xKey,
-  yKey,
+  xKey: xKeyProp,
+  yKey: yKeyProp,
   title,
   color = '#3b82f6',
 }: AreaChartProps) {
+  const { xKey, yKey } = inferChartKeys(data, xKeyProp, yKeyProp)
   const gradientId = `area-gradient-${yKey}`
   return (
     <div className="my-3">
@@ -74,9 +90,5 @@ export function AreaChart({
 export function validateAreaChartProps(
   props: Record<string, unknown>,
 ): boolean {
-  return (
-    Array.isArray(props.data) &&
-    typeof props.xKey === 'string' &&
-    typeof props.yKey === 'string'
-  )
+  return Array.isArray(props.data) && props.data.length > 0
 }
