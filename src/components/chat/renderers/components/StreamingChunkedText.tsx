@@ -7,6 +7,7 @@ interface StreamingChunkedTextProps {
   isDarkMode: boolean
   isUser?: boolean
   isStreaming?: boolean
+  citationUrlTitles?: Map<string, string>
 }
 
 interface ContentChunk {
@@ -347,11 +348,13 @@ const ChunkRenderer = memo(
     isDarkMode,
     isUser,
     isStreaming,
+    citationUrlTitles,
   }: {
     chunk: ContentChunk
     isDarkMode: boolean
     isUser?: boolean
     isStreaming?: boolean
+    citationUrlTitles?: Map<string, string>
   }) {
     const wasIncompleteRef = useRef(!chunk.isComplete)
     const [shouldAnimate, setShouldAnimate] = useState(false)
@@ -378,6 +381,7 @@ const ChunkRenderer = memo(
           isDarkMode={isDarkMode}
           isUser={isUser}
           isStreaming={isStreaming}
+          citationUrlTitles={citationUrlTitles}
         />
       </div>
     )
@@ -389,7 +393,8 @@ const ChunkRenderer = memo(
       return (
         prevProps.chunk.content === nextProps.chunk.content &&
         prevProps.isDarkMode === nextProps.isDarkMode &&
-        prevProps.isStreaming === nextProps.isStreaming
+        prevProps.isStreaming === nextProps.isStreaming &&
+        prevProps.citationUrlTitles === nextProps.citationUrlTitles
       )
     }
     // One or both incomplete - check everything
@@ -397,7 +402,8 @@ const ChunkRenderer = memo(
       prevProps.chunk.content === nextProps.chunk.content &&
       prevProps.chunk.isComplete === nextProps.chunk.isComplete &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
-      prevProps.isStreaming === nextProps.isStreaming
+      prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.citationUrlTitles === nextProps.citationUrlTitles
     )
   },
 )
@@ -407,6 +413,7 @@ export const StreamingChunkedText = memo(function StreamingChunkedText({
   isDarkMode,
   isUser = false,
   isStreaming = false,
+  citationUrlTitles,
 }: StreamingChunkedTextProps) {
   const chunks = useMemo(
     () => splitIntoChunks(content, isStreaming),
@@ -425,6 +432,7 @@ export const StreamingChunkedText = memo(function StreamingChunkedText({
         isDarkMode={isDarkMode}
         isUser={isUser}
         isStreaming={isStreaming}
+        citationUrlTitles={citationUrlTitles}
       />
     )
   }
@@ -439,6 +447,7 @@ export const StreamingChunkedText = memo(function StreamingChunkedText({
           isDarkMode={isDarkMode}
           isUser={isUser}
           isStreaming={isStreaming}
+          citationUrlTitles={citationUrlTitles}
         />
       ))}
     </>

@@ -90,12 +90,18 @@ interface CreateMarkdownComponentsOptions {
   isDarkMode: boolean
   isStreaming: boolean
   showMarkdownTablePlaceholder: boolean
+  // URLs the router annotated as web-search citations, mapped to the source
+  // title. Any markdown link whose href matches one of these URLs is rendered
+  // as a citation pill to stay visually consistent with legacy chats that
+  // stored citations as #cite-... anchors.
+  citationUrlTitles?: Map<string, string>
 }
 
 export function createMarkdownComponents({
   isDarkMode,
   isStreaming,
   showMarkdownTablePlaceholder,
+  citationUrlTitles,
 }: CreateMarkdownComponentsOptions): Components {
   return {
     // Suppress hr elements
@@ -241,14 +247,21 @@ export function createMarkdownComponents({
           const rest = href.slice(tildeIndex + 1)
           const secondTildeIndex = rest.indexOf('~')
           if (secondTildeIndex !== -1) {
-            // New format: [1](#cite-1~url~encodedTitle)
+            // Legacy format retained so chats saved before the router started
+            // emitting markdown citations keep rendering as pills.
             const url = rest.slice(0, secondTildeIndex)
             const title = decodeURIComponent(rest.slice(secondTildeIndex + 1))
             return <CitationPill url={url} title={title || undefined} />
           }
-          // Old format: [cite](#cite-1~url)
           return <CitationPill url={rest} />
         }
+      }
+      // Render as a citation pill when the markdown link points at a URL the
+      // router annotated as a web-search source. Falls back to a regular
+      // hyperlink for any other external link.
+      if (href && citationUrlTitles?.has(href)) {
+        const title = citationUrlTitles.get(href)
+        return <CitationPill url={href} title={title || undefined} />
       }
       const sanitizedHref = sanitizeUrl(href)
       return (

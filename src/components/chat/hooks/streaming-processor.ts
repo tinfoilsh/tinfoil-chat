@@ -10,7 +10,6 @@
  * to storage directly. All persistence goes through updateChatWithHistoryCheck.
  */
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
-import { processCitationMarkers } from '@/utils/citation-processing'
 import { logError } from '@/utils/error-handling'
 import type {
   Annotation,
@@ -105,17 +104,10 @@ export async function processStreamingResponse(
     let webSearchStarted = false
     let thinkingStarted = false
 
-    // Process citations for display during streaming
-    const getMessageWithCitations = (): Message => {
-      const msg = assistantMessage as Message
-      if (msg.content && collectedSources.length > 0) {
-        return {
-          ...msg,
-          content: processCitationMarkers(msg.content, collectedSources),
-        }
-      }
-      return msg
-    }
+    // The router delivers citations as standard markdown links inside the
+    // assistant content, so the UI can forward the message through the
+    // markdown renderer unchanged.
+    const getMessageWithCitations = (): Message => assistantMessage as Message
 
     const scheduleStreamingUpdate = () => {
       if (rafId !== null) return
@@ -385,7 +377,8 @@ export async function processStreamingResponse(
               ) {
                 const { title, url } = annotation.url_citation
                 if (url) {
-                  // Add to collectedSources without deduplication to preserve citation index mapping
+                  // Track the sources the router annotated so the web-search
+                  // panel can list them alongside the inline markdown links.
                   collectedSources.push({
                     title: title || url,
                     url,
@@ -715,17 +708,6 @@ export async function processStreamingResponse(
           })
           continue
         }
-      }
-    }
-
-    // Process citation markers into links before returning
-    if (assistantMessage?.content && collectedSources.length > 0) {
-      assistantMessage = {
-        ...assistantMessage,
-        content: processCitationMarkers(
-          assistantMessage.content,
-          collectedSources,
-        ),
       }
     }
   } finally {
