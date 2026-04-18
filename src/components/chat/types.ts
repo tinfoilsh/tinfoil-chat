@@ -1,3 +1,5 @@
+import type { GenUIToolCall } from './genui/types'
+
 export type URLCitation = {
   title: string
   url: string
@@ -78,7 +80,7 @@ export type Message = {
   // aggregate fields above.
   segments?: MessageSegment[]
   webSearches?: WebSearchInstance[]
-  toolCalls?: Array<{ id: string; name: string; arguments: string }>
+  toolCalls?: GenUIToolCall[]
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'
