@@ -62,32 +62,54 @@ const progressBarInput = z.object({
 const barChartInput = z.object({
   data: z
     .array(z.record(z.string(), z.union([z.string(), z.number()])))
-    .describe('Array of data points with xKey and yKey values'),
-  xKey: z.string().describe('Key for category axis values'),
-  yKey: z.string().describe('Key for numeric axis values'),
+    .describe(
+      'Array of data points. Each object must share the same keys — e.g. [{"label": "A", "value": 10}, {"label": "B", "value": 20}].',
+    ),
+  xKey: z
+    .string()
+    .optional()
+    .describe('Key for category axis (defaults to the first string field).'),
+  yKey: z
+    .string()
+    .optional()
+    .describe('Key for numeric axis (defaults to the first numeric field).'),
   title: z.string().optional().describe('Chart title'),
   color: z.string().optional().describe('Bar color'),
 })
 
 const lineChartInput = z.object({
-  data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
-  xKey: z.string(),
-  yKey: z.string(),
+  data: z
+    .array(z.record(z.string(), z.union([z.string(), z.number()])))
+    .describe(
+      'Array of data points sharing the same keys — e.g. [{"x": "Jan", "y": 4}, ...].',
+    ),
+  xKey: z.string().optional(),
+  yKey: z.string().optional(),
   title: z.string().optional(),
   color: z.string().optional(),
 })
 
 const pieChartInput = z.object({
-  data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
-  nameKey: z.string().describe('Key for category names'),
-  valueKey: z.string().describe('Key for numeric values'),
+  data: z
+    .array(z.record(z.string(), z.union([z.string(), z.number()])))
+    .describe(
+      'Array of slices sharing the same keys — e.g. [{"name": "A", "value": 10}, ...].',
+    ),
+  nameKey: z
+    .string()
+    .optional()
+    .describe('Key for slice names (defaults to the first string field).'),
+  valueKey: z
+    .string()
+    .optional()
+    .describe('Key for slice values (defaults to the first numeric field).'),
   title: z.string().optional(),
 })
 
 const areaChartInput = z.object({
   data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
-  xKey: z.string(),
-  yKey: z.string(),
+  xKey: z.string().optional(),
+  yKey: z.string().optional(),
   title: z.string().optional(),
   color: z.string().optional().describe('Area fill color'),
 })

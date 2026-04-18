@@ -19,12 +19,37 @@ const DEFAULT_COLORS = [
 
 interface PieChartProps {
   data: Record<string, string | number>[]
-  nameKey: string
-  valueKey: string
+  nameKey?: string
+  valueKey?: string
   title?: string
 }
 
-export function PieChart({ data, nameKey, valueKey, title }: PieChartProps) {
+function inferPieKeys(
+  data: Record<string, string | number>[],
+  preferredName?: string,
+  preferredValue?: string,
+): { nameKey: string; valueKey: string } {
+  const first = data[0] ?? {}
+  const keys = Object.keys(first)
+  let nameKey =
+    preferredName && preferredName in first ? preferredName : undefined
+  let valueKey =
+    preferredValue && preferredValue in first ? preferredValue : undefined
+  if (!nameKey)
+    nameKey = keys.find((k) => typeof first[k] === 'string') ?? keys[0]
+  if (!valueKey)
+    valueKey = keys.find((k) => k !== nameKey && typeof first[k] === 'number')
+  if (!valueKey) valueKey = keys.find((k) => k !== nameKey) ?? keys[0]
+  return { nameKey: nameKey || 'name', valueKey: valueKey || 'value' }
+}
+
+export function PieChart({
+  data,
+  nameKey: nameKeyProp,
+  valueKey: valueKeyProp,
+  title,
+}: PieChartProps) {
+  const { nameKey, valueKey } = inferPieKeys(data, nameKeyProp, valueKeyProp)
   return (
     <div className="my-3">
       {title && (
@@ -69,9 +94,5 @@ export function PieChart({ data, nameKey, valueKey, title }: PieChartProps) {
 }
 
 export function validatePieChartProps(props: Record<string, unknown>): boolean {
-  return (
-    Array.isArray(props.data) &&
-    typeof props.nameKey === 'string' &&
-    typeof props.valueKey === 'string'
-  )
+  return Array.isArray(props.data) && props.data.length > 0
 }
