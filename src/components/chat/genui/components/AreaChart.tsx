@@ -7,7 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { coerceChartData, isValidChartData } from './chart-utils'
+import { coerceArray, isNonEmptyArray, type ChartRow } from './input-coercion'
 
 interface AreaChartProps {
   data: unknown
@@ -39,7 +39,7 @@ export function AreaChart({
   title,
   color = '#3b82f6',
 }: AreaChartProps) {
-  const rows = coerceChartData(data)
+  const rows = coerceArray<ChartRow>(data)
   const { xKey, yKey } = inferChartKeys(rows, xKeyProp, yKeyProp)
   const gradientId = `area-gradient-${yKey}`
   return (
@@ -92,5 +92,5 @@ export function AreaChart({
 export function validateAreaChartProps(
   props: Record<string, unknown>,
 ): boolean {
-  return isValidChartData(props.data)
+  return isNonEmptyArray(props.data)
 }

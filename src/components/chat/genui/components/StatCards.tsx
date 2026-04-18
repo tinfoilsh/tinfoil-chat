@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { TrendingDown, TrendingUp } from 'lucide-react'
-import { coerceArray } from './chart-utils'
+import { coerceArray } from './input-coercion'
 
 interface Stat {
   label: string

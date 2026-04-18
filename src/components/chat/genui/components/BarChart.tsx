@@ -7,7 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { coerceChartData, isValidChartData } from './chart-utils'
+import { coerceArray, isNonEmptyArray, type ChartRow } from './input-coercion'
 
 interface BarChartProps {
   data: unknown
@@ -39,7 +39,7 @@ export function BarChart({
   title,
   color = '#3b82f6',
 }: BarChartProps) {
-  const rows = coerceChartData(data)
+  const rows = coerceArray<ChartRow>(data)
   const { xKey, yKey } = inferChartKeys(rows, xKeyProp, yKeyProp)
   return (
     <div className="my-3">
@@ -77,5 +77,5 @@ export function BarChart({
 }
 
 export function validateBarChartProps(props: Record<string, unknown>): boolean {
-  return isValidChartData(props.data)
+  return isNonEmptyArray(props.data)
 }

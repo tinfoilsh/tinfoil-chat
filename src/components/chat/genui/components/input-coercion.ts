@@ -1,9 +1,9 @@
 /**
  * GenUI input coercion helpers.
  *
- * Models sometimes emit nested arrays as stringified JSON instead of true
- * arrays. These helpers coerce input so components can accept either shape
- * without lowering their contract.
+ * Models sometimes emit nested arrays/objects as stringified JSON instead of
+ * true arrays/objects. These helpers coerce input so components can accept
+ * either shape without lowering their contract.
  */
 
 export type ChartRow = Record<string, string | number>
@@ -50,13 +50,7 @@ export function coerceObject<T extends Record<string, unknown>>(
   return {} as T
 }
 
-/** Alias kept for chart call sites. */
-export const coerceChartData = coerceArray<ChartRow>
-
 /** True if `value` is (or decodes to) a non-empty array. */
 export function isNonEmptyArray(value: unknown): boolean {
   return coerceArray(value).length > 0
 }
-
-/** Alias kept for chart call sites. */
-export const isValidChartData = isNonEmptyArray
