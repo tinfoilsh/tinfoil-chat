@@ -7,6 +7,7 @@ import type { GenUIToolCall } from './types'
 interface GenUIToolCallRendererProps {
   toolCalls: GenUIToolCall[]
   isStreaming: boolean
+  isDarkMode?: boolean
 }
 
 function resolveInput(tc: GenUIToolCall): Record<string, unknown> | null {
@@ -28,6 +29,7 @@ function resolveInput(tc: GenUIToolCall): Record<string, unknown> | null {
 export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   toolCalls,
   isStreaming,
+  isDarkMode,
 }: GenUIToolCallRendererProps) {
   return (
     <>
@@ -35,7 +37,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
         const input = resolveInput(tc)
 
         if (input) {
-          const rendered = renderGenUIToolCall(tc.name, input)
+          const rendered = renderGenUIToolCall(tc.name, input, { isDarkMode })
           if (rendered) {
             return (
               <div key={tc.id} className="my-4">
