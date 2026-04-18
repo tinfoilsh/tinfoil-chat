@@ -7,8 +7,7 @@
  *    consume without choking on unknown event types.
  * 2. A sidechannel of Tinfoil-specific events the upstream streaming loop
  *    subscribes to: web search progress, URL fetches, url_citation
- *    annotations, search_reasoning deltas, and inline `<think>` content
- *    rewritten into `reasoning_content` deltas.
+ *    annotations, and search_reasoning deltas.
  *
  * The pre-parser only engages for responses whose content-type starts with
  * `text/event-stream`; other responses (errors, JSON bodies for non-streaming
@@ -87,11 +86,6 @@ interface ChatCompletionChunk {
   [key: string]: unknown
 }
 
-interface ThinkTagState {
-  insideThink: boolean
-  pendingBuffer: string
-}
-
 /**
  * Wrap a fetch implementation so streamed chat completion responses have
  * Tinfoil-specific events peeled off into the provided sidechannel.
@@ -128,10 +122,6 @@ function transformTinfoilStream(
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
-  const thinkState: ThinkTagState = {
-    insideThink: false,
-    pendingBuffer: '',
-  }
   let sseBuffer = ''
 
   return new ReadableStream<Uint8Array>({
@@ -142,13 +132,7 @@ function transformTinfoilStream(
           const { done, value } = await reader.read()
           if (done) {
             if (sseBuffer.length > 0) {
-              processSseBlock(
-                sseBuffer,
-                controller,
-                sidechannel,
-                thinkState,
-                encoder,
-              )
+              processSseBlock(sseBuffer, controller, sidechannel, encoder)
               sseBuffer = ''
             }
             controller.close()
@@ -163,13 +147,7 @@ function transformTinfoilStream(
           while (boundary !== -1) {
             const rawEvent = sseBuffer.slice(0, boundary)
             sseBuffer = sseBuffer.slice(boundary).replace(/^(\r?\n){2}/, '')
-            processSseBlock(
-              rawEvent,
-              controller,
-              sidechannel,
-              thinkState,
-              encoder,
-            )
+            processSseBlock(rawEvent, controller, sidechannel, encoder)
             boundary = findEventBoundary(sseBuffer)
           }
         }
@@ -197,7 +175,6 @@ function processSseBlock(
   rawEvent: string,
   controller: ReadableStreamDefaultController<Uint8Array>,
   sidechannel: TinfoilSidechannel,
-  thinkState: ThinkTagState,
   encoder: TextEncoder,
 ): void {
   const trimmed = rawEvent.trim()
@@ -235,7 +212,7 @@ function processSseBlock(
     return
   }
 
-  // Only rewrite chat.completion.chunk events for reasoning/think/annotations.
+  // Only rewrite chat.completion.chunk events for annotations / search_reasoning.
   const chunk = parsed as ChatCompletionChunk
   const choice = chunk?.choices?.[0]
   const delta = choice?.delta
@@ -265,21 +242,6 @@ function processSseBlock(
         type: 'search_reasoning_delta',
         delta: searchReasoning,
       })
-    }
-
-    // Rewrite inline <think>...</think> in content into reasoning_content deltas.
-    if (typeof delta.content === 'string' && delta.content.length > 0) {
-      const rewritten = rewriteThinkTags(delta.content, thinkState)
-      if (rewritten.reasoningDelta || rewritten.contentDelta !== undefined) {
-        if (rewritten.reasoningDelta) {
-          const prevReasoning =
-            typeof delta.reasoning_content === 'string'
-              ? delta.reasoning_content
-              : ''
-          delta.reasoning_content = prevReasoning + rewritten.reasoningDelta
-        }
-        delta.content = rewritten.contentDelta ?? ''
-      }
     }
   }
 
@@ -325,74 +287,4 @@ function handleWebSearchEvent(
       reason: event?.reason as string | undefined,
     })
   }
-}
-
-interface ThinkRewriteResult {
-  /** Content remaining after any `<think>...</think>` has been stripped. */
-  contentDelta?: string
-  /** Fragments that should be routed into reasoning_content. */
-  reasoningDelta?: string
-}
-
-/**
- * Rewrite inline `<think>...</think>` tags into reasoning deltas. Handles
- * partial tags across chunk boundaries via `thinkState`.
- */
-function rewriteThinkTags(
-  chunk: string,
-  state: ThinkTagState,
-): ThinkRewriteResult {
-  let contentOut = ''
-  let reasoningOut = ''
-  let input = state.pendingBuffer + chunk
-  state.pendingBuffer = ''
-
-  while (input.length > 0) {
-    if (state.insideThink) {
-      const closeIdx = input.indexOf('</think>')
-      if (closeIdx === -1) {
-        // All remaining bytes go to reasoning; defer nothing.
-        reasoningOut += input
-        input = ''
-      } else {
-        reasoningOut += input.slice(0, closeIdx)
-        input = input.slice(closeIdx + '</think>'.length)
-        state.insideThink = false
-      }
-    } else {
-      const openIdx = input.indexOf('<think>')
-      if (openIdx === -1) {
-        // No opening tag yet, but a partial might be at the end; hold it back.
-        const partial = detectPartialOpenTag(input)
-        if (partial > 0) {
-          state.pendingBuffer = input.slice(input.length - partial)
-          contentOut += input.slice(0, input.length - partial)
-        } else {
-          contentOut += input
-        }
-        input = ''
-      } else {
-        contentOut += input.slice(0, openIdx)
-        input = input.slice(openIdx + '<think>'.length)
-        state.insideThink = true
-      }
-    }
-  }
-
-  return {
-    contentDelta: contentOut,
-    reasoningDelta: reasoningOut.length > 0 ? reasoningOut : undefined,
-  }
-}
-
-function detectPartialOpenTag(input: string): number {
-  const marker = '<think>'
-  // Check if the tail of `input` could be a prefix of `<think>`.
-  const max = Math.min(marker.length - 1, input.length)
-  for (let len = max; len > 0; len--) {
-    if (input.endsWith(marker.slice(0, len))) {
-      return len
-    }
-  }
-  return 0
 }
