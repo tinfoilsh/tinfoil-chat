@@ -545,7 +545,9 @@ export function useChatMessaging({
           assistantMessage &&
           (assistantMessage.content ||
             assistantMessage.thoughts ||
-            assistantMessage.webSearch)
+            assistantMessage.webSearch ||
+            (assistantMessage.toolCalls &&
+              assistantMessage.toolCalls.length > 0))
         ) {
           const chatId = currentChatIdRef.current
 

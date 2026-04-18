@@ -7,9 +7,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { coerceChartData, isValidChartData } from './chart-utils'
 
 interface BarChartProps {
-  data: Record<string, string | number>[]
+  data: unknown
   xKey?: string
   yKey?: string
   title?: string
@@ -38,7 +39,8 @@ export function BarChart({
   title,
   color = '#3b82f6',
 }: BarChartProps) {
-  const { xKey, yKey } = inferChartKeys(data, xKeyProp, yKeyProp)
+  const rows = coerceChartData(data)
+  const { xKey, yKey } = inferChartKeys(rows, xKeyProp, yKeyProp)
   return (
     <div className="my-3">
       {title && (
@@ -46,7 +48,7 @@ export function BarChart({
       )}
       <div className="rounded-lg border border-border-subtle p-4">
         <ResponsiveContainer width="100%" height={300}>
-          <RechartsBarChart data={data}>
+          <RechartsBarChart data={rows}>
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="var(--color-border-subtle, #e5e7eb)"
@@ -75,5 +77,5 @@ export function BarChart({
 }
 
 export function validateBarChartProps(props: Record<string, unknown>): boolean {
-  return Array.isArray(props.data) && props.data.length > 0
+  return isValidChartData(props.data)
 }

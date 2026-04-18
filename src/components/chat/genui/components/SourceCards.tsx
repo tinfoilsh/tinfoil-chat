@@ -1,3 +1,5 @@
+import { coerceArray } from './chart-utils'
+
 interface Source {
   title: string
   url: string
@@ -7,7 +9,7 @@ interface Source {
 }
 
 interface SourceCardsProps {
-  sources: Source[]
+  sources: unknown
   title?: string
 }
 
@@ -29,13 +31,14 @@ function getFaviconUrl(url: string): string | null {
 }
 
 export function SourceCards({ sources, title }: SourceCardsProps) {
+  const items = coerceArray<Source>(sources)
   return (
     <div className="my-3">
       {title && (
         <p className="mb-2 text-sm font-medium text-content-primary">{title}</p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {sources.map((src, i) => {
+        {items.map((src, i) => {
           const favicon = getFaviconUrl(src.url)
           const domain = getDomain(src.url)
           return (
@@ -85,9 +88,10 @@ export function SourceCards({ sources, title }: SourceCardsProps) {
 export function validateSourceCardsProps(
   props: Record<string, unknown>,
 ): boolean {
+  const sources = coerceArray<unknown>(props.sources)
   return (
-    Array.isArray(props.sources) &&
-    props.sources.every(
+    sources.length > 0 &&
+    sources.every(
       (s: unknown) =>
         s !== null &&
         typeof s === 'object' &&

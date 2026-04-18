@@ -1,11 +1,14 @@
 import { Check, Minus, X } from 'lucide-react'
+import { coerceArray } from './chart-utils'
+
+interface Feature {
+  label: string
+  values: Array<string | number | boolean | null>
+}
 
 interface ComparisonTableProps {
-  items: string[]
-  features: {
-    label: string
-    values: Array<string | number | boolean | null>
-  }[]
+  items: unknown
+  features: unknown
   title?: string
 }
 
@@ -27,6 +30,11 @@ export function ComparisonTable({
   features,
   title,
 }: ComparisonTableProps) {
+  const columns = coerceArray<string>(items)
+  const rows = coerceArray<Feature>(features).map((f) => ({
+    label: f.label,
+    values: coerceArray<string | number | boolean | null>(f.values),
+  }))
   return (
     <div className="my-3">
       {title && (
@@ -39,7 +47,7 @@ export function ComparisonTable({
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-content-muted">
                 Feature
               </th>
-              {items.map((item) => (
+              {columns.map((item) => (
                 <th
                   key={item}
                   className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-content-primary"
@@ -50,12 +58,12 @@ export function ComparisonTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle">
-            {features.map((feature, i) => (
+            {rows.map((feature, i) => (
               <tr key={i}>
                 <td className="px-4 py-3 text-sm font-medium text-content-primary">
                   {feature.label}
                 </td>
-                {items.map((_, j) => (
+                {columns.map((_, j) => (
                   <td
                     key={j}
                     className="px-4 py-3 text-center text-sm text-content-primary"
@@ -75,16 +83,18 @@ export function ComparisonTable({
 export function validateComparisonTableProps(
   props: Record<string, unknown>,
 ): boolean {
+  const items = coerceArray<unknown>(props.items)
+  const features = coerceArray<unknown>(props.features)
   return (
-    Array.isArray(props.items) &&
-    props.items.every((i: unknown) => typeof i === 'string') &&
-    Array.isArray(props.features) &&
-    props.features.every(
+    items.length > 0 &&
+    items.every((i: unknown) => typeof i === 'string') &&
+    features.length > 0 &&
+    features.every(
       (f: unknown) =>
         f !== null &&
         typeof f === 'object' &&
         typeof (f as any).label === 'string' &&
-        Array.isArray((f as any).values),
+        coerceArray((f as any).values).length >= 0,
     )
   )
 }
