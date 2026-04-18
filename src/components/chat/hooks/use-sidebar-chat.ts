@@ -41,7 +41,7 @@ export interface SidebarChatState {
 }
 
 interface UseSidebarChatReturn extends SidebarChatState {
-  askQuote: (quote: string) => void
+  askQuote: (quote: string, contextMessages?: Message[]) => void
   cancel: () => void
   reset: () => void
 }
@@ -49,6 +49,30 @@ interface UseSidebarChatReturn extends SidebarChatState {
 // A stable placeholder chat id used by the streaming processor. The id never
 // leaves this hook — nothing is saved under it.
 const EPHEMERAL_CHAT_ID = 'ask-sidebar-ephemeral'
+
+// Prompt prepended to the hidden user turn so the model understands that the
+// preceding transcript is the conversation the user highlighted from.
+const ASK_CONTEXT_INSTRUCTION =
+  'The following is the prior conversation the user was having. ' +
+  'They highlighted a snippet from it and want you to elaborate on, ' +
+  'clarify, or expand on that specific snippet. Use the conversation ' +
+  'above only as background context and focus your answer on the quoted ' +
+  'snippet in the user\u2019s next message.'
+
+// Render a Chat transcript as readable plain text for the hidden context turn.
+function serializeTranscript(messages: Message[]): string {
+  return messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => {
+      const role = m.role === 'user' ? 'User' : 'Assistant'
+      const quotePrefix = m.quote
+        ? `[In reply to: ${m.quote.replace(/\s+/g, ' ').trim()}]\n`
+        : ''
+      const body = (m.content || '').trim()
+      return `${role}:\n${quotePrefix}${body}`.trim()
+    })
+    .join('\n\n')
+}
 
 export function useSidebarChat({
   systemPrompt,
@@ -100,7 +124,7 @@ export function useSidebarChat({
   }, [cancel])
 
   const askQuote = useCallback(
-    (quoteText: string) => {
+    (quoteText: string, contextMessages?: Message[]) => {
       if (!quoteText) return
 
       // Discard any in-flight stream and any previous sidebar conversation.
@@ -117,14 +141,34 @@ export function useSidebarChat({
         return
       }
 
-      const userMessage: Message = {
+      // Visible user message - shown in the sidebar UI. Content is empty so
+      // the default renderer only shows the quoted block.
+      const visibleUserMessage: Message = {
         role: 'user',
         content: '',
         quote: quoteText,
         timestamp: new Date(),
       }
-      const updatedMessages: Message[] = [userMessage]
-      setMessages(updatedMessages)
+      setMessages([visibleUserMessage])
+
+      // Hidden context message sent to the model but never shown in the UI.
+      // It carries the parent conversation transcript and tells the model to
+      // focus on the quote in the next user message.
+      const transcript = contextMessages?.length
+        ? serializeTranscript(contextMessages)
+        : ''
+      const hiddenContextMessage: Message | null = transcript
+        ? {
+            role: 'user',
+            content: `${ASK_CONTEXT_INSTRUCTION}\n\n----- Prior conversation -----\n${transcript}\n----- End of conversation -----`,
+            timestamp: new Date(),
+          }
+        : null
+
+      // What we actually send to the model.
+      const apiMessages: Message[] = hiddenContextMessage
+        ? [hiddenContextMessage, visibleUserMessage]
+        : [visibleUserMessage]
 
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -133,8 +177,10 @@ export function useSidebarChat({
       setIsStreaming(true)
 
       // In-memory shim for updateChatWithHistoryCheck. The streaming processor
-      // expects (setChats, chatSnapshot, setCurrentChat, chatId, newMessages).
-      // We map that onto our single messages state.
+      // calls this with `[...apiMessages, currentAssistantMessage]`. The UI
+      // must only show the visible user message plus the assistant reply, so
+      // we drop the hidden prefix and keep the tail.
+      const hiddenPrefixLength = hiddenContextMessage ? 1 : 0
       const inMemoryUpdate = (
         _setChats: unknown,
         _chatSnapshot: unknown,
@@ -142,14 +188,14 @@ export function useSidebarChat({
         _chatId: string,
         newMessages: Message[],
       ) => {
-        setMessages(newMessages)
+        setMessages(newMessages.slice(hiddenPrefixLength))
       }
 
       // Minimal Chat-shaped object; only id is really used by the processor.
       const ephemeralChat = {
         id: EPHEMERAL_CHAT_ID,
         title: '',
-        messages: updatedMessages,
+        messages: apiMessages,
         createdAt: new Date(),
       }
 
@@ -163,7 +209,7 @@ export function useSidebarChat({
               setLoadingState('retrying')
               setRetryInfo({ attempt, maxRetries: max, error })
             },
-            updatedMessages,
+            updatedMessages: apiMessages,
             maxMessages,
             signal: controller.signal,
             reasoningEffort,
@@ -174,7 +220,7 @@ export function useSidebarChat({
           isStreamingRef.current = true
           const assistantMessage = await processStreamingResponse(response, {
             updatedChat: ephemeralChat as never,
-            updatedMessages,
+            updatedMessages: apiMessages,
             isFirstMessage: true,
             modelsLength: models.length,
             currentChatIdRef,
@@ -192,7 +238,8 @@ export function useSidebarChat({
           })
 
           if (assistantMessage && abortControllerRef.current === controller) {
-            setMessages([...updatedMessages, assistantMessage])
+            // Only the visible messages go into the UI state.
+            setMessages([visibleUserMessage, assistantMessage])
           }
         } catch (error) {
           if (error instanceof DOMException && error.name === 'AbortError') {
@@ -209,7 +256,7 @@ export function useSidebarChat({
           const errMsg =
             error instanceof Error ? error.message : 'Unknown error'
           setMessages([
-            ...updatedMessages,
+            visibleUserMessage,
             {
               role: 'assistant',
               content: `Error: ${errMsg}`,

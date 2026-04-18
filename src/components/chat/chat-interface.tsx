@@ -48,10 +48,8 @@ import { useProfileSync } from '@/hooks/use-profile-sync'
 
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
-import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
-import { sessionChatStorage } from '@/services/storage/session-storage'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
@@ -62,7 +60,6 @@ import {
   getProjectUploadPreference,
   setProjectUploadPreference,
 } from '@/utils/project-upload-preference'
-import { generateReverseId } from '@/utils/reverse-id'
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import {
@@ -96,7 +93,7 @@ import { QuoteSelectionPopover } from './quote-selection-popover'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
-import type { Attachment, Chat } from './types'
+import type { Attachment } from './types'
 // Lazy-load modals that aren't shown on initial load
 const CloudSyncSetupModal = dynamic(
   () =>
@@ -676,75 +673,6 @@ export function ChatInterface({
     webSearchEnabled,
     piiCheckEnabled,
   })
-
-  const handleOpenSidebarAsChat = useCallback(async () => {
-    const snapshotMessages = sidebarChat.messages
-    if (snapshotMessages.length === 0) return
-
-    const useCloudStorage = isSignedIn || !isCloudSyncEnabled()
-    const newChatId = generateReverseId().id
-    const newChat: Chat = {
-      id: newChatId,
-      title: 'Untitled',
-      titleState: 'placeholder',
-      messages: snapshotMessages,
-      createdAt: new Date(),
-      isLocalOnly: !isCloudSyncEnabled(),
-      projectId: isProjectMode && activeProject ? activeProject.id : undefined,
-    }
-
-    setIsAskSidebarOpen(false)
-    sidebarChat.reset()
-
-    try {
-      if (useCloudStorage) {
-        await chatStorage.saveChatAndSync(newChat)
-      } else {
-        sessionChatStorage.saveChat(newChat)
-      }
-    } catch (error) {
-      logError('Failed to persist sidebar chat as full chat', error, {
-        component: 'ChatInterface',
-        action: 'handleOpenSidebarAsChat',
-      })
-    }
-
-    // Title generation from the seeded conversation (best effort, non-blocking).
-    const firstUser = snapshotMessages.find((m) => m.role === 'user')
-    const firstAssistant = snapshotMessages.find((m) => m.role === 'assistant')
-    if (firstUser && firstAssistant) {
-      generateTitle([
-        {
-          role: 'user',
-          content: firstUser.quote
-            ? `In reply to:\n${firstUser.quote}\n\n${firstUser.content}`
-            : firstUser.content,
-        },
-        { role: 'assistant', content: firstAssistant.content },
-      ])
-        .then((title) => {
-          if (title && title !== 'Untitled') {
-            updateChatTitle(newChatId, title)
-          }
-        })
-        .catch(() => {})
-    }
-
-    try {
-      await reloadChats()
-    } catch {
-      // non-fatal
-    }
-    handleChatSelect(newChatId)
-  }, [
-    sidebarChat,
-    isSignedIn,
-    isProjectMode,
-    activeProject,
-    reloadChats,
-    handleChatSelect,
-    updateChatTitle,
-  ])
 
   // Sync URL with current chat state
   useEffect(() => {
@@ -2430,15 +2358,14 @@ export function ChatInterface({
         isClient={isClient}
       />
 
-      {/* Ask Sidebar - ephemeral side conversation seeded from highlighted text.
-          Discarded on close or on the next "Ask" click. */}
+      {/* Ask Sidebar - ephemeral, context-aware side conversation seeded from
+          highlighted text. Discarded on close or on the next "Ask" click. */}
       <AskSidebar
         isOpen={isAskSidebarOpen}
         onClose={() => {
           setIsAskSidebarOpen(false)
           sidebarChat.reset()
         }}
-        onOpenAsChat={handleOpenSidebarAsChat}
         state={sidebarChat}
         models={models}
         selectedModel={selectedModel}
@@ -2560,7 +2487,11 @@ export function ChatInterface({
                 setIsSidebarOpen(false)
               }
               setIsAskSidebarOpen(true)
-              sidebarChat.askQuote(text)
+              // Hand the current chat transcript to the sidebar so the model
+              // can reason about the highlighted snippet in context. The
+              // transcript is sent as a hidden user message; only the quote
+              // and assistant reply are shown in the sidebar UI.
+              sidebarChat.askQuote(text, currentChat?.messages ?? [])
             }}
           />
           <div
