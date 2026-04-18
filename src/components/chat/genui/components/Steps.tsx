@@ -1,5 +1,5 @@
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
-import { coerceArray } from './chart-utils'
+import { coerceArray } from './input-coercion'
 
 interface Step {
   title: string
