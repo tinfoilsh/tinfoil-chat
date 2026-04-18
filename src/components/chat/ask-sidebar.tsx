@@ -1,17 +1,22 @@
 import { cn } from '@/components/ui/utils'
 import { type BaseModel } from '@/config/models'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import { memo } from 'react'
+import { memo, useRef } from 'react'
 import { PiChatCircleText } from 'react-icons/pi'
 import { LoadingDots } from '../loading-dots'
 import { CONSTANTS } from './constants'
 import type { SidebarChatState } from './hooks/use-sidebar-chat'
+import { QuoteSelectionPopover } from './quote-selection-popover'
 import { getRendererRegistry } from './renderers/client'
 import type { AIModel, Message } from './types'
 
 type AskSidebarProps = {
   isOpen: boolean
   onClose: () => void
+  // Fired when the user highlights text inside the sidebar and chooses
+  // "Quote". The quote is piped back into the main chat's input (the sidebar
+  // itself has no input of its own).
+  onQuote?: (text: string) => void
   state: SidebarChatState
   models: BaseModel[]
   selectedModel: AIModel
@@ -52,6 +57,7 @@ const SidebarMessage = memo(function SidebarMessage({
 export function AskSidebar({
   isOpen,
   onClose,
+  onQuote,
   state,
   models,
   selectedModel,
@@ -61,6 +67,7 @@ export function AskSidebar({
   const hasMessages = messages.length > 0
   const currentModel =
     models.find((m) => m.modelName === selectedModel) || models[0]
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
 
   const lastMessage = messages[messages.length - 1]
   const showLoadingDots =
@@ -98,7 +105,13 @@ export function AskSidebar({
         </div>
 
         {/* Messages area */}
-        <div className="flex flex-1 overflow-y-auto">
+        {isOpen && onQuote && (
+          <QuoteSelectionPopover
+            containerRef={sidebarScrollRef}
+            onQuote={onQuote}
+          />
+        )}
+        <div ref={sidebarScrollRef} className="flex flex-1 overflow-y-auto">
           {hasMessages && currentModel ? (
             <div className="flex-1 [container-type:inline-size]">
               <div className="flex flex-col gap-2 px-2 py-4">

@@ -2366,6 +2366,15 @@ export function ChatInterface({
           setIsAskSidebarOpen(false)
           sidebarChat.reset()
         }}
+        onQuote={(text) => {
+          // Highlighting text inside the sidebar quotes back into the main
+          // chat's input. The sidebar itself has no input.
+          setQuote(text)
+          setIsAskSidebarOpen(false)
+          sidebarChat.reset()
+          // Defer focus so the layout has settled after the sidebar closes.
+          setTimeout(() => inputRef.current?.focus(), 0)
+        }}
         state={sidebarChat}
         models={models}
         selectedModel={selectedModel}
