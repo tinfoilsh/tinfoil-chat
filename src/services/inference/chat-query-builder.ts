@@ -23,7 +23,7 @@ import type {
  * - **Unknown models**: Prepends to first user message (safe default)
  */
 
-const GENUI_TOOL_HINT = `You have render_* tools for creating visual components (charts, tables, stat cards, etc.). When the user asks for a chart, table, or visual data presentation, always use the appropriate render tool instead of markdown, mermaid, or code blocks. Use them whenever visual structure adds clarity.`
+const GENUI_TOOL_HINT = `You have render_* tools for rich visual components: charts (bar, line, pie, area), tables (data, comparison), source cards and link previews for web results, timelines, stat cards, progress bars, callouts (info/warning/tip/success/error), key-value lists, info cards, steps/checklists, and image grids. When content benefits from visual structure — comparisons, trends, proportions, chronologies, curated sources, highlighted takeaways, structured facts — always call the appropriate render tool instead of markdown, mermaid, or code blocks. After using web search, prefer render_source_cards or render_link_preview to surface the best sources. You may call multiple render tools in one response.`
 
 export interface ChatQueryBuilderParams {
   model: BaseModel
