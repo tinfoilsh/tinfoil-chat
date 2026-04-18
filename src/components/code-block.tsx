@@ -11,6 +11,8 @@ import {
 } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 import remarkGfm from 'remark-gfm'
 import { CONSTANTS } from './chat/constants'
+import { MermaidPreview } from './preview/mermaid-preview'
+import { SvgPreview } from './preview/svg-preview'
 
 const CodeIcon = () => (
   <svg
@@ -277,20 +279,6 @@ const PreviewContainer = ({
     {children}
   </div>
 )
-
-const SvgPreview = ({ code }: { code: string }) => {
-  const sanitizedSvg = DOMPurify.sanitize(code, {
-    USE_PROFILES: { svg: true, svgFilters: true },
-    ADD_TAGS: ['style'],
-  })
-
-  return (
-    <div
-      className="flex w-full items-center justify-center [&>svg]:h-auto [&>svg]:max-h-[400px] [&>svg]:w-full [&>svg]:max-w-full"
-      dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
-    />
-  )
-}
 
 const HtmlPreview = ({ code }: { code: string }) => {
   const [height, setHeight] = useState(100)
@@ -628,65 +616,6 @@ parent.postMessage({ type: 'python-preview-output', instanceId: '${instanceId}',
         </>
       )}
     </div>
-  )
-}
-
-const MermaidPreview = ({
-  code,
-  isDarkMode,
-}: {
-  code: string
-  isDarkMode: boolean
-}) => {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
-  const idRef = useMemo(
-    () => `mermaid-${Math.random().toString(36).slice(2, 11)}`,
-    [],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-
-    const renderMermaid = async () => {
-      try {
-        const mermaid = (await import('mermaid')).default
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: isDarkMode ? 'dark' : 'default',
-          securityLevel: 'strict',
-        })
-
-        const { svg: renderedSvg } = await mermaid.render(idRef, code)
-        if (!cancelled && containerRef.current) {
-          containerRef.current.innerHTML = renderedSvg
-          setError(null)
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e))
-          if (containerRef.current) {
-            containerRef.current.innerHTML = ''
-          }
-        }
-      }
-    }
-
-    renderMermaid()
-    return () => {
-      cancelled = true
-    }
-  }, [code, isDarkMode, idRef])
-
-  if (error) {
-    return <div className="text-sm text-red-500">Mermaid error: {error}</div>
-  }
-
-  return (
-    <div
-      ref={containerRef}
-      className="flex w-full items-center justify-center [&>svg]:max-w-full"
-    />
   )
 }
 
