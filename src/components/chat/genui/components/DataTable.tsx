@@ -1,10 +1,18 @@
+import { coerceArray } from './chart-utils'
+
 interface DataTableProps {
-  columns: string[]
-  rows: Record<string, string | number>[]
+  columns: unknown
+  rows: unknown
   caption?: string
 }
 
-export function DataTable({ columns, rows, caption }: DataTableProps) {
+export function DataTable({
+  columns: columnsProp,
+  rows: rowsProp,
+  caption,
+}: DataTableProps) {
+  const columns = coerceArray<string>(columnsProp)
+  const rows = coerceArray<Record<string, string | number>>(rowsProp)
   return (
     <div className="my-3 overflow-x-auto rounded-lg border border-border-subtle">
       <table className="w-full divide-y divide-border-subtle">
@@ -47,10 +55,11 @@ export function DataTable({ columns, rows, caption }: DataTableProps) {
 export function validateDataTableProps(
   props: Record<string, unknown>,
 ): boolean {
+  const columns = coerceArray<unknown>(props.columns)
+  const rows = coerceArray<unknown>(props.rows)
   return (
-    Array.isArray(props.columns) &&
-    props.columns.every((c: unknown) => typeof c === 'string') &&
-    Array.isArray(props.rows) &&
-    props.rows.every((r: unknown) => r !== null && typeof r === 'object')
+    columns.length > 0 &&
+    columns.every((c: unknown) => typeof c === 'string') &&
+    rows.every((r: unknown) => r !== null && typeof r === 'object')
   )
 }

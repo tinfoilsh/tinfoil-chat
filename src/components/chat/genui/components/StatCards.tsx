@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { TrendingDown, TrendingUp } from 'lucide-react'
+import { coerceArray } from './chart-utils'
 
 interface Stat {
   label: string
@@ -8,13 +9,14 @@ interface Stat {
 }
 
 interface StatCardsProps {
-  stats: Stat[]
+  stats: unknown
 }
 
 export function StatCards({ stats }: StatCardsProps) {
+  const items = coerceArray<Stat>(stats)
   return (
     <div className="my-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {stats.map((stat, index) => (
+      {items.map((stat, index) => (
         <Card key={index}>
           <CardContent className="p-4">
             <p className="text-xs font-medium text-content-muted">
@@ -41,9 +43,10 @@ export function StatCards({ stats }: StatCardsProps) {
 export function validateStatCardsProps(
   props: Record<string, unknown>,
 ): boolean {
+  const stats = coerceArray<unknown>(props.stats)
   return (
-    Array.isArray(props.stats) &&
-    props.stats.every(
+    stats.length > 0 &&
+    stats.every(
       (s: unknown) =>
         s !== null &&
         typeof s === 'object' &&

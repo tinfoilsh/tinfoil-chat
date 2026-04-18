@@ -7,9 +7,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { coerceChartData, isValidChartData } from './chart-utils'
 
 interface LineChartProps {
-  data: Record<string, string | number>[]
+  data: unknown
   xKey?: string
   yKey?: string
   title?: string
@@ -38,7 +39,8 @@ export function LineChart({
   title,
   color = '#3b82f6',
 }: LineChartProps) {
-  const { xKey, yKey } = inferChartKeys(data, xKeyProp, yKeyProp)
+  const rows = coerceChartData(data)
+  const { xKey, yKey } = inferChartKeys(rows, xKeyProp, yKeyProp)
   return (
     <div className="my-3">
       {title && (
@@ -46,7 +48,7 @@ export function LineChart({
       )}
       <div className="rounded-lg border border-border-subtle p-4">
         <ResponsiveContainer width="100%" height={300}>
-          <RechartsLineChart data={data}>
+          <RechartsLineChart data={rows}>
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="var(--color-border-subtle, #e5e7eb)"
@@ -84,5 +86,5 @@ export function LineChart({
 export function validateLineChartProps(
   props: Record<string, unknown>,
 ): boolean {
-  return Array.isArray(props.data) && props.data.length > 0
+  return isValidChartData(props.data)
 }

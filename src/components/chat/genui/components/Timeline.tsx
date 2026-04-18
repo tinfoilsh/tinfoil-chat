@@ -1,3 +1,5 @@
+import { coerceArray } from './chart-utils'
+
 interface TimelineEvent {
   date: string
   title: string
@@ -5,11 +7,12 @@ interface TimelineEvent {
 }
 
 interface TimelineProps {
-  events: TimelineEvent[]
+  events: unknown
   title?: string
 }
 
 export function Timeline({ events, title }: TimelineProps) {
+  const items = coerceArray<TimelineEvent>(events)
   return (
     <div className="my-3">
       {title && (
@@ -18,7 +21,7 @@ export function Timeline({ events, title }: TimelineProps) {
       <div className="relative">
         <div className="absolute bottom-2 left-[7px] top-2 w-px bg-border-subtle" />
         <div className="space-y-4">
-          {events.map((event, i) => (
+          {items.map((event, i) => (
             <div key={i} className="relative flex gap-4">
               <div className="mt-1.5 h-[14px] w-[14px] shrink-0 rounded-full border-2 border-border-subtle bg-surface-card" />
               <div className="flex-1">
@@ -43,9 +46,10 @@ export function Timeline({ events, title }: TimelineProps) {
 }
 
 export function validateTimelineProps(props: Record<string, unknown>): boolean {
+  const events = coerceArray<unknown>(props.events)
   return (
-    Array.isArray(props.events) &&
-    props.events.every(
+    events.length > 0 &&
+    events.every(
       (e: unknown) =>
         e !== null &&
         typeof e === 'object' &&
