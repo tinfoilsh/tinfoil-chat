@@ -48,8 +48,10 @@ import { useProfileSync } from '@/hooks/use-profile-sync'
 
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import { generateTitle } from '@/services/inference/title'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
+import { sessionChatStorage } from '@/services/storage/session-storage'
 import {
   isCloudSyncEnabled,
   setCloudSyncEnabled,
@@ -60,6 +62,7 @@ import {
   getProjectUploadPreference,
   setProjectUploadPreference,
 } from '@/utils/project-upload-preference'
+import { generateReverseId } from '@/utils/reverse-id'
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import {
@@ -76,6 +79,7 @@ const useLayoutEffect =
 
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
+import { AskSidebar } from './ask-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
@@ -84,13 +88,15 @@ import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
+import { useMaxMessages } from './hooks/use-max-messages'
 import { useReasoningEffort } from './hooks/use-reasoning-effort'
+import { useSidebarChat } from './hooks/use-sidebar-chat'
 import { ModelSelector } from './model-selector'
 import { QuoteSelectionPopover } from './quote-selection-popover'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
-import type { Attachment } from './types'
+import type { Attachment, Chat } from './types'
 // Lazy-load modals that aren't shown on initial load
 const CloudSyncSetupModal = dynamic(
   () =>
@@ -412,6 +418,10 @@ export function ChatInterface({
   // Quote state for highlighted text from messages
   const [quote, setQuote] = useState<string | null>(null)
 
+  // Ask-sidebar state: a disposable side conversation seeded with highlighted
+  // text. Nothing is persisted unless the user clicks "Open as chat".
+  const [isAskSidebarOpen, setIsAskSidebarOpen] = useState(false)
+
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -652,6 +662,90 @@ export function ChatInterface({
     piiCheckEnabled,
   })
 
+  // Ask sidebar - ephemeral streaming only. Nothing is persisted until the
+  // user clicks "Open as chat", which creates a new real chat seeded with the
+  // sidebar's messages.
+  const sidebarMaxMessages = useMaxMessages()
+  const sidebarChat = useSidebarChat({
+    systemPrompt: finalSystemPrompt,
+    rules: processedRules,
+    models,
+    selectedModel,
+    maxMessages: sidebarMaxMessages,
+    reasoningEffort,
+    webSearchEnabled,
+    piiCheckEnabled,
+  })
+
+  const handleOpenSidebarAsChat = useCallback(async () => {
+    const snapshotMessages = sidebarChat.messages
+    if (snapshotMessages.length === 0) return
+
+    const useCloudStorage = isSignedIn || !isCloudSyncEnabled()
+    const newChatId = generateReverseId().id
+    const newChat: Chat = {
+      id: newChatId,
+      title: 'Untitled',
+      titleState: 'placeholder',
+      messages: snapshotMessages,
+      createdAt: new Date(),
+      isLocalOnly: !isCloudSyncEnabled(),
+      projectId: isProjectMode && activeProject ? activeProject.id : undefined,
+    }
+
+    setIsAskSidebarOpen(false)
+    sidebarChat.reset()
+
+    try {
+      if (useCloudStorage) {
+        await chatStorage.saveChatAndSync(newChat)
+      } else {
+        sessionChatStorage.saveChat(newChat)
+      }
+    } catch (error) {
+      logError('Failed to persist sidebar chat as full chat', error, {
+        component: 'ChatInterface',
+        action: 'handleOpenSidebarAsChat',
+      })
+    }
+
+    // Title generation from the seeded conversation (best effort, non-blocking).
+    const firstUser = snapshotMessages.find((m) => m.role === 'user')
+    const firstAssistant = snapshotMessages.find((m) => m.role === 'assistant')
+    if (firstUser && firstAssistant) {
+      generateTitle([
+        {
+          role: 'user',
+          content: firstUser.quote
+            ? `In reply to:\n${firstUser.quote}\n\n${firstUser.content}`
+            : firstUser.content,
+        },
+        { role: 'assistant', content: firstAssistant.content },
+      ])
+        .then((title) => {
+          if (title && title !== 'Untitled') {
+            updateChatTitle(newChatId, title)
+          }
+        })
+        .catch(() => {})
+    }
+
+    try {
+      await reloadChats()
+    } catch {
+      // non-fatal
+    }
+    handleChatSelect(newChatId)
+  }, [
+    sidebarChat,
+    isSignedIn,
+    isProjectMode,
+    activeProject,
+    reloadChats,
+    handleChatSelect,
+    updateChatTitle,
+  ])
+
   // Sync URL with current chat state
   useEffect(() => {
     // Don't update URL during initial load
@@ -823,13 +917,23 @@ export function ChatInterface({
   useEffect(() => {
     // When window becomes narrow and both types of sidebars are open, close the right one
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-      if (isSidebarOpen && (isVerifierSidebarOpen || isSettingsModalOpen)) {
+      if (
+        isSidebarOpen &&
+        (isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen)
+      ) {
         // Close right sidebars to prioritize left sidebar
         setIsVerifierSidebarOpen(false)
         setIsSettingsModalOpen(false)
+        setIsAskSidebarOpen(false)
       }
     }
-  }, [windowWidth, isSidebarOpen, isVerifierSidebarOpen, isSettingsModalOpen])
+  }, [
+    windowWidth,
+    isSidebarOpen,
+    isVerifierSidebarOpen,
+    isSettingsModalOpen,
+    isAskSidebarOpen,
+  ])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
@@ -1040,9 +1144,11 @@ export function ChatInterface({
       // If already open, close it
       handleSetVerifierSidebarOpen(false)
     } else {
-      // Open verifier and close settings if open
+      // Open verifier and close other right-side panels
       handleSetVerifierSidebarOpen(true)
       setIsSettingsModalOpen(false)
+      setIsAskSidebarOpen(false)
+      sidebarChat.reset()
     }
   }
 
@@ -2067,7 +2173,7 @@ export function ChatInterface({
       {/* Mobile sidebar toggle - only visible when collapsed sidebar rail is hidden */}
       {windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT &&
         !isSidebarOpen &&
-        !(isVerifierSidebarOpen || isSettingsModalOpen) && (
+        !(isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen) && (
           <div className="group relative">
             <button
               className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
@@ -2090,16 +2196,21 @@ export function ChatInterface({
       {/* Right side toggle buttons */}
       {!(
         windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
-        (isSidebarOpen || isVerifierSidebarOpen || isSettingsModalOpen)
+        (isSidebarOpen ||
+          isVerifierSidebarOpen ||
+          isSettingsModalOpen ||
+          isAskSidebarOpen)
       ) && (
         <div
           className="fixed top-4 z-50 flex gap-2 transition-all duration-300"
           style={{
             right:
               windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? isVerifierSidebarOpen
-                  ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
-                  : '16px'
+                ? isAskSidebarOpen
+                  ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX + 24}px`
+                  : isVerifierSidebarOpen
+                    ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
+                    : '16px'
                 : '16px',
           }}
         >
@@ -2319,6 +2430,21 @@ export function ChatInterface({
         isClient={isClient}
       />
 
+      {/* Ask Sidebar - ephemeral side conversation seeded from highlighted text.
+          Discarded on close or on the next "Ask" click. */}
+      <AskSidebar
+        isOpen={isAskSidebarOpen}
+        onClose={() => {
+          setIsAskSidebarOpen(false)
+          sidebarChat.reset()
+        }}
+        onOpenAsChat={handleOpenSidebarAsChat}
+        state={sidebarChat}
+        models={models}
+        selectedModel={selectedModel}
+        isDarkMode={isDarkMode}
+      />
+
       {/* Share Modal */}
       <ShareModalLazy
         isOpen={isShareModalOpen}
@@ -2329,7 +2455,7 @@ export function ChatInterface({
           isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         isRightSidebarOpen={
-          (isVerifierSidebarOpen || isSettingsModalOpen) &&
+          (isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen) &&
           windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         chatTitle={currentChat?.title}
@@ -2368,9 +2494,11 @@ export function ChatInterface({
         style={{
           right:
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? isVerifierSidebarOpen
-                ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
-                : '0'
+              ? isAskSidebarOpen
+                ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX}px`
+                : isVerifierSidebarOpen
+                  ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
+                  : '0'
               : '0',
           bottom: 0,
           left:
@@ -2421,6 +2549,18 @@ export function ChatInterface({
             onQuote={(text) => {
               setQuote(text)
               inputRef.current?.focus()
+            }}
+            onAsk={(text) => {
+              setIsVerifierSidebarOpen(false)
+              setIsSettingsModalOpen(false)
+              if (
+                windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT &&
+                isSidebarOpen
+              ) {
+                setIsSidebarOpen(false)
+              }
+              setIsAskSidebarOpen(true)
+              sidebarChat.askQuote(text)
             }}
           />
           <div
