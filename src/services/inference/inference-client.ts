@@ -24,14 +24,14 @@ import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel, StreamTextResult } from 'ai'
-import { streamText } from 'ai'
+import { Output, generateText, streamText } from 'ai'
+import { z } from 'zod'
 import { ChatQueryBuilder } from './chat-query-builder'
 import {
   getTinfoilAISdk,
   resetTinfoilAISdk,
   type TinfoilProviderHandle,
 } from './tinfoil-ai-sdk'
-import { getTinfoilClient } from './tinfoil-client'
 import {
   createTinfoilSidechannel,
   type TinfoilSidechannel,
@@ -317,43 +317,36 @@ async function getDevSimulatorHandle(updatedMessages: Message[]): Promise<{
   }
 }
 
-// --- Non-streaming structured completion (still uses legacy OpenAI client) ---
+// --- Non-streaming structured completion (Vercel AI SDK) ---
 
-export interface StructuredCompletionParams {
+export interface StructuredCompletionParams<SCHEMA extends z.ZodType> {
   model: BaseModel
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
-  jsonSchema: Record<string, unknown>
+  schema: SCHEMA
   signal?: AbortSignal
 }
 
-export async function sendStructuredCompletion<T>(
-  params: StructuredCompletionParams,
-): Promise<T> {
-  const { model, messages, jsonSchema, signal } = params
+/**
+ * Run a non-streaming completion that is constrained to match `schema` and
+ * return the parsed, typed payload. The schema is passed through to the
+ * provider as a JSON-schema `response_format` and validated client-side via
+ * Zod, so the returned value is always safe to consume without casting.
+ */
+export async function sendStructuredCompletion<SCHEMA extends z.ZodType>(
+  params: StructuredCompletionParams<SCHEMA>,
+): Promise<z.infer<SCHEMA>> {
+  const { model, messages, schema, signal } = params
 
-  const client = await getTinfoilClient()
-  const response = await client.chat.completions.create(
-    {
-      model: model.modelName,
-      messages,
-      stream: false,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          schema: jsonSchema,
-        },
-      },
-    },
-    { signal },
-  )
+  const tinfoil = await getTinfoilAISdk()
 
-  const content = response.choices[0]?.message?.content
-  if (!content) {
-    throw new Error('No content in structured completion response')
-  }
+  const result = await generateText({
+    model: tinfoil.chat(model.modelName),
+    messages,
+    abortSignal: signal,
+    output: Output.object({ schema }),
+  })
 
-  return JSON.parse(content) as T
+  return result.output as z.infer<SCHEMA>
 }
 
 // Keep the handle type exported so the streaming processor can type itself

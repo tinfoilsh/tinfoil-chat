@@ -151,9 +151,7 @@ export async function extractFacts(params: {
     )
 
   try {
-    const result = await sendStructuredCompletion<{
-      operations: FactOperation[]
-    }>({
+    const result = await sendStructuredCompletion({
       model: structuredModel,
       messages: [
         {
@@ -163,7 +161,7 @@ export async function extractFacts(params: {
         },
         { role: 'user', content: prompt },
       ],
-      jsonSchema: FACT_OPERATIONS_SCHEMA,
+      schema: FACT_OPERATIONS_SCHEMA,
       signal,
     })
 
