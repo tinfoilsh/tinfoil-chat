@@ -7,9 +7,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { coerceChartData, isValidChartData } from './chart-utils'
 
 interface AreaChartProps {
-  data: Record<string, string | number>[]
+  data: unknown
   xKey?: string
   yKey?: string
   title?: string
@@ -38,7 +39,8 @@ export function AreaChart({
   title,
   color = '#3b82f6',
 }: AreaChartProps) {
-  const { xKey, yKey } = inferChartKeys(data, xKeyProp, yKeyProp)
+  const rows = coerceChartData(data)
+  const { xKey, yKey } = inferChartKeys(rows, xKeyProp, yKeyProp)
   const gradientId = `area-gradient-${yKey}`
   return (
     <div className="my-3">
@@ -47,7 +49,7 @@ export function AreaChart({
       )}
       <div className="rounded-lg border border-border-subtle p-4">
         <ResponsiveContainer width="100%" height={300}>
-          <RechartsAreaChart data={data}>
+          <RechartsAreaChart data={rows}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={color} stopOpacity={0.35} />
@@ -90,5 +92,5 @@ export function AreaChart({
 export function validateAreaChartProps(
   props: Record<string, unknown>,
 ): boolean {
-  return Array.isArray(props.data) && props.data.length > 0
+  return isValidChartData(props.data)
 }

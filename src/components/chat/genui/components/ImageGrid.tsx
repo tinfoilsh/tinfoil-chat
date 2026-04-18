@@ -1,3 +1,5 @@
+import { coerceArray } from './chart-utils'
+
 interface ImageItem {
   url: string
   alt?: string
@@ -6,18 +8,19 @@ interface ImageItem {
 }
 
 interface ImageGridProps {
-  images: ImageItem[]
+  images: unknown
   title?: string
 }
 
 export function ImageGrid({ images, title }: ImageGridProps) {
+  const items = coerceArray<ImageItem>(images)
   return (
     <div className="my-3">
       {title && (
         <p className="mb-2 text-sm font-medium text-content-primary">{title}</p>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        {images.map((img, i) => {
+        {items.map((img, i) => {
           const Wrapper = img.link ? 'a' : 'div'
           const wrapperProps = img.link
             ? {
@@ -56,9 +59,10 @@ export function ImageGrid({ images, title }: ImageGridProps) {
 export function validateImageGridProps(
   props: Record<string, unknown>,
 ): boolean {
+  const images = coerceArray<unknown>(props.images)
   return (
-    Array.isArray(props.images) &&
-    props.images.every(
+    images.length > 0 &&
+    images.every(
       (i: unknown) =>
         i !== null &&
         typeof i === 'object' &&
