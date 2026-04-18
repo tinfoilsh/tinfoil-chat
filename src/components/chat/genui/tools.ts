@@ -202,6 +202,52 @@ const imageGridInput = z.object({
   title: z.string().optional(),
 })
 
+const renderedImageInput = z.object({
+  source: z
+    .discriminatedUnion('type', [
+      z
+        .object({
+          type: z.literal('url'),
+          url: z.string().describe('Publicly accessible image URL'),
+        })
+        .describe('Reference an image hosted elsewhere'),
+      z
+        .object({
+          type: z.literal('svg'),
+          svg: z.string().describe('Raw SVG markup, e.g. "<svg ...>...</svg>"'),
+        })
+        .describe(
+          'Inline SVG markup — use for generated diagrams, charts, or illustrations',
+        ),
+      z
+        .object({
+          type: z.literal('base64'),
+          data: z
+            .string()
+            .describe('Base64-encoded image bytes (no data: prefix)'),
+          mimeType: z
+            .string()
+            .describe('MIME type, e.g. "image/png" or "image/jpeg"'),
+        })
+        .describe('Inline raster image as base64'),
+      z
+        .object({
+          type: z.literal('mermaid'),
+          code: z
+            .string()
+            .describe(
+              'Mermaid diagram source (graph, sequence, flowchart, etc.)',
+            ),
+        })
+        .describe('Render a Mermaid diagram from source code'),
+    ])
+    .describe(
+      'Image source — choose url for hosted images, svg for inline SVG, base64 for raw bytes, mermaid for diagrams.',
+    ),
+  alt: z.string().optional().describe('Alt text for accessibility'),
+  caption: z.string().optional().describe('Caption shown below the image'),
+})
+
 /**
  * Tool map passed to `streamText({ tools })`. Tool results are rendered by
  * the component registry; we do not declare `execute` because the tools are
@@ -287,6 +333,11 @@ export const GENUI_TOOLS = {
     description:
       'Display a gallery of images in a responsive grid. Use for visual search results or photo collections.',
     inputSchema: imageGridInput,
+  }),
+  render_image: tool({
+    description:
+      'Render a single image or diagram. Accepts hosted URLs, inline SVG, base64 image bytes, or Mermaid diagram source. Use this to generate visual diagrams, illustrations, or highlight a single hero image — not for galleries (use render_image_grid) or link cards (use render_link_preview).',
+    inputSchema: renderedImageInput,
   }),
 } as const
 
