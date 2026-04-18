@@ -154,6 +154,17 @@ export class ChatQueryBuilder {
     | Array<{ type: string; text?: string; image_url?: { url: string } }> {
     let textContent = msg.content
 
+    // Prepend the quoted reference so the model knows what the user is replying to.
+    if (msg.quote) {
+      const quoted = msg.quote
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n')
+      textContent = textContent
+        ? `In reply to:\n${quoted}\n\n${textContent}`
+        : `In reply to:\n${quoted}`
+    }
+
     // Derive document content from attachments (or legacy fields via helpers)
     const docAttachments = getMessageDocuments(msg)
     if (docAttachments.length > 0) {

@@ -86,6 +86,7 @@ import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useReasoningEffort } from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
+import { QuoteSelectionPopover } from './quote-selection-popover'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
@@ -407,6 +408,9 @@ export function ChatInterface({
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([])
+
+  // Quote state for highlighted text from messages
+  const [quote, setQuote] = useState<string | null>(null)
 
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
@@ -1622,8 +1626,8 @@ export function ChatInterface({
 
     const messageText = input.trim()
 
-    // Don't proceed if there's no input text and no documents
-    if (!messageText && completedDocuments.length === 0) {
+    // Don't proceed if there's no input text, no quote, and no documents
+    if (!messageText && !quote && completedDocuments.length === 0) {
       return
     }
 
@@ -1652,10 +1656,21 @@ export function ChatInterface({
         )
       })
 
-    handleQuery(messageText, attachments.length > 0 ? attachments : undefined)
+    handleQuery(
+      messageText,
+      attachments.length > 0 ? attachments : undefined,
+      undefined,
+      undefined,
+      quote ?? undefined,
+    )
 
     if (rateLimit) {
       snapshotAndDecrementRemaining()
+    }
+
+    // Clear the quote after submission
+    if (quote) {
+      setQuote(null)
     }
 
     // Keep documents that are still uploading or generating descriptions
@@ -2401,6 +2416,13 @@ export function ChatInterface({
           )}
 
           {/* Messages Area */}
+          <QuoteSelectionPopover
+            containerRef={scrollContainerRef}
+            onQuote={(text) => {
+              setQuote(text)
+              inputRef.current?.focus()
+            }}
+          />
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
@@ -2471,6 +2493,8 @@ export function ChatInterface({
                     processedDocuments={processedDocuments}
                     removeDocument={removeDocument}
                     isPremium={isPremium}
+                    quote={quote}
+                    onClearQuote={() => setQuote(null)}
                     hasMessages={
                       currentChat?.messages && currentChat.messages.length > 0
                     }
@@ -2643,6 +2667,3 @@ export function ChatInterface({
     </div>
   )
 }
-
-// Default export as well
-export default ChatInterface

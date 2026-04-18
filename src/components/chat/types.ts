@@ -62,6 +62,7 @@ export type Message = {
   webSearchBeforeThinking?: boolean // True if web search started before thinking
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
+  quote?: string // Highlighted text the user is replying to
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'

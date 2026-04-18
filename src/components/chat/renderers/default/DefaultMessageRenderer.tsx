@@ -1,11 +1,12 @@
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
+  ArrowUturnLeftIcon,
   ChevronDownIcon,
   InformationCircleIcon,
   PencilSquareIcon,
 } from '@heroicons/react/24/outline'
-import React, { memo } from 'react'
+import React, { memo, useState } from 'react'
 import { BsCheckLg } from 'react-icons/bs'
 import { GoClockFill } from 'react-icons/go'
 import { RxCopy } from 'react-icons/rx'
@@ -127,6 +128,14 @@ const DefaultMessageComponent = ({
   }, [message.content, isUser, isLastMessage, showActions])
 
   const USER_MESSAGE_MAX_HEIGHT = 150
+  const QUOTE_PREVIEW_MAX_LENGTH = 240
+  const [isQuoteExpanded, setIsQuoteExpanded] = useState(false)
+  const shouldTruncateQuote =
+    !!message.quote && message.quote.length > QUOTE_PREVIEW_MAX_LENGTH
+  const displayedQuote =
+    message.quote && shouldTruncateQuote && !isQuoteExpanded
+      ? `${message.quote.slice(0, QUOTE_PREVIEW_MAX_LENGTH).trimEnd()}…`
+      : (message.quote ?? '')
 
   React.useEffect(() => {
     if (isUser && userMessageContentRef.current) {
@@ -204,6 +213,34 @@ const DefaultMessageComponent = ({
       className={`relative mx-auto flex w-full max-w-3xl flex-col ${isUser ? 'items-end' : 'items-start'} group mb-6`}
       data-message-role={message.role}
     >
+      {/* Display the quoted reply preview above the user's message */}
+      {isUser && message.quote && !isEditing && (
+        <div className="flex w-full justify-end px-4 pb-1 pt-2">
+          <div className="flex max-w-[95%] items-start gap-2 opacity-70">
+            <ArrowUturnLeftIcon className="mt-1 h-3.5 w-3.5 flex-shrink-0 text-content-secondary" />
+            <div className="min-w-0">
+              <p
+                className={cn(
+                  'whitespace-pre-wrap text-sm italic text-content-secondary',
+                  !isQuoteExpanded && 'line-clamp-3',
+                )}
+              >
+                {displayedQuote}
+              </p>
+              {shouldTruncateQuote && (
+                <button
+                  type="button"
+                  onClick={() => setIsQuoteExpanded((prev) => !prev)}
+                  className="mt-0.5 text-xs font-medium text-content-secondary underline-offset-2 transition-colors hover:text-content-primary hover:underline"
+                >
+                  {isQuoteExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Display documents and images for user messages */}
       {isUser && hasMessageAttachments(message) && (
         <DocumentList

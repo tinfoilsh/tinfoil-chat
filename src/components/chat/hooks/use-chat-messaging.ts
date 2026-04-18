@@ -69,6 +69,7 @@ interface UseChatMessagingReturn {
     attachments?: import('@/components/chat/types').Attachment[],
     systemPromptOverride?: string,
     baseMessages?: Message[],
+    quote?: string,
   ) => void
   cancelGeneration: () => Promise<void>
   editMessage: (messageIndex: number, newContent: string) => void
@@ -224,10 +225,14 @@ export function useChatMessaging({
       attachments?: import('@/components/chat/types').Attachment[],
       systemPromptOverride?: string,
       baseMessages?: Message[],
+      quote?: string,
     ) => {
-      // Allow empty query if systemPromptOverride or attachments are provided
+      // Allow empty query if systemPromptOverride, attachments, or a quote are provided
       if (
-        (!query.trim() && !systemPromptOverride && !attachments?.length) ||
+        (!query.trim() &&
+          !systemPromptOverride &&
+          !attachments?.length &&
+          !quote) ||
         loadingState !== 'idle'
       )
         return
@@ -258,7 +263,9 @@ export function useChatMessaging({
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
       const hasUserContent =
-        query.trim() !== '' || (attachments && attachments.length > 0)
+        query.trim() !== '' ||
+        (attachments && attachments.length > 0) ||
+        Boolean(quote)
 
       const userMessage: Message | null = hasUserContent
         ? {
@@ -267,6 +274,7 @@ export function useChatMessaging({
             attachments:
               attachments && attachments.length > 0 ? attachments : undefined,
             timestamp: new Date(),
+            quote: quote || undefined,
           }
         : null
 
