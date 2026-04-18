@@ -1,9 +1,6 @@
 import { cn } from '@/components/ui/utils'
 import { type BaseModel } from '@/config/models'
-import {
-  ArrowTopRightOnSquareIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline'
+import { XMarkIcon } from '@heroicons/react/24/outline'
 import { memo } from 'react'
 import { PiChatCircleText } from 'react-icons/pi'
 import { LoadingDots } from '../loading-dots'
@@ -15,7 +12,6 @@ import type { AIModel, Message } from './types'
 type AskSidebarProps = {
   isOpen: boolean
   onClose: () => void
-  onOpenAsChat: () => void
   state: SidebarChatState
   models: BaseModel[]
   selectedModel: AIModel
@@ -56,16 +52,13 @@ const SidebarMessage = memo(function SidebarMessage({
 export function AskSidebar({
   isOpen,
   onClose,
-  onOpenAsChat,
   state,
   models,
   selectedModel,
   isDarkMode,
 }: AskSidebarProps) {
-  const { messages, isWaitingForResponse, isStreaming, loadingState } = state
+  const { messages, isWaitingForResponse, isStreaming } = state
   const hasMessages = messages.length > 0
-  const hasAssistantReply = messages.some((m) => m.role === 'assistant')
-  const canOpenAsChat = hasAssistantReply && loadingState === 'idle'
   const currentModel =
     models.find((m) => m.modelName === selectedModel) || models[0]
 
@@ -94,26 +87,14 @@ export function AskSidebar({
             <PiChatCircleText className="h-5 w-5" />
             <span className="text-sm font-medium">Ask</span>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onOpenAsChat}
-              disabled={!canOpenAsChat}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-chat px-2.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat-background disabled:cursor-not-allowed disabled:opacity-40"
-              title="Open as a new chat"
-            >
-              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-              <span>Open as chat</span>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle bg-surface-chat text-content-secondary transition-colors hover:bg-surface-chat-background"
-              aria-label="Close ask sidebar"
-            >
-              <XMarkIcon className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle bg-surface-chat text-content-secondary transition-colors hover:bg-surface-chat-background"
+            aria-label="Close ask sidebar"
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Messages area */}
