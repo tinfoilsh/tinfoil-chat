@@ -1,6 +1,19 @@
+/**
+ * Inference client — Vercel AI SDK implementation.
+ *
+ * Streams chat completions through a verified Tinfoil enclave (via
+ * `SecureClient` + pinned fetch) using `streamText`. Tinfoil-specific SSE
+ * events (web search, URL fetches, url_citation annotations, search_reasoning)
+ * are routed through a pre-parser into a sidechannel so the AI SDK only sees
+ * OpenAI-compliant chunks.
+ *
+ * The dev-simulator model routes to a local HTTP endpoint using the same
+ * AI SDK pipeline via a fetch override.
+ */
 import { ChatError } from '@/components/chat/chat-utils'
 import { CONSTANTS } from '@/components/chat/constants'
-import { GENUI_TOOL_DEFINITIONS } from '@/components/chat/genui/registry'
+import type { GENUI_TOOLS as GenUIToolSet } from '@/components/chat/genui/tools'
+import { GENUI_TOOLS } from '@/components/chat/genui/tools'
 import {
   isReasoningModel,
   type ReasoningEffort,
@@ -9,8 +22,20 @@ import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import type { LanguageModel, StreamTextResult } from 'ai'
+import { streamText } from 'ai'
 import { ChatQueryBuilder } from './chat-query-builder'
+import {
+  getTinfoilAISdk,
+  resetTinfoilAISdk,
+  type TinfoilProviderHandle,
+} from './tinfoil-ai-sdk'
 import { getTinfoilClient } from './tinfoil-client'
+import {
+  createTinfoilSidechannel,
+  type TinfoilSidechannel,
+} from './tinfoil-sse-preparser'
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -67,8 +92,6 @@ function isRetryableError(error: unknown): boolean {
     return true
   }
 
-  // Default to not retrying - only explicitly identified conditions should trigger retries
-  // This prevents unnecessary retries for client errors (4xx) which won't succeed on retry
   return false
 }
 
@@ -85,9 +108,23 @@ export interface SendChatStreamParams {
   piiCheckEnabled?: boolean
 }
 
+/**
+ * The concrete tool set used for chat streaming (the GenUI tools).
+ */
+export type GenUITools = typeof GenUIToolSet
+
+/**
+ * A handle returned by `sendChatStream` that exposes the AI SDK stream plus
+ * Tinfoil's sidechannel for custom SSE events.
+ */
+export interface ChatStreamHandle {
+  result: StreamTextResult<GenUITools, never>
+  sidechannel: TinfoilSidechannel
+}
+
 export async function sendChatStream(
   params: SendChatStreamParams,
-): Promise<Response> {
+): Promise<ChatStreamHandle> {
   const {
     model,
     systemPrompt,
@@ -101,114 +138,6 @@ export async function sendChatStream(
     piiCheckEnabled,
   } = params
 
-  if (model.modelName === 'dev-simulator') {
-    const simulatorUrl = '/api/dev/simulator'
-    const messages = ChatQueryBuilder.buildMessages({
-      model,
-      systemPrompt,
-      rules,
-      messages: updatedMessages,
-      maxMessages,
-    })
-
-    // Get the last user message for retry test check
-    const lastUserMessage = updatedMessages
-      .filter((m) => m.role === 'user')
-      .pop()
-    const queryText = lastUserMessage?.content || ''
-
-    let lastError: unknown = null
-    const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (signal.aborted) {
-        throw new DOMException('Aborted', 'AbortError')
-      }
-
-      try {
-        // Check if this is a retry test that should fail
-        if (shouldRetryTestFail(queryText)) {
-          throw new Error('Simulated network error for retry testing')
-        }
-
-        const response = await fetch(simulatorUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: model.modelName,
-            messages,
-            stream: true,
-          }),
-          signal,
-        })
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new ChatError(
-              'Dev simulator is only available in development environment',
-              'FETCH_ERROR',
-            )
-          }
-          throw new ChatError(
-            `Server returned ${response.status}: ${response.statusText}`,
-            'FETCH_ERROR',
-          )
-        }
-
-        return response
-      } catch (err: unknown) {
-        lastError = err
-        const anyErr = err as any
-
-        if (
-          (typeof DOMException !== 'undefined' &&
-            anyErr instanceof DOMException &&
-            anyErr.name === 'AbortError') ||
-          anyErr?.name === 'AbortError'
-        ) {
-          throw err
-        }
-
-        // Check if we should retry
-        if (attempt < maxRetries && isRetryableError(err)) {
-          const backoffDelay =
-            CONSTANTS.MESSAGE_SEND_RETRY_DELAY_MS * Math.pow(2, attempt)
-
-          logInfo('Retrying dev simulator request', {
-            component: 'inference-client',
-            action: 'sendChatStream.devSimulator',
-            metadata: {
-              attempt: attempt + 1,
-              maxRetries,
-              delayMs: backoffDelay,
-              error: anyErr?.message,
-            },
-          })
-
-          onRetry?.(attempt + 1, maxRetries, anyErr?.message)
-
-          await delay(backoffDelay)
-          continue
-        }
-
-        if (err instanceof ChatError) {
-          throw err
-        }
-
-        const msg = anyErr?.message || 'Unknown network error'
-        throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
-      }
-    }
-
-    // Fallback if loop completes without returning
-    const anyErr = lastError as any
-    const msg = anyErr?.message || 'Unknown network error'
-    throw new ChatError(
-      `Network request failed after ${maxRetries} retries: ${msg}`,
-      'FETCH_ERROR',
-    )
-  }
-
   const messages = ChatQueryBuilder.buildMessages({
     model,
     systemPrompt,
@@ -221,19 +150,17 @@ export async function sendChatStream(
   const maxRetries = CONSTANTS.MESSAGE_SEND_MAX_RETRIES
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    // Check if aborted before attempting
     if (signal.aborted) {
       throw new DOMException('Aborted', 'AbortError')
     }
 
-    // Wait for connection if offline (except for first attempt)
+    // Wait for connection if offline (except first attempt)
     if (attempt > 0 && !isOnline()) {
       logInfo('Waiting for internet connection before retry', {
         component: 'inference-client',
         action: 'sendChatStream',
         metadata: { attempt, maxRetries },
       })
-      // Wait up to 10 seconds for connection to return
       const connectionWaitStart = Date.now()
       while (!isOnline() && Date.now() - connectionWaitStart < 10000) {
         if (signal.aborted) {
@@ -244,63 +171,52 @@ export async function sendChatStream(
     }
 
     try {
-      // Build request body
-      const requestBody: Record<string, unknown> = {
-        model: model.modelName,
-        messages,
-        stream: true,
+      let handle: { model: LanguageModel; sidechannel: TinfoilSidechannel }
+
+      if (model.modelName === 'dev-simulator') {
+        // Dev simulator — use an OpenAI-compatible provider pointed at the
+        // local simulator endpoint. We use a sidechannel for parity even
+        // though the simulator does not emit Tinfoil events.
+        handle = await getDevSimulatorHandle(updatedMessages)
+      } else {
+        const tinfoil = await getTinfoilAISdk({
+          extensions: {
+            webSearch: webSearchEnabled,
+            piiCheck: piiCheckEnabled,
+          },
+        })
+        handle = {
+          model: tinfoil.chat(model.modelName),
+          sidechannel: tinfoil.sidechannel,
+        }
       }
+
+      const providerOptions: Record<string, Record<string, string>> = {}
       if (isReasoningModel(model.modelName) && reasoningEffort) {
-        requestBody.reasoning_effort = reasoningEffort
+        providerOptions.tinfoil = { reasoningEffort }
       }
-      if (webSearchEnabled) {
-        requestBody.web_search_options = {}
-      }
-      if (piiCheckEnabled) {
-        requestBody.pii_check_options = {}
-      }
-      requestBody.tools = GENUI_TOOL_DEFINITIONS
-      requestBody.tool_choice = 'auto'
 
-      const client = await getTinfoilClient()
-
-      const stream: any = await (client.chat.completions.create as Function)(
-        requestBody,
-        { signal },
-      )
-
-      const encoder = new TextEncoder()
-      const readableStream = new ReadableStream({
-        async start(controller) {
-          try {
-            for await (const chunk of stream) {
-              if (signal.aborted) {
-                controller.close()
-                return
-              }
-              const sseData = `data: ${JSON.stringify(chunk)}\n\n`
-              controller.enqueue(encoder.encode(sseData))
-            }
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-            controller.close()
-          } catch (error) {
-            logError('Stream processing error', error, {
-              component: 'inference-client',
-              action: 'sendChatStream',
-            })
-            controller.error(error)
-          }
+      const result = streamText({
+        model: handle.model,
+        messages,
+        tools: GENUI_TOOLS,
+        toolChoice: 'auto',
+        abortSignal: signal,
+        providerOptions:
+          Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
+        onError: ({ error }) => {
+          logError('streamText internal error', error, {
+            component: 'inference-client',
+            action: 'sendChatStream.onError',
+          })
         },
       })
 
-      return new Response(readableStream, {
-        headers: { 'Content-Type': 'text/event-stream' },
-      })
+      return { result, sidechannel: handle.sidechannel }
     } catch (err: unknown) {
       lastError = err
       const anyErr = err as any
 
-      // Don't retry aborted requests
       if (
         (typeof DOMException !== 'undefined' &&
           anyErr instanceof DOMException &&
@@ -310,7 +226,11 @@ export async function sendChatStream(
         throw err
       }
 
-      // Check if we should retry
+      // On auth errors, reset the provider so the next attempt gets a fresh token.
+      if (anyErr?.status === 401 || anyErr?.statusCode === 401) {
+        resetTinfoilAISdk()
+      }
+
       if (attempt < maxRetries && isRetryableError(err)) {
         const backoffDelay =
           CONSTANTS.MESSAGE_SEND_RETRY_DELAY_MS * Math.pow(2, attempt)
@@ -326,14 +246,12 @@ export async function sendChatStream(
           },
         })
 
-        // Notify caller that we're retrying
-        onRetry?.(attempt + 1, maxRetries)
+        onRetry?.(attempt + 1, maxRetries, anyErr?.message)
 
         await delay(backoffDelay)
         continue
       }
 
-      // Log final failure
       logError('Chat stream request failed after retries', err, {
         component: 'inference-client',
         action: 'sendChatStream',
@@ -345,12 +263,15 @@ export async function sendChatStream(
         },
       })
 
+      if (err instanceof ChatError) {
+        throw err
+      }
+
       const msg = anyErr?.message || 'Unknown network error'
       throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
     }
   }
 
-  // This should not be reached, but just in case
   const anyErr = lastError as any
   const msg = anyErr?.message || 'Unknown network error'
   throw new ChatError(
@@ -358,6 +279,45 @@ export async function sendChatStream(
     'FETCH_ERROR',
   )
 }
+
+/**
+ * Build a LanguageModel pointed at the local dev-simulator HTTP endpoint.
+ * The simulator returns plain OpenAI SSE so we can reuse the AI SDK's
+ * openai-compatible chat model with a fetch override.
+ */
+async function getDevSimulatorHandle(updatedMessages: Message[]): Promise<{
+  model: LanguageModel
+  sidechannel: TinfoilSidechannel
+}> {
+  const lastUserMessage = updatedMessages.filter((m) => m.role === 'user').pop()
+  const queryText = lastUserMessage?.content || ''
+  if (shouldRetryTestFail(queryText)) {
+    throw new Error('Simulated network error for retry testing')
+  }
+
+  const simulatorFetch: typeof fetch = async (_input, init) => {
+    return fetch('/api/dev/simulator', {
+      method: init?.method ?? 'POST',
+      headers: init?.headers,
+      body: init?.body,
+      signal: init?.signal,
+    })
+  }
+
+  const provider = createOpenAICompatible({
+    name: 'dev-simulator',
+    baseURL: 'http://localhost/mock/v1',
+    fetch: simulatorFetch,
+  })
+
+  return {
+    model: provider.chatModel('dev-simulator'),
+    // Simulator never emits Tinfoil events — sidechannel exists for API parity.
+    sidechannel: createTinfoilSidechannel(),
+  }
+}
+
+// --- Non-streaming structured completion (still uses legacy OpenAI client) ---
 
 export interface StructuredCompletionParams {
   model: BaseModel
@@ -385,9 +345,7 @@ export async function sendStructuredCompletion<T>(
         },
       },
     },
-    {
-      signal,
-    },
+    { signal },
   )
 
   const content = response.choices[0]?.message?.content
@@ -397,3 +355,7 @@ export async function sendStructuredCompletion<T>(
 
   return JSON.parse(content) as T
 }
+
+// Keep the handle type exported so the streaming processor can type itself
+// without creating a circular import.
+export type { TinfoilProviderHandle }
