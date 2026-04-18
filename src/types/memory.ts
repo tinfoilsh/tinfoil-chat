@@ -2,6 +2,7 @@
  * Memory types for the factoid-based memory system
  * Extracts and stores discrete facts/preferences from user messages
  */
+import { z } from 'zod'
 
 export interface Fact {
   id: string // unique identifier
@@ -35,59 +36,43 @@ export interface ExtractFactsResult {
   processedCount: number
 }
 
-export const FACT_OPERATIONS_SCHEMA = {
-  type: 'object',
-  properties: {
-    operations: {
-      type: 'array',
-      items: {
-        type: 'object',
-        oneOf: [
-          {
-            properties: {
-              action: { type: 'string', const: 'add' },
-              fact: {
-                type: 'object',
-                properties: {
-                  fact: { type: 'string' },
-                  date: { type: 'string' },
-                  category: { type: 'string' },
-                  confidence: { type: 'number' },
-                },
-                required: ['fact', 'date', 'category', 'confidence'],
-              },
-            },
-            required: ['action', 'fact'],
-          },
-          {
-            properties: {
-              action: { type: 'string', const: 'update' },
-              factId: { type: 'string' },
-              updates: {
-                type: 'object',
-                properties: {
-                  fact: { type: 'string' },
-                  category: { type: 'string' },
-                  confidence: { type: 'number' },
-                },
-              },
-            },
-            required: ['action', 'factId', 'updates'],
-          },
-          {
-            properties: {
-              action: { type: 'string', const: 'delete' },
-              factId: { type: 'string' },
-              reason: { type: 'string' },
-            },
-            required: ['action', 'factId', 'reason'],
-          },
-        ],
-      },
-    },
-  },
-  required: ['operations'],
-}
+const factAddSchema = z.object({
+  action: z.literal('add'),
+  fact: z.object({
+    fact: z.string(),
+    date: z.string(),
+    category: z.string(),
+    confidence: z.number(),
+  }),
+})
+
+const factUpdateSchema = z.object({
+  action: z.literal('update'),
+  factId: z.string(),
+  updates: z.object({
+    fact: z.string().optional(),
+    category: z.string().optional(),
+    confidence: z.number().optional(),
+  }),
+})
+
+const factDeleteSchema = z.object({
+  action: z.literal('delete'),
+  factId: z.string(),
+  reason: z.string(),
+})
+
+export const FACT_OPERATIONS_SCHEMA = z.object({
+  operations: z.array(
+    z.discriminatedUnion('action', [
+      factAddSchema,
+      factUpdateSchema,
+      factDeleteSchema,
+    ]),
+  ),
+})
+
+export type FactOperationsPayload = z.infer<typeof FACT_OPERATIONS_SCHEMA>
 
 export const MAX_FACTS = 500
 export const MIN_WORD_COUNT = 5
