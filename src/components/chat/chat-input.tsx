@@ -23,6 +23,7 @@ import {
   PiGlobeX,
   PiPaperclipLight,
   PiPlusLight,
+  PiQuotes,
   PiSpinner,
 } from 'react-icons/pi'
 import { MacFileIcon } from './components/mac-file-icon'
@@ -50,7 +51,12 @@ type ChatInputProps = {
   modelSelectorButton?: React.ReactNode
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  quote?: string | null
+  onClearQuote?: () => void
 }
+
+// Maximum number of characters displayed in the collapsed quote preview.
+const QUOTE_PREVIEW_MAX_LENGTH = 240
 
 export function ChatInput({
   input,
@@ -71,6 +77,8 @@ export function ChatInput({
   modelSelectorButton,
   webSearchEnabled,
   onWebSearchToggle,
+  quote,
+  onClearQuote,
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const documentsScrollRef = useRef<HTMLDivElement>(null)
@@ -455,6 +463,38 @@ export function ChatInput({
             }
           />
 
+          {quote && (
+            <div className="mb-3 mt-1 flex items-start gap-2 rounded-2xl border border-border-subtle bg-surface-chat-background px-3 py-2">
+              <PiQuotes className="mt-0.5 h-4 w-4 flex-shrink-0 text-content-secondary" />
+              <p className="line-clamp-3 flex-1 whitespace-pre-wrap text-sm text-content-secondary">
+                {quote.length > QUOTE_PREVIEW_MAX_LENGTH
+                  ? `${quote.slice(0, QUOTE_PREVIEW_MAX_LENGTH).trimEnd()}…`
+                  : quote}
+              </p>
+              {onClearQuote && (
+                <button
+                  type="button"
+                  onClick={onClearQuote}
+                  aria-label="Remove quote"
+                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3.5 w-3.5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+
           {processedDocuments && processedDocuments.length > 0 && (
             <div
               ref={documentsScrollRef}
@@ -709,10 +749,11 @@ export function ChatInput({
                     (doc) => !doc.isUploading && !doc.isGeneratingDescription,
                   )
                 const hasInput = input.trim().length > 0
+                const hasQuote = Boolean(quote)
                 if (
                   loadingState === 'idle' &&
                   !isTranscribing &&
-                  (hasInput || hasDocuments)
+                  (hasInput || hasDocuments || hasQuote)
                 ) {
                   shouldRemountOnClearRef.current = true
                   handleSubmit(e)
@@ -987,6 +1028,7 @@ export function ChatInput({
                   loadingState !== 'retrying' &&
                   (isTranscribing ||
                     (!input.trim() &&
+                      !quote &&
                       (!processedDocuments ||
                         !processedDocuments.some(
                           (doc) =>
