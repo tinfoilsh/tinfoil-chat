@@ -95,13 +95,12 @@ export async function processStreamingResponse(
   let collectedAnnotations: Annotation[] = []
   let urlFetches: URLFetchState[] = []
   let webSearchState: WebSearchState | undefined = undefined
-  let webSearchStarted = false
   let thinkingStarted = false
   let searchReasoning = ''
 
   const toolCallsInProgress = new Map<
     string,
-    { id: string; name: string; arguments: string }
+    { id: string; name: string; arguments: string; input?: unknown }
   >()
 
   const getMessageWithCitations = (): Message => {
@@ -185,7 +184,6 @@ export async function processStreamingResponse(
       if (event.type === 'web_search_call') {
         const searchQuery = event.query
         if (event.status === 'in_progress' && searchQuery) {
-          webSearchStarted = true
           webSearchState = { query: searchQuery, status: 'searching' }
           assistantMessage = {
             ...assistantMessage,
@@ -211,7 +209,6 @@ export async function processStreamingResponse(
           assistantMessage = { ...assistantMessage, webSearch: webSearchState }
           scheduleStreamingUpdate()
         } else if (event.status === 'blocked') {
-          webSearchStarted = true
           webSearchState = {
             query: searchQuery,
             status: 'blocked',
@@ -400,6 +397,12 @@ export async function processStreamingResponse(
           break
 
         case 'tool-call': {
+          // The AI SDK delivers the final tool input as a typed object. Keep
+          // `arguments` as the canonical string (for persistence) but also
+          // store the pre-parsed value on `input` so the renderer doesn't
+          // re-parse on every frame.
+          const parsedInput: unknown =
+            typeof part.input === 'string' ? undefined : part.input
           const finalArgs =
             typeof part.input === 'string'
               ? part.input
@@ -408,11 +411,13 @@ export async function processStreamingResponse(
           if (existing) {
             existing.name = part.toolName
             existing.arguments = finalArgs
+            existing.input = parsedInput
           } else {
             toolCallsInProgress.set(part.toolCallId, {
               id: part.toolCallId,
               name: part.toolName,
               arguments: finalArgs,
+              input: parsedInput,
             })
           }
           assistantMessage = {
@@ -485,10 +490,6 @@ export async function processStreamingResponse(
     ctx.thinkingStartTimeRef.current = null
     ctx.setIsWaitingForResponse(false)
   }
-
-  // Reference webSearchStarted to silence unused-var lint; its transitions
-  // above still matter for webSearchBeforeThinking ordering.
-  void webSearchStarted
 
   return assistantMessage
 }
