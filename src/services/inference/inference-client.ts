@@ -23,6 +23,7 @@ import type { BaseModel } from '@/config/models'
 import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import type { LanguageModel, StreamTextResult } from 'ai'
 import { Output, generateText, streamText } from 'ai'
 import { z } from 'zod'
@@ -45,52 +46,40 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+interface ErrorShape {
+  name?: string
+  message?: string
+  status?: number
+  statusCode?: number
+  stack?: string
+}
+
+function toErrorShape(error: unknown): ErrorShape {
+  if (error && typeof error === 'object') {
+    return error as ErrorShape
+  }
+  return {}
+}
+
+function isAbortError(error: unknown): boolean {
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+  return toErrorShape(error).name === 'AbortError'
+}
+
 function isRetryableError(error: unknown): boolean {
-  const anyErr = error as any
+  if (isAbortError(error)) return false
 
-  // Don't retry user-initiated aborts
-  if (
-    (typeof DOMException !== 'undefined' &&
-      anyErr instanceof DOMException &&
-      anyErr.name === 'AbortError') ||
-    anyErr?.name === 'AbortError'
-  ) {
-    return false
-  }
+  const { message, status } = toErrorShape(error)
 
-  // Retry network errors
-  if (
-    anyErr?.message?.includes('network') ||
-    anyErr?.message?.includes('fetch')
-  ) {
+  if (message?.includes('network') || message?.includes('fetch')) return true
+  if (message?.includes('connection') || message?.includes('ECONNRESET'))
     return true
-  }
-
-  // Retry connection errors
-  if (
-    anyErr?.message?.includes('connection') ||
-    anyErr?.message?.includes('ECONNRESET')
-  ) {
+  if (message?.includes('timeout') || message?.includes('ETIMEDOUT'))
     return true
-  }
-
-  // Retry timeout errors
-  if (
-    anyErr?.message?.includes('timeout') ||
-    anyErr?.message?.includes('ETIMEDOUT')
-  ) {
-    return true
-  }
-
-  // Retry 5xx server errors
-  if (anyErr?.status >= 500 && anyErr?.status < 600) {
-    return true
-  }
-
-  // Retry 429 rate limit errors
-  if (anyErr?.status === 429) {
-    return true
-  }
+  if (typeof status === 'number' && status >= 500 && status < 600) return true
+  if (status === 429) return true
 
   return false
 }
@@ -191,7 +180,7 @@ export async function sendChatStream(
         }
       }
 
-      const providerOptions: Record<string, Record<string, string>> = {}
+      const providerOptions: ProviderOptions = {}
       if (isReasoningModel(model.modelName) && reasoningEffort) {
         providerOptions.tinfoil = { reasoningEffort }
       }
@@ -215,19 +204,15 @@ export async function sendChatStream(
       return { result, sidechannel: handle.sidechannel }
     } catch (err: unknown) {
       lastError = err
-      const anyErr = err as any
 
-      if (
-        (typeof DOMException !== 'undefined' &&
-          anyErr instanceof DOMException &&
-          anyErr.name === 'AbortError') ||
-        anyErr?.name === 'AbortError'
-      ) {
+      if (isAbortError(err)) {
         throw err
       }
 
+      const shape = toErrorShape(err)
+
       // On auth errors, reset the provider so the next attempt gets a fresh token.
-      if (anyErr?.status === 401 || anyErr?.statusCode === 401) {
+      if (shape.status === 401 || shape.statusCode === 401) {
         resetTinfoilAISdk()
       }
 
@@ -242,11 +227,11 @@ export async function sendChatStream(
             attempt: attempt + 1,
             maxRetries,
             delayMs: backoffDelay,
-            error: anyErr?.message,
+            error: shape.message,
           },
         })
 
-        onRetry?.(attempt + 1, maxRetries, anyErr?.message)
+        onRetry?.(attempt + 1, maxRetries, shape.message)
 
         await delay(backoffDelay)
         continue
@@ -258,8 +243,8 @@ export async function sendChatStream(
         metadata: {
           model: model.modelName,
           attempts: attempt + 1,
-          error: anyErr?.message,
-          stack: anyErr?.stack,
+          error: shape.message,
+          stack: shape.stack,
         },
       })
 
@@ -267,13 +252,12 @@ export async function sendChatStream(
         throw err
       }
 
-      const msg = anyErr?.message || 'Unknown network error'
+      const msg = shape.message || 'Unknown network error'
       throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
     }
   }
 
-  const anyErr = lastError as any
-  const msg = anyErr?.message || 'Unknown network error'
+  const msg = toErrorShape(lastError).message || 'Unknown network error'
   throw new ChatError(
     `Network request failed after ${maxRetries} retries: ${msg}`,
     'FETCH_ERROR',
