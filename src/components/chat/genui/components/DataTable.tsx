@@ -1,4 +1,4 @@
-import { coerceArray } from './chart-utils'
+import { coerceArray } from './input-coercion'
 
 interface DataTableProps {
   columns: unknown
