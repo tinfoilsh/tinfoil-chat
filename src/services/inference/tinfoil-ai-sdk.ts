@@ -8,8 +8,8 @@
  * caller is expected to call `resetTinfoilAISdk()` and retry.
  *
  * The fetch passed to the provider is wrapped by the Tinfoil SSE pre-parser so
- * non-OpenAI events (web search, URL fetches, url_citation annotations, inline
- * `<think>` tags) are peeled off into a side-channel before the AI SDK parses
+ * non-OpenAI events (web search, URL fetches, url_citation annotations,
+ * search_reasoning) are peeled off into a side-channel before the AI SDK parses
  * the stream.
  */
 import { logError } from '@/utils/error-handling'

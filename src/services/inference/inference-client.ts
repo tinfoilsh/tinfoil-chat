@@ -3,9 +3,9 @@
  *
  * Streams chat completions through a verified Tinfoil enclave (via
  * `SecureClient` + pinned fetch) using `streamText`. Tinfoil-specific SSE
- * events (web search, URL fetches, url_citation annotations, inline `<think>`
- * tags) are routed through a pre-parser into a sidechannel so the AI SDK only
- * sees OpenAI-compliant chunks.
+ * events (web search, URL fetches, url_citation annotations, search_reasoning)
+ * are routed through a pre-parser into a sidechannel so the AI SDK only sees
+ * OpenAI-compliant chunks.
  *
  * The dev-simulator model routes to a local HTTP endpoint using the same
  * AI SDK pipeline via a fetch override.
