@@ -5,6 +5,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
+import { coerceChartData, isValidChartData } from './chart-utils'
 
 const DEFAULT_COLORS = [
   '#3b82f6',
@@ -18,7 +19,7 @@ const DEFAULT_COLORS = [
 ]
 
 interface PieChartProps {
-  data: Record<string, string | number>[]
+  data: unknown
   nameKey?: string
   valueKey?: string
   title?: string
@@ -49,7 +50,8 @@ export function PieChart({
   valueKey: valueKeyProp,
   title,
 }: PieChartProps) {
-  const { nameKey, valueKey } = inferPieKeys(data, nameKeyProp, valueKeyProp)
+  const rows = coerceChartData(data)
+  const { nameKey, valueKey } = inferPieKeys(rows, nameKeyProp, valueKeyProp)
   return (
     <div className="my-3">
       {title && (
@@ -59,7 +61,7 @@ export function PieChart({
         <ResponsiveContainer width="100%" height={300}>
           <RechartsPieChart>
             <Pie
-              data={data}
+              data={rows}
               dataKey={valueKey}
               nameKey={nameKey}
               cx="50%"
@@ -70,7 +72,7 @@ export function PieChart({
               }
               labelLine={true}
             >
-              {data.map((_, index) => (
+              {rows.map((_, index) => (
                 <Cell
                   key={index}
                   fill={DEFAULT_COLORS[index % DEFAULT_COLORS.length]}
@@ -94,5 +96,5 @@ export function PieChart({
 }
 
 export function validatePieChartProps(props: Record<string, unknown>): boolean {
-  return Array.isArray(props.data) && props.data.length > 0
+  return isValidChartData(props.data)
 }

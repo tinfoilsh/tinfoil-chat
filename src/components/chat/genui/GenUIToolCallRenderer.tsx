@@ -33,6 +33,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           }
           // Parsed but unrecognized tool or failed validation — show fallback
           if (!isStreaming) {
+            console.warn('[GenUI] failed to render', tc.name, parsed)
             return (
               <div
                 key={tc.id}
@@ -59,6 +60,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
         }
 
         // Finished streaming but JSON never parsed — show fallback
+        console.warn('[GenUI] args never parsed', tc.name, tc.arguments)
         return (
           <div
             key={tc.id}

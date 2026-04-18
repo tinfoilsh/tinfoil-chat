@@ -1,14 +1,17 @@
+import { coerceArray } from './chart-utils'
+
 interface KeyValueItem {
   label: string
   value: string | number
 }
 
 interface KeyValueListProps {
-  items: KeyValueItem[]
+  items: unknown
   title?: string
 }
 
 export function KeyValueList({ items, title }: KeyValueListProps) {
+  const rows = coerceArray<KeyValueItem>(items)
   return (
     <div className="my-3">
       {title && (
@@ -16,7 +19,7 @@ export function KeyValueList({ items, title }: KeyValueListProps) {
       )}
       <div className="overflow-hidden rounded-lg border border-border-subtle">
         <dl className="divide-y divide-border-subtle">
-          {items.map((item, i) => (
+          {rows.map((item, i) => (
             <div
               key={i}
               className="grid grid-cols-3 gap-4 px-4 py-2.5 sm:grid-cols-4"
@@ -38,9 +41,10 @@ export function KeyValueList({ items, title }: KeyValueListProps) {
 export function validateKeyValueListProps(
   props: Record<string, unknown>,
 ): boolean {
+  const items = coerceArray<unknown>(props.items)
   return (
-    Array.isArray(props.items) &&
-    props.items.every(
+    items.length > 0 &&
+    items.every(
       (i: unknown) =>
         i !== null &&
         typeof i === 'object' &&

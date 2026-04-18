@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
+import { coerceArray } from './chart-utils'
 
 interface Step {
   title: string
@@ -7,7 +8,7 @@ interface Step {
 }
 
 interface StepsProps {
-  steps: Step[]
+  steps: unknown
 }
 
 const STATUS_ICONS = {
@@ -17,9 +18,10 @@ const STATUS_ICONS = {
 } as const
 
 export function Steps({ steps }: StepsProps) {
+  const items = coerceArray<Step>(steps)
   return (
     <div className="my-3 space-y-3">
-      {steps.map((step, i) => {
+      {items.map((step, i) => {
         const status = step.status ?? 'pending'
         return (
           <div key={i} className="flex gap-3">
@@ -44,9 +46,10 @@ export function Steps({ steps }: StepsProps) {
 }
 
 export function validateStepsProps(props: Record<string, unknown>): boolean {
+  const steps = coerceArray<unknown>(props.steps)
   return (
-    Array.isArray(props.steps) &&
-    props.steps.every(
+    steps.length > 0 &&
+    steps.every(
       (s: unknown) =>
         s !== null &&
         typeof s === 'object' &&
