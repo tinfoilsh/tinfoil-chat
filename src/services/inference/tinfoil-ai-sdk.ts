@@ -8,8 +8,8 @@
  * caller is expected to call `resetTinfoilAISdk()` and retry.
  *
  * The fetch passed to the provider is wrapped by the Tinfoil SSE pre-parser so
- * non-OpenAI events (web search, URL fetches, url_citation annotations, inline
- * `<think>` tags) are peeled off into a side-channel before the AI SDK parses
+ * non-OpenAI events (web search, URL fetches, url_citation annotations,
+ * search_reasoning) are peeled off into a side-channel before the AI SDK parses
  * the stream.
  */
 import { logError } from '@/utils/error-handling'
@@ -53,6 +53,20 @@ export interface TinfoilProviderHandle {
 }
 
 /**
+ * Extra Tinfoil-specific request body fields to inject via
+ * `transformRequestBody`. These are non-standard OpenAI extensions forwarded
+ * by the enclave: web search, PII checks, etc.
+ */
+export interface TinfoilRequestExtensions {
+  webSearch?: boolean
+  piiCheck?: boolean
+}
+
+export interface GetTinfoilAISdkOptions {
+  extensions?: TinfoilRequestExtensions
+}
+
+/**
  * Get (or build) a Tinfoil-backed Vercel AI SDK provider.
  *
  * A new provider is constructed per call so each request has a dedicated
@@ -60,7 +74,9 @@ export interface TinfoilProviderHandle {
  * underlying `SecureClient` is memoized — attestation only runs once per page
  * load unless `resetTinfoilAISdk()` is invoked.
  */
-export async function getTinfoilAISdk(): Promise<TinfoilProviderHandle> {
+export async function getTinfoilAISdk(
+  options: GetTinfoilAISdkOptions = {},
+): Promise<TinfoilProviderHandle> {
   const secureClient = await getSecureClient()
   const apiKey = await fetchSessionToken()
   const sidechannel = createTinfoilSidechannel()
@@ -70,11 +86,24 @@ export async function getTinfoilAISdk(): Promise<TinfoilProviderHandle> {
     sidechannel,
   )
 
+  const extensions = options.extensions
+
   const provider = createOpenAICompatible({
     name: 'tinfoil',
     baseURL: secureClient.getBaseURL()!,
     apiKey,
     fetch: wrappedFetch,
+    transformRequestBody: (body) => {
+      if (!extensions) return body
+      const patched: Record<string, unknown> = { ...body }
+      if (extensions.webSearch) {
+        patched.web_search_options = {}
+      }
+      if (extensions.piiCheck) {
+        patched.pii_check_options = {}
+      }
+      return patched
+    },
   })
 
   return {

@@ -495,7 +495,7 @@ export function useChatMessaging({
         })
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
-        const response = await sendChatStream({
+        const chatStreamHandle = await sendChatStream({
           model,
           systemPrompt: baseSystemPrompt,
           rules,
@@ -511,24 +511,27 @@ export function useChatMessaging({
           piiCheckEnabled,
         })
 
-        const assistantMessage = await processStreamingResponse(response, {
-          updatedChat,
-          updatedMessages,
-          isFirstMessage,
-          modelsLength: models.length,
-          currentChatIdRef,
-          isStreamingRef,
-          thinkingStartTimeRef,
-          setIsThinking,
-          setIsWaitingForResponse,
-          setIsStreaming,
-          updateChatWithHistoryCheck,
-          setChats,
-          setCurrentChat,
-          setLoadingState,
-          storeHistory,
-          startingChatId,
-        })
+        const assistantMessage = await processStreamingResponse(
+          chatStreamHandle,
+          {
+            updatedChat,
+            updatedMessages,
+            isFirstMessage,
+            modelsLength: models.length,
+            currentChatIdRef,
+            isStreamingRef,
+            thinkingStartTimeRef,
+            setIsThinking,
+            setIsWaitingForResponse,
+            setIsStreaming,
+            updateChatWithHistoryCheck,
+            setChats,
+            setCurrentChat,
+            setLoadingState,
+            storeHistory,
+            startingChatId,
+          },
+        )
 
         if (
           assistantMessage &&
