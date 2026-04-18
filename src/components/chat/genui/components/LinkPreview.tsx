@@ -1,3 +1,4 @@
+import { ImageWithSkeleton } from '@/components/preview/image-with-skeleton'
 import { ExternalLink } from 'lucide-react'
 
 interface LinkPreviewProps {
@@ -43,10 +44,11 @@ export function LinkPreview({
       className="hover:border-border-primary my-3 flex max-w-2xl overflow-hidden rounded-lg border border-border-subtle bg-surface-card transition-colors hover:bg-surface-chat-background"
     >
       {image && (
-        <img
+        <ImageWithSkeleton
           src={image}
           alt=""
-          className="h-32 w-32 shrink-0 object-cover sm:h-40 sm:w-40"
+          wrapperClassName="relative h-32 w-32 shrink-0 overflow-hidden bg-surface-card sm:h-40 sm:w-40"
+          className="h-full w-full object-cover"
           loading="lazy"
         />
       )}
@@ -54,10 +56,11 @@ export function LinkPreview({
         <div>
           <div className="mb-1 flex items-center gap-2">
             {favicon && (
-              <img
+              <ImageWithSkeleton
                 src={favicon}
                 alt=""
-                className="h-4 w-4 shrink-0 rounded"
+                wrapperClassName="relative h-4 w-4 shrink-0 overflow-hidden rounded bg-surface-card"
+                className="h-4 w-4 object-cover"
                 loading="lazy"
               />
             )}

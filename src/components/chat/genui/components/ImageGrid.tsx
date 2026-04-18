@@ -1,3 +1,4 @@
+import { ImageWithSkeleton } from '@/components/preview/image-with-skeleton'
 import { coerceArray } from './input-coercion'
 
 interface ImageItem {
@@ -36,9 +37,10 @@ export function ImageGrid({ images, title }: ImageGridProps) {
               className="group flex flex-col gap-1 overflow-hidden rounded-lg border border-border-subtle bg-surface-card"
             >
               <div className="aspect-square w-full overflow-hidden bg-surface-chat-background">
-                <img
+                <ImageWithSkeleton
                   src={img.url}
                   alt={img.alt ?? ''}
+                  wrapperClassName="relative h-full w-full overflow-hidden bg-surface-chat-background"
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   loading="lazy"
                 />
