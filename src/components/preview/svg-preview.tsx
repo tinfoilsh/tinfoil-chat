@@ -14,6 +14,7 @@ interface SvgPreviewProps {
 export function SvgPreview({ code, className }: SvgPreviewProps) {
   const sanitized = DOMPurify.sanitize(code, {
     USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ['style'],
   })
 
   return (
