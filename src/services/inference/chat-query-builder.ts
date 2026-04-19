@@ -1,18 +1,6 @@
-import {
-  getMessageDocuments,
-  getMessageImages,
-} from '@/components/chat/attachment-helpers'
-import type { Message } from '@/components/chat/types'
-import type { BaseModel } from '@/config/models'
-import type {
-  ChatCompletionAssistantMessageParam,
-  ChatCompletionMessageParam,
-  ChatCompletionSystemMessageParam,
-  ChatCompletionUserMessageParam,
-} from 'openai/resources/chat/completions'
-
 /**
- * Helper for building chat completion queries with model-specific system prompt injection
+ * Helper for building Vercel AI SDK `ModelMessage[]` payloads with
+ * model-specific system prompt injection.
  *
  * **System Prompt Handling by Model:**
  * - **Llama** (llama3-3-70b): Uses system role with header tokens
@@ -22,6 +10,22 @@ import type {
  * - **DeepSeek** (deepseek-r1): Prepends to first user message (no system role support)
  * - **Unknown models**: Prepends to first user message (safe default)
  */
+import {
+  getMessageDocuments,
+  getMessageImages,
+} from '@/components/chat/attachment-helpers'
+import type { Message } from '@/components/chat/types'
+import type { BaseModel } from '@/config/models'
+import type {
+  AssistantModelMessage,
+  ModelMessage,
+  SystemModelMessage,
+  ToolModelMessage,
+  UserContent,
+  UserModelMessage,
+} from '@ai-sdk/provider-utils'
+
+const GENUI_TOOL_HINT = `You have render_* tools for rich visual components: artifact previews for generated apps/docs/HTML/diagrams, task-plan trackers, approval cards, weather cards, map/place cards, charts (bar, line, pie, area), tables (data, comparison), source cards and link previews for web results, timelines, stat cards, progress bars, callouts (info/warning/tip/success/error), key-value lists, info cards, steps/checklists, image grids, and render_image for a single image/diagram (accepts hosted URLs, inline SVG, base64 bytes, or Mermaid diagram source). When content benefits from visual structure — previews, plans, approvals, local recommendations, weather, comparisons, trends, proportions, chronologies, curated sources, highlighted takeaways, structured facts, diagrams, or illustrations — always call the appropriate render tool instead of markdown, mermaid, or code blocks. Use render_artifact_preview for generated HTML/markdown/diagram previews, render_task_plan for multi-step work, render_confirmation_card before sensitive actions, render_weather_card for forecast summaries, render_map_place_card for locations, render_image for single hero images or diagrams, and render_image_grid for galleries. After using web search, prefer render_source_cards or render_link_preview to surface the best sources. You may call multiple render tools in one response.`
 
 export interface ChatQueryBuilderParams {
   model: BaseModel
@@ -33,11 +37,9 @@ export interface ChatQueryBuilderParams {
 
 export class ChatQueryBuilder {
   /**
-   * Build chat completion messages with model-appropriate system prompt and rules injection
+   * Build model messages with model-appropriate system prompt and rules injection.
    */
-  static buildMessages(
-    params: ChatQueryBuilderParams,
-  ): ChatCompletionMessageParam[] {
+  static buildMessages(params: ChatQueryBuilderParams): ModelMessage[] {
     const {
       model,
       systemPrompt,
@@ -55,12 +57,10 @@ export class ChatQueryBuilder {
       ? rules.replaceAll('{MODEL_NAME}', model.name)
       : ''
 
-    const result: ChatCompletionMessageParam[] = []
+    const result: ModelMessage[] = []
 
-    // Determine if we should use system role or prepend to user message
     const useSystemRole = this.shouldUseSystemRole(modelId)
 
-    // Add system message/instructions based on model requirements
     if (useSystemRole) {
       const systemContent = this.buildSystemContent(
         modelId,
@@ -71,11 +71,10 @@ export class ChatQueryBuilder {
         result.push({
           role: 'system',
           content: systemContent,
-        } as ChatCompletionSystemMessageParam)
+        } as SystemModelMessage)
       }
     }
 
-    // Add conversation history
     const recentMessages = conversationMessages.slice(-maxMessages)
     let addedSystemInstructions = useSystemRole
 
@@ -83,40 +82,69 @@ export class ChatQueryBuilder {
       const msg = recentMessages[index]
 
       if (msg.role === 'user') {
-        let userContent = this.buildUserContent(msg, model.multimodal)
+        const userContent = this.buildUserContent(msg, model.multimodal)
 
-        // For models that don't use system role (e.g. DeepSeek): inject system instructions as a separate user message before the first user message
+        // For models that don't use system role (e.g. DeepSeek): inject system
+        // instructions as a separate user message before the first user message.
         if (!addedSystemInstructions) {
           const rawInstructions = processedRules
             ? `${processedSystemPrompt}\n\n${processedRules}`
             : processedSystemPrompt
           result.push({
             role: 'user',
-            content: `<system>\n${rawInstructions}\n</system>`,
-          } as ChatCompletionUserMessageParam)
+            content: `<system>\n${rawInstructions}\n\n${GENUI_TOOL_HINT}\n</system>`,
+          } as UserModelMessage)
           addedSystemInstructions = true
         }
 
         result.push({
           role: 'user',
           content: userContent,
-        } as ChatCompletionUserMessageParam)
-      } else if (msg.content) {
-        // Assistant messages - include annotations and searchReasoning for multi-turn context
-        const assistantParam: ChatCompletionAssistantMessageParam & {
-          annotations?: Message['annotations']
-          search_reasoning?: string
-        } = {
+        } as UserModelMessage)
+      } else if (msg.content || msg.toolCalls) {
+        // Assistant turn — include text content and tool calls
+        const assistantContent: AssistantModelMessage['content'] = []
+        if (msg.content) {
+          assistantContent.push({ type: 'text', text: msg.content })
+        }
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            let input: unknown = tc.arguments
+            try {
+              input = JSON.parse(tc.arguments)
+            } catch {
+              // Leave raw string if the model ever returned malformed JSON
+            }
+            assistantContent.push({
+              type: 'tool-call',
+              toolCallId: tc.id,
+              toolName: tc.name,
+              input,
+            })
+          }
+        }
+        result.push({
           role: 'assistant',
-          content: msg.content,
+          content:
+            assistantContent.length === 0
+              ? [{ type: 'text', text: '' }]
+              : assistantContent,
+        } as AssistantModelMessage)
+
+        // Emit synthetic tool results for each tool call so the conversation
+        // history stays consistent on the next turn.
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          const toolResults: ToolModelMessage = {
+            role: 'tool',
+            content: msg.toolCalls.map((tc) => ({
+              type: 'tool-result',
+              toolCallId: tc.id,
+              toolName: tc.name,
+              output: { type: 'text', value: 'displayed' },
+            })),
+          }
+          result.push(toolResults)
         }
-        if (msg.annotations && msg.annotations.length > 0) {
-          assistantParam.annotations = msg.annotations
-        }
-        if (msg.searchReasoning) {
-          assistantParam.search_reasoning = msg.searchReasoning
-        }
-        result.push(assistantParam)
       }
     }
 
@@ -132,14 +160,15 @@ export class ChatQueryBuilder {
   }
 
   /**
-   * Build system content based on model requirements
+   * Build system content based on model requirements.
    */
   private static buildSystemContent(
     _modelId: string,
     systemPrompt: string,
     rules: string,
   ): string | null {
-    return rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    const base = rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    return `${base}\n\n${GENUI_TOOL_HINT}`
   }
 
   /**
@@ -149,9 +178,7 @@ export class ChatQueryBuilder {
   private static buildUserContent(
     msg: Message,
     multimodal?: boolean,
-  ):
-    | string
-    | Array<{ type: string; text?: string; image_url?: { url: string } }> {
+  ): UserContent {
     let textContent = msg.content
 
     // Prepend the quoted reference so the model knows what the user is replying to.
@@ -165,7 +192,6 @@ export class ChatQueryBuilder {
         : `In reply to:\n${quoted}`
     }
 
-    // Derive document content from attachments (or legacy fields via helpers)
     const docAttachments = getMessageDocuments(msg)
     if (docAttachments.length > 0) {
       const docContent = docAttachments
@@ -180,28 +206,20 @@ export class ChatQueryBuilder {
       }
     }
 
-    // Derive image data from attachments (or legacy fields via helpers)
     const imageAttachments = getMessageImages(msg)
 
     if (imageAttachments.length > 0 && multimodal) {
-      const content: Array<{
-        type: string
-        text?: string
-        image_url?: { url: string }
-      }> = [{ type: 'text', text: textContent }]
-
+      const parts: UserContent = [{ type: 'text', text: textContent }]
       for (const img of imageAttachments) {
         if (img.base64 && img.mimeType) {
-          content.push({
-            type: 'image_url',
-            image_url: {
-              url: `data:${img.mimeType};base64,${img.base64}`,
-            },
+          parts.push({
+            type: 'image',
+            image: `data:${img.mimeType};base64,${img.base64}`,
+            mediaType: img.mimeType,
           })
         }
       }
-
-      return content
+      return parts
     }
 
     // Non-multimodal fallback: append image descriptions as text

@@ -1,3 +1,5 @@
+import type { GenUIToolCall } from './genui/types'
+
 export type URLCitation = {
   title: string
   url: string
@@ -63,6 +65,7 @@ export type Message = {
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
   quote?: string // Highlighted text the user is replying to
+  toolCalls?: GenUIToolCall[]
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'

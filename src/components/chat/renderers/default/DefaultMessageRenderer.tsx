@@ -1,3 +1,4 @@
+import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
@@ -16,6 +17,7 @@ import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
+import { StreamingSilenceIndicator } from '../components/StreamingSilenceIndicator'
 import { ThoughtProcess } from '../components/ThoughtProcess'
 import { URLFetchProcess } from '../components/URLFetchProcess'
 import { WebSearchProcess } from '../components/WebSearchProcess'
@@ -288,6 +290,17 @@ const DefaultMessageComponent = ({
       {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
         <div className="no-scroll-anchoring w-full px-4">
           <WebSearchProcess webSearch={message.webSearch} />
+        </div>
+      )}
+
+      {/* Tool call rendered components */}
+      {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
+        <div className="w-full px-4 py-2">
+          <GenUIToolCallRenderer
+            toolCalls={message.toolCalls}
+            isStreaming={!!(isStreaming && isLastMessage)}
+            isDarkMode={isDarkMode}
+          />
         </div>
       )}
 
@@ -574,6 +587,20 @@ const DefaultMessageComponent = ({
             </div>
           )}
         </>
+      )}
+
+      {/* Bridge indicator — shown while the assistant is still streaming but
+          no other animated element (thinking, web search, tool-call cards)
+          is visible. Covers the silence between narration text and the first
+          finalized tool call. */}
+      {!isUser && isStreaming && isLastMessage && (
+        <StreamingSilenceIndicator
+          isThinking={!!message.isThinking}
+          hasActiveWebSearch={message.webSearch?.status === 'searching'}
+          hasActiveToolCalls={
+            !!message.toolCalls && message.toolCalls.length > 0
+          }
+        />
       )}
     </div>
   )

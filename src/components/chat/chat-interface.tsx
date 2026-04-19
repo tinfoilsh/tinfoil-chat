@@ -76,6 +76,7 @@ const useLayoutEffect =
 
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
+import { ArtifactSidebar } from './artifact-sidebar'
 import { AskSidebar } from './ask-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatMessages } from './chat-messages'
@@ -83,6 +84,14 @@ import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
+import {
+  OPEN_ARTIFACT_PREVIEW_EVENT,
+  type ArtifactPreviewSidebarDetail,
+} from './genui/components/ArtifactPreview'
+import {
+  CONFIRMATION_ACTION_EVENT,
+  type ConfirmationActionDetail,
+} from './genui/components/ConfirmationCard'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useMaxMessages } from './hooks/use-max-messages'
@@ -421,6 +430,9 @@ export function ChatInterface({
   // Ask-sidebar state: a disposable side conversation seeded with highlighted
   // text. Nothing is persisted unless the user clicks "Open as chat".
   const [isAskSidebarOpen, setIsAskSidebarOpen] = useState(false)
+  const [isArtifactSidebarOpen, setIsArtifactSidebarOpen] = useState(false)
+  const [artifactPreview, setArtifactPreview] =
+    useState<ArtifactPreviewSidebarDetail | null>(null)
 
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
@@ -850,12 +862,16 @@ export function ChatInterface({
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
       if (
         isSidebarOpen &&
-        (isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen)
+        (isVerifierSidebarOpen ||
+          isSettingsModalOpen ||
+          isAskSidebarOpen ||
+          isArtifactSidebarOpen)
       ) {
         // Close right sidebars to prioritize left sidebar
         setIsVerifierSidebarOpen(false)
         setIsSettingsModalOpen(false)
         setIsAskSidebarOpen(false)
+        setIsArtifactSidebarOpen(false)
       }
     }
   }, [
@@ -864,7 +880,62 @@ export function ChatInterface({
     isVerifierSidebarOpen,
     isSettingsModalOpen,
     isAskSidebarOpen,
+    isArtifactSidebarOpen,
   ])
+
+  useEffect(() => {
+    const handleOpenArtifactPreview = (
+      event: CustomEvent<ArtifactPreviewSidebarDetail>,
+    ) => {
+      if (!event.detail) return
+
+      setArtifactPreview(event.detail)
+      setIsArtifactSidebarOpen(true)
+      setIsVerifierSidebarOpen(false)
+      setIsSettingsModalOpen(false)
+      setIsAskSidebarOpen(false)
+      sidebarChat.reset()
+
+      if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+        setIsSidebarOpen(false)
+      }
+    }
+
+    window.addEventListener(
+      OPEN_ARTIFACT_PREVIEW_EVENT,
+      handleOpenArtifactPreview as EventListener,
+    )
+
+    return () => {
+      window.removeEventListener(
+        OPEN_ARTIFACT_PREVIEW_EVENT,
+        handleOpenArtifactPreview as EventListener,
+      )
+    }
+  }, [windowWidth, setIsSidebarOpen, sidebarChat])
+
+  useEffect(() => {
+    const handleConfirmationAction = (
+      event: CustomEvent<ConfirmationActionDetail>,
+    ) => {
+      const message = event.detail?.message?.trim()
+      if (!message) return
+
+      void handleQuery(message)
+    }
+
+    window.addEventListener(
+      CONFIRMATION_ACTION_EVENT,
+      handleConfirmationAction as EventListener,
+    )
+
+    return () => {
+      window.removeEventListener(
+        CONFIRMATION_ACTION_EVENT,
+        handleConfirmationAction as EventListener,
+      )
+    }
+  }, [handleQuery])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
@@ -1079,6 +1150,7 @@ export function ChatInterface({
       handleSetVerifierSidebarOpen(true)
       setIsSettingsModalOpen(false)
       setIsAskSidebarOpen(false)
+      setIsArtifactSidebarOpen(false)
       sidebarChat.reset()
     }
   }
@@ -1104,6 +1176,7 @@ export function ChatInterface({
       setSettingsInitialTab(undefined)
       setIsSettingsModalOpen(true)
       handleSetVerifierSidebarOpen(false)
+      setIsArtifactSidebarOpen(false)
       // If window is narrow, close left sidebar when opening settings
       if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
         setIsSidebarOpen(false)
@@ -1121,6 +1194,7 @@ export function ChatInterface({
     setSettingsInitialTab('cloud-sync')
     setIsSettingsModalOpen(true)
     handleSetVerifierSidebarOpen(false)
+    setIsArtifactSidebarOpen(false)
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
       setIsSidebarOpen(false)
     }
@@ -2095,6 +2169,7 @@ export function ChatInterface({
           setSettingsInitialTab(tab)
           setIsSettingsModalOpen(true)
           handleSetVerifierSidebarOpen(false)
+          setIsArtifactSidebarOpen(false)
           if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
             setIsSidebarOpen(false)
           }
@@ -2104,7 +2179,12 @@ export function ChatInterface({
       {/* Mobile sidebar toggle - only visible when collapsed sidebar rail is hidden */}
       {windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT &&
         !isSidebarOpen &&
-        !(isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen) && (
+        !(
+          isVerifierSidebarOpen ||
+          isSettingsModalOpen ||
+          isAskSidebarOpen ||
+          isArtifactSidebarOpen
+        ) && (
           <div className="group relative">
             <button
               className="fixed left-4 top-4 z-50 flex items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
@@ -2130,18 +2210,21 @@ export function ChatInterface({
         (isSidebarOpen ||
           isVerifierSidebarOpen ||
           isSettingsModalOpen ||
-          isAskSidebarOpen)
+          isAskSidebarOpen ||
+          isArtifactSidebarOpen)
       ) && (
         <div
           className="fixed top-4 z-50 flex gap-2 transition-all duration-300"
           style={{
             right:
               windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? isAskSidebarOpen
-                  ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX + 24}px`
-                  : isVerifierSidebarOpen
-                    ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
-                    : '16px'
+                ? isArtifactSidebarOpen
+                  ? `${CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX + 24}px`
+                  : isAskSidebarOpen
+                    ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX + 24}px`
+                    : isVerifierSidebarOpen
+                      ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
+                      : '16px'
                 : '16px',
           }}
         >
@@ -2384,6 +2467,13 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
+      <ArtifactSidebar
+        isOpen={isArtifactSidebarOpen}
+        onClose={() => setIsArtifactSidebarOpen(false)}
+        artifact={artifactPreview}
+        isDarkMode={isDarkMode}
+      />
+
       {/* Share Modal */}
       <ShareModalLazy
         isOpen={isShareModalOpen}
@@ -2394,7 +2484,10 @@ export function ChatInterface({
           isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         isRightSidebarOpen={
-          (isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen) &&
+          (isVerifierSidebarOpen ||
+            isSettingsModalOpen ||
+            isAskSidebarOpen ||
+            isArtifactSidebarOpen) &&
           windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         chatTitle={currentChat?.title}
@@ -2433,11 +2526,13 @@ export function ChatInterface({
         style={{
           right:
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? isAskSidebarOpen
-                ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX}px`
-                : isVerifierSidebarOpen
-                  ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
-                  : '0'
+              ? isArtifactSidebarOpen
+                ? `${CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX}px`
+                : isAskSidebarOpen
+                  ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX}px`
+                  : isVerifierSidebarOpen
+                    ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
+                    : '0'
               : '0',
           bottom: 0,
           left:
@@ -2492,6 +2587,7 @@ export function ChatInterface({
             onAsk={(text) => {
               setIsVerifierSidebarOpen(false)
               setIsSettingsModalOpen(false)
+              setIsArtifactSidebarOpen(false)
               if (
                 windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT &&
                 isSidebarOpen

@@ -118,11 +118,19 @@ const ChatMessage = memo(
 
     // Always re-render if this is the streaming message and content/thoughts changed
     if (nextProps.isStreaming && nextProps.isLastMessage) {
-      // Only re-render if content, thoughts, or expanded state actually changed
+      // Re-render whenever anything that drives the live UI can change.
+      // The streaming processor creates fresh arrays/objects for each update,
+      // so referential equality is sufficient for these fields.
       return (
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevProps.message.toolCalls === nextProps.message.toolCalls &&
+        prevProps.message.webSearch === nextProps.message.webSearch &&
+        prevProps.message.urlFetches === nextProps.message.urlFetches &&
+        prevProps.message.annotations === nextProps.message.annotations &&
+        prevProps.message.searchReasoning ===
+          nextProps.message.searchReasoning &&
         prevExpanded === nextExpanded
       )
     }
@@ -153,6 +161,10 @@ const ChatMessage = memo(
     return (
       prevProps.message.content === nextProps.message.content &&
       prevProps.message.thoughts === nextProps.message.thoughts &&
+      prevProps.message.toolCalls === nextProps.message.toolCalls &&
+      prevProps.message.webSearch === nextProps.message.webSearch &&
+      prevProps.message.urlFetches === nextProps.message.urlFetches &&
+      prevProps.message.annotations === nextProps.message.annotations &&
       prevProps.message.attachments === nextProps.message.attachments &&
       prevProps.message.documentContent === nextProps.message.documentContent &&
       prevProps.message.documents === nextProps.message.documents &&
