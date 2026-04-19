@@ -8,6 +8,7 @@ import {
   CardFooter,
   CardTitle,
 } from '@/components/ui/card'
+import { cn } from '@/components/ui/utils'
 import { Code2, ExternalLink, Eye } from 'lucide-react'
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -131,10 +132,12 @@ function Preview({
   source,
   title,
   isDarkMode,
+  className,
 }: {
   source: ArtifactSource
   title?: string
   isDarkMode: boolean
+  className?: string
 }) {
   switch (source.type) {
     case 'url':
@@ -144,7 +147,9 @@ function Preview({
           src={source.url}
           sandbox="allow-forms allow-modals allow-popups allow-scripts"
           referrerPolicy="no-referrer"
-          className="h-[420px] w-full rounded-md border-0 bg-white"
+          className={
+            className ?? 'h-[420px] w-full rounded-md border-0 bg-white'
+          }
         />
       )
     case 'html':
@@ -154,25 +159,54 @@ function Preview({
           srcDoc={source.html}
           sandbox="allow-forms allow-modals allow-popups allow-scripts"
           referrerPolicy="no-referrer"
-          className="h-[420px] w-full rounded-md border-0 bg-white"
+          className={
+            className ?? 'h-[420px] w-full rounded-md border-0 bg-white'
+          }
         />
       )
     case 'markdown':
       return (
-        <div className="prose prose-sm max-w-none text-content-primary dark:prose-invert">
+        <div
+          className={
+            className ??
+            'prose prose-sm max-w-none text-content-primary dark:prose-invert'
+          }
+        >
           <ReactMarkdown>{source.markdown}</ReactMarkdown>
         </div>
       )
     case 'svg':
-      return <SvgPreview code={source.svg} />
+      return <SvgPreview code={source.svg} className={className} />
     case 'mermaid':
-      return <MermaidPreview code={source.code} isDarkMode={isDarkMode} />
+      return (
+        <MermaidPreview
+          code={source.code}
+          isDarkMode={isDarkMode}
+          className={className}
+        />
+      )
+  }
+}
+
+type ArtifactPreviewPanelLayout = 'card' | 'sidebar'
+
+function getSidebarPreviewClassName(source: ArtifactSource): string {
+  switch (source.type) {
+    case 'url':
+    case 'html':
+      return 'h-full w-full border-0 bg-white'
+    case 'markdown':
+      return 'prose prose-sm h-full max-w-none overflow-auto px-4 py-3 text-content-primary dark:prose-invert'
+    case 'svg':
+    case 'mermaid':
+      return 'flex h-full w-full items-center justify-center overflow-auto p-4 [&>svg]:h-auto [&>svg]:max-h-full [&>svg]:w-full [&>svg]:max-w-full'
   }
 }
 
 interface ArtifactPreviewPanelProps extends ArtifactPreviewSidebarDetail {
   isDarkMode?: boolean
   className?: string
+  layout?: ArtifactPreviewPanelLayout
 }
 
 export function ArtifactPreviewPanel({
@@ -182,13 +216,23 @@ export function ArtifactPreviewPanel({
   footer,
   isDarkMode = true,
   className,
+  layout = 'card',
 }: ArtifactPreviewPanelProps) {
   const [mode, setMode] = React.useState<ViewMode>('preview')
+  const isSidebarLayout = layout === 'sidebar'
 
   const copyText = sourceToCopyString(source)
 
   return (
-    <Card className={className ?? 'my-3 overflow-hidden'}>
+    <Card
+      className={cn(
+        'overflow-hidden',
+        isSidebarLayout
+          ? 'flex h-full min-h-0 flex-col rounded-none border-0 shadow-none'
+          : 'my-3',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-surface-chat-background px-4 py-2.5">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-content-muted">
@@ -231,11 +275,27 @@ export function ArtifactPreviewPanel({
           <CopyButton text={copyText} />
         </div>
       </div>
-      <CardContent className="p-4">
+      <CardContent
+        className={cn(isSidebarLayout ? 'flex min-h-0 flex-1 p-0' : 'p-4')}
+      >
         {mode === 'preview' ? (
-          <Preview source={source} title={title} isDarkMode={isDarkMode} />
+          <Preview
+            source={source}
+            title={title}
+            isDarkMode={isDarkMode}
+            className={
+              isSidebarLayout ? getSidebarPreviewClassName(source) : undefined
+            }
+          />
         ) : (
-          <pre className="max-h-[420px] overflow-auto rounded-md bg-surface-chat-background p-3 text-xs text-content-primary">
+          <pre
+            className={cn(
+              'overflow-auto bg-surface-chat-background text-xs text-content-primary',
+              isSidebarLayout
+                ? 'h-full flex-1 rounded-none p-4'
+                : 'max-h-[420px] rounded-md p-3',
+            )}
+          >
             <code>{copyText}</code>
           </pre>
         )}

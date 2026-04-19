@@ -12,6 +12,9 @@ type ArtifactSidebarProps = {
   onClose: () => void
   artifact: ArtifactPreviewSidebarDetail | null
   isDarkMode: boolean
+  width: number
+  onWidthChange: (width: number) => void
+  isResizable: boolean
 }
 
 export function ArtifactSidebar({
@@ -19,7 +22,73 @@ export function ArtifactSidebar({
   onClose,
   artifact,
   isDarkMode,
+  width,
+  onWidthChange,
+  isResizable,
 }: ArtifactSidebarProps): React.JSX.Element {
+  const startXRef = React.useRef(0)
+  const startWidthRef = React.useRef(width)
+  const [isResizing, setIsResizing] = React.useState(false)
+
+  const clampWidth = React.useCallback((nextWidth: number) => {
+    return Math.min(
+      CONSTANTS.ARTIFACT_SIDEBAR_MAX_WIDTH_PX,
+      Math.max(CONSTANTS.ARTIFACT_SIDEBAR_MIN_WIDTH_PX, nextWidth),
+    )
+  }, [])
+
+  React.useEffect(() => {
+    if (!isResizing) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const delta = startXRef.current - event.clientX
+      onWidthChange(clampWidth(startWidthRef.current + delta))
+    }
+
+    const handlePointerUp = () => {
+      setIsResizing(false)
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [clampWidth, isResizing, onWidthChange])
+
+  const handleResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizable || event.button !== 0) return
+
+    startXRef.current = event.clientX
+    startWidthRef.current = width
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsResizing(true)
+  }
+
+  const handleResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isResizable) return
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      onWidthChange(
+        clampWidth(width + CONSTANTS.ARTIFACT_SIDEBAR_RESIZE_STEP_PX),
+      )
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      onWidthChange(
+        clampWidth(width - CONSTANTS.ARTIFACT_SIDEBAR_RESIZE_STEP_PX),
+      )
+    }
+  }
+
   return (
     <>
       <div
@@ -27,9 +96,39 @@ export function ArtifactSidebar({
           'fixed right-0 top-0 z-40 flex h-full w-[85vw] flex-col border-l border-border-subtle bg-surface-chat-background font-aeonik transition-transform duration-200 ease-in-out',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
-        style={{ maxWidth: `${CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX}px` }}
+        style={
+          isResizable
+            ? { width: `${width}px` }
+            : { maxWidth: `${CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX}px` }
+        }
         aria-hidden={!isOpen}
       >
+        {isResizable && (
+          <div
+            role="separator"
+            tabIndex={0}
+            aria-label="Resize artifact sidebar"
+            aria-orientation="vertical"
+            aria-valuemin={CONSTANTS.ARTIFACT_SIDEBAR_MIN_WIDTH_PX}
+            aria-valuemax={CONSTANTS.ARTIFACT_SIDEBAR_MAX_WIDTH_PX}
+            aria-valuenow={width}
+            onPointerDown={handleResizeStart}
+            onKeyDown={handleResizeKeyDown}
+            className="absolute left-0 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 cursor-col-resize outline-none md:block"
+          >
+            <div
+              className={cn(
+                'flex h-14 w-6 items-center justify-center rounded-full border border-border-subtle bg-surface-chat shadow-sm transition-colors',
+                isResizing
+                  ? 'bg-surface-chat-background'
+                  : 'hover:bg-surface-chat-background',
+              )}
+            >
+              <div className="h-8 w-1 rounded-full bg-content-muted" />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-shrink-0 items-center justify-between border-b border-border-subtle px-4 py-3">
           <div className="flex items-center gap-2 text-content-primary">
             <EyeIcon className="h-5 w-5" />
@@ -45,7 +144,7 @@ export function ArtifactSidebar({
           </button>
         </div>
 
-        <div className="flex flex-1 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1">
           {artifact ? (
             <ArtifactPreviewPanel
               title={artifact.title}
@@ -53,7 +152,8 @@ export function ArtifactSidebar({
               source={artifact.source}
               footer={artifact.footer}
               isDarkMode={isDarkMode}
-              className="my-0 w-full"
+              className="w-full"
+              layout="sidebar"
             />
           ) : (
             <div className="flex flex-1 items-center justify-center px-6 text-center">

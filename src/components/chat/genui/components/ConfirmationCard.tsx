@@ -1,4 +1,3 @@
-import { AlertTriangle, CheckCircle2, Shield } from 'lucide-react'
 import React from 'react'
 import { coerceArray } from './input-coercion'
 
@@ -26,32 +25,32 @@ export interface ConfirmationActionDetail {
   message: string
 }
 
-const RISK_META = {
+type RiskMeta = {
+  railClass: string | null
+  badgeClass: string
+  label: string
+}
+
+const RISK_META: Record<RiskLevel, RiskMeta> = {
   low: {
-    icon: CheckCircle2,
-    containerClass: 'border-green-500/30 bg-green-500/5',
+    railClass: null,
     badgeClass:
-      'border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400',
-    iconClass: 'text-green-500',
+      'border-green-500/20 bg-green-500/5 text-green-600 dark:text-green-400',
     label: 'Low risk',
   },
   medium: {
-    icon: Shield,
-    containerClass: 'border-yellow-500/30 bg-yellow-500/5',
+    railClass: 'bg-yellow-500/70',
     badgeClass:
-      'border-yellow-500/30 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
-    iconClass: 'text-yellow-500',
+      'border-yellow-500/20 bg-yellow-500/5 text-yellow-700 dark:text-yellow-400',
     label: 'Medium risk',
   },
   high: {
-    icon: AlertTriangle,
-    containerClass: 'border-red-500/30 bg-red-500/5',
+    railClass: 'bg-orange-500/80',
     badgeClass:
-      'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400',
-    iconClass: 'text-red-500',
+      'border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-400',
     label: 'High risk',
   },
-} as const
+}
 
 function getStringItems(value: unknown): string[] {
   return coerceArray<unknown>(value).filter(
@@ -88,7 +87,6 @@ export function ConfirmationCard({
   requiresConfirmation = true,
 }: ConfirmationCardProps): React.JSX.Element {
   const meta = RISK_META[riskLevel]
-  const Icon = meta.icon
   const detailItems = getStringItems(details)
   const consequenceItems = getStringItems(consequences)
   const handleAction = (action: ConfirmationAction, label: string) => {
@@ -101,84 +99,85 @@ export function ConfirmationCard({
   }
 
   return (
-    <div
-      className={`my-3 overflow-hidden rounded-lg border ${meta.containerClass}`}
-    >
-      <div className="flex items-start gap-3 px-4 py-4">
-        <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${meta.iconClass}`} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-content-primary">
-                {title}
-              </p>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-content-primary">
-                {summary}
-              </p>
-            </div>
-            <span
-              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${meta.badgeClass}`}
-            >
-              {meta.label}
-            </span>
+    <div className="relative my-3 overflow-hidden rounded-lg border border-border-subtle bg-surface-card">
+      {meta.railClass && (
+        <div
+          className={`absolute inset-y-0 left-0 w-[3px] ${meta.railClass}`}
+          aria-hidden="true"
+        />
+      )}
+      <div className="px-4 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-content-primary">
+              {title}
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-content-primary">
+              {summary}
+            </p>
           </div>
+          <span
+            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${meta.badgeClass}`}
+          >
+            {meta.label}
+          </span>
+        </div>
 
-          {reason && (
-            <div className="mt-3 rounded-md border border-border-subtle bg-surface-card/70 px-3 py-2">
-              <p className="text-xs uppercase tracking-wide text-content-muted">
-                Why this needs approval
-              </p>
-              <p className="mt-1 text-sm text-content-primary">{reason}</p>
-            </div>
-          )}
-
-          {detailItems.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs uppercase tracking-wide text-content-muted">
-                Request details
-              </p>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-content-primary">
-                {detailItems.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {consequenceItems.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs uppercase tracking-wide text-content-muted">
-                Potential impact
-              </p>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-content-primary">
-                {consequenceItems.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleAction('confirm', confirmLabel)}
-              className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
-            >
-              {confirmLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleAction('cancel', cancelLabel)}
-              className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
-            >
-              {cancelLabel}
-            </button>
-            <span className="text-xs text-content-muted">
-              {requiresConfirmation
-                ? 'Awaiting confirmation in chat'
-                : 'Confirmation optional'}
-            </span>
+        {reason && (
+          <div className="mt-4">
+            <p className="text-xs uppercase tracking-wide text-content-muted">
+              Why this needs approval
+            </p>
+            <p className="mt-1 text-sm text-content-primary">{reason}</p>
           </div>
+        )}
+
+        {detailItems.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs uppercase tracking-wide text-content-muted">
+              Request details
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-content-primary">
+              {detailItems.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {consequenceItems.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs uppercase tracking-wide text-content-muted">
+              Potential impact
+            </p>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-content-primary">
+              {consequenceItems.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleAction('confirm', confirmLabel)}
+            className="rounded-full bg-content-primary px-3 py-1 text-xs font-medium text-surface-card transition-opacity hover:opacity-90"
+          >
+            {confirmLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction('cancel', cancelLabel)}
+            className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
+          >
+            {cancelLabel}
+          </button>
+          <span className="text-xs text-content-muted">
+            {requiresConfirmation
+              ? 'Awaiting confirmation in chat'
+              : 'Confirmation optional'}
+          </span>
         </div>
       </div>
     </div>

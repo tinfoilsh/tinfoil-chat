@@ -498,6 +498,9 @@ export function ChatInterface({
   // text. Nothing is persisted unless the user clicks "Open as chat".
   const [isAskSidebarOpen, setIsAskSidebarOpen] = useState(false)
   const [isArtifactSidebarOpen, setIsArtifactSidebarOpen] = useState(false)
+  const [artifactSidebarWidth, setArtifactSidebarWidth] = useState<number>(
+    CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX,
+  )
   const [artifactPreview, setArtifactPreview] =
     useState<ArtifactPreviewSidebarDetail | null>(null)
 
@@ -1024,6 +1027,20 @@ export function ChatInterface({
       )
     }
   }, [handleQuery])
+
+  const rightSidebarWidthPx = useMemo(() => {
+    if (windowWidth < CONSTANTS.MOBILE_BREAKPOINT) return 0
+    if (isArtifactSidebarOpen) return artifactSidebarWidth
+    if (isAskSidebarOpen) return CONSTANTS.ASK_SIDEBAR_WIDTH_PX
+    if (isVerifierSidebarOpen) return CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX
+    return 0
+  }, [
+    artifactSidebarWidth,
+    isArtifactSidebarOpen,
+    isAskSidebarOpen,
+    isVerifierSidebarOpen,
+    windowWidth,
+  ])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
@@ -2322,13 +2339,9 @@ export function ChatInterface({
           style={{
             right:
               windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? isArtifactSidebarOpen
-                  ? `${CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX + 24}px`
-                  : isAskSidebarOpen
-                    ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX + 24}px`
-                    : isVerifierSidebarOpen
-                      ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
-                      : '16px'
+                ? rightSidebarWidthPx > 0
+                  ? `${rightSidebarWidthPx + 24}px`
+                  : '16px'
                 : '16px',
           }}
         >
@@ -2576,6 +2589,9 @@ export function ChatInterface({
         onClose={() => setIsArtifactSidebarOpen(false)}
         artifact={artifactPreview}
         isDarkMode={isDarkMode}
+        width={artifactSidebarWidth}
+        onWidthChange={setArtifactSidebarWidth}
+        isResizable={windowWidth >= CONSTANTS.MOBILE_BREAKPOINT}
       />
 
       {/* Share Modal */}
@@ -2630,13 +2646,7 @@ export function ChatInterface({
         style={{
           right:
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? isArtifactSidebarOpen
-                ? `${CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX}px`
-                : isAskSidebarOpen
-                  ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX}px`
-                  : isVerifierSidebarOpen
-                    ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
-                    : '0'
+              ? `${rightSidebarWidthPx}px`
               : '0',
           bottom: 0,
           left:

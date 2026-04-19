@@ -88,6 +88,9 @@ describe('GenUI new components', () => {
         isOpen={true}
         onClose={() => {}}
         isDarkMode={true}
+        width={640}
+        onWidthChange={() => {}}
+        isResizable={true}
         artifact={{
           title: 'Status board',
           description: 'Preview of the generated app',
@@ -104,6 +107,32 @@ describe('GenUI new components', () => {
       'srcdoc',
       expect.stringContaining('Demo'),
     )
+    expect(
+      screen.getByRole('separator', { name: 'Resize artifact sidebar' }),
+    ).toBeInTheDocument()
+  })
+
+  it('resizes the artifact sidebar from the keyboard', () => {
+    const handleWidthChange = vi.fn()
+
+    render(
+      <ArtifactSidebar
+        isOpen={true}
+        onClose={() => {}}
+        isDarkMode={true}
+        width={640}
+        onWidthChange={handleWidthChange}
+        isResizable={true}
+        artifact={null}
+      />,
+    )
+
+    fireEvent.keyDown(
+      screen.getByRole('separator', { name: 'Resize artifact sidebar' }),
+      { key: 'ArrowLeft' },
+    )
+
+    expect(handleWidthChange).toHaveBeenCalledWith(680)
   })
 
   it('renders a task plan and derives progress from completed tasks', () => {
