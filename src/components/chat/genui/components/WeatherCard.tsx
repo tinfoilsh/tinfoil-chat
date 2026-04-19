@@ -10,6 +10,7 @@ import {
   Sun,
   Wind,
 } from 'lucide-react'
+import React from 'react'
 import { coerceArray } from './input-coercion'
 
 type WeatherValue = string | number
@@ -91,7 +92,7 @@ export function WeatherCard({
   wind,
   forecast,
   updatedAt,
-}: WeatherCardProps) {
+}: WeatherCardProps): React.JSX.Element {
   const forecastItems = getForecastItems(forecast)
   const ConditionIcon = getConditionIcon(condition)
   const stats = [

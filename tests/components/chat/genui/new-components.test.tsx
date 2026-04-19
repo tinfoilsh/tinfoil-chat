@@ -1,8 +1,12 @@
+import { ArtifactSidebar } from '@/components/chat/artifact-sidebar'
 import {
   ArtifactPreview,
+  OPEN_ARTIFACT_PREVIEW_EVENT,
   validateArtifactPreviewProps,
 } from '@/components/chat/genui/components/ArtifactPreview'
 import {
+  buildConfirmationActionMessage,
+  CONFIRMATION_ACTION_EVENT,
   ConfirmationCard,
   validateConfirmationCardProps,
 } from '@/components/chat/genui/components/ConfirmationCard'
@@ -15,10 +19,10 @@ import {
   validateTaskPlanProps,
 } from '@/components/chat/genui/components/TaskPlan'
 import {
-  WeatherCard,
   validateWeatherCardProps,
+  WeatherCard,
 } from '@/components/chat/genui/components/WeatherCard'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/copy-button', () => ({
@@ -26,7 +30,13 @@ vi.mock('@/components/copy-button', () => ({
 }))
 
 describe('GenUI new components', () => {
-  it('renders an artifact preview card for generated HTML', () => {
+  it('opens artifact previews in the sidebar', () => {
+    const handleOpen = vi.fn()
+    window.addEventListener(
+      OPEN_ARTIFACT_PREVIEW_EVENT,
+      handleOpen as EventListener,
+    )
+
     expect(
       validateArtifactPreviewProps({
         source: {
@@ -36,7 +46,7 @@ describe('GenUI new components', () => {
       }),
     ).toBe(true)
 
-    render(
+    const { unmount } = render(
       <ArtifactPreview
         title="Status board"
         description="Preview of the generated app"
@@ -49,6 +59,47 @@ describe('GenUI new components', () => {
 
     expect(screen.getByText('Status board')).toBeInTheDocument()
     expect(screen.getByText('Preview of the generated app')).toBeInTheDocument()
+    expect(
+      screen.getByText('Preview opens in the sidebar.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open preview' }))
+
+    expect(handleOpen).toHaveBeenCalledTimes(1)
+    expect(handleOpen.mock.calls[0][0].detail).toMatchObject({
+      title: 'Status board',
+      description: 'Preview of the generated app',
+      source: {
+        type: 'html',
+        html: expect.stringContaining('Demo'),
+      },
+    })
+
+    unmount()
+    window.removeEventListener(
+      OPEN_ARTIFACT_PREVIEW_EVENT,
+      handleOpen as EventListener,
+    )
+  })
+
+  it('renders artifact content inside the sidebar panel', () => {
+    render(
+      <ArtifactSidebar
+        isOpen={true}
+        onClose={() => {}}
+        isDarkMode={true}
+        artifact={{
+          title: 'Status board',
+          description: 'Preview of the generated app',
+          source: {
+            type: 'html',
+            html: '<!doctype html><html><body><h1>Demo</h1></body></html>',
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Preview')).toBeInTheDocument()
     expect(screen.getByTitle('Status board')).toHaveAttribute(
       'srcdoc',
       expect.stringContaining('Demo'),
@@ -107,6 +158,41 @@ describe('GenUI new components', () => {
       screen.getByText('Awaiting confirmation in chat'),
     ).toBeInTheDocument()
     expect(screen.getByText('Writes production data')).toBeInTheDocument()
+  })
+
+  it('dispatches a confirmation action when a card button is clicked', () => {
+    const handleAction = vi.fn()
+    window.addEventListener(
+      CONFIRMATION_ACTION_EVENT,
+      handleAction as EventListener,
+    )
+
+    render(
+      <ConfirmationCard
+        title="Run database migration"
+        summary="This will apply schema changes to the production database."
+        confirmLabel="Approve Migration"
+        cancelLabel="Postpone"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Migration' }))
+
+    expect(handleAction).toHaveBeenCalledTimes(1)
+    expect(handleAction.mock.calls[0][0].detail).toEqual({
+      action: 'confirm',
+      label: 'Approve Migration',
+      title: 'Run database migration',
+      message: buildConfirmationActionMessage(
+        'Run database migration',
+        'Approve Migration',
+      ),
+    })
+
+    window.removeEventListener(
+      CONFIRMATION_ACTION_EVENT,
+      handleAction as EventListener,
+    )
   })
 
   it('renders a weather card with forecast details', () => {

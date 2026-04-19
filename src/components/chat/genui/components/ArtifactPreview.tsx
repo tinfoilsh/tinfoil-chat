@@ -9,11 +9,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Code2, ExternalLink, Eye } from 'lucide-react'
-import { useState } from 'react'
+import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import { coerceObject } from './input-coercion'
 
-type ArtifactSource =
+export const OPEN_ARTIFACT_PREVIEW_EVENT = 'openArtifactPreviewSidebar'
+
+export type ArtifactSource =
   | { type: 'url'; url: string }
   | { type: 'html'; html: string }
   | { type: 'markdown'; markdown: string }
@@ -26,6 +28,13 @@ interface ArtifactPreviewProps {
   source: unknown
   footer?: string
   isDarkMode?: boolean
+}
+
+export interface ArtifactPreviewSidebarDetail {
+  title?: string
+  description?: string
+  source: ArtifactSource
+  footer?: string
 }
 
 type ViewMode = 'preview' | 'source'
@@ -57,6 +66,35 @@ function getArtifactSource(value: unknown): ArtifactSource | null {
     default:
       return null
   }
+}
+
+export function getArtifactPreviewDetail(
+  props: Pick<
+    ArtifactPreviewProps,
+    'title' | 'description' | 'source' | 'footer'
+  >,
+): ArtifactPreviewSidebarDetail | null {
+  const source = getArtifactSource(props.source)
+  if (!source) return null
+
+  return {
+    title: props.title,
+    description: props.description,
+    source,
+    footer: props.footer,
+  }
+}
+
+export function openArtifactPreviewSidebar(
+  detail: ArtifactPreviewSidebarDetail,
+): void {
+  if (typeof window === 'undefined') return
+
+  window.dispatchEvent(
+    new CustomEvent<ArtifactPreviewSidebarDetail>(OPEN_ARTIFACT_PREVIEW_EVENT, {
+      detail,
+    }),
+  )
 }
 
 function getSourceLabel(source: ArtifactSource): string {
@@ -132,26 +170,29 @@ function Preview({
   }
 }
 
-export function ArtifactPreview({
+interface ArtifactPreviewPanelProps extends ArtifactPreviewSidebarDetail {
+  isDarkMode?: boolean
+  className?: string
+}
+
+export function ArtifactPreviewPanel({
   title,
   description,
   source,
   footer,
   isDarkMode = true,
-}: ArtifactPreviewProps) {
-  const [mode, setMode] = useState<ViewMode>('preview')
-  const artifactSource = getArtifactSource(source)
+  className,
+}: ArtifactPreviewPanelProps) {
+  const [mode, setMode] = React.useState<ViewMode>('preview')
 
-  if (!artifactSource) return null
-
-  const copyText = sourceToCopyString(artifactSource)
+  const copyText = sourceToCopyString(source)
 
   return (
-    <Card className="my-3 overflow-hidden">
+    <Card className={className ?? 'my-3 overflow-hidden'}>
       <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-surface-chat-background px-4 py-2.5">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-content-muted">
-            {getSourceLabel(artifactSource)}
+            {getSourceLabel(source)}
           </p>
           {title && <CardTitle className="mt-1 text-base">{title}</CardTitle>}
           {description && (
@@ -176,9 +217,9 @@ export function ArtifactPreview({
               </>
             )}
           </button>
-          {artifactSource.type === 'url' && (
+          {source.type === 'url' && (
             <a
-              href={artifactSource.url}
+              href={source.url}
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-6 items-center gap-1 rounded px-2 text-xs text-content-muted hover:bg-surface-card hover:text-content-primary"
@@ -192,16 +233,76 @@ export function ArtifactPreview({
       </div>
       <CardContent className="p-4">
         {mode === 'preview' ? (
-          <Preview
-            source={artifactSource}
-            title={title}
-            isDarkMode={isDarkMode}
-          />
+          <Preview source={source} title={title} isDarkMode={isDarkMode} />
         ) : (
           <pre className="max-h-[420px] overflow-auto rounded-md bg-surface-chat-background p-3 text-xs text-content-primary">
             <code>{copyText}</code>
           </pre>
         )}
+      </CardContent>
+      {footer && (
+        <CardFooter className="border-t border-border-subtle bg-surface-chat-background px-4 py-3">
+          <p className="text-xs text-content-muted">{footer}</p>
+        </CardFooter>
+      )}
+    </Card>
+  )
+}
+
+export function ArtifactPreview({
+  title,
+  description,
+  source,
+  footer,
+}: ArtifactPreviewProps) {
+  const detail = getArtifactPreviewDetail({
+    title,
+    description,
+    source,
+    footer,
+  })
+
+  if (!detail) return null
+
+  const copyText = sourceToCopyString(detail.source)
+
+  return (
+    <Card className="my-3 overflow-hidden">
+      <div className="border-b border-border-subtle bg-surface-chat-background px-4 py-2.5">
+        <p className="text-xs font-medium uppercase tracking-wide text-content-muted">
+          {getSourceLabel(detail.source)}
+        </p>
+        {title && <CardTitle className="mt-1 text-base">{title}</CardTitle>}
+        {description && (
+          <CardDescription className="mt-1">{description}</CardDescription>
+        )}
+      </div>
+      <CardContent className="space-y-3 p-4">
+        <p className="text-sm text-content-muted">
+          Preview opens in the sidebar.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openArtifactPreviewSidebar(detail)}
+            className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card"
+          >
+            <Eye className="h-4 w-4" />
+            <span>Open preview</span>
+          </button>
+          {detail.source.type === 'url' && (
+            <a
+              href={detail.source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card"
+            >
+              <ExternalLink className="h-4 w-4" />
+              <span>Open source</span>
+            </a>
+          )}
+          <CopyButton text={copyText} />
+        </div>
       </CardContent>
       {footer && (
         <CardFooter className="border-t border-border-subtle bg-surface-chat-background px-4 py-3">
