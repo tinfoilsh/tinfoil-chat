@@ -403,7 +403,10 @@ export function ChatInterface({
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
 
   useEffect(() => {
-    if (manualRecoveryNeeded) {
+    // Only auto-open the recovery modal when the user actually has cloud sync
+    // turned on. Signed-in users with cloud sync disabled should not see it
+    // pop up on every load - they can still trigger it manually from settings.
+    if (manualRecoveryNeeded && isCloudSyncEnabled()) {
       setShowCloudSyncSetupModal(true)
     }
   }, [manualRecoveryNeeded])
