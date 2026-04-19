@@ -1,4 +1,5 @@
 import { toast } from '@/hooks/use-toast'
+import { downloadMarkdownAsPdf } from '@/utils/markdown-pdf-export'
 import DOMPurify from 'isomorphic-dompurify'
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { BsFiletypeMd, BsFiletypePdf } from 'react-icons/bs'
@@ -1003,72 +1004,11 @@ export const CodeBlock = memo(function CodeBlock({
     if (!markdownRef.current || isGeneratingPdf) return
 
     setIsGeneratingPdf(true)
-
-    // html2pdf internally clones the target and reparents it under document.body
-    // while the live <html> still carries the `dark` class, so Tailwind's
-    // `dark:` rules (e.g. `dark:prose-invert`) keep resolving and the PDF comes
-    // out with white-on-white text. To avoid that (and to pin the font to
-    // Helvetica) we clone the preview ourselves into a detached, off-screen
-    // wrapper, stamp inline styles that override the theme, and hand that clone
-    // to html2pdf instead of the live node.
-    const originalEl = markdownRef.current
-    const wrapper = document.createElement('div')
-    wrapper.style.position = 'fixed'
-    wrapper.style.top = '-10000px'
-    wrapper.style.left = '0'
-    wrapper.style.width = `${originalEl.scrollWidth}px`
-    wrapper.style.backgroundColor = '#ffffff'
-    wrapper.style.color = '#000000'
-    wrapper.style.padding = '0'
-    // Detach from any dark-mode ancestor so `:where(.dark *)` selectors miss.
-    wrapper.className = ''
-
-    const clone = originalEl.cloneNode(true) as HTMLElement
-    wrapper.appendChild(clone)
-    document.body.appendChild(wrapper)
-
-    // Remove overflow clipping inside the clone so wide tables capture fully.
-    clone
-      .querySelectorAll<HTMLElement>('.overflow-x-auto')
-      .forEach((el) => (el.style.overflow = 'visible'))
-
-    // Force a light palette + Helvetica on the clone via inline styles, which
-    // override any theme-driven class rules inherited from the stylesheet.
-    const PDF_FONT_FAMILY = 'Helvetica, Arial, sans-serif'
-    const PDF_MONO_FAMILY = 'ui-monospace, Menlo, Consolas, monospace'
-    const allEls: HTMLElement[] = [
-      clone,
-      ...Array.from(clone.querySelectorAll<HTMLElement>('*')),
-    ]
-    for (const el of allEls) {
-      const tag = el.tagName
-      const isMono =
-        tag === 'CODE' || tag === 'PRE' || tag === 'KBD' || tag === 'SAMP'
-      el.style.fontFamily = isMono ? PDF_MONO_FAMILY : PDF_FONT_FAMILY
-      el.style.color = tag === 'A' ? '#1d4ed8' : '#000000'
-      el.style.backgroundColor = el === clone ? '#ffffff' : 'transparent'
-      el.style.borderColor = '#e5e7eb'
-    }
-
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-      await html2pdf()
-        .set({
-          margin: [10, 10, 10, 10],
-          filename: 'document.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            backgroundColor: '#ffffff',
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        })
-        .from(clone)
-        .save()
+      await downloadMarkdownAsPdf(markdownRef.current)
     } catch {
       toast({ title: 'Failed to generate PDF', variant: 'destructive' })
     } finally {
-      wrapper.remove()
       setIsGeneratingPdf(false)
     }
   }
