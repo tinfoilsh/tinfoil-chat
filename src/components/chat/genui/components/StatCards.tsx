@@ -16,8 +16,8 @@ export function StatCards({ stats }: StatCardsProps) {
   const items = coerceArray<Stat>(stats)
   return (
     <div className="my-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {items.map((stat, index) => (
-        <Card key={index}>
+      {items.map((stat) => (
+        <Card key={stat.label}>
           <CardContent className="p-4">
             <p className="text-xs font-medium text-content-muted">
               {stat.label}
