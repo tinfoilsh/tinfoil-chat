@@ -1019,7 +1019,19 @@ export const CodeBlock = memo(function CodeBlock({
           margin: [10, 10, 10, 10],
           filename: 'document.pdf',
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2 },
+          html2canvas: {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            onclone: (clonedDoc: Document) => {
+              // Strip class-based dark mode so the PDF always renders with
+              // light-theme colors (prevents white text on white background).
+              clonedDoc.documentElement.classList.remove('dark')
+              clonedDoc.body.classList.remove('dark')
+              clonedDoc
+                .querySelectorAll('.dark')
+                .forEach((el) => el.classList.remove('dark'))
+            },
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         })
         .from(markdownRef.current)
