@@ -33,6 +33,7 @@ import {
   RateLimitBanner,
   shouldShowRateLimitBanner,
 } from '@/components/chat/rate-limit-banner'
+import { StreamErrorBanner } from '@/components/chat/stream-error-banner'
 import {
   ProjectModeBanner,
   ProjectSidebar,
@@ -617,6 +618,8 @@ export function ChatInterface({
     verificationSuccess,
     isWaitingForResponse,
     isStreaming,
+    streamError,
+    dismissStreamError,
     selectedModel,
     hasValidatedModel,
     expandedLabel,
@@ -2506,43 +2509,52 @@ export function ChatInterface({
               sidebarChat.askQuote(text, currentChat?.messages ?? [])
             }}
           />
-          <div
-            ref={scrollContainerRef}
-            onScroll={handleScroll}
-            data-scroll-container="main"
-            className="relative flex flex-1 overflow-y-auto bg-surface-chat-background"
-          >
-            <div className="flex min-w-0 flex-1 [container-type:inline-size]">
-              <ChatMessages
-                messages={currentChat?.messages || []}
+          <div className="relative flex min-h-0 flex-1">
+            {streamError && (
+              <StreamErrorBanner
+                message={streamError}
+                onDismiss={dismissStreamError}
                 isDarkMode={isDarkMode}
-                chatId={currentChat.id}
-                isWaitingForResponse={isWaitingForResponse}
-                isStreamingResponse={isStreaming}
-                isPremium={isPremium}
-                models={models}
-                onSubmit={handleSubmit}
-                input={input}
-                setInput={setInput}
-                loadingState={loadingState}
-                retryInfo={retryInfo}
-                cancelGeneration={cancelGeneration}
-                inputRef={inputRef}
-                handleInputFocus={handleInputFocus}
-                handleDocumentUpload={handleFileUpload}
-                processedDocuments={processedDocuments}
-                removeDocument={removeDocument}
-                selectedModel={selectedModel}
-                handleModelSelect={handleModelSelect}
-                expandedLabel={expandedLabel}
-                handleLabelClick={handleLabelClick}
-                onEditMessage={editMessage}
-                onRegenerateMessage={regenerateMessage}
-                showScrollButton={showScrollButton}
-                webSearchEnabled={webSearchEnabled}
-                onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
-                onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
               />
+            )}
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              data-scroll-container="main"
+              className="relative flex flex-1 overflow-y-auto bg-surface-chat-background"
+            >
+              <div className="flex min-w-0 flex-1 [container-type:inline-size]">
+                <ChatMessages
+                  messages={currentChat?.messages || []}
+                  isDarkMode={isDarkMode}
+                  chatId={currentChat.id}
+                  isWaitingForResponse={isWaitingForResponse}
+                  isStreamingResponse={isStreaming}
+                  isPremium={isPremium}
+                  models={models}
+                  onSubmit={handleSubmit}
+                  input={input}
+                  setInput={setInput}
+                  loadingState={loadingState}
+                  retryInfo={retryInfo}
+                  cancelGeneration={cancelGeneration}
+                  inputRef={inputRef}
+                  handleInputFocus={handleInputFocus}
+                  handleDocumentUpload={handleFileUpload}
+                  processedDocuments={processedDocuments}
+                  removeDocument={removeDocument}
+                  selectedModel={selectedModel}
+                  handleModelSelect={handleModelSelect}
+                  expandedLabel={expandedLabel}
+                  handleLabelClick={handleLabelClick}
+                  onEditMessage={editMessage}
+                  onRegenerateMessage={regenerateMessage}
+                  showScrollButton={showScrollButton}
+                  webSearchEnabled={webSearchEnabled}
+                  onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+                  onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
+                />
+              </div>
             </div>
           </div>
 

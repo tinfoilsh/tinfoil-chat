@@ -62,6 +62,8 @@ interface UseChatMessagingReturn {
   isThinking: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
+  streamError: string | null
+  dismissStreamError: () => void
   setInput: (input: string) => void
   handleSubmit: (e: React.FormEvent) => void
   handleQuery: (
@@ -108,6 +110,11 @@ export function useChatMessaging({
   const [isThinking, setIsThinking] = useState(false)
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
+
+  const dismissStreamError = useCallback(() => {
+    setStreamError(null)
+  }, [])
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const currentChatIdRef = useRef<string>(currentChat?.id || '')
@@ -259,6 +266,7 @@ export function useChatMessaging({
       setLoadingState('loading')
       setIsWaitingForResponse(true)
       setIsStreaming(true)
+      setStreamError(null)
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
@@ -678,24 +686,29 @@ export function useChatMessaging({
             lowerMsg.includes('request limit') ||
             lowerMsg.includes('insufficient_quota')
 
-          const errorMessage: Message = {
-            role: 'assistant',
-            content: `Error: ${errorMsg}`,
-            timestamp: new Date(),
-            isError: true,
-            isRateLimitError,
-          }
+          if (isRateLimitError) {
+            const errorMessage: Message = {
+              role: 'assistant',
+              content: `Error: ${errorMsg}`,
+              timestamp: new Date(),
+              isError: true,
+              isRateLimitError: true,
+            }
 
-          // Use the current chat ID from ref which has the correct (possibly server) ID
-          const currentId = currentChatIdRef.current || updatedChat.id
-          updateChatWithHistoryCheck(
-            setChats,
-            { ...updatedChat, id: currentId, pendingSave: false },
-            setCurrentChat,
-            currentId,
-            [...updatedMessages, errorMessage],
-            false,
-          )
+            // Use the current chat ID from ref which has the correct (possibly server) ID
+            const currentId = currentChatIdRef.current || updatedChat.id
+            updateChatWithHistoryCheck(
+              setChats,
+              { ...updatedChat, id: currentId, pendingSave: false },
+              setCurrentChat,
+              currentId,
+              [...updatedMessages, errorMessage],
+              false,
+            )
+          } else {
+            // Surface as a dismissable floating banner instead of a chat message
+            setStreamError(errorMsg)
+          }
         }
       } finally {
         // Refresh rate limit from server for free-tier users so the
@@ -797,6 +810,8 @@ export function useChatMessaging({
     isThinking,
     isWaitingForResponse,
     isStreaming,
+    streamError,
+    dismissStreamError,
     setInput,
     handleSubmit,
     handleQuery,

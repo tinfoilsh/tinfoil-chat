@@ -27,6 +27,8 @@ interface UseChatStateReturn {
   verificationSuccess: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
+  streamError: string | null
+  dismissStreamError: () => void
   selectedModel: AIModel
   hasValidatedModel: boolean
   expandedLabel: LabelType
@@ -168,6 +170,8 @@ export function useChatState({
     isThinking,
     isWaitingForResponse,
     isStreaming,
+    streamError,
+    dismissStreamError,
     setInput,
     handleSubmit,
     handleQuery,
@@ -277,6 +281,8 @@ export function useChatState({
     verificationSuccess,
     isWaitingForResponse,
     isStreaming,
+    streamError,
+    dismissStreamError,
     selectedModel,
     hasValidatedModel,
     expandedLabel,
