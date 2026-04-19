@@ -37,6 +37,10 @@ import { processStreamingResponse } from './streaming-processor'
 import { useMaxMessages } from './use-max-messages'
 import type { ReasoningEffort } from './use-reasoning-effort'
 
+interface HandleQueryOptions {
+  hideUserMessage?: boolean
+}
+
 interface UseChatMessagingProps {
   systemPrompt: string
   rules?: string
@@ -72,6 +76,7 @@ interface UseChatMessagingReturn {
     systemPromptOverride?: string,
     baseMessages?: Message[],
     quote?: string,
+    options?: HandleQueryOptions,
   ) => void
   cancelGeneration: () => Promise<void>
   editMessage: (messageIndex: number, newContent: string) => void
@@ -233,6 +238,7 @@ export function useChatMessaging({
       systemPromptOverride?: string,
       baseMessages?: Message[],
       quote?: string,
+      options?: HandleQueryOptions,
     ) => {
       // Allow empty query if systemPromptOverride, attachments, or a quote are provided
       if (
@@ -279,6 +285,7 @@ export function useChatMessaging({
         ? {
             role: 'user',
             content: query,
+            hiddenFromUI: options?.hideUserMessage ? true : undefined,
             attachments:
               attachments && attachments.length > 0 ? attachments : undefined,
             timestamp: new Date(),

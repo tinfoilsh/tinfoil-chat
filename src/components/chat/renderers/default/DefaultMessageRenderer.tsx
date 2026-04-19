@@ -30,6 +30,23 @@ import type { MessageRenderer, MessageRenderProps } from '../types'
 // rows stay visually in sync.
 const EVENT_STACK_CLASSES = 'flex flex-col gap-2'
 
+export function getAssistantRenderSections(
+  hasContent: boolean,
+  hasToolCalls: boolean,
+): Array<'content' | 'toolCalls'> {
+  const sections: Array<'content' | 'toolCalls'> = []
+
+  if (hasContent) {
+    sections.push('content')
+  }
+
+  if (hasToolCalls) {
+    sections.push('toolCalls')
+  }
+
+  return sections
+}
+
 const DefaultMessageComponent = ({
   message,
   messageIndex,
@@ -220,6 +237,10 @@ const DefaultMessageComponent = ({
       }),
     }
   }, [message.timestamp])
+  const assistantRenderSections = getAssistantRenderSections(
+    Boolean(message.content),
+    Boolean(message.toolCalls && message.toolCalls.length > 0),
+  )
 
   return (
     <div
@@ -498,19 +519,10 @@ const DefaultMessageComponent = ({
         </div>
       )}
 
-      {/* Tool call rendered components */}
-      {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
-        <div className="w-full px-4 py-2">
-          <GenUIToolCallRenderer
-            toolCalls={message.toolCalls}
-            isStreaming={!!(isStreaming && isLastMessage)}
-            isDarkMode={isDarkMode}
-          />
-        </div>
-      )}
-
       {/* Message content */}
-      {message.content && (!hasInlineTextSegments || isUser) && (
+      {assistantRenderSections.includes('content') &&
+        message.content &&
+        (!hasInlineTextSegments || isUser) && (
         <>
           {/* Hide message when editing for user messages */}
           {!(isUser && isEditing) && (
@@ -757,6 +769,20 @@ const DefaultMessageComponent = ({
           )}
         </>
       )}
+
+      {/* Tool call rendered components */}
+      {!isUser &&
+        assistantRenderSections.includes('toolCalls') &&
+        message.toolCalls &&
+        message.toolCalls.length > 0 && (
+          <div className="w-full px-4 py-2">
+            <GenUIToolCallRenderer
+              toolCalls={message.toolCalls}
+              isStreaming={!!(isStreaming && isLastMessage)}
+              isDarkMode={isDarkMode}
+            />
+          </div>
+        )}
 
       {/* Bridge indicator - shown while the assistant is still streaming but
           no other animated element (thinking, web search, tool-call cards)

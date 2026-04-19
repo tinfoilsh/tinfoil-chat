@@ -52,6 +52,15 @@ type ChatMessagesProps = {
   onOpenVerifier?: () => void
 }
 
+type MessageEntry = {
+  message: Message
+  messageIndex: number
+}
+
+export function getVisibleMessages(messages: Message[]): Message[] {
+  return messages.filter((message) => !message.hiddenFromUI)
+}
+
 // Optimized wrapper component that receives expanded state from parent
 const ChatMessage = memo(
   function ChatMessage({
@@ -310,49 +319,53 @@ export function ChatMessages({
   const maxMessages = useMaxMessages()
   const chatFont = useChatFont()
   const [showSpacer, setShowSpacer] = useState(false)
-  const prevMessageCountRef = React.useRef(messages.length)
+  const visibleMessages = useMemo(
+    () => getVisibleMessages(messages),
+    [messages],
+  )
+  const prevMessageCountRef = React.useRef(visibleMessages.length)
   const prevShowScrollButtonRef = React.useRef(showScrollButton)
   const messageCountWhenSpacerSetRef = React.useRef<number | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
 
   useChatPrint({
     printRef,
-    enabled: messages.length > 0,
+    enabled: visibleMessages.length > 0,
   })
 
   // Show spacer when user sends a new message
   React.useEffect(() => {
-    const lastMessage = messages[messages.length - 1]
+    const lastMessage = visibleMessages[visibleMessages.length - 1]
     if (
-      messages.length > prevMessageCountRef.current &&
+      visibleMessages.length > prevMessageCountRef.current &&
       lastMessage?.role === 'user'
     ) {
       setShowSpacer(true)
-      messageCountWhenSpacerSetRef.current = messages.length
+      messageCountWhenSpacerSetRef.current = visibleMessages.length
     }
-    prevMessageCountRef.current = messages.length
-  }, [messages])
+    prevMessageCountRef.current = visibleMessages.length
+  }, [visibleMessages])
 
   // Reset spacer when chat changes
   React.useEffect(() => {
     setShowSpacer(false)
-    prevMessageCountRef.current = messages.length
+    prevMessageCountRef.current = visibleMessages.length
     messageCountWhenSpacerSetRef.current = null
-  }, [chatId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chatId, visibleMessages.length])
 
   // Reset spacer when scroll-to-bottom button appears (user scrolled up)
   React.useEffect(() => {
     const buttonJustAppeared =
       showScrollButton && !prevShowScrollButtonRef.current
     const spacerSetForCurrentMessage =
-      messageCountWhenSpacerSetRef.current === messages.length
+      messageCountWhenSpacerSetRef.current === visibleMessages.length
 
     // Only reset if button transitioned to visible and we're not on the same message that triggered the spacer
     if (buttonJustAppeared && !spacerSetForCurrentMessage) {
       setShowSpacer(false)
     }
     prevShowScrollButtonRef.current = showScrollButton
-  }, [showScrollButton, messages.length])
+  }, [showScrollButton, visibleMessages.length])
 
   // Memoize the setter to prevent function reference changes
   const memoizedSetExpandedThoughtsState = useCallback(
@@ -374,11 +387,26 @@ export function ChatMessages({
 
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
-    const archived =
+    const toEntries = (items: Message[], offset: number): MessageEntry[] =>
+      items
+        .map((message, index) => ({
+          message,
+          messageIndex: offset + index,
+        }))
+        .filter(({ message }) => !message.hiddenFromUI)
+
+    const archivedSlice =
       messages.length > maxMessages ? messages.slice(0, -maxMessages) : []
-    const live =
+    const liveSlice =
       messages.length > maxMessages ? messages.slice(-maxMessages) : messages
-    return { archivedMessages: archived, liveMessages: live }
+
+    return {
+      archivedMessages: toEntries(archivedSlice, 0),
+      liveMessages: toEntries(
+        liveSlice,
+        messages.length > maxMessages ? messages.length - maxMessages : 0,
+      ),
+    }
   }, [messages, maxMessages])
 
   useEffect(() => {
@@ -389,7 +417,7 @@ export function ChatMessages({
     return <div className="h-full"></div>
   }
 
-  if (messages.length === 0 && !isWaitingForResponse) {
+  if (visibleMessages.length === 0 && !isWaitingForResponse) {
     return (
       <div className="flex min-h-full w-full items-center justify-center overflow-y-auto">
         <div className="w-full max-w-4xl px-8 pb-8 pt-16">
@@ -426,7 +454,7 @@ export function ChatMessages({
   }
 
   // Show loading dots only if waiting and no assistant thinking message exists yet
-  const lastMessage = liveMessages[liveMessages.length - 1]
+  const lastMessage = liveMessages[liveMessages.length - 1]?.message
   const hasAssistantThinking = Boolean(
     lastMessage &&
       lastMessage.role === 'assistant' &&
@@ -443,11 +471,11 @@ export function ChatMessages({
       {archivedMessages.length > 0 && (
         <>
           <div className={`opacity-70`}>
-            {archivedMessages.map((message, i) => (
+            {archivedMessages.map(({ message, messageIndex }, i) => (
               <ChatMessage
                 key={getMessageKey(`${chatId}-archived`, message, i)}
                 message={message}
-                messageIndex={i}
+                messageIndex={messageIndex}
                 model={currentModel}
                 isDarkMode={isDarkMode}
                 isLastMessage={false}
@@ -466,11 +494,11 @@ export function ChatMessages({
       )}
 
       {/* Live Messages - the last messages up to max prompt limit */}
-      {liveMessages.map((message, i) => (
+      {liveMessages.map(({ message, messageIndex }, i) => (
         <ChatMessage
           key={getMessageKey(`${chatId}-live`, message, i)}
           message={message}
-          messageIndex={archivedMessages.length + i}
+          messageIndex={messageIndex}
           model={currentModel}
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
@@ -503,7 +531,7 @@ export function ChatMessages({
           aria-hidden="true"
         />
       )}
-      <PrintableChat messages={messages} printRef={printRef} />
+      <PrintableChat messages={visibleMessages} printRef={printRef} />
     </div>
   )
 }

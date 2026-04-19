@@ -1007,7 +1007,9 @@ export function ChatInterface({
       const message = event.detail?.message?.trim()
       if (!message) return
 
-      void handleQuery(message)
+      void handleQuery(message, undefined, undefined, undefined, undefined, {
+        hideUserMessage: true,
+      })
     }
 
     window.addEventListener(

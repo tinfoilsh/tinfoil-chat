@@ -56,6 +56,7 @@ export type Attachment = {
 export type Message = {
   role: 'user' | 'assistant'
   content: string
+  hiddenFromUI?: boolean
   attachments?: Attachment[]
   // Legacy fields — kept for reading old messages, not written for new ones
   documentContent?: string
