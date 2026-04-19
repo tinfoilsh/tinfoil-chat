@@ -1,6 +1,6 @@
 import { LoadingDots } from '@/components/loading-dots'
 import { logError } from '@/utils/error-handling'
-import { memo } from 'react'
+import React, { memo } from 'react'
 import { renderGenUIToolCall } from './registry'
 import type { GenUIToolCall } from './types'
 
@@ -32,7 +32,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   isDarkMode,
 }: GenUIToolCallRendererProps) {
   return (
-    <>
+    <React.Fragment>
       {toolCalls.map((tc) => {
         const input = resolveInput(tc)
 
@@ -82,6 +82,6 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
 
         return null
       })}
-    </>
+    </React.Fragment>
   )
 })

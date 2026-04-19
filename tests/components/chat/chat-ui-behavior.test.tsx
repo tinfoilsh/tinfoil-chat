@@ -3,7 +3,12 @@ import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRend
 import { getAssistantRenderSections } from '@/components/chat/renderers/default/DefaultMessageRenderer'
 import type { Message } from '@/components/chat/types'
 import { render, screen } from '@testing-library/react'
+import React from 'react'
 import { describe, expect, it } from 'vitest'
+
+function renderWithReact(element: React.ReactElement) {
+  return render(<React.Fragment>{element}</React.Fragment>)
+}
 
 describe('chat UI behavior', () => {
   it('filters hidden action messages out of the visible chat timeline', () => {
@@ -32,7 +37,7 @@ describe('chat UI behavior', () => {
   })
 
   it('does not show a render error for incomplete tool calls after streaming stops', () => {
-    const { container } = render(
+    const { container } = renderWithReact(
       <GenUIToolCallRenderer
         toolCalls={[
           {

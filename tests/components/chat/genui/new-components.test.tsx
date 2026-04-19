@@ -23,11 +23,16 @@ import {
   WeatherCard,
 } from '@/components/chat/genui/components/WeatherCard'
 import { fireEvent, render, screen } from '@testing-library/react'
+import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/copy-button', () => ({
   default: () => null,
 }))
+
+function renderWithReact(element: React.ReactElement) {
+  return render(<React.Fragment>{element}</React.Fragment>)
+}
 
 describe('GenUI new components', () => {
   it('opens artifact previews in the sidebar', () => {
@@ -46,7 +51,7 @@ describe('GenUI new components', () => {
       }),
     ).toBe(true)
 
-    const { unmount } = render(
+    const { unmount } = renderWithReact(
       <ArtifactPreview
         title="Status board"
         description="Preview of the generated app"
@@ -83,7 +88,7 @@ describe('GenUI new components', () => {
   })
 
   it('renders artifact content inside the sidebar panel', () => {
-    render(
+    renderWithReact(
       <ArtifactSidebar
         isOpen={true}
         onClose={() => {}}
@@ -115,7 +120,7 @@ describe('GenUI new components', () => {
   it('resizes the artifact sidebar from the keyboard', () => {
     const handleWidthChange = vi.fn()
 
-    render(
+    renderWithReact(
       <ArtifactSidebar
         isOpen={true}
         onClose={() => {}}
@@ -145,7 +150,7 @@ describe('GenUI new components', () => {
       }),
     ).toBe(true)
 
-    render(
+    renderWithReact(
       <TaskPlan
         title="Deploy plan"
         tasks={[
@@ -171,7 +176,7 @@ describe('GenUI new components', () => {
       }),
     ).toBe(true)
 
-    render(
+    renderWithReact(
       <ConfirmationCard
         title="Run database migration"
         summary="This will apply schema changes to the production database."
@@ -196,7 +201,7 @@ describe('GenUI new components', () => {
       handleAction as EventListener,
     )
 
-    render(
+    renderWithReact(
       <ConfirmationCard
         title="Run database migration"
         summary="This will apply schema changes to the production database."
@@ -233,7 +238,7 @@ describe('GenUI new components', () => {
       }),
     ).toBe(true)
 
-    render(
+    renderWithReact(
       <WeatherCard
         location="San Francisco"
         condition="Partly cloudy"
@@ -261,7 +266,7 @@ describe('GenUI new components', () => {
       }),
     ).toBe(true)
 
-    render(
+    renderWithReact(
       <MapPlaceCard
         name="Blue Bottle Coffee"
         address="300 Webster St, Oakland, CA"

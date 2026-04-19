@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, CircleDot } from 'lucide-react'
+import React from 'react'
 import { coerceArray } from './input-coercion'
 
 interface Step {
@@ -12,9 +13,15 @@ interface StepsProps {
 }
 
 const STATUS_ICONS = {
-  pending: <Circle className="h-5 w-5 text-content-muted" />,
-  active: <CircleDot className="h-5 w-5 text-blue-500" />,
-  complete: <CheckCircle2 className="h-5 w-5 text-green-500" />,
+  pending: React.createElement(Circle, {
+    className: 'h-5 w-5 text-content-muted',
+  }),
+  active: React.createElement(CircleDot, {
+    className: 'h-5 w-5 text-blue-500',
+  }),
+  complete: React.createElement(CheckCircle2, {
+    className: 'h-5 w-5 text-green-500',
+  }),
 } as const
 
 export function Steps({ steps }: StepsProps) {
