@@ -1,6 +1,8 @@
 import { getVisibleMessages } from '@/components/chat/chat-messages'
+import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { getAssistantRenderSections } from '@/components/chat/renderers/default/DefaultMessageRenderer'
 import type { Message } from '@/components/chat/types'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 describe('chat UI behavior', () => {
@@ -27,5 +29,25 @@ describe('chat UI behavior', () => {
       'content',
       'toolCalls',
     ])
+  })
+
+  it('does not show a render error for incomplete tool calls after streaming stops', () => {
+    const { container } = render(
+      <GenUIToolCallRenderer
+        toolCalls={[
+          {
+            id: 'tool-call-1',
+            name: 'render_task_plan',
+            arguments: '{"title":"Plan","tasks":[',
+          },
+        ]}
+        isStreaming={false}
+      />,
+    )
+
+    expect(
+      screen.queryByText('Unable to render component: render_task_plan'),
+    ).not.toBeInTheDocument()
+    expect(container).toBeEmptyDOMElement()
   })
 })

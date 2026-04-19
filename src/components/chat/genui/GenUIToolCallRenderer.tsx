@@ -80,23 +80,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           )
         }
 
-        logError(
-          'GenUI arguments never parsed',
-          new Error(`Unable to render component: ${tc.name}`),
-          {
-            component: 'GenUIToolCallRenderer',
-            action: 'render',
-            metadata: { toolName: tc.name },
-          },
-        )
-        return (
-          <div
-            key={tc.id}
-            className="my-4 rounded-lg border border-border-subtle bg-transparent px-4 py-3 text-sm text-content-muted"
-          >
-            Unable to render component: {tc.name}
-          </div>
-        )
+        return null
       })}
     </>
   )
