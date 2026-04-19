@@ -26,26 +26,29 @@ export interface ConfirmationActionDetail {
 }
 
 type RiskMeta = {
-  railClass: string | null
+  headerClass: string
   badgeClass: string
   label: string
 }
 
 const RISK_META: Record<RiskLevel, RiskMeta> = {
   low: {
-    railClass: null,
+    headerClass:
+      'border-green-500/15 bg-green-500/5 text-green-700 dark:text-green-300',
     badgeClass:
       'border-green-500/20 bg-green-500/5 text-green-600 dark:text-green-400',
     label: 'Low risk',
   },
   medium: {
-    railClass: 'bg-yellow-500/70',
+    headerClass:
+      'border-yellow-500/15 bg-yellow-500/5 text-yellow-700 dark:text-yellow-300',
     badgeClass:
       'border-yellow-500/20 bg-yellow-500/5 text-yellow-700 dark:text-yellow-400',
     label: 'Medium risk',
   },
   high: {
-    railClass: 'bg-orange-500/80',
+    headerClass:
+      'border-orange-500/15 bg-orange-500/5 text-orange-700 dark:text-orange-300',
     badgeClass:
       'border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-400',
     label: 'High risk',
@@ -89,6 +92,9 @@ export function ConfirmationCard({
   const meta = RISK_META[riskLevel]
   const detailItems = getStringItems(details)
   const consequenceItems = getStringItems(consequences)
+  const headerTitle = requiresConfirmation
+    ? 'Action required'
+    : 'Review suggested'
   const handleAction = (action: ConfirmationAction, label: string) => {
     dispatchConfirmationAction({
       action,
@@ -99,15 +105,22 @@ export function ConfirmationCard({
   }
 
   return (
-    <div className="relative my-3 overflow-hidden rounded-lg border border-border-subtle bg-surface-card">
-      {meta.railClass && (
-        <div
-          className={`absolute inset-y-0 left-0 w-[3px] ${meta.railClass}`}
-          aria-hidden="true"
-        />
-      )}
+    <div className="my-3 overflow-hidden rounded-lg border border-border-subtle bg-surface-card">
+      <div
+        className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${meta.headerClass}`}
+      >
+        <p className="text-xs font-semibold uppercase tracking-[0.16em]">
+          {headerTitle}
+        </p>
+        <span
+          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${meta.badgeClass}`}
+        >
+          {meta.label}
+        </span>
+      </div>
+
       <div className="px-4 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-content-primary">
               {title}
@@ -116,11 +129,6 @@ export function ConfirmationCard({
               {summary}
             </p>
           </div>
-          <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${meta.badgeClass}`}
-          >
-            {meta.label}
-          </span>
         </div>
 
         {reason && (

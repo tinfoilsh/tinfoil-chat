@@ -39,6 +39,7 @@ import type { ReasoningEffort } from './use-reasoning-effort'
 
 interface HandleQueryOptions {
   hideUserMessage?: boolean
+  scrollToLatestUserMessage?: boolean
 }
 
 interface UseChatMessagingProps {
@@ -274,6 +275,9 @@ export function useChatMessaging({
       setIsStreaming(true)
       setStreamError(null)
 
+      const shouldScrollToLatestUserMessage =
+        options?.scrollToLatestUserMessage !== false
+
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
       const hasUserContent =
@@ -358,7 +362,7 @@ export function useChatMessaging({
         })
 
         // Scroll after state update and DOM renders
-        if (scrollToBottom) {
+        if (scrollToBottom && shouldScrollToLatestUserMessage) {
           setTimeout(() => scrollToBottom(), 50)
         }
 
@@ -415,7 +419,7 @@ export function useChatMessaging({
         })
 
         // Scroll after state update and DOM renders
-        if (scrollToBottom) {
+        if (scrollToBottom && shouldScrollToLatestUserMessage) {
           setTimeout(() => scrollToBottom(), 50)
         }
 
@@ -453,7 +457,7 @@ export function useChatMessaging({
         )
 
         // Scroll after state update and DOM renders
-        if (scrollToBottom) {
+        if (scrollToBottom && shouldScrollToLatestUserMessage) {
           setTimeout(() => scrollToBottom(), 50)
         }
 

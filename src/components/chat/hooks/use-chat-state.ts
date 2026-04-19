@@ -49,7 +49,10 @@ interface UseChatStateReturn {
     systemPromptOverride?: string,
     baseMessages?: Message[],
     quote?: string,
-    options?: { hideUserMessage?: boolean },
+    options?: {
+      hideUserMessage?: boolean
+      scrollToLatestUserMessage?: boolean
+    },
   ) => void
   createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   deleteChat: (chatId: string) => void

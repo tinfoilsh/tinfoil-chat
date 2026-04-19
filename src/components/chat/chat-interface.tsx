@@ -1012,6 +1012,7 @@ export function ChatInterface({
 
       void handleQuery(message, undefined, undefined, undefined, undefined, {
         hideUserMessage: true,
+        scrollToLatestUserMessage: false,
       })
     }
 

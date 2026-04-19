@@ -187,6 +187,7 @@ describe('GenUI new components', () => {
     )
 
     expect(screen.getByText('Run database migration')).toBeInTheDocument()
+    expect(screen.getByText('Action required')).toBeInTheDocument()
     expect(screen.getByText('High risk')).toBeInTheDocument()
     expect(
       screen.getByText('Awaiting confirmation in chat'),
