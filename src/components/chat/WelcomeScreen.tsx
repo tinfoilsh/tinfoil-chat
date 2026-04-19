@@ -2,13 +2,7 @@ import { type BaseModel } from '@/config/models'
 import { USER_PREFS_NICKNAME } from '@/constants/storage-keys'
 import { useUser } from '@clerk/nextjs'
 import { AnimatePresence, motion } from 'framer-motion'
-import React, {
-  memo,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react'
+import React, { memo, useEffect, useRef, useState } from 'react'
 import { BiSolidLock } from 'react-icons/bi'
 import { ChatInput } from './chat-input'
 import { CONSTANTS } from './constants'
@@ -17,12 +11,9 @@ import { ModelSelector } from './model-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
 
-const CIPHER_CHARS =
-  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-const DECRYPT_DURATION_MS = 3000
-const DECRYPT_DELAY_MS = 300
-const DECRYPT_INITIAL_PROGRESS = 0.5
-const DECRYPT_ZIPF_EXPONENT = 20
+const LINE_FADE_DURATION_S = 0.5
+const LINE_FADE_STAGGER_S = 0.15
+const LINE_FADE_INITIAL_DELAY_S = 0.1
 
 type Segment =
   | { type: 'text'; content: string }
@@ -43,230 +34,143 @@ type Segment =
       onClick?: () => void
     }
 
-function DecryptText({
-  segments,
-  animate,
-}: {
-  segments: Segment[]
-  animate: boolean
-}) {
-  const spanRefs = useRef<(HTMLSpanElement | null)[]>([])
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const animatingRef = useRef(false)
-  const segmentsRef = useRef(segments)
-  segmentsRef.current = segments
+function renderSegment(seg: Segment, key: React.Key) {
+  if (seg.type === 'citation') {
+    const domain = seg.href
+      ? new URL(seg.href).hostname.replace(/^www\./, '')
+      : null
+    const pillClass =
+      'mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20'
+    const inner = (
+      <>
+        {seg.href && (
+          <img
+            src={`https://icons.duckduckgo.com/ip3/${new URL(seg.href).hostname}.ico`}
+            alt=""
+            className="h-[1.1em] w-[1.1em] shrink-0 rounded-full bg-white p-[1px]"
+          />
+        )}
+        <span>{domain || seg.content}</span>
+      </>
+    )
+    if (seg.onClick) {
+      return (
+        <button
+          key={key}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            seg.onClick?.()
+          }}
+          className={pillClass}
+        >
+          {inner}
+        </button>
+      )
+    }
+    return (
+      <a
+        key={key}
+        href={seg.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={pillClass}
+      >
+        {inner}
+      </a>
+    )
+  }
 
-  // Pre-compute flat character list with segment/char indices
-  const flatChars = useRef<{ segIdx: number; charIdx: number }[]>([])
+  if (seg.type === 'link') {
+    return (
+      <a
+        key={key}
+        href={seg.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+      >
+        {seg.content}
+      </a>
+    )
+  }
 
-  useLayoutEffect(() => {
-    const chars: { segIdx: number; charIdx: number }[] = []
-    segments.forEach((seg, segIdx) => {
-      if (seg.type === 'citation') return
-      for (let i = 0; i < seg.content.length; i++) {
-        chars.push({ segIdx, charIdx: i })
+  if (seg.type === 'button') {
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          seg.onClick()
+        }}
+        className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
+      >
+        {seg.content}
+      </button>
+    )
+  }
+
+  return <span key={key}>{seg.content}</span>
+}
+
+/**
+ * Splits a flat list of segments into "lines" by breaking text segments on
+ * sentence boundaries (". "). Citation/link/button segments stay attached to
+ * whichever sentence they follow so inline pills don't orphan on their own line.
+ */
+function segmentsToLines(segments: Segment[]): Segment[][] {
+  const lines: Segment[][] = []
+  let current: Segment[] = []
+
+  const pushCurrent = () => {
+    if (current.length > 0) {
+      lines.push(current)
+      current = []
+    }
+  }
+
+  for (const seg of segments) {
+    if (seg.type !== 'text') {
+      current.push(seg)
+      continue
+    }
+
+    const parts = seg.content.split(/(?<=\. )/)
+    parts.forEach((part) => {
+      if (!part) return
+      current.push({ type: 'text', content: part })
+      if (/\.\s$/.test(part)) {
+        pushCurrent()
       }
     })
-    flatChars.current = chars
-  }, [segments])
+  }
 
-  useEffect(() => {
-    const segs = segmentsRef.current
-    const isMobile = window.matchMedia('(max-width: 767px)').matches
+  pushCurrent()
+  return lines
+}
 
-    if (!animate || isMobile) {
-      segs.forEach((seg, i) => {
-        if (seg.type === 'citation') return
-        const span = spanRefs.current[i]
-        if (span) span.textContent = seg.content
-      })
-      return
-    }
-
-    animatingRef.current = true
-    const totalChars = flatChars.current.length
-    const startTime = performance.now() + DECRYPT_DELAY_MS
-
-    // Assign each character a random resolve threshold (0–1)
-    const resolveAt = flatChars.current.map(
-      (_, i) => ((i * 2654435761) >>> 0) / 4294967296,
-    )
-
-    const buffers = segs.map((seg) =>
-      seg.type === 'citation' ? [] : [...seg.content],
-    )
-
-    const step = (now: number) => {
-      if (!animatingRef.current) return
-
-      const elapsed = now - startTime
-      const raw = Math.min(1, Math.max(0, elapsed / DECRYPT_DURATION_MS))
-      const done = raw >= 1
-      const eased = 1 - Math.pow(1 - raw, DECRYPT_ZIPF_EXPONENT)
-      const progress =
-        DECRYPT_INITIAL_PROGRESS + eased * (1 - DECRYPT_INITIAL_PROGRESS)
-
-      const cycleTick = Math.floor(now / 80)
-
-      for (let i = 0; i < totalChars; i++) {
-        const { segIdx, charIdx } = flatChars.current[i]
-        const realChar = segs[segIdx].content[charIdx]
-
-        if (done || progress >= resolveAt[i] || realChar === ' ') {
-          buffers[segIdx][charIdx] = realChar
-        } else {
-          const seed = (i * 13 + cycleTick) % CIPHER_CHARS.length
-          buffers[segIdx][charIdx] = CIPHER_CHARS[seed]
-        }
-      }
-
-      segs.forEach((_, i) => {
-        const span = spanRefs.current[i]
-        if (span) span.textContent = buffers[i].join('')
-      })
-
-      if (!done) {
-        requestAnimationFrame(step)
-      }
-    }
-
-    requestAnimationFrame(step)
-
-    return () => {
-      animatingRef.current = false
-    }
-    // Only run on mount (animate is always true when mounted)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+function FadeInLines({ segments }: { segments: Segment[] }) {
+  const lines = segmentsToLines(segments)
 
   return (
-    <span ref={wrapperRef} className="relative block">
-      {/* Invisible layer to establish correct height */}
-      <span aria-hidden="true" className="invisible">
-        {segments.map((seg, i) => {
-          if (seg.type === 'citation') {
-            const domain = seg.href
-              ? new URL(seg.href).hostname.replace(/^www\./, '')
-              : null
-            return (
-              <span
-                key={i}
-                className="mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 align-baseline text-[10px] font-medium text-blue-500"
-              >
-                {domain || seg.content}
-              </span>
-            )
-          }
-          if (seg.type === 'link') {
-            return (
-              <a
-                key={i}
-                className="text-brand-accent-dark dark:text-brand-accent-light"
-              >
-                {seg.content}
-              </a>
-            )
-          }
-          if (seg.type === 'button') {
-            return (
-              <span
-                key={i}
-                className="text-brand-accent-dark dark:text-brand-accent-light"
-              >
-                {seg.content}
-              </span>
-            )
-          }
-          return <span key={i}>{seg.content}</span>
-        })}
-      </span>
-      {/* Visible animated layer */}
-      <span className="absolute inset-0">
-        {segments.map((seg, i) => {
-          if (seg.type === 'citation') {
-            const domain = seg.href
-              ? new URL(seg.href).hostname.replace(/^www\./, '')
-              : null
-            const pillClass =
-              'mx-0.5 inline-flex h-[1.5em] items-center gap-1 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20'
-            const inner = (
-              <>
-                {seg.href && (
-                  <img
-                    src={`https://icons.duckduckgo.com/ip3/${new URL(seg.href).hostname}.ico`}
-                    alt=""
-                    className="h-[1.1em] w-[1.1em] shrink-0 rounded-full bg-white p-[1px]"
-                  />
-                )}
-                <span>{domain || seg.content}</span>
-              </>
-            )
-            if (seg.onClick) {
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    seg.onClick?.()
-                  }}
-                  className={pillClass}
-                >
-                  {inner}
-                </button>
-              )
-            }
-            return (
-              <a
-                key={i}
-                href={seg.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={pillClass}
-              >
-                {inner}
-              </a>
-            )
-          }
-
-          const ref = (el: HTMLSpanElement | null) => {
-            spanRefs.current[i] = el
-          }
-
-          if (seg.type === 'link') {
-            return (
-              <a
-                key={i}
-                href={seg.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-              >
-                <span ref={ref} />
-              </a>
-            )
-          }
-
-          if (seg.type === 'button') {
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  seg.onClick()
-                }}
-                className="text-brand-accent-dark transition-opacity hover:opacity-80 dark:text-brand-accent-light"
-              >
-                <span ref={ref} />
-              </button>
-            )
-          }
-
-          return <span key={i} ref={ref} />
-        })}
-      </span>
-    </span>
+    <>
+      {lines.map((line, lineIdx) => (
+        <motion.span
+          key={lineIdx}
+          className="inline"
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: LINE_FADE_DURATION_S,
+            ease: 'easeOut',
+            delay: LINE_FADE_INITIAL_DELAY_S + lineIdx * LINE_FADE_STAGGER_S,
+          }}
+        >
+          {line.map((seg, segIdx) => renderSegment(seg, segIdx))}
+        </motion.span>
+      ))}
+    </>
   )
 }
 
@@ -478,8 +382,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   className="overflow-hidden"
                 >
                   <p className="mt-2 text-left text-base leading-relaxed text-content-secondary">
-                    <DecryptText
-                      animate={privacyExpanded}
+                    <FadeInLines
                       segments={[
                         {
                           type: 'text',
