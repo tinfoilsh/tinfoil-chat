@@ -545,6 +545,7 @@ export function useChatMessaging({
             setLoadingState,
             storeHistory,
             startingChatId,
+            abortStream: () => controller.abort(),
           },
         )
 

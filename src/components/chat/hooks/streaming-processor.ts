@@ -16,7 +16,8 @@
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import type { ChatStreamHandle } from '@/services/inference/inference-client'
 import { processCitationMarkers } from '@/utils/citation-processing'
-import { logError } from '@/utils/error-handling'
+import { logError, logWarning } from '@/utils/error-handling'
+import { CONSTANTS } from '../constants'
 import type {
   Annotation,
   Chat,
@@ -51,6 +52,7 @@ export interface StreamingContext {
   setLoadingState: (s: 'idle' | 'loading') => void
   storeHistory: boolean
   startingChatId: string
+  abortStream?: () => void
 }
 
 export interface StreamingHandlers {
@@ -97,11 +99,37 @@ export async function processStreamingResponse(
   let webSearchState: WebSearchState | undefined = undefined
   let thinkingStarted = false
   let searchReasoning = ''
+  let streamStalled = false
+  let stallTimer: ReturnType<typeof setTimeout> | null = null
 
   const toolCallsInProgress = new Map<
     string,
     { id: string; name: string; arguments: string; input?: unknown }
   >()
+
+  const clearStallTimer = () => {
+    if (!stallTimer) return
+    clearTimeout(stallTimer)
+    stallTimer = null
+  }
+
+  const resetStallTimer = () => {
+    if (!ctx.abortStream) return
+
+    clearStallTimer()
+    stallTimer = setTimeout(() => {
+      streamStalled = true
+      logWarning('Streaming response stalled, aborting request', {
+        component: 'streaming-processor',
+        action: 'stall-timeout',
+        metadata: {
+          chatId: streamingChatId,
+          timeoutMs: CONSTANTS.STREAMING_STALL_TIMEOUT_MS,
+        },
+      })
+      ctx.abortStream?.()
+    }, CONSTANTS.STREAMING_STALL_TIMEOUT_MS)
+  }
 
   const getMessageWithCitations = (): Message => {
     if (assistantMessage.content && collectedSources.length > 0) {
@@ -181,6 +209,8 @@ export async function processStreamingResponse(
   // url_citation / search_reasoning events.
   const unsubscribe = handle.sidechannel.subscribe((event) => {
     try {
+      resetStallTimer()
+
       if (event.type === 'web_search_call') {
         const searchQuery = event.query
         if (event.status === 'in_progress' && searchQuery) {
@@ -290,11 +320,14 @@ export async function processStreamingResponse(
   try {
     ctx.isStreamingRef.current = true
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
+    resetStallTimer()
 
     for await (const part of handle.result.fullStream) {
       if (!isSameChat()) {
         break
       }
+
+      resetStallTimer()
 
       switch (part.type) {
         case 'start':
@@ -473,8 +506,19 @@ export async function processStreamingResponse(
     if (isSameChat()) {
       commit(assistantMessage)
     }
+  } catch (error) {
+    if (
+      !(
+        streamStalled &&
+        error instanceof DOMException &&
+        error.name === 'AbortError'
+      )
+    ) {
+      throw error
+    }
   } finally {
     unsubscribe()
+    clearStallTimer()
     cancelScheduled()
     ctx.setLoadingState('idle')
     ctx.isStreamingRef.current = false

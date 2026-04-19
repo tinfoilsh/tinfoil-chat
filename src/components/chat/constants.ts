@@ -43,6 +43,7 @@ export const CONSTANTS = {
   VERIFICATION_RETRY_DELAY_MS: 2000, // Base delay between retries (exponential backoff)
   MESSAGE_SEND_MAX_RETRIES: 6,
   MESSAGE_SEND_RETRY_DELAY_MS: 1000, // Base delay between retries (exponential backoff)
+  STREAMING_STALL_TIMEOUT_MS: 30000,
   // Placeholder messages for empty chat input
   INPUT_PLACEHOLDERS: [
     "What's on your mind?",

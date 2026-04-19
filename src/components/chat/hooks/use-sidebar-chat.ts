@@ -235,6 +235,7 @@ export function useSidebarChat({
             setLoadingState: setLoadingState as never,
             storeHistory: false,
             startingChatId: EPHEMERAL_CHAT_ID,
+            abortStream: () => controller.abort(),
           })
 
           if (assistantMessage && abortControllerRef.current === controller) {
