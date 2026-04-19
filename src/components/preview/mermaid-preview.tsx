@@ -34,6 +34,12 @@ export function MermaidPreview({
           startOnLoad: false,
           theme: isDarkMode ? 'dark' : 'default',
           securityLevel: 'strict',
+          // Render labels as SVG <text> nodes instead of wrapping them in
+          // <foreignObject><div>...</div></foreignObject>, which DOMPurify
+          // strips under its SVG profile.
+          htmlLabels: false,
+          flowchart: { htmlLabels: false },
+          class: { htmlLabels: false },
         })
 
         const { svg: renderedSvg } = await mermaid.render(idRef, code)
@@ -61,6 +67,7 @@ export function MermaidPreview({
 
   const sanitized = DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ['style'],
   })
 
   return (
