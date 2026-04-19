@@ -1,5 +1,6 @@
 import { Progress } from '@/components/ui/progress'
 import { AlertTriangle, CheckCircle2, Circle, CircleDot } from 'lucide-react'
+import React from 'react'
 import { coerceArray } from './input-coercion'
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked'
@@ -106,7 +107,7 @@ export function TaskPlan({
   progress,
   tasks,
   nextStep,
-}: TaskPlanProps) {
+}: TaskPlanProps): React.JSX.Element {
   const items = getTasks(tasks)
   const overallStatus = getOverallStatus(status, items)
   const overallMeta = STATUS_META[overallStatus]

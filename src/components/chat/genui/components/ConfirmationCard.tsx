@@ -1,7 +1,11 @@
 import { AlertTriangle, CheckCircle2, Shield } from 'lucide-react'
+import React from 'react'
 import { coerceArray } from './input-coercion'
 
 type RiskLevel = 'low' | 'medium' | 'high'
+type ConfirmationAction = 'confirm' | 'cancel'
+
+export const CONFIRMATION_ACTION_EVENT = 'submitConfirmationCardAction'
 
 interface ConfirmationCardProps {
   title: string
@@ -13,6 +17,13 @@ interface ConfirmationCardProps {
   confirmLabel?: string
   cancelLabel?: string
   requiresConfirmation?: boolean
+}
+
+export interface ConfirmationActionDetail {
+  action: ConfirmationAction
+  label: string
+  title: string
+  message: string
 }
 
 const RISK_META = {
@@ -48,6 +59,23 @@ function getStringItems(value: unknown): string[] {
   )
 }
 
+export function buildConfirmationActionMessage(
+  title: string,
+  label: string,
+): string {
+  return `I clicked "${label}" on the confirmation card for "${title}".`
+}
+
+function dispatchConfirmationAction(detail: ConfirmationActionDetail): void {
+  if (typeof window === 'undefined') return
+
+  window.dispatchEvent(
+    new CustomEvent<ConfirmationActionDetail>(CONFIRMATION_ACTION_EVENT, {
+      detail,
+    }),
+  )
+}
+
 export function ConfirmationCard({
   title,
   summary,
@@ -58,11 +86,19 @@ export function ConfirmationCard({
   confirmLabel = 'Approve',
   cancelLabel = 'Revise',
   requiresConfirmation = true,
-}: ConfirmationCardProps) {
+}: ConfirmationCardProps): React.JSX.Element {
   const meta = RISK_META[riskLevel]
   const Icon = meta.icon
   const detailItems = getStringItems(details)
   const consequenceItems = getStringItems(consequences)
+  const handleAction = (action: ConfirmationAction, label: string) => {
+    dispatchConfirmationAction({
+      action,
+      label,
+      title,
+      message: buildConfirmationActionMessage(title, label),
+    })
+  }
 
   return (
     <div
@@ -123,12 +159,20 @@ export function ConfirmationCard({
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary">
+            <button
+              type="button"
+              onClick={() => handleAction('confirm', confirmLabel)}
+              className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
+            >
               {confirmLabel}
-            </span>
-            <span className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary">
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAction('cancel', cancelLabel)}
+              className="rounded-full border border-border-subtle bg-surface-card px-3 py-1 text-xs font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
+            >
               {cancelLabel}
-            </span>
+            </button>
             <span className="text-xs text-content-muted">
               {requiresConfirmation
                 ? 'Awaiting confirmation in chat'

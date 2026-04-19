@@ -14,6 +14,7 @@ import {
   Phone,
   Star,
 } from 'lucide-react'
+import React from 'react'
 import { coerceArray } from './input-coercion'
 
 interface MapPlaceCardProps {
@@ -76,7 +77,7 @@ export function MapPlaceCard({
   directionsUrl,
   sourceUrl,
   distance,
-}: MapPlaceCardProps) {
+}: MapPlaceCardProps): React.JSX.Element {
   const hourItems = getHours(hours)
 
   return (
