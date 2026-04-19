@@ -19,6 +19,7 @@ import { MessageActions } from '../components/MessageActions'
 import { SourcesButton } from '../components/SourcesButton'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
+import { StreamingSilenceIndicator } from '../components/StreamingSilenceIndicator'
 import { ThoughtProcess } from '../components/ThoughtProcess'
 import { URLFetchProcess } from '../components/URLFetchProcess'
 import { WebSearchProcess } from '../components/WebSearchProcess'
@@ -755,6 +756,20 @@ const DefaultMessageComponent = ({
             </div>
           )}
         </>
+      )}
+
+      {/* Bridge indicator - shown while the assistant is still streaming but
+          no other animated element (thinking, web search, tool-call cards)
+          is visible. Covers the silence between narration text and the first
+          finalized tool call. */}
+      {!isUser && isStreaming && isLastMessage && (
+        <StreamingSilenceIndicator
+          isThinking={!!message.isThinking}
+          hasActiveWebSearch={message.webSearch?.status === 'searching'}
+          hasActiveToolCalls={
+            !!message.toolCalls && message.toolCalls.length > 0
+          }
+        />
       )}
 
       {/* Actions for assistant messages - hidden while streaming the last response */}
