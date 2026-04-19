@@ -248,12 +248,183 @@ const renderedImageInput = z.object({
   caption: z.string().optional().describe('Caption shown below the image'),
 })
 
+const artifactPreviewInput = z.object({
+  title: z.string().optional().describe('Artifact title'),
+  description: z
+    .string()
+    .optional()
+    .describe('Short description of what the artifact shows'),
+  source: z
+    .discriminatedUnion('type', [
+      z
+        .object({
+          type: z.literal('url'),
+          url: z
+            .string()
+            .describe('Publicly accessible URL for a hosted preview'),
+        })
+        .describe('Preview a hosted app or document in an iframe'),
+      z
+        .object({
+          type: z.literal('html'),
+          html: z.string().describe('HTML document source for the artifact'),
+        })
+        .describe('Preview generated HTML or a small self-contained app'),
+      z
+        .object({
+          type: z.literal('markdown'),
+          markdown: z.string().describe('Markdown content for the artifact'),
+        })
+        .describe('Preview a generated markdown document'),
+      z
+        .object({
+          type: z.literal('svg'),
+          svg: z.string().describe('Raw SVG markup for the artifact'),
+        })
+        .describe('Preview a generated SVG artifact'),
+      z
+        .object({
+          type: z.literal('mermaid'),
+          code: z.string().describe('Mermaid diagram source for the artifact'),
+        })
+        .describe('Preview a Mermaid diagram artifact'),
+    ])
+    .describe(
+      'Artifact content to preview — use html for generated apps, markdown for docs, svg/mermaid for diagrams, or url for a hosted preview.',
+    ),
+  footer: z
+    .string()
+    .optional()
+    .describe('Footer note shown under the artifact'),
+})
+
+const taskPlanInput = z.object({
+  title: z.string().optional().describe('Plan title'),
+  summary: z.string().optional().describe('Short summary of the plan'),
+  status: z
+    .enum(['pending', 'in_progress', 'completed', 'blocked'])
+    .optional()
+    .describe('Overall plan status'),
+  progress: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe('Overall completion percentage'),
+  tasks: z
+    .array(
+      z.object({
+        title: z.string(),
+        description: z.string().optional(),
+        status: z
+          .enum(['pending', 'in_progress', 'completed', 'blocked'])
+          .optional(),
+      }),
+    )
+    .describe('Ordered list of plan tasks'),
+  nextStep: z.string().optional().describe('Recommended next step'),
+})
+
+const confirmationCardInput = z.object({
+  title: z.string().describe('Title of the action awaiting approval'),
+  summary: z.string().describe('Short summary of what would happen'),
+  riskLevel: z
+    .enum(['low', 'medium', 'high'])
+    .optional()
+    .describe('Relative risk of the requested action'),
+  reason: z
+    .string()
+    .optional()
+    .describe('Why confirmation is needed before proceeding'),
+  details: z
+    .array(z.string())
+    .optional()
+    .describe('Specific details about the action to approve'),
+  consequences: z
+    .array(z.string())
+    .optional()
+    .describe('Potential impacts or side effects if approved'),
+  confirmLabel: z
+    .string()
+    .optional()
+    .describe('Suggested confirmation reply, e.g. "Approve"'),
+  cancelLabel: z
+    .string()
+    .optional()
+    .describe('Suggested alternative reply, e.g. "Revise"'),
+  requiresConfirmation: z
+    .boolean()
+    .optional()
+    .describe('Whether explicit user confirmation is required'),
+})
+
+const weatherCardInput = z.object({
+  location: z.string().describe('Location name'),
+  condition: z.string().describe('Current weather condition'),
+  temperature: z
+    .union([z.string(), z.number()])
+    .describe('Current temperature'),
+  unit: z.enum(['C', 'F']).optional().describe('Temperature unit'),
+  feelsLike: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Feels-like temperature'),
+  high: z.union([z.string(), z.number()]).optional().describe('Daily high'),
+  low: z.union([z.string(), z.number()]).optional().describe('Daily low'),
+  precipitationChance: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Chance of precipitation'),
+  humidity: z.union([z.string(), z.number()]).optional().describe('Humidity'),
+  wind: z.string().optional().describe('Wind speed or direction'),
+  forecast: z
+    .array(
+      z.object({
+        label: z.string(),
+        condition: z.string().optional(),
+        temperature: z.union([z.string(), z.number()]).optional(),
+        high: z.union([z.string(), z.number()]).optional(),
+        low: z.union([z.string(), z.number()]).optional(),
+        precipitationChance: z.union([z.string(), z.number()]).optional(),
+      }),
+    )
+    .optional()
+    .describe('Short forecast items, such as hourly or daily outlooks'),
+  updatedAt: z.string().optional().describe('Timestamp or recency label'),
+})
+
+const mapPlaceCardInput = z.object({
+  name: z.string().describe('Place name'),
+  address: z.string().describe('Street address or location description'),
+  description: z.string().optional().describe('Short place description'),
+  image: z.string().optional().describe('Preview image URL'),
+  category: z.string().optional().describe('Place category'),
+  rating: z.number().optional().describe('Average rating'),
+  reviewCount: z.number().optional().describe('Number of reviews'),
+  priceLevel: z.string().optional().describe('Price tier, e.g. "$$"'),
+  openNow: z.boolean().optional().describe('Whether the place is open now'),
+  hours: z.array(z.string()).optional().describe('Opening hours'),
+  phone: z.string().optional().describe('Phone number'),
+  websiteUrl: z.string().optional().describe('Official website URL'),
+  directionsUrl: z.string().optional().describe('Directions or maps URL'),
+  sourceUrl: z.string().optional().describe('Supporting source URL'),
+  distance: z
+    .string()
+    .optional()
+    .describe('Distance from the user or reference'),
+})
+
 /**
  * Tool map passed to `streamText({ tools })`. Tool results are rendered by
  * the component registry; we do not declare `execute` because the tools are
  * display-only — the UI handles the result on the client.
  */
 export const GENUI_TOOLS = {
+  render_artifact_preview: tool({
+    description:
+      'Render a previewable artifact panel for generated apps, HTML, markdown documents, or diagrams. Use this instead of dumping raw HTML, SVG, or Mermaid into markdown.',
+    inputSchema: artifactPreviewInput,
+  }),
   render_info_card: tool({
     description:
       'Display a highlighted card with structured information. Use for a single key fact, definition, or summary.',
@@ -273,6 +444,11 @@ export const GENUI_TOOLS = {
     description:
       'Show an ordered list of steps or a checklist. Use for processes, instructions, or progress tracking.',
     inputSchema: stepsInput,
+  }),
+  render_task_plan: tool({
+    description:
+      'Display a task or execution plan with statuses and overall progress. Use for multi-step workflows, agent plans, or long-running work.',
+    inputSchema: taskPlanInput,
   }),
   render_progress_bar: tool({
     description:
@@ -319,6 +495,11 @@ export const GENUI_TOOLS = {
       'Display a highlighted callout box for key takeaways, warnings, tips, or notes.',
     inputSchema: calloutInput,
   }),
+  render_confirmation_card: tool({
+    description:
+      'Display an approval card for a sensitive or high-impact action. Use when the user should confirm before the assistant proceeds.',
+    inputSchema: confirmationCardInput,
+  }),
   render_link_preview: tool({
     description:
       'Render a single rich link preview card with optional image and description.',
@@ -328,6 +509,16 @@ export const GENUI_TOOLS = {
     description:
       'Display a fact sheet of labeled values. Use for structured attributes like specs or metadata.',
     inputSchema: keyValueListInput,
+  }),
+  render_weather_card: tool({
+    description:
+      'Display current weather conditions with supporting details and a short forecast.',
+    inputSchema: weatherCardInput,
+  }),
+  render_map_place_card: tool({
+    description:
+      'Display a place card with location details, hours, rating, and useful links such as directions or source URLs.',
+    inputSchema: mapPlaceCardInput,
   }),
   render_image_grid: tool({
     description:
