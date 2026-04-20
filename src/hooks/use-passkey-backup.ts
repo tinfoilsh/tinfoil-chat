@@ -2,6 +2,9 @@ import {
   PASSKEY_BUNDLE_VERSION,
   PASSKEY_SYNC_VERSION,
   SECRET_PASSKEY_BACKED_UP,
+  SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED,
+  SETTINGS_PASSKEY_RECOVERY_DISMISSED,
+  SETTINGS_PASSKEY_SETUP_WARNING_DISMISSED,
 } from '@/constants/storage-keys'
 import type { CloudKeyAuthorizationMode } from '@/services/cloud/cloud-key-authorization'
 import {
@@ -22,6 +25,7 @@ import {
   getPasskeyCredentialState,
   loadPasskeyCredentials,
   PasskeyCredentialConflictError,
+  PasskeyTimeoutError,
   PrfNotSupportedError,
   retrieveEncryptedKeys,
   storeEncryptedKeys,
@@ -41,6 +45,19 @@ export interface PasskeyBackupState {
   manualRecoveryNeeded: boolean
   /** PRF supported + keys exist locally; user can register a passkey backup from settings */
   passkeySetupAvailable: boolean
+  /**
+   * Passkey backup setup was attempted but failed because the user's passkey
+   * provider doesn't actually support PRF or hung. Surfaces the
+   * "your chats are not backed up" warning modal.
+   */
+  passkeySetupFailed: boolean
+  /**
+   * First-time user with no local key, no remote backup, and PRF support
+   * available. Surfaces a confirmation modal asking whether to enable
+   * passkey-backed cloud sync — we no longer invoke the native passkey
+   * prompt automatically on page load.
+   */
+  passkeyFirstTimePromptAvailable: boolean
 }
 
 export interface UsePasskeyBackupOptions {
@@ -110,6 +127,59 @@ function setLocalBundleVersion(version: number): void {
   }
 }
 
+interface StorageFlag {
+  isSet: () => boolean
+  set: () => void
+  clear: () => void
+}
+
+// Build a best-effort boolean flag backed by a web Storage bucket. All
+// operations swallow errors so Safari ITP / quota / private-mode failures
+// never crash the hook.
+function createStorageFlag(
+  getStorage: () => Storage,
+  key: string,
+): StorageFlag {
+  return {
+    isSet: () => {
+      try {
+        return getStorage().getItem(key) === 'true'
+      } catch {
+        return false
+      }
+    },
+    set: () => {
+      try {
+        getStorage().setItem(key, 'true')
+      } catch {
+        // best-effort
+      }
+    },
+    clear: () => {
+      try {
+        getStorage().removeItem(key)
+      } catch {
+        // best-effort
+      }
+    },
+  }
+}
+
+const setupWarningDismissedFlag = createStorageFlag(
+  () => sessionStorage,
+  SETTINGS_PASSKEY_SETUP_WARNING_DISMISSED,
+)
+
+const passkeyRecoveryDismissedFlag = createStorageFlag(
+  () => localStorage,
+  SETTINGS_PASSKEY_RECOVERY_DISMISSED,
+)
+
+const firstTimePromptDismissedFlag = createStorageFlag(
+  () => sessionStorage,
+  SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED,
+)
+
 export function usePasskeyBackup({
   encryptionKey,
   initialized,
@@ -122,6 +192,8 @@ export function usePasskeyBackup({
     passkeyRecoveryNeeded: false,
     manualRecoveryNeeded: false,
     passkeySetupAvailable: false,
+    passkeySetupFailed: false,
+    passkeyFirstTimePromptAvailable: false,
   })
 
   const isMountedRef = useRef(true)
@@ -131,6 +203,7 @@ export function usePasskeyBackup({
   const onEncryptionKeyRecoveredRef = useRef(onEncryptionKeyRecovered)
   onEncryptionKeyRecoveredRef.current = onEncryptionKeyRecovered
   const hasInitializedPasskeyRef = useRef(false)
+  const previousUserIdRef = useRef<string | null | undefined>(undefined)
 
   // Cleanup on unmount
   useEffect(() => {
@@ -138,6 +211,43 @@ export function usePasskeyBackup({
       isMountedRef.current = false
     }
   }, [])
+
+  // When the signed-in user changes *after* the initial sign-in hydration
+  // (sign-out-then-sign-in on the same tab, or a user switch), reset the
+  // init guard and per-user state so the passkey init effect re-runs for
+  // the new session. Also clear any previous-session recovery dismissal so
+  // we never inherit a prior user's "don't prompt me" choice.
+  //
+  // The ref starts as `undefined` and is only populated once we've observed
+  // a real user ID. This way, the initial Clerk hydration sequence
+  // (`undefined → null → <id>` on reload, or `undefined → <id>` directly)
+  // does not trip the reset and wipe legitimate same-user dismissals.
+  useEffect(() => {
+    const currentUserId = isSignedIn ? (user?.id ?? null) : null
+    if (previousUserIdRef.current === undefined) {
+      if (currentUserId !== null) {
+        previousUserIdRef.current = currentUserId
+      }
+      return
+    }
+    if (currentUserId !== null && currentUserId !== previousUserIdRef.current) {
+      hasInitializedPasskeyRef.current = false
+      passkeyRecoveryDismissedFlag.clear()
+      firstTimePromptDismissedFlag.clear()
+      setupWarningDismissedFlag.clear()
+      if (isMountedRef.current) {
+        setState({
+          passkeyActive: false,
+          passkeyRecoveryNeeded: false,
+          manualRecoveryNeeded: false,
+          passkeySetupAvailable: false,
+          passkeySetupFailed: false,
+          passkeyFirstTimePromptAvailable: false,
+        })
+      }
+      previousUserIdRef.current = currentUserId
+    }
+  }, [isSignedIn, user?.id])
 
   /**
    * Build the (userId, userName, displayName) tuple for createPrfPasskey
@@ -597,6 +707,10 @@ export function usePasskeyBackup({
    * Returns the recovered primary key on success, null on failure.
    */
   const recoverWithPasskey = useCallback(async (): Promise<string | null> => {
+    // Each explicit user-initiated passkey action resets the session
+    // "warning dismissed" flag, so a dismissal from an earlier failure
+    // flow doesn't silently suppress the warning on a new attempt.
+    setupWarningDismissedFlag.clear()
     try {
       const previousKeys = encryptionService.getAllKeys()
       const recovery = await performPasskeyRecovery()
@@ -609,6 +723,7 @@ export function usePasskeyBackup({
       if (!appliedMode) return null
 
       applyRecoveredKeys(recovery)
+      passkeyRecoveryDismissedFlag.clear()
 
       logInfo('Recovered encryption keys via passkey retry', {
         component: 'usePasskeyBackup',
@@ -617,6 +732,26 @@ export function usePasskeyBackup({
       })
       return recovery.keyBundle.primary
     } catch (error) {
+      if (
+        error instanceof PrfNotSupportedError ||
+        error instanceof PasskeyTimeoutError
+      ) {
+        logInfo('Passkey provider cannot complete PRF recovery', {
+          component: 'usePasskeyBackup',
+          action: 'recoverWithPasskey',
+          metadata: { reason: error.name },
+        })
+        if (isMountedRef.current) {
+          const alreadyDismissed = setupWarningDismissedFlag.isSet()
+          setState((prev) => ({
+            ...prev,
+            passkeySetupFailed: alreadyDismissed
+              ? prev.passkeySetupFailed
+              : true,
+          }))
+        }
+        return null
+      }
       logError('Passkey recovery retry failed', error, {
         component: 'usePasskeyBackup',
         action: 'recoverWithPasskey',
@@ -632,7 +767,25 @@ export function usePasskeyBackup({
 
     const initializePasskey = async () => {
       const prfSupported = await isPrfSupported()
-      if (!prfSupported) return
+
+      if (!prfSupported) {
+        // The device/provider can't do PRF, so passkey-backed cloud sync is
+        // unavailable here. If the user has no local key and no remote data
+        // we warn them that their chats will only exist on this device and
+        // offer the manual-backup fallback. If remote data exists, they need
+        // the manual recovery flow to decrypt it. Users who already have a
+        // local key stay silent — local storage works fine even without PRF.
+        if (!encryptionKey) {
+          const remoteState = await inspectRemoteEncryptedState()
+          if (!isMountedRef.current) return
+          if (remoteState === 'empty') {
+            setState((prev) => ({ ...prev, passkeySetupFailed: true }))
+          } else {
+            setState((prev) => ({ ...prev, manualRecoveryNeeded: true }))
+          }
+        }
+        return
+      }
 
       if (encryptionKey) {
         // User has local keys — check for existing backup
@@ -660,12 +813,20 @@ export function usePasskeyBackup({
           }
         }
       } else {
-        // No localStorage keys — try passkey recovery
+        // No localStorage keys — check backend state but do not auto-prompt
+        // the user with a native passkey dialog. We surface the appropriate
+        // UI state flag instead and let the user trigger the WebAuthn call
+        // explicitly from a confirmation or recovery modal.
         const credentialState = await getPasskeyCredentialState()
 
         if (credentialState === 'exists') {
-          const recovered = await tryPasskeyRecovery()
-          if (!recovered && isMountedRef.current) {
+          // If the user explicitly dismissed the recovery prompt on a
+          // previous visit, stay silent on reload — they can re-trigger
+          // recovery from Settings when they're ready.
+          if (passkeyRecoveryDismissedFlag.isSet()) {
+            return
+          }
+          if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
               passkeyRecoveryNeeded: true,
@@ -675,7 +836,12 @@ export function usePasskeyBackup({
           const remoteState = await inspectRemoteEncryptedState()
 
           if (remoteState === 'empty') {
-            await setupFirstTimePasskeyUser()
+            if (isMountedRef.current && !firstTimePromptDismissedFlag.isSet()) {
+              setState((prev) => ({
+                ...prev,
+                passkeyFirstTimePromptAvailable: true,
+              }))
+            }
           } else if (isMountedRef.current) {
             setState((prev) => ({
               ...prev,
@@ -691,103 +857,20 @@ export function usePasskeyBackup({
       }
     }
 
-    /**
-     * Attempt to recover keys from backend using passkey authentication.
-     * Delegates to recoverWithPasskey (stable useCallback) and forwards
-     * the recovered key to the onEncryptionKeyRecovered callback.
-     */
-    const tryPasskeyRecovery = async (): Promise<boolean> => {
-      const key = await recoverWithPasskey()
-      if (key) {
-        onEncryptionKeyRecoveredRef.current?.(key)
-        return true
-      }
-      return false
-    }
-
-    /**
-     * First-time user with PRF support: generate key in memory, only persist
-     * after passkey creation succeeds. If passkey is cancelled, key is discarded
-     * and cloud sync stays OFF.
-     */
-    const setupFirstTimePasskeyUser = async (): Promise<void> => {
-      try {
-        const previousKeys = encryptionService.getAllKeys()
-        const newKey = await generateKeyWithPasskeyBackup('validated')
-
-        if (newKey) {
-          const appliedMode = await applyRecoveredKeyBundle(
-            {
-              primary: newKey,
-              alternatives: [],
-              authorizationMode: 'validated',
-            },
-            previousKeys,
-          )
-          if (!appliedMode) {
-            if (isMountedRef.current) {
-              setState((prev) => ({
-                ...prev,
-                manualRecoveryNeeded: true,
-              }))
-            }
-            return
-          }
-
-          applyNewPasskeyKey()
-          onEncryptionKeyRecoveredRef.current?.(newKey)
-
-          logInfo('First-time passkey setup complete', {
-            component: 'usePasskeyBackup',
-            action: 'setupFirstTimePasskeyUser',
-          })
-        } else {
-          // User cancelled — discard key, cloud sync stays OFF
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupAvailable: true,
-            }))
-          }
-
-          logInfo('Passkey creation cancelled, key discarded', {
-            component: 'usePasskeyBackup',
-            action: 'setupFirstTimePasskeyUser',
-          })
-        }
-      } catch (error) {
-        if (error instanceof PrfNotSupportedError) {
-          logInfo(
-            'Authenticator does not support PRF during first-time setup',
-            {
-              component: 'usePasskeyBackup',
-              action: 'setupFirstTimePasskeyUser',
-            },
-          )
-          if (isMountedRef.current) {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupAvailable: true,
-            }))
-          }
-          return
-        }
-        logError('First-time passkey user setup failed', error, {
-          component: 'usePasskeyBackup',
-          action: 'setupFirstTimePasskeyUser',
-        })
-      }
-    }
-
     initializePasskey()
-  }, [
-    applyRecoveredKeyBundle,
-    initialized,
-    isSignedIn,
-    encryptionKey,
-    generateKeyWithPasskeyBackup,
-    recoverWithPasskey,
-  ])
+  }, [initialized, isSignedIn, encryptionKey])
+
+  // Clear the persistent "recovery dismissed" flag and the session
+  // first-time-prompt flag once the user has a key again (via passkey
+  // recovery, successful manual-key apply, or completed first-time setup).
+  // The modals will be allowed to auto-open again on a future visit if they
+  // ever land back in the no-key state.
+  useEffect(() => {
+    if (encryptionKey) {
+      passkeyRecoveryDismissedFlag.clear()
+      firstTimePromptDismissedFlag.clear()
+    }
+  }, [encryptionKey])
 
   // --- Periodic sync_version check ---
   useEffect(() => {
@@ -809,6 +892,7 @@ export function usePasskeyBackup({
     const userInfo = getPasskeyUserInfo()
     if (!userInfo) return false
 
+    setupWarningDismissedFlag.clear()
     try {
       let authorizationMode = await getCurrentCloudKeyAuthorizationMode()
       if (!authorizationMode) {
@@ -853,6 +937,7 @@ export function usePasskeyBackup({
       return true
     } catch (error) {
       if (error instanceof PrfNotSupportedError) throw error
+      if (error instanceof PasskeyTimeoutError) throw error
       logError('Passkey setup failed', error, {
         component: 'usePasskeyBackup',
         action: 'setupPasskey',
@@ -867,6 +952,7 @@ export function usePasskeyBackup({
    * Returns the new primary key on success, null on failure/cancel.
    */
   const setupNewKeySplit = useCallback(async (): Promise<string | null> => {
+    setupWarningDismissedFlag.clear()
     const previousKeys = encryptionService.getAllKeys()
     let didSetNewKey = false
 
@@ -891,6 +977,7 @@ export function usePasskeyBackup({
       return newKey
     } catch (error) {
       if (error instanceof PrfNotSupportedError) throw error
+      if (error instanceof PasskeyTimeoutError) throw error
       if (didSetNewKey) {
         await rollbackToPreviousKeys(previousKeys)
       }
@@ -902,11 +989,236 @@ export function usePasskeyBackup({
     }
   }, [generateKeyWithPasskeyBackup, rollbackToPreviousKeys])
 
+  const dismissPasskeySetupFailed = useCallback((): void => {
+    setupWarningDismissedFlag.set()
+    if (isMountedRef.current) {
+      setState((prev) => {
+        // If the warning is being dismissed while we're in the recovery
+        // flow (remote passkey exists but this device can't use it),
+        // persist a localStorage flag so the recovery modal doesn't
+        // re-open on every reload. It's cleared when the user successfully
+        // unlocks with a passkey or applies a manual key.
+        if (prev.passkeyRecoveryNeeded) {
+          passkeyRecoveryDismissedFlag.set()
+        }
+        return {
+          ...prev,
+          passkeySetupFailed: false,
+          // Also hide the recovery-needed flag so chat-interface closes the
+          // auto-opened recovery modal. It stays recoverable via Settings.
+          passkeyRecoveryNeeded: false,
+        }
+      })
+    }
+  }, [])
+
+  /**
+   * Brand-new user flow (no local key, no remote backup, PRF supported):
+   * generate a key in memory, create a passkey to back it up, and persist the
+   * key only after passkey creation succeeds. Invoked from the first-time
+   * confirmation modal — we intentionally do not auto-trigger the native
+   * passkey dialog on page load.
+   */
+  const setupFirstTimePasskey = useCallback(async (): Promise<boolean> => {
+    setupWarningDismissedFlag.clear()
+    // Single exit point for every non-success branch: close the prompt
+    // modal and surface the "chats are not being backed up" warning so the
+    // user always has a clear next step (manual backup or continue without).
+    const markFailedAndClosePrompt = (): void => {
+      if (!isMountedRef.current) return
+      setState((prev) => ({
+        ...prev,
+        passkeyFirstTimePromptAvailable: false,
+        passkeySetupFailed: true,
+      }))
+    }
+
+    try {
+      const previousKeys = encryptionService.getAllKeys()
+      const newKey = await generateKeyWithPasskeyBackup('validated')
+
+      if (newKey) {
+        const appliedMode = await applyRecoveredKeyBundle(
+          {
+            primary: newKey,
+            alternatives: [],
+            authorizationMode: 'validated',
+          },
+          previousKeys,
+        )
+        if (!appliedMode) {
+          if (isMountedRef.current) {
+            setState((prev) => ({
+              ...prev,
+              manualRecoveryNeeded: true,
+              passkeyFirstTimePromptAvailable: false,
+            }))
+          }
+          return false
+        }
+
+        applyNewPasskeyKey()
+        onEncryptionKeyRecoveredRef.current?.(newKey)
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            passkeyActive: true,
+            passkeyFirstTimePromptAvailable: false,
+          }))
+        }
+
+        logInfo('First-time passkey setup complete', {
+          component: 'usePasskeyBackup',
+          action: 'setupFirstTimePasskey',
+        })
+        return true
+      }
+
+      markFailedAndClosePrompt()
+      logInfo('Passkey creation cancelled, key discarded', {
+        component: 'usePasskeyBackup',
+        action: 'setupFirstTimePasskey',
+      })
+      return false
+    } catch (error) {
+      if (
+        error instanceof PrfNotSupportedError ||
+        error instanceof PasskeyTimeoutError
+      ) {
+        logInfo(
+          'Passkey provider cannot support PRF backup during first-time setup',
+          {
+            component: 'usePasskeyBackup',
+            action: 'setupFirstTimePasskey',
+            metadata: { reason: error.name },
+          },
+        )
+      } else {
+        logError('First-time passkey setup failed', error, {
+          component: 'usePasskeyBackup',
+          action: 'setupFirstTimePasskey',
+        })
+      }
+      markFailedAndClosePrompt()
+      return false
+    }
+  }, [applyRecoveredKeyBundle, generateKeyWithPasskeyBackup])
+
+  const dismissFirstTimePasskeyPrompt = useCallback((): void => {
+    firstTimePromptDismissedFlag.set()
+    if (!isMountedRef.current) return
+    setState((prev) => ({
+      ...prev,
+      passkeyFirstTimePromptAvailable: false,
+      // Surface the "chats are not being backed up" warning so the user has
+      // a clear next step (manual backup or continue without). Respect the
+      // session dismiss so we don't reopen it after they've already seen
+      // and dismissed it this session.
+      passkeySetupFailed: setupWarningDismissedFlag.isSet()
+        ? prev.passkeySetupFailed
+        : true,
+    }))
+  }, [])
+
+  // Ask the hook to re-show the first-time setup prompt modal. Used when
+  // the user clicks "Enable Cloud Sync" from the sidebar/settings after
+  // previously dismissing the prompt. Only succeeds when PRF is supported
+  // AND the backend has no remote passkey credential or encrypted data —
+  // first-time setup would otherwise generate a new key that couldn't
+  // decrypt anything already stored remotely. Returns true if the prompt
+  // was made available; false if the caller should route through the
+  // manual-key flow instead.
+  const showFirstTimePasskeyPrompt = useCallback(async (): Promise<boolean> => {
+    const prfSupported = await isPrfSupported()
+    if (!prfSupported) return false
+    try {
+      const [credentialState, remoteState] = await Promise.all([
+        getPasskeyCredentialState(),
+        inspectRemoteEncryptedState(),
+      ])
+      if (credentialState !== 'empty' || remoteState !== 'empty') {
+        return false
+      }
+    } catch {
+      return false
+    }
+    firstTimePromptDismissedFlag.clear()
+    if (isMountedRef.current) {
+      setState((prev) => ({
+        ...prev,
+        passkeyFirstTimePromptAvailable: true,
+      }))
+    }
+    return true
+  }, [])
+
+  // User explicitly opted out of passkey recovery (e.g. "Skip for Now" on
+  // the recovery modal). Persist the dismiss so we don't auto-reopen the
+  // recovery modal on every reload, and clear the recovery-needed flag so
+  // chat-interface closes the currently open modal. Cleared automatically
+  // once the user regains an encryption key via any path.
+  const skipPasskeyRecovery = useCallback((): void => {
+    passkeyRecoveryDismissedFlag.set()
+    if (!isMountedRef.current) return
+    setState((prev) => ({
+      ...prev,
+      passkeyRecoveryNeeded: false,
+      // Surface the "chats are not being backed up" warning so the user
+      // has a clear next step (manual backup or continue without). Respect
+      // the session dismiss so we don't keep reopening it.
+      passkeySetupFailed: setupWarningDismissedFlag.isSet()
+        ? prev.passkeySetupFailed
+        : true,
+    }))
+  }, [])
+
+  // Called from the "Try Again with Passkey" button on the setup-failed
+  // warning modal. Picks the right passkey flow based on current state:
+  // - local key + no backup → retry `setupPasskey` (backup-existing-key)
+  // - no key + remote credential → retry `recoverWithPasskey`
+  // - no key + no remote → retry `setupFirstTimePasskey`
+  // Returns true on success, false on any failure path (caller keeps the
+  // warning dismissed and the user can try again manually).
+  const retryPasskeySetup = useCallback(async (): Promise<boolean> => {
+    setupWarningDismissedFlag.clear()
+    passkeyRecoveryDismissedFlag.clear()
+    firstTimePromptDismissedFlag.clear()
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, passkeySetupFailed: false }))
+    }
+
+    const hasLocalKey = Boolean(encryptionService.getKey())
+    if (hasLocalKey) {
+      return await setupPasskey()
+    }
+
+    try {
+      const credentialState = await getPasskeyCredentialState()
+      if (credentialState === 'exists') {
+        const key = await recoverWithPasskey()
+        return Boolean(key)
+      }
+      return await setupFirstTimePasskey()
+    } catch (error) {
+      logError('Retry passkey setup failed', error, {
+        component: 'usePasskeyBackup',
+        action: 'retryPasskeySetup',
+      })
+      return false
+    }
+  }, [setupPasskey, recoverWithPasskey, setupFirstTimePasskey])
+
   return {
     ...state,
     setupPasskey,
+    setupFirstTimePasskey,
+    showFirstTimePasskeyPrompt,
+    dismissFirstTimePasskeyPrompt,
     recoverWithPasskey,
     setupNewKeySplit,
     updatePasskeyBackup,
+    dismissPasskeySetupFailed,
+    skipPasskeyRecovery,
+    retryPasskeySetup,
   }
 }

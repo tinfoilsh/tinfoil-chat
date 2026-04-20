@@ -29,6 +29,42 @@ export class PrfNotSupportedError extends Error {
   }
 }
 
+export class PasskeyTimeoutError extends Error {
+  constructor() {
+    super(
+      "Your passkey provider took too long to respond. This can happen with some browser extension password managers. Try using iCloud Keychain, Chrome's built-in passkey manager, or the Passwords app in your device settings.",
+    )
+    this.name = 'PasskeyTimeoutError'
+  }
+}
+
+// Timeout passed to the WebAuthn API (some browsers ignore this).
+const WEBAUTHN_TIMEOUT_MS = 30_000
+
+// Internal hard timeout to guard against providers (e.g. some password-manager
+// browser extensions) that never resolve the credentials.create/get promise.
+// Kept tight so users aren't left staring at an indefinite spinner; the
+// WebAuthn flow itself should complete well within this window once the
+// provider actually prompts.
+const STUCK_WEBAUTHN_TIMEOUT_MS = 10_000
+
+async function withStuckTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new PasskeyTimeoutError()),
+          STUCK_WEBAUTHN_TIMEOUT_MS,
+        )
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
 // Salt passed to PRF eval.first — the client internally computes:
 // SHA-256("WebAuthn PRF" || 0x00 || PRF_EVAL_FIRST)
 const PRF_EVAL_FIRST = new TextEncoder().encode('tinfoil-chat-key-encryption')
@@ -109,28 +145,31 @@ export async function createPrfPasskey(
   const userIdBytes = new TextEncoder().encode(userId)
 
   try {
-    const credential = (await navigator.credentials.create({
-      publicKey: {
-        challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rp: { id: RP_ID, name: RP_NAME },
-        user: {
-          id: userIdBytes,
-          name: userEmail,
-          displayName: displayName || userEmail,
+    const credential = (await withStuckTimeout(
+      navigator.credentials.create({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rp: { id: RP_ID, name: RP_NAME },
+          user: {
+            id: userIdBytes,
+            name: userEmail,
+            displayName: displayName || userEmail,
+          },
+          pubKeyCredParams: [
+            { type: 'public-key', alg: -7 }, // ES256
+            { type: 'public-key', alg: -257 }, // RS256 (broader compat)
+          ],
+          authenticatorSelection: {
+            residentKey: 'preferred',
+            userVerification: 'required',
+          },
+          timeout: WEBAUTHN_TIMEOUT_MS,
+          extensions: {
+            prf: { eval: { first: PRF_EVAL_FIRST } },
+          },
         },
-        pubKeyCredParams: [
-          { type: 'public-key', alg: -7 }, // ES256
-          { type: 'public-key', alg: -257 }, // RS256 (broader compat)
-        ],
-        authenticatorSelection: {
-          residentKey: 'preferred',
-          userVerification: 'required',
-        },
-        extensions: {
-          prf: { eval: { first: PRF_EVAL_FIRST } },
-        },
-      },
-    })) as PublicKeyCredential | null
+      }),
+    )) as PublicKeyCredential | null
 
     if (!credential) {
       return null
@@ -170,9 +209,23 @@ export async function createPrfPasskey(
         action: 'createPrfPasskey',
       },
     )
-    return await authenticatePrfPasskey([credentialId])
+    // Pass throwOnCancel so a user-cancelled assertion surfaces as a
+    // DOMException we can handle below — otherwise a `null` return would
+    // be indistinguishable from "provider returned no PRF output" and we'd
+    // show the misleading "PRF not supported" error for a plain cancel.
+    const postCreateAuth = await authenticatePrfPasskey([credentialId], {
+      throwOnCancel: true,
+    })
+    if (!postCreateAuth) {
+      // The provider claimed PRF support during creation but didn't deliver
+      // a PRF output on the immediately-following assertion. Treat this as
+      // a lack of real PRF support rather than a silent failure.
+      throw new PrfNotSupportedError()
+    }
+    return postCreateAuth
   } catch (error) {
     if (error instanceof PrfNotSupportedError) throw error
+    if (error instanceof PasskeyTimeoutError) throw error
 
     // DOMException with name "NotAllowedError" means the user cancelled
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
@@ -200,7 +253,9 @@ export async function createPrfPasskey(
  */
 export async function authenticatePrfPasskey(
   credentialIds: string[],
+  options: { throwOnCancel?: boolean } = {},
 ): Promise<PrfPasskeyResult | null> {
+  const { throwOnCancel = false } = options
   const allowCredentials: PublicKeyCredentialDescriptor[] = credentialIds.map(
     (id) => ({
       id: base64UrlToUint8Array(id),
@@ -209,17 +264,20 @@ export async function authenticatePrfPasskey(
   )
 
   try {
-    const assertion = (await navigator.credentials.get({
-      publicKey: {
-        challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rpId: RP_ID,
-        allowCredentials,
-        userVerification: 'required',
-        extensions: {
-          prf: { eval: { first: PRF_EVAL_FIRST } },
+    const assertion = (await withStuckTimeout(
+      navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rpId: RP_ID,
+          allowCredentials,
+          userVerification: 'required',
+          timeout: WEBAUTHN_TIMEOUT_MS,
+          extensions: {
+            prf: { eval: { first: PRF_EVAL_FIRST } },
+          },
         },
-      },
-    })) as PublicKeyCredential | null
+      }),
+    )) as PublicKeyCredential | null
 
     if (!assertion) {
       return null
@@ -243,11 +301,14 @@ export async function authenticatePrfPasskey(
     cachePrfResult(result)
     return result
   } catch (error) {
+    if (error instanceof PasskeyTimeoutError) throw error
+
     if (error instanceof DOMException && error.name === 'NotAllowedError') {
       logInfo('User cancelled passkey authentication', {
         component: 'PasskeyService',
         action: 'authenticatePrfPasskey',
       })
+      if (throwOnCancel) throw error
       return null
     }
 

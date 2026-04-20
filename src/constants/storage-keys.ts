@@ -40,6 +40,24 @@ export const SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO =
   'tinfoil-settings-has-seen-web-search-intro'
 export const SETTINGS_LOCAL_ONLY_MODE_ENABLED =
   'tinfoil-settings-local-only-mode-enabled'
+// Persists across sessions: set when the user explicitly dismisses the
+// recovery / setup-failed warning after a cancelled passkey recovery attempt.
+// While set, the recovery modal is not auto-opened on page load so the user
+// isn't pestered on every reload. Cleared when they successfully unlock via
+// passkey or manual backup.
+export const SETTINGS_PASSKEY_RECOVERY_DISMISSED =
+  'tinfoil-settings-passkey-recovery-dismissed'
+
+// --- sessionStorage: Passkey setup failure ---------------------------------
+// Tracks whether the user has dismissed the "passkey backup failed" warning
+// during the current session so we don't re-prompt on every re-init.
+export const SETTINGS_PASSKEY_SETUP_WARNING_DISMISSED =
+  'tinfoil-settings-passkey-setup-warning-dismissed'
+// Tracks whether the brand-new-user first-time setup prompt was dismissed
+// via "Not Now" during the current session so we don't re-show it on every
+// reload within the same tab. Cleared on tab close.
+export const SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED =
+  'tinfoil-settings-passkey-first-time-prompt-dismissed'
 
 // --- localStorage: User personalization preferences ------------------------
 export const USER_PREFS_NICKNAME = 'tinfoil-user-prefs-nickname'

@@ -103,6 +103,20 @@ const CloudSyncSetupModal = dynamic(
     ),
   { ssr: false },
 )
+const PasskeySetupFailedModal = dynamic(
+  () =>
+    import('../modals/passkey-setup-failed-modal').then(
+      (m) => m.PasskeySetupFailedModal,
+    ),
+  { ssr: false },
+)
+const PasskeySetupPromptModal = dynamic(
+  () =>
+    import('../modals/passkey-setup-prompt-modal').then(
+      (m) => m.PasskeySetupPromptModal,
+    ),
+  { ssr: false },
+)
 const AddToProjectContextModal = dynamic(
   () =>
     import('../modals/add-to-project-context-modal').then(
@@ -345,10 +359,18 @@ export function ChatInterface({
     passkeyRecoveryNeeded,
     manualRecoveryNeeded,
     passkeySetupAvailable,
+    passkeySetupFailed,
+    passkeyFirstTimePromptAvailable,
     setupPasskey,
+    setupFirstTimePasskey,
+    showFirstTimePasskeyPrompt,
+    dismissFirstTimePasskeyPrompt,
     recoverWithPasskey,
     setupNewKeySplit,
     updatePasskeyBackup,
+    dismissPasskeySetupFailed,
+    skipPasskeyRecovery,
+    retryPasskeySetup,
   } = usePasskeyBackup({
     encryptionKey,
     initialized: cloudSyncInitialized && !showOnboarding,
@@ -402,15 +424,36 @@ export function ChatInterface({
 
   // State for cloud sync setup modal
   const [showCloudSyncSetupModal, setShowCloudSyncSetupModal] = useState(false)
+  // When the user falls back to manual backup from the passkey-setup-failed
+  // modal, we force the cloud sync setup modal onto the non-passkey path.
+  const [forceManualCloudSyncFlow, setForceManualCloudSyncFlow] =
+    useState(false)
+  // Tracks the in-flight first-time passkey setup call so the modal can
+  // disable its buttons while the native dialog is showing.
+  const [isFirstTimePasskeySetupBusy, setIsFirstTimePasskeySetupBusy] =
+    useState(false)
+  // Tracks an in-flight retry triggered from the setup-failed warning modal.
+  const [isRetryingPasskey, setIsRetryingPasskey] = useState(false)
+  // Bumped whenever we need CloudSyncSetupModal to remount (e.g. switching
+  // from passkey-recovery step to forced manual flow after the user dismisses
+  // the setup-failed warning). The modal derives initialStep from props only
+  // once, so a remount is required to pick up the new starting step.
+  const [cloudSyncSetupModalKey, setCloudSyncSetupModalKey] = useState(0)
 
   useEffect(() => {
-    // Only auto-open the recovery modal when the user actually has cloud sync
-    // turned on. Signed-in users with cloud sync disabled should not see it
-    // pop up on every load - they can still trigger it manually from settings.
+    // Passkey-based recovery always auto-opens: a remote passkey credential
+    // means the user *has* chats backed up and can't see them on this device
+    // until they unlock, regardless of whether the local sync toggle is on.
+    // Manual recovery still respects the sync toggle — if the user has
+    // explicitly disabled sync, we don't force a manual-key prompt.
+    if (passkeyRecoveryNeeded) {
+      setShowCloudSyncSetupModal(true)
+      return
+    }
     if (manualRecoveryNeeded && isCloudSyncEnabled()) {
       setShowCloudSyncSetupModal(true)
     }
-  }, [manualRecoveryNeeded])
+  }, [manualRecoveryNeeded, passkeyRecoveryNeeded])
 
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
@@ -1129,10 +1172,17 @@ export function ChatInterface({
     }
   }
 
-  // Handler for cloud sync setup
-  const handleOpenCloudSyncSetup = () => {
+  // Handler for cloud sync setup. Prefer the friendly "Back Up Your Chats"
+  // prompt for brand-new signed-in users so they don't get dropped into the
+  // raw key-generator UI; fall back to the manual cloud-sync setup modal
+  // otherwise (existing key, remote data, or PRF unsupported).
+  const handleOpenCloudSyncSetup = useCallback(async () => {
+    if (!encryptionService.getKey()) {
+      const routed = await showFirstTimePasskeyPrompt()
+      if (routed) return
+    }
     setShowCloudSyncSetupModal(true)
-  }
+  }, [showFirstTimePasskeyPrompt])
 
   const handleKeyChanged = useCallback(
     async (
@@ -2684,9 +2734,11 @@ export function ChatInterface({
       {/* Cloud Sync Setup Modal - manually triggered from settings */}
       {showCloudSyncSetupModal && (
         <CloudSyncSetupModal
+          key={cloudSyncSetupModalKey}
           isOpen={showCloudSyncSetupModal}
           onClose={() => {
             setShowCloudSyncSetupModal(false)
+            setForceManualCloudSyncFlow(false)
             // If no key was set, turn off cloud sync
             if (!encryptionService.getKey()) {
               setCloudSyncEnabled(false)
@@ -2696,6 +2748,7 @@ export function ChatInterface({
             try {
               await handleKeyChanged(key, { mode })
               setShowCloudSyncSetupModal(false)
+              setForceManualCloudSyncFlow(false)
               return true
             } catch {
               return false
@@ -2708,6 +2761,12 @@ export function ChatInterface({
           }
           passkeyRecoveryNeeded={passkeyRecoveryNeeded}
           manualRecoveryNeeded={manualRecoveryNeeded}
+          forceManualFlow={forceManualCloudSyncFlow}
+          onSkipRecovery={() => {
+            skipPasskeyRecovery()
+            setShowCloudSyncSetupModal(false)
+            setForceManualCloudSyncFlow(false)
+          }}
           onRecoverWithPasskey={async () => {
             const key = await recoverWithPasskey()
             if (!key) return false
@@ -2729,6 +2788,59 @@ export function ChatInterface({
             }
             setShowCloudSyncSetupModal(false)
             return true
+          }}
+        />
+      )}
+
+      {/* Passkey Setup Failed Warning - shown when the user's passkey
+          provider can't do PRF, so chats aren't being backed up. */}
+      {passkeySetupFailed && (
+        <PasskeySetupFailedModal
+          isOpen={passkeySetupFailed}
+          isRetryingPasskey={isRetryingPasskey}
+          onRetryPasskey={async () => {
+            setIsRetryingPasskey(true)
+            try {
+              await retryPasskeySetup()
+            } finally {
+              setIsRetryingPasskey(false)
+            }
+          }}
+          onEnableManualBackup={() => {
+            dismissPasskeySetupFailed()
+            setForceManualCloudSyncFlow(true)
+            // Force a remount so CloudSyncSetupModal picks up the new
+            // forceManualFlow prop in its initialStep calculation.
+            setCloudSyncSetupModalKey((k) => k + 1)
+            setShowCloudSyncSetupModal(true)
+          }}
+          onDismiss={() => {
+            dismissPasskeySetupFailed()
+            setCloudSyncEnabled(false)
+            // Also close any auto-opened recovery modal since the user has
+            // explicitly opted out of backups this session.
+            setShowCloudSyncSetupModal(false)
+          }}
+        />
+      )}
+
+      {/* First-time passkey setup confirmation - shown to brand-new users so
+          we never invoke the native WebAuthn dialog without an explicit click. */}
+      {passkeyFirstTimePromptAvailable && (
+        <PasskeySetupPromptModal
+          isOpen={passkeyFirstTimePromptAvailable}
+          isBusy={isFirstTimePasskeySetupBusy}
+          onEnable={async () => {
+            setIsFirstTimePasskeySetupBusy(true)
+            try {
+              await setupFirstTimePasskey()
+            } finally {
+              setIsFirstTimePasskeySetupBusy(false)
+            }
+          }}
+          onDismiss={() => {
+            dismissFirstTimePasskeyPrompt()
+            setCloudSyncEnabled(false)
           }}
         />
       )}
