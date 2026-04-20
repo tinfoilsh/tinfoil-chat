@@ -40,6 +40,19 @@ interface CloudSyncSetupModalBaseProps {
   initialCloudSyncEnabled?: boolean
   prfSupported?: boolean
   manualRecoveryNeeded?: boolean
+  /**
+   * When true, the modal skips the passkey-based flow entirely and opens
+   * directly on the manual "generate or restore key" step. Used when the
+   * user's passkey provider doesn't support PRF and they opt into manual
+   * backup from the {@link PasskeySetupFailedModal} warning.
+   */
+  forceManualFlow?: boolean
+  /**
+   * Called when the user clicks "Skip for Now" on the passkey-recovery step.
+   * Lets the caller persist a "don't auto-reopen" flag. When omitted, the
+   * button falls back to plain {@link onClose}.
+   */
+  onSkipRecovery?: () => void
 }
 type CloudSyncSetupModalProps = CloudSyncSetupModalBaseProps &
   (
@@ -72,16 +85,20 @@ export function CloudSyncSetupModal({
   passkeyRecoveryNeeded = false,
   prfSupported = false,
   manualRecoveryNeeded = false,
+  forceManualFlow = false,
+  onSkipRecovery,
   onRecoverWithPasskey,
   onSetupNewKey,
 }: CloudSyncSetupModalProps) {
-  const initialStep: SetupStep = passkeyRecoveryNeeded
-    ? 'passkey-recovery'
-    : manualRecoveryNeeded
-      ? 'generate-or-restore'
-      : prfSupported
+  const initialStep: SetupStep = forceManualFlow
+    ? 'generate-or-restore'
+    : passkeyRecoveryNeeded
+      ? 'passkey-recovery'
+      : manualRecoveryNeeded
         ? 'generate-or-restore'
-        : 'intro'
+        : prfSupported
+          ? 'generate-or-restore'
+          : 'intro'
   const [currentStep, setCurrentStep] = useState<SetupStep>(initialStep)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(
     initialCloudSyncEnabled,
@@ -805,7 +822,7 @@ ${generatedKey.replace('key_', '')}
       )}
 
       <button
-        onClick={onClose}
+        onClick={onSkipRecovery ?? onClose}
         disabled={isRecovering || isStartingFresh}
         className="w-full text-center text-sm text-content-muted transition-colors hover:text-content-secondary"
       >

@@ -16,6 +16,7 @@ export type {
   StoreEncryptedKeysOptions,
 } from './passkey-key-storage'
 export {
+  PasskeyTimeoutError,
   PrfNotSupportedError,
   authenticatePrfPasskey,
   clearCachedPrfResult,
