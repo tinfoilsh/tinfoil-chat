@@ -1,6 +1,10 @@
 import { API_BASE_URL } from '@/config'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
+import {
+  TINFOIL_EVENTS_HEADER,
+  TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+} from '@/utils/tinfoil-events'
 import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
@@ -184,6 +188,13 @@ async function initClient(sessionToken: string): Promise<TinfoilAI> {
     clientInstance = new TinfoilAI({
       apiKey: sessionToken,
       dangerouslyAllowBrowser: true,
+      // Opt into the router's inline progress-marker stream so the
+      // chat UI can surface live web_search and URL-fetch status while
+      // the underlying SSE stream stays spec-conformant for any other
+      // OpenAI-compatible consumer.
+      defaultHeaders: {
+        [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+      },
     })
     lastSessionToken = sessionToken
     return clientInstance
