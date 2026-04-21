@@ -52,6 +52,14 @@ export interface PasskeyBackupState {
    */
   passkeySetupFailed: boolean
   /**
+   * Whether retrying the passkey flow makes sense given the current state.
+   * False when the warning was raised by a path where there is no passkey
+   * credential to retry against (e.g. remote data exists but the server
+   * has no registered passkey for this user). The warning modal hides the
+   * "Try Again with Passkey" button in that case.
+   */
+  passkeyRetryAvailable: boolean
+  /**
    * First-time user with no local key, no remote backup, and PRF support
    * available. Surfaces a confirmation modal asking whether to enable
    * passkey-backed cloud sync — we no longer invoke the native passkey
@@ -193,6 +201,7 @@ export function usePasskeyBackup({
     manualRecoveryNeeded: false,
     passkeySetupAvailable: false,
     passkeySetupFailed: false,
+    passkeyRetryAvailable: true,
     passkeyFirstTimePromptAvailable: false,
   })
 
@@ -242,6 +251,7 @@ export function usePasskeyBackup({
           manualRecoveryNeeded: false,
           passkeySetupAvailable: false,
           passkeySetupFailed: false,
+          passkeyRetryAvailable: true,
           passkeyFirstTimePromptAvailable: false,
         })
       }
@@ -779,9 +789,25 @@ export function usePasskeyBackup({
           const remoteState = await inspectRemoteEncryptedState()
           if (!isMountedRef.current) return
           if (remoteState === 'empty') {
-            setState((prev) => ({ ...prev, passkeySetupFailed: true }))
+            setState((prev) => ({
+              ...prev,
+              passkeySetupFailed: true,
+              passkeyRetryAvailable: false,
+            }))
           } else {
-            setState((prev) => ({ ...prev, manualRecoveryNeeded: true }))
+            // Remote data exists but PRF is unavailable on this device.
+            // Surface both the recovery-needed flag (so the unlock modal
+            // can open when sync is enabled) and the warning (so the user
+            // knows their chats aren't being backed up right now). Hide
+            // the retry button since there's nothing to retry with.
+            setState((prev) => ({
+              ...prev,
+              manualRecoveryNeeded: true,
+              passkeySetupFailed: setupWarningDismissedFlag.isSet()
+                ? prev.passkeySetupFailed
+                : true,
+              passkeyRetryAvailable: false,
+            }))
           }
         }
         return
@@ -843,9 +869,23 @@ export function usePasskeyBackup({
               }))
             }
           } else if (isMountedRef.current) {
+            // Remote encrypted data exists but the server has no passkey
+            // credential registered for this user, so we can't offer a
+            // passkey-driven unlock on this device. Surface both:
+            //  - manualRecoveryNeeded (existing): the recovery modal still
+            //    opens when the user enables cloud sync from settings.
+            //  - passkeySetupFailed (warning): tell the user their chats
+            //    aren't being backed up, with manual-backup as the primary
+            //    fallback. Hide the "Try Again with Passkey" button since
+            //    there's no passkey to retry against.
+            // Respect the session warning-dismiss flag.
             setState((prev) => ({
               ...prev,
               manualRecoveryNeeded: true,
+              passkeySetupFailed: setupWarningDismissedFlag.isSet()
+                ? prev.passkeySetupFailed
+                : true,
+              passkeyRetryAvailable: false,
             }))
           }
         } else if (isMountedRef.current) {
@@ -1030,6 +1070,7 @@ export function usePasskeyBackup({
         ...prev,
         passkeyFirstTimePromptAvailable: false,
         passkeySetupFailed: true,
+        passkeyRetryAvailable: true,
       }))
     }
 
@@ -1169,6 +1210,9 @@ export function usePasskeyBackup({
       passkeySetupFailed: setupWarningDismissedFlag.isSet()
         ? prev.passkeySetupFailed
         : true,
+      // A passkey credential is registered on the server, so retrying
+      // passkey recovery is a valid next step.
+      passkeyRetryAvailable: true,
     }))
   }, [])
 

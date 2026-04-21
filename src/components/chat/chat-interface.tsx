@@ -360,6 +360,7 @@ export function ChatInterface({
     manualRecoveryNeeded,
     passkeySetupAvailable,
     passkeySetupFailed,
+    passkeyRetryAvailable,
     passkeyFirstTimePromptAvailable,
     setupPasskey,
     setupFirstTimePasskey,
@@ -2798,6 +2799,7 @@ export function ChatInterface({
         <PasskeySetupFailedModal
           isOpen={passkeySetupFailed}
           isRetryingPasskey={isRetryingPasskey}
+          allowRetry={passkeyRetryAvailable}
           onRetryPasskey={async () => {
             setIsRetryingPasskey(true)
             try {

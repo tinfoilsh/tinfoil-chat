@@ -121,4 +121,51 @@ describe('PasskeySetupFailedModal', () => {
       screen.getByText(/tinfoil works best with built-in passkey managers/i),
     ).toBeInTheDocument()
   })
+
+  it('hides retry and swaps to unlock copy when allowRetry is false', () => {
+    render(
+      createElement(PasskeySetupFailedModal, {
+        ...baseProps,
+        allowRetry: false,
+      }),
+    )
+
+    expect(
+      screen.queryByRole('button', { name: /try again with passkey/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /unlock your chats/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/we detected existing encrypted chats on your account/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /enter encryption key/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /continue without backup/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the unlock-specific dropdown copy when allowRetry is false', () => {
+    render(
+      createElement(PasskeySetupFailedModal, {
+        ...baseProps,
+        allowRetry: false,
+      }),
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /why isn't passkey available/i }),
+    )
+
+    expect(
+      screen.getByText(
+        /we detected existing encrypted chats that weren't backed up with a passkey/i,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/you can start fresh with a new one/i),
+    ).toBeInTheDocument()
+  })
 })
