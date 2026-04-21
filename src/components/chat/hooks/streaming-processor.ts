@@ -12,6 +12,10 @@
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { processCitationMarkers } from '@/utils/citation-processing'
 import { logError } from '@/utils/error-handling'
+import {
+  createTinfoilEventParser,
+  type TinfoilWebSearchCallEvent,
+} from '@/utils/tinfoil-events'
 import type {
   Annotation,
   Chat,
@@ -160,6 +164,155 @@ export async function processStreamingResponse(
             }, 16)
     }
 
+    // Parser for `<tinfoil-event>...</tinfoil-event>` progress markers
+    // the router inlines into delta.content when the client opts in via
+    // the X-Tinfoil-Events header. Markers are stripped from the
+    // visible text before it reaches the assistant message; decoded
+    // events drive the same webSearchState / urlFetches state machine
+    // the legacy top-level SSE path used.
+    const tinfoilEventParser = createTinfoilEventParser()
+
+    /**
+     * Dispatches a normalized web_search_call event into the live
+     * streaming state. Callers normalize to a common shape so the
+     * legacy top-level SSE branch and the new marker-extracted events
+     * share one code path.
+     */
+    const applyWebSearchCallEvent = (event: {
+      id?: string
+      status: string
+      action?: { type?: string; query?: string; url?: string }
+      reason?: string
+    }) => {
+      // `assistantMessage` is typed `Message | null` at the outer scope
+      // but is never reassigned to `null` once streaming begins. The
+      // helper runs exclusively inside the streaming loop, so force
+      // the narrowing here instead of threading the field through
+      // another parameter.
+      const current = assistantMessage as Message
+      // URL fetch events surface as action.type === 'open_page'.
+      if (event.action?.type === 'open_page' && event.action?.url) {
+        const fetchUrl = event.action.url
+        const fetchId = event.id || fetchUrl
+        const fetchStatus = event.status
+
+        if (fetchStatus === 'in_progress') {
+          if (!urlFetches.some((f) => f.id === fetchId)) {
+            urlFetches = [
+              ...urlFetches,
+              { id: fetchId, url: fetchUrl, status: 'fetching' },
+            ]
+          }
+        } else if (fetchStatus === 'completed' || fetchStatus === 'failed') {
+          urlFetches = urlFetches.map((f) =>
+            f.id === fetchId
+              ? { ...f, status: fetchStatus as 'completed' | 'failed' }
+              : f,
+          )
+        }
+
+        assistantMessage = {
+          ...current,
+          urlFetches: [...urlFetches],
+        }
+        if (isSameChat()) {
+          scheduleStreamingUpdate()
+        }
+        return
+      }
+
+      const searchQuery = event.action?.query
+      const searchStatus = event.status
+
+      if (searchStatus === 'in_progress' && searchQuery) {
+        if (!webSearchStarted) {
+          webSearchStarted = true
+        }
+        webSearchState = {
+          query: searchQuery,
+          status: 'searching',
+        }
+        assistantMessage = {
+          ...current,
+          webSearch: webSearchState,
+          webSearchBeforeThinking: !thinkingStarted,
+        }
+        if (isSameChat()) {
+          const chatId = ctx.currentChatIdRef.current
+          const messageToSave = assistantMessage as Message
+          const newMessages = [...ctx.updatedMessages, messageToSave]
+          ctx.updateChatWithHistoryCheck(
+            ctx.setChats,
+            { ...ctx.updatedChat, id: chatId },
+            ctx.setCurrentChat,
+            chatId,
+            newMessages,
+            false,
+            true,
+          )
+          ctx.setIsWaitingForResponse(false)
+        }
+      } else if (searchStatus === 'completed' && webSearchState) {
+        webSearchState = {
+          query: webSearchState.query,
+          status: 'completed',
+          sources: webSearchState.sources,
+        }
+        assistantMessage = {
+          ...current,
+          webSearch: webSearchState,
+        }
+        if (isSameChat()) {
+          scheduleStreamingUpdate()
+        }
+      } else if (searchStatus === 'failed' && webSearchState) {
+        webSearchState = {
+          query: webSearchState.query,
+          status: 'failed',
+          sources: [],
+        }
+        assistantMessage = {
+          ...current,
+          webSearch: webSearchState,
+        }
+        if (isSameChat()) {
+          scheduleStreamingUpdate()
+        }
+      } else if (searchStatus === 'blocked') {
+        if (!webSearchStarted) {
+          webSearchStarted = true
+        }
+        webSearchState = {
+          query: searchQuery,
+          status: 'blocked',
+          reason: event.reason,
+        }
+        assistantMessage = {
+          ...current,
+          webSearch: webSearchState,
+          webSearchBeforeThinking: !thinkingStarted,
+        }
+        if (isSameChat()) {
+          scheduleStreamingUpdate()
+        }
+      }
+    }
+
+    /**
+     * Adapts a marker-shaped payload to the normalized dispatch shape.
+     * Marker payloads carry `item_id` and `error.code`; the legacy
+     * top-level SSE events carry `id` and `reason`. Everything else is
+     * structurally identical so we just re-key the two fields.
+     */
+    const dispatchMarkerEvent = (event: TinfoilWebSearchCallEvent) => {
+      applyWebSearchCallEvent({
+        id: event.item_id,
+        status: event.status,
+        action: event.action,
+        reason: event.error?.code,
+      })
+    }
+
     while (true) {
       const { done, value } = await reader!.read()
       if (done || !isSameChat()) {
@@ -252,115 +405,18 @@ export async function processStreamingResponse(
           const jsonData = line.replace(/^data:\s*/i, '')
           const json = JSON.parse(jsonData)
 
-          // Handle web_search_call events
+          // Legacy top-level `web_search_call` SSE records. Current
+          // routers surface the same progression through inline
+          // `<tinfoil-event>` markers on delta.content; this branch
+          // stays so older router builds that still emit the legacy
+          // record shape keep the same UX.
           if (json.type === 'web_search_call') {
-            // Handle URL fetch events (action.type === 'open_page')
-            if (json.action?.type === 'open_page' && json.action?.url) {
-              const fetchUrl = json.action.url as string
-              const fetchId = (json.id as string) || fetchUrl
-              const fetchStatus = json.status as string
-
-              if (fetchStatus === 'in_progress') {
-                urlFetches = [
-                  ...urlFetches,
-                  { id: fetchId, url: fetchUrl, status: 'fetching' },
-                ]
-              } else if (
-                fetchStatus === 'completed' ||
-                fetchStatus === 'failed'
-              ) {
-                urlFetches = urlFetches.map((f) =>
-                  f.id === fetchId
-                    ? { ...f, status: fetchStatus as 'completed' | 'failed' }
-                    : f,
-                )
-              }
-
-              assistantMessage = {
-                ...assistantMessage,
-                urlFetches: [...urlFetches],
-              }
-              if (isSameChat()) {
-                scheduleStreamingUpdate()
-              }
-              continue
-            }
-
-            const searchQuery = json.action?.query
-            const searchStatus = json.status
-
-            if (searchStatus === 'in_progress' && searchQuery) {
-              if (!webSearchStarted) {
-                webSearchStarted = true
-              }
-              webSearchState = {
-                query: searchQuery,
-                status: 'searching',
-              }
-              assistantMessage = {
-                ...assistantMessage,
-                webSearch: webSearchState,
-                webSearchBeforeThinking: !thinkingStarted,
-              }
-              if (isSameChat()) {
-                const chatId = ctx.currentChatIdRef.current
-                const messageToSave = assistantMessage as Message
-                const newMessages = [...ctx.updatedMessages, messageToSave]
-                ctx.updateChatWithHistoryCheck(
-                  ctx.setChats,
-                  { ...ctx.updatedChat, id: chatId },
-                  ctx.setCurrentChat,
-                  chatId,
-                  newMessages,
-                  false,
-                  true,
-                )
-                ctx.setIsWaitingForResponse(false)
-              }
-            } else if (searchStatus === 'completed' && webSearchState) {
-              webSearchState = {
-                query: webSearchState.query,
-                status: 'completed',
-                sources: webSearchState.sources,
-              }
-              assistantMessage = {
-                ...assistantMessage,
-                webSearch: webSearchState,
-              }
-              if (isSameChat()) {
-                scheduleStreamingUpdate()
-              }
-            } else if (searchStatus === 'failed' && webSearchState) {
-              webSearchState = {
-                query: webSearchState.query,
-                status: 'failed',
-                sources: [],
-              }
-              assistantMessage = {
-                ...assistantMessage,
-                webSearch: webSearchState,
-              }
-              if (isSameChat()) {
-                scheduleStreamingUpdate()
-              }
-            } else if (searchStatus === 'blocked') {
-              if (!webSearchStarted) {
-                webSearchStarted = true
-              }
-              webSearchState = {
-                query: searchQuery,
-                status: 'blocked',
-                reason: json.reason,
-              }
-              assistantMessage = {
-                ...assistantMessage,
-                webSearch: webSearchState,
-                webSearchBeforeThinking: !thinkingStarted,
-              }
-              if (isSameChat()) {
-                scheduleStreamingUpdate()
-              }
-            }
+            applyWebSearchCallEvent({
+              id: typeof json.id === 'string' ? json.id : undefined,
+              status: String(json.status ?? ''),
+              action: json.action,
+              reason: typeof json.reason === 'string' ? json.reason : undefined,
+            })
             continue
           }
 
@@ -441,6 +497,22 @@ export async function processStreamingResponse(
             json.choices?.[0]?.delta?.reasoning ||
             ''
           let content = json.choices?.[0]?.delta?.content || ''
+
+          // Strip any `<tinfoil-event>` progress markers the router
+          // embeds in delta.content when the caller opts into the
+          // event stream. Dispatched events drive the same
+          // webSearchState / urlFetches machinery as the legacy SSE
+          // records; the cleaned text flows through the rest of the
+          // pipeline so the assistant message never contains raw
+          // marker tags.
+          if (content) {
+            const { text: cleaned, events } =
+              tinfoilEventParser.consume(content)
+            for (const event of events) {
+              dispatchMarkerEvent(event)
+            }
+            content = cleaned
+          }
 
           if (
             hasReasoningContent &&
@@ -715,6 +787,22 @@ export async function processStreamingResponse(
           })
           continue
         }
+      }
+    }
+
+    // Drain any bytes the tinfoil-event parser was holding back at
+    // the byte boundary of the final delta. Anything left over is
+    // either an unterminated marker body (router bug) or a trailing
+    // fragment of what could have been an open tag. Surface it as
+    // plain text so no assistant characters are lost, and strip any
+    // residual marker tags defensively so the UI never renders raw
+    // `<tinfoil-event>` bytes.
+    const tail = tinfoilEventParser.flush()
+    if (tail) {
+      const safeTail = tail.replace(/<\/?tinfoil-event>/g, '')
+      assistantMessage = {
+        ...assistantMessage,
+        content: (assistantMessage.content || '') + safeTail,
       }
     }
 
