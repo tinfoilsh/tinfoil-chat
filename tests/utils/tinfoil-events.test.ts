@@ -140,9 +140,13 @@ describe('extractTinfoilEventsFromText', () => {
       status: 'completed',
       action: { type: 'search', query: 'q' },
     }
+    // Router emits `\n<marker>\n` so raw SSE captures stay readable.
+    // The parser collapses those pad newlines on each side so the
+    // marker round-trips invisibly — the rendered text should have no
+    // orphan blank line where the marker used to be.
     const input = `\n${markerFor(payload)}\nAnswer.`
     const { text, events } = extractTinfoilEventsFromText(input)
-    expect(text).toBe('\n\nAnswer.')
+    expect(text).toBe('Answer.')
     expect(events).toHaveLength(1)
     expect(events[0].action?.query).toBe('q')
   })
@@ -153,5 +157,19 @@ describe('extractTinfoilEventsFromText', () => {
     )
     expect(text).toBe('plain answer without events')
     expect(events).toEqual([])
+  })
+
+  it('preserves non-pad whitespace adjacent to a marker', () => {
+    const payload = {
+      type: TINFOIL_WEB_SEARCH_CALL_TYPE,
+      item_id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q' },
+    }
+    // Two `\n` before the marker: one is consumed as the pad, the
+    // other is real content the model intended to emit.
+    const input = `first\n\n${markerFor(payload)}\n\nsecond`
+    const { text } = extractTinfoilEventsFromText(input)
+    expect(text).toBe('first\n\nsecond')
   })
 })

@@ -116,7 +116,16 @@ export function createTinfoilEventParser(): {
           buffer = buffer.slice(buffer.length - holdBack)
           break
         }
-        text += buffer.slice(0, openIdx)
+        // The router pads each marker with a leading newline so raw SSE
+        // captures stay readable. Drop a single `\n` directly abutting
+        // the open tag so the marker round-trips invisibly in the
+        // rendered text instead of producing an empty line where the
+        // marker used to be.
+        const preTag =
+          openIdx > 0 && buffer.charCodeAt(openIdx - 1) === 0x0a /* \n */
+            ? buffer.slice(0, openIdx - 1)
+            : buffer.slice(0, openIdx)
+        text += preTag
         buffer = buffer.slice(openIdx + OPEN_TAG.length)
         insideMarker = true
         continue
@@ -129,6 +138,11 @@ export function createTinfoilEventParser(): {
       }
       const payload = buffer.slice(0, closeIdx)
       buffer = buffer.slice(closeIdx + CLOSE_TAG.length)
+      // Match the leading-newline strip on the trailing side so a
+      // `\n<marker>\n` pad collapses to nothing, not to `\n`.
+      if (buffer.charCodeAt(0) === 0x0a) {
+        buffer = buffer.slice(1)
+      }
       insideMarker = false
       const event = parseMarkerPayload(payload)
       if (event) events.push(event)
