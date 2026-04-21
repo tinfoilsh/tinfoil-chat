@@ -203,11 +203,22 @@ export async function processStreamingResponse(
               { id: fetchId, url: fetchUrl, status: 'fetching' },
             ]
           }
-        } else if (fetchStatus === 'completed' || fetchStatus === 'failed') {
+        } else if (
+          fetchStatus === 'completed' ||
+          fetchStatus === 'failed' ||
+          fetchStatus === 'blocked'
+        ) {
+          // URLFetchState has no distinct `blocked` status slot, so a
+          // safety-block on a URL fetch is collapsed onto `failed` in
+          // the UI. The router's richer `blocked` signal still surfaces
+          // on the separate webSearchState when the whole search is
+          // blocked; per-URL blocks are rare and the fallback keeps
+          // the UI consistent with the spec-defined URLFetchStatus
+          // enum.
+          const next: URLFetchState['status'] =
+            fetchStatus === 'blocked' ? 'failed' : fetchStatus
           urlFetches = urlFetches.map((f) =>
-            f.id === fetchId
-              ? { ...f, status: fetchStatus as 'completed' | 'failed' }
-              : f,
+            f.id === fetchId ? { ...f, status: next } : f,
           )
         }
 
