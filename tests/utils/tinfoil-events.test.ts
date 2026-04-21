@@ -130,6 +130,53 @@ describe('createTinfoilEventParser', () => {
     expect(tail).not.toContain('<tinfoil-event>')
     expect(tail).toBe('{"type":"')
   })
+
+  it('strips trailing pad newline that arrives in the next chunk', () => {
+    const parser = createTinfoilEventParser()
+    const payload = {
+      type: TINFOIL_WEB_SEARCH_CALL_TYPE,
+      item_id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q' },
+    }
+    // Close tag lands at the exact end of chunk 1; the router's
+    // trailing pad `\n` arrives at the start of chunk 2. Both must be
+    // suppressed so the concatenated text has no orphan blank line.
+    const first = parser.consume(`hello\n${markerFor(payload)}`)
+    expect(first.text).toBe('hello')
+    expect(first.events).toHaveLength(1)
+    const second = parser.consume('\nAnswer.')
+    expect(second.text).toBe('Answer.')
+    expect(second.events).toEqual([])
+  })
+
+  it('strips leading pad newline when the open tag starts the next chunk', () => {
+    const parser = createTinfoilEventParser()
+    const payload = {
+      type: TINFOIL_WEB_SEARCH_CALL_TYPE,
+      item_id: 'ws_1',
+      status: 'in_progress',
+      action: { type: 'search', query: 'q' },
+    }
+    // Leading pad `\n` is in chunk 1 before the open tag arrives in
+    // chunk 2. The parser must retroactively drop it from the emitted
+    // text so no orphan blank line surfaces above the marker.
+    const first = parser.consume('hello\n')
+    expect(first.text).toBe('hello\n')
+    const second = parser.consume(`${markerFor(payload)}\nAnswer.`)
+    expect(second.text).toBe('Answer.')
+    expect(second.events).toHaveLength(1)
+  })
+
+  it('preserves a real model newline when no marker follows it', () => {
+    const parser = createTinfoilEventParser()
+    // A `\n` emitted by the model that is NOT followed by an open tag
+    // in the next chunk must survive verbatim.
+    const first = parser.consume('line1\n')
+    expect(first.text).toBe('line1\n')
+    const second = parser.consume('line2')
+    expect(second.text).toBe('line2')
+  })
 })
 
 describe('extractTinfoilEventsFromText', () => {

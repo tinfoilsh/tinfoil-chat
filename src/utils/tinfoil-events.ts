@@ -81,6 +81,16 @@ export function createTinfoilEventParser(): {
   // bounded by the largest in-flight marker.
   let buffer = ''
   let insideMarker = false
+  // True when the most recently-consumed close tag landed at the very
+  // end of a chunk. In that case the router's trailing pad `\n` is
+  // still in the next chunk; we strip the first byte of that chunk
+  // below instead of checking buffer[0] synchronously.
+  let pendingStripLeadingNewline = false
+  // True when the last byte we emitted to the output `text` was `\n`.
+  // If the next chunk starts with `<tinfoil-event>`, that `\n` was the
+  // router's leading pad and must be retroactively removed from `text`
+  // (we only know it was a pad after seeing the open tag).
+  let trailingNewlineOnText = false
 
   /**
    * Given a non-marker chunk suffix, return how many trailing bytes
@@ -105,6 +115,16 @@ export function createTinfoilEventParser(): {
     let text = ''
     const events: TinfoilWebSearchCallEvent[] = []
 
+    // Drain a deferred trailing-pad `\n` left over from the previous
+    // `consume` call. Only applies to the very first byte so we do not
+    // accidentally eat model-emitted newlines further downstream.
+    if (pendingStripLeadingNewline) {
+      pendingStripLeadingNewline = false
+      if (buffer.charCodeAt(0) === 0x0a) {
+        buffer = buffer.slice(1)
+      }
+    }
+
     while (buffer.length > 0) {
       if (!insideMarker) {
         const openIdx = buffer.indexOf(OPEN_TAG)
@@ -112,7 +132,11 @@ export function createTinfoilEventParser(): {
           // No full open tag yet. Emit everything except any trailing
           // bytes that could still grow into `<tinfoil-event>`.
           const holdBack = openTagPrefixSuffixLength(buffer)
-          text += buffer.slice(0, buffer.length - holdBack)
+          const emit = buffer.slice(0, buffer.length - holdBack)
+          text += emit
+          if (emit.length > 0) {
+            trailingNewlineOnText = emit.charCodeAt(emit.length - 1) === 0x0a
+          }
           buffer = buffer.slice(buffer.length - holdBack)
           break
         }
@@ -120,12 +144,24 @@ export function createTinfoilEventParser(): {
         // captures stay readable. Drop a single `\n` directly abutting
         // the open tag so the marker round-trips invisibly in the
         // rendered text instead of producing an empty line where the
-        // marker used to be.
-        const preTag =
-          openIdx > 0 && buffer.charCodeAt(openIdx - 1) === 0x0a /* \n */
-            ? buffer.slice(0, openIdx - 1)
-            : buffer.slice(0, openIdx)
-        text += preTag
+        // marker used to be. The `\n` can live either in the current
+        // buffer (same chunk) or at the end of what we already emitted
+        // on a prior chunk; handle both cases.
+        let preTagEnd = openIdx
+        if (preTagEnd > 0 && buffer.charCodeAt(preTagEnd - 1) === 0x0a) {
+          preTagEnd -= 1
+        } else if (preTagEnd === 0 && trailingNewlineOnText) {
+          // Pad `\n` already sits at the tail of `text` from a prior
+          // chunk. Retroactively drop it so the rendered text has no
+          // orphan blank line where the marker used to be.
+          text = text.slice(0, -1)
+        }
+        text += buffer.slice(0, preTagEnd)
+        if (text.length > 0) {
+          trailingNewlineOnText = text.charCodeAt(text.length - 1) === 0x0a
+        } else {
+          trailingNewlineOnText = false
+        }
         buffer = buffer.slice(openIdx + OPEN_TAG.length)
         insideMarker = true
         continue
@@ -139,10 +175,20 @@ export function createTinfoilEventParser(): {
       const payload = buffer.slice(0, closeIdx)
       buffer = buffer.slice(closeIdx + CLOSE_TAG.length)
       // Match the leading-newline strip on the trailing side so a
-      // `\n<marker>\n` pad collapses to nothing, not to `\n`.
-      if (buffer.charCodeAt(0) === 0x0a) {
+      // `\n<marker>\n` pad collapses to nothing, not to `\n`. The pad
+      // might have already arrived (same chunk) or still be pending
+      // (close tag was at the chunk boundary) — defer the strip to the
+      // next call if the buffer is empty here.
+      if (buffer.length === 0) {
+        pendingStripLeadingNewline = true
+      } else if (buffer.charCodeAt(0) === 0x0a) {
         buffer = buffer.slice(1)
       }
+      // The open tag we just finished reset `trailingNewlineOnText` to
+      // whatever `text` ended with; re-confirm that state so leading
+      // strips for subsequent markers in the same chunk still work.
+      trailingNewlineOnText =
+        text.length > 0 && text.charCodeAt(text.length - 1) === 0x0a
       insideMarker = false
       const event = parseMarkerPayload(payload)
       if (event) events.push(event)
@@ -159,6 +205,8 @@ export function createTinfoilEventParser(): {
     const tail = buffer
     buffer = ''
     insideMarker = false
+    pendingStripLeadingNewline = false
+    trailingNewlineOnText = false
     return tail
   }
 
