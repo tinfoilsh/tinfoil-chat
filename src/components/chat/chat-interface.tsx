@@ -2647,7 +2647,7 @@ export function ChatInterface({
                     } as React.CSSProperties)
               }
             >
-              <div className="flex min-w-0 flex-1 [container-type:inline-size]">
+              <div className="flex min-h-full min-w-0 flex-1 [container-type:inline-size]">
                 <ChatMessages
                   messages={currentChat?.messages || []}
                   isDarkMode={isDarkMode}

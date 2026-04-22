@@ -386,8 +386,8 @@ export function ChatMessages({
 
   if (messages.length === 0 && !isWaitingForResponse) {
     return (
-      <div className="flex w-full flex-1 justify-center overflow-y-auto">
-        <div className="my-auto w-full max-w-4xl px-8 pb-8 pt-16">
+      <div className="flex min-h-full w-full items-center justify-center overflow-y-auto">
+        <div className="w-full max-w-4xl px-8 pb-8 pt-16">
           <WelcomeScreen
             isDarkMode={isDarkMode}
             isPremium={isPremium}
