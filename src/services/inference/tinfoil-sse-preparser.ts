@@ -247,20 +247,8 @@ function processSseBlock(
   const delta = choice?.delta
 
   if (delta) {
-    // Strip any `<tinfoil-event>` progress markers the router may embed
-    // inside `delta.content` (current router builds) before the AI SDK
-    // sees the text. Decoded markers are dispatched onto the sidechannel
-    // using the same shape as the legacy top-level records, so consumers
-    // only need one code path.
-    if (typeof delta.content === 'string' && delta.content.length > 0) {
-      const { text: cleaned, events } = markerParser.consume(delta.content)
-      for (const event of events) {
-        dispatchInlineMarkerEvent(event, sidechannel)
-      }
-      delta.content = cleaned
-    }
-
-    // Lift url_citation annotations onto the sidechannel.
+    // Lift url_citation annotations onto the sidechannel. These aren't
+    // ordered relative to content; they describe the whole chunk.
     if (Array.isArray(delta.annotations) && delta.annotations.length > 0) {
       for (const ann of delta.annotations) {
         const a = ann as any
@@ -285,11 +273,105 @@ function processSseBlock(
         delta: searchReasoning,
       })
     }
+
+    // Process any `<tinfoil-event>` progress markers the router embeds
+    // inside `delta.content`. Pieces are interleaved with text in the
+    // exact order they appeared so downstream segment builders can
+    // place the event between the text that preceded it and the text
+    // that followed it in the same chunk. We emit a separate downstream
+    // SSE chunk per text piece and dispatch events between them; the
+    // first emitted chunk carries any non-content fields (tool_calls,
+    // reasoning, role, finish_reason, etc.) so nothing is dropped.
+    if (typeof delta.content === 'string' && delta.content.length > 0) {
+      const pieces = markerParser.consumeOrdered(delta.content)
+      const textPieces = pieces.filter(
+        (p): p is { type: 'text'; text: string } => p.type === 'text',
+      )
+
+      if (pieces.length === 0) {
+        // Fully consumed into the parser's internal buffer (e.g. chunk
+        // ends mid-marker). Forward the chunk with empty content so
+        // other fields on the delta (tool_calls, finish_reason, ...)
+        // are not lost while the marker finishes arriving.
+        const emptyChunk = cloneChunkWithContent(chunk, '')
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(emptyChunk)}\n\n`),
+        )
+        return
+      }
+
+      let forwardedFirst = false
+      for (const piece of pieces) {
+        if (piece.type === 'text') {
+          // Keep the original non-content fields on the first emitted
+          // chunk; subsequent chunks only carry the split text so the
+          // AI SDK doesn't double-count tool_calls or finish_reason.
+          const textChunk = forwardedFirst
+            ? chunkWithOnlyContent(chunk, piece.text)
+            : cloneChunkWithContent(chunk, piece.text)
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(textChunk)}\n\n`),
+          )
+          forwardedFirst = true
+        } else {
+          dispatchInlineMarkerEvent(piece.event, sidechannel)
+        }
+      }
+
+      if (!forwardedFirst) {
+        // All pieces were events (chunk was entirely markers). Still
+        // forward an empty-content chunk so tool_calls / finish_reason
+        // reach the AI SDK.
+        const emptyChunk = cloneChunkWithContent(chunk, '')
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(emptyChunk)}\n\n`),
+        )
+      }
+      return
+    }
   }
 
   // Forward the (possibly-mutated) chunk to the downstream consumer.
   const payload = `data: ${JSON.stringify(chunk)}\n\n`
   controller.enqueue(encoder.encode(payload))
+}
+
+/**
+ * Build a minimal chat completion chunk that only carries text content.
+ * Used for the 2nd..Nth text piece when a single upstream chunk was split
+ * around inline event markers — the first emitted chunk keeps the
+ * non-content fields so tool_calls / finish_reason flow downstream
+ * exactly once.
+ */
+function chunkWithOnlyContent(
+  chunk: ChatCompletionChunk,
+  content: string,
+): ChatCompletionChunk {
+  const firstChoice = chunk.choices?.[0] ?? {}
+  const index = firstChoice.index ?? 0
+  return {
+    ...chunk,
+    choices: [{ index, delta: { content } }],
+  }
+}
+
+/**
+ * Produce a shallow clone of `chunk` with `delta.content` replaced by
+ * `content`. Preserves every other field (role, tool_calls, finish_reason,
+ * reasoning_content, id, timestamps, etc.) so the per-piece chunks we emit
+ * look identical to the original record apart from the split content.
+ */
+function cloneChunkWithContent(
+  chunk: ChatCompletionChunk,
+  content: string,
+): ChatCompletionChunk {
+  const choices = chunk.choices ?? []
+  const nextChoices = choices.map((choice, index) => {
+    if (index !== 0) return choice
+    const delta = choice.delta ? { ...choice.delta, content } : { content }
+    return { ...choice, delta }
+  })
+  return { ...chunk, choices: nextChoices }
 }
 
 function normalizeInlineMarkerSources(

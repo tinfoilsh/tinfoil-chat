@@ -71,12 +71,23 @@ export interface TinfoilEventConsumeResult {
 }
 
 /**
+ * Ordered pieces produced when consuming a chunk. Order matches the
+ * position inside the incoming bytes so downstream consumers can
+ * interleave event dispatches with text forwarding without losing the
+ * model's narrative ordering.
+ */
+export type TinfoilEventOrderedPiece =
+  | { type: 'text'; text: string }
+  | { type: 'event'; event: TinfoilWebSearchCallEvent }
+
+/**
  * Create a stateful parser bound to a single assistant turn. Chunks must
  * be fed through `consume` in order; at stream end callers should drain
  * any unterminated tail via `flush` so no characters are lost.
  */
 export function createTinfoilEventParser(): {
   consume: (chunk: string) => TinfoilEventConsumeResult
+  consumeOrdered: (chunk: string) => TinfoilEventOrderedPiece[]
   flush: () => string
 } {
   // Holds any bytes we could not yet classify: either a partial open
@@ -120,10 +131,30 @@ export function createTinfoilEventParser(): {
     return tail
   }
 
-  const consume = (chunk: string): TinfoilEventConsumeResult => {
+  // Emit ordered text/event pieces as the internal buffer advances.
+  // The non-ordered `consume` below aggregates these into a single
+  // text string + events array for legacy callers that don't care
+  // about interleaving.
+  const consumeOrdered = (chunk: string): TinfoilEventOrderedPiece[] => {
     buffer += chunk
-    let text = ''
-    const events: TinfoilWebSearchCallEvent[] = []
+    const pieces: TinfoilEventOrderedPiece[] = []
+
+    const pushText = (text: string) => {
+      if (!text) return
+      const last = pieces[pieces.length - 1]
+      if (last && last.type === 'text') {
+        last.text += text
+      } else {
+        pieces.push({ type: 'text', text })
+      }
+    }
+
+    const trimLastPieceChar = () => {
+      const last = pieces[pieces.length - 1]
+      if (!last || last.type !== 'text' || last.text.length === 0) return
+      last.text = last.text.slice(0, -1)
+      if (last.text.length === 0) pieces.pop()
+    }
 
     // Drain a deferred trailing-pad `\n` left over from the previous
     // `consume` call. Only applies to the very first byte so we do not
@@ -143,8 +174,8 @@ export function createTinfoilEventParser(): {
           // bytes that could still grow into `<tinfoil-event>`.
           const holdBack = openTagPrefixSuffixLength(buffer)
           const emit = buffer.slice(0, buffer.length - holdBack)
-          text += emit
           if (emit.length > 0) {
+            pushText(emit)
             trailingNewlineOnText = emit.charCodeAt(emit.length - 1) === 0x0a
           }
           buffer = buffer.slice(buffer.length - holdBack)
@@ -161,17 +192,23 @@ export function createTinfoilEventParser(): {
         if (preTagEnd > 0 && buffer.charCodeAt(preTagEnd - 1) === 0x0a) {
           preTagEnd -= 1
         } else if (preTagEnd === 0 && trailingNewlineOnText) {
-          // Pad `\n` already sits at the tail of `text` from a prior
-          // chunk. Retroactively drop it so the rendered text has no
-          // orphan blank line where the marker used to be.
-          text = text.slice(0, -1)
+          // Pad `\n` already sits at the tail of the previous emitted
+          // text piece. Retroactively drop it so the rendered text has
+          // no orphan blank line where the marker used to be.
+          trimLastPieceChar()
         }
-        text += buffer.slice(0, preTagEnd)
-        if (text.length > 0) {
-          trailingNewlineOnText = text.charCodeAt(text.length - 1) === 0x0a
-        } else {
-          trailingNewlineOnText = false
+        if (preTagEnd > 0) {
+          pushText(buffer.slice(0, preTagEnd))
         }
+        // Recompute the trailing-newline flag against the most recently
+        // pushed text piece so subsequent markers in the same chunk
+        // still strip correctly.
+        const last = pieces[pieces.length - 1]
+        trailingNewlineOnText =
+          !!last &&
+          last.type === 'text' &&
+          last.text.length > 0 &&
+          last.text.charCodeAt(last.text.length - 1) === 0x0a
         buffer = buffer.slice(openIdx + OPEN_TAG.length)
         insideMarker = true
         continue
@@ -194,16 +231,23 @@ export function createTinfoilEventParser(): {
       } else if (buffer.charCodeAt(0) === 0x0a) {
         buffer = buffer.slice(1)
       }
-      // The open tag we just finished reset `trailingNewlineOnText` to
-      // whatever `text` ended with; re-confirm that state so leading
-      // strips for subsequent markers in the same chunk still work.
-      trailingNewlineOnText =
-        text.length > 0 && text.charCodeAt(text.length - 1) === 0x0a
+      trailingNewlineOnText = false
       insideMarker = false
       const event = parseMarkerPayload(payload)
-      if (event) events.push(event)
+      if (event) pieces.push({ type: 'event', event })
     }
 
+    return pieces
+  }
+
+  const consume = (chunk: string): TinfoilEventConsumeResult => {
+    const pieces = consumeOrdered(chunk)
+    let text = ''
+    const events: TinfoilWebSearchCallEvent[] = []
+    for (const piece of pieces) {
+      if (piece.type === 'text') text += piece.text
+      else events.push(piece.event)
+    }
     return { text, events }
   }
 
@@ -220,7 +264,7 @@ export function createTinfoilEventParser(): {
     return tail
   }
 
-  return { consume, flush }
+  return { consume, consumeOrdered, flush }
 }
 
 function parseMarkerPayload(raw: string): TinfoilWebSearchCallEvent | null {
