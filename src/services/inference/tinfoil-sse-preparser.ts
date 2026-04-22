@@ -9,17 +9,30 @@
  *    subscribes to: web search progress, URL fetches, url_citation
  *    annotations, and search_reasoning deltas.
  *
+ * Two marker formats are supported so the UI works against both legacy and
+ * current router builds:
+ * - Legacy: top-level SSE records with `type: "web_search_call"` / `open_page`.
+ * - Current: `<tinfoil-event>{...}</tinfoil-event>` markers embedded inside
+ *   `delta.content` when the client opts in via the `X-Tinfoil-Events`
+ *   header. Markers are stripped from content before the AI SDK sees it.
+ *
  * The pre-parser only engages for responses whose content-type starts with
  * `text/event-stream`; other responses (errors, JSON bodies for non-streaming
  * endpoints) pass through untouched.
  */
+import {
+  createTinfoilEventParser,
+  type TinfoilWebSearchCallEvent,
+} from '@/utils/tinfoil-events'
 
 export type TinfoilSidechannelEvent =
   | {
       type: 'web_search_call'
+      id?: string
       status: 'in_progress' | 'completed' | 'failed' | 'blocked'
       query?: string
       reason?: string
+      sources?: Array<{ title: string; url: string }>
     }
   | {
       type: 'url_fetch'
@@ -123,6 +136,9 @@ function transformTinfoilStream(
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   let sseBuffer = ''
+  // One parser per stream: it carries state across chunks so a marker
+  // split on any byte boundary is still recognized on the next SSE event.
+  const markerParser = createTinfoilEventParser()
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -132,7 +148,13 @@ function transformTinfoilStream(
           const { done, value } = await reader.read()
           if (done) {
             if (sseBuffer.length > 0) {
-              processSseBlock(sseBuffer, controller, sidechannel, encoder)
+              processSseBlock(
+                sseBuffer,
+                controller,
+                sidechannel,
+                encoder,
+                markerParser,
+              )
               sseBuffer = ''
             }
             controller.close()
@@ -147,7 +169,13 @@ function transformTinfoilStream(
           while (boundary !== -1) {
             const rawEvent = sseBuffer.slice(0, boundary)
             sseBuffer = sseBuffer.slice(boundary).replace(/^(\r?\n){2}/, '')
-            processSseBlock(rawEvent, controller, sidechannel, encoder)
+            processSseBlock(
+              rawEvent,
+              controller,
+              sidechannel,
+              encoder,
+              markerParser,
+            )
             boundary = findEventBoundary(sseBuffer)
           }
         }
@@ -176,6 +204,7 @@ function processSseBlock(
   controller: ReadableStreamDefaultController<Uint8Array>,
   sidechannel: TinfoilSidechannel,
   encoder: TextEncoder,
+  markerParser: ReturnType<typeof createTinfoilEventParser>,
 ): void {
   const trimmed = rawEvent.trim()
   if (!trimmed) return
@@ -218,6 +247,19 @@ function processSseBlock(
   const delta = choice?.delta
 
   if (delta) {
+    // Strip any `<tinfoil-event>` progress markers the router may embed
+    // inside `delta.content` (current router builds) before the AI SDK
+    // sees the text. Decoded markers are dispatched onto the sidechannel
+    // using the same shape as the legacy top-level records, so consumers
+    // only need one code path.
+    if (typeof delta.content === 'string' && delta.content.length > 0) {
+      const { text: cleaned, events } = markerParser.consume(delta.content)
+      for (const event of events) {
+        dispatchInlineMarkerEvent(event, sidechannel)
+      }
+      delta.content = cleaned
+    }
+
     // Lift url_citation annotations onto the sidechannel.
     if (Array.isArray(delta.annotations) && delta.annotations.length > 0) {
       for (const ann of delta.annotations) {
@@ -248,6 +290,77 @@ function processSseBlock(
   // Forward the (possibly-mutated) chunk to the downstream consumer.
   const payload = `data: ${JSON.stringify(chunk)}\n\n`
   controller.enqueue(encoder.encode(payload))
+}
+
+function normalizeInlineMarkerSources(
+  sources:
+    | Array<{
+        title?: string
+        url?: string
+      }>
+    | undefined,
+): Array<{ title: string; url: string }> | undefined {
+  if (!sources || sources.length === 0) return undefined
+  const normalized = sources.flatMap((source) => {
+    if (!source?.url) return []
+    return [
+      {
+        title: source.title || source.url,
+        url: source.url,
+      },
+    ]
+  })
+  return normalized.length > 0 ? normalized : undefined
+}
+
+function dispatchInlineMarkerEvent(
+  event: TinfoilWebSearchCallEvent,
+  sidechannel: TinfoilSidechannel,
+): void {
+  // URL fetches arrive as action.type === 'open_page' markers.
+  if (event.action?.type === 'open_page' && event.action.url) {
+    const status = event.status
+    // URLFetchState has no distinct `blocked` slot; collapse onto `failed`.
+    const mapped: 'fetching' | 'completed' | 'failed' =
+      status === 'in_progress'
+        ? 'fetching'
+        : status === 'completed'
+          ? 'completed'
+          : 'failed'
+    sidechannel.emit({
+      type: 'url_fetch',
+      id: event.item_id || event.action.url,
+      url: event.action.url,
+      status: mapped,
+    })
+    return
+  }
+
+  // Web search progress. The router uses `searching` as an alias for
+  // `in_progress` in some marker payloads; collapse both onto
+  // `in_progress` for the downstream consumer.
+  const status = event.status
+  const normalizedStatus:
+    | 'in_progress'
+    | 'completed'
+    | 'failed'
+    | 'blocked'
+    | null =
+    status === 'in_progress' || status === 'searching'
+      ? 'in_progress'
+      : status === 'completed' || status === 'failed' || status === 'blocked'
+        ? status
+        : null
+  if (!normalizedStatus) return
+
+  sidechannel.emit({
+    type: 'web_search_call',
+    id: event.item_id,
+    status: normalizedStatus,
+    query: event.action?.query,
+    reason: event.error?.code,
+    sources: normalizeInlineMarkerSources(event.sources),
+  })
 }
 
 function handleWebSearchEvent(
@@ -282,9 +395,15 @@ function handleWebSearchEvent(
   ) {
     sidechannel.emit({
       type: 'web_search_call',
+      id: typeof event?.id === 'string' ? (event.id as string) : undefined,
       status,
       query,
       reason: event?.reason as string | undefined,
+      sources: normalizeInlineMarkerSources(
+        Array.isArray(event?.sources)
+          ? (event.sources as Array<{ title?: string; url?: string }>)
+          : undefined,
+      ),
     })
   }
 }
