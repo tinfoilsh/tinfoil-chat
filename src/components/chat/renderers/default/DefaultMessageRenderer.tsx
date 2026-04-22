@@ -376,6 +376,17 @@ const DefaultMessageComponent = ({
                   !!isLastMessage &&
                   runIndex === runs.length - 1 &&
                   !message.isThinking
+                // When the silence-indicator card is about to render below
+                // this run, skip the trailing tracer so it isn't stacked
+                // on top of the card's own spinner.
+                const silenceIndicatorWillRender =
+                  !!isStreaming &&
+                  !!isLastMessage &&
+                  !message.isThinking &&
+                  message.webSearch?.status !== 'searching' &&
+                  !(message.toolCalls && message.toolCalls.length > 0)
+                const showTrailingTextTracer =
+                  textIsStreaming && !silenceIndicatorWillRender
 
                 return (
                   <div
@@ -411,7 +422,7 @@ const DefaultMessageComponent = ({
                         />
                       )}
                     </div>
-                    {textIsStreaming && (
+                    {showTrailingTextTracer && (
                       <div
                         role="status"
                         aria-label="Response still streaming"
@@ -807,13 +818,26 @@ const DefaultMessageComponent = ({
           is visible. Covers the silence between narration text and the first
           finalized tool call. */}
       {!isUser && isStreaming && isLastMessage && (
-        <StreamingSilenceIndicator
-          isThinking={!!message.isThinking}
-          hasActiveWebSearch={message.webSearch?.status === 'searching'}
-          hasActiveToolCalls={
-            !!message.toolCalls && message.toolCalls.length > 0
-          }
-        />
+        <>
+          <StreamingSilenceIndicator
+            isThinking={!!message.isThinking}
+            hasActiveWebSearch={message.webSearch?.status === 'searching'}
+            hasActiveToolCalls={
+              !!message.toolCalls && message.toolCalls.length > 0
+            }
+          />
+          {!message.isThinking &&
+            message.webSearch?.status !== 'searching' &&
+            !(message.toolCalls && message.toolCalls.length > 0) && (
+              <div
+                role="status"
+                aria-label="Response still streaming"
+                className="mt-1 px-4 text-content-primary"
+              >
+                <StreamingTracer />
+              </div>
+            )}
+        </>
       )}
 
       {/* Actions for assistant messages - hidden while streaming the last response */}
