@@ -154,6 +154,11 @@ type ChatInterfaceProps = {
   isLocalChatUrl?: boolean
 }
 
+// Short delay before showing the "Chats Are Not Being Backed Up" warning so
+// it doesn't snap in immediately after the preceding passkey/setup modal is
+// dismissed. Gives the dismissal animation room to finish first.
+const PASSKEY_SETUP_FAILED_MODAL_DELAY_MS = 400
+
 // Helper to roughly estimate token count based on character length (≈4 chars per token)
 const estimateTokenCount = (text: string | undefined): number => {
   if (!text) return 0
@@ -436,6 +441,11 @@ export function ChatInterface({
     useState(false)
   // Tracks an in-flight retry triggered from the setup-failed warning modal.
   const [isRetryingPasskey, setIsRetryingPasskey] = useState(false)
+  // Debounced mirror of passkeySetupFailed so the warning modal opens after a
+  // short delay. The underlying flag flips true right as another modal (e.g.
+  // the passkey recovery prompt) is dismissed, and without this buffer the
+  // warning snaps in before the previous dismissal animation finishes.
+  const [showPasskeySetupFailed, setShowPasskeySetupFailed] = useState(false)
   // Bumped whenever we need CloudSyncSetupModal to remount (e.g. switching
   // from passkey-recovery step to forced manual flow after the user dismisses
   // the setup-failed warning). The modal derives initialStep from props only
@@ -456,6 +466,17 @@ export function ChatInterface({
       setShowCloudSyncSetupModal(true)
     }
   }, [manualRecoveryNeeded, passkeyRecoveryNeeded])
+
+  useEffect(() => {
+    if (!passkeySetupFailed) {
+      setShowPasskeySetupFailed(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      setShowPasskeySetupFailed(true)
+    }, PASSKEY_SETUP_FAILED_MODAL_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [passkeySetupFailed])
 
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
@@ -2805,9 +2826,9 @@ export function ChatInterface({
 
       {/* Passkey Setup Failed Warning - shown when the user's passkey
           provider can't do PRF, so chats aren't being backed up. */}
-      {passkeySetupFailed && (
+      {showPasskeySetupFailed && (
         <PasskeySetupFailedModal
-          isOpen={passkeySetupFailed}
+          isOpen={showPasskeySetupFailed}
           isRetryingPasskey={isRetryingPasskey}
           allowRetry={passkeyRetryAvailable}
           onRetryPasskey={async () => {
