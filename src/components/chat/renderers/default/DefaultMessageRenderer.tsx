@@ -749,6 +749,11 @@ const DefaultMessageComponent = ({
           }`}
         >
           <div className="flex items-center gap-1">
+            {message.webSearch?.sources &&
+              message.webSearch.sources.length > 0 &&
+              !(isStreaming && isLastMessage) && (
+                <SourcesButton sources={message.webSearch.sources} />
+              )}
             <MessageActions content={message.content} isDarkMode={isDarkMode} />
             {/* Regenerate button - only on last assistant message */}
             {isLastMessage && onRegenerateMessage && messageIndex > 0 && (
@@ -765,13 +770,6 @@ const DefaultMessageComponent = ({
               </div>
             )}
           </div>
-          {message.webSearch?.sources &&
-            message.webSearch.sources.length > 0 &&
-            !(isStreaming && isLastMessage) && (
-              <div className="ml-auto flex items-center">
-                <SourcesButton sources={message.webSearch.sources} />
-              </div>
-            )}
         </div>
       )}
     </div>
