@@ -16,6 +16,9 @@ interface ContentChunk {
   isComplete: boolean
 }
 
+const LIVE_TAIL_MASK =
+  'linear-gradient(to bottom, black calc(100% - 1.5em), transparent 100%)'
+
 // Check if a line looks like a markdown table separator (|---|---|)
 function isTableSeparator(line: string): boolean {
   const trimmed = line.trim()
@@ -373,9 +376,20 @@ const ChunkRenderer = memo(
       return <GeneratingTable />
     }
 
+    const isLiveTail = !!isStreaming && !chunk.isComplete && !isTable
+    const liveTailMaskStyle = isLiveTail
+      ? {
+          WebkitMaskImage: LIVE_TAIL_MASK,
+          maskImage: LIVE_TAIL_MASK,
+        }
+      : undefined
+
     // Render content, with fade-in animation for tables that just completed
     return (
-      <div className={shouldAnimate ? 'animate-fadeIn' : ''}>
+      <div
+        className={shouldAnimate ? 'animate-fadeIn' : ''}
+        style={liveTailMaskStyle}
+      >
         <MessageContent
           content={chunk.content}
           isDarkMode={isDarkMode}

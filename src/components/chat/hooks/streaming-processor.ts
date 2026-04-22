@@ -19,7 +19,9 @@ import type {
   Annotation,
   Chat,
   Message,
+  MessageSegment,
   URLFetchState,
+  WebSearchInstance,
   WebSearchSource,
   WebSearchState,
 } from '../types'
@@ -108,6 +110,66 @@ export async function processStreamingResponse(
     let webSearchStarted = false
     let thinkingStarted = false
 
+    // Ordered content segments (text + inline event refs) that preserve the
+    // exact order in which the router surfaced events relative to the
+    // streamed text. The aggregate `webSearch`/`urlFetches` fields are kept
+    // in sync for legacy consumers (SourcesButton, title generation).
+    let segments: MessageSegment[] = []
+    let webSearches: WebSearchInstance[] = []
+    let nextSearchId = 0
+
+    const allocateSearchId = () => `ws-${nextSearchId++}`
+
+    const appendText = (text: string) => {
+      if (!text) return
+      const last = segments[segments.length - 1]
+      if (last && last.type === 'text') {
+        segments = [
+          ...segments.slice(0, -1),
+          { type: 'text', text: last.text + text },
+        ]
+      } else {
+        segments = [...segments, { type: 'text', text }]
+      }
+    }
+
+    const upsertWebSearchInstance = (instance: WebSearchInstance) => {
+      const idx = webSearches.findIndex((w) => w.id === instance.id)
+      if (idx >= 0) {
+        webSearches = [
+          ...webSearches.slice(0, idx),
+          instance,
+          ...webSearches.slice(idx + 1),
+        ]
+      } else {
+        webSearches = [...webSearches, instance]
+        segments = [...segments, { type: 'web_search', searchId: instance.id }]
+      }
+    }
+
+    const setContentAndRebuildTrailingText = (newContent: string) => {
+      // Strip any trailing text segment(s) and rebuild from the full content
+      // string. This keeps segments consistent when code paths replace the
+      // full `content` instead of appending deltas (e.g. initial chunk
+      // buffer flush, <think>/</think> splits).
+      let lastEventIdx = -1
+      for (let i = segments.length - 1; i >= 0; i--) {
+        if (segments[i].type !== 'text') {
+          lastEventIdx = i
+          break
+        }
+      }
+      const prefix = segments.slice(0, lastEventIdx + 1)
+      const eventContentLength = prefix.reduce((acc, seg) => {
+        if (seg.type === 'text') return acc + seg.text.length
+        return acc
+      }, 0)
+      const trailingText = newContent.slice(eventContentLength)
+      segments = trailingText
+        ? [...prefix, { type: 'text', text: trailingText }]
+        : prefix
+    }
+
     // The router delivers citations as standard markdown links inside the
     // assistant content, so the UI can forward the message through the
     // markdown renderer unchanged.
@@ -164,6 +226,27 @@ export async function processStreamingResponse(
     // the legacy top-level SSE path used.
     const tinfoilEventParser = createTinfoilEventParser()
 
+    const normalizeEventSources = (
+      sources:
+        | Array<{
+            title?: string
+            url?: string
+          }>
+        | undefined,
+    ): WebSearchSource[] | undefined => {
+      if (!sources || sources.length === 0) return undefined
+      const normalized = sources.flatMap((source) => {
+        if (!source?.url) return []
+        return [
+          {
+            title: source.title || source.url,
+            url: source.url,
+          },
+        ]
+      })
+      return normalized.length > 0 ? normalized : undefined
+    }
+
     /**
      * Dispatches a normalized web_search_call event into the live
      * streaming state. Callers normalize to a common shape so the
@@ -174,6 +257,7 @@ export async function processStreamingResponse(
       id?: string
       status: string
       action?: { type?: string; query?: string; url?: string }
+      sources?: WebSearchSource[]
       reason?: string
     }) => {
       // `assistantMessage` is typed `Message | null` at the outer scope
@@ -194,6 +278,7 @@ export async function processStreamingResponse(
               ...urlFetches,
               { id: fetchId, url: fetchUrl, status: 'fetching' },
             ]
+            segments = [...segments, { type: 'url_fetch', fetchId }]
           }
         } else if (
           fetchStatus === 'completed' ||
@@ -217,6 +302,7 @@ export async function processStreamingResponse(
         assistantMessage = {
           ...current,
           urlFetches: [...urlFetches],
+          segments: [...segments],
         }
         if (isSameChat()) {
           scheduleStreamingUpdate()
@@ -227,18 +313,38 @@ export async function processStreamingResponse(
       const searchQuery = event.action?.query
       const searchStatus = event.status
 
+      // Resolve which in-flight WebSearchInstance this event refers to.
+      // The router may or may not provide a stable id; when it doesn't,
+      // status updates address the most recent instance.
+      const findInstance = (): WebSearchInstance | undefined => {
+        if (event.id) {
+          const hit = webSearches.find((w) => w.id === event.id)
+          if (hit) return hit
+        }
+        return webSearches[webSearches.length - 1]
+      }
+
       if (searchStatus === 'in_progress' && searchQuery) {
         if (!webSearchStarted) {
           webSearchStarted = true
         }
-        webSearchState = {
+        const id = event.id || allocateSearchId()
+        const instance: WebSearchInstance = {
+          id,
           query: searchQuery,
           status: 'searching',
+        }
+        upsertWebSearchInstance(instance)
+        webSearchState = {
+          query: instance.query,
+          status: instance.status,
         }
         assistantMessage = {
           ...current,
           webSearch: webSearchState,
           webSearchBeforeThinking: !thinkingStarted,
+          segments: [...segments],
+          webSearches: [...webSearches],
         }
         if (isSameChat()) {
           const chatId = ctx.currentChatIdRef.current
@@ -255,38 +361,69 @@ export async function processStreamingResponse(
           )
           ctx.setIsWaitingForResponse(false)
         }
-      } else if (searchStatus === 'completed' && webSearchState) {
-        webSearchState = {
-          query: webSearchState.query,
-          status: 'completed',
-          sources: webSearchState.sources,
+      } else if (searchStatus === 'completed') {
+        const existing = findInstance()
+        if (existing) {
+          const updated: WebSearchInstance = {
+            ...existing,
+            status: 'completed',
+            sources: event.sources ?? existing.sources,
+          }
+          upsertWebSearchInstance(updated)
+          webSearchState = {
+            query: updated.query,
+            status: 'completed',
+            sources: updated.sources,
+          }
+          assistantMessage = {
+            ...current,
+            webSearch: webSearchState,
+            segments: [...segments],
+            webSearches: [...webSearches],
+          }
+          if (isSameChat()) {
+            scheduleStreamingUpdate()
+          }
         }
-        assistantMessage = {
-          ...current,
-          webSearch: webSearchState,
-        }
-        if (isSameChat()) {
-          scheduleStreamingUpdate()
-        }
-      } else if (searchStatus === 'failed' && webSearchState) {
-        webSearchState = {
-          query: webSearchState.query,
-          status: 'failed',
-          sources: [],
-        }
-        assistantMessage = {
-          ...current,
-          webSearch: webSearchState,
-        }
-        if (isSameChat()) {
-          scheduleStreamingUpdate()
+      } else if (searchStatus === 'failed') {
+        const existing = findInstance()
+        if (existing) {
+          const updated: WebSearchInstance = {
+            ...existing,
+            status: 'failed',
+            sources: event.sources ?? [],
+          }
+          upsertWebSearchInstance(updated)
+          webSearchState = {
+            query: updated.query,
+            status: 'failed',
+            sources: updated.sources,
+          }
+          assistantMessage = {
+            ...current,
+            webSearch: webSearchState,
+            segments: [...segments],
+            webSearches: [...webSearches],
+          }
+          if (isSameChat()) {
+            scheduleStreamingUpdate()
+          }
         }
       } else if (searchStatus === 'blocked') {
         if (!webSearchStarted) {
           webSearchStarted = true
         }
+        const existing = findInstance()
+        const id = existing?.id || event.id || allocateSearchId()
+        const updated: WebSearchInstance = {
+          id,
+          query: searchQuery ?? existing?.query,
+          status: 'blocked',
+          reason: event.reason,
+        }
+        upsertWebSearchInstance(updated)
         webSearchState = {
-          query: searchQuery,
+          query: updated.query,
           status: 'blocked',
           reason: event.reason,
         }
@@ -294,6 +431,8 @@ export async function processStreamingResponse(
           ...current,
           webSearch: webSearchState,
           webSearchBeforeThinking: !thinkingStarted,
+          segments: [...segments],
+          webSearches: [...webSearches],
         }
         if (isSameChat()) {
           scheduleStreamingUpdate()
@@ -312,6 +451,7 @@ export async function processStreamingResponse(
         id: event.item_id,
         status: event.status,
         action: event.action,
+        sources: normalizeEventSources(event.sources),
         reason: event.error?.code,
       })
     }
@@ -333,12 +473,15 @@ export async function processStreamingResponse(
         }
 
         if (isFirstChunk && initialContentBuffer.trim()) {
+          const finalContent = initialContentBuffer.trim()
+          setContentAndRebuildTrailingText(finalContent)
           assistantMessage = {
             ...assistantMessage,
             role: 'assistant',
-            content: initialContentBuffer.trim(),
+            content: finalContent,
             timestamp: assistantMessage?.timestamp || new Date(),
             isThinking: false,
+            segments: [...segments],
           }
           if (isSameChat()) {
             const newMessages = [...ctx.updatedMessages, assistantMessage]
@@ -418,6 +561,11 @@ export async function processStreamingResponse(
               id: typeof json.id === 'string' ? json.id : undefined,
               status: String(json.status ?? ''),
               action: json.action,
+              sources: normalizeEventSources(
+                Array.isArray(json.sources)
+                  ? (json.sources as Array<{ title?: string; url?: string }>)
+                  : undefined,
+              ),
               reason: typeof json.reason === 'string' ? json.reason : undefined,
             })
             continue
@@ -468,9 +616,22 @@ export async function processStreamingResponse(
                   status: webSearchState.status,
                   sources: [...collectedSources],
                 }
+                // Legacy annotation streams don't identify which web-search
+                // instance a source belongs to. Only mirror them onto an
+                // inline search pill when there's exactly one search, so
+                // multi-search turns don't incorrectly attach every favicon
+                // cluster to the last search row.
+                const lastInstance = webSearches[webSearches.length - 1]
+                if (lastInstance && webSearches.length === 1) {
+                  upsertWebSearchInstance({
+                    ...lastInstance,
+                    sources: [...collectedSources],
+                  })
+                }
                 assistantMessage = {
                   ...assistantMessage,
                   webSearch: webSearchState,
+                  webSearches: [...webSearches],
                   annotations: [...collectedAnnotations],
                 }
               } else {
@@ -570,12 +731,14 @@ export async function processStreamingResponse(
               const thinkingDuration = getThinkingDuration(
                 ctx.thinkingStartTimeRef,
               )
+              appendText(content)
               assistantMessage = {
                 ...assistantMessage,
                 thoughts: thoughtsBuffer.trim() || undefined,
                 content: content,
                 isThinking: false,
                 thinkingDuration,
+                segments: [...segments],
               }
               if (isSameChat()) {
                 scheduleStreamingUpdate()
@@ -605,10 +768,12 @@ export async function processStreamingResponse(
               )
               assistantMessage = { ...assistantMessage, thinkingDuration }
             }
+            appendText(content)
             assistantMessage = {
               ...assistantMessage,
               content: (assistantMessage.content || '') + content,
               isThinking: false,
+              segments: [...segments],
             }
             if (isSameChat()) {
               scheduleStreamingUpdate()
@@ -660,9 +825,11 @@ export async function processStreamingResponse(
                       thinkingDuration,
                     }
                     if (remaining.trim()) {
+                      appendText(remaining)
                       assistantMessage = {
                         ...assistantMessage,
                         content: (assistantMessage.content || '') + remaining,
+                        segments: [...segments],
                       }
                     }
 
@@ -750,8 +917,12 @@ export async function processStreamingResponse(
               thinkingDuration,
             }
             if (remainingContent.trim()) {
-              assistantMessage.content =
-                (assistantMessage.content || '') + remainingContent
+              appendText(remainingContent)
+              assistantMessage = {
+                ...assistantMessage,
+                content: (assistantMessage.content || '') + remainingContent,
+                segments: [...segments],
+              }
             }
             if (isSameChat()) {
               scheduleStreamingUpdate()
@@ -774,10 +945,12 @@ export async function processStreamingResponse(
               content = content.replace(/<think>|<\/think>/g, '')
             }
             if (content) {
+              appendText(content)
               assistantMessage = {
                 ...assistantMessage,
                 content: (assistantMessage.content || '') + content,
                 isThinking: false,
+                segments: [...segments],
               }
               if (isSameChat()) {
                 scheduleStreamingUpdate()
@@ -804,9 +977,11 @@ export async function processStreamingResponse(
     const tail = tinfoilEventParser.flush()
     if (tail) {
       const safeTail = tail.replace(/<\/?tinfoil-event>/g, '')
+      appendText(safeTail)
       assistantMessage = {
         ...assistantMessage,
         content: (assistantMessage.content || '') + safeTail,
+        segments: [...segments],
       }
     }
   } finally {

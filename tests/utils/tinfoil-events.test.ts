@@ -27,6 +27,25 @@ describe('createTinfoilEventParser', () => {
     expect(parser.flush()).toBe('')
   })
 
+  it('preserves per-search sources attached to a marker payload', () => {
+    const parser = createTinfoilEventParser()
+    const payload = {
+      type: TINFOIL_WEB_SEARCH_CALL_TYPE,
+      item_id: 'ws_1',
+      status: 'completed',
+      action: { type: 'search', query: 'q' },
+      sources: [
+        {
+          title: 'Example',
+          url: 'https://example.com/article',
+        },
+      ],
+    }
+    const result = parser.consume(markerFor(payload))
+    expect(result.events).toHaveLength(1)
+    expect(result.events[0].sources).toEqual(payload.sources)
+  })
+
   it('stitches a marker split across an arbitrary byte boundary', () => {
     const parser = createTinfoilEventParser()
     const payload = {

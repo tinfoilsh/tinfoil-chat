@@ -20,7 +20,6 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
   const contentRef = useRef<HTMLDivElement>(null)
   const [minHeight, setMinHeight] = useState<number | undefined>(undefined)
   const maxHeightRef = useRef<number>(0)
-  const measurementFrameRef = useRef<number | null>(null)
   const hasEverStreamedRef = useRef<boolean>(false)
   const holdTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isHolding, setIsHolding] = useState<boolean>(false)
@@ -61,37 +60,7 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
       }
     }
 
-    if (!isStreaming) {
-      return
-    }
-
-    if (!contentRef.current) return
-
-    // Function to measure and update minimum height
-    const measureHeight = () => {
-      if (contentRef.current && isStreaming) {
-        const currentHeight = contentRef.current.scrollHeight
-
-        // Only increase, never decrease during streaming
-        if (currentHeight > maxHeightRef.current) {
-          maxHeightRef.current = currentHeight
-          setMinHeight(currentHeight)
-        }
-
-        // Continue measuring while streaming
-        measurementFrameRef.current = requestAnimationFrame(measureHeight)
-      }
-    }
-
-    // Start measuring
-    measureHeight()
-
-    // Cleanup
     return () => {
-      if (measurementFrameRef.current) {
-        cancelAnimationFrame(measurementFrameRef.current)
-        measurementFrameRef.current = null
-      }
       // Clear hold timeout on unmount or when effect re-runs
       if (holdTimeoutRef.current) {
         clearTimeout(holdTimeoutRef.current)
@@ -99,6 +68,36 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
       }
     }
   }, [isStreaming, holdAfterStopMs])
+
+  useEffect(() => {
+    if (
+      !contentRef.current ||
+      typeof ResizeObserver === 'undefined' ||
+      (!isStreaming && !isHolding)
+    ) {
+      return
+    }
+
+    const node = contentRef.current
+    const measureHeight = () => {
+      const currentHeight = node.scrollHeight
+      if (currentHeight > maxHeightRef.current) {
+        maxHeightRef.current = currentHeight
+        setMinHeight(currentHeight)
+      }
+    }
+
+    measureHeight()
+
+    const resizeObserver = new ResizeObserver(() => {
+      measureHeight()
+    })
+    resizeObserver.observe(node)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [isStreaming, isHolding])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -114,6 +113,7 @@ export const StreamingContentWrapper = memo(function StreamingContentWrapper({
     <div
       ref={contentRef}
       style={{
+        overflowAnchor: 'none',
         minHeight:
           (isStreaming || isHolding) && minHeight
             ? `${minHeight}px`
