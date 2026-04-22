@@ -5,6 +5,7 @@ import type {
 } from '@/components/chat/types'
 import { sanitizeUrl } from '@braintree/sanitize-url'
 import { memo, useMemo, useState } from 'react'
+import { PiSpinner } from 'react-icons/pi'
 
 const webSearchFaviconCache = new Map<
   string,
@@ -143,28 +144,11 @@ const SingleWebSearchProcess = memo(function SingleWebSearchProcess({
           aria-hidden="true"
         >
           {isSearching ? (
-            <svg
+            <PiSpinner
               className="h-3.5 w-3.5 animate-spin text-content-primary/50"
-              viewBox="0 0 24 24"
-              fill="none"
               aria-hidden="true"
               focusable="false"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeOpacity="0.25"
-                strokeWidth="3"
-              />
-              <path
-                d="M22 12a10 10 0 0 1-10 10"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-            </svg>
+            />
           ) : hasSources ? (
             <svg
               className={`h-3.5 w-3.5 transform text-content-primary/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
@@ -325,28 +309,11 @@ const GroupedWebSearchProcess = memo(function GroupedWebSearchProcess({
       >
         <span className="mt-[5px] h-3.5 w-3.5 shrink-0" aria-hidden="true">
           {aggregateStatus === 'searching' ? (
-            <svg
+            <PiSpinner
               className="h-3.5 w-3.5 animate-spin text-content-primary/50"
-              viewBox="0 0 24 24"
-              fill="none"
               aria-hidden="true"
               focusable="false"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeOpacity="0.25"
-                strokeWidth="3"
-              />
-              <path
-                d="M22 12a10 10 0 0 1-10 10"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-            </svg>
+            />
           ) : (
             <svg
               className={`h-3.5 w-3.5 transform text-content-primary/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
