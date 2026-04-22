@@ -14,6 +14,7 @@ import { hasMessageAttachments } from '../../attachment-helpers'
 import { CHAT_FONT_CLASSES, useChatFont } from '../../hooks/use-chat-font'
 import { DocumentList } from '../components/DocumentList'
 import { MessageActions } from '../components/MessageActions'
+import { SourcesButton } from '../components/SourcesButton'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
@@ -535,6 +536,11 @@ const DefaultMessageComponent = ({
                 content={message.content}
                 isDarkMode={isDarkMode}
               />
+              {message.webSearch?.sources &&
+                message.webSearch.sources.length > 0 &&
+                !(isStreaming && isLastMessage) && (
+                  <SourcesButton sources={message.webSearch.sources} />
+                )}
               {/* Regenerate button - only on last assistant message */}
               {isLastMessage && onRegenerateMessage && messageIndex > 0 && (
                 <div className="group/regen relative">

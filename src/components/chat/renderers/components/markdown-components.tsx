@@ -59,15 +59,20 @@ function CitationPill({ url, title }: { url: string; title?: string }) {
           rel="noopener noreferrer"
           className="mx-0.5 inline-flex h-[1.5em] items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
         >
-          {!imgError && (
-            <img
-              src={faviconUrl}
-              alt=""
-              className={`h-[1.1em] w-[1.1em] shrink-0 rounded-full bg-white p-[1px] transition-opacity ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-              onLoad={handleLoad}
-              onError={handleError}
-            />
-          )}
+          <span
+            className="inline-flex h-[1.1em] w-[1.1em] shrink-0 items-center justify-center rounded-full bg-white"
+            aria-hidden="true"
+          >
+            {!imgError && (
+              <img
+                src={faviconUrl}
+                alt=""
+                className={`h-full w-full rounded-full p-[1px] transition-opacity ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                onLoad={handleLoad}
+                onError={handleError}
+              />
+            )}
+          </span>
           <span>{domain}</span>
         </a>
       </TooltipTrigger>
