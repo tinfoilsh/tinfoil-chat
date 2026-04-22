@@ -27,9 +27,16 @@ export const StreamingSilenceIndicator = memo(
     if (isThinking || hasActiveWebSearch || hasActiveToolCalls) return null
 
     return (
-      <div className="my-2 flex items-center gap-2 px-4 text-sm text-content-muted">
-        <LoadingDots />
-        <span>Preparing response</span>
+      <div className="mx-4 my-4 rounded-lg border border-border-subtle bg-surface-chat-background/40 px-4 py-4">
+        <div className="flex items-center gap-2 text-xs font-medium text-content-muted">
+          <LoadingDots />
+          <span>Preparing response</span>
+        </div>
+        <div aria-hidden="true" className="mt-3 space-y-2">
+          <div className="h-3 w-2/3 animate-pulse rounded bg-surface-chat-background" />
+          <div className="h-3 w-1/2 animate-pulse rounded bg-surface-chat-background" />
+          <div className="h-20 w-full animate-pulse rounded bg-surface-chat-background" />
+        </div>
       </div>
     )
   },

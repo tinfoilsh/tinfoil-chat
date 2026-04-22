@@ -523,70 +523,81 @@ const DefaultMessageComponent = ({
       {assistantRenderSections.includes('content') &&
         message.content &&
         (!hasInlineTextSegments || isUser) && (
-        <>
-          {/* Hide message when editing for user messages */}
-          {!(isUser && isEditing) && (
-            <div
-              className={`w-full ${isUser ? 'flex justify-end px-4 pb-8 pt-2' : 'px-4 py-2'}`}
-            >
+          <>
+            {/* Hide message when editing for user messages */}
+            {!(isUser && isEditing) && (
               <div
-                className={cn(
-                  isUser ? 'max-w-[95%]' : 'w-full',
-                  isUser &&
-                    'rounded-2xl bg-surface-message-user/90 px-4 py-2 shadow-sm backdrop-blur-sm',
-                  message.isRateLimitError &&
-                    'rounded-lg border-2 border-brand-accent-dark/30 bg-brand-accent-dark/5 px-4 py-3',
-                )}
+                className={`w-full ${isUser ? 'flex justify-end px-4 pb-8 pt-2' : 'px-4 py-2'}`}
               >
-                {message.isRateLimitError && (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <GoClockFill className="h-5 w-5 flex-shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
-                      <span className="font-semibold text-brand-accent-dark dark:text-brand-accent-light">
-                        Daily limit reached
-                      </span>
-                    </div>
-                    <p className="text-sm text-brand-accent-dark/70 dark:text-brand-accent-light/70">
-                      You&apos;ve used all your free requests for today.
-                    </p>
-                    <button
-                      type="button"
-                      className="w-fit rounded-md bg-brand-accent-dark px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent('requestUpgrade'))
-                      }}
-                    >
-                      Upgrade to Premium
-                    </button>
-                  </div>
-                )}
-                {!message.isRateLimitError && (
-                  <>
-                    <div className="relative">
-                      <div
-                        ref={isUser ? userMessageContentRef : undefined}
-                        style={
-                          isUser &&
-                          isUserMessageOverflowing &&
-                          !isUserMessageExpanded
-                            ? {
-                                maxHeight: USER_MESSAGE_MAX_HEIGHT,
-                                overflow: 'hidden',
-                              }
-                            : undefined
-                        }
+                <div
+                  className={cn(
+                    isUser ? 'max-w-[95%]' : 'w-full',
+                    isUser &&
+                      'rounded-2xl bg-surface-message-user/90 px-4 py-2 shadow-sm backdrop-blur-sm',
+                    message.isRateLimitError &&
+                      'rounded-lg border-2 border-brand-accent-dark/30 bg-brand-accent-dark/5 px-4 py-3',
+                  )}
+                >
+                  {message.isRateLimitError && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <GoClockFill className="h-5 w-5 flex-shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
+                        <span className="font-semibold text-brand-accent-dark dark:text-brand-accent-light">
+                          Daily limit reached
+                        </span>
+                      </div>
+                      <p className="text-sm text-brand-accent-dark/70 dark:text-brand-accent-light/70">
+                        You&apos;ve used all your free requests for today.
+                      </p>
+                      <button
+                        type="button"
+                        className="w-fit rounded-md bg-brand-accent-dark px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent('requestUpgrade'),
+                          )
+                        }}
                       >
+                        Upgrade to Premium
+                      </button>
+                    </div>
+                  )}
+                  {!message.isRateLimitError && (
+                    <>
+                      <div className="relative">
                         <div
-                          className={cn(
-                            'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
-                            'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
-                            'prose-a:text-blue-500 hover:prose-a:text-blue-600',
-                          )}
+                          ref={isUser ? userMessageContentRef : undefined}
+                          style={
+                            isUser &&
+                            isUserMessageOverflowing &&
+                            !isUserMessageExpanded
+                              ? {
+                                  maxHeight: USER_MESSAGE_MAX_HEIGHT,
+                                  overflow: 'hidden',
+                                }
+                              : undefined
+                          }
                         >
-                          {!isUser && isLastMessage ? (
-                            <StreamingContentWrapper
-                              isStreaming={isStreaming ?? false}
-                            >
+                          <div
+                            className={cn(
+                              'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
+                              'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
+                              'prose-a:text-blue-500 hover:prose-a:text-blue-600',
+                            )}
+                          >
+                            {!isUser && isLastMessage ? (
+                              <StreamingContentWrapper
+                                isStreaming={isStreaming ?? false}
+                              >
+                                <StreamingChunkedText
+                                  content={message.content}
+                                  isDarkMode={isDarkMode}
+                                  isUser={isUser}
+                                  isStreaming={isStreaming}
+                                  citationUrlTitles={citationUrlTitles}
+                                />
+                              </StreamingContentWrapper>
+                            ) : (
                               <StreamingChunkedText
                                 content={message.content}
                                 isDarkMode={isDarkMode}
@@ -594,181 +605,188 @@ const DefaultMessageComponent = ({
                                 isStreaming={isStreaming}
                                 citationUrlTitles={citationUrlTitles}
                               />
-                            </StreamingContentWrapper>
-                          ) : (
-                            <StreamingChunkedText
-                              content={message.content}
-                              isDarkMode={isDarkMode}
-                              isUser={isUser}
-                              isStreaming={isStreaming}
-                              citationUrlTitles={citationUrlTitles}
-                            />
-                          )}
+                            )}
+                          </div>
+                          {(() => {
+                            // The silence indicator below renders its own
+                            // LoadingDots whenever the stream is quiet.
+                            // Suppress the content-body tracer in that case
+                            // so we don't stack two "still working" cues.
+                            const silenceIndicatorWillRender =
+                              !message.isThinking &&
+                              message.webSearch?.status !== 'searching' &&
+                              !(
+                                message.toolCalls &&
+                                message.toolCalls.length > 0
+                              )
+                            return (
+                              !isUser &&
+                              isLastMessage &&
+                              isStreaming &&
+                              !message.isThinking &&
+                              !silenceIndicatorWillRender && (
+                                <div
+                                  role="status"
+                                  aria-label="Response still streaming"
+                                  className="mt-1 text-content-primary"
+                                >
+                                  <StreamingTracer />
+                                </div>
+                              )
+                            )
+                          })()}
                         </div>
-                        {!isUser &&
-                          isLastMessage &&
-                          isStreaming &&
-                          !message.isThinking && (
-                            <div
-                              role="status"
-                              aria-label="Response still streaming"
-                              className="mt-1 text-content-primary"
-                            >
-                              <StreamingTracer />
-                            </div>
+
+                        {isUser &&
+                          isUserMessageOverflowing &&
+                          !isUserMessageExpanded && (
+                            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface-message-user/90 to-transparent" />
                           )}
                       </div>
 
-                      {isUser &&
-                        isUserMessageOverflowing &&
-                        !isUserMessageExpanded && (
-                          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-surface-message-user/90 to-transparent" />
-                        )}
-                    </div>
-
-                    {isUser && isUserMessageOverflowing && (
-                      <button
-                        onClick={() =>
-                          setIsUserMessageExpanded(!isUserMessageExpanded)
-                        }
-                        className="mt-1 flex w-full items-center justify-center gap-1 py-1 text-xs font-medium text-content-secondary transition-colors hover:text-content-primary"
-                      >
-                        <span>
-                          {isUserMessageExpanded ? 'Show less' : 'Show more'}
-                        </span>
-                        <ChevronDownIcon
-                          className={cn(
-                            'h-3 w-3 transition-transform',
-                            isUserMessageExpanded && 'rotate-180',
-                          )}
-                        />
-                      </button>
-                    )}
-                  </>
-                )}
+                      {isUser && isUserMessageOverflowing && (
+                        <button
+                          onClick={() =>
+                            setIsUserMessageExpanded(!isUserMessageExpanded)
+                          }
+                          className="mt-1 flex w-full items-center justify-center gap-1 py-1 text-xs font-medium text-content-secondary transition-colors hover:text-content-primary"
+                        >
+                          <span>
+                            {isUserMessageExpanded ? 'Show less' : 'Show more'}
+                          </span>
+                          <ChevronDownIcon
+                            className={cn(
+                              'h-3 w-3 transition-transform',
+                              isUserMessageExpanded && 'rotate-180',
+                            )}
+                          />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Full-width edit mode for user messages */}
-          {isUser && isEditing && (
-            <div className="w-full px-4">
-              <div className="rounded-xl border border-border-subtle bg-surface-chat p-4">
-                <textarea
-                  ref={editTextareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSubmitEdit()
-                    } else if (e.key === 'Escape') {
-                      handleCancelEdit()
-                    }
-                  }}
-                  className={cn(
-                    'w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
-                    CHAT_FONT_CLASSES[chatFont],
-                  )}
-                  rows={Math.min(
-                    10,
-                    Math.max(3, editContent.split('\n').length),
-                  )}
-                />
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="hidden items-center gap-2 text-sm text-content-muted sm:flex">
-                    <InformationCircleIcon className="h-4 w-4 shrink-0" />
-                    <span>All messages after this point will be removed</span>
-                  </div>
-                  <div className="flex flex-1 justify-end gap-2">
-                    <button
-                      onClick={handleCancelEdit}
-                      className="rounded-lg px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSubmitEdit}
-                      disabled={!editContent.trim()}
-                      className="rounded-lg bg-surface-chat-background px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background/80 disabled:opacity-50"
-                    >
-                      Save
-                    </button>
+            {/* Full-width edit mode for user messages */}
+            {isUser && isEditing && (
+              <div className="w-full px-4">
+                <div className="rounded-xl border border-border-subtle bg-surface-chat p-4">
+                  <textarea
+                    ref={editTextareaRef}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSubmitEdit()
+                      } else if (e.key === 'Escape') {
+                        handleCancelEdit()
+                      }
+                    }}
+                    className={cn(
+                      'w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
+                      CHAT_FONT_CLASSES[chatFont],
+                    )}
+                    rows={Math.min(
+                      10,
+                      Math.max(3, editContent.split('\n').length),
+                    )}
+                  />
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="hidden items-center gap-2 text-sm text-content-muted sm:flex">
+                      <InformationCircleIcon className="h-4 w-4 shrink-0" />
+                      <span>All messages after this point will be removed</span>
+                    </div>
+                    <div className="flex flex-1 justify-end gap-2">
+                      <button
+                        onClick={handleCancelEdit}
+                        className="rounded-lg px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSubmitEdit}
+                        disabled={!editContent.trim()}
+                        className="rounded-lg bg-surface-chat-background px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background/80 disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Action bar for user messages */}
-          {isUser && !isEditing && (
-            <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4">
-              {formattedDate && (
-                <div className="group/date relative">
-                  <span className="px-2 py-1 text-sm text-content-muted">
-                    {formattedDate}
-                  </span>
-                  {fullDate && (
-                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/date:opacity-100">
-                      {fullDate}
+            {/* Action bar for user messages */}
+            {isUser && !isEditing && (
+              <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4">
+                {formattedDate && (
+                  <div className="group/date relative">
+                    <span className="px-2 py-1 text-sm text-content-muted">
+                      {formattedDate}
+                    </span>
+                    {fullDate && (
+                      <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/date:opacity-100">
+                        {fullDate}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {onRegenerateMessage && (
+                  <div className="group/regen relative">
+                    <button
+                      onClick={handleRegenerate}
+                      className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                    >
+                      <ArrowPathIcon className="h-4 w-4" />
+                    </button>
+                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/regen:opacity-100">
+                      Regenerate
+                    </span>
+                  </div>
+                )}
+                {onEditMessage && (
+                  <div className="group/edit relative">
+                    <button
+                      onClick={handleStartEdit}
+                      className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                    >
+                      <PencilSquareIcon className="h-4 w-4" />
+                    </button>
+                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/edit:opacity-100">
+                      Edit
+                    </span>
+                  </div>
+                )}
+                <div className="group/copy relative">
+                  <button
+                    onClick={handleCopyUser}
+                    className={`flex items-center gap-1.5 rounded-lg p-2 text-xs font-medium transition-all ${
+                      copiedUser
+                        ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
+                        : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary'
+                    }`}
+                  >
+                    {copiedUser ? (
+                      <>
+                        <BsCheckLg className="h-4 w-4" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <RxCopy className="h-4 w-4" />
+                    )}
+                  </button>
+                  {!copiedUser && (
+                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
+                      Copy
                     </span>
                   )}
                 </div>
-              )}
-              {onRegenerateMessage && (
-                <div className="group/regen relative">
-                  <button
-                    onClick={handleRegenerate}
-                    className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                  >
-                    <ArrowPathIcon className="h-4 w-4" />
-                  </button>
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/regen:opacity-100">
-                    Regenerate
-                  </span>
-                </div>
-              )}
-              {onEditMessage && (
-                <div className="group/edit relative">
-                  <button
-                    onClick={handleStartEdit}
-                    className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                  >
-                    <PencilSquareIcon className="h-4 w-4" />
-                  </button>
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/edit:opacity-100">
-                    Edit
-                  </span>
-                </div>
-              )}
-              <div className="group/copy relative">
-                <button
-                  onClick={handleCopyUser}
-                  className={`flex items-center gap-1.5 rounded-lg p-2 text-xs font-medium transition-all ${
-                    copiedUser
-                      ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
-                      : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary'
-                  }`}
-                >
-                  {copiedUser ? (
-                    <>
-                      <BsCheckLg className="h-4 w-4" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <RxCopy className="h-4 w-4" />
-                  )}
-                </button>
-                {!copiedUser && (
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
-                    Copy
-                  </span>
-                )}
               </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
 
       {/* Tool call rendered components */}
       {!isUser &&
