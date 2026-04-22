@@ -96,18 +96,24 @@ export function createTinfoilEventParser(): {
    * Given a non-marker chunk suffix, return how many trailing bytes
    * might be the start of an opening tag. The parser holds those bytes
    * back until the next chunk arrives so `<tinfoil-event` split across
-   * a boundary is still detected. A match is only plausible if the
-   * suffix is a proper prefix of OPEN_TAG; everything shorter is
-   * consumed as visible text.
+   * a boundary is still detected.
+   *
+   * Only the bytes starting at the last `<` in the buffer are eligible
+   * to be a partial open tag. If those bytes match the corresponding
+   * prefix of OPEN_TAG exactly, hold them back; otherwise release
+   * everything. This avoids stalling visible text whenever the model
+   * emits any `<` character (e.g. `<think>`, HTML, `x < y`, generics)
+   * which would otherwise batch up to 14 bytes per stall.
    */
   const openTagPrefixSuffixLength = (s: string): number => {
-    const max = Math.min(s.length, OPEN_TAG.length - 1)
-    for (let len = max; len > 0; len--) {
-      if (OPEN_TAG.startsWith(s.slice(s.length - len))) {
-        return len
-      }
+    const lastLt = s.lastIndexOf('<')
+    if (lastLt < 0) return 0
+    const tail = s.length - lastLt
+    if (tail >= OPEN_TAG.length) return 0
+    for (let i = 0; i < tail; i++) {
+      if (s.charCodeAt(lastLt + i) !== OPEN_TAG.charCodeAt(i)) return 0
     }
-    return 0
+    return tail
   }
 
   const consume = (chunk: string): TinfoilEventConsumeResult => {
