@@ -1161,6 +1161,39 @@ export function usePasskeyBackup({
     }))
   }, [])
 
+  // Ask the hook to re-surface the passkey-recovery modal. Used when the
+  // user clicks "Enable Cloud Sync" from the sidebar/settings after
+  // previously dismissing the recovery prompt. Only succeeds when PRF is
+  // supported, there is no local encryption key, and the backend has a
+  // registered passkey credential for this user. Clears the persistent
+  // dismiss flag so the recovery modal reopens, and flips
+  // `passkeyRecoveryNeeded` back to true so `chat-interface` routes the
+  // modal to the passkey-recovery step. Returns true if the recovery
+  // prompt was made available; false if the caller should fall through to
+  // another flow (first-time setup or manual key).
+  const showPasskeyRecoveryPrompt = useCallback(async (): Promise<boolean> => {
+    if (encryptionService.getKey()) return false
+    const prfSupported = await isPrfSupported()
+    if (!prfSupported) return false
+    try {
+      const credentialState = await getPasskeyCredentialState()
+      if (credentialState !== 'exists') return false
+    } catch {
+      return false
+    }
+    passkeyRecoveryDismissedFlag.clear()
+    setupWarningDismissedFlag.clear()
+    if (isMountedRef.current) {
+      setState((prev) => ({
+        ...prev,
+        passkeyRecoveryNeeded: true,
+        passkeySetupFailed: false,
+        passkeyRetryAvailable: true,
+      }))
+    }
+    return true
+  }, [])
+
   // Ask the hook to re-show the first-time setup prompt modal. Used when
   // the user clicks "Enable Cloud Sync" from the sidebar/settings after
   // previously dismissing the prompt. Only succeeds when PRF is supported
@@ -1257,6 +1290,7 @@ export function usePasskeyBackup({
     setupPasskey,
     setupFirstTimePasskey,
     showFirstTimePasskeyPrompt,
+    showPasskeyRecoveryPrompt,
     dismissFirstTimePasskeyPrompt,
     recoverWithPasskey,
     setupNewKeySplit,

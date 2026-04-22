@@ -365,6 +365,7 @@ export function ChatInterface({
     setupPasskey,
     setupFirstTimePasskey,
     showFirstTimePasskeyPrompt,
+    showPasskeyRecoveryPrompt,
     dismissFirstTimePasskeyPrompt,
     recoverWithPasskey,
     setupNewKeySplit,
@@ -1173,17 +1174,26 @@ export function ChatInterface({
     }
   }
 
-  // Handler for cloud sync setup. Prefer the friendly "Back Up Your Chats"
-  // prompt for brand-new signed-in users so they don't get dropped into the
-  // raw key-generator UI; fall back to the manual cloud-sync setup modal
-  // otherwise (existing key, remote data, or PRF unsupported).
+  // Handler for cloud sync setup. When the user has no local key we first
+  // check if the backend already holds a passkey credential — if so, route
+  // them back to passkey recovery even if they previously dismissed it, so
+  // clicking "Enable Cloud Sync" is always a valid re-entry path. Next
+  // prefer the friendly "Back Up Your Chats" prompt for brand-new signed-in
+  // users so they don't get dropped into the raw key-generator UI. Fall
+  // back to the manual cloud-sync setup modal otherwise (existing key,
+  // remote data without a passkey, or PRF unsupported).
   const handleOpenCloudSyncSetup = useCallback(async () => {
     if (!encryptionService.getKey()) {
+      const recovered = await showPasskeyRecoveryPrompt()
+      if (recovered) {
+        setShowCloudSyncSetupModal(true)
+        return
+      }
       const routed = await showFirstTimePasskeyPrompt()
       if (routed) return
     }
     setShowCloudSyncSetupModal(true)
-  }, [showFirstTimePasskeyPrompt])
+  }, [showPasskeyRecoveryPrompt, showFirstTimePasskeyPrompt])
 
   const handleKeyChanged = useCallback(
     async (
