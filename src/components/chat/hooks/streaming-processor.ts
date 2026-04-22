@@ -22,7 +22,9 @@ import type {
   Annotation,
   Chat,
   Message,
+  MessageSegment,
   URLFetchState,
+  WebSearchInstance,
   WebSearchSource,
   WebSearchState,
 } from '../types'
@@ -102,6 +104,65 @@ export async function processStreamingResponse(
   let streamStalled = false
   let stallTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Ordered content segments (text + inline event refs) that preserve the
+  // exact order in which the router surfaced events relative to the
+  // streamed text. The aggregate `webSearch`/`urlFetches` fields are kept
+  // in sync for legacy consumers (SourcesButton, title generation).
+  let segments: MessageSegment[] = []
+  let webSearches: WebSearchInstance[] = []
+  let nextSearchId = 0
+
+  const allocateSearchId = () => `ws-${nextSearchId++}`
+
+  const appendTextSegment = (text: string) => {
+    if (!text) return
+    const last = segments[segments.length - 1]
+    if (last && last.type === 'text') {
+      segments = [
+        ...segments.slice(0, -1),
+        { type: 'text', text: last.text + text },
+      ]
+    } else {
+      segments = [...segments, { type: 'text', text }]
+    }
+  }
+
+  const upsertWebSearchInstance = (instance: WebSearchInstance) => {
+    const idx = webSearches.findIndex((w) => w.id === instance.id)
+    if (idx >= 0) {
+      webSearches = [
+        ...webSearches.slice(0, idx),
+        instance,
+        ...webSearches.slice(idx + 1),
+      ]
+    } else {
+      webSearches = [...webSearches, instance]
+      segments = [...segments, { type: 'web_search', searchId: instance.id }]
+    }
+  }
+
+  const appendUrlFetchSegmentIfNew = (fetchId: string) => {
+    const already = segments.some(
+      (s) => s.type === 'url_fetch' && s.fetchId === fetchId,
+    )
+    if (!already) {
+      segments = [...segments, { type: 'url_fetch', fetchId }]
+    }
+  }
+
+  // Resolve which in-flight WebSearchInstance a status update refers to.
+  // The router may not attach an id to completed/failed events, in which
+  // case we fall back to the most recent instance.
+  const findSearchInstance = (
+    id: string | undefined,
+  ): WebSearchInstance | undefined => {
+    if (id) {
+      const hit = webSearches.find((w) => w.id === id)
+      if (hit) return hit
+    }
+    return webSearches[webSearches.length - 1]
+  }
+
   const toolCallsInProgress = new Map<
     string,
     { id: string; name: string; arguments: string; input?: unknown }
@@ -131,15 +192,32 @@ export async function processStreamingResponse(
     }, CONSTANTS.STREAMING_STALL_TIMEOUT_MS)
   }
 
+  const rewriteSegmentsWithCitations = (
+    sourceSegments: MessageSegment[],
+    sources: WebSearchSource[],
+  ): MessageSegment[] =>
+    sourceSegments.map((segment) =>
+      segment.type === 'text'
+        ? { type: 'text', text: processCitationMarkers(segment.text, sources) }
+        : segment,
+    )
+
   const getMessageWithCitations = (): Message => {
     if (assistantMessage.content && collectedSources.length > 0) {
-      return {
+      const rewritten: Message = {
         ...assistantMessage,
         content: processCitationMarkers(
           assistantMessage.content,
           collectedSources,
         ),
       }
+      if (assistantMessage.segments && assistantMessage.segments.length > 0) {
+        rewritten.segments = rewriteSegmentsWithCitations(
+          assistantMessage.segments,
+          collectedSources,
+        )
+      }
+      return rewritten
     }
     return assistantMessage
   }
@@ -214,33 +292,84 @@ export async function processStreamingResponse(
       if (event.type === 'web_search_call') {
         const searchQuery = event.query
         if (event.status === 'in_progress' && searchQuery) {
-          webSearchState = { query: searchQuery, status: 'searching' }
+          const id = event.id || allocateSearchId()
+          const instance: WebSearchInstance = {
+            id,
+            query: searchQuery,
+            status: 'searching',
+            sources: event.sources,
+          }
+          upsertWebSearchInstance(instance)
+          webSearchState = {
+            query: instance.query,
+            status: instance.status,
+            sources: instance.sources,
+          }
           assistantMessage = {
             ...assistantMessage,
             webSearch: webSearchState,
             webSearchBeforeThinking: !thinkingStarted,
+            segments: [...segments],
+            webSearches: [...webSearches],
           }
           commit(assistantMessage)
           markFirstActivity()
-        } else if (event.status === 'completed' && webSearchState) {
-          webSearchState = {
-            query: webSearchState.query,
-            status: 'completed',
-            sources: webSearchState.sources,
+        } else if (event.status === 'completed') {
+          const existing = findSearchInstance(event.id)
+          if (existing) {
+            const updated: WebSearchInstance = {
+              ...existing,
+              status: 'completed',
+              sources: event.sources ?? existing.sources,
+            }
+            upsertWebSearchInstance(updated)
+            webSearchState = {
+              query: updated.query,
+              status: 'completed',
+              sources: updated.sources,
+            }
+            assistantMessage = {
+              ...assistantMessage,
+              webSearch: webSearchState,
+              segments: [...segments],
+              webSearches: [...webSearches],
+            }
+            scheduleStreamingUpdate()
           }
-          assistantMessage = { ...assistantMessage, webSearch: webSearchState }
-          scheduleStreamingUpdate()
-        } else if (event.status === 'failed' && webSearchState) {
-          webSearchState = {
-            query: webSearchState.query,
-            status: 'failed',
-            sources: [],
+        } else if (event.status === 'failed') {
+          const existing = findSearchInstance(event.id)
+          if (existing) {
+            const updated: WebSearchInstance = {
+              ...existing,
+              status: 'failed',
+              sources: event.sources ?? [],
+            }
+            upsertWebSearchInstance(updated)
+            webSearchState = {
+              query: updated.query,
+              status: 'failed',
+              sources: updated.sources,
+            }
+            assistantMessage = {
+              ...assistantMessage,
+              webSearch: webSearchState,
+              segments: [...segments],
+              webSearches: [...webSearches],
+            }
+            scheduleStreamingUpdate()
           }
-          assistantMessage = { ...assistantMessage, webSearch: webSearchState }
-          scheduleStreamingUpdate()
         } else if (event.status === 'blocked') {
+          const existing = findSearchInstance(event.id)
+          const id = existing?.id || event.id || allocateSearchId()
+          const updated: WebSearchInstance = {
+            id,
+            query: searchQuery ?? existing?.query,
+            status: 'blocked',
+            reason: event.reason,
+          }
+          upsertWebSearchInstance(updated)
           webSearchState = {
-            query: searchQuery,
+            query: updated.query,
             status: 'blocked',
             reason: event.reason,
           }
@@ -248,6 +377,8 @@ export async function processStreamingResponse(
             ...assistantMessage,
             webSearch: webSearchState,
             webSearchBeforeThinking: !thinkingStarted,
+            segments: [...segments],
+            webSearches: [...webSearches],
           }
           scheduleStreamingUpdate()
         }
@@ -260,6 +391,7 @@ export async function processStreamingResponse(
             ...urlFetches,
             { id: event.id, url: event.url, status: 'fetching' },
           ]
+          appendUrlFetchSegmentIfNew(event.id)
         } else {
           urlFetches = urlFetches.map((f) =>
             f.id === event.id ? { ...f, status: event.status } : f,
@@ -268,6 +400,7 @@ export async function processStreamingResponse(
         assistantMessage = {
           ...assistantMessage,
           urlFetches: [...urlFetches],
+          segments: [...segments],
         }
         scheduleStreamingUpdate()
         return
@@ -285,9 +418,21 @@ export async function processStreamingResponse(
             status: webSearchState.status,
             sources: [...collectedSources],
           }
+          // Legacy annotation streams don't identify which search a
+          // source belongs to. Only mirror them onto the single-search
+          // case so multi-search turns don't clobber per-instance
+          // sources that already arrived via marker events.
+          const lastInstance = webSearches[webSearches.length - 1]
+          if (lastInstance && webSearches.length === 1) {
+            upsertWebSearchInstance({
+              ...lastInstance,
+              sources: [...collectedSources],
+            })
+          }
           assistantMessage = {
             ...assistantMessage,
             webSearch: webSearchState,
+            webSearches: [...webSearches],
             annotations: [...collectedAnnotations],
           }
         } else {
@@ -352,9 +497,11 @@ export async function processStreamingResponse(
               thinkingDuration,
             }
           }
+          appendTextSegment(part.text)
           assistantMessage = {
             ...assistantMessage,
             content: (assistantMessage.content || '') + part.text,
+            segments: [...segments],
           }
           scheduleStreamingUpdate()
           break
@@ -494,12 +641,17 @@ export async function processStreamingResponse(
     }
 
     if (assistantMessage.content && collectedSources.length > 0) {
+      // Mirror the content rewrite onto every text segment so inline
+      // segment rendering stays consistent with the aggregate `content`
+      // field after stream end.
+      segments = rewriteSegmentsWithCitations(segments, collectedSources)
       assistantMessage = {
         ...assistantMessage,
         content: processCitationMarkers(
           assistantMessage.content,
           collectedSources,
         ),
+        segments: [...segments],
       }
     }
 
