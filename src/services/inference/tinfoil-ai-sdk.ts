@@ -13,6 +13,10 @@
  * the stream.
  */
 import { logError } from '@/utils/error-handling'
+import {
+  TINFOIL_EVENTS_HEADER,
+  TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+} from '@/utils/tinfoil-events'
 import type {
   OpenAICompatibleChatLanguageModel,
   OpenAICompatibleProvider,
@@ -93,6 +97,12 @@ export async function getTinfoilAISdk(
     baseURL: secureClient.getBaseURL()!,
     apiKey,
     fetch: wrappedFetch,
+    // Opt into the router's inline progress-marker stream so the UI can
+    // surface live web_search and URL-fetch status. The preparser strips
+    // the embedded markers before the AI SDK sees chunk contents.
+    headers: {
+      [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+    },
     transformRequestBody: (body) => {
       if (!extensions) return body
       const patched: Record<string, unknown> = { ...body }
