@@ -133,7 +133,7 @@ const SingleWebSearchProcess = memo(function SingleWebSearchProcess({
         type="button"
         onClick={handleToggle}
         disabled={!hasSources}
-        className={`group flex items-start gap-1.5 rounded-md px-1 py-1 text-left transition-colors ${
+        className={`group -mx-1 flex items-start gap-1.5 rounded-md px-1 py-1 text-left transition-colors ${
           hasSources
             ? 'hover:bg-surface-secondary/50 cursor-pointer'
             : 'cursor-default'
@@ -305,7 +305,7 @@ const GroupedWebSearchProcess = memo(function GroupedWebSearchProcess({
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
-        className="hover:bg-surface-secondary/50 group flex cursor-pointer items-start gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
+        className="hover:bg-surface-secondary/50 group -mx-1 flex cursor-pointer items-start gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
       >
         <span className="mt-[5px] h-3.5 w-3.5 shrink-0" aria-hidden="true">
           {aggregateStatus === 'searching' ? (

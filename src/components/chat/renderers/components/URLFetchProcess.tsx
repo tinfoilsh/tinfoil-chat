@@ -126,7 +126,7 @@ export const URLFetchProcess = memo(function URLFetchProcess({
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
-        className="hover:bg-surface-secondary/50 group flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
+        className="hover:bg-surface-secondary/50 group -mx-1 flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
       >
         <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
           <svg
