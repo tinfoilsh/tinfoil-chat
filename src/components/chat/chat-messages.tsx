@@ -118,11 +118,17 @@ const ChatMessage = memo(
 
     // Always re-render if this is the streaming message and content/thoughts changed
     if (nextProps.isStreaming && nextProps.isLastMessage) {
-      // Only re-render if content, thoughts, or expanded state actually changed
+      // Only re-render if content, thoughts, streaming tool-call state, or
+      // expanded state actually changed.
       return (
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevProps.message.segments === nextProps.message.segments &&
+        prevProps.message.webSearches === nextProps.message.webSearches &&
+        prevProps.message.webSearch === nextProps.message.webSearch &&
+        prevProps.message.urlFetches === nextProps.message.urlFetches &&
+        prevProps.message.annotations === nextProps.message.annotations &&
         prevExpanded === nextExpanded
       )
     }
@@ -134,6 +140,11 @@ const ChatMessage = memo(
         prevProps.message.content === nextProps.message.content &&
         prevProps.message.thoughts === nextProps.message.thoughts &&
         prevProps.message.isThinking === nextProps.message.isThinking &&
+        prevProps.message.segments === nextProps.message.segments &&
+        prevProps.message.webSearches === nextProps.message.webSearches &&
+        prevProps.message.webSearch === nextProps.message.webSearch &&
+        prevProps.message.urlFetches === nextProps.message.urlFetches &&
+        prevProps.message.annotations === nextProps.message.annotations &&
         prevProps.message.attachments === nextProps.message.attachments &&
         prevProps.message.documentContent ===
           nextProps.message.documentContent &&
@@ -153,6 +164,11 @@ const ChatMessage = memo(
     return (
       prevProps.message.content === nextProps.message.content &&
       prevProps.message.thoughts === nextProps.message.thoughts &&
+      prevProps.message.segments === nextProps.message.segments &&
+      prevProps.message.webSearches === nextProps.message.webSearches &&
+      prevProps.message.webSearch === nextProps.message.webSearch &&
+      prevProps.message.urlFetches === nextProps.message.urlFetches &&
+      prevProps.message.annotations === nextProps.message.annotations &&
       prevProps.message.attachments === nextProps.message.attachments &&
       prevProps.message.documentContent === nextProps.message.documentContent &&
       prevProps.message.documents === nextProps.message.documents &&
@@ -467,11 +483,18 @@ export function ChatMessages({
           retryInfo={retryInfo}
         />
       )}
-      {/* Spacer allows scrollIntoView to bring user message to top of viewport */}
+      {/* Spacer allows scrollIntoView to bring user message to top of viewport.
+          Subtracts the composer height (set on the scroll container as
+          --input-area-height) so the total over-scroll is just enough for the
+          fade above the input area, not a full 70dvh of empty space. */}
       {showSpacer && (
         <div
           data-spacer
-          className="h-[70dvh] flex-shrink-0"
+          className="flex-shrink-0"
+          style={{
+            height:
+              'max(0px, calc(70dvh - var(--input-area-height, 0px) - 32px))',
+          }}
           aria-hidden="true"
         />
       )}

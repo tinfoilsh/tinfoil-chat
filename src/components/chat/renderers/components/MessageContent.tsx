@@ -51,9 +51,11 @@ export const MessageContent = memo(function MessageContent({
   citationUrlTitles,
 }: MessageContentProps) {
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
-  const preprocessed = preprocessMarkdown(content)
-  const processedContent = processLatexTags(preprocessed)
-  const sanitizedContent = sanitizeUnsupportedMathBlocks(processedContent)
+  const sanitizedContent = useMemo(() => {
+    const preprocessed = preprocessMarkdown(content)
+    const processedContent = processLatexTags(preprocessed)
+    return sanitizeUnsupportedMathBlocks(processedContent)
+  }, [content])
 
   const showMarkdownTablePlaceholder = useMemo(() => {
     if (!isStreaming) return false

@@ -613,6 +613,23 @@ export function ChatInterface({
   // State for scroll button - define early so it can be used in useChatState
   const [showScrollButton, setShowScrollButton] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const inputAreaObserverRef = useRef<ResizeObserver | null>(null)
+  const [inputAreaHeight, setInputAreaHeight] = useState(0)
+  const inputAreaRef = useCallback((node: HTMLDivElement | null) => {
+    inputAreaObserverRef.current?.disconnect()
+    inputAreaObserverRef.current = null
+    if (!node) {
+      setInputAreaHeight(0)
+      return
+    }
+    setInputAreaHeight(node.offsetHeight)
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      setInputAreaHeight(node.offsetHeight)
+    })
+    observer.observe(node)
+    inputAreaObserverRef.current = observer
+  }, [])
   const scrollCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
@@ -2603,7 +2620,32 @@ export function ChatInterface({
               ref={scrollContainerRef}
               onScroll={handleScroll}
               data-scroll-container="main"
-              className="relative flex flex-1 overflow-y-auto bg-surface-chat-background"
+              className="relative flex-1 overflow-y-auto bg-surface-chat-background"
+              style={
+                inputAreaHeight
+                  ? ({
+                      paddingBottom: inputAreaHeight + 32,
+                      '--input-area-height': `${inputAreaHeight}px`,
+                      '--mask-fade-start': `calc(100% - ${inputAreaHeight + 32}px)`,
+                      '--mask-fade-end': `calc(100% - ${inputAreaHeight}px)`,
+                      maskImage:
+                        'linear-gradient(to bottom, black 0, black var(--mask-fade-start), transparent var(--mask-fade-end)), linear-gradient(black, black)',
+                      maskSize:
+                        'calc(100% - var(--scrollbar-gutter, 14px)) 100%, var(--scrollbar-gutter, 14px) 100%',
+                      maskPosition: '0 0, 100% 0',
+                      maskRepeat: 'no-repeat, no-repeat',
+                      WebkitMaskImage:
+                        'linear-gradient(to bottom, black 0, black var(--mask-fade-start), transparent var(--mask-fade-end)), linear-gradient(black, black)',
+                      WebkitMaskSize:
+                        'calc(100% - var(--scrollbar-gutter, 14px)) 100%, var(--scrollbar-gutter, 14px) 100%',
+                      WebkitMaskPosition: '0 0, 100% 0',
+                      WebkitMaskRepeat: 'no-repeat, no-repeat',
+                    } as React.CSSProperties)
+                  : ({
+                      paddingBottom: inputAreaHeight + 32,
+                      '--input-area-height': `${inputAreaHeight}px`,
+                    } as React.CSSProperties)
+              }
             >
               <div className="flex min-w-0 flex-1 [container-type:inline-size]">
                 <ChatMessages
@@ -2645,7 +2687,8 @@ export function ChatInterface({
             (windowWidth < CONSTANTS.MOBILE_BREAKPOINT ||
               (currentChat?.messages && currentChat.messages.length > 0)) && (
               <div
-                className="relative flex-shrink-0 bg-surface-chat-background px-4 pb-4"
+                ref={inputAreaRef}
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-4"
                 style={{
                   minHeight: '80px',
                   maxHeight: '50vh',
@@ -2654,7 +2697,7 @@ export function ChatInterface({
               >
                 <form
                   onSubmit={handleSubmit}
-                  className="mx-auto max-w-3xl px-1 md:px-8"
+                  className="pointer-events-auto relative mx-auto max-w-3xl px-1 md:px-8"
                 >
                   <ChatInput
                     input={input}
@@ -2745,7 +2788,7 @@ export function ChatInterface({
 
                 {/* Scroll to bottom button - absolutely positioned in parent */}
                 {showScrollButton && currentChat?.messages?.length > 0 && (
-                  <div className="absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
+                  <div className="pointer-events-auto absolute -top-[50px] left-1/2 z-10 -translate-x-1/2">
                     <button
                       onClick={() => scrollToLastMessage()}
                       className="flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle bg-surface-sidebar-button shadow-md transition-colors hover:bg-surface-sidebar-button-hover"

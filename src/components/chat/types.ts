@@ -22,11 +22,20 @@ export type WebSearchState = {
   reason?: string
 }
 
+export type WebSearchInstance = WebSearchState & {
+  id: string
+}
+
 export type URLFetchState = {
   id: string
   url: string
   status: 'fetching' | 'completed' | 'failed'
 }
+
+export type MessageSegment =
+  | { type: 'text'; text: string }
+  | { type: 'web_search'; searchId: string }
+  | { type: 'url_fetch'; fetchId: string }
 
 export type Attachment = {
   id: string
@@ -63,6 +72,12 @@ export type Message = {
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
   quote?: string // Highlighted text the user is replying to
+  // Ordered list of content/event segments so web-search and URL-fetch events
+  // render inline with the assistant text in the exact order they streamed.
+  // Optional for backward compatibility; legacy messages fall back to the
+  // aggregate fields above.
+  segments?: MessageSegment[]
+  webSearches?: WebSearchInstance[]
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'

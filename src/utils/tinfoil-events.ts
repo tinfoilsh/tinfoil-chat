@@ -53,6 +53,10 @@ export interface TinfoilWebSearchCallEvent {
     query?: string
     url?: string
   }
+  sources?: Array<{
+    title?: string
+    url?: string
+  }>
   error?: { code?: string }
 }
 

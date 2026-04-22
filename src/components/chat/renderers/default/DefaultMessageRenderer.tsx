@@ -1,3 +1,4 @@
+import { StreamingTracer } from '@/components/streaming-tracer'
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
@@ -138,6 +139,9 @@ const DefaultMessageComponent = ({
     message.quote && shouldTruncateQuote && !isQuoteExpanded
       ? `${message.quote.slice(0, QUOTE_PREVIEW_MAX_LENGTH).trimEnd()}…`
       : (message.quote ?? '')
+  const hasInlineTextSegments =
+    !isUser &&
+    (message.segments?.some((segment) => segment.type === 'text') ?? false)
 
   React.useEffect(() => {
     if (isUser && userMessageContentRef.current) {
@@ -253,47 +257,243 @@ const DefaultMessageComponent = ({
         />
       )}
 
-      {/* Show URL fetch status for assistant messages */}
-      {!isUser && message.urlFetches && message.urlFetches.length > 0 && (
-        <div className="no-scroll-anchoring w-full px-4">
-          <URLFetchProcess urlFetches={message.urlFetches} />
-        </div>
-      )}
+      {/* Render inline segments (events interleaved in the order they
+          streamed) when present; fall back to the legacy fixed layout for
+          older messages without segments. Thoughts render once at the top
+          since a message has at most one thoughts stream and it always
+          precedes the content segments. */}
+      {!isUser && message.segments && message.segments.length > 0 ? (
+        <>
+          {(message.isThinking ||
+            (typeof message.thoughts === 'string' &&
+              message.thoughts.trim().length > 0)) && (
+            <div className="no-scroll-anchoring w-full px-4">
+              <ThoughtProcess
+                thoughts={message.thoughts || ''}
+                isDarkMode={isDarkMode}
+                isThinking={message.isThinking}
+                thinkingDuration={message.thinkingDuration}
+                messageId={messageUniqueId}
+                expandedThoughtsState={expandedThoughtsState}
+                setExpandedThoughtsState={setExpandedThoughtsState}
+              />
+            </div>
+          )}
+          {(() => {
+            // Group adjacent same-kind event segments so long runs of
+            // tool calls collapse into a single summary row instead of
+            // stacking one full pill per event.
+            type Run =
+              | { kind: 'text'; index: number }
+              | {
+                  kind: 'web_search'
+                  index: number
+                  instances: NonNullable<typeof message.webSearches>
+                }
+              | {
+                  kind: 'url_fetch'
+                  index: number
+                  fetches: NonNullable<typeof message.urlFetches>
+                }
+            const runs: Run[] = []
+            message.segments.forEach((segment, i) => {
+              if (segment.type === 'text') {
+                runs.push({ kind: 'text', index: i })
+                return
+              }
+              if (segment.type === 'web_search') {
+                const instance = message.webSearches?.find(
+                  (w) => w.id === segment.searchId,
+                )
+                if (!instance) return
+                const last = runs[runs.length - 1]
+                if (last && last.kind === 'web_search') {
+                  last.instances.push(instance)
+                } else {
+                  runs.push({
+                    kind: 'web_search',
+                    index: i,
+                    instances: [instance],
+                  })
+                }
+                return
+              }
+              if (segment.type === 'url_fetch') {
+                const fetchState = message.urlFetches?.find(
+                  (f) => f.id === segment.fetchId,
+                )
+                if (!fetchState) return
+                const last = runs[runs.length - 1]
+                if (last && last.kind === 'url_fetch') {
+                  last.fetches.push(fetchState)
+                } else {
+                  runs.push({
+                    kind: 'url_fetch',
+                    index: i,
+                    fetches: [fetchState],
+                  })
+                }
+              }
+            })
 
-      {/* Show web search for assistant messages - before thoughts if it started first */}
-      {!isUser && message.webSearch && message.webSearchBeforeThinking && (
-        <div className="no-scroll-anchoring w-full px-4">
-          <WebSearchProcess webSearch={message.webSearch} />
-        </div>
-      )}
+            return runs.map((run, runIndex) => {
+              if (run.kind === 'text') {
+                const segment = message.segments?.[run.index]
+                if (!segment || segment.type !== 'text' || !segment.text) {
+                  return null
+                }
 
-      {/* Show thoughts for assistant messages */}
-      {!isUser &&
-        (message.isThinking ||
-          (typeof message.thoughts === 'string' &&
-            message.thoughts.trim().length > 0)) && (
-          <div className="no-scroll-anchoring w-full px-4">
-            <ThoughtProcess
-              thoughts={message.thoughts || ''}
-              isDarkMode={isDarkMode}
-              isThinking={message.isThinking}
-              thinkingDuration={message.thinkingDuration}
-              messageId={messageUniqueId}
-              expandedThoughtsState={expandedThoughtsState}
-              setExpandedThoughtsState={setExpandedThoughtsState}
-            />
-          </div>
-        )}
+                const textIsStreaming =
+                  !!isStreaming &&
+                  !!isLastMessage &&
+                  runIndex === runs.length - 1 &&
+                  !message.isThinking
 
-      {/* Show web search for assistant messages - after thoughts if it started after */}
-      {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
-        <div className="no-scroll-anchoring w-full px-4">
-          <WebSearchProcess webSearch={message.webSearch} />
-        </div>
+                return (
+                  <div
+                    key={`run-${run.index}`}
+                    className="no-scroll-anchoring w-full px-4 py-2"
+                  >
+                    <div
+                      className={cn(
+                        'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
+                        'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
+                        'prose-a:text-blue-500 hover:prose-a:text-blue-600',
+                      )}
+                    >
+                      {textIsStreaming ? (
+                        <StreamingContentWrapper isStreaming={true}>
+                          <StreamingChunkedText
+                            content={segment.text}
+                            isDarkMode={isDarkMode}
+                            isUser={false}
+                            isStreaming={true}
+                            citationUrlTitles={citationUrlTitles}
+                          />
+                        </StreamingContentWrapper>
+                      ) : (
+                        <StreamingChunkedText
+                          content={segment.text}
+                          isDarkMode={isDarkMode}
+                          isUser={false}
+                          isStreaming={false}
+                          citationUrlTitles={citationUrlTitles}
+                        />
+                      )}
+                    </div>
+                    {textIsStreaming && (
+                      <div
+                        role="status"
+                        aria-label="Response still streaming"
+                        className="mt-1 text-content-primary"
+                      >
+                        <StreamingTracer />
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              const isTrailingRun =
+                !!isStreaming &&
+                !!isLastMessage &&
+                runIndex === runs.length - 1 &&
+                !message.isThinking
+              if (run.kind === 'web_search') {
+                const aggregate = run.instances[run.instances.length - 1]
+                return (
+                  <div
+                    key={`run-${run.index}`}
+                    className="no-scroll-anchoring w-full px-4"
+                  >
+                    <WebSearchProcess
+                      webSearch={aggregate}
+                      groupInstances={
+                        run.instances.length > 1 ? run.instances : undefined
+                      }
+                    />
+                    {isTrailingRun && (
+                      <div
+                        role="status"
+                        aria-label="Response still streaming"
+                        className="mt-1 text-content-primary"
+                      >
+                        <StreamingTracer />
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              if (run.kind === 'url_fetch') {
+                return (
+                  <div
+                    key={`run-${run.index}`}
+                    className="no-scroll-anchoring w-full px-4"
+                  >
+                    <URLFetchProcess
+                      urlFetches={run.fetches}
+                      grouped={run.fetches.length > 1}
+                    />
+                    {isTrailingRun && (
+                      <div
+                        role="status"
+                        aria-label="Response still streaming"
+                        className="mt-1 text-content-primary"
+                      >
+                        <StreamingTracer />
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              return null
+            })
+          })()}
+        </>
+      ) : (
+        <>
+          {/* Show URL fetch status for assistant messages */}
+          {!isUser && message.urlFetches && message.urlFetches.length > 0 && (
+            <div className="no-scroll-anchoring w-full px-4">
+              <URLFetchProcess urlFetches={message.urlFetches} />
+            </div>
+          )}
+
+          {/* Show web search for assistant messages - before thoughts if it started first */}
+          {!isUser && message.webSearch && message.webSearchBeforeThinking && (
+            <div className="no-scroll-anchoring w-full px-4">
+              <WebSearchProcess webSearch={message.webSearch} />
+            </div>
+          )}
+
+          {/* Show thoughts for assistant messages */}
+          {!isUser &&
+            (message.isThinking ||
+              (typeof message.thoughts === 'string' &&
+                message.thoughts.trim().length > 0)) && (
+              <div className="no-scroll-anchoring w-full px-4">
+                <ThoughtProcess
+                  thoughts={message.thoughts || ''}
+                  isDarkMode={isDarkMode}
+                  isThinking={message.isThinking}
+                  thinkingDuration={message.thinkingDuration}
+                  messageId={messageUniqueId}
+                  expandedThoughtsState={expandedThoughtsState}
+                  setExpandedThoughtsState={setExpandedThoughtsState}
+                />
+              </div>
+            )}
+
+          {/* Show web search for assistant messages - after thoughts if it started after */}
+          {!isUser && message.webSearch && !message.webSearchBeforeThinking && (
+            <div className="no-scroll-anchoring w-full px-4">
+              <WebSearchProcess webSearch={message.webSearch} />
+            </div>
+          )}
+        </>
       )}
 
       {/* Message content */}
-      {message.content && (
+      {message.content && (!hasInlineTextSegments || isUser) && (
         <>
           {/* Hide message when editing for user messages */}
           {!(isUser && isEditing) && (
@@ -354,8 +554,10 @@ const DefaultMessageComponent = ({
                             'prose-a:text-blue-500 hover:prose-a:text-blue-600',
                           )}
                         >
-                          {!isUser && isStreaming && isLastMessage ? (
-                            <StreamingContentWrapper isStreaming={true}>
+                          {!isUser && isLastMessage ? (
+                            <StreamingContentWrapper
+                              isStreaming={isStreaming ?? false}
+                            >
                               <StreamingChunkedText
                                 content={message.content}
                                 isDarkMode={isDarkMode}
@@ -374,6 +576,18 @@ const DefaultMessageComponent = ({
                             />
                           )}
                         </div>
+                        {!isUser &&
+                          isLastMessage &&
+                          isStreaming &&
+                          !message.isThinking && (
+                            <div
+                              role="status"
+                              aria-label="Response still streaming"
+                              className="mt-1 text-content-primary"
+                            >
+                              <StreamingTracer />
+                            </div>
+                          )}
                       </div>
 
                       {isUser &&
@@ -524,40 +738,41 @@ const DefaultMessageComponent = ({
               </div>
             </div>
           )}
-
-          {/* Actions for assistant messages - fade in/out during streaming */}
-          {!isUser && (
-            <div
-              className={`flex items-center gap-1 px-4 transition-opacity duration-500 ease-in-out ${
-                showActions ? 'opacity-100' : 'pointer-events-none opacity-0'
-              }`}
-            >
-              <MessageActions
-                content={message.content}
-                isDarkMode={isDarkMode}
-              />
-              {message.webSearch?.sources &&
-                message.webSearch.sources.length > 0 &&
-                !(isStreaming && isLastMessage) && (
-                  <SourcesButton sources={message.webSearch.sources} />
-                )}
-              {/* Regenerate button - only on last assistant message */}
-              {isLastMessage && onRegenerateMessage && messageIndex > 0 && (
-                <div className="group/regen relative">
-                  <button
-                    onClick={() => onRegenerateMessage(messageIndex - 1)}
-                    className="flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium text-content-secondary transition-all hover:bg-surface-chat-background hover:text-content-primary"
-                  >
-                    <ArrowPathIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/regen:opacity-100">
-                    Regenerate
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
         </>
+      )}
+
+      {/* Actions for assistant messages - hidden while streaming the last response */}
+      {!isUser && message.content && !(isStreaming && isLastMessage) && (
+        <div
+          className={`flex items-center justify-between gap-3 px-4 transition-opacity duration-500 ease-in-out ${
+            showActions ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <MessageActions content={message.content} isDarkMode={isDarkMode} />
+            {/* Regenerate button - only on last assistant message */}
+            {isLastMessage && onRegenerateMessage && messageIndex > 0 && (
+              <div className="group/regen relative">
+                <button
+                  onClick={() => onRegenerateMessage(messageIndex - 1)}
+                  className="flex items-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium text-content-secondary transition-all hover:bg-surface-chat-background hover:text-content-primary"
+                >
+                  <ArrowPathIcon className="h-3.5 w-3.5" />
+                </button>
+                <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/regen:opacity-100">
+                  Regenerate
+                </span>
+              </div>
+            )}
+          </div>
+          {message.webSearch?.sources &&
+            message.webSearch.sources.length > 0 &&
+            !(isStreaming && isLastMessage) && (
+              <div className="ml-auto flex items-center">
+                <SourcesButton sources={message.webSearch.sources} />
+              </div>
+            )}
+        </div>
       )}
     </div>
   )

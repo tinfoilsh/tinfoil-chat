@@ -57,7 +57,7 @@ function CitationPill({ url, title }: { url: string; title?: string }) {
           href={sanitizedHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="mx-0.5 inline-flex h-[1.5em] items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 !align-baseline text-[10px] font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
+          className="mx-0.5 inline-flex h-[1.5em] items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-500/10 pl-1 pr-2 align-middle text-[10px] font-medium leading-none text-blue-500 transition-colors hover:bg-blue-500/20"
         >
           <span
             className="inline-flex h-[1.1em] w-[1.1em] shrink-0 items-center justify-center rounded-full bg-white"
@@ -73,7 +73,7 @@ function CitationPill({ url, title }: { url: string; title?: string }) {
               />
             )}
           </span>
-          <span>{domain}</span>
+          <span className="leading-none">{domain}</span>
         </a>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs">
