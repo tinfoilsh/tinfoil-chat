@@ -4,14 +4,11 @@ import { PiSpinner } from 'react-icons/pi'
 
 interface URLFetchProcessProps {
   urlFetches: URLFetchState[]
-  /**
-   * When true and `urlFetches` contains more than one entry, the component
-   * renders a collapsed "Read N links" row that expands on click, instead
-   * of stacking one row per URL. Keeps long fetch runs from vertically
-   * polluting the chat.
-   */
-  grouped?: boolean
 }
+
+// Max favicons shown inline next to the "Read N links" label before
+// the remainder collapses into a "+N" badge.
+const INLINE_FAVICON_LIMIT = 4
 
 function getDisplayUrl(url: string): string {
   try {
@@ -39,25 +36,12 @@ function FetchSpinner() {
   )
 }
 
-/// Single row rendering one fetched URL. Used by both the flat and
-/// grouped (collapsed) URL-fetch views so presentation tweaks stay in
-/// one place. `compact` drops the verb prefix ("Read ", "Reading ") that
-/// only makes sense when the row stands alone; the grouped header
-/// already conveys that state for its children.
-function URLFetchRow({
-  fetch,
-  compact,
-}: {
-  fetch: URLFetchState
-  compact: boolean
-}) {
-  const textSize = compact ? 'text-sm' : 'text-base'
-  const textTone = compact
-    ? 'text-content-primary/60'
-    : 'text-content-primary/50'
-
+/// Single row rendering one fetched URL inside the expanded list.
+/// Always compact: the verb ("Read"/"Reading") is conveyed by the
+/// collapsible header, so rows just show favicon + host/path.
+function URLFetchRow({ fetch }: { fetch: URLFetchState }) {
   return (
-    <div className={`flex min-h-7 items-center gap-2 ${textSize}`}>
+    <div className="flex min-h-7 items-center gap-2 text-sm">
       {fetch.status === 'fetching' ? (
         <FetchSpinner />
       ) : (
@@ -74,69 +58,53 @@ function URLFetchRow({
         className={`min-w-0 truncate ${
           fetch.status === 'failed'
             ? 'text-content-primary/40 line-through'
-            : textTone
+            : 'text-content-primary/60'
         }`}
       >
-        {compact ? (
-          getDisplayUrl(fetch.url)
-        ) : fetch.status === 'fetching' ? (
-          <>
-            <span className="font-medium text-content-primary/50">
-              Reading{' '}
-            </span>
-            {getDisplayUrl(fetch.url)}
-          </>
-        ) : fetch.status === 'completed' ? (
-          <>
-            <span className="font-medium text-content-primary/50">Read </span>
-            {getDisplayUrl(fetch.url)}
-          </>
-        ) : (
-          <>
-            <span className="font-medium">Failed to read </span>
-            {getDisplayUrl(fetch.url)}
-          </>
-        )}
+        {getDisplayUrl(fetch.url)}
       </span>
     </div>
   )
 }
 
-export const URLFetchProcess = memo(function URLFetchProcess({
-  urlFetches,
-  grouped,
-}: URLFetchProcessProps) {
-  const anyFetching = useMemo(
-    () => urlFetches.some((f) => f.status === 'fetching'),
-    [urlFetches],
-  )
-
-  const shouldCollapse = !!grouped && urlFetches.length > 1
-  if (shouldCollapse) {
-    return <GroupedURLFetchProcess urlFetches={urlFetches} />
-  }
+/// Inline stack of favicons shown next to the "Read N links" header.
+/// Mirrors the overlap + overflow "+N" treatment used by the iOS web
+/// search row so the two visual groupings feel related.
+function InlineFavicons({ urlFetches }: { urlFetches: URLFetchState[] }) {
+  const visible = urlFetches.slice(0, INLINE_FAVICON_LIMIT)
+  const overflow = urlFetches.length - visible.length
 
   return (
-    <div>
-      <div className="flex flex-col gap-0.5 px-1 py-1">
-        {urlFetches.map((fetch) => (
-          <URLFetchRow key={fetch.id} fetch={fetch} compact={false} />
-        ))}
-        {anyFetching && urlFetches.length === 1 && (
-          <span className="text-xs text-content-primary/40">
-            Fetching page contents...
+    <span className="flex shrink-0 items-center">
+      <span className="flex -space-x-1.5">
+        {visible.map((fetch) => (
+          <span
+            key={fetch.id}
+            className="bg-surface-secondary inline-flex h-4 w-4 items-center justify-center overflow-hidden rounded-full ring-1 ring-border-subtle"
+          >
+            <img
+              src={getFaviconUrl(fetch.url)}
+              alt=""
+              className="h-3 w-3"
+              onError={(e) => {
+                ;(e.target as HTMLImageElement).style.display = 'none'
+              }}
+            />
           </span>
-        )}
-      </div>
-    </div>
+        ))}
+      </span>
+      {overflow > 0 && (
+        <span className="ml-1.5 text-xs text-content-primary/50">
+          +{overflow}
+        </span>
+      )}
+    </span>
   )
-})
+}
 
-const GroupedURLFetchProcess = memo(function GroupedURLFetchProcess({
+export const URLFetchProcess = memo(function URLFetchProcess({
   urlFetches,
-}: {
-  urlFetches: URLFetchState[]
-}) {
+}: URLFetchProcessProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const anyFetching = useMemo(
     () => urlFetches.some((f) => f.status === 'fetching'),
@@ -147,6 +115,8 @@ const GroupedURLFetchProcess = memo(function GroupedURLFetchProcess({
     [urlFetches],
   )
   const count = urlFetches.length
+  if (count === 0) return null
+
   const label = anyFetching
     ? `Reading ${count} link${count === 1 ? '' : 's'}`
     : `Read ${completedCount} link${completedCount === 1 ? '' : 's'}`
@@ -156,9 +126,9 @@ const GroupedURLFetchProcess = memo(function GroupedURLFetchProcess({
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
-        className="hover:bg-surface-secondary/50 group flex cursor-pointer items-start gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
+        className="hover:bg-surface-secondary/50 group flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors"
       >
-        <span className="mt-[5px] h-3.5 w-3.5 shrink-0" aria-hidden="true">
+        <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
           <svg
             className={`h-3.5 w-3.5 transform text-content-primary/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
             fill="none"
@@ -173,9 +143,10 @@ const GroupedURLFetchProcess = memo(function GroupedURLFetchProcess({
             />
           </svg>
         </span>
-        <span className="min-w-0 text-base text-content-primary/50">
-          <span className="font-medium">{label}</span>
+        <span className="min-w-0 truncate text-base font-medium text-content-primary/50">
+          {label}
         </span>
+        <InlineFavicons urlFetches={urlFetches} />
       </button>
 
       <div
@@ -185,7 +156,7 @@ const GroupedURLFetchProcess = memo(function GroupedURLFetchProcess({
         <div className="min-h-0 overflow-hidden">
           <div className="ml-2 flex flex-col gap-0.5 border-l-2 border-border-subtle py-2 pl-3 pr-1">
             {urlFetches.map((fetch) => (
-              <URLFetchRow key={fetch.id} fetch={fetch} compact />
+              <URLFetchRow key={fetch.id} fetch={fetch} />
             ))}
           </div>
         </div>
