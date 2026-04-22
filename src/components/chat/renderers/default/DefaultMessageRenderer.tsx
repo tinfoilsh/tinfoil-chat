@@ -23,6 +23,11 @@ import { URLFetchProcess } from '../components/URLFetchProcess'
 import { WebSearchProcess } from '../components/WebSearchProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
 
+// Vertical rhythm between consecutive event/content rows (thoughts,
+// web searches, URL fetches, streamed text). Kept in one place so all
+// rows stay visually in sync.
+const EVENT_STACK_CLASSES = 'flex flex-col gap-2'
+
 const DefaultMessageComponent = ({
   message,
   messageIndex,
@@ -263,7 +268,7 @@ const DefaultMessageComponent = ({
           since a message has at most one thoughts stream and it always
           precedes the content segments. */}
       {!isUser && message.segments && message.segments.length > 0 ? (
-        <>
+        <div className={EVENT_STACK_CLASSES}>
           {(message.isThinking ||
             (typeof message.thoughts === 'string' &&
               message.thoughts.trim().length > 0)) && (
@@ -352,13 +357,15 @@ const DefaultMessageComponent = ({
                 return (
                   <div
                     key={`run-${run.index}`}
-                    className="no-scroll-anchoring w-full px-4 py-2"
+                    className="no-scroll-anchoring w-full px-4"
                   >
                     <div
                       className={cn(
                         'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
                         'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
                         'prose-a:text-blue-500 hover:prose-a:text-blue-600',
+                        '[&>*:first-child_p:first-child]:mt-0 [&>p:first-child]:mt-0',
+                        '[&>*:last-child_p:last-child]:mb-0 [&>p:last-child]:mb-0',
                       )}
                     >
                       {textIsStreaming ? (
@@ -448,9 +455,9 @@ const DefaultMessageComponent = ({
               return null
             })
           })()}
-        </>
+        </div>
       ) : (
-        <>
+        <div className={EVENT_STACK_CLASSES}>
           {/* Show URL fetch status for assistant messages */}
           {!isUser && message.urlFetches && message.urlFetches.length > 0 && (
             <div className="no-scroll-anchoring w-full px-4">
@@ -489,7 +496,7 @@ const DefaultMessageComponent = ({
               <WebSearchProcess webSearch={message.webSearch} />
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Message content */}
@@ -744,7 +751,7 @@ const DefaultMessageComponent = ({
       {/* Actions for assistant messages - hidden while streaming the last response */}
       {!isUser && message.content && !(isStreaming && isLastMessage) && (
         <div
-          className={`flex items-center justify-between gap-3 px-4 transition-opacity duration-500 ease-in-out ${
+          className={`mt-4 flex items-center justify-between gap-3 px-4 transition-opacity duration-500 ease-in-out ${
             showActions ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
