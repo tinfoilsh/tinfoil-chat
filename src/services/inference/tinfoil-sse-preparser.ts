@@ -157,6 +157,25 @@ function transformTinfoilStream(
               )
               sseBuffer = ''
             }
+            // Drain any bytes the marker parser held back at the byte
+            // boundary of the final delta. An unterminated marker body
+            // (router bug) or a trailing fragment of what could have
+            // been an open tag would otherwise be silently dropped.
+            // Surface it as a final content chunk so no assistant
+            // characters are lost, and strip any residual marker tags
+            // defensively so the UI never renders raw bytes.
+            const tail = markerParser.flush()
+            if (tail) {
+              const safeTail = tail.replace(/<\/?tinfoil-event>/g, '')
+              if (safeTail) {
+                const tailChunk = {
+                  choices: [{ index: 0, delta: { content: safeTail } }],
+                } as ChatCompletionChunk
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify(tailChunk)}\n\n`),
+                )
+              }
+            }
             controller.close()
             return
           }
@@ -209,8 +228,22 @@ function processSseBlock(
   const trimmed = rawEvent.trim()
   if (!trimmed) return
 
-  // Pass-through for the terminal sentinel.
+  // Pass-through for the terminal sentinel. Before forwarding the
+  // sentinel, drain any bytes the marker parser held back so they land
+  // in the AI SDK stream as final content before `[DONE]` closes it.
   if (trimmed === 'data: [DONE]') {
+    const tail = markerParser.flush()
+    if (tail) {
+      const safeTail = tail.replace(/<\/?tinfoil-event>/g, '')
+      if (safeTail) {
+        const tailChunk = {
+          choices: [{ index: 0, delta: { content: safeTail } }],
+        } as ChatCompletionChunk
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(tailChunk)}\n\n`),
+        )
+      }
+    }
     controller.enqueue(encoder.encode('data: [DONE]\n\n'))
     return
   }
