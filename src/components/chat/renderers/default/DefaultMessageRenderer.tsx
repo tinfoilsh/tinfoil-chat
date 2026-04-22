@@ -436,10 +436,7 @@ const DefaultMessageComponent = ({
                     key={`run-${run.index}`}
                     className="no-scroll-anchoring w-full px-4"
                   >
-                    <URLFetchProcess
-                      urlFetches={run.fetches}
-                      grouped={run.fetches.length > 1}
-                    />
+                    <URLFetchProcess urlFetches={run.fetches} />
                     {isTrailingRun && (
                       <div
                         role="status"
