@@ -47,17 +47,19 @@ export const SETTINGS_LOCAL_ONLY_MODE_ENABLED =
 // passkey or manual backup.
 export const SETTINGS_PASSKEY_RECOVERY_DISMISSED =
   'tinfoil-settings-passkey-recovery-dismissed'
+// Persists across sessions: set when the brand-new-user first-time setup
+// prompt was dismissed via "Not Now". While set, the prompt is not
+// auto-opened on page load so the user isn't pestered on every new tab.
+// Cleared automatically when the user signs in as a different user, or
+// when they explicitly re-enable cloud sync from settings.
+export const SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED =
+  'tinfoil-settings-passkey-first-time-prompt-dismissed'
 
 // --- sessionStorage: Passkey setup failure ---------------------------------
 // Tracks whether the user has dismissed the "passkey backup failed" warning
 // during the current session so we don't re-prompt on every re-init.
 export const SETTINGS_PASSKEY_SETUP_WARNING_DISMISSED =
   'tinfoil-settings-passkey-setup-warning-dismissed'
-// Tracks whether the brand-new-user first-time setup prompt was dismissed
-// via "Not Now" during the current session so we don't re-show it on every
-// reload within the same tab. Cleared on tab close.
-export const SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED =
-  'tinfoil-settings-passkey-first-time-prompt-dismissed'
 
 // --- localStorage: User personalization preferences ------------------------
 export const USER_PREFS_NICKNAME = 'tinfoil-user-prefs-nickname'
