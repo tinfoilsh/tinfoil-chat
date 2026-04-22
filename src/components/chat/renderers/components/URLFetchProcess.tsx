@@ -1,5 +1,6 @@
 import type { URLFetchState } from '@/components/chat/types'
 import { memo, useMemo, useState } from 'react'
+import { PiSpinner } from 'react-icons/pi'
 
 interface URLFetchProcessProps {
   urlFetches: URLFetchState[]
@@ -34,22 +35,7 @@ function getFaviconUrl(url: string): string {
 
 function FetchSpinner() {
   return (
-    <svg
-      className="h-3.5 w-3.5 shrink-0 animate-spin text-content-primary/50"
-      viewBox="0 0 16 16"
-      fill="none"
-    >
-      <circle
-        cx="8"
-        cy="8"
-        r="6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray="28"
-        strokeDashoffset="8"
-      />
-    </svg>
+    <PiSpinner className="h-3.5 w-3.5 shrink-0 animate-spin text-content-primary/50" />
   )
 }
 
