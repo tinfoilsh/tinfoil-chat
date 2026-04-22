@@ -184,7 +184,7 @@ const passkeyRecoveryDismissedFlag = createStorageFlag(
 )
 
 const firstTimePromptDismissedFlag = createStorageFlag(
-  () => sessionStorage,
+  () => localStorage,
   SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED,
 )
 
