@@ -1,9 +1,5 @@
 import { Dialog, Transition } from '@headlessui/react'
-import {
-  CloudArrowUpIcon,
-  KeyIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/outline'
+import { CloudArrowUpIcon, KeyIcon } from '@heroicons/react/24/outline'
 import { Fragment } from 'react'
 
 interface PasskeySetupPromptModalProps {
@@ -66,12 +62,6 @@ export function PasskeySetupPromptModal({
                     Tinfoil can encrypt and back up your chats with a passkey so
                     you can access them across devices.
                   </p>
-                  <div className="flex items-start gap-2">
-                    <ShieldCheckIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-content-primary" />
-                    <span>
-                      End-to-end encrypted — only you can decrypt your chats.
-                    </span>
-                  </div>
                 </div>
 
                 <div className="mt-5 space-y-2">
