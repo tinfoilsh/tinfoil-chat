@@ -16,7 +16,7 @@ import { sendChatStream } from '@/services/inference/inference-client'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useRef, useState } from 'react'
 import type { AIModel, LoadingState, Message } from '../types'
-import { processStreamingResponse } from './streaming-processor'
+import { processStreamingResponse } from './streaming'
 import type { ReasoningEffort } from './use-reasoning-effort'
 
 interface UseSidebarChatProps {

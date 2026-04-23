@@ -33,7 +33,7 @@ import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import { createBlankChat, sortChats } from './chat-operations'
 import { createUpdateChatWithHistoryCheck } from './chat-persistence'
-import { processStreamingResponse } from './streaming-processor'
+import { processStreamingResponse } from './streaming'
 import { useMaxMessages } from './use-max-messages'
 import type { ReasoningEffort } from './use-reasoning-effort'
 

@@ -18,11 +18,6 @@ interface ThoughtProcessProps {
   isThinking?: boolean
   shouldDiscard?: boolean
   thinkingDuration?: number
-  messageId?: string
-  expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: React.Dispatch<
-    React.SetStateAction<Record<string, boolean>>
-  >
 }
 
 export const ThoughtProcess = memo(function ThoughtProcess({
@@ -31,14 +26,8 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   isThinking = false,
   shouldDiscard = false,
   thinkingDuration,
-  messageId,
-  expandedThoughtsState,
-  setExpandedThoughtsState,
 }: ThoughtProcessProps) {
-  const isExpanded =
-    messageId && expandedThoughtsState
-      ? (expandedThoughtsState[messageId] ?? false)
-      : false
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const contentRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -52,12 +41,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const wasExpandedRef = useRef<boolean>(isExpanded)
 
   const handleToggle = () => {
-    if (messageId && setExpandedThoughtsState) {
-      setExpandedThoughtsState((prevState) => ({
-        ...prevState,
-        [messageId]: !prevState[messageId],
-      }))
-    }
+    setIsExpanded((prev) => !prev)
   }
 
   const generateSummary = useCallback(

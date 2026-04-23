@@ -56,6 +56,7 @@ export function chatContentFingerprint(chat: {
     thinkingDuration: m.thinkingDuration,
     isError: m.isError,
     timestamp: m.timestamp,
+    timeline: m.timeline,
     // New format: hash attachment data to avoid huge fingerprints
     attachments:
       Array.isArray(m.attachments) && m.attachments.length > 0

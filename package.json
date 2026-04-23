@@ -7,6 +7,7 @@
     "dev:backend": "node scripts/dev-simulator.mjs",
     "build": "next build",
     "start": "npx serve out",
+    "dev:serve": "node scripts/dev-serve.mjs",
     "lint": "next lint",
     "format": "prettier --write .",
     "prepare": "husky install",

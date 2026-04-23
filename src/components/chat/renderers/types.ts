@@ -24,10 +24,6 @@ export interface MessageRenderProps {
   isDarkMode: boolean
   isLastMessage?: boolean
   isStreaming?: boolean
-  expandedThoughtsState?: Record<string, boolean>
-  setExpandedThoughtsState?: React.Dispatch<
-    React.SetStateAction<Record<string, boolean>>
-  >
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
 }

@@ -32,10 +32,37 @@ export type URLFetchState = {
   status: 'fetching' | 'completed' | 'failed'
 }
 
-export type MessageSegment =
-  | { type: 'text'; text: string }
-  | { type: 'web_search'; searchId: string }
-  | { type: 'url_fetch'; fetchId: string }
+export type TimelineThinkingBlock = {
+  type: 'thinking'
+  id: string
+  content: string
+  isThinking: boolean
+  duration?: number
+}
+
+export type TimelineWebSearchBlock = {
+  type: 'web_search'
+  id: string
+  state: WebSearchState
+}
+
+export type TimelineURLFetchBlock = {
+  type: 'url_fetches'
+  id: string
+  fetches: URLFetchState[]
+}
+
+export type TimelineContentBlock = {
+  type: 'content'
+  id: string
+  content: string
+}
+
+export type TimelineBlock =
+  | TimelineThinkingBlock
+  | TimelineWebSearchBlock
+  | TimelineURLFetchBlock
+  | TimelineContentBlock
 
 export type Attachment = {
   id: string
@@ -72,12 +99,7 @@ export type Message = {
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
   quote?: string // Highlighted text the user is replying to
-  // Ordered list of content/event segments so web-search and URL-fetch events
-  // render inline with the assistant text in the exact order they streamed.
-  // Optional for backward compatibility; legacy messages fall back to the
-  // aggregate fields above.
-  segments?: MessageSegment[]
-  webSearches?: WebSearchInstance[]
+  timeline?: TimelineBlock[] // Chronological sequence of blocks for rendering
 }
 
 export type TitleState = 'placeholder' | 'generated' | 'manual'

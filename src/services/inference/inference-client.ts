@@ -258,6 +258,9 @@ export async function sendChatStream(
       if (piiCheckEnabled) {
         requestBody.pii_check_options = {}
       }
+      if (model.requestParams) {
+        Object.assign(requestBody, model.requestParams)
+      }
 
       const client = await getTinfoilClient()
 

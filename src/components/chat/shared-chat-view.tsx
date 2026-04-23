@@ -21,17 +21,11 @@ const SharedChatMessage = memo(function SharedChatMessage({
   messageIndex,
   model,
   isDarkMode,
-  expandedThoughtsState,
-  setExpandedThoughtsState,
 }: {
   message: Message
   messageIndex: number
   model: BaseModel
   isDarkMode: boolean
-  expandedThoughtsState: Record<string, boolean>
-  setExpandedThoughtsState: React.Dispatch<
-    React.SetStateAction<Record<string, boolean>>
-  >
 }) {
   const renderer = getRendererRegistry().getMessageRenderer(message, model)
   const RendererComponent = renderer.render
@@ -44,8 +38,6 @@ const SharedChatMessage = memo(function SharedChatMessage({
       isDarkMode={isDarkMode}
       isLastMessage={false}
       isStreaming={false}
-      expandedThoughtsState={expandedThoughtsState}
-      setExpandedThoughtsState={setExpandedThoughtsState}
       onEditMessage={undefined}
       onRegenerateMessage={undefined}
     />
@@ -65,10 +57,6 @@ export function SharedChatView({
   isDarkMode,
   model,
 }: SharedChatViewProps) {
-  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
-    Record<string, boolean>
-  >({})
-
   // Build initial messages with thumbnail placeholders for images
   const initialMessages: Message[] = useMemo(
     () =>
@@ -173,8 +161,6 @@ export function SharedChatView({
           messageIndex={index}
           model={model}
           isDarkMode={isDarkMode}
-          expandedThoughtsState={expandedThoughtsState}
-          setExpandedThoughtsState={setExpandedThoughtsState}
         />
       ))}
     </div>

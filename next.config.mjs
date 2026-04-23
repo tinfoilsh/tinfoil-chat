@@ -50,6 +50,10 @@ const nextConfig = {
         source: '/api/dev/simulator',
         destination: 'http://localhost:3001/api/dev/simulator',
       },
+      {
+        source: '/api/local-router/:path*',
+        destination: 'http://localhost:8090/:path*',
+      },
     ]
   },
 }

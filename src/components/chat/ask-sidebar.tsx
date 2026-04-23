@@ -48,8 +48,6 @@ const SidebarMessage = memo(function SidebarMessage({
       isDarkMode={isDarkMode}
       isLastMessage={isLastMessage}
       isStreaming={isStreaming}
-      expandedThoughtsState={{}}
-      setExpandedThoughtsState={() => {}}
     />
   )
 })

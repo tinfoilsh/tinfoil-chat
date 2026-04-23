@@ -231,12 +231,25 @@ const PrintableMessage = memo(function PrintableMessage({
         </div>
       )}
 
-      {message.thoughts && (
-        <div className="printable-thinking">
-          <div className="printable-thinking-label">Thinking</div>
-          <div className="whitespace-pre-wrap text-sm">{message.thoughts}</div>
-        </div>
-      )}
+      {message.timeline
+        ? message.timeline
+            .filter((b) => b.type === 'thinking')
+            .map((b) => (
+              <div key={b.id} className="printable-thinking">
+                <div className="printable-thinking-label">Thinking</div>
+                <div className="whitespace-pre-wrap text-sm">
+                  {b.type === 'thinking' ? b.content : ''}
+                </div>
+              </div>
+            ))
+        : message.thoughts && (
+            <div className="printable-thinking">
+              <div className="printable-thinking-label">Thinking</div>
+              <div className="whitespace-pre-wrap text-sm">
+                {message.thoughts}
+              </div>
+            </div>
+          )}
 
       {message.content && (
         <div className="printable-content prose prose-sm max-w-none">
