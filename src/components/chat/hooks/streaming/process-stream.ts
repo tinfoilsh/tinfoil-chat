@@ -4,13 +4,15 @@
  * A thin `for await` loop that composes the pipeline:
  *   SSE reader → content preprocessor → event normalizer → switch dispatch
  *
- * Each event updates the TimelineBuilder and MessageAssembler.
+ * Each event updates the TimelineBuilder (canonical state). The
+ * MessageAssembler only tracks citation annotations and search reasoning;
+ * all other flat Message fields are derived from the timeline in toMessage().
  * UI is flushed once per reader.read() chunk — no rAF needed.
  */
 
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { createStreamLogger } from '@/utils/dev-stream-logger'
-import type { Message, URLFetchState, WebSearchState } from '../../types'
+import type { Message, URLFetchState } from '../../types'
 import { createContentPreprocessor } from './content-preprocessor'
 import { createEventNormalizer } from './event-normalizer'
 import { MessageAssembler } from './message-assembler'
@@ -72,7 +74,6 @@ export async function processStreamingResponse(
     switch (event.type) {
       case 'thinking_start':
         timeline.startThinking()
-        assembler.apply(event)
         markFirstEvent()
         ctx.setIsThinking(true)
         ctx.thinkingStartTimeRef.current = Date.now()
@@ -80,45 +81,44 @@ export async function processStreamingResponse(
 
       case 'thinking_delta':
         timeline.appendThinking(event.content)
-        assembler.apply(event)
         break
 
       case 'thinking_end': {
         const duration = getThinkingDuration(ctx.thinkingStartTimeRef)
         timeline.endThinking(duration)
-        assembler.apply(event)
-        assembler.setThinkingDuration(duration)
         ctx.setIsThinking(false)
         break
       }
 
       case 'content_delta':
         timeline.appendContent(event.content)
-        assembler.apply(event)
         markFirstEvent()
         break
 
       case 'web_search':
         applyWebSearch(event)
-        assembler.apply(event)
         markFirstEvent()
         break
 
       case 'url_fetch':
         applyURLFetch(event)
-        assembler.apply(event)
         break
 
-      case 'annotation':
-        assembler.apply(event)
-        // Also update timeline web search sources
-        timeline.updateWebSearch(
-          assembler.toMessage(timeline.snapshot()).webSearch as WebSearchState,
-        )
+      case 'annotation': {
+        assembler.addAnnotation(event.url, event.title)
+        // Update timeline web search sources with accumulated citations
+        const ws = timeline.getLastWebSearchState()
+        if (ws) {
+          timeline.updateWebSearch({
+            ...ws,
+            sources: [...assembler.collectedSources],
+          })
+        }
         break
+      }
 
       case 'search_reasoning':
-        assembler.apply(event)
+        assembler.addSearchReasoning(event.content)
         break
     }
 
@@ -133,9 +133,7 @@ export async function processStreamingResponse(
     if (status === 'in_progress' && query) {
       timeline.pushWebSearch({ query, status: 'searching' })
     } else if (status === 'completed') {
-      // Build state for timeline update
-      const msg = assembler.toMessage(timeline.snapshot())
-      const ws = msg.webSearch
+      const ws = timeline.getLastWebSearchState()
       const resolvedSources = sources
         ? sources.map((s) => ({ title: s.title || s.url, url: s.url }))
         : ws?.sources
@@ -145,15 +143,14 @@ export async function processStreamingResponse(
         sources: resolvedSources,
       })
     } else if (status === 'failed') {
-      const msg = assembler.toMessage(timeline.snapshot())
+      const ws = timeline.getLastWebSearchState()
       timeline.updateWebSearch({
-        query: msg.webSearch?.query,
+        query: ws?.query,
         status: 'failed',
         sources: [],
       })
     } else if (status === 'blocked') {
-      const state: WebSearchState = { query, status: 'blocked', reason }
-      timeline.pushWebSearch(state)
+      timeline.pushWebSearch({ query, status: 'blocked', reason })
     }
   }
 
@@ -207,8 +204,6 @@ export async function processStreamingResponse(
     if (timeline.isThinkingOpen) {
       const duration = getThinkingDuration(ctx.thinkingStartTimeRef)
       timeline.endThinking(duration)
-      assembler.apply({ type: 'thinking_end' })
-      assembler.setThinkingDuration(duration)
     }
 
     // Final flush

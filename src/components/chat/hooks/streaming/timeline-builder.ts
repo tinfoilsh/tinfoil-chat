@@ -10,6 +10,7 @@ import type {
   TimelineBlock,
   TimelineContentBlock,
   TimelineThinkingBlock,
+  TimelineWebSearchBlock,
   URLFetchState,
   WebSearchState,
 } from '../../types'
@@ -138,6 +139,17 @@ export class TimelineBuilder {
         break
       }
     }
+  }
+
+  // -- Query --------------------------------------------------------------
+
+  getLastWebSearchState(): WebSearchState | undefined {
+    for (let i = this.blocks.length - 1; i >= 0; i--) {
+      if (this.blocks[i].type === 'web_search') {
+        return { ...(this.blocks[i] as TimelineWebSearchBlock).state }
+      }
+    }
+    return undefined
   }
 
   // -- Snapshot -----------------------------------------------------------
