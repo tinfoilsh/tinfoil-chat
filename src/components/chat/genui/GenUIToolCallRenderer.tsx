@@ -1,6 +1,7 @@
+import { CONSTANTS } from '@/components/chat/constants'
 import { LoadingDots } from '@/components/loading-dots'
 import { logError } from '@/utils/error-handling'
-import React, { memo } from 'react'
+import React, { memo, useEffect, useRef, useState } from 'react'
 import { renderGenUIToolCall } from './registry'
 import type { GenUIToolCall } from './types'
 
@@ -26,17 +27,71 @@ function resolveInput(tc: GenUIToolCall): Record<string, unknown> | null {
   return null
 }
 
+/**
+ * Tracks the earliest moment each tool-call id became visible, so we can
+ * enforce a minimum placeholder duration even when providers stream tool
+ * calls sequentially and each one finalizes before the next begins.
+ */
+function usePlaceholderRelease(
+  toolCalls: GenUIToolCall[],
+  minDurationMs: number,
+): Set<string> {
+  const firstSeenAtRef = useRef<Map<string, number>>(new Map())
+  const [releasedIds, setReleasedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const now = Date.now()
+    const firstSeen = firstSeenAtRef.current
+    const timers: ReturnType<typeof setTimeout>[] = []
+
+    for (const tc of toolCalls) {
+      if (!firstSeen.has(tc.id)) {
+        firstSeen.set(tc.id, now)
+      }
+
+      if (releasedIds.has(tc.id)) continue
+
+      const shownAt = firstSeen.get(tc.id) ?? now
+      const elapsed = now - shownAt
+      const remaining = Math.max(0, minDurationMs - elapsed)
+      const id = tc.id
+
+      const timer = setTimeout(() => {
+        setReleasedIds((prev) => {
+          if (prev.has(id)) return prev
+          const next = new Set(prev)
+          next.add(id)
+          return next
+        })
+      }, remaining)
+      timers.push(timer)
+    }
+
+    return () => {
+      for (const t of timers) clearTimeout(t)
+    }
+  }, [toolCalls, minDurationMs, releasedIds])
+
+  return releasedIds
+}
+
 export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   toolCalls,
   isStreaming,
   isDarkMode,
 }: GenUIToolCallRendererProps) {
+  const releasedIds = usePlaceholderRelease(
+    toolCalls,
+    CONSTANTS.GENUI_PLACEHOLDER_MIN_DURATION_MS,
+  )
+
   return (
     <React.Fragment>
       {toolCalls.map((tc) => {
         const input = resolveInput(tc)
+        const canShowComponent = !isStreaming || releasedIds.has(tc.id)
 
-        if (input) {
+        if (input && canShowComponent) {
           const rendered = renderGenUIToolCall(tc.name, input, { isDarkMode })
           if (rendered) {
             return (
