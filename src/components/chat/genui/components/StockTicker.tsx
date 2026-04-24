@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   Area,
   AreaChart as RechartsAreaChart,
@@ -16,6 +16,11 @@ type MarketStatus = 'open' | 'closed' | 'pre' | 'post' | 'unknown'
 interface StockHistoryPoint {
   time: string
   price: number
+}
+
+interface StockRangeSeries {
+  label: string
+  points: StockHistoryPoint[]
 }
 
 interface StockTickerProps {
@@ -34,6 +39,7 @@ interface StockTickerProps {
   marketCap?: string
   rangeLabel?: string
   history?: unknown
+  ranges?: unknown
   marketStatus?: MarketStatus
   asOf?: string
 }
@@ -70,6 +76,34 @@ function normalizeHistory(raw: unknown): StockHistoryPoint[] {
     }
   }
   return points
+}
+
+function normalizeRanges(
+  raw: unknown,
+  fallback?: { label?: string; points: StockHistoryPoint[] },
+): StockRangeSeries[] {
+  const list = coerceArray<Record<string, unknown>>(raw)
+  const series: StockRangeSeries[] = []
+
+  for (const entry of list) {
+    const label =
+      typeof entry.label === 'string'
+        ? entry.label
+        : typeof entry.range === 'string'
+          ? entry.range
+          : ''
+    const rawPoints = entry.points ?? entry.history ?? entry.data
+    const points = normalizeHistory(rawPoints)
+    if (label && points.length > 1) {
+      series.push({ label, points })
+    }
+  }
+
+  if (series.length === 0 && fallback && fallback.points.length > 1) {
+    series.push({ label: fallback.label || 'History', points: fallback.points })
+  }
+
+  return series
 }
 
 function formatCurrency(value: number | null, currency?: string): string {
@@ -142,6 +176,7 @@ export function StockTicker({
   marketCap,
   rangeLabel,
   history,
+  ranges,
   marketStatus,
   asOf,
 }: StockTickerProps): React.JSX.Element {
@@ -185,7 +220,21 @@ export function StockTicker({
         ? ArrowDownRight
         : Minus
 
-  const historyPoints = useMemo(() => normalizeHistory(history), [history])
+  const rangeSeries = useMemo(() => {
+    const fallbackPoints = normalizeHistory(history)
+    return normalizeRanges(ranges, {
+      label: rangeLabel,
+      points: fallbackPoints,
+    })
+  }, [ranges, history, rangeLabel])
+
+  const [activeRangeLabel, setActiveRangeLabel] = useState<string | null>(null)
+
+  const activeSeries =
+    rangeSeries.find((series) => series.label === activeRangeLabel) ??
+    rangeSeries[0] ??
+    null
+
   const gradientId = `stock-gradient-${symbol.replace(/[^A-Za-z0-9]/g, '')}`
 
   const stats: Array<{ label: string; value: string }> = []
@@ -257,17 +306,45 @@ export function StockTicker({
           )}
         </div>
 
-        {historyPoints.length > 1 && (
-          <div className="flex flex-col gap-1">
-            {rangeLabel && (
-              <p className="text-xs font-medium text-content-muted">
-                {rangeLabel}
-              </p>
+        {activeSeries && (
+          <div className="flex flex-col gap-2">
+            {rangeSeries.length > 1 ? (
+              <div
+                role="tablist"
+                aria-label="Price history range"
+                className="flex flex-wrap items-center gap-1"
+              >
+                {rangeSeries.map((series) => {
+                  const isActive = series.label === activeSeries.label
+                  return (
+                    <button
+                      key={series.label}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setActiveRangeLabel(series.label)}
+                      className={
+                        isActive
+                          ? 'rounded-md border border-border-subtle bg-surface-chat-background px-2 py-0.5 text-xs font-medium text-content-primary'
+                          : 'rounded-md border border-transparent px-2 py-0.5 text-xs font-medium text-content-muted hover:bg-surface-chat-background hover:text-content-primary'
+                      }
+                    >
+                      {series.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              activeSeries.label && (
+                <p className="text-xs font-medium text-content-muted">
+                  {activeSeries.label}
+                </p>
+              )
             )}
             <div className="h-32 rounded-lg border border-border-subtle bg-transparent p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsAreaChart
-                  data={historyPoints}
+                  data={activeSeries.points}
                   margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
                 >
                   <defs>
