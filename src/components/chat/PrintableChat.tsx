@@ -11,6 +11,7 @@ import {
   getMessageAttachments,
   hasMessageAttachments,
 } from './attachment-helpers'
+import { ensureTimeline } from './ensure-timeline'
 import { useMathPlugins } from './renderers/components/use-math-plugins'
 import type { Message } from './types'
 
@@ -31,10 +32,11 @@ const formatTimestamp = (timestamp: Date): string => {
 }
 
 const PrintableMessage = memo(function PrintableMessage({
-  message,
+  message: rawMessage,
 }: {
   message: Message
 }) {
+  const message = ensureTimeline(rawMessage)
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
 
   const renderContent = (content: string, isUser: boolean) => {
@@ -231,12 +233,16 @@ const PrintableMessage = memo(function PrintableMessage({
         </div>
       )}
 
-      {message.thoughts && (
-        <div className="printable-thinking">
-          <div className="printable-thinking-label">Thinking</div>
-          <div className="whitespace-pre-wrap text-sm">{message.thoughts}</div>
-        </div>
-      )}
+      {message.timeline
+        ?.filter((b) => b.type === 'thinking')
+        .map((b) => (
+          <div key={b.id} className="printable-thinking">
+            <div className="printable-thinking-label">Thinking</div>
+            <div className="whitespace-pre-wrap text-sm">
+              {b.type === 'thinking' ? b.content : ''}
+            </div>
+          </div>
+        ))}
 
       {message.content && (
         <div className="printable-content prose prose-sm max-w-none">

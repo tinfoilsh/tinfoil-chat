@@ -1,6 +1,30 @@
-import { API_BASE_URL } from '@/config'
+import { API_BASE_URL, IS_DEV } from '@/config'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logError } from '@/utils/error-handling'
+
+const DEV_MODELS: BaseModel[] = [
+  {
+    modelName: 'gemma4-31b',
+    image: 'google.webp',
+    name: 'Gemma 4 31B',
+    nameShort: 'Gemma 4',
+    description: 'Google Gemma 4 31B',
+    type: 'chat',
+    chat: true,
+    multimodal: true,
+    requestParams: { chat_template_kwargs: { enable_thinking: true } },
+  },
+  {
+    modelName: 'kimi-k2-6',
+    image: 'moonshot.png',
+    name: 'Kimi K2.6',
+    nameShort: 'Kimi K2.6',
+    description: 'Moonshot Kimi K2.6',
+    type: 'chat',
+    chat: true,
+    multimodal: true,
+  },
+]
 
 // Base model type with all possible properties
 export type BaseModel = {
@@ -19,6 +43,8 @@ export type BaseModel = {
   paid?: boolean
   multimodal?: boolean
   endpoint?: string
+  /** Extra fields merged into the chat completion request body */
+  requestParams?: Record<string, unknown>
 }
 
 // Helper function to validate if a specific model name exists in the models list
@@ -43,6 +69,11 @@ const isLocalDevelopment = (): boolean => {
 // Fetch models from the API
 export const getAIModels = async (): Promise<BaseModel[]> => {
   const isLocalDev = isLocalDevelopment()
+
+  // In dev mode on localhost, return hardcoded models instead of fetching
+  if (IS_DEV && isLocalDev) {
+    return [...DEV_MODELS, DEV_SIMULATOR_MODEL]
+  }
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/config/models`)

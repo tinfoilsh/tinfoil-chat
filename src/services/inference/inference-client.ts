@@ -258,6 +258,25 @@ export async function sendChatStream(
       if (piiCheckEnabled) {
         requestBody.pii_check_options = {}
       }
+      // Apply model-specific params first, then let our explicit fields win.
+      // This prevents requestParams from accidentally overwriting security-
+      // sensitive fields like web_search_options or pii_check_options.
+      if (model.requestParams) {
+        const reserved = new Set([
+          'model',
+          'messages',
+          'stream',
+          'signal',
+          'reasoning_effort',
+          'web_search_options',
+          'pii_check_options',
+        ])
+        for (const [key, value] of Object.entries(model.requestParams)) {
+          if (!reserved.has(key)) {
+            requestBody[key] = value
+          }
+        }
+      }
 
       const client = await getTinfoilClient()
 

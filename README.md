@@ -2,34 +2,17 @@
 
 **Live at:** [chat.tinfoil.sh](https://chat.tinfoil.sh)
 
-## Quick Start
+## Table of Contents
 
-1. **Clone and install**
-
-   ```bash
-   git clone https://github.com/tinfoilsh/tinfoil-webapp.git
-   cd tinfoil-webapp
-   npm install
-   ```
-
-2. **Environment setup**
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Configure your `.env.local` with the required keys:
-
-   ```env
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_key
-   CLERK_SECRET_KEY=your_clerk_secret
-   NEXT_PUBLIC_API_BASE_URL=https://api.tinfoil.sh
-   ```
-
-3. **Start development server**
-   ```bash
-   npm run dev
-   ```
+- [Built With](#built-with)
+- [Security Architecture](#security-architecture)
+  - [How It Works](#how-it-works)
+  - [Encrypted Chat Storage](#encrypted-chat-storage)
+  - [Verification Steps](#verification-steps)
+- [Development](#development)
+  - [Quick Start](#quick-start)
+  - [Local Testing & Dev Mode](#local-testing--dev-mode)
+- [Reporting Vulnerabilities](#reporting-vulnerabilities)
 
 ## Built With
 
@@ -42,7 +25,7 @@
 
 Tinfoil Chat is designed to ensure that only the AI model inside a verified secure enclave can read your messages - not Tinfoil, not cloud providers, not network intermediaries.
 
-### How it works
+### How It Works
 
 We use [EHBP (Encrypted HTTP Body Protocol)](https://docs.tinfoil.sh/resources/ehbp) with [HPKE encryption (RFC 9180)](https://www.rfc-editor.org/rfc/rfc9180.html) to secure messages in transit to the enclave. All data from the chat application running in the browser is encrypted with the HPKE key that is generated and lives only inside the secure enclave.
 
@@ -72,6 +55,41 @@ Learn more about the security model:
 
 - [Tinfoil JavaScript SDK Documentation](https://docs.tinfoil.sh/sdk/javascript-sdk)
 - [EHBP Protocol Details](https://docs.tinfoil.sh/resources/ehbp)
+
+## Development
+
+### Quick Start
+
+1. **Clone and install**
+
+   ```bash
+   git clone https://github.com/tinfoilsh/tinfoil-webapp.git
+   cd tinfoil-webapp
+   npm install
+   ```
+
+2. **Environment setup**
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   Configure your `.env.local` with the required keys:
+
+   ```env
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_key
+   CLERK_SECRET_KEY=your_clerk_secret
+   NEXT_PUBLIC_API_BASE_URL=https://api.tinfoil.sh
+   ```
+
+3. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+### Local Testing & Dev Mode
+
+For running the app against a local model router (bypassing attestation and encryption), see **[LOCAL_TESTING.md](./LOCAL_TESTING.md)**.
 
 ## Reporting Vulnerabilities
 

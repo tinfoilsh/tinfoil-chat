@@ -28,6 +28,7 @@ import { BiSolidLock, BiSolidLockOpen } from 'react-icons/bi'
 import { GoSidebarCollapse } from 'react-icons/go'
 import { IoShareOutline } from 'react-icons/io5'
 import { PiFilePlusLight, PiNotePencilLight, PiSpinner } from 'react-icons/pi'
+import type { TinfoilAI } from 'tinfoil'
 
 import {
   RateLimitBanner,
@@ -853,7 +854,8 @@ export function ChatInterface({
           '@/services/inference/tinfoil-client'
         )
         const client = await getTinfoilClient()
-        const doc = await client.getVerificationDocument()
+        if (!('getVerificationDocument' in client)) return
+        const doc = await (client as TinfoilAI).getVerificationDocument()
         if (doc) {
           setVerificationDocument(doc)
           // Set verification status based on document

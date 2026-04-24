@@ -1,10 +1,11 @@
-import { API_BASE_URL } from '@/config'
+import { API_BASE_URL, DEV_API_KEY, IS_DEV } from '@/config'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
 import {
   TINFOIL_EVENTS_HEADER,
   TINFOIL_EVENTS_VALUE_WEB_SEARCH,
 } from '@/utils/tinfoil-events'
+import OpenAI from 'openai'
 import { AuthenticationError, TinfoilAI } from 'tinfoil'
 import { authTokenManager } from '../auth'
 
@@ -17,7 +18,7 @@ export interface RateLimitInfo {
 const SESSION_TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000
 const AUTH_INIT_WAIT_MS = 3000
 
-let clientInstance: TinfoilAI | null = null
+let clientInstance: TinfoilAI | OpenAI | null = null
 let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
@@ -32,6 +33,10 @@ function dispatchRateLimitUpdate(): void {
 }
 
 async function fetchSessionToken(): Promise<string> {
+  if (IS_DEV) {
+    return DEV_API_KEY
+  }
+
   if (cachedSessionToken) {
     const isExpired =
       cachedSessionTokenExpiresAt !== null &&
@@ -183,19 +188,30 @@ export function resetTinfoilClient(): void {
   refreshInFlight = null
 }
 
-async function initClient(sessionToken: string): Promise<TinfoilAI> {
+async function initClient(sessionToken: string): Promise<TinfoilAI | OpenAI> {
   try {
-    clientInstance = new TinfoilAI({
-      apiKey: sessionToken,
-      dangerouslyAllowBrowser: true,
-      // Opt into the router's inline progress-marker stream so the
-      // chat UI can surface live web_search and URL-fetch status while
-      // the underlying SSE stream stays spec-conformant for any other
-      // OpenAI-compatible consumer.
-      defaultHeaders: {
-        [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
-      },
-    })
+    if (IS_DEV) {
+      clientInstance = new OpenAI({
+        apiKey: sessionToken,
+        baseURL: `${window.location.origin}/api/local-router/v1`,
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: {
+          [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+        },
+      })
+    } else {
+      clientInstance = new TinfoilAI({
+        apiKey: sessionToken,
+        dangerouslyAllowBrowser: true,
+        // Opt into the router's inline progress-marker stream so the
+        // chat UI can surface live web_search and URL-fetch status while
+        // the underlying SSE stream stays spec-conformant for any other
+        // OpenAI-compatible consumer.
+        defaultHeaders: {
+          [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+        },
+      })
+    }
     lastSessionToken = sessionToken
     return clientInstance
   } catch (error) {
@@ -211,7 +227,7 @@ export async function getSessionToken(): Promise<string> {
   return fetchSessionToken()
 }
 
-async function getRawClient(): Promise<TinfoilAI> {
+async function getRawClient(): Promise<TinfoilAI | OpenAI> {
   const sessionToken = await fetchSessionToken()
 
   if (!clientInstance || lastSessionToken !== sessionToken) {
@@ -230,7 +246,7 @@ async function getRawClient(): Promise<TinfoilAI> {
  * full path on the live clientInstance, invokes the method, and retries
  * with a fresh client on AuthenticationError.
  */
-export async function getTinfoilClient(): Promise<TinfoilAI> {
+export async function getTinfoilClient(): Promise<TinfoilAI | OpenAI> {
   await getRawClient()
 
   function resolvePath(path: PropertyKey[]): { fn: any; thisArg: any } {
@@ -246,6 +262,10 @@ export async function getTinfoilClient(): Promise<TinfoilAI> {
   function proxyWithRetry(pathFromRoot: PropertyKey[]): any {
     // Target must be a function so the `apply` trap can fire
     return new Proxy(function () {}, {
+      has(_, prop) {
+        if (!clientInstance) return false
+        return prop in clientInstance
+      },
       get(_, prop) {
         if (
           prop === 'then' ||
@@ -276,5 +296,5 @@ export async function getTinfoilClient(): Promise<TinfoilAI> {
     })
   }
 
-  return proxyWithRetry([]) as TinfoilAI
+  return proxyWithRetry([]) as TinfoilAI | OpenAI
 }

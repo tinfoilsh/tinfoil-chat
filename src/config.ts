@@ -2,6 +2,10 @@
 // We'll provide fallback values for development if not set
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
 
+// Local dev mode: bypass TinfoilAI client and connect to local router
+export const IS_DEV = process.env.NEXT_PUBLIC_DEV === 'true'
+export const DEV_API_KEY = process.env.NEXT_PUBLIC_DEV_API_KEY || ''
+
 // Pagination settings
 export const PAGINATION = {
   CHATS_PER_PAGE: 20,

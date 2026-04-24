@@ -1,15 +1,9 @@
 import { type BaseModel } from '@/config/models'
 import { useChatPrint } from '@/hooks/use-chat-print'
 import 'katex/dist/katex.min.css'
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingDots } from '../loading-dots'
+import { ensureTimeline } from './ensure-timeline'
 import { CHAT_FONT_CLASSES, useChatFont } from './hooks/use-chat-font'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { PrintableChat } from './PrintableChat'
@@ -61,8 +55,6 @@ const ChatMessage = memo(
     isDarkMode,
     isLastMessage = false,
     isStreaming = false,
-    expandedThoughtsState,
-    setExpandedThoughtsState,
     onEditMessage,
     onRegenerateMessage,
   }: {
@@ -72,115 +64,37 @@ const ChatMessage = memo(
     isDarkMode: boolean
     isLastMessage?: boolean
     isStreaming?: boolean
-    expandedThoughtsState: Record<string, boolean>
-    setExpandedThoughtsState: React.Dispatch<
-      React.SetStateAction<Record<string, boolean>>
-    >
     onEditMessage?: (messageIndex: number, newContent: string) => void
     onRegenerateMessage?: (messageIndex: number) => void
   }) {
-    // Get renderer from registry
-    const renderer = getRendererRegistry().getMessageRenderer(message, model)
-
+    const normalized = ensureTimeline(message)
+    const renderer = getRendererRegistry().getMessageRenderer(normalized, model)
     const RendererComponent = renderer.render
 
     return (
       <RendererComponent
-        message={message}
+        message={normalized}
         messageIndex={messageIndex}
         model={model}
         isDarkMode={isDarkMode}
         isLastMessage={isLastMessage}
         isStreaming={isStreaming}
-        expandedThoughtsState={expandedThoughtsState}
-        setExpandedThoughtsState={setExpandedThoughtsState}
         onEditMessage={onEditMessage}
         onRegenerateMessage={onRegenerateMessage}
       />
     )
   },
   (prevProps, nextProps) => {
-    // Custom comparison to prevent unnecessary re-renders
-
-    // Generate stable message IDs for expanded state comparison
-    const getMessageId = (message: Message) => {
-      const timestamp = message.timestamp
-        ? message.timestamp instanceof Date
-          ? message.timestamp.getTime()
-          : String(message.timestamp)
-        : 'no-timestamp'
-      return `${message.role}-${timestamp}`
-    }
-
-    const messageId = getMessageId(nextProps.message)
-    const prevExpanded = prevProps.expandedThoughtsState[messageId] ?? false
-    const nextExpanded = nextProps.expandedThoughtsState[messageId] ?? false
-
-    // Always re-render if this is the streaming message and content/thoughts changed
-    if (nextProps.isStreaming && nextProps.isLastMessage) {
-      // Only re-render if content, thoughts, streaming tool-call state, or
-      // expanded state actually changed.
-      return (
-        prevProps.message.content === nextProps.message.content &&
-        prevProps.message.thoughts === nextProps.message.thoughts &&
-        prevProps.message.isThinking === nextProps.message.isThinking &&
-        prevProps.message.segments === nextProps.message.segments &&
-        prevProps.message.webSearches === nextProps.message.webSearches &&
-        prevProps.message.webSearch === nextProps.message.webSearch &&
-        prevProps.message.urlFetches === nextProps.message.urlFetches &&
-        prevProps.message.annotations === nextProps.message.annotations &&
-        prevExpanded === nextExpanded
-      )
-    }
-
-    // For messages with thinking, be more careful about re-renders
-    if (prevProps.message.isThinking || nextProps.message.isThinking) {
-      // Only re-render if the actual message content or thinking state changed
-      return (
-        prevProps.message.content === nextProps.message.content &&
-        prevProps.message.thoughts === nextProps.message.thoughts &&
-        prevProps.message.isThinking === nextProps.message.isThinking &&
-        prevProps.message.segments === nextProps.message.segments &&
-        prevProps.message.webSearches === nextProps.message.webSearches &&
-        prevProps.message.webSearch === nextProps.message.webSearch &&
-        prevProps.message.urlFetches === nextProps.message.urlFetches &&
-        prevProps.message.annotations === nextProps.message.annotations &&
-        prevProps.message.attachments === nextProps.message.attachments &&
-        prevProps.message.documentContent ===
-          nextProps.message.documentContent &&
-        prevProps.message.documents === nextProps.message.documents &&
-        prevProps.message.imageData === nextProps.message.imageData &&
-        prevProps.model === nextProps.model &&
-        prevProps.isDarkMode === nextProps.isDarkMode &&
-        prevProps.isLastMessage === nextProps.isLastMessage &&
-        prevProps.isStreaming === nextProps.isStreaming &&
-        prevExpanded === nextExpanded
-      )
-    }
-
-    // Default comparison for non-streaming, non-thinking messages
-    // Note: documentContent, documents, and imageData are immutable after message creation
-    // but we include them for completeness and to handle any edge cases
+    // toMessage() creates a new Message object on every streaming chunk,
+    // so reference equality naturally re-renders the active message.
+    // Non-streaming messages keep stable references from the messages array.
     return (
-      prevProps.message.content === nextProps.message.content &&
-      prevProps.message.thoughts === nextProps.message.thoughts &&
-      prevProps.message.segments === nextProps.message.segments &&
-      prevProps.message.webSearches === nextProps.message.webSearches &&
-      prevProps.message.webSearch === nextProps.message.webSearch &&
-      prevProps.message.urlFetches === nextProps.message.urlFetches &&
-      prevProps.message.annotations === nextProps.message.annotations &&
-      prevProps.message.attachments === nextProps.message.attachments &&
-      prevProps.message.documentContent === nextProps.message.documentContent &&
-      prevProps.message.documents === nextProps.message.documents &&
-      prevProps.message.imageData === nextProps.message.imageData &&
+      prevProps.message === nextProps.message &&
       prevProps.messageIndex === nextProps.messageIndex &&
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
       prevProps.isStreaming === nextProps.isStreaming &&
-      prevExpanded === nextExpanded &&
-      prevProps.setExpandedThoughtsState ===
-        nextProps.setExpandedThoughtsState &&
       prevProps.onEditMessage === nextProps.onEditMessage &&
       prevProps.onRegenerateMessage === nextProps.onRegenerateMessage
     )
@@ -299,9 +213,6 @@ export function ChatMessages({
   onOpenVerifier,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
-  const [expandedThoughtsState, setExpandedThoughtsState] = useState<
-    Record<string, boolean>
-  >({})
   const maxMessages = useMaxMessages()
   const chatFont = useChatFont()
   const [showSpacer, setShowSpacer] = useState(false)
@@ -348,14 +259,6 @@ export function ChatMessages({
     }
     prevShowScrollButtonRef.current = showScrollButton
   }, [showScrollButton, messages.length])
-
-  // Memoize the setter to prevent function reference changes
-  const memoizedSetExpandedThoughtsState = useCallback(
-    (updater: React.SetStateAction<Record<string, boolean>>) => {
-      setExpandedThoughtsState(updater)
-    },
-    [],
-  )
 
   // Get the current model - always defined since config must load
   const currentModel = useMemo(() => {
@@ -447,8 +350,6 @@ export function ChatMessages({
                 isDarkMode={isDarkMode}
                 isLastMessage={false}
                 isStreaming={false}
-                expandedThoughtsState={expandedThoughtsState}
-                setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
                 onEditMessage={onEditMessage}
                 onRegenerateMessage={onRegenerateMessage}
               />
@@ -470,8 +371,6 @@ export function ChatMessages({
           isDarkMode={isDarkMode}
           isLastMessage={i === liveMessages.length - 1}
           isStreaming={i === liveMessages.length - 1 && isStreamingResponse}
-          expandedThoughtsState={expandedThoughtsState}
-          setExpandedThoughtsState={memoizedSetExpandedThoughtsState}
           onEditMessage={onEditMessage}
           onRegenerateMessage={onRegenerateMessage}
         />
