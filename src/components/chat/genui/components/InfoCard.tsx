@@ -6,6 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface InfoCardProps {
   title: string
@@ -28,7 +30,9 @@ export function InfoCard({
       </CardHeader>
       {content && (
         <CardContent>
-          <p className="text-sm text-content-primary">{content}</p>
+          <div className="prose prose-sm max-w-none text-sm text-content-primary dark:prose-invert">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          </div>
         </CardContent>
       )}
       {footer && (

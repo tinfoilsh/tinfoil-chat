@@ -17,7 +17,12 @@ const infoCardInput = z.object({
     .string()
     .optional()
     .describe('Short description below the title'),
-  content: z.string().optional().describe('Main body content of the card'),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      'Main body content of the card. Supports GitHub-flavored markdown — use "- item" on separate lines for bullet lists and "**bold**" for emphasis.',
+    ),
   footer: z.string().optional().describe('Footer text at the bottom'),
 })
 
@@ -479,13 +484,30 @@ const stockTickerInput = z.object({
     .string()
     .optional()
     .describe(
-      'Short label for the history window, e.g. "1D", "5D", "1M", "1Y".',
+      'Short label for a single-range history window, e.g. "1D", "5D", "1M", "1Y". Ignored when `ranges` is provided.',
     ),
   history: z
     .array(stockHistoryPointInput)
     .optional()
     .describe(
-      'Ordered price history points to render as a sparkline-style chart.',
+      'Ordered price history points to render as a sparkline-style chart. Use `ranges` instead when supplying multiple selectable ranges.',
+    ),
+  ranges: z
+    .array(
+      z.object({
+        label: z
+          .string()
+          .describe(
+            'Short range label, e.g. "1D", "5D", "1M", "6M", "1Y", "5Y".',
+          ),
+        points: z
+          .array(stockHistoryPointInput)
+          .describe('Ordered price points for this range.'),
+      }),
+    )
+    .optional()
+    .describe(
+      'Multiple labeled history series — renders tabs so the user can switch between ranges. Prefer this over `history` when more than one range is available.',
     ),
   marketStatus: z
     .enum(['open', 'closed', 'pre', 'post', 'unknown'])
