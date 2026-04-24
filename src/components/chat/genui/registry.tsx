@@ -13,6 +13,7 @@ import {
 } from './components/ArtifactPreview'
 import { BarChart, validateBarChartProps } from './components/BarChart'
 import { Callout, validateCalloutProps } from './components/Callout'
+import { ClockWidget, validateClockWidgetProps } from './components/ClockWidget'
 import {
   ComparisonTable,
   validateComparisonTableProps,
@@ -43,6 +44,7 @@ import {
 import { SourceCards, validateSourceCardsProps } from './components/SourceCards'
 import { StatCards, validateStatCardsProps } from './components/StatCards'
 import { Steps, validateStepsProps } from './components/Steps'
+import { StockTicker, validateStockTickerProps } from './components/StockTicker'
 import { TaskPlan, validateTaskPlanProps } from './components/TaskPlan'
 import { Timeline, validateTimelineProps } from './components/Timeline'
 import { WeatherCard, validateWeatherCardProps } from './components/WeatherCard'
@@ -100,6 +102,14 @@ const GENUI_COMPONENTS: Record<string, GenUIComponentDef> = {
   render_image: {
     validate: validateRenderedImageProps,
     component: RenderedImage,
+  },
+  render_clock: {
+    validate: validateClockWidgetProps,
+    component: ClockWidget,
+  },
+  render_stock_ticker: {
+    validate: validateStockTickerProps,
+    component: StockTicker,
   },
 }
 

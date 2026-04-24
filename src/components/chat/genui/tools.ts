@@ -393,6 +393,110 @@ const weatherCardInput = z.object({
   updatedAt: z.string().optional().describe('Timestamp or recency label'),
 })
 
+const clockWidgetInput = z.object({
+  timezone: z
+    .string()
+    .optional()
+    .describe(
+      'IANA timezone id, e.g. "America/Los_Angeles" or "Europe/Paris". Omit to use the user\'s local timezone.',
+    ),
+  label: z
+    .string()
+    .optional()
+    .describe(
+      'Optional heading shown above the clock — typically the city or zone name.',
+    ),
+  style: z
+    .enum(['analog', 'digital', 'both'])
+    .optional()
+    .describe('Visual style (defaults to "both").'),
+  showSeconds: z
+    .boolean()
+    .optional()
+    .describe('Whether to show seconds in the digital readout (default true).'),
+  hour12: z
+    .boolean()
+    .optional()
+    .describe('Use 12-hour clock with AM/PM (default true).'),
+})
+
+const stockHistoryPointInput = z.object({
+  time: z
+    .string()
+    .describe(
+      'Label for this data point — typically a time like "09:30" or a date like "2024-06-14".',
+    ),
+  price: z.number().describe('Price at this point in time.'),
+})
+
+const stockTickerInput = z.object({
+  symbol: z.string().describe('Ticker symbol, e.g. "AAPL" or "TSLA".'),
+  name: z.string().optional().describe('Company or instrument name.'),
+  exchange: z
+    .string()
+    .optional()
+    .describe('Exchange code, e.g. "NASDAQ" or "NYSE".'),
+  currency: z
+    .string()
+    .optional()
+    .describe('ISO currency code for the price (defaults to "USD").'),
+  price: z.union([z.string(), z.number()]).describe('Current or latest price.'),
+  previousClose: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe(
+      'Previous session close. Used to derive change/percent when not provided.',
+    ),
+  change: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Absolute price change vs. previous close.'),
+  changePercent: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Percent change vs. previous close (e.g. -1.23).'),
+  dayHigh: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe("Today's high price."),
+  dayLow: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe("Today's low price."),
+  openPrice: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe("Today's open price."),
+  volume: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Trading volume for the session.'),
+  marketCap: z
+    .string()
+    .optional()
+    .describe('Pre-formatted market cap string, e.g. "2.8T" or "$412B".'),
+  rangeLabel: z
+    .string()
+    .optional()
+    .describe(
+      'Short label for the history window, e.g. "1D", "5D", "1M", "1Y".',
+    ),
+  history: z
+    .array(stockHistoryPointInput)
+    .optional()
+    .describe(
+      'Ordered price history points to render as a sparkline-style chart.',
+    ),
+  marketStatus: z
+    .enum(['open', 'closed', 'pre', 'post', 'unknown'])
+    .optional()
+    .describe('Current market status indicator.'),
+  asOf: z
+    .string()
+    .optional()
+    .describe('Timestamp or recency label for the quoted price.'),
+})
+
 const mapPlaceCardInput = z.object({
   name: z.string().describe('Place name'),
   address: z.string().describe('Street address or location description'),
@@ -529,6 +633,16 @@ export const GENUI_TOOLS = {
     description:
       'Render a single image or diagram. Accepts hosted URLs, inline SVG, base64 image bytes, or Mermaid diagram source. Use this to generate visual diagrams, illustrations, or highlight a single hero image — not for galleries (use render_image_grid) or link cards (use render_link_preview).',
     inputSchema: renderedImageInput,
+  }),
+  render_clock: tool({
+    description:
+      'Display a live-ticking clock (analog, digital, or both) for the current time in a given timezone. Use when the user asks for the time, wants a clock for a city, or requests a world clock. The clock updates every second on the client.',
+    inputSchema: clockWidgetInput,
+  }),
+  render_stock_ticker: tool({
+    description:
+      'Display a stock ticker card with current price, change vs. previous close, and an optional price-history sparkline. Use when presenting a quote for a stock, ETF, index, or similar instrument.',
+    inputSchema: stockTickerInput,
   }),
 } as const
 
