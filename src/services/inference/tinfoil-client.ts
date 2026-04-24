@@ -262,6 +262,10 @@ export async function getTinfoilClient(): Promise<TinfoilAI | OpenAI> {
   function proxyWithRetry(pathFromRoot: PropertyKey[]): any {
     // Target must be a function so the `apply` trap can fire
     return new Proxy(function () {}, {
+      has(_, prop) {
+        if (!clientInstance) return false
+        return prop in clientInstance
+      },
       get(_, prop) {
         if (
           prop === 'then' ||
