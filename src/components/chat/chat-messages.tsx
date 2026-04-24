@@ -85,46 +85,11 @@ const ChatMessage = memo(
     )
   },
   (prevProps, nextProps) => {
-    // Custom comparison to prevent unnecessary re-renders
-
-    // Always re-render if this is the streaming message and content/thoughts changed
-    if (nextProps.isStreaming && nextProps.isLastMessage) {
-      return (
-        prevProps.message.content === nextProps.message.content &&
-        prevProps.message.thoughts === nextProps.message.thoughts &&
-        prevProps.message.isThinking === nextProps.message.isThinking &&
-        prevProps.message.timeline === nextProps.message.timeline
-      )
-    }
-
-    // For messages with thinking, be more careful about re-renders
-    if (prevProps.message.isThinking || nextProps.message.isThinking) {
-      return (
-        prevProps.message.content === nextProps.message.content &&
-        prevProps.message.thoughts === nextProps.message.thoughts &&
-        prevProps.message.isThinking === nextProps.message.isThinking &&
-        prevProps.message.timeline === nextProps.message.timeline &&
-        prevProps.message.attachments === nextProps.message.attachments &&
-        prevProps.message.documentContent ===
-          nextProps.message.documentContent &&
-        prevProps.message.documents === nextProps.message.documents &&
-        prevProps.message.imageData === nextProps.message.imageData &&
-        prevProps.model === nextProps.model &&
-        prevProps.isDarkMode === nextProps.isDarkMode &&
-        prevProps.isLastMessage === nextProps.isLastMessage &&
-        prevProps.isStreaming === nextProps.isStreaming
-      )
-    }
-
-    // Default comparison for non-streaming, non-thinking messages
+    // toMessage() creates a new Message object on every streaming chunk,
+    // so reference equality naturally re-renders the active message.
+    // Non-streaming messages keep stable references from the messages array.
     return (
-      prevProps.message.content === nextProps.message.content &&
-      prevProps.message.thoughts === nextProps.message.thoughts &&
-      prevProps.message.timeline === nextProps.message.timeline &&
-      prevProps.message.attachments === nextProps.message.attachments &&
-      prevProps.message.documentContent === nextProps.message.documentContent &&
-      prevProps.message.documents === nextProps.message.documents &&
-      prevProps.message.imageData === nextProps.message.imageData &&
+      prevProps.message === nextProps.message &&
       prevProps.messageIndex === nextProps.messageIndex &&
       prevProps.model === nextProps.model &&
       prevProps.isDarkMode === nextProps.isDarkMode &&

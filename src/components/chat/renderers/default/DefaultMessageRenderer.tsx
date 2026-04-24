@@ -250,7 +250,7 @@ const DefaultMessageComponent = ({
       {/* Render assistant pre-content blocks: timeline or legacy fallback */}
       {!isUser && message.timeline && message.timeline.length > 0
         ? /* Chronological timeline rendering */
-          message.timeline.map((block) => {
+          message.timeline.map((block, blockIndex) => {
             switch (block.type) {
               case 'thinking':
                 return (
@@ -289,7 +289,7 @@ const DefaultMessageComponent = ({
                 const isLastContent =
                   message.timeline!.findLastIndex(
                     (b) => b.type === 'content',
-                  ) === message.timeline!.indexOf(block)
+                  ) === blockIndex
                 return (
                   <div key={block.id} className="w-full px-4 py-2">
                     <div className="w-full">
