@@ -290,6 +290,8 @@ const DefaultMessageComponent = ({
                   message.timeline!.findLastIndex(
                     (b) => b.type === 'content',
                   ) === blockIndex
+                const isActivelyStreaming =
+                  !!isStreaming && !!isLastMessage && isLastContent
                 return (
                   <div key={block.id} className="w-full px-4 py-2">
                     <div className="w-full">
@@ -300,13 +302,13 @@ const DefaultMessageComponent = ({
                           'prose-a:text-blue-500 hover:prose-a:text-blue-600',
                         )}
                       >
-                        {isStreaming && isLastMessage && isLastContent ? (
+                        {isActivelyStreaming ? (
                           <StreamingContentWrapper isStreaming={true}>
                             <StreamingChunkedText
                               content={block.content}
                               isDarkMode={isDarkMode}
                               isUser={false}
-                              isStreaming={isStreaming}
+                              isStreaming={true}
                               citationUrlTitles={citationUrlTitles}
                             />
                           </StreamingContentWrapper>
@@ -324,6 +326,8 @@ const DefaultMessageComponent = ({
                   </div>
                 )
               }
+              default:
+                return null
             }
           })
         : /* Legacy fixed-section fallback */

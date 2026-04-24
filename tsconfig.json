@@ -31,5 +31,10 @@
     "**/*.mdx",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "vitest.setup.ts"]
+  "exclude": [
+    "node_modules",
+    "vitest.setup.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
 }
