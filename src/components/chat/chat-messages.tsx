@@ -3,6 +3,7 @@ import { useChatPrint } from '@/hooks/use-chat-print'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingDots } from '../loading-dots'
+import { ensureTimeline } from './ensure-timeline'
 import { CHAT_FONT_CLASSES, useChatFont } from './hooks/use-chat-font'
 import { useMaxMessages } from './hooks/use-max-messages'
 import { PrintableChat } from './PrintableChat'
@@ -66,14 +67,13 @@ const ChatMessage = memo(
     onEditMessage?: (messageIndex: number, newContent: string) => void
     onRegenerateMessage?: (messageIndex: number) => void
   }) {
-    // Get renderer from registry
-    const renderer = getRendererRegistry().getMessageRenderer(message, model)
-
+    const normalized = ensureTimeline(message)
+    const renderer = getRendererRegistry().getMessageRenderer(normalized, model)
     const RendererComponent = renderer.render
 
     return (
       <RendererComponent
-        message={message}
+        message={normalized}
         messageIndex={messageIndex}
         model={model}
         isDarkMode={isDarkMode}

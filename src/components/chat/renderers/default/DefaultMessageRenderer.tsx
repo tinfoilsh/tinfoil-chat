@@ -247,132 +247,84 @@ const DefaultMessageComponent = ({
         />
       )}
 
-      {/* Render assistant pre-content blocks: timeline or legacy fallback */}
-      {!isUser && message.timeline && message.timeline.length > 0
-        ? /* Chronological timeline rendering */
-          message.timeline.map((block, blockIndex) => {
-            switch (block.type) {
-              case 'thinking':
-                return (
-                  <div
-                    key={block.id}
-                    className="no-scroll-anchoring w-full px-4"
-                  >
-                    <ThoughtProcess
-                      thoughts={block.content}
-                      isDarkMode={isDarkMode}
-                      isThinking={block.isThinking}
-                      thinkingDuration={block.duration}
-                    />
-                  </div>
-                )
-              case 'web_search':
-                return (
-                  <div
-                    key={block.id}
-                    className="no-scroll-anchoring w-full px-4"
-                  >
-                    <WebSearchProcess webSearch={block.state} />
-                  </div>
-                )
-              case 'url_fetches':
-                return (
-                  <div
-                    key={block.id}
-                    className="no-scroll-anchoring w-full px-4"
-                  >
-                    <URLFetchProcess urlFetches={block.fetches} />
-                  </div>
-                )
-              case 'content': {
-                if (!block.content) return null
-                const isLastContent =
-                  message.timeline!.findLastIndex(
-                    (b) => b.type === 'content',
-                  ) === blockIndex
-                const isActivelyStreaming =
-                  !!isStreaming && !!isLastMessage && isLastContent
-                return (
-                  <div key={block.id} className="w-full px-4 py-2">
-                    <div className="w-full">
-                      <div
-                        className={cn(
-                          'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
-                          'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
-                          'prose-a:text-blue-500 hover:prose-a:text-blue-600',
-                        )}
-                      >
-                        {isActivelyStreaming ? (
-                          <StreamingContentWrapper isStreaming={true}>
-                            <StreamingChunkedText
-                              content={block.content}
-                              isDarkMode={isDarkMode}
-                              isUser={false}
-                              isStreaming={true}
-                              citationUrlTitles={citationUrlTitles}
-                            />
-                          </StreamingContentWrapper>
-                        ) : (
+      {/* Chronological timeline rendering (assistant only) */}
+      {!isUser &&
+        message.timeline?.map((block, blockIndex) => {
+          switch (block.type) {
+            case 'thinking':
+              return (
+                <div key={block.id} className="no-scroll-anchoring w-full px-4">
+                  <ThoughtProcess
+                    thoughts={block.content}
+                    isDarkMode={isDarkMode}
+                    isThinking={block.isThinking}
+                    thinkingDuration={block.duration}
+                  />
+                </div>
+              )
+            case 'web_search':
+              return (
+                <div key={block.id} className="no-scroll-anchoring w-full px-4">
+                  <WebSearchProcess webSearch={block.state} />
+                </div>
+              )
+            case 'url_fetches':
+              return (
+                <div key={block.id} className="no-scroll-anchoring w-full px-4">
+                  <URLFetchProcess urlFetches={block.fetches} />
+                </div>
+              )
+            case 'content': {
+              if (!block.content) return null
+              const isLastContent =
+                message.timeline!.findLastIndex((b) => b.type === 'content') ===
+                blockIndex
+              const isActivelyStreaming =
+                !!isStreaming && !!isLastMessage && isLastContent
+              return (
+                <div key={block.id} className="w-full px-4 py-2">
+                  <div className="w-full">
+                    <div
+                      className={cn(
+                        'prose w-full max-w-none text-base prose-pre:bg-transparent prose-pre:p-0',
+                        'text-content-primary prose-headings:text-content-primary prose-strong:text-content-primary prose-code:text-content-primary',
+                        'prose-a:text-blue-500 hover:prose-a:text-blue-600',
+                      )}
+                    >
+                      {isActivelyStreaming ? (
+                        <StreamingContentWrapper isStreaming={true}>
                           <StreamingChunkedText
                             content={block.content}
                             isDarkMode={isDarkMode}
                             isUser={false}
-                            isStreaming={false}
+                            isStreaming={true}
                             citationUrlTitles={citationUrlTitles}
                           />
-                        )}
-                      </div>
+                        </StreamingContentWrapper>
+                      ) : (
+                        <StreamingChunkedText
+                          content={block.content}
+                          isDarkMode={isDarkMode}
+                          isUser={false}
+                          isStreaming={false}
+                          citationUrlTitles={citationUrlTitles}
+                        />
+                      )}
                     </div>
                   </div>
-                )
-              }
-              default:
-                return null
+                </div>
+              )
             }
-          })
-        : /* Legacy fixed-section fallback */
-          !isUser && (
-            <>
-              {message.urlFetches && message.urlFetches.length > 0 && (
-                <div className="no-scroll-anchoring w-full px-4">
-                  <URLFetchProcess urlFetches={message.urlFetches} />
-                </div>
-              )}
+            default:
+              return null
+          }
+        })}
 
-              {message.webSearch && message.webSearchBeforeThinking && (
-                <div className="no-scroll-anchoring w-full px-4">
-                  <WebSearchProcess webSearch={message.webSearch} />
-                </div>
-              )}
-
-              {(message.isThinking ||
-                (typeof message.thoughts === 'string' &&
-                  message.thoughts.trim().length > 0)) && (
-                <div className="no-scroll-anchoring w-full px-4">
-                  <ThoughtProcess
-                    thoughts={message.thoughts || ''}
-                    isDarkMode={isDarkMode}
-                    isThinking={message.isThinking}
-                    thinkingDuration={message.thinkingDuration}
-                  />
-                </div>
-              )}
-
-              {message.webSearch && !message.webSearchBeforeThinking && (
-                <div className="no-scroll-anchoring w-full px-4">
-                  <WebSearchProcess webSearch={message.webSearch} />
-                </div>
-              )}
-            </>
-          )}
-
-      {/* Message content */}
-      {(message.content ||
-        (!isUser && message.timeline && message.timeline.length > 0)) && (
-        <>
-          {/* Hide message when editing for user messages; skip content block for timeline (rendered inline above) */}
-          {!(isUser && isEditing) &&
-            !(!isUser && message.timeline && message.timeline.length > 0) && (
+      {/* User message content (or assistant without timeline, e.g. rate limit errors) */}
+      {message.content &&
+        !(!isUser && message.timeline && message.timeline.length > 0) && (
+          <>
+            {!(isUser && isEditing) && (
               <div
                 className={`w-full ${isUser ? 'flex justify-end px-4 pb-8 pt-2' : 'px-4 py-2'}`}
               >
@@ -485,125 +437,125 @@ const DefaultMessageComponent = ({
               </div>
             )}
 
-          {/* Full-width edit mode for user messages */}
-          {isUser && isEditing && (
-            <div className="w-full px-4">
-              <div className="rounded-xl border border-border-subtle bg-surface-chat p-4">
-                <textarea
-                  ref={editTextareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSubmitEdit()
-                    } else if (e.key === 'Escape') {
-                      handleCancelEdit()
-                    }
-                  }}
-                  className={cn(
-                    'w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
-                    CHAT_FONT_CLASSES[chatFont],
-                  )}
-                  rows={Math.min(
-                    10,
-                    Math.max(3, editContent.split('\n').length),
-                  )}
-                />
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="hidden items-center gap-2 text-sm text-content-muted sm:flex">
-                    <InformationCircleIcon className="h-4 w-4 shrink-0" />
-                    <span>All messages after this point will be removed</span>
-                  </div>
-                  <div className="flex flex-1 justify-end gap-2">
-                    <button
-                      onClick={handleCancelEdit}
-                      className="rounded-lg px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSubmitEdit}
-                      disabled={!editContent.trim()}
-                      className="rounded-lg bg-surface-chat-background px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background/80 disabled:opacity-50"
-                    >
-                      Save
-                    </button>
+            {/* Full-width edit mode for user messages */}
+            {isUser && isEditing && (
+              <div className="w-full px-4">
+                <div className="rounded-xl border border-border-subtle bg-surface-chat p-4">
+                  <textarea
+                    ref={editTextareaRef}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSubmitEdit()
+                      } else if (e.key === 'Escape') {
+                        handleCancelEdit()
+                      }
+                    }}
+                    className={cn(
+                      'w-full resize-none bg-transparent text-base leading-relaxed text-content-primary placeholder:text-content-muted focus:outline-none',
+                      CHAT_FONT_CLASSES[chatFont],
+                    )}
+                    rows={Math.min(
+                      10,
+                      Math.max(3, editContent.split('\n').length),
+                    )}
+                  />
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="hidden items-center gap-2 text-sm text-content-muted sm:flex">
+                      <InformationCircleIcon className="h-4 w-4 shrink-0" />
+                      <span>All messages after this point will be removed</span>
+                    </div>
+                    <div className="flex flex-1 justify-end gap-2">
+                      <button
+                        onClick={handleCancelEdit}
+                        className="rounded-lg px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSubmitEdit}
+                        disabled={!editContent.trim()}
+                        className="rounded-lg bg-surface-chat-background px-4 py-2 text-sm font-medium text-content-primary transition-colors hover:bg-surface-chat-background/80 disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Action bar for user messages */}
-          {isUser && !isEditing && (
-            <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4">
-              {formattedDate && (
-                <div className="group/date relative">
-                  <span className="px-2 py-1 text-sm text-content-muted">
-                    {formattedDate}
-                  </span>
-                  {fullDate && (
-                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/date:opacity-100">
-                      {fullDate}
+            {/* Action bar for user messages */}
+            {isUser && !isEditing && (
+              <div className="flex h-0 items-center justify-end gap-1 overflow-visible px-4">
+                {formattedDate && (
+                  <div className="group/date relative">
+                    <span className="px-2 py-1 text-sm text-content-muted">
+                      {formattedDate}
+                    </span>
+                    {fullDate && (
+                      <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/date:opacity-100">
+                        {fullDate}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {onRegenerateMessage && (
+                  <div className="group/regen relative">
+                    <button
+                      onClick={handleRegenerate}
+                      className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                    >
+                      <ArrowPathIcon className="h-4 w-4" />
+                    </button>
+                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/regen:opacity-100">
+                      Regenerate
+                    </span>
+                  </div>
+                )}
+                {onEditMessage && (
+                  <div className="group/edit relative">
+                    <button
+                      onClick={handleStartEdit}
+                      className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                    >
+                      <PencilSquareIcon className="h-4 w-4" />
+                    </button>
+                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/edit:opacity-100">
+                      Edit
+                    </span>
+                  </div>
+                )}
+                <div className="group/copy relative">
+                  <button
+                    onClick={handleCopyUser}
+                    className={`flex items-center gap-1.5 rounded-lg p-2 text-xs font-medium transition-all ${
+                      copiedUser
+                        ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
+                        : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary'
+                    }`}
+                  >
+                    {copiedUser ? (
+                      <>
+                        <BsCheckLg className="h-4 w-4" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <RxCopy className="h-4 w-4" />
+                    )}
+                  </button>
+                  {!copiedUser && (
+                    <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
+                      Copy
                     </span>
                   )}
                 </div>
-              )}
-              {onRegenerateMessage && (
-                <div className="group/regen relative">
-                  <button
-                    onClick={handleRegenerate}
-                    className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                  >
-                    <ArrowPathIcon className="h-4 w-4" />
-                  </button>
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/regen:opacity-100">
-                    Regenerate
-                  </span>
-                </div>
-              )}
-              {onEditMessage && (
-                <div className="group/edit relative">
-                  <button
-                    onClick={handleStartEdit}
-                    className="rounded-lg p-2 text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                  >
-                    <PencilSquareIcon className="h-4 w-4" />
-                  </button>
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/edit:opacity-100">
-                    Edit
-                  </span>
-                </div>
-              )}
-              <div className="group/copy relative">
-                <button
-                  onClick={handleCopyUser}
-                  className={`flex items-center gap-1.5 rounded-lg p-2 text-xs font-medium transition-all ${
-                    copiedUser
-                      ? 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400'
-                      : 'text-content-secondary hover:bg-surface-chat-background hover:text-content-primary'
-                  }`}
-                >
-                  {copiedUser ? (
-                    <>
-                      <BsCheckLg className="h-4 w-4" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <RxCopy className="h-4 w-4" />
-                  )}
-                </button>
-                {!copiedUser && (
-                  <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100">
-                    Copy
-                  </span>
-                )}
               </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
 
       {/* Actions for assistant messages - hidden while streaming the last response */}
       {!isUser && message.content && !(isStreaming && isLastMessage) && (
