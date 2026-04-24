@@ -12,6 +12,10 @@ import {
   validateArtifactPreviewProps,
 } from './components/ArtifactPreview'
 import { BarChart, validateBarChartProps } from './components/BarChart'
+import {
+  CalendarWidget,
+  validateCalendarWidgetProps,
+} from './components/CalendarWidget'
 import { Callout, validateCalloutProps } from './components/Callout'
 import { ClockWidget, validateClockWidgetProps } from './components/ClockWidget'
 import {
@@ -22,13 +26,24 @@ import {
   ConfirmationCard,
   validateConfirmationCardProps,
 } from './components/ConfirmationCard'
+import { Countdown, validateCountdownProps } from './components/Countdown'
+import {
+  CurrencyConverter,
+  validateCurrencyConverterProps,
+} from './components/CurrencyConverter'
 import { DataTable, validateDataTableProps } from './components/DataTable'
+import {
+  FlightStatusCard,
+  validateFlightStatusProps,
+} from './components/FlightStatus'
+import { Gauge, validateGaugeProps } from './components/Gauge'
 import { ImageGrid, validateImageGridProps } from './components/ImageGrid'
 import { InfoCard, validateInfoCardProps } from './components/InfoCard'
 import {
   KeyValueList,
   validateKeyValueListProps,
 } from './components/KeyValueList'
+import { Leaderboard, validateLeaderboardProps } from './components/Leaderboard'
 import { LineChart, validateLineChartProps } from './components/LineChart'
 import { LinkPreview, validateLinkPreviewProps } from './components/LinkPreview'
 import {
@@ -36,7 +51,10 @@ import {
   validateMapPlaceCardProps,
 } from './components/MapPlaceCard'
 import { PieChart, validatePieChartProps } from './components/PieChart'
+import { PlacesMap, validatePlacesMapProps } from './components/PlacesMap'
 import { ProgressBar, validateProgressBarProps } from './components/ProgressBar'
+import { Quote, validateQuoteProps } from './components/Quote'
+import { RecipeCard, validateRecipeCardProps } from './components/RecipeCard'
 import {
   RenderedImage,
   validateRenderedImageProps,
@@ -110,6 +128,42 @@ const GENUI_COMPONENTS: Record<string, GenUIComponentDef> = {
   render_stock_ticker: {
     validate: validateStockTickerProps,
     component: StockTicker,
+  },
+  render_calendar: {
+    validate: validateCalendarWidgetProps,
+    component: CalendarWidget,
+  },
+  render_places_map: {
+    validate: validatePlacesMapProps,
+    component: PlacesMap,
+  },
+  render_flight_status: {
+    validate: validateFlightStatusProps,
+    component: FlightStatusCard,
+  },
+  render_countdown: {
+    validate: validateCountdownProps,
+    component: Countdown,
+  },
+  render_quote: {
+    validate: validateQuoteProps,
+    component: Quote,
+  },
+  render_recipe_card: {
+    validate: validateRecipeCardProps,
+    component: RecipeCard,
+  },
+  render_currency_converter: {
+    validate: validateCurrencyConverterProps,
+    component: CurrencyConverter,
+  },
+  render_gauge: {
+    validate: validateGaugeProps,
+    component: Gauge,
+  },
+  render_leaderboard: {
+    validate: validateLeaderboardProps,
+    component: Leaderboard,
   },
 }
 

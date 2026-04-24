@@ -425,6 +425,60 @@ const clockWidgetInput = z.object({
     .describe('Use 12-hour clock with AM/PM (default true).'),
 })
 
+const calendarEventInput = z.object({
+  date: z
+    .string()
+    .describe(
+      'Event date in ISO form, e.g. "2026-04-24" or a parseable date string.',
+    ),
+  title: z.string().describe('Short event title.'),
+  time: z
+    .string()
+    .optional()
+    .describe('Optional time or time range, e.g. "9:30 AM" or "10–11 AM".'),
+  color: z
+    .string()
+    .optional()
+    .describe('Optional CSS color for the event dot, e.g. "#3b82f6" or "red".'),
+  description: z
+    .string()
+    .optional()
+    .describe('Optional short description shown in the event list.'),
+})
+
+const calendarWidgetInput = z.object({
+  month: z
+    .string()
+    .optional()
+    .describe(
+      'Initial month to display, e.g. "2026-04" or an ISO date within that month. Defaults to the current month.',
+    ),
+  weekStartsOn: z
+    .enum(['sunday', 'monday'])
+    .optional()
+    .describe('First day of the week (defaults to "sunday").'),
+  events: z
+    .array(calendarEventInput)
+    .optional()
+    .describe(
+      'Events to show as dots on their dates and in the event list below the grid.',
+    ),
+  highlightedDates: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'ISO date strings to emphasize on the grid, separate from events.',
+    ),
+  showEventList: z
+    .boolean()
+    .optional()
+    .describe('Whether to show the event list below the grid (default true).'),
+  title: z
+    .string()
+    .optional()
+    .describe('Optional small heading above the month label.'),
+})
+
 const stockHistoryPointInput = z.object({
   time: z
     .string()
@@ -538,6 +592,360 @@ const mapPlaceCardInput = z.object({
     .string()
     .optional()
     .describe('Distance from the user or reference'),
+})
+
+const placesMapPlaceInput = z.object({
+  name: z.string().describe('Place name or label.'),
+  address: z.string().optional().describe('Street address or location string.'),
+  lat: z
+    .number()
+    .optional()
+    .describe(
+      'Latitude in decimal degrees. Include with `lng` for accurate pins.',
+    ),
+  lng: z
+    .number()
+    .optional()
+    .describe(
+      'Longitude in decimal degrees. Include with `lat` for accurate pins.',
+    ),
+  description: z
+    .string()
+    .optional()
+    .describe('Short description shown under the place entry.'),
+})
+
+const placesMapInput = z.object({
+  places: z
+    .array(placesMapPlaceInput)
+    .optional()
+    .describe(
+      'Places to pin on the map. Use for single-place or multi-place views (e.g. search results).',
+    ),
+  mode: z
+    .enum(['search', 'directions'])
+    .optional()
+    .describe(
+      'Use "directions" with `origin`+`destination` to render a route card; otherwise "search".',
+    ),
+  origin: placesMapPlaceInput
+    .optional()
+    .describe('Origin place for directions mode.'),
+  destination: placesMapPlaceInput
+    .optional()
+    .describe('Destination place for directions mode.'),
+  title: z.string().optional().describe('Optional header above the map.'),
+  footer: z
+    .string()
+    .optional()
+    .describe('Optional small note shown under the action buttons.'),
+})
+
+const flightEndpointInput = z.object({
+  code: z.string().describe('IATA airport code, e.g. "JFK" or "LAX".'),
+  name: z.string().optional().describe('Airport name.'),
+  city: z.string().optional().describe('Airport city.'),
+  terminal: z.string().optional().describe('Terminal identifier.'),
+  gate: z.string().optional().describe('Gate identifier.'),
+  scheduledTime: z
+    .string()
+    .optional()
+    .describe('Scheduled local time, e.g. "10:45 AM".'),
+  actualTime: z
+    .string()
+    .optional()
+    .describe(
+      'Actual or revised local time if different from scheduledTime — shown with scheduled struck through.',
+    ),
+})
+
+const flightStatusInput = z.object({
+  airline: z.string().describe('Airline name, e.g. "Delta Air Lines".'),
+  flightNumber: z.string().describe('Flight number, e.g. "123" or "DL 123".'),
+  airlineIataCode: z
+    .string()
+    .optional()
+    .describe('Two-letter airline IATA code, e.g. "DL".'),
+  origin: flightEndpointInput,
+  destination: flightEndpointInput,
+  status: z
+    .enum([
+      'scheduled',
+      'boarding',
+      'departed',
+      'in_air',
+      'landed',
+      'arrived',
+      'delayed',
+      'cancelled',
+      'diverted',
+    ])
+    .optional()
+    .describe('Current flight status.'),
+  statusLabel: z
+    .string()
+    .optional()
+    .describe(
+      'Optional custom status label overriding the default for `status`.',
+    ),
+  duration: z
+    .string()
+    .optional()
+    .describe('Total flight duration, e.g. "5h 20m".'),
+  seat: z.string().optional().describe('Seat assignment.'),
+  confirmationCode: z
+    .string()
+    .optional()
+    .describe('Booking confirmation / PNR code.'),
+  aircraft: z
+    .string()
+    .optional()
+    .describe('Aircraft type, e.g. "Boeing 737-800".'),
+  note: z.string().optional().describe('Optional note shown in the footer.'),
+})
+
+const countdownInput = z.object({
+  target: z
+    .string()
+    .describe(
+      'Target date/time as ISO 8601, e.g. "2026-12-31T23:59:59-08:00". The UI ticks down to this moment.',
+    ),
+  title: z.string().optional().describe('Optional title above the countdown.'),
+  label: z
+    .string()
+    .optional()
+    .describe(
+      'Custom label for the target — defaults to a formatted version of `target`.',
+    ),
+  description: z
+    .string()
+    .optional()
+    .describe('Short description shown under the digits.'),
+  showSeconds: z
+    .boolean()
+    .optional()
+    .describe('Whether to show the seconds cell (default true).'),
+  completedMessage: z
+    .string()
+    .optional()
+    .describe('Message to display after the target time has passed.'),
+})
+
+const quoteInput = z.object({
+  text: z.string().describe('Quotation text. Preserves line breaks.'),
+  author: z.string().optional().describe('Author or speaker name.'),
+  role: z
+    .string()
+    .optional()
+    .describe('Author title, role, or affiliation, e.g. "CEO, Acme".'),
+  source: z
+    .string()
+    .optional()
+    .describe('Source name — book, publication, interview, etc.'),
+  sourceUrl: z
+    .string()
+    .optional()
+    .describe('URL linking to the full source or article.'),
+  publishedAt: z
+    .string()
+    .optional()
+    .describe('Publication date or recency label, e.g. "March 2024".'),
+  avatarUrl: z
+    .string()
+    .optional()
+    .describe('Optional author avatar image URL.'),
+})
+
+const recipeIngredientInput = z.object({
+  item: z.string().describe('Ingredient name, e.g. "flour" or "olive oil".'),
+  quantity: z
+    .string()
+    .optional()
+    .describe('Quantity with unit, e.g. "2 cups" or "1 tbsp".'),
+  note: z
+    .string()
+    .optional()
+    .describe('Optional note, e.g. "sifted" or "room temperature".'),
+})
+
+const recipeStepInput = z.object({
+  title: z.string().optional().describe('Short title for the step.'),
+  content: z.string().describe('Full step instructions.'),
+})
+
+const recipeCardInput = z.object({
+  title: z.string().describe('Recipe title.'),
+  description: z.string().optional().describe('Short description of the dish.'),
+  image: z.string().optional().describe('Hero image URL.'),
+  cuisine: z.string().optional().describe('Cuisine style, e.g. "Italian".'),
+  difficulty: z
+    .enum(['easy', 'medium', 'hard'])
+    .optional()
+    .describe('Relative difficulty.'),
+  servings: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('How many servings the recipe yields.'),
+  prepTime: z.string().optional().describe('Prep time, e.g. "15 min".'),
+  cookTime: z.string().optional().describe('Cook time, e.g. "30 min".'),
+  totalTime: z
+    .string()
+    .optional()
+    .describe("Total time, used when prep/cook aren't broken out."),
+  ingredients: z
+    .array(recipeIngredientInput)
+    .optional()
+    .describe('List of ingredients with optional quantities and notes.'),
+  steps: z
+    .array(recipeStepInput)
+    .optional()
+    .describe('Ordered preparation steps.'),
+  tags: z
+    .array(z.string())
+    .optional()
+    .describe('Free-form tags, e.g. "vegan", "gluten-free".'),
+  source: z.string().optional().describe('Source name or publication.'),
+  sourceUrl: z.string().optional().describe('Link to the original recipe.'),
+})
+
+const currencyHistoryPointInput = z.object({
+  time: z.string().describe('Label for this point — typically an ISO date.'),
+  rate: z.number().describe('Exchange rate at this point.'),
+})
+
+const currencyConverterInput = z.object({
+  amount: z
+    .union([z.string(), z.number()])
+    .describe('Amount denominated in `fromCurrency`.'),
+  fromCurrency: z.string().describe('Source currency code, e.g. "USD".'),
+  toCurrency: z.string().describe('Target currency code, e.g. "EUR".'),
+  rate: z
+    .union([z.string(), z.number()])
+    .describe('Exchange rate so that `amount * rate` = converted amount.'),
+  convertedAmount: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe(
+      'Pre-computed converted amount. If omitted, derived from amount * rate.',
+    ),
+  asOf: z
+    .string()
+    .optional()
+    .describe('Timestamp or recency label for the quoted rate.'),
+  source: z
+    .string()
+    .optional()
+    .describe('Data source, e.g. "ECB" or "xe.com".'),
+  rangeLabel: z
+    .string()
+    .optional()
+    .describe('Short label for the history window, e.g. "30D".'),
+  history: z
+    .array(currencyHistoryPointInput)
+    .optional()
+    .describe('Ordered rate history points for the sparkline.'),
+})
+
+const gaugeZoneInput = z.object({
+  from: z.number().describe('Zone start value.'),
+  to: z.number().describe('Zone end value.'),
+  color: z
+    .string()
+    .describe('CSS color for the zone, e.g. "#16a34a" or "red".'),
+  label: z.string().optional().describe('Optional zone label.'),
+})
+
+const gaugeInput = z.object({
+  label: z.string().describe('Short label describing what the gauge measures.'),
+  value: z.union([z.string(), z.number()]).describe('Current value.'),
+  min: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Minimum value (default 0).'),
+  max: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Maximum value (default 100).'),
+  unit: z
+    .string()
+    .optional()
+    .describe('Short unit shown under the value, e.g. "mph" or "%".'),
+  valueLabel: z
+    .string()
+    .optional()
+    .describe('Overrides the unit text under the number, e.g. "AQI".'),
+  description: z
+    .string()
+    .optional()
+    .describe('Short description below the gauge.'),
+  color: z
+    .string()
+    .optional()
+    .describe(
+      'Accent color for the filled arc. Use a CSS color, e.g. "#3b82f6".',
+    ),
+  zones: z
+    .array(gaugeZoneInput)
+    .optional()
+    .describe(
+      'Optional colored zones drawn along the arc to signal thresholds (e.g. "good", "moderate", "unhealthy").',
+    ),
+  size: z
+    .enum(['small', 'default'])
+    .optional()
+    .describe('Overall gauge size (default "default").'),
+})
+
+const leaderboardEntryInput = z.object({
+  name: z.string().describe('Entry name or title.'),
+  score: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe('Primary score or metric for this entry.'),
+  rank: z
+    .number()
+    .optional()
+    .describe('Explicit rank. If omitted, the entry order is used.'),
+  subtitle: z
+    .string()
+    .optional()
+    .describe('Secondary line under the name, e.g. team, country, or role.'),
+  change: z
+    .number()
+    .optional()
+    .describe(
+      'Positive for rising ranks, negative for falling, zero for unchanged. Rendered as an arrow + delta.',
+    ),
+  avatarUrl: z.string().optional().describe('Optional avatar image URL.'),
+  badge: z
+    .string()
+    .optional()
+    .describe('Small badge shown next to the name, e.g. "MVP".'),
+})
+
+const leaderboardInput = z.object({
+  title: z.string().optional().describe('Overall leaderboard title.'),
+  subtitle: z
+    .string()
+    .optional()
+    .describe('Short subtitle, e.g. the scoring window.'),
+  entries: z
+    .array(leaderboardEntryInput)
+    .describe('Ranked entries, ordered from top to bottom.'),
+  scoreLabel: z
+    .string()
+    .optional()
+    .describe('Header for the score column (default "Score").'),
+  scoreSuffix: z
+    .string()
+    .optional()
+    .describe('Optional unit appended to every score, e.g. "pts" or "wins".'),
+  highlight: z
+    .string()
+    .optional()
+    .describe(
+      'Name of an entry to visually emphasize (case-insensitive match), e.g. the current user.',
+    ),
 })
 
 /**
@@ -665,6 +1073,51 @@ export const GENUI_TOOLS = {
     description:
       'Display a stock ticker card with current price, change vs. previous close, and an optional price-history sparkline. Use when presenting a quote for a stock, ETF, index, or similar instrument.',
     inputSchema: stockTickerInput,
+  }),
+  render_calendar: tool({
+    description:
+      'Display an interactive month calendar with optional events and highlighted dates. Today is marked with a red circle, and the user can navigate between months, jump back to today, and tap a day to see the events scheduled on it. Use when presenting schedules, deadlines, date ranges, or answering "what is the date of…" style questions.',
+    inputSchema: calendarWidgetInput,
+  }),
+  render_places_map: tool({
+    description:
+      'Display a map-style card for one or more places, or directions between an origin and destination. Renders an SVG mini-map from lat/lng plus deep-link buttons to Apple Maps, Google Maps, and Waze. Prefer this over writing raw map URLs in markdown.',
+    inputSchema: placesMapInput,
+  }),
+  render_flight_status: tool({
+    description:
+      'Display a boarding-pass-style flight card with airline, flight number, origin/destination codes, scheduled/actual times, gate, terminal, and status. Use for itinerary questions, delay updates, or travel plans.',
+    inputSchema: flightStatusInput,
+  }),
+  render_countdown: tool({
+    description:
+      'Display a live-ticking countdown to a target date/time, updating every second on the client. Use for "how long until X" questions, launch dates, or event countdowns.',
+    inputSchema: countdownInput,
+  }),
+  render_quote: tool({
+    description:
+      'Display a pull-quote card with attribution (author, role, source, date). Use when surfacing a notable quotation in the middle of longer prose.',
+    inputSchema: quoteInput,
+  }),
+  render_recipe_card: tool({
+    description:
+      'Display an interactive recipe card with hero image, timing, servings, a tickable ingredient checklist, and numbered steps the user can mark complete. Use for any cooking-related answer that lists ingredients and steps.',
+    inputSchema: recipeCardInput,
+  }),
+  render_currency_converter: tool({
+    description:
+      'Display a currency converter card with the current FX rate, converted amount, optional history sparkline, and a client-side editable amount field. Use when answering "how much is X in Y" style questions.',
+    inputSchema: currencyConverterInput,
+  }),
+  render_gauge: tool({
+    description:
+      'Display a radial gauge for a single value with optional colored threshold zones. Use for speedometer-style metrics, credit scores, air quality, battery/health, or similar single-value indicators where a progress bar feels too flat.',
+    inputSchema: gaugeInput,
+  }),
+  render_leaderboard: tool({
+    description:
+      'Display a ranked list with positions, avatars, scores, optional rank-change arrows, and an optional highlighted entry. Use for sports standings, top-N lists, or any ranking.',
+    inputSchema: leaderboardInput,
   }),
 } as const
 
