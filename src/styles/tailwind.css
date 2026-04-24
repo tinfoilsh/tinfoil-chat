@@ -11,12 +11,6 @@
   }
 }
 
-@keyframes streaming-tracer {
-  to {
-    background-position: 150%;
-  }
-}
-
 @keyframes loading-dots {
   33% {
     background-size:

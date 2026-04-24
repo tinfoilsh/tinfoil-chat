@@ -10,8 +10,12 @@
  * UI is flushed once per reader.read() chunk — no rAF needed.
  */
 
+import { IS_DEV } from '@/config'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
-import { createStreamLogger } from '@/utils/dev-stream-logger'
+import {
+  createStreamLogger,
+  type StreamLogger,
+} from '@/utils/dev-stream-logger'
 import type { Message, URLFetchState } from '../../types'
 import { createContentPreprocessor } from './content-preprocessor'
 import { createEventNormalizer } from './event-normalizer'
@@ -34,7 +38,11 @@ export async function processStreamingResponse(
   response: Response,
   ctx: StreamingContext,
 ): Promise<Message | null> {
-  const streamLogger = createStreamLogger()
+  // Only create the stream logger in dev mode — in production this is undefined
+  // and all logger?.foo() calls throughout the pipeline become no-ops.
+  const streamLogger: StreamLogger | undefined = IS_DEV
+    ? createStreamLogger()
+    : undefined
   const startingChatId = ctx.startingChatId
   const streamingChatId = ctx.updatedChat.id
   const isSameChat = () => ctx.currentChatIdRef.current === startingChatId
@@ -210,7 +218,7 @@ export async function processStreamingResponse(
     // Final flush
     if (dirty) flushToUI()
 
-    streamLogger.flush(streamingChatId)
+    streamLogger?.flush(streamingChatId)
     return assembler.toMessage(timeline.snapshot())
   } finally {
     ctx.setLoadingState('idle')
