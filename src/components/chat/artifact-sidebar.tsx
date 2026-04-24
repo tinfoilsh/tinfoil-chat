@@ -103,7 +103,7 @@ export function ArtifactSidebar({
         }
         aria-hidden={!isOpen}
       >
-        {isResizable && (
+        {isResizable && isOpen && (
           <div
             role="separator"
             tabIndex={0}
