@@ -45,6 +45,7 @@ export class MessageAssembler {
     let webSearch: WebSearchState | undefined
     let webSearchBeforeThinking: boolean | undefined
     const urlFetches: URLFetchState[] = []
+    const toolCalls: Message['toolCalls'] = []
     let firstThinkingIdx = -1
     let firstWebSearchIdx = -1
 
@@ -66,6 +67,13 @@ export class MessageAssembler {
           break
         case 'url_fetches':
           urlFetches.push(...block.fetches)
+          break
+        case 'tool_call':
+          toolCalls.push({
+            id: block.toolCallId,
+            name: block.name,
+            arguments: block.arguments,
+          })
           break
       }
     }
@@ -89,6 +97,7 @@ export class MessageAssembler {
         this.annotations.length > 0 ? [...this.annotations] : undefined,
       searchReasoning: this.searchReasoning || undefined,
       timeline: [...timeline],
+      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     }
   }
 }
