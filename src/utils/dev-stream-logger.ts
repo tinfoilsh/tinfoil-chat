@@ -46,7 +46,8 @@ export function createStreamLogger(): StreamLogger {
 
     flush(chatId: string) {
       if (entries.length === 0) return
-      const payload = { chatId, events: entries }
+      const payload = { chatId, events: entries.slice() }
+      entries.length = 0
       fetch('/api/dev/stream-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

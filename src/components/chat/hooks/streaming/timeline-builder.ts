@@ -110,9 +110,12 @@ export class TimelineBuilder {
     this.finalizeThinkingForTool()
     const lastBlock = this.blocks[this.blocks.length - 1]
     if (lastBlock && lastBlock.type === 'url_fetches') {
+      const exists = lastBlock.fetches.some((f) => f.id === fetch.id)
       this.blocks[this.blocks.length - 1] = {
         ...lastBlock,
-        fetches: [...lastBlock.fetches, fetch],
+        fetches: exists
+          ? lastBlock.fetches.map((f) => (f.id === fetch.id ? fetch : f))
+          : [...lastBlock.fetches, fetch],
       }
     } else {
       this.blocks.push({

@@ -204,6 +204,7 @@ export async function processStreamingResponse(
     if (timeline.isThinkingOpen) {
       const duration = getThinkingDuration(ctx.thinkingStartTimeRef)
       timeline.endThinking(duration)
+      dirty = true
     }
 
     // Final flush
