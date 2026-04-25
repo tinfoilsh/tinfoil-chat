@@ -83,6 +83,7 @@ export interface SendChatStreamParams {
   webSearchEnabled?: boolean
   codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
+  chatId?: string
 }
 
 export async function sendChatStream(
@@ -100,6 +101,7 @@ export async function sendChatStream(
     webSearchEnabled,
     codeExecutionEnabled,
     piiCheckEnabled,
+    chatId,
   } = params
 
   if (model.modelName === 'dev-simulator') {
@@ -286,9 +288,14 @@ export async function sendChatStream(
 
       const client = await getTinfoilClient()
 
+      const requestOptions: Record<string, unknown> = { signal }
+      if (chatId) {
+        requestOptions.headers = { 'X-Session-Id': chatId }
+      }
+
       const stream: any = await (client.chat.completions.create as Function)(
         requestBody,
-        { signal },
+        requestOptions,
       )
 
       const encoder = new TextEncoder()
