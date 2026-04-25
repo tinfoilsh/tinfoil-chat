@@ -262,23 +262,100 @@ The `blocked` → `failed` collapse mirrors web_search_call behavior: OpenAI's e
 
 ---
 
-## 6. Tool Names
+## 6. MCP Tool Definitions
 
-The router's MCP server exposes concrete tool names (not `code_execution`). Known tool names observed:
+The code-execution MCP server (`confidential-code-execution` v0.1.0) advertises **5 tools**. The router passes their names through unchanged (unlike web search, which renames `search` → `router_search`).
 
-- `bash` — shell command execution
-- `view` — file viewer
+### `bash`
 
-The `tool.name` field in markers and `code` field in output items carry these concrete names. The webapp should handle **any** tool name that isn't `search` or `fetch` (which belong to web search) as a code-execution tool.
+Execute a bash command in a sandboxed container.
+
+```typescript
+{
+  name: "bash",
+  arguments: {
+    command: string     // required — the bash command to execute
+  }
+}
+// Output: "stdout:\n...\nstderr:\n...\nexit_code: 0"
+// Error:  "error: ..."
+```
+
+### `view`
+
+View a file's contents with line numbers.
+
+```typescript
+{
+  name: "view",
+  arguments: {
+    path: string              // required — absolute or workspace-relative path
+    view_range?: [number, number]  // optional — [start_line, end_line] (1-indexed, inclusive)
+  }
+}
+// Output: "     1\tline content\n     2\tline content\n..."
+```
+
+### `str_replace`
+
+Replace an exact string occurrence in a file (must be unique).
+
+```typescript
+{
+  name: "str_replace",
+  arguments: {
+    path: string      // required
+    old_str: string   // required — must appear exactly once
+    new_str: string   // required
+  }
+}
+// Output: "Replaced in <path>:\n<context snippet>"
+// Error:  "error: old_str not found in <path>"
+// Error:  "error: old_str appears N times in <path> (must be unique)"
+```
+
+### `create`
+
+Create a new file (fails if it already exists).
+
+```typescript
+{
+  name: "create",
+  arguments: {
+    path: string        // required
+    file_text: string   // required — full file contents
+  }
+}
+// Output: "Created <path> (N bytes)"
+// Error:  "error: file already exists: <path>"
+```
+
+### `insert`
+
+Insert text after a specific line number.
+
+```typescript
+{
+  name: "insert",
+  arguments: {
+    path: string         // required
+    line_number: number  // required — 0 = beginning, 1 = after first line
+    text: string         // required
+  }
+}
+// Output: "Inserted at line N in <path>:\n<context snippet>"
+```
 
 ### Classification logic
 
-```
-isWebSearchTool(name) = isRouterSearchToolName(name) || isRouterFetchToolName(name)
+The router classifies tools by name. Web search tools (`search`, `fetch`, `router_search`, `router_fetch`) are the only hardcoded names. **Everything else is treated as code execution**:
 
-// Everything else is code execution
-isCodeExecTool(name) = !isWebSearchTool(name)
 ```
+isWebSearchTool(name) = name in {search, fetch, router_search, router_fetch}
+isCodeExecTool(name)  = !isWebSearchTool(name)
+```
+
+The webapp does NOT need to hardcode `bash`/`view`/`str_replace`/`create`/`insert` — it should handle any tool name generically. But knowing the actual tools helps design the UI (e.g., showing a terminal-style view for `bash`, a file viewer for `view`, a diff for `str_replace`).
 
 ---
 
@@ -296,32 +373,56 @@ On the Responses path, `{"type": "code_execution"}` and `{"type": "web_search"}`
 
 ---
 
-## 8. Session ID Forwarding
+## 8. Session Lifecycle
 
-The router forwards `X-Session-Id` from the client request to the MCP tool server. This enables session-scoped state on the code-execution server (e.g., persistent filesystem between tool calls within a conversation).
+### `X-Session-Id` header
+
+The router forwards `X-Session-Id` from the client request through to the code-execution MCP server. This header is **required** by the MCP server — calls without it return an error.
+
+### How sessions work server-side
+
+The code-execution server runs a **container pool orchestrator**:
+
+1. A warm pool of sandboxed containers is kept ready (default: 3 warm, max: 10 total)
+2. On the first tool call for a given `X-Session-Id`, a container is assigned from the warm pool (blocks up to 60s if pool is empty)
+3. Subsequent tool calls with the same session ID reuse the same container — **filesystem state persists across calls**
+4. When the session ends, the container is deleted
+
+### Implications for the webapp
+
+- The webapp already sends `X-Session-Id` (used for dev logging). This same header now provides container affinity for code execution
+- Files created by `bash` or `create` in one turn are visible to `view` or `str_replace` in the next turn (within the same session)
+- Different chats should use different session IDs to get isolated containers
+- Container startup may add latency to the first code-exec call in a session (~seconds while a warm container is assigned)
 
 ---
 
 ## 9. Summary: What the Webapp Needs to Implement
 
-### To activate code execution:
+### Request side:
 
-1. Send `code_execution_options: {}` on Chat Completions requests (or `{"type": "code_execution"}` in Responses tools)
-2. Send `X-Tinfoil-Events: web_search,code_execution` header
+1. Send `code_execution_options: {}` on Chat Completions requests
+2. Add `X-Tinfoil-Events: web_search,code_execution` header (extend existing `web_search` value)
+3. Ensure `X-Session-Id` is sent (already done for dev logging — same header provides container affinity)
 
-### To render code execution progress (Chat Completions streaming):
+### Streaming parsing (Chat Completions — the path the webapp uses):
 
 1. Parse `<tinfoil-event>` markers from `delta.content` (existing infrastructure)
 2. Handle new type `tinfoil.tool_call` alongside existing `tinfoil.web_search_call`
 3. Match `in_progress` → terminal pairs by `item_id` (prefix `tc_`)
-4. Display tool name + arguments during `in_progress`, tool output on completion
-5. Handle output truncation (look for `…[truncated]` suffix)
+4. On `in_progress`: display tool name + arguments (e.g., "Running bash: `ls -la`")
+5. On `completed`/`failed`: display tool output (possibly truncated at 4096 chars)
 
-### To render code execution progress (Responses streaming):
+### UI rendering (per tool name):
 
-1. Handle `response.output_item.added` with `type: "code_interpreter_call"`
-2. Handle phase events: `response.code_interpreter_call.in_progress`, `.interpreting`, `.completed`
-3. Handle `response.output_item.done` with `type: "code_interpreter_call"`
+| Tool          | Suggested UI                                                     |
+| ------------- | ---------------------------------------------------------------- |
+| `bash`        | Terminal-style block: show command, then stdout/stderr/exit_code |
+| `view`        | File viewer with line numbers (content is pre-numbered)          |
+| `str_replace` | Diff-style view: old → new with file path                        |
+| `create`      | File creation confirmation with path                             |
+| `insert`      | Insertion confirmation with context snippet                      |
+| (unknown)     | Generic: show tool name + arguments → output                     |
 
 ### Error handling:
 
