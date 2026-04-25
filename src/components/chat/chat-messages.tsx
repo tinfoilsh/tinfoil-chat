@@ -43,6 +43,8 @@ type ChatMessagesProps = {
   showScrollButton?: boolean
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  codeExecutionEnabled?: boolean
+  onCodeExecutionToggle?: () => void
   onOpenVerifier?: () => void
 }
 
@@ -210,6 +212,8 @@ export function ChatMessages({
   showScrollButton,
   webSearchEnabled,
   onWebSearchToggle,
+  codeExecutionEnabled,
+  onCodeExecutionToggle,
   onOpenVerifier,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
@@ -311,6 +315,8 @@ export function ChatMessages({
             handleLabelClick={handleLabelClick}
             webSearchEnabled={webSearchEnabled}
             onWebSearchToggle={onWebSearchToggle}
+            codeExecutionEnabled={codeExecutionEnabled}
+            onCodeExecutionToggle={onCodeExecutionToggle}
             onOpenVerifier={onOpenVerifier}
           />
         </div>

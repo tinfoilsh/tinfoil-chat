@@ -51,6 +51,7 @@ interface UseChatMessagingProps {
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   webSearchEnabled?: boolean
+  codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
 }
 
@@ -92,6 +93,7 @@ export function useChatMessaging({
   scrollToBottom,
   reasoningEffort,
   webSearchEnabled,
+  codeExecutionEnabled,
   piiCheckEnabled,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { isSignedIn } = useAuth()
@@ -516,6 +518,7 @@ export function useChatMessaging({
           signal: controller.signal,
           reasoningEffort,
           webSearchEnabled,
+          codeExecutionEnabled,
           piiCheckEnabled,
         })
 
@@ -741,6 +744,7 @@ export function useChatMessaging({
       isProjectMode,
       activeProject,
       webSearchEnabled,
+      codeExecutionEnabled,
       piiCheckEnabled,
     ],
   )

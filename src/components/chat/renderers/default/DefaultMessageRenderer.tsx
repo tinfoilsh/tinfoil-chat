@@ -18,6 +18,7 @@ import { SourcesButton } from '../components/SourcesButton'
 import { StreamingChunkedText } from '../components/StreamingChunkedText'
 import { StreamingContentWrapper } from '../components/StreamingContentWrapper'
 import { ThoughtProcess } from '../components/ThoughtProcess'
+import { ToolCallProcess } from '../components/ToolCallProcess'
 import { URLFetchProcess } from '../components/URLFetchProcess'
 import { WebSearchProcess } from '../components/WebSearchProcess'
 import type { MessageRenderer, MessageRenderProps } from '../types'
@@ -272,6 +273,12 @@ const DefaultMessageComponent = ({
               return (
                 <div key={block.id} className="no-scroll-anchoring w-full px-4">
                   <URLFetchProcess urlFetches={block.fetches} />
+                </div>
+              )
+            case 'tool_call':
+              return (
+                <div key={block.id} className="no-scroll-anchoring w-full px-4">
+                  <ToolCallProcess calls={block.calls} />
                 </div>
               )
             case 'content': {

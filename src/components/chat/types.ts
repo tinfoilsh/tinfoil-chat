@@ -58,11 +58,26 @@ export type TimelineContentBlock = {
   content: string
 }
 
+export type ToolCallState = {
+  id: string
+  toolName: string
+  arguments?: Record<string, unknown>
+  status: 'running' | 'completed' | 'failed'
+  output?: string
+}
+
+export type TimelineToolCallBlock = {
+  type: 'tool_call'
+  id: string
+  calls: ToolCallState[]
+}
+
 export type TimelineBlock =
   | TimelineThinkingBlock
   | TimelineWebSearchBlock
   | TimelineURLFetchBlock
   | TimelineContentBlock
+  | TimelineToolCallBlock
 
 export type Attachment = {
   id: string
@@ -98,6 +113,7 @@ export type Message = {
   webSearchBeforeThinking?: boolean // True if web search started before thinking
   annotations?: Annotation[] // URL citations from web search
   searchReasoning?: string // Search agent's reasoning for multi-turn context
+  toolCalls?: ToolCallState[] // Code execution tool calls
   quote?: string // Highlighted text the user is replying to
   timeline?: TimelineBlock[] // Chronological sequence of blocks for rendering
 }

@@ -197,6 +197,8 @@ interface WelcomeScreenProps {
   ) => void
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  codeExecutionEnabled?: boolean
+  onCodeExecutionToggle?: () => void
   onOpenVerifier?: () => void
 }
 
@@ -220,6 +222,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   handleLabelClick,
   webSearchEnabled,
   onWebSearchToggle,
+  codeExecutionEnabled,
+  onCodeExecutionToggle,
   onOpenVerifier,
 }: WelcomeScreenProps) {
   const { user } = useUser()
@@ -508,6 +512,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                   }
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={onWebSearchToggle}
+                  codeExecutionEnabled={codeExecutionEnabled}
+                  onCodeExecutionToggle={onCodeExecutionToggle}
                 />
               </motion.div>
             )}

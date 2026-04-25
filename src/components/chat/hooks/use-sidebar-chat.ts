@@ -27,6 +27,7 @@ interface UseSidebarChatProps {
   maxMessages: number
   reasoningEffort?: ReasoningEffort
   webSearchEnabled?: boolean
+  codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
 }
 
@@ -82,6 +83,7 @@ export function useSidebarChat({
   maxMessages,
   reasoningEffort,
   webSearchEnabled,
+  codeExecutionEnabled,
   piiCheckEnabled,
 }: UseSidebarChatProps): UseSidebarChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
@@ -214,6 +216,7 @@ export function useSidebarChat({
             signal: controller.signal,
             reasoningEffort,
             webSearchEnabled,
+            codeExecutionEnabled,
             piiCheckEnabled,
           })
 
@@ -289,6 +292,7 @@ export function useSidebarChat({
       maxMessages,
       reasoningEffort,
       webSearchEnabled,
+      codeExecutionEnabled,
       piiCheckEnabled,
     ],
   )

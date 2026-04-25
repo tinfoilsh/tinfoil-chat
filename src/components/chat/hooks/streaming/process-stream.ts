@@ -112,6 +112,11 @@ export async function processStreamingResponse(
         applyURLFetch(event)
         break
 
+      case 'tool_call':
+        applyToolCall(event)
+        markFirstEvent()
+        break
+
       case 'annotation': {
         assembler.addAnnotation(event.url, event.title)
         // Update timeline web search sources with accumulated citations
@@ -175,6 +180,25 @@ export async function processStreamingResponse(
       const mapped: URLFetchState['status'] =
         event.status === 'blocked' ? 'failed' : event.status
       timeline.updateURLFetch(event.id, mapped)
+    }
+  }
+
+  const applyToolCall = (
+    event: Extract<NormalizedEvent, { type: 'tool_call' }>,
+  ): void => {
+    if (event.status === 'in_progress') {
+      timeline.pushToolCall({
+        id: event.id,
+        toolName: event.toolName,
+        arguments: event.arguments,
+        status: 'running',
+      })
+    } else {
+      const mapped = event.status === 'blocked' ? 'failed' : event.status
+      timeline.updateToolCall(event.id, {
+        status: mapped as 'completed' | 'failed',
+        output: event.output,
+      })
     }
   }
 

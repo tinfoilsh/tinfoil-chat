@@ -4,6 +4,7 @@ import {
   type BaseModel,
 } from '@/config/models'
 import {
+  SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
   SETTINGS_PII_CHECK_ENABLED,
   SETTINGS_WEB_SEARCH_ENABLED,
@@ -497,6 +498,13 @@ export function ChatInterface({
     return saved === null ? true : saved === 'true'
   })
 
+  // State for code execution toggle (persisted in localStorage, defaults to off)
+  const [codeExecutionEnabled, setCodeExecutionEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const saved = localStorage.getItem(SETTINGS_CODE_EXECUTION_ENABLED)
+    return saved === null ? false : saved === 'true'
+  })
+
   // PII check setting (controlled from settings modal, defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -746,6 +754,7 @@ export function ChatInterface({
     initialChatId,
     isLocalChatUrl,
     webSearchEnabled,
+    codeExecutionEnabled,
     piiCheckEnabled,
   })
 
@@ -761,6 +770,7 @@ export function ChatInterface({
     maxMessages: sidebarMaxMessages,
     reasoningEffort,
     webSearchEnabled,
+    codeExecutionEnabled,
     piiCheckEnabled,
   })
 
@@ -912,6 +922,14 @@ export function ChatInterface({
   useEffect(() => {
     localStorage.setItem(SETTINGS_WEB_SEARCH_ENABLED, String(webSearchEnabled))
   }, [webSearchEnabled])
+
+  // Persist code execution toggle to localStorage
+  useEffect(() => {
+    localStorage.setItem(
+      SETTINGS_CODE_EXECUTION_ENABLED,
+      String(codeExecutionEnabled),
+    )
+  }, [codeExecutionEnabled])
 
   // Listen for PII check setting changes from settings modal
   useEffect(() => {
@@ -2678,6 +2696,10 @@ export function ChatInterface({
                   showScrollButton={showScrollButton}
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+                  codeExecutionEnabled={codeExecutionEnabled}
+                  onCodeExecutionToggle={() =>
+                    setCodeExecutionEnabled((prev) => !prev)
+                  }
                   onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
                 />
               </div>
@@ -2784,6 +2806,10 @@ export function ChatInterface({
                     webSearchEnabled={webSearchEnabled}
                     onWebSearchToggle={() =>
                       setWebSearchEnabled((prev) => !prev)
+                    }
+                    codeExecutionEnabled={codeExecutionEnabled}
+                    onCodeExecutionToggle={() =>
+                      setCodeExecutionEnabled((prev) => !prev)
                     }
                   />
                 </form>

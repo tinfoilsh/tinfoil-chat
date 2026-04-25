@@ -3,6 +3,7 @@ import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
 import {
   TINFOIL_EVENTS_HEADER,
+  TINFOIL_EVENTS_VALUE_CODE_EXECUTION,
   TINFOIL_EVENTS_VALUE_WEB_SEARCH,
 } from '@/utils/tinfoil-events'
 import OpenAI from 'openai'
@@ -196,7 +197,7 @@ async function initClient(sessionToken: string): Promise<TinfoilAI | OpenAI> {
         baseURL: `${window.location.origin}/api/local-router/v1`,
         dangerouslyAllowBrowser: true,
         defaultHeaders: {
-          [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+          [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
         },
       })
     } else {
@@ -208,7 +209,7 @@ async function initClient(sessionToken: string): Promise<TinfoilAI | OpenAI> {
         // the underlying SSE stream stays spec-conformant for any other
         // OpenAI-compatible consumer.
         defaultHeaders: {
-          [TINFOIL_EVENTS_HEADER]: TINFOIL_EVENTS_VALUE_WEB_SEARCH,
+          [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
         },
       })
     }

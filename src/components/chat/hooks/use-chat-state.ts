@@ -82,6 +82,7 @@ export function useChatState({
   initialChatId,
   isLocalChatUrl = false,
   webSearchEnabled,
+  codeExecutionEnabled,
   piiCheckEnabled,
 }: {
   systemPrompt: string
@@ -93,6 +94,7 @@ export function useChatState({
   initialChatId?: string | null
   isLocalChatUrl?: boolean
   webSearchEnabled?: boolean
+  codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
 }): UseChatStateReturn {
   const hasCreatedInitialChatRef = useRef(false)
@@ -192,6 +194,7 @@ export function useChatState({
     scrollToBottom,
     reasoningEffort,
     webSearchEnabled,
+    codeExecutionEnabled,
     piiCheckEnabled,
   })
 

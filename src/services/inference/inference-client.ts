@@ -81,6 +81,7 @@ export interface SendChatStreamParams {
   signal: AbortSignal
   reasoningEffort?: ReasoningEffort
   webSearchEnabled?: boolean
+  codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
 }
 
@@ -97,6 +98,7 @@ export async function sendChatStream(
     signal,
     reasoningEffort,
     webSearchEnabled,
+    codeExecutionEnabled,
     piiCheckEnabled,
   } = params
 
@@ -255,6 +257,9 @@ export async function sendChatStream(
       if (webSearchEnabled) {
         requestBody.web_search_options = {}
       }
+      if (codeExecutionEnabled) {
+        requestBody.code_execution_options = {}
+      }
       if (piiCheckEnabled) {
         requestBody.pii_check_options = {}
       }
@@ -269,6 +274,7 @@ export async function sendChatStream(
           'signal',
           'reasoning_effort',
           'web_search_options',
+          'code_execution_options',
           'pii_check_options',
         ])
         for (const [key, value] of Object.entries(model.requestParams)) {

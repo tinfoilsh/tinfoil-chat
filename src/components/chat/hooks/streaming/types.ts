@@ -43,6 +43,15 @@ export type SearchReasoningEvent = {
   content: string
 }
 
+export type ToolCallEvent = {
+  type: 'tool_call'
+  id: string
+  toolName: string
+  status: 'in_progress' | 'completed' | 'failed' | 'blocked'
+  arguments?: Record<string, unknown>
+  output?: string
+}
+
 export type NormalizedEvent =
   | ThinkingStartEvent
   | ThinkingDeltaEvent
@@ -52,6 +61,7 @@ export type NormalizedEvent =
   | URLFetchEvent
   | AnnotationEvent
   | SearchReasoningEvent
+  | ToolCallEvent
 
 // ---------------------------------------------------------------------------
 // Context passed by callers (unchanged from the old processor)

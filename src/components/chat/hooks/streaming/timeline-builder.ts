@@ -11,6 +11,7 @@ import type {
   TimelineContentBlock,
   TimelineThinkingBlock,
   TimelineWebSearchBlock,
+  ToolCallState,
   URLFetchState,
   WebSearchState,
 } from '../../types'
@@ -137,6 +138,40 @@ export class TimelineBuilder {
           ...block,
           fetches: block.fetches.map((f) =>
             f.id === id ? { ...f, status } : f,
+          ),
+        }
+        break
+      }
+    }
+  }
+
+  // -- Tool Calls ---------------------------------------------------------
+
+  pushToolCall(call: ToolCallState): void {
+    this.finalizeThinkingForTool()
+    const lastBlock = this.blocks[this.blocks.length - 1]
+    if (lastBlock && lastBlock.type === 'tool_call') {
+      this.blocks[this.blocks.length - 1] = {
+        ...lastBlock,
+        calls: [...lastBlock.calls, call],
+      }
+    } else {
+      this.blocks.push({
+        type: 'tool_call',
+        id: `tool-call-${this.blocks.length}`,
+        calls: [call],
+      })
+    }
+  }
+
+  updateToolCall(id: string, updates: Partial<ToolCallState>): void {
+    for (let i = this.blocks.length - 1; i >= 0; i--) {
+      const block = this.blocks[i]
+      if (block.type === 'tool_call' && block.calls.some((c) => c.id === id)) {
+        this.blocks[i] = {
+          ...block,
+          calls: block.calls.map((c) =>
+            c.id === id ? { ...c, ...updates } : c,
           ),
         }
         break
