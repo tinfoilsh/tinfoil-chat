@@ -74,10 +74,41 @@ function getHeaderLabel(calls: ToolCallState[]): string {
   return `Ran ${count} tools`
 }
 
+/** Get the displayable content block for a completed tool call. */
+function getDisplayContent(call: ToolCallState): string | null {
+  switch (call.toolName) {
+    case 'bash':
+      // Show command output (stdout/stderr)
+      return call.output || null
+    case 'view':
+      // Output is the file content with line numbers
+      return call.output || null
+    case 'create':
+      // The interesting content is the file text from arguments, not the
+      // confirmation line in output ("Created foo.md (231 bytes)")
+      return (
+        (typeof call.arguments?.file_text === 'string'
+          ? call.arguments.file_text
+          : null) ||
+        call.output ||
+        null
+      )
+    case 'str_replace':
+      // Output contains the replacement context snippet
+      return call.output || null
+    case 'insert':
+      // Output contains the insertion context snippet
+      return call.output || null
+    default:
+      return call.output || null
+  }
+}
+
 function ToolCallRow({ call }: { call: ToolCallState }) {
   const label = getToolLabel(call)
   const isBash = call.toolName === 'bash'
-  const hasOutput = !!call.output
+  const displayContent =
+    call.status !== 'running' ? getDisplayContent(call) : null
 
   return (
     <div className="flex flex-col gap-1">
@@ -105,15 +136,15 @@ function ToolCallRow({ call }: { call: ToolCallState }) {
         )}
         <span className="min-w-0 font-medium">{label}</span>
       </div>
-      {hasOutput && (
+      {displayContent && (
         <pre
-          className={`ml-6 overflow-x-auto rounded-md px-3 py-2 text-xs leading-relaxed ${
+          className={`ml-6 max-h-60 overflow-auto rounded-md px-3 py-2 text-xs leading-relaxed ${
             isBash
               ? 'bg-surface-chat-background font-mono text-content-primary/70'
               : 'bg-surface-chat-background text-content-primary/70'
           } ${call.status === 'failed' ? 'border border-red-500/20' : ''}`}
         >
-          {call.output}
+          {displayContent}
         </pre>
       )}
     </div>
