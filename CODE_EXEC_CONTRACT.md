@@ -89,7 +89,7 @@ Code execution events are delivered as `<tinfoil-event>` XML markers embedded in
 ```json
 {
   "type": "tinfoil.tool_call",
-  "item_id": "tc_<uuid>",
+  "item_id": "ci_<uuid>",
   "status": "in_progress",
   "tool": {
     "name": "bash",
@@ -103,7 +103,7 @@ Code execution events are delivered as `<tinfoil-event>` XML markers embedded in
 ```json
 {
   "type": "tinfoil.tool_call",
-  "item_id": "tc_<uuid>",
+  "item_id": "ci_<uuid>",
   "status": "completed",
   "tool": {
     "name": "bash",
@@ -117,7 +117,7 @@ Code execution events are delivered as `<tinfoil-event>` XML markers embedded in
 ```json
 {
   "type": "tinfoil.tool_call",
-  "item_id": "tc_<uuid>",
+  "item_id": "ci_<uuid>",
   "status": "failed",
   "tool": {
     "name": "bash",
@@ -126,22 +126,38 @@ Code execution events are delivered as `<tinfoil-event>` XML markers embedded in
 }
 ```
 
+#### `blocked` (safety filter — not currently triggered for code-exec)
+
+```json
+{
+  "type": "tinfoil.tool_call",
+  "item_id": "ci_<uuid>",
+  "status": "blocked",
+  "tool": {
+    "name": "bash",
+    "output": "safety policy rejected this query"
+  }
+}
+```
+
+> **Note:** Unlike the Responses path (which collapses `blocked` → `failed` + `_tinfoil.status`), Chat markers surface `blocked` as the raw status. Currently only the web search MCP server's PII/prompt-injection safeguards produce `blocked`; the code-execution server does not trigger it today. The router applies `failureStatusFor` generically to all tool calls, so `blocked` could appear for code-exec in the future. Clients should treat `blocked` the same as `failed` unless they want distinct UI.
+
 ### Key differences from web search markers
 
-| Field                 | Web Search (`tinfoil.web_search_call`) | Code Exec (`tinfoil.tool_call`)  |
-| --------------------- | -------------------------------------- | -------------------------------- |
-| `type`                | `tinfoil.web_search_call`              | `tinfoil.tool_call`              |
-| `item_id` prefix      | `ws_`                                  | `tc_`                            |
-| Progress payload      | `action: {type, query/url}`            | `tool: {name, arguments/output}` |
-| `in_progress` carries | `action` (search query or URL)         | `tool.arguments`                 |
-| Terminal carries      | `action` + `sources[]`                 | `tool.output` (text result)      |
+| Field                 | Web Search (`tinfoil.web_search_call`) | Code Exec (`tinfoil.tool_call`)           |
+| --------------------- | -------------------------------------- | ----------------------------------------- |
+| `type`                | `tinfoil.web_search_call`              | `tinfoil.tool_call`                       |
+| `item_id` prefix      | `ws_`                                  | `ci_` (streaming) / `tc_` (non-streaming) |
+| Progress payload      | `action: {type, query/url}`            | `tool: {name, arguments/output}`          |
+| `in_progress` carries | `action` (search query or URL)         | `tool.arguments`                          |
+| Terminal carries      | `action` + `sources[]`                 | `tool.output` (text result)               |
 
 ### Marker pairs
 
 Each tool call produces exactly **two markers** with the same `item_id`:
 
 1. `in_progress` — carries tool name + arguments
-2. Terminal (`completed` / `failed`) — carries tool name + output
+2. Terminal (`completed` / `failed` / `blocked`) — carries tool name + output
 
 ### Output truncation
 
@@ -409,7 +425,7 @@ The code-execution server runs a **container pool orchestrator**:
 
 1. Parse `<tinfoil-event>` markers from `delta.content` (existing infrastructure)
 2. Handle new type `tinfoil.tool_call` alongside existing `tinfoil.web_search_call`
-3. Match `in_progress` → terminal pairs by `item_id` (prefix `tc_`)
+3. Match `in_progress` → terminal pairs by `item_id` (prefix `ci_` in streaming, `tc_` in non-streaming)
 4. On `in_progress`: display tool name + arguments (e.g., "Running bash: `ls -la`")
 5. On `completed`/`failed`: display tool output (possibly truncated at 4096 chars)
 
@@ -426,5 +442,7 @@ The code-execution server runs a **container pool orchestrator**:
 
 ### Error handling:
 
+- `status: "completed"` → success
 - `status: "failed"` → generic error
-- `_tinfoil.status: "blocked"` → safety filter blocked the call (show distinct UI)
+- `status: "blocked"` (Chat markers only) → safety filter blocked the call; not currently triggered for code-exec tools, but handle defensively
+- `_tinfoil.status: "blocked"` (Responses items only) → safety filter blocked; `status` will be `"failed"` with the real reason in `_tinfoil`
