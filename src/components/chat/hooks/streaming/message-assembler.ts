@@ -17,6 +17,12 @@ import type {
 
 export class MessageAssembler {
   private annotations: Annotation[] = []
+  // Frozen snapshot of `annotations` shared across every toMessage() call
+  // until a new annotation is added. Reusing the same reference lets
+  // downstream React memos (e.g. citationUrlTitles) skip rebuilding while
+  // streaming tokens arrive, which prevents citation pill favicons from
+  // remounting and flashing on every chunk.
+  private annotationsSnapshot: Annotation[] | undefined
   private sources: WebSearchSource[] = []
   private searchReasoning = ''
   private timestamp = new Date()
@@ -27,6 +33,7 @@ export class MessageAssembler {
       type: 'url_citation',
       url_citation: { title, url },
     })
+    this.annotationsSnapshot = undefined
   }
 
   addSearchReasoning(content: string): void {
@@ -93,11 +100,18 @@ export class MessageAssembler {
       webSearch,
       webSearchBeforeThinking: webSearchBeforeThinking || undefined,
       urlFetches: urlFetches.length > 0 ? urlFetches : undefined,
-      annotations:
-        this.annotations.length > 0 ? [...this.annotations] : undefined,
+      annotations: this.getAnnotationsSnapshot(),
       searchReasoning: this.searchReasoning || undefined,
       timeline: [...timeline],
       toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
     }
+  }
+
+  private getAnnotationsSnapshot(): Annotation[] | undefined {
+    if (this.annotations.length === 0) return undefined
+    if (!this.annotationsSnapshot) {
+      this.annotationsSnapshot = [...this.annotations]
+    }
+    return this.annotationsSnapshot
   }
 }
