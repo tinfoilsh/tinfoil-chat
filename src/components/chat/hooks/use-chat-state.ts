@@ -79,6 +79,7 @@ export function useChatState({
   models = [],
   scrollToBottom,
   reasoningEffort,
+  thinkingEnabled,
   initialChatId,
   isLocalChatUrl = false,
   webSearchEnabled,
@@ -90,6 +91,7 @@ export function useChatState({
   models?: BaseModel[]
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
+  thinkingEnabled?: boolean
   initialChatId?: string | null
   isLocalChatUrl?: boolean
   webSearchEnabled?: boolean
@@ -191,6 +193,7 @@ export function useChatState({
     messagesEndRef,
     scrollToBottom,
     reasoningEffort,
+    thinkingEnabled,
     webSearchEnabled,
     piiCheckEnabled,
   })

@@ -90,7 +90,10 @@ import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useMaxMessages } from './hooks/use-max-messages'
 import {
   isReasoningModel,
+  supportsReasoningEffort,
+  supportsThinkingToggle,
   useReasoningEffort,
+  useThinkingEnabled,
 } from './hooks/use-reasoning-effort'
 import { useSidebarChat } from './hooks/use-sidebar-chat'
 import { ModelSelector } from './model-selector'
@@ -531,8 +534,11 @@ export function ChatInterface({
     autoLoad: isSignedIn && isCloudSyncEnabled() && isPremium,
   })
 
-  // Use reasoning effort hook for gpt-oss models
+  // Reasoning controls — graded effort for models that support it, on/off
+  // toggle for models that expose a thinking flag. Both are persisted globally
+  // (not per-model) and only surfaced for models whose reasoningConfig opts in.
   const { reasoningEffort, setReasoningEffort } = useReasoningEffort()
+  const { thinkingEnabled, setThinkingEnabled } = useThinkingEnabled()
 
   // Detect platform for keyboard shortcut display
   const isMac = useMemo(() => {
@@ -747,6 +753,7 @@ export function ChatInterface({
     // Scroll user message to top of viewport when sending
     scrollToBottom: scrollUserMessageToTop,
     reasoningEffort,
+    thinkingEnabled,
     initialChatId,
     isLocalChatUrl,
     webSearchEnabled,
@@ -764,6 +771,7 @@ export function ChatInterface({
     selectedModel,
     maxMessages: sidebarMaxMessages,
     reasoningEffort,
+    thinkingEnabled,
     webSearchEnabled,
     piiCheckEnabled,
   })
@@ -2684,6 +2692,8 @@ export function ChatInterface({
                   onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
                   reasoningEffort={reasoningEffort}
                   setReasoningEffort={setReasoningEffort}
+                  thinkingEnabled={thinkingEnabled}
+                  setThinkingEnabled={setThinkingEnabled}
                   onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
                 />
               </div>
@@ -2787,13 +2797,19 @@ export function ChatInterface({
                         </div>
                       ) : undefined
                     }
-                    reasoningSelectorButton={
-                      isReasoningModel(
-                        models.find((m) => m.modelName === selectedModel),
-                      ) ? (
+                    reasoningSelectorButton={(() => {
+                      const m = models.find(
+                        (mm) => mm.modelName === selectedModel,
+                      )
+                      if (!isReasoningModel(m)) return undefined
+                      return (
                         <ReasoningEffortSelector
+                          supportsEffort={supportsReasoningEffort(m)}
+                          supportsToggle={supportsThinkingToggle(m)}
                           reasoningEffort={reasoningEffort}
-                          onChange={setReasoningEffort}
+                          onEffortChange={setReasoningEffort}
+                          thinkingEnabled={thinkingEnabled}
+                          onThinkingEnabledChange={setThinkingEnabled}
                           isOpen={expandedLabel === 'reasoning'}
                           onToggle={() =>
                             handleLabelClick('reasoning', () => {})
@@ -2802,8 +2818,8 @@ export function ChatInterface({
                             handleLabelClick('reasoning', () => {})
                           }
                         />
-                      ) : undefined
-                    }
+                      )
+                    })()}
                     webSearchEnabled={webSearchEnabled}
                     onWebSearchToggle={() =>
                       setWebSearchEnabled((prev) => !prev)

@@ -12,8 +12,20 @@ const DEV_MODELS: BaseModel[] = [
     type: 'chat',
     chat: true,
     multimodal: true,
-    reasoning: true,
-    requestParams: { chat_template_kwargs: { enable_thinking: true } },
+    reasoningConfig: {
+      supportsToggle: true,
+      defaultEnabled: true,
+      params: {
+        '/v1/chat/completions': {
+          enable: { chat_template_kwargs: { enable_thinking: true } },
+          disable: { chat_template_kwargs: { enable_thinking: false } },
+        },
+        '/v1/responses': {
+          enable: { chat_template_kwargs: { enable_thinking: true } },
+          disable: { chat_template_kwargs: { enable_thinking: false } },
+        },
+      },
+    },
   },
   {
     modelName: 'kimi-k2-6',
@@ -26,6 +38,44 @@ const DEV_MODELS: BaseModel[] = [
     multimodal: true,
   },
 ]
+
+/**
+ * Per-endpoint enable/disable parameter blocks for thinking mode.
+ * Keyed by full endpoint path (e.g. "/v1/chat/completions", "/v1/responses").
+ * Each block is shallow-merged into the request body when the toggle is in
+ * the corresponding state.
+ */
+export type ReasoningEndpointParams = {
+  enable?: Record<string, unknown>
+  disable?: Record<string, unknown>
+}
+
+/**
+ * Reasoning capability descriptor returned by the controlplane.
+ *
+ * - `supportsEffort: true` — model accepts a `reasoning_effort` (chat
+ *   completions) or `reasoning.effort` (responses) parameter with low/medium/high.
+ * - `supportsToggle: true` — thinking mode can be turned on or off per request
+ *   via `params[endpoint].enable` / `params[endpoint].disable`.
+ * - `defaultEnabled` — initial state of the toggle when `supportsToggle` is true.
+ *
+ * The presence of a `reasoningConfig` object is itself the capability flag
+ * — there is no separate boolean.
+ */
+export type ReasoningConfig = {
+  supportsEffort?: boolean
+  supportsToggle?: boolean
+  defaultEnabled?: boolean
+  /**
+   * Optional translation table from the UI's effort vocabulary
+   * (low | medium | high) to the model's actual accepted values. Used when
+   * a model's chat template only accepts a non-standard set, e.g. DeepSeek V4
+   * which accepts only "high" and "max". When unset, the UI value is
+   * substituted verbatim (correct for OpenAI-style models like GPT-OSS).
+   */
+  effortMap?: Record<string, string>
+  params?: Record<string, ReasoningEndpointParams>
+}
 
 // Base model type with all possible properties
 export type BaseModel = {
@@ -44,7 +94,7 @@ export type BaseModel = {
   paid?: boolean
   multimodal?: boolean
   toolCalling?: boolean
-  reasoning?: boolean
+  reasoningConfig?: ReasoningConfig
   endpoint?: string
   /** Extra fields merged into the chat completion request body */
   requestParams?: Record<string, unknown>
