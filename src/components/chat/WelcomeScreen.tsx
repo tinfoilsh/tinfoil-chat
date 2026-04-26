@@ -9,6 +9,8 @@ import { CONSTANTS } from './constants'
 import { DataFlowDiagram } from './DataFlowDiagram'
 import {
   isReasoningModel,
+  supportsReasoningEffort,
+  supportsThinkingToggle,
   type ReasoningEffort,
 } from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
@@ -204,6 +206,8 @@ interface WelcomeScreenProps {
   onWebSearchToggle?: () => void
   reasoningEffort?: ReasoningEffort
   setReasoningEffort?: (effort: ReasoningEffort) => void
+  thinkingEnabled?: boolean
+  setThinkingEnabled?: (enabled: boolean) => void
   onOpenVerifier?: () => void
 }
 
@@ -229,6 +233,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   onWebSearchToggle,
   reasoningEffort,
   setReasoningEffort,
+  thinkingEnabled,
+  setThinkingEnabled,
   onOpenVerifier,
 }: WelcomeScreenProps) {
   const { user } = useUser()
@@ -515,22 +521,33 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                       </div>
                     ) : undefined
                   }
-                  reasoningSelectorButton={
-                    reasoningEffort &&
-                    setReasoningEffort &&
-                    handleLabelClick &&
-                    isReasoningModel(
-                      models?.find((m) => m.modelName === selectedModel),
-                    ) ? (
+                  reasoningSelectorButton={(() => {
+                    if (
+                      !reasoningEffort ||
+                      !setReasoningEffort ||
+                      !handleLabelClick ||
+                      thinkingEnabled === undefined ||
+                      !setThinkingEnabled
+                    )
+                      return undefined
+                    const m = models?.find(
+                      (mm) => mm.modelName === selectedModel,
+                    )
+                    if (!isReasoningModel(m)) return undefined
+                    return (
                       <ReasoningEffortSelector
+                        supportsEffort={supportsReasoningEffort(m)}
+                        supportsToggle={supportsThinkingToggle(m)}
                         reasoningEffort={reasoningEffort}
-                        onChange={setReasoningEffort}
+                        onEffortChange={setReasoningEffort}
+                        thinkingEnabled={thinkingEnabled}
+                        onThinkingEnabledChange={setThinkingEnabled}
                         isOpen={expandedLabel === 'reasoning'}
                         onToggle={() => handleLabelClick('reasoning', () => {})}
                         onClose={() => handleLabelClick('reasoning', () => {})}
                       />
-                    ) : undefined
-                  }
+                    )
+                  })()}
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={onWebSearchToggle}
                 />

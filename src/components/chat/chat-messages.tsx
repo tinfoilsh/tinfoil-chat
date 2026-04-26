@@ -46,6 +46,8 @@ type ChatMessagesProps = {
   onWebSearchToggle?: () => void
   reasoningEffort?: ReasoningEffort
   setReasoningEffort?: (effort: ReasoningEffort) => void
+  thinkingEnabled?: boolean
+  setThinkingEnabled?: (enabled: boolean) => void
   onOpenVerifier?: () => void
 }
 
@@ -215,6 +217,8 @@ export function ChatMessages({
   onWebSearchToggle,
   reasoningEffort,
   setReasoningEffort,
+  thinkingEnabled,
+  setThinkingEnabled,
   onOpenVerifier,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
@@ -318,6 +322,8 @@ export function ChatMessages({
             onWebSearchToggle={onWebSearchToggle}
             reasoningEffort={reasoningEffort}
             setReasoningEffort={setReasoningEffort}
+            thinkingEnabled={thinkingEnabled}
+            setThinkingEnabled={setThinkingEnabled}
             onOpenVerifier={onOpenVerifier}
           />
         </div>

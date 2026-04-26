@@ -26,6 +26,7 @@ interface UseSidebarChatProps {
   selectedModel: AIModel
   maxMessages: number
   reasoningEffort?: ReasoningEffort
+  thinkingEnabled?: boolean
   webSearchEnabled?: boolean
   piiCheckEnabled?: boolean
 }
@@ -81,6 +82,7 @@ export function useSidebarChat({
   selectedModel,
   maxMessages,
   reasoningEffort,
+  thinkingEnabled,
   webSearchEnabled,
   piiCheckEnabled,
 }: UseSidebarChatProps): UseSidebarChatReturn {
@@ -213,6 +215,7 @@ export function useSidebarChat({
             maxMessages,
             signal: controller.signal,
             reasoningEffort,
+            thinkingEnabled,
             webSearchEnabled,
             piiCheckEnabled,
           })
@@ -288,6 +291,7 @@ export function useSidebarChat({
       rules,
       maxMessages,
       reasoningEffort,
+      thinkingEnabled,
       webSearchEnabled,
       piiCheckEnabled,
     ],

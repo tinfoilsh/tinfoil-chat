@@ -2,6 +2,8 @@ import { ChatError } from '@/components/chat/chat-utils'
 import { CONSTANTS } from '@/components/chat/constants'
 import {
   isReasoningModel,
+  supportsReasoningEffort,
+  supportsThinkingToggle,
   type ReasoningEffort,
 } from '@/components/chat/hooks/use-reasoning-effort'
 import type { Message } from '@/components/chat/types'
@@ -10,6 +12,34 @@ import { shouldRetryTestFail } from '@/utils/dev-simulator'
 import { logError, logInfo } from '@/utils/error-handling'
 import { ChatQueryBuilder } from './chat-query-builder'
 import { getTinfoilClient } from './tinfoil-client'
+
+const CHAT_COMPLETIONS_ENDPOINT = '/v1/chat/completions'
+
+const EFFORT_PLACEHOLDER = '$EFFORT'
+
+/**
+ * Recursively clones an object, replacing any string equal to "$EFFORT" with
+ * the provided effort value. Used to splice the user-selected reasoning effort
+ * into the model's declarative `reasoningConfig.params[endpoint].enable` block
+ * without the inference layer needing to know which key the model expects it
+ * under (top-level `reasoning_effort`, nested `chat_template_kwargs`, etc.).
+ */
+function substituteEffort(value: unknown, effort: string): unknown {
+  if (typeof value === 'string') {
+    return value === EFFORT_PLACEHOLDER ? effort : value
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => substituteEffort(v, effort))
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = substituteEffort(v, effort)
+    }
+    return out
+  }
+  return value
+}
 
 function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -80,6 +110,7 @@ export interface SendChatStreamParams {
   maxMessages: number
   signal: AbortSignal
   reasoningEffort?: ReasoningEffort
+  thinkingEnabled?: boolean
   webSearchEnabled?: boolean
   piiCheckEnabled?: boolean
 }
@@ -96,6 +127,7 @@ export async function sendChatStream(
     maxMessages,
     signal,
     reasoningEffort,
+    thinkingEnabled,
     webSearchEnabled,
     piiCheckEnabled,
   } = params
@@ -249,8 +281,41 @@ export async function sendChatStream(
         messages,
         stream: true,
       }
-      if (isReasoningModel(model) && reasoningEffort) {
-        requestBody.reasoning_effort = reasoningEffort
+      if (isReasoningModel(model)) {
+        const endpointParams =
+          model.reasoningConfig?.params?.[CHAT_COMPLETIONS_ENDPOINT]
+        if (endpointParams) {
+          // Pick enable vs disable based on the toggle. Models that don't
+          // support a toggle always take the enable block.
+          const rawBlock = supportsThinkingToggle(model)
+            ? thinkingEnabled
+              ? endpointParams.enable
+              : endpointParams.disable
+            : endpointParams.enable
+          if (rawBlock) {
+            // The config may embed "$EFFORT" anywhere inside the block; we
+            // splice in the user-selected effort here. Each model declares
+            // exactly which request key its backend expects the effort under
+            // (top-level reasoning_effort, chat_template_kwargs, etc.).
+            // When the model's chat template only accepts a non-standard set
+            // of effort values (e.g. DeepSeek V4 accepts only "high"/"max"),
+            // an effortMap on the reasoningConfig translates the UI value
+            // before substitution.
+            const uiEffort =
+              supportsReasoningEffort(model) && reasoningEffort
+                ? reasoningEffort
+                : 'medium'
+            const effort =
+              model.reasoningConfig?.effortMap?.[uiEffort] ?? uiEffort
+            const block = substituteEffort(rawBlock, effort) as Record<
+              string,
+              unknown
+            >
+            for (const [key, value] of Object.entries(block)) {
+              requestBody[key] = value
+            }
+          }
+        }
       }
       if (webSearchEnabled) {
         requestBody.web_search_options = {}

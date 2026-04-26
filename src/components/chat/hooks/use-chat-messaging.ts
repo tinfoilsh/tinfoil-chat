@@ -50,6 +50,7 @@ interface UseChatMessagingProps {
   messagesEndRef: React.RefObject<HTMLDivElement>
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
+  thinkingEnabled?: boolean
   webSearchEnabled?: boolean
   piiCheckEnabled?: boolean
 }
@@ -91,6 +92,7 @@ export function useChatMessaging({
   messagesEndRef,
   scrollToBottom,
   reasoningEffort,
+  thinkingEnabled,
   webSearchEnabled,
   piiCheckEnabled,
 }: UseChatMessagingProps): UseChatMessagingReturn {
@@ -515,6 +517,7 @@ export function useChatMessaging({
           maxMessages,
           signal: controller.signal,
           reasoningEffort,
+          thinkingEnabled,
           webSearchEnabled,
           piiCheckEnabled,
         })
@@ -738,6 +741,7 @@ export function useChatMessaging({
       updateChatWithHistoryCheck,
       scrollToBottom,
       reasoningEffort,
+      thinkingEnabled,
       isProjectMode,
       activeProject,
       webSearchEnabled,
