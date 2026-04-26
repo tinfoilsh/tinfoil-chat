@@ -249,7 +249,7 @@ export async function sendChatStream(
         messages,
         stream: true,
       }
-      if (isReasoningModel(model.modelName) && reasoningEffort) {
+      if (isReasoningModel(model) && reasoningEffort) {
         requestBody.reasoning_effort = reasoningEffort
       }
       if (webSearchEnabled) {

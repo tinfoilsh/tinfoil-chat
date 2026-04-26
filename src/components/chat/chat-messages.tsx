@@ -6,6 +6,7 @@ import { LoadingDots } from '../loading-dots'
 import { ensureTimeline } from './ensure-timeline'
 import { CHAT_FONT_CLASSES, useChatFont } from './hooks/use-chat-font'
 import { useMaxMessages } from './hooks/use-max-messages'
+import type { ReasoningEffort } from './hooks/use-reasoning-effort'
 import { PrintableChat } from './PrintableChat'
 import { getRendererRegistry } from './renderers/client'
 import type { LabelType, Message } from './types'
@@ -43,6 +44,8 @@ type ChatMessagesProps = {
   showScrollButton?: boolean
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  reasoningEffort?: ReasoningEffort
+  setReasoningEffort?: (effort: ReasoningEffort) => void
   onOpenVerifier?: () => void
 }
 
@@ -210,6 +213,8 @@ export function ChatMessages({
   showScrollButton,
   webSearchEnabled,
   onWebSearchToggle,
+  reasoningEffort,
+  setReasoningEffort,
   onOpenVerifier,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
@@ -311,6 +316,8 @@ export function ChatMessages({
             handleLabelClick={handleLabelClick}
             webSearchEnabled={webSearchEnabled}
             onWebSearchToggle={onWebSearchToggle}
+            reasoningEffort={reasoningEffort}
+            setReasoningEffort={setReasoningEffort}
             onOpenVerifier={onOpenVerifier}
           />
         </div>

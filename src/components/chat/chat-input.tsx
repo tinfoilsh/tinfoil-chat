@@ -49,6 +49,7 @@ type ChatInputProps = {
   hasMessages?: boolean
   audioModel?: string
   modelSelectorButton?: React.ReactNode
+  reasoningSelectorButton?: React.ReactNode
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
   quote?: string | null
@@ -75,6 +76,7 @@ export function ChatInput({
   hasMessages,
   audioModel,
   modelSelectorButton,
+  reasoningSelectorButton,
   webSearchEnabled,
   onWebSearchToggle,
   quote,
@@ -975,6 +977,7 @@ export function ChatInput({
 
             <div className="flex items-center gap-2">
               {modelSelectorButton && <div>{modelSelectorButton}</div>}
+              {reasoningSelectorButton && <div>{reasoningSelectorButton}</div>}
               {isPremium && audioModel && (
                 <button
                   type="button"

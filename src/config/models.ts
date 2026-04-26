@@ -12,6 +12,7 @@ const DEV_MODELS: BaseModel[] = [
     type: 'chat',
     chat: true,
     multimodal: true,
+    reasoning: true,
     requestParams: { chat_template_kwargs: { enable_thinking: true } },
   },
   {
@@ -42,6 +43,8 @@ export type BaseModel = {
   chat?: boolean
   paid?: boolean
   multimodal?: boolean
+  toolCalling?: boolean
+  reasoning?: boolean
   endpoint?: string
   /** Extra fields merged into the chat completion request body */
   requestParams?: Record<string, unknown>

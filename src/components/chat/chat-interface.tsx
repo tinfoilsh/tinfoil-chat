@@ -88,10 +88,14 @@ import { DragProvider } from './drag-context'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useMaxMessages } from './hooks/use-max-messages'
-import { useReasoningEffort } from './hooks/use-reasoning-effort'
+import {
+  isReasoningModel,
+  useReasoningEffort,
+} from './hooks/use-reasoning-effort'
 import { useSidebarChat } from './hooks/use-sidebar-chat'
 import { ModelSelector } from './model-selector'
 import { QuoteSelectionPopover } from './quote-selection-popover'
+import { ReasoningEffortSelector } from './reasoning-effort-selector'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
@@ -2678,6 +2682,8 @@ export function ChatInterface({
                   showScrollButton={showScrollButton}
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
+                  reasoningEffort={reasoningEffort}
+                  setReasoningEffort={setReasoningEffort}
                   onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
                 />
               </div>
@@ -2779,6 +2785,23 @@ export function ChatInterface({
                             />
                           )}
                         </div>
+                      ) : undefined
+                    }
+                    reasoningSelectorButton={
+                      isReasoningModel(
+                        models.find((m) => m.modelName === selectedModel),
+                      ) ? (
+                        <ReasoningEffortSelector
+                          reasoningEffort={reasoningEffort}
+                          onChange={setReasoningEffort}
+                          isOpen={expandedLabel === 'reasoning'}
+                          onToggle={() =>
+                            handleLabelClick('reasoning', () => {})
+                          }
+                          onClose={() =>
+                            handleLabelClick('reasoning', () => {})
+                          }
+                        />
                       ) : undefined
                     }
                     webSearchEnabled={webSearchEnabled}
