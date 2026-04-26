@@ -78,6 +78,7 @@ const useLayoutEffect =
 
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
 import { UrlHashSettingsHandler } from '../url-hash-settings-handler'
+import { ArtifactSidebar } from './artifact-sidebar'
 import { AskSidebar } from './ask-sidebar'
 import { ChatInput } from './chat-input'
 import { ChatMessages } from './chat-messages'
@@ -85,6 +86,13 @@ import { ChatSidebar } from './chat-sidebar'
 import { CONSTANTS } from './constants'
 import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
+import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
+import { selectPendingInputToolCallFromChat } from './genui/pending-input-tool-call'
+import {
+  artifactDetailsEqual,
+  OPEN_ARTIFACT_PREVIEW_EVENT,
+  type ArtifactPreviewSidebarDetail,
+} from './genui/widgets/ArtifactPreview'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useMaxMessages } from './hooks/use-max-messages'
@@ -490,6 +498,15 @@ export function ChatInterface({
   // text. Nothing is persisted unless the user clicks "Open as chat".
   const [isAskSidebarOpen, setIsAskSidebarOpen] = useState(false)
 
+  // Artifact-sidebar state — opened when a `render_artifact_preview` inline
+  // card dispatches `OPEN_ARTIFACT_PREVIEW_EVENT` on the window.
+  const [isArtifactSidebarOpen, setIsArtifactSidebarOpen] = useState(false)
+  const [artifactSidebarWidth, setArtifactSidebarWidth] = useState<number>(
+    CONSTANTS.ARTIFACT_SIDEBAR_WIDTH_PX,
+  )
+  const [artifactPreview, setArtifactPreview] =
+    useState<ArtifactPreviewSidebarDetail | null>(null)
+
   // State for web search toggle (persisted in localStorage)
   const [webSearchEnabled, setWebSearchEnabled] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -732,6 +749,7 @@ export function ChatInterface({
     reloadChats,
     editMessage,
     regenerateMessage,
+    resolveInputToolCall,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
     localChatNotFound,
@@ -938,12 +956,16 @@ export function ChatInterface({
     if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
       if (
         isSidebarOpen &&
-        (isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen)
+        (isVerifierSidebarOpen ||
+          isSettingsModalOpen ||
+          isAskSidebarOpen ||
+          isArtifactSidebarOpen)
       ) {
         // Close right sidebars to prioritize left sidebar
         setIsVerifierSidebarOpen(false)
         setIsSettingsModalOpen(false)
         setIsAskSidebarOpen(false)
+        setIsArtifactSidebarOpen(false)
       }
     }
   }, [
@@ -952,7 +974,49 @@ export function ChatInterface({
     isVerifierSidebarOpen,
     isSettingsModalOpen,
     isAskSidebarOpen,
+    isArtifactSidebarOpen,
   ])
+
+  // Listen for `OPEN_ARTIFACT_PREVIEW_EVENT` dispatched by the
+  // `render_artifact_preview` inline card. Shows the artifact in the right
+  // slide-over and closes any other right-side panel so only one is visible.
+  useEffect(() => {
+    const handleOpenArtifactPreview = (
+      event: CustomEvent<ArtifactPreviewSidebarDetail>,
+    ) => {
+      if (!event.detail) return
+      // Toggle: clicking the inline card while its artifact is already open
+      // closes the sidebar instead of re-opening it.
+      setArtifactPreview((prev) => {
+        const sameArtifact =
+          prev !== null &&
+          isArtifactSidebarOpen &&
+          artifactDetailsEqual(prev, event.detail)
+        if (sameArtifact) {
+          setIsArtifactSidebarOpen(false)
+          return prev
+        }
+        setIsArtifactSidebarOpen(true)
+        setIsVerifierSidebarOpen(false)
+        setIsSettingsModalOpen(false)
+        setIsAskSidebarOpen(false)
+        if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+          setIsSidebarOpen(false)
+        }
+        return event.detail
+      })
+    }
+    window.addEventListener(
+      OPEN_ARTIFACT_PREVIEW_EVENT,
+      handleOpenArtifactPreview as EventListener,
+    )
+    return () => {
+      window.removeEventListener(
+        OPEN_ARTIFACT_PREVIEW_EVENT,
+        handleOpenArtifactPreview as EventListener,
+      )
+    }
+  }, [windowWidth, setIsSidebarOpen, isArtifactSidebarOpen])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   useEffect(() => {
@@ -1167,6 +1231,7 @@ export function ChatInterface({
       handleSetVerifierSidebarOpen(true)
       setIsSettingsModalOpen(false)
       setIsAskSidebarOpen(false)
+      setIsArtifactSidebarOpen(false)
       sidebarChat.reset()
     }
   }
@@ -1192,6 +1257,8 @@ export function ChatInterface({
       setSettingsInitialTab(undefined)
       setIsSettingsModalOpen(true)
       handleSetVerifierSidebarOpen(false)
+      setIsAskSidebarOpen(false)
+      setIsArtifactSidebarOpen(false)
       // If window is narrow, close left sidebar when opening settings
       if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
         setIsSidebarOpen(false)
@@ -2234,18 +2301,21 @@ export function ChatInterface({
         (isSidebarOpen ||
           isVerifierSidebarOpen ||
           isSettingsModalOpen ||
-          isAskSidebarOpen)
+          isAskSidebarOpen ||
+          isArtifactSidebarOpen)
       ) && (
         <div
           className="fixed top-4 z-50 flex gap-2 transition-all duration-300"
           style={{
             right:
               windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-                ? isAskSidebarOpen
-                  ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX + 24}px`
-                  : isVerifierSidebarOpen
-                    ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
-                    : '16px'
+                ? isArtifactSidebarOpen
+                  ? `${artifactSidebarWidth + 24}px`
+                  : isAskSidebarOpen
+                    ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX + 24}px`
+                    : isVerifierSidebarOpen
+                      ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX + 24}px`
+                      : '16px'
                 : '16px',
           }}
         >
@@ -2488,6 +2558,16 @@ export function ChatInterface({
         isDarkMode={isDarkMode}
       />
 
+      <ArtifactSidebar
+        isOpen={isArtifactSidebarOpen}
+        onClose={() => setIsArtifactSidebarOpen(false)}
+        artifact={artifactPreview}
+        isDarkMode={isDarkMode}
+        width={artifactSidebarWidth}
+        onWidthChange={setArtifactSidebarWidth}
+        isResizable={windowWidth >= CONSTANTS.MOBILE_BREAKPOINT}
+      />
+
       {/* Share Modal */}
       <ShareModalLazy
         isOpen={isShareModalOpen}
@@ -2498,7 +2578,10 @@ export function ChatInterface({
           isSidebarOpen && windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         isRightSidebarOpen={
-          (isVerifierSidebarOpen || isSettingsModalOpen || isAskSidebarOpen) &&
+          (isVerifierSidebarOpen ||
+            isSettingsModalOpen ||
+            isAskSidebarOpen ||
+            isArtifactSidebarOpen) &&
           windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
         }
         chatTitle={currentChat?.title}
@@ -2537,11 +2620,13 @@ export function ChatInterface({
         style={{
           right:
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
-              ? isAskSidebarOpen
-                ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX}px`
-                : isVerifierSidebarOpen
-                  ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
-                  : '0'
+              ? isArtifactSidebarOpen
+                ? `${artifactSidebarWidth}px`
+                : isAskSidebarOpen
+                  ? `${CONSTANTS.ASK_SIDEBAR_WIDTH_PX}px`
+                  : isVerifierSidebarOpen
+                    ? `${CONSTANTS.VERIFIER_SIDEBAR_WIDTH_PX}px`
+                    : '0'
               : '0',
           bottom: 0,
           left:
@@ -2596,6 +2681,7 @@ export function ChatInterface({
             onAsk={(text) => {
               setIsVerifierSidebarOpen(false)
               setIsSettingsModalOpen(false)
+              setIsArtifactSidebarOpen(false)
               if (
                 windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT &&
                 isSidebarOpen
@@ -2697,96 +2783,107 @@ export function ChatInterface({
                   paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
                 }}
               >
-                <form
-                  onSubmit={handleSubmit}
-                  className="pointer-events-auto relative mx-auto max-w-3xl px-1 md:px-8"
-                >
-                  <ChatInput
-                    input={input}
-                    setInput={setInput}
-                    handleSubmit={handleSubmit}
-                    loadingState={loadingState}
-                    cancelGeneration={cancelGeneration}
-                    inputRef={inputRef}
-                    handleInputFocus={handleInputFocus}
-                    inputMinHeight={inputMinHeight}
-                    isDarkMode={isDarkMode}
-                    handleDocumentUpload={handleFileUpload}
-                    processedDocuments={processedDocuments}
-                    removeDocument={removeDocument}
-                    isPremium={isPremium}
-                    quote={quote}
-                    onClearQuote={() => setQuote(null)}
-                    hasMessages={
-                      currentChat?.messages && currentChat.messages.length > 0
-                    }
-                    audioModel={
-                      (
-                        models.find(
-                          (m) => m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL,
-                        ) || models.find((m) => m.type === 'audio')
-                      )?.modelName
-                    }
-                    modelSelectorButton={
-                      models.length > 0 &&
-                      selectedModel &&
-                      handleModelSelect ? (
-                        <div className="relative">
-                          <button
-                            type="button"
-                            data-model-selector
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              handleLabelClick('model', () => {})
-                            }}
-                            className="flex items-center gap-1 text-content-secondary transition-colors hover:text-content-primary"
-                          >
-                            {(() => {
-                              const model = models.find(
-                                (m) => m.modelName === selectedModel,
-                              )
-                              if (!model) return null
-                              return (
-                                <>
-                                  <span className="text-xs font-medium">
-                                    {model.name}
-                                  </span>
-                                  <svg
-                                    className="h-3 w-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M19 9l-7 7-7-7"
-                                    />
-                                  </svg>
-                                </>
-                              )
-                            })()}
-                          </button>
+                {selectPendingInputToolCallFromChat(currentChat) ? (
+                  <div className="pointer-events-auto relative mx-auto max-w-3xl rounded-xl border border-border-subtle bg-surface-card p-3 px-1 md:px-8">
+                    <GenUIInputAreaRenderer
+                      pending={selectPendingInputToolCallFromChat(currentChat)!}
+                      isDarkMode={isDarkMode}
+                      onResolve={resolveInputToolCall}
+                    />
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleSubmit}
+                    className="pointer-events-auto relative mx-auto max-w-3xl px-1 md:px-8"
+                  >
+                    <ChatInput
+                      input={input}
+                      setInput={setInput}
+                      handleSubmit={handleSubmit}
+                      loadingState={loadingState}
+                      cancelGeneration={cancelGeneration}
+                      inputRef={inputRef}
+                      handleInputFocus={handleInputFocus}
+                      inputMinHeight={inputMinHeight}
+                      isDarkMode={isDarkMode}
+                      handleDocumentUpload={handleFileUpload}
+                      processedDocuments={processedDocuments}
+                      removeDocument={removeDocument}
+                      isPremium={isPremium}
+                      quote={quote}
+                      onClearQuote={() => setQuote(null)}
+                      hasMessages={
+                        currentChat?.messages && currentChat.messages.length > 0
+                      }
+                      audioModel={
+                        (
+                          models.find(
+                            (m) =>
+                              m.modelName === CONSTANTS.DEFAULT_AUDIO_MODEL,
+                          ) || models.find((m) => m.type === 'audio')
+                        )?.modelName
+                      }
+                      modelSelectorButton={
+                        models.length > 0 &&
+                        selectedModel &&
+                        handleModelSelect ? (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              data-model-selector
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleLabelClick('model', () => {})
+                              }}
+                              className="flex items-center gap-1 text-content-secondary transition-colors hover:text-content-primary"
+                            >
+                              {(() => {
+                                const model = models.find(
+                                  (m) => m.modelName === selectedModel,
+                                )
+                                if (!model) return null
+                                return (
+                                  <>
+                                    <span className="text-xs font-medium">
+                                      {model.name}
+                                    </span>
+                                    <svg
+                                      className="h-3 w-3"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 9l-7 7-7-7"
+                                      />
+                                    </svg>
+                                  </>
+                                )
+                              })()}
+                            </button>
 
-                          {expandedLabel === 'model' && (
-                            <ModelSelector
-                              selectedModel={selectedModel}
-                              onSelect={handleModelSelect}
-                              isDarkMode={isDarkMode}
-                              models={models}
-                            />
-                          )}
-                        </div>
-                      ) : undefined
-                    }
-                    webSearchEnabled={webSearchEnabled}
-                    onWebSearchToggle={() =>
-                      setWebSearchEnabled((prev) => !prev)
-                    }
-                  />
-                </form>
+                            {expandedLabel === 'model' && (
+                              <ModelSelector
+                                selectedModel={selectedModel}
+                                onSelect={handleModelSelect}
+                                isDarkMode={isDarkMode}
+                                models={models}
+                              />
+                            )}
+                          </div>
+                        ) : undefined
+                      }
+                      webSearchEnabled={webSearchEnabled}
+                      onWebSearchToggle={() =>
+                        setWebSearchEnabled((prev) => !prev)
+                      }
+                    />
+                  </form>
+                )}
 
                 {/* Scroll to bottom button - absolutely positioned in parent */}
                 {showScrollButton && currentChat?.messages?.length > 0 && (

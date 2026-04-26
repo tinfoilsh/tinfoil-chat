@@ -1,5 +1,6 @@
 import { ChatError } from '@/components/chat/chat-utils'
 import { CONSTANTS } from '@/components/chat/constants'
+import { buildGenUIToolSchemas } from '@/components/chat/genui/registry'
 import {
   isReasoningModel,
   type ReasoningEffort,
@@ -82,6 +83,12 @@ export interface SendChatStreamParams {
   reasoningEffort?: ReasoningEffort
   webSearchEnabled?: boolean
   piiCheckEnabled?: boolean
+  /**
+   * Include GenUI tool definitions in the request so the model can emit
+   * render_* tool calls. Internal utilities (title gen, memory extraction,
+   * etc.) should pass `false` to avoid steering those paths toward tools.
+   */
+  genUIEnabled?: boolean
 }
 
 export async function sendChatStream(
@@ -98,7 +105,10 @@ export async function sendChatStream(
     reasoningEffort,
     webSearchEnabled,
     piiCheckEnabled,
+    genUIEnabled,
   } = params
+
+  const genUITools = genUIEnabled ? buildGenUIToolSchemas() : []
 
   if (model.modelName === 'dev-simulator') {
     const simulatorUrl = '/api/dev/simulator'
@@ -108,6 +118,7 @@ export async function sendChatStream(
       rules,
       messages: updatedMessages,
       maxMessages,
+      includeGenUIHint: genUIEnabled,
     })
 
     // Get the last user message for retry test check
@@ -214,6 +225,7 @@ export async function sendChatStream(
     rules,
     messages: updatedMessages,
     maxMessages,
+    includeGenUIHint: genUIEnabled,
   })
 
   let lastError: unknown = null
@@ -258,6 +270,10 @@ export async function sendChatStream(
       if (piiCheckEnabled) {
         requestBody.pii_check_options = {}
       }
+      if (genUITools.length > 0) {
+        requestBody.tools = genUITools
+        requestBody.tool_choice = 'auto'
+      }
       // Apply model-specific params first, then let our explicit fields win.
       // This prevents requestParams from accidentally overwriting security-
       // sensitive fields like web_search_options or pii_check_options.
@@ -270,6 +286,8 @@ export async function sendChatStream(
           'reasoning_effort',
           'web_search_options',
           'pii_check_options',
+          'tools',
+          'tool_choice',
         ])
         for (const [key, value] of Object.entries(model.requestParams)) {
           if (!reserved.has(key)) {
