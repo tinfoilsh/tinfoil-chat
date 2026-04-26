@@ -7,7 +7,12 @@ import { BiSolidLock } from 'react-icons/bi'
 import { ChatInput } from './chat-input'
 import { CONSTANTS } from './constants'
 import { DataFlowDiagram } from './DataFlowDiagram'
+import {
+  isReasoningModel,
+  type ReasoningEffort,
+} from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
+import { ReasoningEffortSelector } from './reasoning-effort-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
 
@@ -197,6 +202,8 @@ interface WelcomeScreenProps {
   ) => void
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
+  reasoningEffort?: ReasoningEffort
+  setReasoningEffort?: (effort: ReasoningEffort) => void
   onOpenVerifier?: () => void
 }
 
@@ -220,6 +227,8 @@ export const WelcomeScreen = memo(function WelcomeScreen({
   handleLabelClick,
   webSearchEnabled,
   onWebSearchToggle,
+  reasoningEffort,
+  setReasoningEffort,
   onOpenVerifier,
 }: WelcomeScreenProps) {
   const { user } = useUser()
@@ -504,6 +513,22 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                           />
                         )}
                       </div>
+                    ) : undefined
+                  }
+                  reasoningSelectorButton={
+                    reasoningEffort &&
+                    setReasoningEffort &&
+                    handleLabelClick &&
+                    isReasoningModel(
+                      models?.find((m) => m.modelName === selectedModel),
+                    ) ? (
+                      <ReasoningEffortSelector
+                        reasoningEffort={reasoningEffort}
+                        onChange={setReasoningEffort}
+                        isOpen={expandedLabel === 'reasoning'}
+                        onToggle={() => handleLabelClick('reasoning', () => {})}
+                        onClose={() => handleLabelClick('reasoning', () => {})}
+                      />
                     ) : undefined
                   }
                   webSearchEnabled={webSearchEnabled}
