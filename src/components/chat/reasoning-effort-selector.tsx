@@ -1,5 +1,7 @@
 import { cn } from '@/components/ui/utils'
-import { GiGearStickPattern } from 'react-icons/gi'
+import { ChevronDownIcon } from '@heroicons/react/24/outline'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { PiLightbulbFilament } from 'react-icons/pi'
 import type { ReasoningEffort } from './hooks/use-reasoning-effort'
 
 const EFFORT_OPTIONS: {
@@ -7,9 +9,9 @@ const EFFORT_OPTIONS: {
   label: string
   description: string
 }[] = [
-  { value: 'low', label: 'Low', description: 'Quick responses' },
-  { value: 'medium', label: 'Medium', description: 'Balanced reasoning' },
   { value: 'high', label: 'High', description: 'Deep thinking' },
+  { value: 'medium', label: 'Medium', description: 'Balanced reasoning' },
+  { value: 'low', label: 'Low', description: 'Quick responses' },
 ]
 
 type ReasoningEffortSelectorProps = {
@@ -24,6 +26,8 @@ type ReasoningEffortSelectorProps = {
   isOpen: boolean
   onToggle: () => void
   onClose: () => void
+  /** Preferred dropdown direction; flips automatically when space is tight. */
+  preferredPosition?: 'above' | 'below'
 }
 
 export function ReasoningEffortSelector({
@@ -36,13 +40,14 @@ export function ReasoningEffortSelector({
   isOpen,
   onToggle,
   onClose,
+  preferredPosition = 'above',
 }: ReasoningEffortSelectorProps) {
   if (!supportsEffort && !supportsToggle) {
     return null
   }
 
-  // Toggle-only models render as a single pill that flips state on click;
-  // there is no popover to open.
+  // Toggle-only models render as a single icon-only button that flips state
+  // on click; there is no popover to open.
   if (supportsToggle && !supportsEffort) {
     return (
       <button
@@ -54,31 +59,29 @@ export function ReasoningEffortSelector({
           onThinkingEnabledChange(!thinkingEnabled)
         }}
         className={cn(
-          'flex items-center gap-1 transition-colors',
+          'flex items-center rounded-md px-3 py-1 transition-colors',
           thinkingEnabled
             ? 'text-content-primary'
             : 'text-content-secondary hover:text-content-primary',
         )}
         title={thinkingEnabled ? 'Thinking on' : 'Thinking off'}
+        aria-label={thinkingEnabled ? 'Thinking on' : 'Thinking off'}
       >
-        <GiGearStickPattern className="h-4 w-4" />
-        <span className="text-xs font-medium">
-          {thinkingEnabled ? 'Thinking' : 'No thinking'}
-        </span>
+        <ReasoningIcon active={thinkingEnabled} />
       </button>
     )
   }
 
-  // Effort-supporting models render a button that opens a popover. When the
-  // model also supports a toggle, the popover includes an "Off" option.
+  // Effort-supporting models render an icon button that opens a popover.
+  // When the model also supports a toggle, the popover includes an "Off"
+  // option. A chevron next to the lightbulb icon signals the dropdown;
+  // the active effort is surfaced via the popover's row highlighting.
   const currentEffort =
     EFFORT_OPTIONS.find((o) => o.value === reasoningEffort) ?? EFFORT_OPTIONS[1]
-  const buttonLabel =
-    supportsToggle && !thinkingEnabled ? 'Off' : currentEffort.label
-  const buttonTitle =
-    supportsToggle && !thinkingEnabled
-      ? 'Thinking off'
-      : `Reasoning effort: ${currentEffort.label}`
+  const isThinkingActive = !supportsToggle || thinkingEnabled
+  const buttonTitle = isThinkingActive
+    ? `Reasoning effort: ${currentEffort.label}`
+    : 'Thinking off'
 
   return (
     <div className="relative">
@@ -90,86 +93,257 @@ export function ReasoningEffortSelector({
           e.stopPropagation()
           onToggle()
         }}
-        className="flex items-center gap-1 text-content-secondary transition-colors hover:text-content-primary"
+        className={cn(
+          'flex items-center gap-0.5 rounded-md px-3 py-1 transition-colors',
+          isThinkingActive
+            ? 'text-content-primary'
+            : 'text-content-secondary hover:text-content-primary',
+        )}
         title={buttonTitle}
+        aria-label={buttonTitle}
       >
-        <GiGearStickPattern className="h-4 w-4" />
-        <span className="text-xs font-medium">{buttonLabel}</span>
-        <svg
-          className="h-3 w-3"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        <ReasoningIcon active={isThinkingActive} />
+        <ChevronDownIcon
+          className={cn(
+            'h-3 w-3 transition-transform',
+            isOpen ? 'rotate-180' : '',
+          )}
+          aria-hidden="true"
+        />
       </button>
 
       {isOpen && (
-        <div
-          data-reasoning-menu
-          className="absolute bottom-full z-50 mb-2 w-[200px] overflow-hidden rounded-lg border border-border-subtle bg-surface-chat p-1 font-aeonik-fono text-content-secondary shadow-lg"
-        >
-          {supportsToggle && (
-            <button
-              type="button"
-              className={cn(
-                'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
-                !thinkingEnabled
-                  ? 'border-border-subtle bg-surface-card text-content-primary'
-                  : 'border-transparent hover:bg-surface-card/70',
-              )}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onThinkingEnabledChange(false)
-                onClose()
-              }}
-            >
-              <span className="font-medium">Off</span>
-              <span className="text-xs text-content-muted">
-                Disable thinking mode
-              </span>
-            </button>
-          )}
-          {EFFORT_OPTIONS.map((option) => {
-            const isActive =
-              (!supportsToggle || thinkingEnabled) &&
-              reasoningEffort === option.value
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={cn(
-                  'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
-                  isActive
-                    ? 'border-border-subtle bg-surface-card text-content-primary'
-                    : 'border-transparent hover:bg-surface-card/70',
-                )}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (supportsToggle && !thinkingEnabled) {
-                    onThinkingEnabledChange(true)
-                  }
-                  onEffortChange(option.value)
-                  onClose()
-                }}
-              >
-                <span className="font-medium">{option.label}</span>
-                <span className="text-xs text-content-muted">
-                  {option.description}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+        <ReasoningPopover
+          supportsToggle={supportsToggle}
+          thinkingEnabled={thinkingEnabled}
+          reasoningEffort={reasoningEffort}
+          onEffortChange={onEffortChange}
+          onThinkingEnabledChange={onThinkingEnabledChange}
+          onClose={onClose}
+          preferredPosition={preferredPosition}
+        />
       )}
     </div>
+  )
+}
+
+type ReasoningPopoverProps = {
+  supportsToggle: boolean
+  thinkingEnabled: boolean
+  reasoningEffort: ReasoningEffort
+  onEffortChange: (effort: ReasoningEffort) => void
+  onThinkingEnabledChange: (enabled: boolean) => void
+  onClose: () => void
+  preferredPosition: 'above' | 'below'
+}
+
+function ReasoningPopover({
+  supportsToggle,
+  thinkingEnabled,
+  reasoningEffort,
+  onEffortChange,
+  onThinkingEnabledChange,
+  onClose,
+  preferredPosition,
+}: ReasoningPopoverProps) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  const isScrollingRef = useRef(false)
+
+  // Mirrors model-selector positioning: honor the requested direction but
+  // flip when there isn't enough vertical space, so the menu stays visible
+  // inside the viewport on mobile when the keyboard is up.
+  const [dynamicStyles, setDynamicStyles] = useState<{
+    maxHeight: string
+    bottom?: string
+    top?: string
+  }>({
+    maxHeight: '400px',
+    ...(preferredPosition === 'below' ? { top: '100%' } : { bottom: '100%' }),
+  })
+
+  useLayoutEffect(() => {
+    let animationFrameId: number | null = null
+
+    const calculatePosition = () => {
+      const menuElement = menuRef.current
+      if (!menuElement) return
+
+      const buttonElement = menuElement.parentElement
+      if (!buttonElement) return
+
+      const buttonRect = buttonElement.getBoundingClientRect()
+
+      const spaceAbove = buttonRect.top - 20
+      const spaceBelow = window.innerHeight - buttonRect.bottom - 20
+
+      let useAbove = preferredPosition === 'above'
+
+      if (
+        preferredPosition === 'above' &&
+        spaceAbove < 150 &&
+        spaceBelow > 150
+      ) {
+        useAbove = false
+      } else if (
+        preferredPosition === 'below' &&
+        spaceBelow < 150 &&
+        spaceAbove > 150
+      ) {
+        useAbove = true
+      }
+
+      const isMobile = window.innerWidth < 768
+      const maxHeightCap = isMobile ? 300 : window.innerHeight * 0.7
+
+      if (useAbove) {
+        setDynamicStyles({
+          maxHeight: `${Math.min(Math.max(0, spaceAbove), maxHeightCap)}px`,
+          bottom: '100%',
+          top: undefined,
+        })
+      } else {
+        setDynamicStyles({
+          maxHeight: `${Math.min(Math.max(0, spaceBelow), maxHeightCap)}px`,
+          top: '100%',
+          bottom: undefined,
+        })
+      }
+    }
+
+    const throttledCalculatePosition = () => {
+      if (animationFrameId !== null) return
+      animationFrameId = requestAnimationFrame(() => {
+        calculatePosition()
+        animationFrameId = null
+      })
+    }
+
+    calculatePosition()
+
+    window.addEventListener('resize', throttledCalculatePosition)
+    window.addEventListener('scroll', throttledCalculatePosition)
+
+    return () => {
+      if (animationFrameId !== null) cancelAnimationFrame(animationFrameId)
+      window.removeEventListener('resize', throttledCalculatePosition)
+      window.removeEventListener('scroll', throttledCalculatePosition)
+    }
+  }, [preferredPosition])
+
+  return (
+    <div
+      ref={menuRef}
+      data-reasoning-menu
+      className={cn(
+        'absolute z-50 w-[200px] overflow-y-auto rounded-lg border border-border-subtle bg-surface-chat p-1 font-aeonik-fono text-content-secondary shadow-lg',
+        dynamicStyles.bottom ? 'mb-2' : 'mt-2',
+      )}
+      style={{
+        maxHeight: dynamicStyles.maxHeight,
+        ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
+        ...(dynamicStyles.top && { top: dynamicStyles.top }),
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation()
+        isScrollingRef.current = false
+      }}
+      onTouchMove={(e) => {
+        e.stopPropagation()
+        isScrollingRef.current = true
+      }}
+      onTouchEnd={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {EFFORT_OPTIONS.map((option) => {
+        const isActive =
+          (!supportsToggle || thinkingEnabled) &&
+          reasoningEffort === option.value
+        const handleSelect = () => {
+          if (supportsToggle && !thinkingEnabled) {
+            onThinkingEnabledChange(true)
+          }
+          onEffortChange(option.value)
+          onClose()
+        }
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={cn(
+              'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
+              isActive
+                ? 'border-border-subtle bg-surface-card text-content-primary'
+                : 'border-transparent hover:bg-surface-card/70',
+            )}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleSelect()
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+              if (isScrollingRef.current) return
+              e.preventDefault()
+              handleSelect()
+            }}
+          >
+            <span className="font-medium">{option.label}</span>
+            <span className="text-xs text-content-muted">
+              {option.description}
+            </span>
+          </button>
+        )
+      })}
+      {supportsToggle && (
+        <button
+          type="button"
+          className={cn(
+            'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
+            !thinkingEnabled
+              ? 'border-border-subtle bg-surface-card text-content-primary'
+              : 'border-transparent hover:bg-surface-card/70',
+          )}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onThinkingEnabledChange(false)
+            onClose()
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation()
+            if (isScrollingRef.current) return
+            e.preventDefault()
+            onThinkingEnabledChange(false)
+            onClose()
+          }}
+        >
+          <span className="font-medium">Off</span>
+          <span className="text-xs text-content-muted">
+            Disable thinking mode
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Lightbulb glyph used as the trigger for the reasoning selector. When
+ * `active` is false (thinking is off), a diagonal stroke is overlaid on
+ * top of the icon to indicate the disabled state — the slash is drawn
+ * manually as a rotated absolutely-positioned bar that adapts to the
+ * current text color in both light and dark themes.
+ */
+function ReasoningIcon({ active }: { active: boolean }) {
+  return (
+    <span className="relative inline-flex h-4 w-4 items-center justify-center">
+      <PiLightbulbFilament className="h-4 w-4" />
+      {!active && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-[18px] -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full bg-current"
+        />
+      )}
+    </span>
   )
 }

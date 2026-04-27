@@ -545,6 +545,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                         isOpen={expandedLabel === 'reasoning'}
                         onToggle={() => handleLabelClick('reasoning', () => {})}
                         onClose={() => handleLabelClick('reasoning', () => {})}
+                        preferredPosition="below"
                       />
                     )
                   })()}
