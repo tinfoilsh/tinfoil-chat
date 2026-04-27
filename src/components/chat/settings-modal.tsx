@@ -43,6 +43,7 @@ import { SignInButton, useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
   ArrowUpTrayIcon,
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
@@ -77,6 +78,8 @@ import { normalizeChatFont, type ChatFont } from './hooks/use-chat-font'
 import type { Chat } from './types'
 
 const CHARS = '0123456789ABCDEF!@#$%^&*()_+<>?/'
+
+const DASHBOARD_URL = 'https://dash.tinfoil.sh'
 
 const ScrambleText = ({
   text,
@@ -3618,6 +3621,38 @@ ${encryptionKey.replace('key_', '')}
                             {upgradeError}
                           </p>
                         )}
+                      </div>
+
+                      {/* Account Management */}
+                      <div className="space-y-3">
+                        <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                          Account Management
+                        </h3>
+                        <a
+                          href={DASHBOARD_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            'flex w-full items-start justify-between rounded-lg border border-border-subtle p-4 transition-colors hover:bg-surface-chat',
+                            isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                          )}
+                        >
+                          <div className="text-left">
+                            <div className="flex items-center gap-3">
+                              <UserCircleIcon className="h-5 w-5 text-content-muted" />
+                              <div className="font-aeonik text-sm font-medium text-content-primary">
+                                Dashboard
+                              </div>
+                            </div>
+                            <div className="mt-1 font-aeonik-fono text-xs text-content-muted">
+                              Manage your account at dash.tinfoil.sh
+                            </div>
+                          </div>
+                          <ArrowTopRightOnSquareIcon
+                            className="h-4 w-4 text-content-muted"
+                            aria-hidden="true"
+                          />
+                        </a>
                       </div>
                     </>
                   ) : (
