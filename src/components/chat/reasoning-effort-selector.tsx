@@ -46,42 +46,22 @@ export function ReasoningEffortSelector({
     return null
   }
 
-  // Toggle-only models render as a single icon-only button that flips state
-  // on click; there is no popover to open.
-  if (supportsToggle && !supportsEffort) {
-    return (
-      <button
-        type="button"
-        data-reasoning-selector
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          onThinkingEnabledChange(!thinkingEnabled)
-        }}
-        className={cn(
-          'flex items-center rounded-md px-3 py-1 transition-colors',
-          thinkingEnabled
-            ? 'text-content-primary'
-            : 'text-content-secondary hover:text-content-primary',
-        )}
-        title={thinkingEnabled ? 'Thinking on' : 'Thinking off'}
-        aria-label={thinkingEnabled ? 'Thinking on' : 'Thinking off'}
-      >
-        <ReasoningIcon active={thinkingEnabled} />
-      </button>
-    )
-  }
-
-  // Effort-supporting models render an icon button that opens a popover.
-  // When the model also supports a toggle, the popover includes an "Off"
-  // option. A chevron next to the lightbulb icon signals the dropdown;
-  // the active effort is surfaced via the popover's row highlighting.
+  // Both effort-supporting and toggle-only models render an icon button that
+  // opens a popover. Effort models list the graded options; toggle-only models
+  // expose On/Off rows. When a model supports both, the popover includes an
+  // additional "Off" option below the effort rows. A chevron next to the
+  // lightbulb icon signals the dropdown; the active selection is surfaced via
+  // the popover's row highlighting.
   const currentEffort =
     EFFORT_OPTIONS.find((o) => o.value === reasoningEffort) ?? EFFORT_OPTIONS[1]
   const isThinkingActive = !supportsToggle || thinkingEnabled
-  const buttonTitle = isThinkingActive
-    ? `Reasoning effort: ${currentEffort.label}`
-    : 'Thinking off'
+  const buttonTitle = supportsEffort
+    ? isThinkingActive
+      ? `Reasoning effort: ${currentEffort.label}`
+      : 'Thinking off'
+    : isThinkingActive
+      ? 'Thinking on'
+      : 'Thinking off'
 
   return (
     <div className="relative">
@@ -114,6 +94,7 @@ export function ReasoningEffortSelector({
 
       {isOpen && (
         <ReasoningPopover
+          supportsEffort={supportsEffort}
           supportsToggle={supportsToggle}
           thinkingEnabled={thinkingEnabled}
           reasoningEffort={reasoningEffort}
@@ -128,6 +109,7 @@ export function ReasoningEffortSelector({
 }
 
 type ReasoningPopoverProps = {
+  supportsEffort: boolean
   supportsToggle: boolean
   thinkingEnabled: boolean
   reasoningEffort: ReasoningEffort
@@ -138,6 +120,7 @@ type ReasoningPopoverProps = {
 }
 
 function ReasoningPopover({
+  supportsEffort,
   supportsToggle,
   thinkingEnabled,
   reasoningEffort,
@@ -254,46 +237,76 @@ function ReasoningPopover({
       onTouchEnd={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {EFFORT_OPTIONS.map((option) => {
-        const isActive =
-          (!supportsToggle || thinkingEnabled) &&
-          reasoningEffort === option.value
-        const handleSelect = () => {
-          if (supportsToggle && !thinkingEnabled) {
-            onThinkingEnabledChange(true)
+      {supportsEffort &&
+        EFFORT_OPTIONS.map((option) => {
+          const isActive =
+            (!supportsToggle || thinkingEnabled) &&
+            reasoningEffort === option.value
+          const handleSelect = () => {
+            if (supportsToggle && !thinkingEnabled) {
+              onThinkingEnabledChange(true)
+            }
+            onEffortChange(option.value)
+            onClose()
           }
-          onEffortChange(option.value)
-          onClose()
-        }
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={cn(
-              'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
-              isActive
-                ? 'border-border-subtle bg-surface-card text-content-primary'
-                : 'border-transparent hover:bg-surface-card/70',
-            )}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              handleSelect()
-            }}
-            onTouchEnd={(e) => {
-              e.stopPropagation()
-              if (isScrollingRef.current) return
-              e.preventDefault()
-              handleSelect()
-            }}
-          >
-            <span className="font-medium">{option.label}</span>
-            <span className="text-xs text-content-muted">
-              {option.description}
-            </span>
-          </button>
-        )
-      })}
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={cn(
+                'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
+                isActive
+                  ? 'border-border-subtle bg-surface-card text-content-primary'
+                  : 'border-transparent hover:bg-surface-card/70',
+              )}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleSelect()
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation()
+                if (isScrollingRef.current) return
+                e.preventDefault()
+                handleSelect()
+              }}
+            >
+              <span className="font-medium">{option.label}</span>
+              <span className="text-xs text-content-muted">
+                {option.description}
+              </span>
+            </button>
+          )
+        })}
+      {supportsToggle && !supportsEffort && (
+        <button
+          type="button"
+          className={cn(
+            'flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm transition-colors',
+            thinkingEnabled
+              ? 'border-border-subtle bg-surface-card text-content-primary'
+              : 'border-transparent hover:bg-surface-card/70',
+          )}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onThinkingEnabledChange(true)
+            onClose()
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation()
+            if (isScrollingRef.current) return
+            e.preventDefault()
+            onThinkingEnabledChange(true)
+            onClose()
+          }}
+        >
+          <span className="font-medium">On</span>
+          <span className="text-xs text-content-muted">
+            Enable thinking mode
+          </span>
+        </button>
+      )}
       {supportsToggle && (
         <button
           type="button"
