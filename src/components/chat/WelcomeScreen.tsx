@@ -492,7 +492,7 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                                   {model.name}
                                 </span>
                                 <svg
-                                  className="h-3 w-3"
+                                  className={`h-3 w-3 transition-transform ${expandedLabel === 'model' ? 'rotate-180' : ''}`}
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
