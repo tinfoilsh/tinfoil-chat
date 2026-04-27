@@ -354,7 +354,7 @@ function ReasoningIcon({ active }: { active: boolean }) {
       {!active && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 h-[2px] w-[18px] -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full bg-current"
+          className="pointer-events-none absolute left-1/2 top-1/2 h-px w-[18px] -translate-x-1/2 -translate-y-1/2 -rotate-45 rounded-full bg-current"
         />
       )}
     </span>
