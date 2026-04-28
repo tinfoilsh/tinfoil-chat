@@ -237,6 +237,7 @@ export function SettingsModal({
   const [isKeyVisible, setIsKeyVisible] = useState(false)
   const [isSettingUpPasskey, setIsSettingUpPasskey] = useState(false)
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false)
   const [isEncryptionKeyOpen, setIsEncryptionKeyOpen] = useState(false)
   const [primaryKeyMode, setPrimaryKeyMode] = useState<
@@ -934,6 +935,24 @@ export function SettingsModal({
       setBillingLoading(false)
     }
   }, [getToken])
+
+  const handleSignOut = useCallback(async () => {
+    setIsSigningOut(true)
+    try {
+      await signOut()
+    } catch (error) {
+      logError('Sign out failed', error, {
+        component: 'SettingsModal',
+        action: 'handleSignOut',
+      })
+    } finally {
+      // Always reset the flag so the button is re-enabled — on success
+      // the component typically unmounts before this matters, and on
+      // failure the user can retry instead of being stuck on a
+      // permanently-disabled control.
+      setIsSigningOut(false)
+    }
+  }, [signOut])
 
   // Import handlers
   const generateChatId = (createdAt?: Date) => {
@@ -3517,18 +3536,23 @@ ${encryptionKey.replace('key_', '')}
                               if (isLocalOnlyModeEnabled()) {
                                 setShowSignOutConfirm(true)
                               } else {
-                                signOut()
+                                void handleSignOut()
                               }
                             }}
+                            disabled={isSigningOut}
                             className={cn(
-                              'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                              'flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                               'w-full border md:w-auto md:border-0',
+                              'disabled:cursor-not-allowed disabled:opacity-70',
                               isDarkMode
                                 ? 'border-red-500/30 bg-red-950/20 text-red-400 hover:bg-red-950/40 md:bg-transparent md:hover:bg-red-500/10'
                                 : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100 md:bg-transparent md:text-red-500 md:hover:bg-red-500/10',
                             )}
                           >
-                            Sign out
+                            {isSigningOut && (
+                              <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                            )}
+                            {isSigningOut ? 'Signing out...' : 'Sign out'}
                           </button>
                         </div>
                       </div>
@@ -3719,16 +3743,21 @@ ${encryptionKey.replace('key_', '')}
               <button
                 onClick={() => {
                   setShowSignOutConfirm(false)
-                  signOut()
+                  void handleSignOut()
                 }}
+                disabled={isSigningOut}
                 className={cn(
-                  'flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors',
+                  'flex flex-1 items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors',
+                  'disabled:cursor-not-allowed disabled:opacity-70',
                   isDarkMode
                     ? 'border-red-500/30 bg-red-950/30 text-red-400 hover:bg-red-950/50'
                     : 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100',
                 )}
               >
-                Sign Out
+                {isSigningOut && (
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                )}
+                {isSigningOut ? 'Signing out...' : 'Sign Out'}
               </button>
             </div>
           </div>
