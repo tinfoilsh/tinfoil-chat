@@ -22,6 +22,7 @@ let clientInstance: TinfoilAI | OpenAI | null = null
 let lastSessionToken: string | null = null
 let cachedSessionToken: string | null = null
 let cachedSessionTokenExpiresAt: number | null = null
+let cachedSessionTokenWasAuthenticated = false
 let cachedRateLimit: RateLimitInfo | null = null
 let remainingBeforeRequest: number | null = null
 let refreshInFlight: Promise<void> | null = null
@@ -37,17 +38,6 @@ async function fetchSessionToken(): Promise<string> {
     return DEV_API_KEY
   }
 
-  if (cachedSessionToken) {
-    const isExpired =
-      cachedSessionTokenExpiresAt !== null &&
-      Date.now() > cachedSessionTokenExpiresAt - SESSION_TOKEN_EXPIRY_BUFFER_MS
-    if (!isExpired) {
-      return cachedSessionToken
-    }
-    cachedSessionToken = null
-    cachedSessionTokenExpiresAt = null
-  }
-
   // If the user was previously signed in, wait for Clerk to initialize
   // the auth token manager before fetching — otherwise we'd get an
   // anonymous free-tier key that gets cached until expiry.
@@ -59,12 +49,14 @@ async function fetchSessionToken(): Promise<string> {
     await authTokenManager.waitForInit(AUTH_INIT_WAIT_MS)
   }
 
-  // Build request headers: include auth if signed in, omit for anonymous users
-  const headers: Record<string, string> = {}
+  // Resolve the auth bearer (if any) up front so the cache-validity
+  // check and the actual request use the same authenticated/anonymous
+  // decision.  This avoids a stale-cache loop when getValidToken()
+  // intermittently fails for a signed-in user.
+  let authBearer: string | null = null
   if (authTokenManager.isInitialized()) {
     try {
-      const token = await authTokenManager.getValidToken()
-      headers['Authorization'] = `Bearer ${token}`
+      authBearer = await authTokenManager.getValidToken()
     } catch (error) {
       logError(
         'Failed to get auth token, falling back to anonymous key',
@@ -75,6 +67,39 @@ async function fetchSessionToken(): Promise<string> {
         },
       )
     }
+  }
+  const usedAuthHeader = authBearer !== null
+
+  // If the cached token was fetched anonymously but we now have an
+  // authenticated bearer, discard it so the next fetch goes out with
+  // the user's token and returns the correct (possibly premium) rate
+  // limit info.
+  if (
+    cachedSessionToken &&
+    !cachedSessionTokenWasAuthenticated &&
+    usedAuthHeader
+  ) {
+    cachedSessionToken = null
+    cachedSessionTokenExpiresAt = null
+    cachedRateLimit = null
+    dispatchRateLimitUpdate()
+  }
+
+  if (cachedSessionToken) {
+    const isExpired =
+      cachedSessionTokenExpiresAt !== null &&
+      Date.now() > cachedSessionTokenExpiresAt - SESSION_TOKEN_EXPIRY_BUFFER_MS
+    if (!isExpired) {
+      return cachedSessionToken
+    }
+    cachedSessionToken = null
+    cachedSessionTokenExpiresAt = null
+  }
+
+  // Build request headers: include auth if we resolved a bearer above
+  const headers: Record<string, string> = {}
+  if (authBearer) {
+    headers['Authorization'] = `Bearer ${authBearer}`
   }
 
   const response = await fetch(`${API_BASE_URL}/api/keys/chat`, {
@@ -97,6 +122,7 @@ async function fetchSessionToken(): Promise<string> {
 
   const data = await response.json()
   cachedSessionToken = data.key
+  cachedSessionTokenWasAuthenticated = usedAuthHeader
   if (data.expires_at) {
     cachedSessionTokenExpiresAt = new Date(data.expires_at).getTime()
   }
@@ -183,9 +209,26 @@ export function resetTinfoilClient(): void {
   lastSessionToken = null
   cachedSessionToken = null
   cachedSessionTokenExpiresAt = null
+  cachedSessionTokenWasAuthenticated = false
   cachedRateLimit = null
   remainingBeforeRequest = null
   refreshInFlight = null
+}
+
+/**
+ * Discards any cached anonymous session token + rate limit so the next
+ * request fetches a fresh authenticated token from the server.  Called
+ * after sign-in transitions so a leftover anonymous free-tier banner
+ * does not persist for a now-authenticated user.
+ */
+export function invalidateAnonymousSessionCache(): void {
+  if (cachedSessionTokenWasAuthenticated) return
+  cachedSessionToken = null
+  cachedSessionTokenExpiresAt = null
+  if (cachedRateLimit !== null) {
+    cachedRateLimit = null
+    dispatchRateLimitUpdate()
+  }
 }
 
 async function initClient(sessionToken: string): Promise<TinfoilAI | OpenAI> {
