@@ -54,15 +54,15 @@ interface SnapshotBundle {
 /**
  * Fetch only the wrappedDEK portion of a snapshot bundle.
  *
- * Returns null if no snapshot exists for this execSessionId (404). All other
- * non-OK responses throw.
+ * Returns null if no snapshot exists for this chat (404). All other non-OK
+ * responses throw.
  */
 export async function fetchWrappedDEK(
-  execSessionId: string,
+  chatId: string,
 ): Promise<Uint8Array | null> {
   const headers = await authTokenManager.getAuthHeaders()
   const response = await fetch(
-    `${API_BASE_URL}/api/storage/exec-snapshot/${encodeURIComponent(execSessionId)}`,
+    `${API_BASE_URL}/api/storage/exec-snapshot/${encodeURIComponent(chatId)}`,
     {
       method: 'GET',
       headers,
@@ -168,25 +168,25 @@ export async function unwrapDEK(
 }
 
 /**
- * One-shot helper: fetch the wrappedDEK for an execSessionId and unwrap it.
+ * One-shot helper: fetch the wrappedDEK for a chat and unwrap it.
  *
  * Returns null when no snapshot exists yet (first-ever code-exec for the
  * chat). Throws SnapshotDecryptionFailedError when a snapshot exists but
  * cannot be opened with the supplied keypair.
  */
 export async function fetchAndUnwrapDEK(
-  execSessionId: string,
+  chatId: string,
   privKey: Uint8Array,
   userPub: Uint8Array,
 ): Promise<Uint8Array | null> {
   let wrapped: Uint8Array | null
   try {
-    wrapped = await fetchWrappedDEK(execSessionId)
+    wrapped = await fetchWrappedDEK(chatId)
   } catch (error) {
     logError('Failed to fetch wrapped exec-snapshot DEK', error, {
       component: 'snapshot-client',
       action: 'fetchAndUnwrapDEK',
-      metadata: { execSessionId },
+      metadata: { chatId },
     })
     throw error
   }

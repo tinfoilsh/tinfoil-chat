@@ -15,7 +15,6 @@
  */
 import { useProject } from '@/components/project'
 import { type BaseModel } from '@/config/models'
-import { generateExecSessionId } from '@/services/exec-snapshot'
 import { sendChatStream } from '@/services/inference/inference-client'
 import {
   getRateLimitInfo,
@@ -339,7 +338,6 @@ export function useChatMessaging({
           pendingSave: true,
           projectId:
             isProjectMode && activeProject ? activeProject.id : undefined,
-          execSessionId: currentChat.execSessionId ?? generateExecSessionId(),
         }
 
         // Update state immediately for instant UI feedback
@@ -412,7 +410,6 @@ export function useChatMessaging({
           isBlankChat: false,
           createdAt: new Date(),
           pendingSave: true,
-          execSessionId: currentChat.execSessionId ?? generateExecSessionId(),
         }
 
         currentChatIdRef.current = updatedChat.id
@@ -521,41 +518,6 @@ export function useChatMessaging({
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
 
-        // Code-exec routing: ensure the chat has an execSessionId. For existing
-        // chats that pre-date this field, lazily generate and persist one so
-        // future opens can find the snapshot.
-        let resolvedExecSessionId = updatedChat.execSessionId
-        if (codeExecutionEnabled && !resolvedExecSessionId) {
-          resolvedExecSessionId = generateExecSessionId()
-          updatedChat = { ...updatedChat, execSessionId: resolvedExecSessionId }
-          setCurrentChat((prev) =>
-            prev.id === updatedChat.id
-              ? { ...prev, execSessionId: resolvedExecSessionId }
-              : prev,
-          )
-          setChats((prevChats) =>
-            prevChats.map((c) =>
-              c.id === updatedChat.id
-                ? { ...c, execSessionId: resolvedExecSessionId }
-                : c,
-            ),
-          )
-          // Persist back so it's stable across reloads.
-          if (storeHistory) {
-            chatStorage.saveChat(updatedChat, true).catch((err) => {
-              logError(
-                'Failed to persist execSessionId for existing chat',
-                err,
-                {
-                  component: 'useChatMessaging',
-                  action: 'handleQuery.lazyExecSessionId',
-                  metadata: { chatId: updatedChat.id },
-                },
-              )
-            })
-          }
-        }
-
         const response = await sendChatStream({
           model,
           systemPrompt: baseSystemPrompt,
@@ -571,7 +533,7 @@ export function useChatMessaging({
           webSearchEnabled,
           codeExecutionEnabled,
           piiCheckEnabled,
-          execSessionId: resolvedExecSessionId,
+          chatId: updatedChat.id,
           execPubkey: execPubkey ?? undefined,
           execResumeDek: execResumeDek ?? undefined,
         })

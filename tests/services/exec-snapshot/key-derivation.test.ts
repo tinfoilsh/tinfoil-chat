@@ -1,4 +1,3 @@
-import { generateExecSessionId } from '@/services/exec-snapshot/exec-session-id'
 import { deriveExecKeypair } from '@/services/exec-snapshot/key-derivation'
 import {
   SnapshotDecryptionFailedError,
@@ -62,24 +61,6 @@ describe('exec-snapshot/key-derivation', () => {
     )
     const exec = await deriveExecKeypair(PRF_FIXTURE)
     expect(Array.from(chatKekBits)).not.toEqual(Array.from(exec.privKey))
-  })
-})
-
-describe('exec-snapshot/exec-session-id', () => {
-  it('generates a 22-character base64url string (16 random bytes)', () => {
-    const id = generateExecSessionId()
-    // 16 bytes → ceil(16*8/6) = 22 base64url chars, no padding.
-    expect(id.length).toBe(22)
-    expect(id).toMatch(/^[A-Za-z0-9_-]+$/)
-    expect(id).not.toContain('=')
-  })
-
-  it('is unique on each call', () => {
-    const seen = new Set<string>()
-    for (let i = 0; i < 100; i++) {
-      seen.add(generateExecSessionId())
-    }
-    expect(seen.size).toBe(100)
   })
 })
 

@@ -32,14 +32,18 @@ This is just standard hybrid encryption. Symmetric is fast and works on big data
 
 ## Identity per chat
 
-Each chat gets a separate, client-generated `execSessionId` — 16 bytes from `crypto.getRandomValues`, base64url-encoded. Stored as metadata on the chat record, sent as `X-Session-Id` on requests. Kept distinct from `chat.id` (which still does its existing sort-key job with the reverse timestamp). The exec session ID is the storage key for the snapshot blob, so the controlplane never sees a direct chat-id ↔ exec-snapshot correlation.
+The wire protocol has a `sessionId` concept everywhere remote — `X-Session-Id` header, `/api/storage/exec-snapshot/{sessionId}` URL, orchestrator session→container map. **The webapp uses `chat.id` as that session ID.** No separate ID, no extra field on the chat record, no migration story.
+
+This is safe because controlplane GET/PUT requires Clerk auth and rows are scoped by `clerk_user_id`. Even if user A guesses user B's chat.id, the auth check rejects the read. Unguessability of `chat.id` (122 bits of UUID v4 entropy from `reverseTs_uuidv4`) is defense-in-depth on top of that.
+
+We considered a separate unguessable `execSessionId` for b2b. This requires more thinking on how to manage state. Currently, iiuc we don't do any state management for b2b. Our inference endoint is stateless - message state is handled client side.
 
 ## The flow, end-to-end
 
 **Chat open:**
 
 - Webapp re-derives the user's X25519 keypair from the passkey.
-- Webapp checks `/api/storage/exec-snapshot/{execSessionId}` for an existing snapshot.
+- Webapp checks `/api/storage/exec-snapshot/{chat.id}` for an existing snapshot.
 - If one exists: fetch just the small wrappedDEK part, unwrap with the privkey, hold the plaintext DEK in memory.
 
 **Code execution request:**
@@ -60,7 +64,7 @@ Each chat gets a separate, client-generated `execSessionId` — 16 bytes from `c
 
 - Orchestrator calls the container's new `POST /snapshot`.
 - Container generates a fresh random DEK, AES-GCM-encrypts a tar of `/workspace`, wraps the DEK with the cached user pubkey, returns `{ciphertext, wrappedDEK}`.
-- Orchestrator PUTs the bundle to `/api/storage/exec-snapshot/{execSessionId}`.
+- Orchestrator PUTs the bundle to `/api/storage/exec-snapshot/{sessionId}` (the chat.id the webapp originally sent on `X-Session-Id`).
 - Container is destroyed.
 
 _evection happens after 10 minutes with no tools to that container_
@@ -77,8 +81,8 @@ Chained attestation: webapp → router → orchestrator → container, each link
 
 New controlplane endpoint, mirroring the existing attachment/conversation pattern:
 
-- `PUT /api/storage/exec-snapshot/{execSessionId}` — orchestrator writes `{ciphertext, wrappedDEK}` as one bundle.
-- `GET /api/storage/exec-snapshot/{execSessionId}` — webapp fetches just the wrappedDEK on chat open; orchestrator fetches the full bundle on resume.
+- `PUT /api/storage/exec-snapshot/{sessionId}` — orchestrator writes `{ciphertext, wrappedDEK}` as one bundle. (For webapp traffic, `sessionId == chat.id`.)
+- `GET /api/storage/exec-snapshot/{sessionId}` — webapp fetches just the wrappedDEK on chat open; orchestrator fetches the full bundle on resume.
 
 The bundle is one storage record so ciphertext and wrappedDEK can't get out of sync.
 
@@ -88,9 +92,9 @@ The bundle is one storage record so ciphertext and wrappedDEK can't get out of s
 - No `/restore` endpoint on the executor. Restore is internal to the orchestrator's `GetOrAssign`.
 - Snapshots are not deleted for v1.
 - Unauthenticated users don't get snapshots. Webapp gates this client-side.
-- `execSessionId` (not `chat.id`) is the storage key.
-- Client-side generation for the exec session ID, 16 bytes of `crypto.getRandomValues`.
-- Snapshot deletion/time stored should be the same as chats. Should be linked to chat.
+- `chat.id` is the storage key (passed as `X-Session-Id`). Auth scopes per Clerk user.
+- The wire protocol keeps a generic `sessionId` name so the future partner-path can plug in.
+- Snapshot deletion/time stored should be the same as chats. The controlplane should add an FK from `exec_snapshots.id` → `chats.id ON DELETE CASCADE` so deleting a chat GCs its snapshot.
 - No size cap. We'll see how this looks in practice.
 - Decryption-failure handling — mirror the existing `decryptionFailed` pattern from the chat path.
 
@@ -100,7 +104,7 @@ _Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They shoul
 
 **tinfoil-webapp:**
 
-- Generate `execSessionId` client-side, store on the `StoredChat` record, send as `X-Session-Id`.
+- Send `chat.id` as `X-Session-Id` on code-exec requests.
 - Add HKDF derivation with `info="tinfoil-exec-snapshot-v1"` off the existing PRF master to produce the X25519 keypair.
 - On chat open: check for snapshot, fetch wrappedDEK, unwrap, hold the DEK in memory.
 - Send the DEK (if exists) and the pubkey (always) in the headers of code-exec requests.
@@ -111,7 +115,7 @@ _Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They shoul
 - Restore-on-assign inside `Manager.GetOrAssign`: read the resume DEK and snapshot bundle, push tar into the fresh container's `/workspace` before exposing it to traffic.
 - Eviction snapshotting: call the container's `/snapshot`, PUT the returned bundle to the controlplane.
 - Cache the user pubkey from the session-start request, keep alongside the session→container map.
-- Per-`execSessionId` serialization so two concurrent webapp tabs don't both spin up a restored container.
+- Per-sessionId serialization so two concurrent webapp tabs don't both spin up a restored container.
 - Flip `VERIFY_ATTESTATION` on in prod.
 
 **code-execution-environment (executor):**
@@ -121,6 +125,6 @@ _Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They shoul
 
 **controlplane (api.tinfoil.sh):**
 
-- New `PUT/GET /api/storage/exec-snapshot/{execSessionId}` endpoint. Same auth and scoping pattern as the existing attachment endpoint. Treats payload as opaque bytes.
+- New `PUT/GET /api/storage/exec-snapshot/{sessionId}` endpoint. Same auth and scoping pattern as the existing attachment endpoint. Treats payload as opaque bytes. Add an FK on `id` → `chats(id) ON DELETE CASCADE` so chat deletion GCs the snapshot.
 
 _Once finished, we'll test manually by running everything_

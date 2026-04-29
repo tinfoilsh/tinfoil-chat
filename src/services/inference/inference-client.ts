@@ -83,7 +83,7 @@ export interface SendChatStreamParams {
   webSearchEnabled?: boolean
   codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
-  execSessionId?: string
+  chatId?: string
   execPubkey?: string
   execResumeDek?: string
 }
@@ -103,7 +103,7 @@ export async function sendChatStream(
     webSearchEnabled,
     codeExecutionEnabled,
     piiCheckEnabled,
-    execSessionId,
+    chatId,
     execPubkey,
     execResumeDek,
   } = params
@@ -294,13 +294,13 @@ export async function sendChatStream(
 
       const headers: Record<string, string> = {}
       if (codeExecutionEnabled) {
-        if (!execSessionId) {
+        if (!chatId) {
           throw new ChatError(
-            'Code execution requested without an execSessionId. The chat must have one assigned before code-exec requests are sent.',
+            'Code execution requested without a chat ID. The chat must be assigned before code-exec requests are sent.',
             'FETCH_ERROR',
           )
         }
-        headers['X-Session-Id'] = execSessionId
+        headers['X-Session-Id'] = chatId
         if (execPubkey) headers['X-Exec-Pubkey'] = execPubkey
         if (execResumeDek) headers['X-Exec-Resume-Dek'] = execResumeDek
       }

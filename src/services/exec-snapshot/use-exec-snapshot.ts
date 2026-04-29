@@ -1,11 +1,12 @@
 /**
- * useExecSnapshot — chat-scoped hook that prepares the X-Session-Id /
- * X-Exec-Pubkey / X-Exec-Resume-Dek headers for code-execution requests.
+ * useExecSnapshot — chat-scoped hook that prepares the X-Exec-Pubkey /
+ * X-Exec-Resume-Dek headers for code-execution requests. The chat ID itself
+ * is sent as X-Session-Id by the inference client.
  *
  * Lifecycle, per chat:
- *   1. When the active chat changes and has an execSessionId, derive the
- *      X25519 keypair from the cached PRF master and try to fetch + unwrap
- *      the existing snapshot DEK.
+ *   1. When the active chat changes, derive the X25519 keypair from the
+ *      cached PRF master and try to fetch + unwrap the existing snapshot
+ *      DEK keyed by chat ID.
  *   2. The plaintext DEK lives only in this hook's React state (memory only,
  *      never persisted, never sent over the wire as plaintext except as
  *      X-Exec-Resume-Dek on the very next request).
@@ -29,11 +30,6 @@ import { logError, logInfo } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface ExecSnapshotState {
-  /**
-   * The active execSessionId, or null when the current chat doesn't use code
-   * execution. Sent as X-Session-Id on code-exec requests.
-   */
-  execSessionId: string | null
   /** User pubkey (base64url, no padding). Sent as X-Exec-Pubkey. */
   execPubkey: string | null
   /**
@@ -42,7 +38,7 @@ export interface ExecSnapshotState {
    */
   execResumeDek: string | null
   /**
-   * True when a snapshot existed for this session but could not be decrypted.
+   * True when a snapshot existed for this chat but could not be decrypted.
    * Mirrors the chat-path `decryptionFailed` flag.
    */
   decryptionFailed: boolean
@@ -61,19 +57,19 @@ export interface ExecSnapshotState {
 }
 
 export function useExecSnapshot(opts: {
-  execSessionId: string | undefined | null
+  chatId: string | undefined | null
   isSignedIn: boolean | undefined
 }): ExecSnapshotState {
-  const { execSessionId, isSignedIn } = opts
+  const { chatId, isSignedIn } = opts
 
   const [execPubkey, setExecPubkey] = useState<string | null>(null)
   const [execResumeDek, setExecResumeDek] = useState<string | null>(null)
   const [decryptionFailed, setDecryptionFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
-  // Tracks the session this state corresponds to, so a stale async result
-  // from a previous chat doesn't leak into the new one.
-  const activeSessionRef = useRef<string | null>(null)
+  // Tracks the chat this state corresponds to, so a stale async result from
+  // a previous chat doesn't leak into the new one.
+  const activeChatRef = useRef<string | null>(null)
 
   const consumeResumeDek = useCallback(() => {
     setExecResumeDek(null)
@@ -84,8 +80,8 @@ export function useExecSnapshot(opts: {
   }, [])
 
   useEffect(() => {
-    if (!execSessionId || !isSignedIn) {
-      activeSessionRef.current = null
+    if (!chatId || !isSignedIn) {
+      activeChatRef.current = null
       setExecPubkey(null)
       setExecResumeDek(null)
       setDecryptionFailed(false)
@@ -93,7 +89,7 @@ export function useExecSnapshot(opts: {
       return
     }
 
-    activeSessionRef.current = execSessionId
+    activeChatRef.current = chatId
     let cancelled = false
 
     const run = async () => {
@@ -108,7 +104,7 @@ export function useExecSnapshot(opts: {
         // user). Nothing we can do — leave headers empty; the user will not
         // be able to use code execution until passkey unlock anyway, and the
         // toggle is gated separately.
-        if (!cancelled && activeSessionRef.current === execSessionId) {
+        if (!cancelled && activeChatRef.current === chatId) {
           setIsLoading(false)
         }
         return
@@ -122,48 +118,48 @@ export function useExecSnapshot(opts: {
           component: 'useExecSnapshot',
           action: 'deriveExecKeypair',
         })
-        if (!cancelled && activeSessionRef.current === execSessionId) {
+        if (!cancelled && activeChatRef.current === chatId) {
           setIsLoading(false)
         }
         return
       }
 
       const pubB64 = uint8ArrayToBase64Url(derived.pubKey)
-      if (!cancelled && activeSessionRef.current === execSessionId) {
+      if (!cancelled && activeChatRef.current === chatId) {
         setExecPubkey(pubB64)
       }
 
       try {
         const dek = await fetchAndUnwrapDEK(
-          execSessionId,
+          chatId,
           derived.privKey,
           derived.pubKey,
         )
-        if (cancelled || activeSessionRef.current !== execSessionId) {
+        if (cancelled || activeChatRef.current !== chatId) {
           return
         }
         if (dek) {
           setExecResumeDek(uint8ArrayToBase64Url(dek))
           logInfo('Loaded exec snapshot resume DEK', {
             component: 'useExecSnapshot',
-            metadata: { execSessionId },
+            metadata: { chatId },
           })
         }
       } catch (error) {
-        if (!cancelled && activeSessionRef.current === execSessionId) {
+        if (!cancelled && activeChatRef.current === chatId) {
           if (error instanceof SnapshotDecryptionFailedError) {
             setDecryptionFailed(true)
           }
           logError('Failed to load exec snapshot DEK', error, {
             component: 'useExecSnapshot',
-            metadata: { execSessionId },
+            metadata: { chatId },
           })
         }
       } finally {
         // Drop the privkey reference as soon as we're done with it. JS will
         // GC it; we don't keep it around in state.
         derived.privKey.fill(0)
-        if (!cancelled && activeSessionRef.current === execSessionId) {
+        if (!cancelled && activeChatRef.current === chatId) {
           setIsLoading(false)
         }
       }
@@ -174,10 +170,9 @@ export function useExecSnapshot(opts: {
     return () => {
       cancelled = true
     }
-  }, [execSessionId, isSignedIn])
+  }, [chatId, isSignedIn])
 
   return {
-    execSessionId: execSessionId ?? null,
     execPubkey,
     execResumeDek,
     decryptionFailed,

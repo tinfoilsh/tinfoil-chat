@@ -178,7 +178,7 @@ export function useChatState({
   // is gated client-side anyway.
   const { isSignedIn } = useAuth()
   const execSnapshot = useExecSnapshot({
-    execSessionId: currentChat?.execSessionId ?? null,
+    chatId: currentChat?.id ?? null,
     isSignedIn,
   })
 
