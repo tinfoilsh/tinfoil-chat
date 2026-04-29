@@ -84,6 +84,9 @@ export interface SendChatStreamParams {
   codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
   chatId?: string
+  execSessionId?: string
+  execPubkey?: string
+  execResumeDek?: string
 }
 
 export async function sendChatStream(
@@ -102,6 +105,9 @@ export async function sendChatStream(
     codeExecutionEnabled,
     piiCheckEnabled,
     chatId,
+    execSessionId,
+    execPubkey,
+    execResumeDek,
   } = params
 
   if (model.modelName === 'dev-simulator') {
@@ -289,8 +295,19 @@ export async function sendChatStream(
       const client = await getTinfoilClient()
 
       const requestOptions: Record<string, unknown> = { signal }
-      if (chatId) {
-        requestOptions.headers = { 'X-Session-Id': chatId }
+      // Code-execution requests need exec-snapshot identity routing.
+      const headers: Record<string, string> = {}
+      if (codeExecutionEnabled && execSessionId) {
+        headers['X-Session-Id'] = execSessionId
+        if (execPubkey) {
+          headers['X-Exec-Pubkey'] = execPubkey
+        }
+        if (execResumeDek) {
+          headers['X-Exec-Resume-Dek'] = execResumeDek
+        }
+      }
+      if (Object.keys(headers).length > 0) {
+        requestOptions.headers = headers
       }
 
       const stream: any = await (client.chat.completions.create as Function)(

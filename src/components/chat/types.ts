@@ -138,6 +138,10 @@ export type Chat = {
   pendingSave?: boolean
   // Project association - when set, chat belongs to a project
   projectId?: string
+  // Encrypted code-execution snapshot identity (16 bytes, base64url, no padding).
+  // Generated client-side; sent as X-Session-Id on code-exec requests so the
+  // controlplane never sees a direct chat-id ↔ exec-snapshot correlation.
+  execSessionId?: string
 }
 
 export type LoadingState = 'idle' | 'loading' | 'streaming' | 'retrying'

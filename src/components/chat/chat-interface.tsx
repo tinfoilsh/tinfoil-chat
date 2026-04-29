@@ -743,6 +743,8 @@ export function ChatInterface({
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
     localChatNotFound,
+    execSnapshotDecryptionFailed,
+    clearExecSnapshotDecryptionFailed,
   } = useChatState({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
@@ -754,7 +756,9 @@ export function ChatInterface({
     initialChatId,
     isLocalChatUrl,
     webSearchEnabled,
-    codeExecutionEnabled,
+    // Code execution is a signed-in-only feature (passkey-derived snapshot
+    // keypair). Force it off for guest users
+    codeExecutionEnabled: isSignedIn ? codeExecutionEnabled : false,
     piiCheckEnabled,
   })
 
@@ -770,7 +774,7 @@ export function ChatInterface({
     maxMessages: sidebarMaxMessages,
     reasoningEffort,
     webSearchEnabled,
-    codeExecutionEnabled,
+    codeExecutionEnabled: isSignedIn ? codeExecutionEnabled : false,
     piiCheckEnabled,
   })
 
@@ -930,6 +934,21 @@ export function ChatInterface({
       String(codeExecutionEnabled),
     )
   }, [codeExecutionEnabled])
+
+  // Surface exec-snapshot decryption failures the same way we surface chat
+  // decryption failures: tell the user, don't silently lose state. The chat
+  // itself is fine — only the /workspace snapshot can't be restored.
+  // Mirrors the initialChatDecryptionFailed flag+clear pattern.
+  useEffect(() => {
+    if (!execSnapshotDecryptionFailed) return
+    toast({
+      title: 'Code execution snapshot unavailable',
+      description:
+        "Couldn't decrypt the saved /workspace for this chat. The chat is fine, but a previous code-execution session can't be restored. Continuing with a fresh container.",
+      variant: 'destructive',
+    })
+    clearExecSnapshotDecryptionFailed()
+  }, [execSnapshotDecryptionFailed, clearExecSnapshotDecryptionFailed, toast])
 
   // Listen for PII check setting changes from settings modal
   useEffect(() => {
@@ -2696,9 +2715,13 @@ export function ChatInterface({
                   showScrollButton={showScrollButton}
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={() => setWebSearchEnabled((prev) => !prev)}
-                  codeExecutionEnabled={codeExecutionEnabled}
-                  onCodeExecutionToggle={() =>
-                    setCodeExecutionEnabled((prev) => !prev)
+                  codeExecutionEnabled={
+                    isSignedIn ? codeExecutionEnabled : false
+                  }
+                  onCodeExecutionToggle={
+                    isSignedIn
+                      ? () => setCodeExecutionEnabled((prev) => !prev)
+                      : undefined
                   }
                   onOpenVerifier={() => setIsVerifierSidebarOpen(true)}
                 />
@@ -2807,9 +2830,13 @@ export function ChatInterface({
                     onWebSearchToggle={() =>
                       setWebSearchEnabled((prev) => !prev)
                     }
-                    codeExecutionEnabled={codeExecutionEnabled}
-                    onCodeExecutionToggle={() =>
-                      setCodeExecutionEnabled((prev) => !prev)
+                    codeExecutionEnabled={
+                      isSignedIn ? codeExecutionEnabled : false
+                    }
+                    onCodeExecutionToggle={
+                      isSignedIn
+                        ? () => setCodeExecutionEnabled((prev) => !prev)
+                        : undefined
                     }
                   />
                 </form>

@@ -122,3 +122,5 @@ _Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They shoul
 **controlplane (api.tinfoil.sh):**
 
 - New `PUT/GET /api/storage/exec-snapshot/{execSessionId}` endpoint. Same auth and scoping pattern as the existing attachment endpoint. Treats payload as opaque bytes.
+
+_Once finished, we'll test manually by running everything_

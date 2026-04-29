@@ -15,6 +15,7 @@
  */
 import { useProject } from '@/components/project'
 import { type BaseModel } from '@/config/models'
+import { generateExecSessionId } from '@/services/exec-snapshot'
 import { sendChatStream } from '@/services/inference/inference-client'
 import {
   getRateLimitInfo,
@@ -53,6 +54,15 @@ interface UseChatMessagingProps {
   webSearchEnabled?: boolean
   codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
+  /** User pubkey for X-Exec-Pubkey on code-exec requests. Memory-only. */
+  execPubkey?: string | null
+  /**
+   * Plaintext DEK (base64url) for X-Exec-Resume-Dek. Only set on the first
+   * request after a chat reopens; consumed once and cleared.
+   */
+  execResumeDek?: string | null
+  /** Called after a request that included execResumeDek so it can be cleared. */
+  consumeExecResumeDek?: () => void
 }
 
 interface UseChatMessagingReturn {
@@ -95,6 +105,9 @@ export function useChatMessaging({
   webSearchEnabled,
   codeExecutionEnabled,
   piiCheckEnabled,
+  execPubkey,
+  execResumeDek,
+  consumeExecResumeDek,
 }: UseChatMessagingProps): UseChatMessagingReturn {
   const { isSignedIn } = useAuth()
   const maxMessages = useMaxMessages()
@@ -326,6 +339,7 @@ export function useChatMessaging({
           pendingSave: true,
           projectId:
             isProjectMode && activeProject ? activeProject.id : undefined,
+          execSessionId: currentChat.execSessionId ?? generateExecSessionId(),
         }
 
         // Update state immediately for instant UI feedback
@@ -398,6 +412,7 @@ export function useChatMessaging({
           isBlankChat: false,
           createdAt: new Date(),
           pendingSave: true,
+          execSessionId: currentChat.execSessionId ?? generateExecSessionId(),
         }
 
         currentChatIdRef.current = updatedChat.id
@@ -505,6 +520,42 @@ export function useChatMessaging({
         })
 
         const baseSystemPrompt = systemPromptOverride || systemPrompt
+
+        // Code-exec routing: ensure the chat has an execSessionId. For existing
+        // chats that pre-date this field, lazily generate and persist one so
+        // future opens can find the snapshot.
+        let resolvedExecSessionId = updatedChat.execSessionId
+        if (codeExecutionEnabled && !resolvedExecSessionId) {
+          resolvedExecSessionId = generateExecSessionId()
+          updatedChat = { ...updatedChat, execSessionId: resolvedExecSessionId }
+          setCurrentChat((prev) =>
+            prev.id === updatedChat.id
+              ? { ...prev, execSessionId: resolvedExecSessionId }
+              : prev,
+          )
+          setChats((prevChats) =>
+            prevChats.map((c) =>
+              c.id === updatedChat.id
+                ? { ...c, execSessionId: resolvedExecSessionId }
+                : c,
+            ),
+          )
+          // Persist back so it's stable across reloads.
+          if (storeHistory) {
+            chatStorage.saveChat(updatedChat, true).catch((err) => {
+              logError(
+                'Failed to persist execSessionId for existing chat',
+                err,
+                {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.lazyExecSessionId',
+                  metadata: { chatId: updatedChat.id },
+                },
+              )
+            })
+          }
+        }
+
         const response = await sendChatStream({
           model,
           systemPrompt: baseSystemPrompt,
@@ -521,7 +572,16 @@ export function useChatMessaging({
           codeExecutionEnabled,
           piiCheckEnabled,
           chatId: startingChatId,
+          execSessionId: resolvedExecSessionId,
+          execPubkey: execPubkey ?? undefined,
+          execResumeDek: execResumeDek ?? undefined,
         })
+
+        // The orchestrator has consumed the resume DEK (if any) — clear it
+        // from memory so subsequent requests don't re-send a stale value.
+        if (codeExecutionEnabled && execResumeDek && consumeExecResumeDek) {
+          consumeExecResumeDek()
+        }
 
         const assistantMessage = await processStreamingResponse(response, {
           updatedChat,
@@ -747,6 +807,9 @@ export function useChatMessaging({
       webSearchEnabled,
       codeExecutionEnabled,
       piiCheckEnabled,
+      execPubkey,
+      execResumeDek,
+      consumeExecResumeDek,
     ],
   )
 

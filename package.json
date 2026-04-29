@@ -23,6 +23,7 @@
     "@clerk/nextjs": "^6.21.0",
     "@headlessui/react": "^2.1.1",
     "@heroicons/react": "^2.1.4",
+    "@noble/curves": "^2.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-progress": "^1.1.1",

@@ -1,4 +1,6 @@
 import type { BaseModel } from '@/config/models'
+import { useExecSnapshot } from '@/services/exec-snapshot/use-exec-snapshot'
+import { useAuth } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from '../types'
 import { useChatMessaging } from './use-chat-messaging'
@@ -70,6 +72,14 @@ interface UseChatStateReturn {
   initialChatDecryptionFailed: boolean
   clearInitialChatDecryptionFailed: () => void
   localChatNotFound: boolean
+  /**
+   * True when an exec snapshot existed for the active chat but couldn't be
+   * unwrapped (e.g. PRF master changed, ciphertext corrupt). Mirrors the
+   * `decryptionFailed` chat-path pattern.
+   */
+  execSnapshotDecryptionFailed: boolean
+  /** Acknowledge the exec-snapshot decryption failure after surfacing it. */
+  clearExecSnapshotDecryptionFailed: () => void
 }
 
 export function useChatState({
@@ -163,6 +173,15 @@ export function useChatState({
     isClient,
   })
 
+  // Code-execution snapshot identity / DEK for the active chat. Only meaningful
+  // for signed-in users (passkey-derived keypair); for anyone else the toggle
+  // is gated client-side anyway.
+  const { isSignedIn } = useAuth()
+  const execSnapshot = useExecSnapshot({
+    execSessionId: currentChat?.execSessionId ?? null,
+    isSignedIn,
+  })
+
   // Chat Messaging
   const {
     input,
@@ -196,6 +215,9 @@ export function useChatState({
     webSearchEnabled,
     codeExecutionEnabled,
     piiCheckEnabled,
+    execPubkey: execSnapshot.execPubkey,
+    execResumeDek: execSnapshot.execResumeDek,
+    consumeExecResumeDek: execSnapshot.consumeResumeDek,
   })
 
   // Update ref with cancelGeneration function
@@ -318,5 +340,7 @@ export function useChatState({
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
     localChatNotFound,
+    execSnapshotDecryptionFailed: execSnapshot.decryptionFailed,
+    clearExecSnapshotDecryptionFailed: execSnapshot.clearDecryptionFailed,
   }
 }
