@@ -294,21 +294,19 @@ export async function sendChatStream(
 
       const client = await getTinfoilClient()
 
-      const requestOptions: Record<string, unknown> = { signal }
-      // Code-execution requests need exec-snapshot identity routing.
       const headers: Record<string, string> = {}
-      if (codeExecutionEnabled && execSessionId) {
+      if (codeExecutionEnabled) {
+        if (!execSessionId) {
+          throw new ChatError(
+            'Code execution requested without an execSessionId. The chat must have one assigned before code-exec requests are sent.',
+            'FETCH_ERROR',
+          )
+        }
         headers['X-Session-Id'] = execSessionId
-        if (execPubkey) {
-          headers['X-Exec-Pubkey'] = execPubkey
-        }
-        if (execResumeDek) {
-          headers['X-Exec-Resume-Dek'] = execResumeDek
-        }
+        if (execPubkey) headers['X-Exec-Pubkey'] = execPubkey
+        if (execResumeDek) headers['X-Exec-Resume-Dek'] = execResumeDek
       }
-      if (Object.keys(headers).length > 0) {
-        requestOptions.headers = headers
-      }
+      const requestOptions: Record<string, unknown> = { signal, headers }
 
       const stream: any = await (client.chat.completions.create as Function)(
         requestBody,
