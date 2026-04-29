@@ -32,9 +32,7 @@ This is just standard hybrid encryption. Symmetric is fast and works on big data
 
 ## Identity per chat
 
-The wire protocol has a `sessionId` concept everywhere remote — `X-Session-Id` header, `/api/storage/exec-snapshot/{sessionId}` URL, orchestrator session→container map. **The webapp uses `chat.id` as that session ID.** No separate ID, no extra field on the chat record, no migration story.
-
-This is safe because controlplane GET/PUT requires Clerk auth and rows are scoped by `clerk_user_id`. Even if user A guesses user B's chat.id, the auth check rejects the read. Unguessability of `chat.id` (122 bits of UUID v4 entropy from `reverseTs_uuidv4`) is defense-in-depth on top of that.
+The wire protocol has a `sessionId` concept everywhere remote — `X-Session-Id` header, `/api/storage/exec-snapshot/{sessionId}` URL, orchestrator session→container map. **The webapp uses `chat.id` as that session ID.**. In the future it would be nice to use something else as the sessionID, to allow non-webapp clients. Storage rows are scoped per Clerk user (see [auth.md](./auth.md)).
 
 We considered a separate unguessable `execSessionId` for b2b. This requires more thinking on how to manage state. Currently, iiuc we don't do any state management for b2b. Our inference endoint is stateless - message state is handled client side.
 
@@ -79,20 +77,20 @@ Chained attestation: webapp → router → orchestrator → container, each link
 
 ## Storage layout
 
-New controlplane endpoint, mirroring the existing attachment/conversation pattern:
+New controlplane endpoints:
 
 - `PUT /api/storage/exec-snapshot/{sessionId}` — orchestrator writes `{ciphertext, wrappedDEK}` as one bundle. (For webapp traffic, `sessionId == chat.id`.)
 - `GET /api/storage/exec-snapshot/{sessionId}` — webapp fetches just the wrappedDEK on chat open; orchestrator fetches the full bundle on resume.
 
-The bundle is one storage record so ciphertext and wrappedDEK can't get out of sync.
+The bundle is one storage record so ciphertext and wrappedDEK can't get out of sync. Auth model for these endpoints lives in [auth.md](./auth.md).
 
 ## Misc. Decisions
 
 - One passkey per user, synced across devices. Single pubkey, single-wrap, no registry.
 - No `/restore` endpoint on the executor. Restore is internal to the orchestrator's `GetOrAssign`.
 - Snapshots are not deleted for v1.
-- Unauthenticated users don't get snapshots. Webapp gates this client-side.
-- `chat.id` is the storage key (passed as `X-Session-Id`). Auth scopes per Clerk user.
+- Code execution is webapp-only (Clerk-authed users). See [auth.md](./auth.md).
+- `chat.id` is the storage key (passed as `X-Session-Id`).
 - The wire protocol keeps a generic `sessionId` name so the future partner-path can plug in.
 - Snapshot deletion/time stored should be the same as chats. The controlplane should add an FK from `exec_snapshots.id` → `chats.id ON DELETE CASCADE` so deleting a chat GCs its snapshot.
 - No size cap. We'll see how this looks in practice.
@@ -100,7 +98,7 @@ The bundle is one storage record so ciphertext and wrappedDEK can't get out of s
 
 ## What needs to be built, by repo
 
-_Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They should all be checked out to ~dmccanns/code-exec already_
+_Note: all the repos are local, in /Users/dmccanns/Desktop/Tinfoil/. They should all be checked out to ~dmccanns/code-exec already_
 
 **tinfoil-webapp:**
 
@@ -108,7 +106,7 @@ _Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They shoul
 - Add HKDF derivation with `info="tinfoil-exec-snapshot-v1"` off the existing PRF master to produce the X25519 keypair.
 - On chat open: check for snapshot, fetch wrappedDEK, unwrap, hold the DEK in memory.
 - Send the DEK (if exists) and the pubkey (always) in the headers of code-exec requests.
-- Block code execution for unauthenticated users - make it not even an option in the UI.
+- Hide the code-execution toggle for signed-out users (auth.md covers the server-side gate).
 
 **confidential-code-execution (orchestrator):**
 
@@ -125,6 +123,6 @@ _Note: all the repoes are local, in /Users/dmccanns/Desktop/Tinfoil/. They shoul
 
 **controlplane (api.tinfoil.sh):**
 
-- New `PUT/GET /api/storage/exec-snapshot/{sessionId}` endpoint. Same auth and scoping pattern as the existing attachment endpoint. Treats payload as opaque bytes. Add an FK on `id` → `chats(id) ON DELETE CASCADE` so chat deletion GCs the snapshot.
+- New `PUT/GET /api/storage/exec-snapshot/{sessionId}` endpoint. Treats payload as opaque bytes. Rows scoped per Clerk user. Add an FK on `id` → `chats(id) ON DELETE CASCADE` so chat deletion GCs the snapshot. (Auth model in [auth.md](./auth.md).)
 
 _Once finished, we'll test manually by running everything_
