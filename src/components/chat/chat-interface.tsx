@@ -162,6 +162,14 @@ type ChatInterfaceProps = {
   initialChatId?: string | null
   initialProjectId?: string | null
   isLocalChatUrl?: boolean
+  /**
+   * When true, suppresses auto-opening intro/setup modals on this mount
+   * (onboarding, passkey setup/recovery prompts, cloud sync setup, and the
+   * "passkey setup failed" warning). Used by routes like /newchat where the
+   * user explicitly wants to start chatting without interruptions. The user
+   * can still open these flows manually from settings.
+   */
+  suppressIntroModals?: boolean
 }
 
 // Short delay before showing the "Chats Are Not Being Backed Up" warning so
@@ -268,6 +276,7 @@ export function ChatInterface({
   initialChatId,
   initialProjectId,
   isLocalChatUrl: isLocalChatUrlProp,
+  suppressIntroModals = false,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
@@ -422,10 +431,11 @@ export function ChatInterface({
 
   // Show onboarding once models are loaded for new users
   useEffect(() => {
+    if (suppressIntroModals) return
     if (onboardingNeeded && models.length > 0) {
       setShowOnboarding(true)
     }
-  }, [onboardingNeeded, models.length])
+  }, [onboardingNeeded, models.length, suppressIntroModals])
 
   // State for right sidebar
   const [isVerifierSidebarOpen, setIsVerifierSidebarOpen] = useState(false)
@@ -463,6 +473,7 @@ export function ChatInterface({
   const [cloudSyncSetupModalKey, setCloudSyncSetupModalKey] = useState(0)
 
   useEffect(() => {
+    if (suppressIntroModals) return
     // Passkey-based recovery always auto-opens: a remote passkey credential
     // means the user *has* chats backed up and can't see them on this device
     // until they unlock, regardless of whether the local sync toggle is on.
@@ -475,10 +486,10 @@ export function ChatInterface({
     if (manualRecoveryNeeded && isCloudSyncEnabled()) {
       setShowCloudSyncSetupModal(true)
     }
-  }, [manualRecoveryNeeded, passkeyRecoveryNeeded])
+  }, [manualRecoveryNeeded, passkeyRecoveryNeeded, suppressIntroModals])
 
   useEffect(() => {
-    if (!passkeySetupFailed) {
+    if (!passkeySetupFailed || suppressIntroModals) {
       setShowPasskeySetupFailed(false)
       return
     }
@@ -486,7 +497,7 @@ export function ChatInterface({
       setShowPasskeySetupFailed(true)
     }, PASSKEY_SETUP_FAILED_MODAL_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [passkeySetupFailed])
+  }, [passkeySetupFailed, suppressIntroModals])
 
   // State for add-to-project-context modal
   const [showAddToProjectModal, setShowAddToProjectModal] = useState(false)
@@ -2957,7 +2968,7 @@ export function ChatInterface({
 
       {/* First-time passkey setup confirmation - shown to brand-new users so
           we never invoke the native WebAuthn dialog without an explicit click. */}
-      {passkeyFirstTimePromptAvailable && (
+      {passkeyFirstTimePromptAvailable && !suppressIntroModals && (
         <PasskeySetupPromptModal
           isOpen={passkeyFirstTimePromptAvailable}
           isBusy={isFirstTimePasskeySetupBusy}
