@@ -118,6 +118,10 @@ function getDisplayContent(call: ToolCallState): string | null {
       return call.output || null
     case 'view':
       return call.output || null
+    case 'present':
+      // Output is also emitted as inline assistant content; suppress the
+      // body so the row stays flat and we don't duplicate the file.
+      return null
     case 'create':
       return (
         (typeof call.arguments?.file_text === 'string'
@@ -138,16 +142,19 @@ function getDisplayContent(call: ToolCallState): string | null {
 function ToolCallRow({ call }: { call: ToolCallState }) {
   const label = getToolLabel(call)
   const isBash = call.toolName === 'bash'
+  const isFailed = call.status === 'failed'
   const displayContent =
     call.status !== 'running' ? getDisplayContent(call) : null
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-2 text-sm text-content-primary/70">
+      <div
+        className={`flex items-start gap-2 text-sm ${isFailed ? 'text-destructive/80' : 'text-content-primary/70'}`}
+      >
         {call.status === 'running' ? (
           <PiSpinner className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-content-primary/50" />
-        ) : call.status === 'failed' ? (
-          <span className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-xs text-red-500">
+        ) : isFailed ? (
+          <span className="mt-0.5 h-3.5 w-3.5 shrink-0 text-center text-xs text-destructive">
             !
           </span>
         ) : (
@@ -173,7 +180,7 @@ function ToolCallRow({ call }: { call: ToolCallState }) {
             isBash
               ? 'bg-surface-chat-background font-mono text-content-primary/70'
               : 'bg-surface-chat-background text-content-primary/70'
-          } ${call.status === 'failed' ? 'border border-red-500/20' : ''}`}
+          } ${isFailed ? 'border border-destructive/30' : ''}`}
         >
           {displayContent}
         </pre>
@@ -188,6 +195,10 @@ export const ToolCallProcess = memo(function ToolCallProcess({
   const [isExpanded, setIsExpanded] = useState(false)
   const anyRunning = useMemo(
     () => calls.some((c) => c.status === 'running'),
+    [calls],
+  )
+  const allFailed = useMemo(
+    () => calls.length > 0 && calls.every((c) => c.status === 'failed'),
     [calls],
   )
   const headerLabel = useMemo(() => getHeaderLabel(calls), [calls])
@@ -213,9 +224,15 @@ export const ToolCallProcess = memo(function ToolCallProcess({
               aria-hidden="true"
               focusable="false"
             />
+          ) : allFailed ? (
+            <span className="block h-3.5 w-3.5 text-center text-xs leading-[14px] text-destructive">
+              !
+            </span>
           ) : null}
         </span>
-        <span className="min-w-0 text-base font-medium text-content-primary/50">
+        <span
+          className={`min-w-0 text-base font-medium ${allFailed ? 'text-destructive/80' : 'text-content-primary/50'}`}
+        >
           {headerLabel}
         </span>
       </div>
@@ -254,7 +271,9 @@ export const ToolCallProcess = memo(function ToolCallProcess({
             </svg>
           )}
         </span>
-        <span className="min-w-0 text-base font-medium text-content-primary/50">
+        <span
+          className={`min-w-0 text-base font-medium ${allFailed ? 'text-destructive/80' : 'text-content-primary/50'}`}
+        >
           {headerLabel}
         </span>
       </button>

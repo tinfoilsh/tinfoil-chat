@@ -167,7 +167,9 @@ const SingleWebSearchProcess = memo(function SingleWebSearchProcess({
             </svg>
           ) : null}
         </span>
-        <span className="min-w-0 text-base text-content-primary/50">
+        <span
+          className={`min-w-0 text-base ${isFailed || isBlocked ? 'text-destructive/80' : 'text-content-primary/50'}`}
+        >
           {isSearching ? (
             <>
               <span className="font-medium">Searching the web...</span>
@@ -332,7 +334,9 @@ const GroupedWebSearchProcess = memo(function GroupedWebSearchProcess({
             </svg>
           )}
         </span>
-        <span className="min-w-0 text-base text-content-primary/50">
+        <span
+          className={`min-w-0 text-base ${aggregateStatus === 'failed' || aggregateStatus === 'blocked' ? 'text-destructive/80' : 'text-content-primary/50'}`}
+        >
           <span className="font-medium">{label}</span>
           {mergedSources.length > 0 && (
             <span
