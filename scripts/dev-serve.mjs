@@ -129,7 +129,12 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  // Dev stream logger: write JSONL to logs/
+  // Dev stream logger: receive raw chunk-level entries from the webapp
+  // and write a stitched-together markdown transcript per stream to
+  // logs/. The webapp logger ships per-chunk events; we string together
+  // the assistant content / reasoning / tool-call arguments here so the
+  // resulting file reads as one continuous conversation instead of a
+  // chunk stream.
   if (req.url === '/api/dev/stream-log' && req.method === 'POST') {
     let body = ''
     let bodySize = 0
@@ -152,16 +157,61 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ error: 'Missing events array' }))
           return
         }
+
+        let content = ''
+        let reasoning = ''
+        let toolArgs = ''
+        let chunkCount = 0
+        const tinfoilEvents = []
+        for (const entry of events) {
+          if (entry?.type === 'tinfoil_event') {
+            tinfoilEvents.push(entry.data)
+            continue
+          }
+          if (entry?.type !== 'parsed') continue
+          chunkCount++
+          const delta = entry.data?.choices?.[0]?.delta
+          if (!delta) continue
+          if (typeof delta.content === 'string') content += delta.content
+          if (typeof delta.reasoning_content === 'string') {
+            reasoning += delta.reasoning_content
+          } else if (typeof delta.reasoning === 'string') {
+            reasoning += delta.reasoning
+          }
+          if (Array.isArray(delta.tool_calls)) {
+            for (const tc of delta.tool_calls) {
+              const args = tc?.function?.arguments
+              if (typeof args === 'string') toolArgs += args
+            }
+          }
+        }
+
         fs.mkdirSync(LOGS_DIR, { recursive: true })
-        const id = chatId ? chatId.slice(0, 8) : 'unknown'
+        const id = chatId ? String(chatId).slice(0, 8) : 'unknown'
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-        const filename = `stream-${id}-${timestamp}.jsonl`
+        const filename = `stream-${id}-${timestamp}.md`
         const filepath = path.join(LOGS_DIR, filename)
-        const lines = events.map((e) => JSON.stringify(e)).join('\n') + '\n'
-        fs.writeFileSync(filepath, lines, 'utf-8')
-        console.log(`  Stream log: ${filename} (${events.length} events)`)
+
+        let out = `# Stream ${chatId || 'unknown'}\n\n`
+        out += `chunks: ${chunkCount}, content: ${content.length} chars, reasoning: ${reasoning.length} chars, tool_args: ${toolArgs.length} chars, tinfoil_events: ${tinfoilEvents.length}\n\n`
+        if (reasoning) out += `## Reasoning\n\n${reasoning}\n\n`
+        if (toolArgs) {
+          out += `## Tool call arguments (concatenated)\n\n\`\`\`\n${toolArgs}\n\`\`\`\n\n`
+        }
+        if (tinfoilEvents.length > 0) {
+          out += `## Tinfoil events\n\n`
+          for (const event of tinfoilEvents) {
+            out += '```json\n' + JSON.stringify(event, null, 2) + '\n```\n\n'
+          }
+        }
+        out += `## Assistant content\n\n${content || '_(empty)_'}\n`
+
+        fs.writeFileSync(filepath, out, 'utf-8')
+        console.log(
+          `  Stream log: ${filename} (${content.length} chars assistant content)`,
+        )
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ file: filename, count: events.length }))
+        res.end(JSON.stringify({ file: filename, chars: content.length }))
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: err.message }))

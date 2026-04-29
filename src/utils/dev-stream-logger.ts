@@ -22,39 +22,6 @@ const noopLogger: StreamLogger = {
   flush() {},
 }
 
-// extractAssistantText pulls the assistant content / reasoning / tool-call
-// argument tokens from a single chat-completion chunk so flush() can stitch
-// them back into one readable stream. Returns three buckets so each kind of
-// token lands in its own concatenated view.
-function extractAssistantText(json: unknown): {
-  content: string
-  reasoning: string
-  toolArgs: string
-} {
-  const choice = (
-    json as { choices?: Array<{ delta?: Record<string, unknown> }> }
-  )?.choices?.[0]
-  const delta = choice?.delta
-  if (!delta) return { content: '', reasoning: '', toolArgs: '' }
-
-  const content = typeof delta.content === 'string' ? delta.content : ''
-  const reasoning =
-    (typeof delta.reasoning_content === 'string'
-      ? delta.reasoning_content
-      : '') || (typeof delta.reasoning === 'string' ? delta.reasoning : '')
-
-  let toolArgs = ''
-  const toolCalls = delta.tool_calls
-  if (Array.isArray(toolCalls)) {
-    for (const tc of toolCalls) {
-      const fn = (tc as { function?: { arguments?: unknown } })?.function
-      if (fn && typeof fn.arguments === 'string') toolArgs += fn.arguments
-    }
-  }
-
-  return { content, reasoning, toolArgs }
-}
-
 export function createStreamLogger(): StreamLogger {
   if (!IS_DEV) return noopLogger
 
@@ -79,48 +46,16 @@ export function createStreamLogger(): StreamLogger {
 
     flush(chatId: string) {
       if (entries.length === 0) return
-
-      let content = ''
-      let reasoning = ''
-      let toolArgs = ''
-      for (const entry of entries) {
-        if (entry.type !== 'parsed') continue
-        const parts = extractAssistantText(entry.data)
-        content += parts.content
-        reasoning += parts.reasoning
-        toolArgs += parts.toolArgs
-      }
-
-      const tinfoilEvents = entries
-        .filter((e) => e.type === 'tinfoil_event')
-        .map((e) => e.data)
-
-      const summary =
-        `chat=${chatId} chunks=${entries.filter((e) => e.type === 'parsed').length}` +
-        ` content=${content.length}ch reasoning=${reasoning.length}ch` +
-        ` tool_args=${toolArgs.length}ch tinfoil_events=${tinfoilEvents.length}`
-
-      console.groupCollapsed(`[stream] ${summary}`)
-      if (reasoning) {
-        console.log('--- reasoning ---')
-        console.log(reasoning)
-      }
-      if (toolArgs) {
-        console.log('--- tool call arguments (concatenated) ---')
-        console.log(toolArgs)
-      }
-      if (tinfoilEvents.length > 0) {
-        console.log('--- tinfoil events ---')
-        for (const event of tinfoilEvents) console.log(event)
-      }
-      console.log('--- assistant content ---')
-      console.log(content || '(empty)')
-      console.groupCollapsed(`raw entries (${entries.length})`)
-      for (const entry of entries) console.log(entry)
-      console.groupEnd()
-      console.groupEnd()
-
+      const payload = { chatId, events: entries.slice() }
       entries.length = 0
+      fetch('/api/dev/stream-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {
+        // Dev-only, silently ignore failures (e.g. running under
+        // `next dev` where the route isn't wired up).
+      })
     },
   }
 }
