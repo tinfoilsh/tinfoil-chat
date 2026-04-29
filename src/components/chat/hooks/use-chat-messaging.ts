@@ -571,7 +571,6 @@ export function useChatMessaging({
           webSearchEnabled,
           codeExecutionEnabled,
           piiCheckEnabled,
-          chatId: startingChatId,
           execSessionId: resolvedExecSessionId,
           execPubkey: execPubkey ?? undefined,
           execResumeDek: execResumeDek ?? undefined,

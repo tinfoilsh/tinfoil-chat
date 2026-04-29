@@ -53,8 +53,7 @@ export function createStreamLogger(): StreamLogger {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }).catch(() => {
-        // Dev-only, silently ignore failures (e.g. running under
-        // `next dev` where the route isn't wired up).
+        // Dev-only, silently ignore failures
       })
     },
   }

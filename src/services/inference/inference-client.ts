@@ -83,7 +83,6 @@ export interface SendChatStreamParams {
   webSearchEnabled?: boolean
   codeExecutionEnabled?: boolean
   piiCheckEnabled?: boolean
-  chatId?: string
   execSessionId?: string
   execPubkey?: string
   execResumeDek?: string
@@ -104,7 +103,6 @@ export async function sendChatStream(
     webSearchEnabled,
     codeExecutionEnabled,
     piiCheckEnabled,
-    chatId,
     execSessionId,
     execPubkey,
     execResumeDek,
