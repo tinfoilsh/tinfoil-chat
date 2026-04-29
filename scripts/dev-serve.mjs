@@ -130,11 +130,12 @@ const server = http.createServer((req, res) => {
   }
 
   // Dev stream logger: receive raw chunk-level entries from the webapp
-  // and write a stitched-together markdown transcript per stream to
-  // logs/. The webapp logger ships per-chunk events; we string together
-  // the assistant content / reasoning / tool-call arguments here so the
-  // resulting file reads as one continuous conversation instead of a
-  // chunk stream.
+  // and write a chronological transcript per stream to logs/. We walk
+  // entries in arrival order and merge consecutive same-kind tokens
+  // (reasoning, tool args per call index, assistant content) into a
+  // single linear log. Tinfoil markers are surfaced inline at the
+  // position they appeared in the stream so tool calls and their
+  // results read in sequence with the surrounding text.
   if (req.url === '/api/dev/stream-log' && req.method === 'POST') {
     let body = ''
     let bodySize = 0
@@ -158,33 +159,101 @@ const server = http.createServer((req, res) => {
           return
         }
 
-        let content = ''
-        let reasoning = ''
-        let toolArgs = ''
+        const segments = []
+        let cur = null
+        const flush = () => {
+          if (cur && cur.text) segments.push(cur)
+          cur = null
+        }
+        const append = (kind, label, text) => {
+          if (!text) return
+          if (!cur || cur.kind !== kind || cur.label !== label) {
+            flush()
+            cur = { kind, label, text: '' }
+          }
+          cur.text += text
+        }
+
+        const TINFOIL_RE = /<tinfoil-event>([\s\S]*?)<\/tinfoil-event>/g
+        const splitContent = (raw) => {
+          // Returns alternating { kind: 'text'|'marker', value } pieces in
+          // order of appearance, so markers can become their own segments.
+          const out = []
+          let last = 0
+          for (const m of raw.matchAll(TINFOIL_RE)) {
+            if (m.index > last)
+              out.push({ kind: 'text', value: raw.slice(last, m.index) })
+            try {
+              out.push({ kind: 'marker', value: JSON.parse(m[1]) })
+            } catch {
+              out.push({ kind: 'text', value: m[0] })
+            }
+            last = m.index + m[0].length
+          }
+          if (last < raw.length)
+            out.push({ kind: 'text', value: raw.slice(last) })
+          return out
+        }
+
         let chunkCount = 0
-        const tinfoilEvents = []
         for (const entry of events) {
           if (entry?.type === 'tinfoil_event') {
-            tinfoilEvents.push(entry.data)
+            // The webapp also logs parsed markers separately; the inline
+            // marker pass above already captures them in their content
+            // position, so skip these to avoid duplicates.
             continue
           }
           if (entry?.type !== 'parsed') continue
           chunkCount++
           const delta = entry.data?.choices?.[0]?.delta
           if (!delta) continue
-          if (typeof delta.content === 'string') content += delta.content
-          if (typeof delta.reasoning_content === 'string') {
-            reasoning += delta.reasoning_content
-          } else if (typeof delta.reasoning === 'string') {
-            reasoning += delta.reasoning
-          }
+
+          const reasoning =
+            (typeof delta.reasoning_content === 'string'
+              ? delta.reasoning_content
+              : '') ||
+            (typeof delta.reasoning === 'string' ? delta.reasoning : '')
+          if (reasoning) append('reasoning', '', reasoning)
+
           if (Array.isArray(delta.tool_calls)) {
             for (const tc of delta.tool_calls) {
+              const idx = tc?.index ?? 0
+              const name = tc?.function?.name || ''
               const args = tc?.function?.arguments
-              if (typeof args === 'string') toolArgs += args
+              const label = name ? `${name}#${idx}` : `#${idx}`
+              if (typeof args === 'string') append('tool_args', label, args)
+            }
+          }
+
+          if (typeof delta.content === 'string' && delta.content) {
+            for (const piece of splitContent(delta.content)) {
+              if (piece.kind === 'text') {
+                append('content', '', piece.value)
+                continue
+              }
+              const ev = piece.value
+              const toolName = ev?.tool?.name || 'unknown'
+              const status = ev?.status || ''
+              flush()
+              if (status === 'in_progress') {
+                const args = ev?.tool?.arguments
+                segments.push({
+                  kind: 'tool_call',
+                  label: `${toolName} (in_progress)`,
+                  text: args ? JSON.stringify(args, null, 2) : '',
+                })
+              } else {
+                segments.push({
+                  kind: 'tool_result',
+                  label: `${toolName} (${status})`,
+                  text:
+                    typeof ev?.tool?.output === 'string' ? ev.tool.output : '',
+                })
+              }
             }
           }
         }
+        flush()
 
         fs.mkdirSync(LOGS_DIR, { recursive: true })
         const id = chatId ? String(chatId).slice(0, 8) : 'unknown'
@@ -192,26 +261,25 @@ const server = http.createServer((req, res) => {
         const filename = `stream-${id}-${timestamp}.md`
         const filepath = path.join(LOGS_DIR, filename)
 
-        let out = `# Stream ${chatId || 'unknown'}\n\n`
-        out += `chunks: ${chunkCount}, content: ${content.length} chars, reasoning: ${reasoning.length} chars, tool_args: ${toolArgs.length} chars, tinfoil_events: ${tinfoilEvents.length}\n\n`
-        if (reasoning) out += `## Reasoning\n\n${reasoning}\n\n`
-        if (toolArgs) {
-          out += `## Tool call arguments (concatenated)\n\n\`\`\`\n${toolArgs}\n\`\`\`\n\n`
+        let out = `# Stream ${chatId || 'unknown'} (${chunkCount} chunks)\n\n`
+        for (const seg of segments) {
+          const header =
+            seg.kind === 'reasoning'
+              ? '--- reasoning ---'
+              : seg.kind === 'tool_args'
+                ? `--- tool call args: ${seg.label} ---`
+                : seg.kind === 'tool_call'
+                  ? `--- tool call: ${seg.label} ---`
+                  : seg.kind === 'tool_result'
+                    ? `--- tool result: ${seg.label} ---`
+                    : '--- content ---'
+          out += `${header}\n${seg.text}\n\n`
         }
-        if (tinfoilEvents.length > 0) {
-          out += `## Tinfoil events\n\n`
-          for (const event of tinfoilEvents) {
-            out += '```json\n' + JSON.stringify(event, null, 2) + '\n```\n\n'
-          }
-        }
-        out += `## Assistant content\n\n${content || '_(empty)_'}\n`
 
         fs.writeFileSync(filepath, out, 'utf-8')
-        console.log(
-          `  Stream log: ${filename} (${content.length} chars assistant content)`,
-        )
+        console.log(`  Stream log: ${filename} (${chunkCount} chunks)`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ file: filename, chars: content.length }))
+        res.end(JSON.stringify({ file: filename, chunks: chunkCount }))
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: err.message }))
