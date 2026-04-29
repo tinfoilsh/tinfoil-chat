@@ -10,6 +10,25 @@ interface UrlHashMessageHandlerProps {
 const MAX_MESSAGE_LENGTH = 50000
 const CONTROL_CHARS_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/
 
+/**
+ * Rewrites the current URL to remove any markers that would cause the message
+ * handler to re-fire on a future reload. Strips both `?q=` and `#send=` so a
+ * URL like `/?q=foo#send=<b64>` can't auto-send the leftover query param later.
+ */
+function clearMessageMarkersFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  params.delete('q')
+  const remainingQuery = params.toString()
+  const hash = window.location.hash.startsWith('#send=')
+    ? ''
+    : window.location.hash
+  const newUrl =
+    window.location.pathname +
+    (remainingQuery ? `?${remainingQuery}` : '') +
+    hash
+  window.history.replaceState(null, '', newUrl)
+}
+
 function sanitizeMessage(decodedMessage: string): string | null {
   if (!decodedMessage) {
     return null
@@ -87,11 +106,7 @@ export function UrlHashMessageHandler({
           hasProcessed.current = true
           onMessageReady(normalizedMessage)
 
-          window.history.replaceState(
-            null,
-            '',
-            window.location.pathname + window.location.search,
-          )
+          clearMessageMarkersFromUrl()
           return true
         } catch (decodeError) {
           logWarning('Invalid base64 encoding in URL hash', {
@@ -135,13 +150,7 @@ export function UrlHashMessageHandler({
         hasProcessed.current = true
         onMessageReady(normalizedMessage)
 
-        params.delete('q')
-        const remainingQuery = params.toString()
-        const newUrl =
-          window.location.pathname +
-          (remainingQuery ? `?${remainingQuery}` : '') +
-          window.location.hash
-        window.history.replaceState(null, '', newUrl)
+        clearMessageMarkersFromUrl()
         return true
       } catch (error) {
         logError('Failed to process URL query message', error, {
