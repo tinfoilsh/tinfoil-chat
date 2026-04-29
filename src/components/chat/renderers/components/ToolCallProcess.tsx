@@ -28,6 +28,15 @@ function getToolLabel(call: ToolCallState): string {
       }
       return call.status === 'running' ? 'Reading file' : 'Read file'
     }
+    case 'present': {
+      const path = call.arguments?.path
+      if (typeof path === 'string') {
+        return call.status === 'running'
+          ? `Presenting \`${path}\``
+          : `Presented \`${path}\``
+      }
+      return call.status === 'running' ? 'Presenting file' : 'Presented file'
+    }
     case 'str_replace': {
       const path = call.arguments?.path
       if (typeof path === 'string') {
@@ -162,6 +171,28 @@ export const ToolCallProcess = memo(function ToolCallProcess({
   const headerLabel = useMemo(() => getHeaderLabel(calls), [calls])
 
   if (calls.length === 0) return null
+
+  // Present has no expandable body: the file's contents are rendered as
+  // inline markdown by the message body, so the tool-call surfaces only
+  // a flat label without a chevron or dropdown.
+  if (calls.every((c) => c.toolName === 'present')) {
+    return (
+      <div className="-mx-1 flex w-full items-start gap-1.5 px-1 py-1">
+        <span className="mt-[5px] h-3.5 w-3.5 shrink-0" aria-hidden="true">
+          {anyRunning ? (
+            <PiSpinner
+              className="h-3.5 w-3.5 animate-spin text-content-primary/50"
+              aria-hidden="true"
+              focusable="false"
+            />
+          ) : null}
+        </span>
+        <span className="min-w-0 text-base font-medium text-content-primary/50">
+          {headerLabel}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div>
