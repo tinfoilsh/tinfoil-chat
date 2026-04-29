@@ -256,12 +256,18 @@ const server = http.createServer((req, res) => {
         flush()
 
         fs.mkdirSync(LOGS_DIR, { recursive: true })
-        const id = chatId ? String(chatId).slice(0, 8) : 'unknown'
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-        const filename = `stream-${id}-${timestamp}.md`
+        // Stable filename per chat: every turn in the same chat appends
+        // to the same file, separated by a turn header so the log reads
+        // top-to-bottom across the whole conversation.
+        const safeId = chatId ? String(chatId).replace(/[^a-zA-Z0-9_-]/g, '_') : 'unknown'
+        const filename = `chat-${safeId}.md`
         const filepath = path.join(LOGS_DIR, filename)
+        const isNew = !fs.existsSync(filepath)
 
-        let out = `# Stream ${chatId || 'unknown'} (${chunkCount} chunks)\n\n`
+        let out = ''
+        if (isNew) out += `# Chat ${chatId || 'unknown'}\n\n`
+        const timestamp = new Date().toISOString()
+        out += `\n## Turn @ ${timestamp} (${chunkCount} chunks)\n\n`
         for (const seg of segments) {
           const header =
             seg.kind === 'reasoning'
@@ -276,8 +282,8 @@ const server = http.createServer((req, res) => {
           out += `${header}\n${seg.text}\n\n`
         }
 
-        fs.writeFileSync(filepath, out, 'utf-8')
-        console.log(`  Stream log: ${filename} (${chunkCount} chunks)`)
+        fs.appendFileSync(filepath, out, 'utf-8')
+        console.log(`  Stream log: ${filename} (+${chunkCount} chunks)`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ file: filename, chunks: chunkCount }))
       } catch (err) {

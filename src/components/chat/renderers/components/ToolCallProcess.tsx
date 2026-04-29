@@ -8,65 +8,79 @@ interface ToolCallProcessProps {
 
 function getToolLabel(call: ToolCallState): string {
   const name = call.toolName
+  const path =
+    typeof call.arguments?.path === 'string'
+      ? (call.arguments.path as string)
+      : null
+  const failed = call.status === 'failed'
+
   switch (name) {
     case 'bash': {
       const cmd = call.arguments?.command
       if (typeof cmd === 'string') {
         const short = cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd
+        if (failed) return `Command failed: \`${short}\``
         return call.status === 'running'
           ? `Running \`${short}\``
           : `Ran \`${short}\``
       }
+      if (failed) return 'Command failed'
       return call.status === 'running' ? 'Running command' : 'Ran command'
     }
     case 'view': {
-      const path = call.arguments?.path
-      if (typeof path === 'string') {
+      if (path) {
+        if (failed) return `Failed to read \`${path}\``
         return call.status === 'running'
           ? `Reading \`${path}\``
           : `Read \`${path}\``
       }
+      if (failed) return 'Failed to read file'
       return call.status === 'running' ? 'Reading file' : 'Read file'
     }
     case 'present': {
-      const path = call.arguments?.path
-      if (typeof path === 'string') {
+      if (path) {
+        if (failed) return `Failed to present \`${path}\``
         return call.status === 'running'
           ? `Presenting \`${path}\``
           : `Presented \`${path}\``
       }
+      if (failed) return 'Failed to present file'
       return call.status === 'running' ? 'Presenting file' : 'Presented file'
     }
     case 'str_replace': {
-      const path = call.arguments?.path
-      if (typeof path === 'string') {
+      if (path) {
+        if (failed) return `Failed to edit \`${path}\``
         return call.status === 'running'
           ? `Editing \`${path}\``
           : `Edited \`${path}\``
       }
+      if (failed) return 'Failed to edit file'
       return call.status === 'running' ? 'Editing file' : 'Edited file'
     }
     case 'create': {
-      const path = call.arguments?.path
-      if (typeof path === 'string') {
+      if (path) {
+        if (failed) return `Failed to create \`${path}\``
         return call.status === 'running'
           ? `Creating \`${path}\``
           : `Created \`${path}\``
       }
+      if (failed) return 'Failed to create file'
       return call.status === 'running' ? 'Creating file' : 'Created file'
     }
     case 'insert': {
-      const path = call.arguments?.path
-      if (typeof path === 'string') {
+      if (path) {
+        if (failed) return `Failed to insert into \`${path}\``
         return call.status === 'running'
           ? `Inserting into \`${path}\``
           : `Inserted into \`${path}\``
       }
+      if (failed) return 'Failed to insert into file'
       return call.status === 'running'
         ? 'Inserting into file'
         : 'Inserted into file'
     }
     default:
+      if (failed) return `${name} failed`
       return call.status === 'running' ? `Running ${name}` : `Ran ${name}`
   }
 }
@@ -85,16 +99,26 @@ function getHeaderLabel(calls: ToolCallState[]): string {
 
 /** Get the displayable content block for a completed tool call. */
 function getDisplayContent(call: ToolCallState): string | null {
+  // Failed editor tools: the would-be file_text / context snippet is
+  // misleading (the action didn't happen). The label already conveys
+  // the failure; suppress the body so the row renders flat.
+  if (
+    call.status === 'failed' &&
+    (call.toolName === 'create' ||
+      call.toolName === 'str_replace' ||
+      call.toolName === 'insert' ||
+      call.toolName === 'view' ||
+      call.toolName === 'present')
+  ) {
+    return null
+  }
   switch (call.toolName) {
     case 'bash':
-      // Show command output (stdout/stderr)
+      // Show command output (stdout/stderr) — useful even on failure.
       return call.output || null
     case 'view':
-      // Output is the file content with line numbers
       return call.output || null
     case 'create':
-      // The interesting content is the file text from arguments, not the
-      // confirmation line in output ("Created foo.md (231 bytes)")
       return (
         (typeof call.arguments?.file_text === 'string'
           ? call.arguments.file_text
@@ -103,10 +127,8 @@ function getDisplayContent(call: ToolCallState): string | null {
         null
       )
     case 'str_replace':
-      // Output contains the replacement context snippet
       return call.output || null
     case 'insert':
-      // Output contains the insertion context snippet
       return call.output || null
     default:
       return call.output || null
@@ -172,10 +194,16 @@ export const ToolCallProcess = memo(function ToolCallProcess({
 
   if (calls.length === 0) return null
 
-  // Present has no expandable body: the file's contents are rendered as
-  // inline markdown by the message body, so the tool-call surfaces only
-  // a flat label without a chevron or dropdown.
-  if (calls.every((c) => c.toolName === 'present')) {
+  // Render flat (no chevron, no dropdown) when no call has a body worth
+  // expanding — present (rendered inline already), failed editor tools
+  // (no file_text body to show), and other completed tools whose output
+  // is empty. Running calls are treated as having a body so the user
+  // can expand to watch them resolve.
+  const hasBody = (c: ToolCallState): boolean => {
+    if (c.status === 'running') return c.toolName !== 'present'
+    return getDisplayContent(c) !== null
+  }
+  if (!calls.some(hasBody)) {
     return (
       <div className="-mx-1 flex w-full items-start gap-1.5 px-1 py-1">
         <span className="mt-[5px] h-3.5 w-3.5 shrink-0" aria-hidden="true">
