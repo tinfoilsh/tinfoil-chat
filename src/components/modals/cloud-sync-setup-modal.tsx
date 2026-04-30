@@ -44,7 +44,7 @@ interface CloudSyncSetupModalBaseProps {
    * When true, the modal skips the passkey-based flow entirely and opens
    * directly on the manual "generate or restore key" step. Used when the
    * user's passkey provider doesn't support PRF and they opt into manual
-   * backup from the {@link PasskeySetupFailedModal} warning.
+   * backup from the sidebar backup warning.
    */
   forceManualFlow?: boolean
   /**

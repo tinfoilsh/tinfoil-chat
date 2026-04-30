@@ -2,6 +2,7 @@ import {
   PASSKEY_BUNDLE_VERSION,
   PASSKEY_SYNC_VERSION,
   SECRET_PASSKEY_BACKED_UP,
+  SETTINGS_BACKUP_WARNING_DISMISSED,
   SETTINGS_MANUAL_RECOVERY_DISMISSED,
   SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED,
   SETTINGS_PASSKEY_RECOVERY_DISMISSED,
@@ -194,6 +195,11 @@ const manualRecoveryDismissedFlag = createStorageFlag(
   SETTINGS_MANUAL_RECOVERY_DISMISSED,
 )
 
+const backupWarningDismissedFlag = createStorageFlag(
+  () => localStorage,
+  SETTINGS_BACKUP_WARNING_DISMISSED,
+)
+
 export function usePasskeyBackup({
   encryptionKey,
   initialized,
@@ -251,6 +257,7 @@ export function usePasskeyBackup({
       firstTimePromptDismissedFlag.clear()
       setupWarningDismissedFlag.clear()
       manualRecoveryDismissedFlag.clear()
+      backupWarningDismissedFlag.clear()
       if (isMountedRef.current) {
         setState({
           passkeyActive: false,
@@ -796,11 +803,13 @@ export function usePasskeyBackup({
           const remoteState = await inspectRemoteEncryptedState()
           if (!isMountedRef.current) return
           if (remoteState === 'empty') {
-            setState((prev) => ({
-              ...prev,
-              passkeySetupFailed: true,
-              passkeyRetryAvailable: false,
-            }))
+            if (!backupWarningDismissedFlag.isSet()) {
+              setState((prev) => ({
+                ...prev,
+                passkeySetupFailed: true,
+                passkeyRetryAvailable: false,
+              }))
+            }
           } else if (!manualRecoveryDismissedFlag.isSet()) {
             // Remote data exists but PRF is unavailable on this device.
             // Surface both the recovery-needed flag (so the unlock modal
@@ -926,6 +935,7 @@ export function usePasskeyBackup({
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
       manualRecoveryDismissedFlag.clear()
+      backupWarningDismissedFlag.clear()
     }
   }, [encryptionKey])
 
@@ -1046,30 +1056,22 @@ export function usePasskeyBackup({
     }
   }, [generateKeyWithPasskeyBackup, rollbackToPreviousKeys])
 
-  const dismissPasskeySetupFailed = useCallback((): void => {
+  // Dismiss the sidebar "your chats aren't being backed up" warning. Persists
+  // across reloads via SETTINGS_BACKUP_WARNING_DISMISSED. The persistent
+  // dismiss is cleared automatically once the user regains an encryption key
+  // or signs in as a different user, so legitimate future warnings can
+  // resurface.
+  const dismissBackupWarning = useCallback((): void => {
     setupWarningDismissedFlag.set()
+    backupWarningDismissedFlag.set()
     if (isMountedRef.current) {
       setState((prev) => {
-        // If the warning is being dismissed while we're in the recovery
-        // flow (remote passkey exists but this device can't use it),
-        // persist a localStorage flag so the recovery modal doesn't
-        // re-open on every reload. It's cleared when the user successfully
-        // unlocks with a passkey or applies a manual key.
-        if (prev.passkeyRecoveryNeeded) {
-          passkeyRecoveryDismissedFlag.set()
-        }
-        // Same idea for the manual-recovery flow (orphan remote data with
-        // no passkey to retry against): persist the dismissal so the
-        // "Unlock Your Chats" warning doesn't reappear on every reload.
         if (prev.manualRecoveryNeeded) {
           manualRecoveryDismissedFlag.set()
         }
         return {
           ...prev,
           passkeySetupFailed: false,
-          // Also hide the recovery-needed flag so chat-interface closes the
-          // auto-opened recovery modal. It stays recoverable via Settings.
-          passkeyRecoveryNeeded: false,
           manualRecoveryNeeded: false,
         }
       })
@@ -1282,43 +1284,6 @@ export function usePasskeyBackup({
     })
   }, [])
 
-  // Called from the "Try Again with Passkey" button on the setup-failed
-  // warning modal. Picks the right passkey flow based on current state:
-  // - local key + no backup → retry `setupPasskey` (backup-existing-key)
-  // - no key + remote credential → retry `recoverWithPasskey`
-  // - no key + no remote → retry `setupFirstTimePasskey`
-  // Returns true on success, false on any failure path (caller keeps the
-  // warning dismissed and the user can try again manually).
-  const retryPasskeySetup = useCallback(async (): Promise<boolean> => {
-    setupWarningDismissedFlag.clear()
-    passkeyRecoveryDismissedFlag.clear()
-    firstTimePromptDismissedFlag.clear()
-    manualRecoveryDismissedFlag.clear()
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, passkeySetupFailed: false }))
-    }
-
-    const hasLocalKey = Boolean(encryptionService.getKey())
-    if (hasLocalKey) {
-      return await setupPasskey()
-    }
-
-    try {
-      const credentialState = await getPasskeyCredentialState()
-      if (credentialState === 'exists') {
-        const key = await recoverWithPasskey()
-        return Boolean(key)
-      }
-      return await setupFirstTimePasskey()
-    } catch (error) {
-      logError('Retry passkey setup failed', error, {
-        component: 'usePasskeyBackup',
-        action: 'retryPasskeySetup',
-      })
-      return false
-    }
-  }, [setupPasskey, recoverWithPasskey, setupFirstTimePasskey])
-
   return {
     ...state,
     setupPasskey,
@@ -1329,8 +1294,7 @@ export function usePasskeyBackup({
     recoverWithPasskey,
     setupNewKeySplit,
     updatePasskeyBackup,
-    dismissPasskeySetupFailed,
+    dismissBackupWarning,
     skipPasskeyRecovery,
-    retryPasskeySetup,
   }
 }

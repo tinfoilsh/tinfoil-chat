@@ -64,6 +64,13 @@ export const SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED =
 // re-enables cloud sync from settings.
 export const SETTINGS_MANUAL_RECOVERY_DISMISSED =
   'tinfoil-settings-manual-recovery-dismissed'
+// Persists across sessions: set when the user dismisses the sidebar
+// "your chats aren't being backed up" warning. Cleared automatically when
+// the underlying state clears (passkey backup is set up, key is recovered,
+// or the user signs in as a different user) so the warning can resurface
+// for genuinely new warning conditions later.
+export const SETTINGS_BACKUP_WARNING_DISMISSED =
+  'tinfoil-settings-backup-warning-dismissed'
 
 // --- sessionStorage: Passkey setup failure ---------------------------------
 // Tracks whether the user has dismissed the "passkey backup failed" warning
