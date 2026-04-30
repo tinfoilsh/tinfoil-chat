@@ -55,6 +55,15 @@ export const SETTINGS_PASSKEY_RECOVERY_DISMISSED =
 // when they explicitly re-enable cloud sync from settings.
 export const SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED =
   'tinfoil-settings-passkey-first-time-prompt-dismissed'
+// Persists across sessions: set when the user dismisses the
+// "Unlock Your Chats" / manual-recovery warning while in a state where there
+// is no passkey credential to retry against (e.g. orphan remote data left
+// over from a pre-account session). While set, the manual-recovery prompt
+// is not auto-opened on page load. Cleared automatically when the user
+// successfully recovers a key, signs in as a different user, or explicitly
+// re-enables cloud sync from settings.
+export const SETTINGS_MANUAL_RECOVERY_DISMISSED =
+  'tinfoil-settings-manual-recovery-dismissed'
 
 // --- sessionStorage: Passkey setup failure ---------------------------------
 // Tracks whether the user has dismissed the "passkey backup failed" warning

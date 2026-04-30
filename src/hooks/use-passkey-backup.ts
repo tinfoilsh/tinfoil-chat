@@ -2,6 +2,7 @@ import {
   PASSKEY_BUNDLE_VERSION,
   PASSKEY_SYNC_VERSION,
   SECRET_PASSKEY_BACKED_UP,
+  SETTINGS_MANUAL_RECOVERY_DISMISSED,
   SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED,
   SETTINGS_PASSKEY_RECOVERY_DISMISSED,
   SETTINGS_PASSKEY_SETUP_WARNING_DISMISSED,
@@ -188,6 +189,11 @@ const firstTimePromptDismissedFlag = createStorageFlag(
   SETTINGS_PASSKEY_FIRST_TIME_PROMPT_DISMISSED,
 )
 
+const manualRecoveryDismissedFlag = createStorageFlag(
+  () => localStorage,
+  SETTINGS_MANUAL_RECOVERY_DISMISSED,
+)
+
 export function usePasskeyBackup({
   encryptionKey,
   initialized,
@@ -244,6 +250,7 @@ export function usePasskeyBackup({
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
       setupWarningDismissedFlag.clear()
+      manualRecoveryDismissedFlag.clear()
       if (isMountedRef.current) {
         setState({
           passkeyActive: false,
@@ -794,12 +801,14 @@ export function usePasskeyBackup({
               passkeySetupFailed: true,
               passkeyRetryAvailable: false,
             }))
-          } else {
+          } else if (!manualRecoveryDismissedFlag.isSet()) {
             // Remote data exists but PRF is unavailable on this device.
             // Surface both the recovery-needed flag (so the unlock modal
             // can open when sync is enabled) and the warning (so the user
             // knows their chats aren't being backed up right now). Hide
             // the retry button since there's nothing to retry with.
+            // Skip entirely if the user previously opted out of the manual
+            // recovery prompt — they can re-trigger it from Settings.
             setState((prev) => ({
               ...prev,
               manualRecoveryNeeded: true,
@@ -868,7 +877,10 @@ export function usePasskeyBackup({
                 passkeyFirstTimePromptAvailable: true,
               }))
             }
-          } else if (isMountedRef.current) {
+          } else if (
+            isMountedRef.current &&
+            !manualRecoveryDismissedFlag.isSet()
+          ) {
             // Remote encrypted data exists but the server has no passkey
             // credential registered for this user, so we can't offer a
             // passkey-driven unlock on this device. Surface both:
@@ -878,7 +890,8 @@ export function usePasskeyBackup({
             //    aren't being backed up, with manual-backup as the primary
             //    fallback. Hide the "Try Again with Passkey" button since
             //    there's no passkey to retry against.
-            // Respect the session warning-dismiss flag.
+            // Respect the session warning-dismiss flag and the persistent
+            // manual-recovery dismiss flag.
             setState((prev) => ({
               ...prev,
               manualRecoveryNeeded: true,
@@ -888,7 +901,10 @@ export function usePasskeyBackup({
               passkeyRetryAvailable: false,
             }))
           }
-        } else if (isMountedRef.current) {
+        } else if (
+          isMountedRef.current &&
+          !manualRecoveryDismissedFlag.isSet()
+        ) {
           setState((prev) => ({
             ...prev,
             manualRecoveryNeeded: true,
@@ -909,6 +925,7 @@ export function usePasskeyBackup({
     if (encryptionKey) {
       passkeyRecoveryDismissedFlag.clear()
       firstTimePromptDismissedFlag.clear()
+      manualRecoveryDismissedFlag.clear()
     }
   }, [encryptionKey])
 
@@ -1041,12 +1058,19 @@ export function usePasskeyBackup({
         if (prev.passkeyRecoveryNeeded) {
           passkeyRecoveryDismissedFlag.set()
         }
+        // Same idea for the manual-recovery flow (orphan remote data with
+        // no passkey to retry against): persist the dismissal so the
+        // "Unlock Your Chats" warning doesn't reappear on every reload.
+        if (prev.manualRecoveryNeeded) {
+          manualRecoveryDismissedFlag.set()
+        }
         return {
           ...prev,
           passkeySetupFailed: false,
           // Also hide the recovery-needed flag so chat-interface closes the
           // auto-opened recovery modal. It stays recoverable via Settings.
           passkeyRecoveryNeeded: false,
+          manualRecoveryNeeded: false,
         }
       })
     }
@@ -1234,19 +1258,28 @@ export function usePasskeyBackup({
   const skipPasskeyRecovery = useCallback((): void => {
     passkeyRecoveryDismissedFlag.set()
     if (!isMountedRef.current) return
-    setState((prev) => ({
-      ...prev,
-      passkeyRecoveryNeeded: false,
-      // Surface the "chats are not being backed up" warning so the user
-      // has a clear next step (manual backup or continue without). Respect
-      // the session dismiss so we don't keep reopening it.
-      passkeySetupFailed: setupWarningDismissedFlag.isSet()
-        ? prev.passkeySetupFailed
-        : true,
-      // A passkey credential is registered on the server, so retrying
-      // passkey recovery is a valid next step.
-      passkeyRetryAvailable: true,
-    }))
+    setState((prev) => {
+      // If the user is skipping the manual-recovery flow (no passkey to
+      // retry against), persist that dismissal too so the "Unlock Your
+      // Chats" warning doesn't auto-open on every reload.
+      if (prev.manualRecoveryNeeded) {
+        manualRecoveryDismissedFlag.set()
+      }
+      return {
+        ...prev,
+        passkeyRecoveryNeeded: false,
+        manualRecoveryNeeded: false,
+        // Surface the "chats are not being backed up" warning so the user
+        // has a clear next step (manual backup or continue without). Respect
+        // the session dismiss so we don't keep reopening it.
+        passkeySetupFailed: setupWarningDismissedFlag.isSet()
+          ? prev.passkeySetupFailed
+          : true,
+        // A passkey credential is registered on the server, so retrying
+        // passkey recovery is a valid next step.
+        passkeyRetryAvailable: true,
+      }
+    })
   }, [])
 
   // Called from the "Try Again with Passkey" button on the setup-failed
@@ -1260,6 +1293,7 @@ export function usePasskeyBackup({
     setupWarningDismissedFlag.clear()
     passkeyRecoveryDismissedFlag.clear()
     firstTimePromptDismissedFlag.clear()
+    manualRecoveryDismissedFlag.clear()
     if (isMountedRef.current) {
       setState((prev) => ({ ...prev, passkeySetupFailed: false }))
     }
