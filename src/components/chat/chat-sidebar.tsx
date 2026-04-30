@@ -25,9 +25,11 @@ import {
   ChevronRightIcon,
   CloudIcon,
   Cog6ToothIcon,
+  ExclamationTriangleIcon,
   FolderIcon,
   FolderPlusIcon,
   TrashIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AiOutlineCloudSync } from 'react-icons/ai'
@@ -83,6 +85,14 @@ type ChatSidebarProps = {
   onCloudSyncSetupClick?: () => void
   onSetupPasskey?: () => Promise<boolean>
   passkeySetupAvailable?: boolean
+  backupWarningVisible?: boolean
+  /**
+   * True when remote encrypted data exists but this device can't decrypt it
+   * (no local key, no usable passkey). Switches the warning copy from
+   * "not being backed up" to "can't access existing backup".
+   */
+  backupWarningNeedsRecovery?: boolean
+  onDismissBackupWarning?: () => void
   onChatsUpdated?: () => void
   verificationComplete?: boolean
   verificationSuccess?: boolean
@@ -138,6 +148,9 @@ export function ChatSidebar({
   onCloudSyncSetupClick,
   onSetupPasskey,
   passkeySetupAvailable,
+  backupWarningVisible = false,
+  backupWarningNeedsRecovery = false,
+  onDismissBackupWarning,
   onChatsUpdated,
   isProjectMode,
   activeProjectName,
@@ -1036,6 +1049,52 @@ export function ChatSidebar({
           {/* Divider after boxes */}
           {!isPremium && (
             <div className="relative z-10 border-b border-border-subtle" />
+          )}
+
+          {/* Backup warning - shown when chats aren't backed up, or when
+              encrypted backups exist remotely but this device can't decrypt
+              them yet. */}
+          {backupWarningVisible && (
+            <div className="relative z-10 flex-none px-2 pt-2">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                <div className="flex items-start gap-2">
+                  <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+                  <div className="flex-1">
+                    <p className="font-aeonik text-xs font-semibold text-content-primary">
+                      {backupWarningNeedsRecovery
+                        ? "Can't access your existing backup"
+                        : "Chats aren't being backed up"}
+                    </p>
+                    <p className="mt-1 text-xs text-content-secondary">
+                      {backupWarningNeedsRecovery
+                        ? 'Set up cloud sync on this device to unlock your existing chats.'
+                        : 'Your chats only exist on this device.'}
+                    </p>
+                  </div>
+                  {onDismissBackupWarning && (
+                    <button
+                      type="button"
+                      onClick={onDismissBackupWarning}
+                      className="-mr-1 -mt-1 flex-shrink-0 rounded p-1 text-content-muted transition-colors hover:bg-amber-500/10 hover:text-content-secondary"
+                      aria-label="Dismiss"
+                    >
+                      <XMarkIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {onCloudSyncSetupClick && (
+                  <button
+                    type="button"
+                    onClick={onCloudSyncSetupClick}
+                    className="mt-2 w-full rounded-md bg-amber-500/90 px-2.5 py-1.5 font-aeonik text-xs font-medium text-white transition-colors hover:bg-amber-500"
+                  >
+                    {backupWarningNeedsRecovery
+                      ? 'Set Up Cloud Sync'
+                      : 'Enable Cloud Sync'}
+                  </button>
+                )}
+              </div>
+            </div>
           )}
 
           {/* New Chat button */}
