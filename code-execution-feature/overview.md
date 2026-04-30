@@ -1,6 +1,6 @@
 # Code Execution
 
-How the code-execution feature is wired across services, independent of the snapshot/state work in [CODE_EXEC_STATE_PLAN.md](./CODE_EXEC_STATE_PLAN.md) and the auth split in [auth.md](./auth.md).
+How the code-execution feature is wired across services, independent of the snapshot/state work in [snapshot.md](./snapshot.md) and the auth split in [auth.md](./auth.md).
 
 ## Pipeline
 
@@ -28,7 +28,7 @@ The orchestrator exposes an MCP-style HTTP server (`POST /mcp`) plus admin endpo
 - `POST /exec` — run a bash command, return stdout/stderr/exit code.
 - `POST /read` / `POST /write` — file IO inside `/workspace`.
 
-Each container is its own trust boundary — a fresh enclave per session. No persistence by default; that's what the snapshot work in [CODE_EXEC_STATE_PLAN.md](./CODE_EXEC_STATE_PLAN.md) layers on.
+Each container is its own trust boundary — a fresh enclave per session. No persistence by default; that's what the snapshot work in [snapshot.md](./snapshot.md) layers on.
 
 ## Tools surfaced to the model
 

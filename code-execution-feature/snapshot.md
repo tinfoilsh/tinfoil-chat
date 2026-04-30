@@ -6,7 +6,7 @@ Code-exec containers get evicted but `/workspace` state needs to survive — enc
 
 ## Code execution
 
-How the underlying code-execution pipeline works (orchestrator, sandbox, session mapping, wire headers) lives in [code-execution.md](./code-execution.md). Everything below assumes that as the substrate.
+How the underlying code-execution pipeline works (orchestrator, sandbox, session mapping, wire headers) lives in [overview.md](./overview.md). Everything below assumes that as the substrate.
 
 ## The unit of state
 
