@@ -2,127 +2,77 @@
 
 ## The problem
 
-Code execution containers can't run forever. At some point we have to evict them, which means the user's `/workspace` state has to go somewhere. But we need the same encryption guarantee we have everywhere else: Tinfoil cannot open it. We can't send it back to the client every time, because the state could be too big. And we don't have access to the user's encryption key inside the container, which is good — that's the whole point.
+Code-exec containers get evicted but `/workspace` state needs to survive — encrypted such that Tinfoil can't read it, and without sending it to the client every time (could be too big).
 
-## What's there today
+## Code execution
 
-The full request flow is:
-
-**webapp → confidential-model-router → confidential-code-execution (orchestrator) → code-execution-environment (sandbox)**
-
-The orchestrator already maintains a warm pool of containers and maps an `X-Session-Id` (currently just the chat ID, a `reverseTs_uuidv4`) to a container. The sandbox is a stateless bash runner with `/exec`, `/read`, `/write` against `/workspace`. No persistence anywhere. Every container is its own little trust boundary — a fresh enclave per session, which is reasonable.
+How the underlying code-execution pipeline works (orchestrator, sandbox, session mapping, wire headers) lives in [code-execution.md](./code-execution.md). Everything below assumes that as the substrate.
 
 ## The unit of state
 
-A tar of `/workspace`. We're going to ignore any long-running processes — we don't really allow them anyway, so it's just tar.
+A tar of `/workspace`. Long-running processes ignored.
 
 ## The two keys
 
-This is the part that took the longest to settle, and once it clicks the rest falls out:
+**User keypair (X25519).** Derived deterministically from the user's passkey via WebAuthn PRF + HKDF — same ceremony as chat encryption, different `info` label (`"tinfoil-exec-snapshot-v1"`). The 32 bytes out of HKDF are the X25519 private key directly (Curve25519 has no key-validation pass). Pubkey is shared freely; privkey lives briefly in webapp memory and is re-derived on demand.
 
-**The user's keypair (X25519, asymmetric).** Derived deterministically from the user's passkey via the WebAuthn PRF extension and HKDF. The same passkey ceremony the webapp already runs to unlock chat encryption — we just add a second `info` label (`"tinfoil-exec-snapshot-v1"`) and HKDF a different 32 bytes out of the same PRF master. Those 32 bytes are the X25519 private key directly (no prime-finding, just bytes-as-key — that's the trick of Curve25519). Multiplying the curve base point by the private key gives the public key. One passkey, two derived secrets, both rooted in the same user-verification ceremony.
+One synced passkey per user → one pubkey, one wrap.
 
-The pubkey is shared freely. The privkey lives only briefly in webapp memory and is re-derived on demand. Nothing private is ever persisted or sent over the wire.
-
-We assume one synced passkey per user. If hardware keys ever become a thing, we'd add a controlplane pubkey registry — but that's a v2 problem, and the on-disk format wouldn't have to change (just an array of wrappedDEKs instead of one).
-
-**The DEK (AES-256, symmetric).** Generated brand new by the container _each time it takes a snapshot_. Single-use. There's only one of them (not a pair) and a new one per snapshot. Used to encrypt the tar (the bulk data). The DEK itself is small, so the container wraps it under the user's pubkey before storage. The wrapped result — the "wrappedDEK" — sits in storage alongside the ciphertext tar.
-
-This is just standard hybrid encryption. Symmetric is fast and works on big data, asymmetric is what we use to deliver the key.
+**DEK (AES-256).** Fresh per snapshot, single-use, generated inside the container. Encrypts the tar (bulk data); the container wraps it under the user's pubkey before storage. Standard hybrid encryption.
 
 ## Identity per chat
 
-The wire protocol has a `sessionId` concept everywhere remote — `X-Session-Id` header, `/api/storage/exec-snapshot/{sessionId}` URL, orchestrator session→container map. **The webapp uses `chat.id` as that session ID.**. In the future it would be nice to use something else as the sessionID, to allow non-webapp clients. Storage rows are scoped per Clerk user (see [auth.md](./auth.md)).
+`X-Session-Id` carries `chat.id`. Same value drives the orchestrator session map and the `/api/storage/exec-snapshot/{sessionId}` URL. Storage rows scoped per Clerk user (see [auth.md](./auth.md)).
 
-We considered a separate unguessable `execSessionId` for b2b. This requires more thinking on how to manage state. Currently, iiuc we don't do any state management for b2b. Our inference endoint is stateless - message state is handled client side.
+We considered a separate unguessable `execSessionId` for b2b, but b2b inference is currently stateless (state is client-side), so deferred.
 
 ## The flow, end-to-end
 
-**Chat open:**
+**Chat open:** webapp re-derives the X25519 keypair, fetches the wrappedDEK for `chat.id` if any, unwraps with privkey, holds the plaintext DEK in memory.
 
-- Webapp re-derives the user's X25519 keypair from the passkey.
-- Webapp checks `/api/storage/exec-snapshot/{chat.id}` for an existing snapshot.
-- If one exists: fetch just the small wrappedDEK part, unwrap with the privkey, hold the plaintext DEK in memory.
+**Code execution request:** webapp sends the tool call through the router with `X-Session-Id`, the pubkey (always — for any future snapshot), and the DEK (only on cold resume).
 
-**Code execution request:**
+**Orchestrator `GetOrAssign`:** in-memory miss → fresh container from warm pool. If a resume DEK is present, fetch the ciphertext from storage, decrypt, push tar into `/workspace` before exposing the container to traffic. Otherwise empty. Restore happens only at assign time — there's no public `/restore` endpoint, which kills the "attacker uploads attacker-controlled tar" class.
 
-- Webapp sends the tool call through the router.
-- Headers carry: `X-Session-Id`, the user's pubkey (so any future snapshot can wrap to it), and — _if_ this is a cold resume — the unwrapped DEK.
+**Container** runs the tool call as today; caches the user pubkey from the request header for later.
 
-**Orchestrator `GetOrAssign`:**
+**Eviction (10 min idle):** orchestrator calls the container's new `POST /snapshot`. Container generates a fresh DEK, AES-GCM-encrypts a tar of `/workspace`, wraps the DEK with the cached pubkey, returns `{ciphertext, wrappedDEK}`. Orchestrator PUTs to `/api/storage/exec-snapshot/{sessionId}` and destroys the container.
 
-- In-memory miss → pull fresh container from warm pool.
-- If a resume DEK is in the request, fetch the ciphertext tar from storage, decrypt with the DEK, push the tar into the container's `/workspace`. Then mark assigned.
-- If no resume DEK and no snapshot exists, just assign a fresh empty container.
-- Restore happens only as the first thing during assignment. There is no public `/restore` endpoint — cleaner that way, kills a class of "attacker uploads attacker-controlled tar" problems.
-
-**Container handles the tool call** like it does today. Caches the user pubkey from the request header for later use.
-
-**Eviction:**
-
-- Orchestrator calls the container's new `POST /snapshot`.
-- Container generates a fresh random DEK, AES-GCM-encrypts a tar of `/workspace`, wraps the DEK with the cached user pubkey, returns `{ciphertext, wrappedDEK}`.
-- Orchestrator PUTs the bundle to `/api/storage/exec-snapshot/{sessionId}` (the chat.id the webapp originally sent on `X-Session-Id`).
-- Container is destroyed.
-
-_evection happens after 10 minutes with no tools to that container_
-
-**Next chat open**, we're back at the top, and the new wrappedDEK gets fetched and unwrapped.
+**Next chat open:** back to the top.
 
 ## Trust model
 
-Chained attestation: webapp → router → orchestrator → container, each link verifying the next. The orchestrator is the trust anchor for the resume handshake — the client doesn't have to learn each container's attestation key separately. This is how it already is!
-
-`VERIFY_ATTESTATION` defaults to false in the orchestrator today for testing (will change in prod dw!)
+Chained attestation: webapp → router → orchestrator → container, each link verifying the next. Orchestrator is the trust anchor for the resume handshake — the client doesn't learn each container's attestation key separately. (`VERIFY_ATTESTATION` defaults off in the orchestrator today; flips on in prod.)
 
 ## Storage layout
 
-New controlplane endpoints:
-
-- `PUT /api/storage/exec-snapshot/{sessionId}` — orchestrator writes `{ciphertext, wrappedDEK}` as one bundle. (For webapp traffic, `sessionId == chat.id`.)
+- `PUT /api/storage/exec-snapshot/{sessionId}` — orchestrator writes `{ciphertext, wrappedDEK}` as one bundle. (`sessionId == chat.id` for webapp traffic.)
 - `GET /api/storage/exec-snapshot/{sessionId}` — webapp fetches just the wrappedDEK on chat open; orchestrator fetches the full bundle on resume.
 
-The bundle is one storage record so ciphertext and wrappedDEK can't get out of sync. Auth model for these endpoints lives in [auth.md](./auth.md).
+One storage record so ciphertext and wrappedDEK can't desync. Auth in [auth.md](./auth.md).
 
 ## Misc. Decisions
 
-- One passkey per user, synced across devices. Single pubkey, single-wrap, no registry.
-- No `/restore` endpoint on the executor. Restore is internal to the orchestrator's `GetOrAssign`.
-- Snapshots are not deleted for v1.
-- Code execution is webapp-only (Clerk-authed users). See [auth.md](./auth.md).
+- One passkey per user, synced. Single pubkey, single wrap, no registry.
+- No `/restore` endpoint on the executor — restore is internal to `GetOrAssign`.
+- Snapshots not deleted for v1.
+- Code execution is webapp-only (Clerk-authed). See [auth.md](./auth.md).
 - `chat.id` is the storage key (passed as `X-Session-Id`).
-- The wire protocol keeps a generic `sessionId` name so the future partner-path can plug in.
-- Snapshot deletion/time stored should be the same as chats. The controlplane should add an FK from `exec_snapshots.id` → `chats.id ON DELETE CASCADE` so deleting a chat GCs its snapshot.
-- No size cap. We'll see how this looks in practice.
+- Wire protocol keeps a generic `sessionId` name so a future partner path can plug in.
+- FK on `exec_snapshots.id` → `chats(id) ON DELETE CASCADE` so deleting a chat GCs its snapshot.
+- No size cap. See how it looks in practice.
 - Decryption-failure handling — mirror the existing `decryptionFailed` pattern from the chat path.
 
 ## What needs to be built, by repo
 
-_Note: all the repos are local, in /Users/dmccanns/Desktop/Tinfoil/. They should all be checked out to ~dmccanns/code-exec already_
+_Repos are local under `/Users/dmccanns/Desktop/Tinfoil/`, all checked out to `dmccanns/code-exec`._
 
-**tinfoil-webapp:**
+**tinfoil-webapp:** send `chat.id` as `X-Session-Id`; HKDF the X25519 keypair off the PRF master; on chat open fetch+unwrap the DEK; send DEK (if any) and pubkey on code-exec requests; hide the code-exec toggle for signed-out users.
 
-- Send `chat.id` as `X-Session-Id` on code-exec requests.
-- Add HKDF derivation with `info="tinfoil-exec-snapshot-v1"` off the existing PRF master to produce the X25519 keypair.
-- On chat open: check for snapshot, fetch wrappedDEK, unwrap, hold the DEK in memory.
-- Send the DEK (if exists) and the pubkey (always) in the headers of code-exec requests.
-- Hide the code-execution toggle for signed-out users (auth.md covers the server-side gate).
+**confidential-code-execution (orchestrator):** restore-on-assign in `Manager.GetOrAssign` (resume DEK + bundle → push tar before exposure); eviction snapshot via container's `/snapshot` → PUT bundle; cache user pubkey on the session→container map; per-sessionId serialization so racing tabs don't double-restore; flip `VERIFY_ATTESTATION` in prod.
 
-**confidential-code-execution (orchestrator):**
+**code-execution-environment (executor):** new `POST /snapshot` (tar `/workspace`, generate DEK, AES-GCM-encrypt, wrap DEK under provided pubkey, return bundle); internal mechanism (not a public endpoint) for the orchestrator to drop a tar into `/workspace` before exposure.
 
-- Restore-on-assign inside `Manager.GetOrAssign`: read the resume DEK and snapshot bundle, push tar into the fresh container's `/workspace` before exposing it to traffic.
-- Eviction snapshotting: call the container's `/snapshot`, PUT the returned bundle to the controlplane.
-- Cache the user pubkey from the session-start request, keep alongside the session→container map.
-- Per-sessionId serialization so two concurrent webapp tabs don't both spin up a restored container.
-- Flip `VERIFY_ATTESTATION` on in prod.
+**controlplane (api.tinfoil.sh):** new `PUT/GET /api/storage/exec-snapshot/{sessionId}`; opaque bytes; rows scoped per Clerk user; FK with `ON DELETE CASCADE`. Auth model in [auth.md](./auth.md).
 
-**code-execution-environment (executor):**
-
-- New `POST /snapshot`: tar `/workspace`, generate DEK, AES-GCM-encrypt, wrap DEK under the provided pubkey, return the bundle.
-- An internal mechanism (not a public endpoint) for the orchestrator to drop a tar into `/workspace` before the container is exposed.
-
-**controlplane (api.tinfoil.sh):**
-
-- New `PUT/GET /api/storage/exec-snapshot/{sessionId}` endpoint. Treats payload as opaque bytes. Rows scoped per Clerk user. Add an FK on `id` → `chats(id) ON DELETE CASCADE` so chat deletion GCs the snapshot. (Auth model in [auth.md](./auth.md).)
-
-_Once finished, we'll test manually by running everything_
+_Manual end-to-end test once everything's running locally._
