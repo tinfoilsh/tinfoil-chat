@@ -455,6 +455,19 @@ export class CloudStorageService {
     }
   }
 
+  async deleteAllChats(): Promise<{ deleted: number }> {
+    const response = await fetch(`${API_BASE_URL}/api/storage/conversations`, {
+      method: 'DELETE',
+      headers: await this.getHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete all chats: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
   async getChatSyncStatus(): Promise<ChatSyncStatus> {
     // Add cache-busting parameter to avoid stale CDN/browser cache
     const url = `${API_BASE_URL}/api/chats/sync-status?_t=${Date.now()}`

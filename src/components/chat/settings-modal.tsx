@@ -25,6 +25,7 @@ import { projectStorage } from '@/services/cloud/project-storage'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { PrfNotSupportedError } from '@/services/passkey'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { sessionChatStorage } from '@/services/storage/session-storage'
 import { TINFOIL_COLORS } from '@/theme/colors'
 import {
   parseChatGPTConversations,
@@ -339,6 +340,11 @@ export function SettingsModal({
   const [exportType, setExportType] = useState<'chats' | 'projects' | null>(
     null,
   )
+
+  // Danger zone state
+  const [showDeleteAllChatsConfirm, setShowDeleteAllChatsConfirm] =
+    useState(false)
+  const [isDeletingAllChats, setIsDeletingAllChats] = useState(false)
 
   // Available personality traits
   const availableTraits = [
@@ -1416,6 +1422,44 @@ export function SettingsModal({
     }
   }
 
+  // Delete every chat the user owns (local IndexedDB + cloud + session)
+  const handleDeleteAllChats = async () => {
+    setIsDeletingAllChats(true)
+    try {
+      if (isSignedIn) {
+        const result = await chatStorage.deleteAllChats()
+        const total = result.localDeleted + result.cloudDeleted
+        toast({
+          title: 'All chats deleted',
+          description: `Removed ${total} chat${total !== 1 ? 's' : ''} from this device${result.cloudDeleted > 0 ? ' and the cloud' : ''}.`,
+        })
+      } else {
+        sessionChatStorage.clearAll()
+        toast({
+          title: 'All chats deleted',
+          description: 'Removed all chats from this browser session.',
+        })
+      }
+
+      if (onChatsUpdated) {
+        onChatsUpdated()
+      }
+    } catch (error) {
+      logError('Failed to delete all chats', error, {
+        component: 'SettingsModal',
+        action: 'handleDeleteAllChats',
+      })
+      toast({
+        title: 'Delete failed',
+        description: 'Failed to delete all chats. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeletingAllChats(false)
+      setShowDeleteAllChatsConfirm(false)
+    }
+  }
+
   // Export projects as projects.json
   const downloadProjects = async (
     projectsToExport: Array<{
@@ -1544,6 +1588,7 @@ export function SettingsModal({
     if (!isOpen) {
       setIsQRCodeExpanded(false)
       setShowSignOutConfirm(false)
+      setShowDeleteAllChatsConfirm(false)
       setPrimaryKeyMode('recoverExisting')
     }
   }, [isOpen])
@@ -2230,6 +2275,80 @@ ${encryptionKey.replace('key_', '')}
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div className="space-y-3">
+                    <h3 className="font-aeonik text-sm font-medium text-content-secondary">
+                      Danger Zone
+                    </h3>
+
+                    {/* Delete all saved chats */}
+                    <div
+                      className={cn(
+                        'rounded-lg border p-4',
+                        isDarkMode
+                          ? 'border-red-500/30 bg-red-950/10'
+                          : 'border-red-200 bg-red-50/50',
+                      )}
+                    >
+                      <div className="space-y-3">
+                        <div>
+                          <div className="font-aeonik text-sm font-medium text-content-primary">
+                            Delete all saved chats
+                          </div>
+                          <div className="font-aeonik-fono text-xs text-content-muted">
+                            {isSignedIn
+                              ? 'Permanently delete every chat from this device and your encrypted cloud backup. This cannot be undone.'
+                              : 'Permanently delete every chat from this browser. This cannot be undone.'}
+                          </div>
+                        </div>
+                        {showDeleteAllChatsConfirm ? (
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <button
+                              onClick={handleDeleteAllChats}
+                              disabled={isDeletingAllChats}
+                              className={cn(
+                                'flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                                isDarkMode
+                                  ? 'bg-red-600 text-white hover:bg-red-500 disabled:bg-red-900 disabled:text-red-300'
+                                  : 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
+                              )}
+                            >
+                              {isDeletingAllChats
+                                ? 'Deleting…'
+                                : 'Yes, delete all my chats'}
+                            </button>
+                            <button
+                              onClick={() =>
+                                setShowDeleteAllChatsConfirm(false)
+                              }
+                              disabled={isDeletingAllChats}
+                              className={cn(
+                                'flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                                isDarkMode
+                                  ? 'border-border-strong bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
+                                  : 'border-border-subtle bg-white text-content-primary hover:bg-surface-chat',
+                              )}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setShowDeleteAllChatsConfirm(true)}
+                            className={cn(
+                              'w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                              isDarkMode
+                                ? 'border-red-500/40 bg-red-950/30 text-red-400 hover:bg-red-950/50'
+                                : 'border-red-300 bg-white text-red-600 hover:bg-red-100',
+                            )}
+                          >
+                            Delete all saved chats
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
