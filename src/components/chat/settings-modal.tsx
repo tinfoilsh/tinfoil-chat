@@ -221,7 +221,11 @@ export function SettingsModal({
   const { toast } = useToast()
 
   // Projects for export functionality
-  const { projects, loading: projectsLoading } = useProjects({
+  const {
+    projects,
+    loading: projectsLoading,
+    refresh: refreshProjects,
+  } = useProjects({
     autoLoad: isSignedIn && isPremium,
   })
   const [maxMessages, setMaxMessages] = useState<number>(
@@ -345,6 +349,9 @@ export function SettingsModal({
   const [showDeleteAllChatsConfirm, setShowDeleteAllChatsConfirm] =
     useState(false)
   const [isDeletingAllChats, setIsDeletingAllChats] = useState(false)
+  const [showDeleteAllProjectsConfirm, setShowDeleteAllProjectsConfirm] =
+    useState(false)
+  const [isDeletingAllProjects, setIsDeletingAllProjects] = useState(false)
 
   // Available personality traits
   const availableTraits = [
@@ -1460,6 +1467,39 @@ export function SettingsModal({
     }
   }
 
+  // Delete every project the user owns
+  const handleDeleteAllProjects = async () => {
+    setIsDeletingAllProjects(true)
+    try {
+      const result = await projectStorage.deleteAllProjects()
+      toast({
+        title: 'All projects deleted',
+        description: `Removed ${result.deleted} project${result.deleted !== 1 ? 's' : ''}.`,
+      })
+
+      await refreshProjects()
+
+      // Project deletion detaches chats from projects on the server, so the
+      // chat list in the sidebar may need to refresh too.
+      if (onChatsUpdated) {
+        onChatsUpdated()
+      }
+    } catch (error) {
+      logError('Failed to delete all projects', error, {
+        component: 'SettingsModal',
+        action: 'handleDeleteAllProjects',
+      })
+      toast({
+        title: 'Delete failed',
+        description: 'Failed to delete all projects. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeletingAllProjects(false)
+      setShowDeleteAllProjectsConfirm(false)
+    }
+  }
+
   // Export projects as projects.json
   const downloadProjects = async (
     projectsToExport: Array<{
@@ -1589,6 +1629,7 @@ export function SettingsModal({
       setIsQRCodeExpanded(false)
       setShowSignOutConfirm(false)
       setShowDeleteAllChatsConfirm(false)
+      setShowDeleteAllProjectsConfirm(false)
       setPrimaryKeyMode('recoverExisting')
     }
   }, [isOpen])
@@ -2349,6 +2390,77 @@ ${encryptionKey.replace('key_', '')}
                         )}
                       </div>
                     </div>
+
+                    {/* Delete all projects (signed-in premium users only) */}
+                    {isSignedIn && isPremium && (
+                      <div
+                        className={cn(
+                          'rounded-lg border p-4',
+                          isDarkMode
+                            ? 'border-red-500/30 bg-red-950/10'
+                            : 'border-red-200 bg-red-50/50',
+                        )}
+                      >
+                        <div className="space-y-3">
+                          <div>
+                            <div className="font-aeonik text-sm font-medium text-content-primary">
+                              Delete all projects
+                            </div>
+                            <div className="font-aeonik-fono text-xs text-content-muted">
+                              Permanently delete every project and its
+                              documents. Chats inside projects will be detached
+                              but kept. This cannot be undone.
+                            </div>
+                          </div>
+                          {showDeleteAllProjectsConfirm ? (
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <button
+                                onClick={handleDeleteAllProjects}
+                                disabled={isDeletingAllProjects}
+                                className={cn(
+                                  'flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                                  isDarkMode
+                                    ? 'bg-red-600 text-white hover:bg-red-500 disabled:bg-red-900 disabled:text-red-300'
+                                    : 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300',
+                                )}
+                              >
+                                {isDeletingAllProjects
+                                  ? 'Deleting…'
+                                  : 'Yes, delete all my projects'}
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setShowDeleteAllProjectsConfirm(false)
+                                }
+                                disabled={isDeletingAllProjects}
+                                className={cn(
+                                  'flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                                  isDarkMode
+                                    ? 'border-border-strong bg-surface-chat text-content-secondary hover:bg-surface-chat/80'
+                                    : 'border-border-subtle bg-white text-content-primary hover:bg-surface-chat',
+                                )}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setShowDeleteAllProjectsConfirm(true)
+                              }
+                              className={cn(
+                                'w-full rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                                isDarkMode
+                                  ? 'border-red-500/40 bg-red-950/30 text-red-400 hover:bg-red-950/50'
+                                  : 'border-red-300 bg-white text-red-600 hover:bg-red-100',
+                              )}
+                            >
+                              Delete all projects
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

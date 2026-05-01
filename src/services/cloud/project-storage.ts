@@ -189,6 +189,25 @@ export class ProjectStorageService {
     }
   }
 
+  async deleteAllProjects(): Promise<{ deleted: number }> {
+    if (!(await canWriteToCloud())) {
+      throw new Error(
+        'Cloud writes are blocked until your encryption key is verified',
+      )
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/storage/projects`, {
+      method: 'DELETE',
+      headers: await this.getHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete all projects: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
   async listProjects(options?: {
     limit?: number
     continuationToken?: string
