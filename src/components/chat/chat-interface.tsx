@@ -2151,8 +2151,11 @@ export function ChatInterface({
       className="flex overflow-hidden bg-surface-chat-background"
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
         height: 'var(--app-height, 100dvh)',
+        maxHeight: 'var(--app-height, 100dvh)',
         minHeight: '-webkit-fill-available',
         overscrollBehavior: 'none',
       }}
@@ -2533,7 +2536,7 @@ export function ChatInterface({
 
       {/* Main Chat Area - Modified for sliding effect */}
       <div
-        className="fixed inset-0 overflow-hidden transition-all duration-200"
+        className="absolute overflow-hidden transition-all duration-200"
         style={{
           right:
             windowWidth >= CONSTANTS.MOBILE_BREAKPOINT
@@ -2697,7 +2700,7 @@ export function ChatInterface({
                 className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-4"
                 style={{
                   minHeight: '80px',
-                  maxHeight: '50vh',
+                  maxHeight: '50dvh',
                   paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)',
                 }}
               >

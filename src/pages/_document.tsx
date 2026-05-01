@@ -33,11 +33,35 @@ export default function Document() {
     })();
   `
 
+  // Inline script to set --app-height before first paint, so the bottom-anchored
+  // chat input is positioned correctly on every browser, including ones that
+  // don't support 100dvh (older Chrome/Firefox/Edge on Android, in-app webviews).
+  // Dynamic resize handling is owned by the React effect in use-ui-state /
+  // chat-interface so we deliberately don't register listeners here.
+  const appHeightScript = `
+    (function() {
+      try {
+        var h = (window.visualViewport && window.visualViewport.height)
+          || window.innerHeight
+          || document.documentElement.clientHeight;
+        if (h) {
+          document.documentElement.style.setProperty(
+            '--app-height',
+            Math.round(h) + 'px'
+          );
+        }
+      } catch (_) {}
+    })();
+  `
+
   return (
     <Html lang="en" data-theme="light" className="overflow-x-hidden">
       <Head>
         {/* Theme initialization script - must run before first paint */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* App-height initialization script - must run before first paint so the
+            bottom-anchored mobile chat input is visible on every browser */}
+        <script dangerouslySetInnerHTML={{ __html: appHeightScript }} />
         {/* Preconnect to external domains */}
         <link rel="preconnect" href="https://clerk.accounts.dev" />
 
