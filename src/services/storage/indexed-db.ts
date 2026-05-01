@@ -403,6 +403,68 @@ export class IndexedDBStorage {
     })
   }
 
+  async getAllChatIds(): Promise<string[]> {
+    await this.saveQueue.catch(() => {})
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([CHATS_STORE], 'readonly')
+      const store = transaction.objectStore(CHATS_STORE)
+      const request = store.getAllKeys()
+
+      request.onsuccess = () => {
+        resolve((request.result as IDBValidKey[]).map((k) => String(k)))
+      }
+      request.onerror = () => reject(new Error('Failed to list chat IDs'))
+    })
+  }
+
+  async deleteAllChats(): Promise<number> {
+    // Serialize through saveQueue so a clear() can't race with an in-flight
+    // saveChatInternal that would re-insert a row after the wipe.
+    let resolveResult!: (n: number) => void
+    let rejectResult!: (e: unknown) => void
+    const result = new Promise<number>((resolve, reject) => {
+      resolveResult = resolve
+      rejectResult = reject
+    })
+
+    this.saveQueue = this.saveQueue
+      .catch((error) => {
+        logError('Previous save operation failed, recovering queue', error, {
+          component: 'IndexedDBStorage',
+          action: 'deleteAllChats.queueRecovery',
+        })
+      })
+      .then(async () => {
+        try {
+          const db = await this.ensureDB()
+          const total = await new Promise<number>((resolve, reject) => {
+            const transaction = db.transaction([CHATS_STORE], 'readwrite')
+            const store = transaction.objectStore(CHATS_STORE)
+            const countRequest = store.count()
+
+            countRequest.onsuccess = () => {
+              const count = countRequest.result
+              const clearRequest = store.clear()
+              clearRequest.onsuccess = () => resolve(count)
+              clearRequest.onerror = () =>
+                reject(new Error('Failed to clear chats store'))
+            }
+
+            countRequest.onerror = () =>
+              reject(new Error('Failed to count chats'))
+          })
+          resolveResult(total)
+        } catch (error) {
+          rejectResult(error)
+          throw error
+        }
+      })
+
+    return result
+  }
+
   async getAllChats(): Promise<StoredChat[]> {
     await this.saveQueue.catch(() => {})
     const db = await this.ensureDB()

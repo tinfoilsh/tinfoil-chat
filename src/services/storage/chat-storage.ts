@@ -1,6 +1,7 @@
 import type { Chat } from '@/components/chat/types'
 import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
+import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
 import { chatEvents } from './chat-events'
@@ -174,6 +175,54 @@ export class ChatStorageService {
     }
 
     return deletedCount
+  }
+
+  async deleteAllChats(): Promise<{
+    localDeleted: number
+    cloudDeleted: number
+  }> {
+    await this.initialize()
+
+    // Snapshot local IDs up front so we know what to mark as deleted in the
+    // tracker after a successful wipe, but don't mark anything yet — if the
+    // cloud delete fails we must leave sync state untouched, otherwise we'd
+    // tombstone chats that still exist on the server and lose them on the
+    // next pull.
+    const localIds = await indexedDBStorage.getAllChatIds()
+
+    // Attempt the cloud bulk-delete first. If it fails, surface the error
+    // and skip both the tracker update and the local wipe so the user can
+    // retry without partial-deletion side effects.
+    let cloudDeleted = 0
+    if (await cloudStorage.isAuthenticated()) {
+      try {
+        const result = await cloudStorage.deleteAllChats()
+        cloudDeleted = result.deleted
+      } catch (error) {
+        logError('Failed to bulk-delete cloud chats', error, {
+          component: 'ChatStorageService',
+          action: 'deleteAllChats',
+        })
+        throw error
+      }
+    }
+
+    // Cloud delete succeeded (or user is anonymous); now it's safe to
+    // tombstone the IDs locally and wipe IndexedDB.
+    for (const id of localIds) {
+      if (id) deletedChatsTracker.markAsDeleted(id)
+    }
+
+    const localDeleted = await indexedDBStorage.deleteAllChats()
+    chatEvents.emit({ reason: 'delete', ids: [] })
+
+    logInfo('Deleted all chats', {
+      component: 'ChatStorageService',
+      action: 'deleteAllChats',
+      metadata: { localDeleted, cloudDeleted },
+    })
+
+    return { localDeleted, cloudDeleted }
   }
 
   async getAllChats(): Promise<Chat[]> {
