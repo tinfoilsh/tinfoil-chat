@@ -128,7 +128,6 @@ export class ChatStorageService {
       locallyModified,
       syncVersion,
       decryptionFailed,
-      encryptedData,
       updatedAt,
       model,
       version,
@@ -235,7 +234,6 @@ export class ChatStorageService {
         locallyModified,
         syncVersion,
         decryptionFailed,
-        encryptedData,
         updatedAt,
         model,
         version,
@@ -257,7 +255,6 @@ export class ChatStorageService {
       ({
         lastAccessedAt,
         syncVersion,
-        encryptedData,
         updatedAt,
         model,
         version,
