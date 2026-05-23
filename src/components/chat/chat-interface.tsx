@@ -196,50 +196,6 @@ const parseContextWindowTokens = (contextWindow?: string): number => {
   return tokens
 }
 
-// Generate a silly privacy-themed project name
-function generateProjectName(): string {
-  const adjectives = [
-    'Private',
-    'Secret',
-    'Encrypted',
-    'Anonymous',
-    'Stealth',
-    'Incognito',
-    'Covert',
-    'Hidden',
-    'Shadowy',
-    'Mysterious',
-    'Whispered',
-    'Cloaked',
-    'Veiled',
-    'Masked',
-    'Undercover',
-  ]
-
-  const animals = [
-    'Orangutan',
-    'Penguin',
-    'Platypus',
-    'Armadillo',
-    'Chameleon',
-    'Pangolin',
-    'Narwhal',
-    'Capybara',
-    'Axolotl',
-    'Quokka',
-    'Wombat',
-    'Hedgehog',
-    'Otter',
-    'Sloth',
-    'Lemur',
-  ]
-
-  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)]
-  const animal = animals[Math.floor(Math.random() * animals.length)]
-
-  return `${adjective} ${animal}`
-}
-
 function buildAttachment(opts: {
   id: string
   fileName: string
@@ -1451,10 +1407,9 @@ export function ChatInterface({
     [addRecoveryKey, retryProfileDecryption, reloadChats],
   )
 
-  // Handler for creating a new project with a random name
   const handleCreateProject = useCallback(async () => {
     try {
-      const name = generateProjectName()
+      const name = `My Project #${projects.length + 1}`
       const project = await createProject({ name, description: '' })
       await enterProjectMode(project.id)
     } catch (error) {
@@ -1468,7 +1423,7 @@ export function ChatInterface({
         variant: 'destructive',
       })
     }
-  }, [createProject, enterProjectMode, toast])
+  }, [createProject, enterProjectMode, projects.length, toast])
 
   // Handler for exiting project mode - creates a new chat and exits
   const handleExitProject = useCallback(() => {
