@@ -1,3 +1,4 @@
+import { CONSTANTS } from '@/components/chat/constants'
 import {
   SETTINGS_MAX_PROMPT_MESSAGES,
   SETTINGS_THEME,
@@ -12,6 +13,8 @@ import {
   USER_PREFS_TRAITS,
 } from '@/constants/storage-keys'
 import type { ProfileData } from '@/services/cloud/profile-sync'
+
+const DEFAULT_PROFILE_LANGUAGE = 'English'
 
 /**
  * Check if two profile data objects differ in any meaningful field (excluding metadata).
@@ -113,6 +116,24 @@ export function loadLocalSettings(): ProfileData {
   }
 
   return settings
+}
+
+export function resetSettingsToLocalDefaults(): ProfileData {
+  const defaults: ProfileData = {
+    themeMode: 'system',
+    maxPromptMessages: CONSTANTS.MAX_PROMPT_MESSAGES,
+    language: DEFAULT_PROFILE_LANGUAGE,
+    nickname: '',
+    profession: '',
+    traits: [],
+    additionalContext: '',
+    isUsingPersonalization: false,
+    isUsingCustomPrompt: false,
+    customSystemPrompt: '',
+  }
+
+  applySettingsToLocal(defaults)
+  return defaults
 }
 
 /**
