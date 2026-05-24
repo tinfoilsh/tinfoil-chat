@@ -113,6 +113,7 @@ export class UploadCoalescer {
   enqueue(chatId: string): void {
     let state = this.states.get(chatId)
 
+    const isNew = !state
     if (!state) {
       state = {
         dirty: false,
@@ -125,6 +126,12 @@ export class UploadCoalescer {
     }
 
     state.dirty = true
+    console.log('[v2-launch] UploadCoalescer.enqueue', {
+      chatId,
+      isNew,
+      hadInFlight: !isNew && !!state.inFlight,
+      failureCount: state.failureCount,
+    })
 
     if (!state.inFlight) {
       this.startWorker(chatId, state)
@@ -137,6 +144,10 @@ export class UploadCoalescer {
    */
   private startWorker(chatId: string, state: ChatUploadState): void {
     const workerGeneration = this.generation
+    console.log('[v2-launch] UploadCoalescer.startWorker', {
+      chatId,
+      generation: workerGeneration,
+    })
     const workerPromise = (async () => {
       while (state.dirty && workerGeneration === this.generation) {
         // Clear dirty flag before upload
@@ -148,18 +159,31 @@ export class UploadCoalescer {
         // set during the upload, that's a new logical write and gets
         // a fresh key on the next iteration.
         const idempotencyKey = newIdempotencyKey()
+        console.log('[v2-launch] UploadCoalescer.worker: cycle start', {
+          chatId,
+          idempotencyKey,
+        })
 
         try {
           await this.uploadWithRetry(chatId, state, idempotencyKey)
           // Success - reset failure count
           state.failureCount = 0
           state.lastError = null
+          console.log('[v2-launch] UploadCoalescer.worker: cycle success', {
+            chatId,
+          })
         } catch (error) {
           const uploadError =
             error instanceof Error ? error : new Error(String(error))
           // Upload failed after all retries
           state.failureCount++
           state.lastError = uploadError
+          console.log('[v2-launch] UploadCoalescer.worker: cycle FAILED', {
+            chatId,
+            failureCount: state.failureCount,
+            willRetry: state.dirty,
+            error: uploadError.message,
+          })
           logError('Upload failed after retries', error, {
             component: 'UploadCoalescer',
             action: 'worker',
@@ -174,6 +198,10 @@ export class UploadCoalescer {
           // Otherwise, the failure is logged and we move on
         }
       }
+      console.log('[v2-launch] UploadCoalescer.worker: exit', {
+        chatId,
+        failureCount: state.failureCount,
+      })
 
       // Worker done - clear in-flight promise
       state.inFlight = null
@@ -228,12 +256,27 @@ export class UploadCoalescer {
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      console.log('[v2-launch] UploadCoalescer.uploadWithRetry: attempt', {
+        chatId,
+        attempt,
+        idempotencyKey,
+      })
       try {
         await this.uploadFn(chatId, idempotencyKey)
         return // Success
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        if (!shouldRetryUploadError(lastError)) {
+        const retryable = shouldRetryUploadError(lastError)
+        console.log(
+          '[v2-launch] UploadCoalescer.uploadWithRetry: attempt error',
+          {
+            chatId,
+            attempt,
+            retryable,
+            error: lastError.message,
+          },
+        )
+        if (!retryable) {
           throw lastError
         }
 

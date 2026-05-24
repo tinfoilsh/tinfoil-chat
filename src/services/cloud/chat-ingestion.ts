@@ -75,6 +75,7 @@ export async function ingestRemoteChats(
   remoteChats: RemoteChatEntry[],
   options: IngestOptions = {},
 ): Promise<IngestResult> {
+  const ingestStartedAt = Date.now()
   const {
     localChatMap,
     projectId,
@@ -86,6 +87,14 @@ export async function ingestRemoteChats(
     forceOverwriteLocal = false,
   } = options
 
+  console.log('[v2-launch] ingestRemoteChats: start', {
+    remoteCount: remoteChats.length,
+    projectId: projectId ?? null,
+    forceOverwriteLocal,
+    fetchMissingContent,
+    checkShouldIngest,
+  })
+
   const result: IngestResult = {
     savedIds: [],
     downloaded: 0,
@@ -95,6 +104,9 @@ export async function ingestRemoteChats(
   for (const remoteChat of remoteChats) {
     // Skip recently deleted chats
     if (skipDeleted && deletedChatsTracker.isDeleted(remoteChat.id)) {
+      console.log('[v2-launch] ingestRemoteChats: skip (deleted)', {
+        chatId: remoteChat.id,
+      })
       continue
     }
 
@@ -108,6 +120,11 @@ export async function ingestRemoteChats(
       checkShouldIngest &&
       !shouldIngestRemoteChat(remoteChat, localChat)
     ) {
+      console.log('[v2-launch] ingestRemoteChats: skip (local up-to-date)', {
+        chatId: remoteChat.id,
+        localSyncVersion: localChat?.syncVersion ?? null,
+        remoteSyncVersion: remoteChat.syncVersion ?? null,
+      })
       continue
     }
 
@@ -123,6 +140,9 @@ export async function ingestRemoteChats(
       if (remoteChat.content) {
         codecInput.plaintext = remoteChat.content
       } else if (fetchMissingContent) {
+        console.log('[v2-launch] ingestRemoteChats: fetching raw content', {
+          chatId: remoteChat.id,
+        })
         const fetched = await cloudStorage.fetchRawChatContent(remoteChat.id)
         if (fetched) {
           codecInput.plaintext = fetched.plaintext
@@ -131,6 +151,9 @@ export async function ingestRemoteChats(
       }
 
       if (!codecInput.plaintext) {
+        console.log('[v2-launch] ingestRemoteChats: skip (no plaintext)', {
+          chatId: remoteChat.id,
+        })
         continue
       }
 
@@ -156,11 +179,25 @@ export async function ingestRemoteChats(
           setLoadedAt,
         })
         if (applyResult.applied) {
+          console.log('[v2-launch] ingestRemoteChats: applied remote chat', {
+            chatId: chat.id,
+            syncVersion: chat.syncVersion ?? 0,
+            messageCount: chat.messages?.length ?? 0,
+          })
           result.savedIds.push(chat.id)
           result.downloaded++
+        } else {
+          console.log(
+            '[v2-launch] ingestRemoteChats: CAS rejected (local newer)',
+            { chatId: chat.id },
+          )
         }
       }
     } catch (error) {
+      console.log('[v2-launch] ingestRemoteChats: per-chat FAILED', {
+        chatId: remoteChat.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
       result.errors.push(
         `Failed to process chat ${remoteChat.id}: ${error instanceof Error ? error.message : String(error)}`,
       )
@@ -171,6 +208,12 @@ export async function ingestRemoteChats(
     chatEvents.emit({ reason: eventReason, ids: result.savedIds })
   }
 
+  console.log('[v2-launch] ingestRemoteChats: done', {
+    elapsedMs: Date.now() - ingestStartedAt,
+    downloaded: result.downloaded,
+    savedCount: result.savedIds.length,
+    errors: result.errors.length,
+  })
   return result
 }
 
@@ -182,8 +225,13 @@ export async function syncRemoteDeletions(
   since: string,
   logAction: string,
 ): Promise<void> {
+  console.log('[v2-launch] syncRemoteDeletions: start', { since, logAction })
   try {
     const { deletedIds } = await cloudStorage.getDeletedChatsSince(since)
+    console.log('[v2-launch] syncRemoteDeletions: server returned', {
+      deletedCount: deletedIds.length,
+      deletedIds: deletedIds.slice(0, 20),
+    })
     const successfulIds: string[] = []
     for (const id of deletedIds) {
       try {
@@ -212,7 +260,13 @@ export async function syncRemoteDeletions(
     if (successfulIds.length > 0) {
       chatEvents.emit({ reason: 'sync', ids: successfulIds })
     }
+    console.log('[v2-launch] syncRemoteDeletions: done', {
+      successfullyDeleted: successfulIds.length,
+    })
   } catch (error) {
+    console.log('[v2-launch] syncRemoteDeletions: FAILED', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     logError('Failed to check for remotely deleted chats', error, {
       component: 'CloudSync',
       action: logAction,

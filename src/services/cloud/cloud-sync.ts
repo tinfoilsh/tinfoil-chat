@@ -343,6 +343,8 @@ export class CloudSyncService {
   }
 
   private async doSyncChangedChats(): Promise<SyncResult> {
+    const startedAt = Date.now()
+    console.log('[v2-launch] syncChangedChats: start')
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -352,6 +354,10 @@ export class CloudSyncService {
     try {
       // Get cached sync status to determine what changed
       const cachedStatus = this.chatSyncCache.load()
+      console.log('[v2-launch] syncChangedChats: cached status', {
+        hasCached: !!cachedStatus,
+        lastUpdated: cachedStatus?.lastUpdated ?? null,
+      })
 
       // Apply remote deletions BEFORE uploading local changes. If another
       // device deleted a chat, we must drop it locally first; otherwise
@@ -362,7 +368,12 @@ export class CloudSyncService {
       }
 
       // Backup any unsynced local changes
+      console.log('[v2-launch] syncChangedChats: starting backupUnsyncedChats')
       const backupResult = await this.backupUnsyncedChats()
+      console.log('[v2-launch] syncChangedChats: backupUnsyncedChats done', {
+        uploaded: backupResult.uploaded,
+        errors: backupResult.errors.length,
+      })
       result.uploaded = backupResult.uploaded
       result.errors.push(...backupResult.errors)
 
@@ -420,8 +431,17 @@ export class CloudSyncService {
         }
         isFirstPage = false
 
+        console.log('[v2-launch] syncChangedChats: ingesting page', {
+          count: remoteConversations.length,
+          hasMore: updatedChats.hasMore,
+        })
         const ingestResult = await ingestRemoteChats(remoteConversations, {
           fetchMissingContent: true,
+        })
+        console.log('[v2-launch] syncChangedChats: ingest page done', {
+          downloaded: ingestResult.downloaded,
+          savedIds: ingestResult.savedIds,
+          errors: ingestResult.errors.length,
         })
         result.downloaded += ingestResult.downloaded
         result.errors.push(...ingestResult.errors)
@@ -435,6 +455,10 @@ export class CloudSyncService {
       try {
         const newStatus = await cloudStorage.getChatSyncStatus()
         this.chatSyncCache.save(newStatus)
+        console.log('[v2-launch] syncChangedChats: cached new sync status', {
+          count: newStatus.count,
+          lastUpdated: newStatus.lastUpdated,
+        })
       } catch (statusError) {
         logError('Failed to update sync status', statusError, {
           component: 'CloudSync',
@@ -443,12 +467,23 @@ export class CloudSyncService {
       }
 
       // Detect cross-scope moves (chats moving between projects)
+      console.log('[v2-launch] syncChangedChats: syncCrossScope')
       await this.syncCrossScope(result)
     } catch (error) {
+      console.log('[v2-launch] syncChangedChats: FAILED', {
+        elapsedMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      })
       result.errors.push(
         `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
       )
     }
+    console.log('[v2-launch] syncChangedChats: done', {
+      elapsedMs: Date.now() - startedAt,
+      uploaded: result.uploaded,
+      downloaded: result.downloaded,
+      errors: result.errors.length,
+    })
 
     return result
   }
@@ -578,8 +613,13 @@ export class CloudSyncService {
     chatId: string,
     idempotencyKey: string,
   ): Promise<void> {
+    const startedAt = Date.now()
+    console.log('[v2-launch] doBackupChat: enter', { chatId, idempotencyKey })
     try {
       if (!(await canWriteToCloud())) {
+        console.log('[v2-launch] doBackupChat: skip (cannot write to cloud)', {
+          chatId,
+        })
         return
       }
 
@@ -655,8 +695,19 @@ export class CloudSyncService {
 
       const preUploadUpdatedAt = chat.updatedAt
       const preUploadVersion = chat.syncVersion ?? 0
+      console.log('[v2-launch] doBackupChat: uploading', {
+        chatId,
+        preUploadVersion,
+        messageCount: chat.messages?.length ?? 0,
+      })
       const { syncVersion, rewrites } = await cloudStorage.uploadChat(chat, {
         idempotencyKey,
+      })
+      console.log('[v2-launch] doBackupChat: upload success', {
+        chatId,
+        elapsedMs: Date.now() - startedAt,
+        newSyncVersion: syncVersion ?? preUploadVersion + 1,
+        rewriteCount: rewrites?.length ?? 0,
       })
 
       await indexedDBStorage.finalizeUpload({
@@ -682,6 +733,17 @@ export class CloudSyncService {
       // codes still bubble up so the coalescer can retry where the
       // recovery table says transient.
       const decision = decideRecovery(error)
+      console.log(
+        '[v2-launch] doBackupChat: upload error -> recovery decision',
+        {
+          chatId,
+          elapsedMs: Date.now() - startedAt,
+          action: decision.action.type,
+          code: decision.classification.code ?? null,
+          kind: decision.classification.kind,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      )
       logInfo('upload-chat recovery decision', {
         component: 'CloudSync',
         action: 'backupChat',
@@ -929,6 +991,8 @@ export class CloudSyncService {
   }
 
   private async doSyncAllChats(): Promise<SyncResult> {
+    const startedAt = Date.now()
+    console.log('[v2-launch] syncAllChats: start')
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
@@ -937,16 +1001,30 @@ export class CloudSyncService {
 
     try {
       const cachedStatus = this.chatSyncCache.load()
+      console.log('[v2-launch] syncAllChats: cached status', {
+        hasCachedStatus: !!cachedStatus,
+        lastUpdated: cachedStatus?.lastUpdated ?? null,
+        count: cachedStatus?.count ?? null,
+      })
 
       // Apply remote deletions BEFORE uploading local changes so a chat
       // deleted on another device is dropped locally first, instead of
       // getting re-uploaded by backupUnsyncedChats.
       if (cachedStatus?.lastUpdated) {
+        console.log(
+          '[v2-launch] syncAllChats: syncing remote deletions since',
+          cachedStatus.lastUpdated,
+        )
         await syncRemoteDeletions(cachedStatus.lastUpdated, 'syncAllChats')
       }
 
       // Backup any unsynced local changes
+      console.log('[v2-launch] syncAllChats: starting backupUnsyncedChats')
       const backupResult = await this.backupUnsyncedChats()
+      console.log('[v2-launch] syncAllChats: backupUnsyncedChats done', {
+        uploaded: backupResult.uploaded,
+        errors: backupResult.errors.length,
+      })
       result.uploaded = backupResult.uploaded
       result.errors.push(...backupResult.errors)
 
@@ -973,10 +1051,19 @@ export class CloudSyncService {
 
       const localChatMap = new Map(localChats.map((c) => [c.id, c]))
 
+      console.log('[v2-launch] syncAllChats: ingesting remote chats', {
+        remoteCount: remoteConversations.length,
+        localCount: localChats.length,
+      })
       const ingestResult = await ingestRemoteChats(remoteConversations, {
         localChatMap,
         checkShouldIngest: true,
         fetchMissingContent: true,
+      })
+      console.log('[v2-launch] syncAllChats: ingest done', {
+        downloaded: ingestResult.downloaded,
+        savedIds: ingestResult.savedIds,
+        errors: ingestResult.errors.length,
       })
       result.downloaded += ingestResult.downloaded
       result.errors.push(...ingestResult.errors)
@@ -985,7 +1072,15 @@ export class CloudSyncService {
       try {
         const newStatus = await cloudStorage.getChatSyncStatus()
         this.chatSyncCache.save(newStatus)
+        console.log('[v2-launch] syncAllChats: cached new sync status', {
+          count: newStatus.count,
+          lastUpdated: newStatus.lastUpdated,
+        })
       } catch (statusError) {
+        console.log(
+          '[v2-launch] syncAllChats: failed to update cached status',
+          statusError instanceof Error ? statusError.message : statusError,
+        )
         // Non-fatal: continue even if we can't update status
         logError('Failed to update sync status after full sync', statusError, {
           component: 'CloudSync',
@@ -994,12 +1089,23 @@ export class CloudSyncService {
       }
 
       // Detect cross-scope moves (chats moving between projects)
+      console.log('[v2-launch] syncAllChats: syncCrossScope')
       await this.syncCrossScope(result)
       this.kickLegacyBlobMigration()
     } catch (error) {
+      console.log('[v2-launch] syncAllChats: FAILED', {
+        elapsedMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      })
       throw error instanceof Error ? error : new Error(String(error))
     }
 
+    console.log('[v2-launch] syncAllChats: done', {
+      elapsedMs: Date.now() - startedAt,
+      uploaded: result.uploaded,
+      downloaded: result.downloaded,
+      errors: result.errors.length,
+    })
     return result
   }
 
@@ -1011,10 +1117,24 @@ export class CloudSyncService {
    * trigger is a no-op on the enclave side anyway.
    */
   private kickLegacyBlobMigration(): void {
-    if (this.legacyMigrationKicked) return
+    if (this.legacyMigrationKicked) {
+      console.log(
+        '[v2-launch] kickLegacyBlobMigration: skip (already kicked this session)',
+      )
+      return
+    }
     this.legacyMigrationKicked = true
+    console.log('[v2-launch] kickLegacyBlobMigration: kicking')
+    const kickStartedAt = Date.now()
     void runLegacyBlobMigrationAndFinalize()
       .then(async (report) => {
+        console.log('[v2-launch] kickLegacyBlobMigration: report received', {
+          elapsedMs: Date.now() - kickStartedAt,
+          fullyMigrated: report.fullyMigrated,
+          totalMigrated: report.totalMigrated,
+          totalRemaining: report.totalRemaining,
+          totalBlocked: report.totalBlocked,
+        })
         logInfo('Legacy blob migration completed', {
           component: 'CloudSync',
           action: 'kickLegacyBlobMigration',
@@ -1025,7 +1145,13 @@ export class CloudSyncService {
             totalBlocked: report.totalBlocked,
           },
         })
+        console.log(
+          '[v2-launch] kickLegacyBlobMigration: running legacy-chat eviction',
+        )
         await runLegacyChatEvictionIfNeeded()
+        console.log(
+          '[v2-launch] kickLegacyBlobMigration: invalidating chat sync caches',
+        )
         // Eviction deletes local rows but the server still has them,
         // so the cached `(count, lastUpdated)` snapshot now lies. Drop
         // it so the next `smartSync` falls back to a full pull and
@@ -1033,6 +1159,10 @@ export class CloudSyncService {
         this.invalidateChatSyncCaches()
       })
       .catch((err) => {
+        console.log('[v2-launch] kickLegacyBlobMigration: FAILED', {
+          elapsedMs: Date.now() - kickStartedAt,
+          error: err instanceof Error ? err.message : String(err),
+        })
         logError('Legacy blob migration kickoff failed', err, {
           component: 'CloudSync',
           action: 'kickLegacyBlobMigration',
@@ -1054,15 +1184,26 @@ export class CloudSyncService {
     // every smartSync entry is safe.
     this.kickLegacyBlobMigration()
 
+    console.log('[v2-launch] smartSync: enter', {
+      projectId: projectId ?? null,
+    })
     // Note: smartSync doesn't need its own lock because it delegates to
     // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
     if (this.syncLock) {
+      console.log('[v2-launch] smartSync: rejected (sync in progress)')
       throw new Error('Sync already in progress')
     }
 
     const status = await this.checkSyncStatus(projectId)
+    console.log('[v2-launch] smartSync: status', {
+      needsSync: status.needsSync,
+      reason: status.reason,
+      remoteCount: status.remoteCount,
+      remoteLastUpdated: status.remoteLastUpdated,
+    })
 
     if (!status.needsSync) {
+      console.log('[v2-launch] smartSync: no changes, skipping')
       logInfo('Smart sync: no changes detected, skipping sync', {
         component: 'CloudSync',
         action: 'smartSync',
@@ -1092,11 +1233,17 @@ export class CloudSyncService {
       : this.chatSyncCache.load()
 
     if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
+      console.log('[v2-launch] smartSync: delegating to delta sync', {
+        projectId: projectId ?? null,
+      })
       return projectId
         ? this.syncProjectChatsChanged(projectId)
         : this.syncChangedChats()
     }
 
+    console.log('[v2-launch] smartSync: delegating to full sync', {
+      projectId: projectId ?? null,
+    })
     return projectId ? this.syncProjectChats(projectId) : this.syncAllChats()
   }
 

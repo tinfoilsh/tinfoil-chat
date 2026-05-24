@@ -113,14 +113,26 @@ function toReport(scopes: Map<Scope, ScopeMigrationResult>): MigrationReport {
 export async function runLegacyBlobMigration(): Promise<MigrationReport> {
   const target = { key: requirePrimaryKeyB64() }
   const keys = migrationKeys()
+  const startedAt = Date.now()
+  console.log('[v2-launch] runLegacyBlobMigration: start', {
+    keysCount: keys.length,
+    maxPasses: MIGRATE_ALL_MAX_PASSES,
+  })
   const accumulator = new Map<Scope, ScopeMigrationResult>()
 
   let lastResp: MigrateAllResponse | undefined
   for (let pass = 0; pass < MIGRATE_ALL_MAX_PASSES; pass++) {
+    console.log('[v2-launch] runLegacyBlobMigration: pass start', { pass })
+    const passStartedAt = Date.now()
     let resp: MigrateAllResponse
     try {
       resp = await enclaveMigrateAll({ keys, target })
     } catch (err) {
+      console.log('[v2-launch] runLegacyBlobMigration: pass FAILED', {
+        pass,
+        elapsedMs: Date.now() - passStartedAt,
+        error: err instanceof Error ? err.message : String(err),
+      })
       logError('legacy-blob-migration: enclave migrate-all failed', err, {
         component: 'LegacyBlobMigration',
         action: 'runLegacyBlobMigration',
@@ -128,6 +140,18 @@ export async function runLegacyBlobMigration(): Promise<MigrationReport> {
       })
       break
     }
+    console.log('[v2-launch] runLegacyBlobMigration: pass response', {
+      pass,
+      elapsedMs: Date.now() - passStartedAt,
+      partial: resp.partial,
+      scopes: resp.scopes.map((s) => ({
+        scope: s.scope,
+        migrated: s.migrated,
+        remaining: s.retryable_remaining,
+        blockedUnmigrated: s.blocked_unmigrated,
+        blockedIds: s.blocked,
+      })),
+    })
     mergeScopeReports(accumulator, resp.scopes)
     lastResp = resp
     if (!resp.partial) break
@@ -143,6 +167,15 @@ export async function runLegacyBlobMigration(): Promise<MigrationReport> {
   if (enclaveStillPartial) {
     report.fullyMigrated = false
   }
+  console.log('[v2-launch] runLegacyBlobMigration: done', {
+    elapsedMs: Date.now() - startedAt,
+    totalMigrated: report.totalMigrated,
+    totalRemaining: report.totalRemaining,
+    totalBlocked: report.totalBlocked,
+    fullyMigrated: report.fullyMigrated,
+    lastRespPartial: lastResp?.partial ?? null,
+    scopes: report.scopes,
+  })
   logInfo('legacy-blob-migration complete', {
     component: 'LegacyBlobMigration',
     action: 'runLegacyBlobMigration',
@@ -188,10 +221,25 @@ export function finalizeAlternativesIfMigrated(
   report: MigrationReport,
 ): boolean {
   if (!report.fullyMigrated) {
+    console.log(
+      '[v2-launch] finalizeAlternativesIfMigrated: skipping (not fully migrated)',
+      {
+        totalRemaining: report.totalRemaining,
+        totalBlocked: report.totalBlocked,
+      },
+    )
     return false
   }
   const before = encryptionService.getFallbackKeyCount()
   encryptionService.clearFallbackKeys()
+  console.log(
+    '[v2-launch] finalizeAlternativesIfMigrated: cleared alternates',
+    {
+      cleared: before,
+      totalMigrated: report.totalMigrated,
+      totalBlocked: report.totalBlocked,
+    },
+  )
   logInfo('Cleared alternative keys after enclave migration', {
     component: 'LegacyBlobMigration',
     action: 'finalizeAlternativesIfMigrated',
