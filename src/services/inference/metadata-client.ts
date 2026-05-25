@@ -91,9 +91,7 @@ export function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
 }
 
 async function doFetchLinkMetadata(url: string): Promise<LinkMetadata> {
-  const client = getClient()
-
-  const response = await client.fetch(`${METADATA_ENCLAVE}/metadata`, {
+  const response = await fetch(`${METADATA_ENCLAVE}/metadata`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),

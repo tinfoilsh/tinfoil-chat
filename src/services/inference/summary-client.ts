@@ -26,9 +26,7 @@ interface SummarizeResponse {
 }
 
 export async function summarize(request: SummarizeRequest): Promise<string> {
-  const client = getClient()
-
-  const response = await client.fetch(`${SUMMARIZER_ENCLAVE}/summarize`, {
+  const response = await fetch(`${SUMMARIZER_ENCLAVE}/summarize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
