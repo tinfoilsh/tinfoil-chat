@@ -368,6 +368,7 @@ export function ChatInterface({
     dismissBackupWarning,
     skipPasskeyRecovery,
     addPasskeyToThisDevice,
+    refreshBundleState,
   } = usePasskeyBackup({
     encryptionKey,
     initialized: cloudSyncInitialized && !showOnboarding,
@@ -2789,6 +2790,7 @@ export function ChatInterface({
         passkeyAddDeviceAvailable={passkeyAddDeviceAvailable}
         onSetupPasskey={setupPasskey}
         onAddPasskeyToThisDevice={addPasskeyToThisDevice}
+        onRefreshBundleState={refreshBundleState}
         initialTab={settingsInitialTab}
         chats={chats}
       />
