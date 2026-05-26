@@ -353,6 +353,7 @@ export function ChatInterface({
     passkeyRecoveryNeeded,
     manualRecoveryNeeded,
     passkeySetupAvailable,
+    passkeyAddDeviceAvailable,
     passkeySetupFailed,
     passkeyRecoveryFailure,
     passkeyFirstTimePromptAvailable,
@@ -366,6 +367,7 @@ export function ChatInterface({
     updatePasskeyBackup,
     dismissBackupWarning,
     skipPasskeyRecovery,
+    addPasskeyToThisDevice,
   } = usePasskeyBackup({
     encryptionKey,
     initialized: cloudSyncInitialized && !showOnboarding,
@@ -2664,6 +2666,8 @@ export function ChatInterface({
                 }
                 onSetupPasskey={setupPasskey}
                 passkeySetupAvailable={passkeySetupAvailable}
+                onAddPasskeyToThisDevice={addPasskeyToThisDevice}
+                passkeyAddDeviceAvailable={passkeyAddDeviceAvailable}
                 backupWarningVisible={
                   isSignedIn &&
                   (passkeySetupFailed || manualRecoveryNeeded) &&
@@ -2782,7 +2786,9 @@ export function ChatInterface({
         onAddRecoveryKey={handleAddRecoveryKey}
         passkeyActive={passkeyActive}
         passkeySetupAvailable={passkeySetupAvailable}
+        passkeyAddDeviceAvailable={passkeyAddDeviceAvailable}
         onSetupPasskey={setupPasskey}
+        onAddPasskeyToThisDevice={addPasskeyToThisDevice}
         initialTab={settingsInitialTab}
         chats={chats}
       />
@@ -3161,7 +3167,10 @@ export function ChatInterface({
           isDarkMode={isDarkMode}
           initialCloudSyncEnabled={true}
           prfSupported={
-            passkeyActive || passkeyRecoveryNeeded || passkeySetupAvailable
+            passkeyActive ||
+            passkeyRecoveryNeeded ||
+            passkeySetupAvailable ||
+            passkeyAddDeviceAvailable
           }
           passkeyRecoveryNeeded={passkeyRecoveryNeeded}
           manualRecoveryNeeded={manualRecoveryNeeded}
