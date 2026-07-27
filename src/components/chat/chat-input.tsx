@@ -1228,8 +1228,8 @@ export function ChatInput({
                       <PiGlobeX className="h-5 w-5" />
                     )}
                     {webSearchEnabled && (
-                      <span className="text-xs font-medium leading-none">
-                        Web Search
+                      <span className="translate-y-px text-xs font-medium leading-none">
+                        Search
                       </span>
                     )}
                   </button>
@@ -1261,7 +1261,7 @@ export function ChatInput({
                   >
                     <PiTerminalWindow className="h-5 w-5" />
                     {codeExecutionEnabled && (
-                      <span className="text-xs font-medium leading-none">
+                      <span className="translate-y-px text-xs font-medium leading-none">
                         Code
                       </span>
                     )}
