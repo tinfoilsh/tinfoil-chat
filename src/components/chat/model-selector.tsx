@@ -8,7 +8,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { PiShuffleAngularBold } from 'react-icons/pi'
 import {
   DEFAULT_EFFORT,
@@ -29,6 +29,11 @@ const EFFORT_OPTIONS: {
 
 const EFFORT_EXPLAINER =
   'Higher effort means more thorough responses, but takes longer.'
+
+const MOBILE_BREAKPOINT_PX = 768
+const EFFORT_FLYOUT_WIDTH_PX = 240
+const EFFORT_FLYOUT_GAP_PX = 8
+const VIEWPORT_MARGIN_PX = 10
 
 type ModelSelectorProps = {
   selectedModel: AIModel
@@ -59,6 +64,13 @@ export function ModelSelector({
   const isScrollingRef = useRef(false)
   const [showOtherModels, setShowOtherModels] = useState(false)
   const [showEffortOptions, setShowEffortOptions] = useState(false)
+  const effortRowRef = useRef<HTMLButtonElement>(null)
+  const effortFlyoutRef = useRef<HTMLDivElement>(null)
+  const [isMobileLayout, setIsMobileLayout] = useState(false)
+  const [effortFlyout, setEffortFlyout] = useState<{
+    top: number
+    side: 'left' | 'right'
+  } | null>(null)
 
   const [dynamicStyles, setDynamicStyles] = useState<{
     maxHeight: string
@@ -116,7 +128,7 @@ export function ModelSelector({
         useAbove = true
       }
 
-      const isMobile = window.innerWidth < 768
+      const isMobile = window.innerWidth < MOBILE_BREAKPOINT_PX
       const maxHeightCap = isMobile ? 300 : viewportHeight * 0.7
 
       const menuWidth = 280
@@ -187,6 +199,50 @@ export function ModelSelector({
     }
   }, [preferredPosition])
 
+  useLayoutEffect(() => {
+    const updateLayout = () =>
+      setIsMobileLayout(window.innerWidth < MOBILE_BREAKPOINT_PX)
+    updateLayout()
+    window.addEventListener('resize', updateLayout)
+    return () => window.removeEventListener('resize', updateLayout)
+  }, [])
+
+  // Anchors the effort flyout beside the menu at the Effort row's height,
+  // flipping to the left edge when the right side lacks space and clamping
+  // to the viewport so the options stay fully visible.
+  const recalcEffortFlyout = useCallback(() => {
+    const menuElement = menuRef.current
+    const rowElement = effortRowRef.current
+    if (!menuElement || !rowElement) return
+    const menuRect = menuElement.getBoundingClientRect()
+    const rowRect = rowElement.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+    const side =
+      menuRect.right + EFFORT_FLYOUT_GAP_PX + EFFORT_FLYOUT_WIDTH_PX <=
+      viewportWidth - VIEWPORT_MARGIN_PX
+        ? 'right'
+        : 'left'
+    const flyoutHeight = effortFlyoutRef.current?.offsetHeight ?? 0
+    const maxTop = viewportHeight - VIEWPORT_MARGIN_PX - flyoutHeight
+    const top = Math.min(rowRect.top, Math.max(VIEWPORT_MARGIN_PX, maxTop))
+    setEffortFlyout({ top: top - menuRect.top, side })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!showEffortOptions || isMobileLayout) {
+      setEffortFlyout(null)
+      return
+    }
+    recalcEffortFlyout()
+    window.addEventListener('resize', recalcEffortFlyout)
+    window.addEventListener('scroll', recalcEffortFlyout)
+    return () => {
+      window.removeEventListener('resize', recalcEffortFlyout)
+      window.removeEventListener('scroll', recalcEffortFlyout)
+    }
+  }, [showEffortOptions, isMobileLayout, recalcEffortFlyout])
+
   const autoModels = getAutoModels(models)
 
   // Reasoning controls live at the bottom of the menu and reflect the
@@ -229,6 +285,55 @@ export function ModelSelector({
       document.querySelector<HTMLElement>('[data-model-selector]')?.focus()
     })
   }
+
+  const renderEffortContent = () => (
+    <>
+      <p className="px-3 py-1 text-xs text-content-muted">{EFFORT_EXPLAINER}</p>
+      {EFFORT_OPTIONS.map((option) => {
+        const isActive = isThinkingActive && reasoningEffort === option.value
+        const handleSelect = () => {
+          if (showThinkingToggle && !thinkingEnabled) {
+            onThinkingEnabledChange?.(true)
+          }
+          onEffortChange?.(option.value)
+        }
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="menuitemradio"
+            aria-checked={isActive}
+            className={`relative flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${isActive ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleSelect()
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+              if (isScrollingRef.current) return
+              e.preventDefault()
+              handleSelect()
+            }}
+          >
+            <span className="font-medium">{option.label}</span>
+            {option.value === DEFAULT_EFFORT && (
+              <span className="rounded bg-surface-card px-1.5 py-0.5 text-xs text-content-muted">
+                Default
+              </span>
+            )}
+            <span className="flex-1" />
+            {isActive && (
+              <CheckIcon
+                className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light"
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        )
+      })}
+    </>
+  )
 
   const renderModelItem = (model: BaseModel) => {
     const isSelected = model.modelName === selectedModel
@@ -301,7 +406,7 @@ export function ModelSelector({
       data-model-menu
       role="menu"
       aria-label="Select a model"
-      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border border-border-subtle bg-surface-chat p-2 font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
+      className={`absolute z-50 flex w-[280px] flex-col rounded-lg border border-border-subtle bg-surface-chat font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
       style={{
         maxHeight: dynamicStyles.maxHeight,
         ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
@@ -320,170 +425,148 @@ export function ModelSelector({
       onTouchEnd={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {autoModels.map((model) => renderModelItem(model))}
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-2"
+        onScroll={() => {
+          if (showEffortOptions && !isMobileLayout) recalcEffortFlyout()
+        }}
+      >
+        {autoModels.map((model) => renderModelItem(model))}
 
-      {autoModels.length > 0 && (
-        <div className="mx-3 my-1 border-t border-border-subtle" />
-      )}
+        {autoModels.length > 0 && (
+          <div className="mx-3 my-1 border-t border-border-subtle" />
+        )}
 
-      {topModels.map((model) => renderModelItem(model))}
+        {topModels.map((model) => renderModelItem(model))}
 
-      {(showEffort || showThinkingToggle) && (
-        <div className="mx-3 my-1 border-t border-border-subtle" />
-      )}
+        {(showEffort || showThinkingToggle) && (
+          <div className="mx-3 my-1 border-t border-border-subtle" />
+        )}
 
-      {showEffort && (
-        <>
-          <button
-            type="button"
-            aria-expanded={showEffortOptions}
-            className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setShowEffortOptions((prev) => !prev)
-            }}
-            onTouchEnd={(e) => {
-              e.stopPropagation()
-              if (isScrollingRef.current) return
-              e.preventDefault()
-              setShowEffortOptions((prev) => !prev)
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <span>Effort</span>
-            <span className="flex items-center gap-1 text-content-muted">
-              <span className="text-xs">
-                {isThinkingActive ? currentEffort.label : 'Off'}
+        {showEffort && (
+          <>
+            <button
+              ref={effortRowRef}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={showEffortOptions}
+              className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium transition-colors ${showEffortOptions ? 'bg-surface-card/70 text-content-primary' : 'text-content-secondary hover:bg-surface-card/70'}`}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setShowEffortOptions((prev) => !prev)
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation()
+                if (isScrollingRef.current) return
+                e.preventDefault()
+                setShowEffortOptions((prev) => !prev)
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <span>Effort</span>
+              <span className="flex items-center gap-1 text-content-muted">
+                <span className="text-xs">
+                  {isThinkingActive ? currentEffort.label : 'Off'}
+                </span>
+                <ChevronRightIcon
+                  className={`h-4 w-4 transition-transform ${showEffortOptions && isMobileLayout ? 'rotate-90' : ''}`}
+                  aria-hidden="true"
+                />
               </span>
-              <ChevronRightIcon
-                className={`h-4 w-4 transition-transform ${showEffortOptions ? 'rotate-90' : ''}`}
+            </button>
+
+            {showEffortOptions && isMobileLayout && renderEffortContent()}
+          </>
+        )}
+
+        {showThinkingToggle && (
+          <>
+            {showEffort && showEffortOptions && isMobileLayout && (
+              <div className="mx-3 my-1 border-t border-border-subtle" />
+            )}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={thinkingEnabled}
+              className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onThinkingEnabledChange?.(!thinkingEnabled)
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation()
+                if (isScrollingRef.current) return
+                e.preventDefault()
+                onThinkingEnabledChange?.(!thinkingEnabled)
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span>Thinking</span>
+                <span className="text-xs font-normal text-content-muted">
+                  Can think for more complex tasks
+                </span>
+              </div>
+              <span
+                aria-hidden="true"
+                className={`relative h-5 w-9 flex-none rounded-full border border-border-subtle transition-colors after:absolute after:left-[1px] after:top-[1px] after:h-4 after:w-4 after:rounded-full after:shadow-sm after:transition-all after:content-[''] ${thinkingEnabled ? 'bg-brand-accent-light after:translate-x-full after:bg-white' : 'bg-content-muted/40 after:bg-content-muted/70'}`}
+              />
+            </button>
+          </>
+        )}
+
+        {otherModels.length > 0 && (
+          <>
+            <div className="mx-3 my-1 border-t border-border-subtle" />
+            <button
+              type="button"
+              aria-expanded={showOtherModels}
+              className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setShowOtherModels((prev) => !prev)
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation()
+                if (isScrollingRef.current) return
+                e.preventDefault()
+                setShowOtherModels((prev) => !prev)
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <span>Other models</span>
+              <ChevronDownIcon
+                className={`h-4 w-4 text-content-muted transition-transform ${showOtherModels ? 'rotate-180' : ''}`}
                 aria-hidden="true"
               />
-            </span>
-          </button>
+            </button>
 
-          {showEffortOptions && (
-            <>
-              <p className="px-3 py-1 text-xs text-content-muted">
-                {EFFORT_EXPLAINER}
-              </p>
-              {EFFORT_OPTIONS.map((option) => {
-                const isActive =
-                  isThinkingActive && reasoningEffort === option.value
-                const handleSelect = () => {
-                  if (showThinkingToggle && !thinkingEnabled) {
-                    onThinkingEnabledChange?.(true)
-                  }
-                  onEffortChange?.(option.value)
-                }
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={isActive}
-                    className={`relative flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${isActive ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      handleSelect()
-                    }}
-                    onTouchEnd={(e) => {
-                      e.stopPropagation()
-                      if (isScrollingRef.current) return
-                      e.preventDefault()
-                      handleSelect()
-                    }}
-                  >
-                    <span className="font-medium">{option.label}</span>
-                    {option.value === DEFAULT_EFFORT && (
-                      <span className="rounded bg-surface-card px-1.5 py-0.5 text-xs text-content-muted">
-                        Default
-                      </span>
-                    )}
-                    <span className="flex-1" />
-                    {isActive && (
-                      <CheckIcon
-                        className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </button>
-                )
-              })}
-            </>
-          )}
-        </>
-      )}
+            {showOtherModels &&
+              otherModels.map((model) => renderModelItem(model))}
+          </>
+        )}
+      </div>
 
-      {showThinkingToggle && (
-        <>
-          {showEffort && showEffortOptions && (
-            <div className="mx-3 my-1 border-t border-border-subtle" />
-          )}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={thinkingEnabled}
-            className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              onThinkingEnabledChange?.(!thinkingEnabled)
-            }}
-            onTouchEnd={(e) => {
-              e.stopPropagation()
-              if (isScrollingRef.current) return
-              e.preventDefault()
-              onThinkingEnabledChange?.(!thinkingEnabled)
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span>Thinking</span>
-              <span className="text-xs font-normal text-content-muted">
-                Can think for more complex tasks
-              </span>
-            </div>
-            <span
-              aria-hidden="true"
-              className={`relative h-5 w-9 flex-none rounded-full border border-border-subtle transition-colors after:absolute after:left-[1px] after:top-[1px] after:h-4 after:w-4 after:rounded-full after:shadow-sm after:transition-all after:content-[''] ${thinkingEnabled ? 'bg-brand-accent-light after:translate-x-full after:bg-white' : 'bg-content-muted/40 after:bg-content-muted/70'}`}
-            />
-          </button>
-        </>
-      )}
-
-      {otherModels.length > 0 && (
-        <>
-          <div className="mx-3 my-1 border-t border-border-subtle" />
-          <button
-            type="button"
-            aria-expanded={showOtherModels}
-            className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setShowOtherModels((prev) => !prev)
-            }}
-            onTouchEnd={(e) => {
-              e.stopPropagation()
-              if (isScrollingRef.current) return
-              e.preventDefault()
-              setShowOtherModels((prev) => !prev)
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <span>Other models</span>
-            <ChevronDownIcon
-              className={`h-4 w-4 text-content-muted transition-transform ${showOtherModels ? 'rotate-180' : ''}`}
-              aria-hidden="true"
-            />
-          </button>
-
-          {showOtherModels &&
-            otherModels.map((model) => renderModelItem(model))}
-        </>
+      {showEffort && showEffortOptions && !isMobileLayout && (
+        <div
+          ref={effortFlyoutRef}
+          role="menu"
+          aria-label="Reasoning effort"
+          className="absolute rounded-lg border border-border-subtle bg-surface-chat p-2 shadow-lg"
+          style={{
+            width: `${EFFORT_FLYOUT_WIDTH_PX}px`,
+            top: `${effortFlyout?.top ?? 0}px`,
+            ...(effortFlyout?.side === 'left'
+              ? { right: `calc(100% + ${EFFORT_FLYOUT_GAP_PX}px)` }
+              : { left: `calc(100% + ${EFFORT_FLYOUT_GAP_PX}px)` }),
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {renderEffortContent()}
+        </div>
       )}
     </div>
   )
