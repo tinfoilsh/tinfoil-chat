@@ -1,6 +1,10 @@
-import type { Message, PendingRecoveryEnvelope } from '@/components/chat/types'
+import type { Message } from '@/components/chat/types'
 import type { StoredChat } from '@/services/storage/indexed-db'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
+import {
+  MAX_PENDING_RECOVERIES_PER_CHAT,
+  type PendingRecoveryEnvelope,
+} from '@/types/chat-recovery'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let remoteChat: StoredChat
@@ -161,18 +165,23 @@ describe('chat recovery sync mutations', () => {
     expect(localChat?.pendingRecoveries).toEqual(result.pendingRecoveries)
   })
 
-  it('prunes expired recoveries before enforcing the pending limit', async () => {
-    remoteChat.pendingRecoveries = Array.from({ length: 8 }, (_, index) => ({
-      ...envelope(`expired-${index}`),
-      expiresAt: new Date(Date.now() - 60_000).toISOString(),
-    }))
+  it('keeps expired recoveries for scanner cleanup', async () => {
+    remoteChat.pendingRecoveries = Array.from(
+      { length: MAX_PENDING_RECOVERIES_PER_CHAT - 1 },
+      (_, index) => ({
+        ...envelope(`expired-${index}`),
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    )
     localChat = structuredClone(remoteChat)
 
     const result = await addPendingRecovery(remoteChat.id, envelope('turn-1'))
 
-    expect(result.pendingRecoveries?.map((item) => item.turnId)).toEqual([
-      'turn-1',
-    ])
+    expect(result.pendingRecoveries).toHaveLength(
+      MAX_PENDING_RECOVERIES_PER_CHAT,
+    )
+    expect(result.pendingRecoveries?.[0].turnId).toBe('expired-0')
+    expect(result.pendingRecoveries?.at(-1)?.turnId).toBe('turn-1')
   })
 
   it('keeps recovery state local when cloud sync is disabled', async () => {

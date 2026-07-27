@@ -245,11 +245,8 @@ export function addPendingRecovery(
 ): Promise<StoredChat> {
   return mutateSyncedChat(chatId, (chat) => {
     const existing = chat.pendingRecoveries ?? []
-    const now = Date.now()
     const pending = existing.filter(
-      (candidate) =>
-        candidate.turnId !== envelope.turnId &&
-        Date.parse(candidate.expiresAt) > now,
+      (candidate) => candidate.turnId !== envelope.turnId,
     )
     if (pending.length >= MAX_PENDING_RECOVERIES_PER_CHAT) {
       throw new Error('Chat has too many pending recovery sessions')
