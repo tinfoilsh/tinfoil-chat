@@ -3,10 +3,15 @@ import {
   resolveModelSelection,
   type BaseModel,
 } from '@/config/models'
-import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+} from '@heroicons/react/24/outline'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { PiShuffleAngularBold } from 'react-icons/pi'
 import {
+  DEFAULT_EFFORT,
   supportsReasoningEffort,
   supportsThinkingToggle,
   type ReasoningEffort,
@@ -16,12 +21,14 @@ import type { AIModel } from './types'
 const EFFORT_OPTIONS: {
   value: ReasoningEffort
   label: string
-  description: string
 }[] = [
-  { value: 'high', label: 'High', description: 'Deep thinking' },
-  { value: 'medium', label: 'Medium', description: 'Balanced reasoning' },
-  { value: 'low', label: 'Low', description: 'Quick responses' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
 ]
+
+const EFFORT_EXPLAINER =
+  'Higher effort means more thorough responses, but takes longer.'
 
 type ModelSelectorProps = {
   selectedModel: AIModel
@@ -294,7 +301,7 @@ export function ModelSelector({
       data-model-menu
       role="menu"
       aria-label="Select a model"
-      className={`absolute z-50 flex w-[280px] flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface-chat p-2 font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
+      className={`absolute z-50 w-[280px] overflow-y-auto rounded-lg border border-border-subtle bg-surface-chat p-2 font-aeonik-fono text-content-secondary shadow-lg ${dynamicStyles.bottom ? 'mb-2' : 'mt-2'}`}
       style={{
         maxHeight: dynamicStyles.maxHeight,
         ...(dynamicStyles.bottom && { bottom: dynamicStyles.bottom }),
@@ -313,159 +320,170 @@ export function ModelSelector({
       onTouchEnd={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* Only the model list scrolls; the reasoning controls below stay
-          pinned so they are reachable without scrolling. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {autoModels.map((model) => renderModelItem(model))}
+      {autoModels.map((model) => renderModelItem(model))}
 
-        {autoModels.length > 0 && (
-          <div className="mx-3 my-1 border-t border-border-subtle" />
-        )}
+      {autoModels.length > 0 && (
+        <div className="mx-3 my-1 border-t border-border-subtle" />
+      )}
 
-        {topModels.map((model) => renderModelItem(model))}
-
-        {otherModels.length > 0 && (
-          <>
-            <div className="mx-3 my-1 border-t border-border-subtle" />
-            <button
-              type="button"
-              aria-expanded={showOtherModels}
-              className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setShowOtherModels((prev) => !prev)
-              }}
-              onTouchEnd={(e) => {
-                e.stopPropagation()
-                if (isScrollingRef.current) return
-                e.preventDefault()
-                setShowOtherModels((prev) => !prev)
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <span>Other models</span>
-              <ChevronDownIcon
-                className={`h-4 w-4 text-content-muted transition-transform ${showOtherModels ? 'rotate-180' : ''}`}
-                aria-hidden="true"
-              />
-            </button>
-
-            {showOtherModels &&
-              otherModels.map((model) => renderModelItem(model))}
-          </>
-        )}
-      </div>
+      {topModels.map((model) => renderModelItem(model))}
 
       {(showEffort || showThinkingToggle) && (
-        <div className="flex-none">
-          <div className="mx-3 my-1 border-t border-border-subtle" />
+        <div className="mx-3 my-1 border-t border-border-subtle" />
+      )}
 
-          {showEffort && (
+      {showEffort && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showEffortOptions}
+            className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowEffortOptions((prev) => !prev)
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+              if (isScrollingRef.current) return
+              e.preventDefault()
+              setShowEffortOptions((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <span>Effort</span>
+            <span className="flex items-center gap-1 text-content-muted">
+              <span className="text-xs">
+                {isThinkingActive ? currentEffort.label : 'Off'}
+              </span>
+              <ChevronRightIcon
+                className={`h-4 w-4 transition-transform ${showEffortOptions ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              />
+            </span>
+          </button>
+
+          {showEffortOptions && (
             <>
-              <button
-                type="button"
-                aria-expanded={showEffortOptions}
-                className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setShowEffortOptions((prev) => !prev)
-                }}
-                onTouchEnd={(e) => {
-                  e.stopPropagation()
-                  if (isScrollingRef.current) return
-                  e.preventDefault()
-                  setShowEffortOptions((prev) => !prev)
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <span>Effort</span>
-                <span className="flex items-center gap-1 text-content-muted">
-                  <span className="text-xs">
-                    {isThinkingActive ? currentEffort.label : 'Off'}
-                  </span>
-                  <ChevronDownIcon
-                    className={`h-4 w-4 transition-transform ${showEffortOptions ? 'rotate-180' : ''}`}
-                    aria-hidden="true"
-                  />
-                </span>
-              </button>
-
-              {showEffortOptions &&
-                EFFORT_OPTIONS.map((option) => {
-                  const isActive =
-                    isThinkingActive && reasoningEffort === option.value
-                  const handleSelect = () => {
-                    if (showThinkingToggle && !thinkingEnabled) {
-                      onThinkingEnabledChange?.(true)
-                    }
-                    onEffortChange?.(option.value)
+              <p className="px-3 py-1 text-xs text-content-muted">
+                {EFFORT_EXPLAINER}
+              </p>
+              {EFFORT_OPTIONS.map((option) => {
+                const isActive =
+                  isThinkingActive && reasoningEffort === option.value
+                const handleSelect = () => {
+                  if (showThinkingToggle && !thinkingEnabled) {
+                    onThinkingEnabledChange?.(true)
                   }
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={isActive}
-                      className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${isActive ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        handleSelect()
-                      }}
-                      onTouchEnd={(e) => {
-                        e.stopPropagation()
-                        if (isScrollingRef.current) return
-                        e.preventDefault()
-                        handleSelect()
-                      }}
-                    >
-                      <div className="flex flex-1 flex-col">
-                        <span className="font-medium">{option.label}</span>
-                        <span className="text-xs text-content-muted">
-                          {option.description}
-                        </span>
-                      </div>
-                      {isActive && (
-                        <CheckIcon
-                          className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light"
-                          aria-hidden="true"
-                        />
-                      )}
-                    </button>
-                  )
-                })}
+                  onEffortChange?.(option.value)
+                }
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isActive}
+                    className={`relative flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${isActive ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleSelect()
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation()
+                      if (isScrollingRef.current) return
+                      e.preventDefault()
+                      handleSelect()
+                    }}
+                  >
+                    <span className="font-medium">{option.label}</span>
+                    {option.value === DEFAULT_EFFORT && (
+                      <span className="rounded bg-surface-card px-1.5 py-0.5 text-xs text-content-muted">
+                        Default
+                      </span>
+                    )}
+                    <span className="flex-1" />
+                    {isActive && (
+                      <CheckIcon
+                        className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                )
+              })}
             </>
           )}
+        </>
+      )}
 
-          {showThinkingToggle && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={thinkingEnabled}
-              className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onThinkingEnabledChange?.(!thinkingEnabled)
-              }}
-              onTouchEnd={(e) => {
-                e.stopPropagation()
-                if (isScrollingRef.current) return
-                e.preventDefault()
-                onThinkingEnabledChange?.(!thinkingEnabled)
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <span>Thinking</span>
-              <span
-                aria-hidden="true"
-                className={`relative h-5 w-9 flex-none rounded-full border border-border-subtle transition-colors after:absolute after:left-[1px] after:top-[1px] after:h-4 after:w-4 after:rounded-full after:shadow-sm after:transition-all after:content-[''] ${thinkingEnabled ? 'bg-brand-accent-light after:translate-x-full after:bg-white' : 'bg-content-muted/40 after:bg-content-muted/70'}`}
-              />
-            </button>
+      {showThinkingToggle && (
+        <>
+          {showEffort && showEffortOptions && (
+            <div className="mx-3 my-1 border-t border-border-subtle" />
           )}
-        </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={thinkingEnabled}
+            className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onThinkingEnabledChange?.(!thinkingEnabled)
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+              if (isScrollingRef.current) return
+              e.preventDefault()
+              onThinkingEnabledChange?.(!thinkingEnabled)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span>Thinking</span>
+              <span className="text-xs font-normal text-content-muted">
+                Can think for more complex tasks
+              </span>
+            </div>
+            <span
+              aria-hidden="true"
+              className={`relative h-5 w-9 flex-none rounded-full border border-border-subtle transition-colors after:absolute after:left-[1px] after:top-[1px] after:h-4 after:w-4 after:rounded-full after:shadow-sm after:transition-all after:content-[''] ${thinkingEnabled ? 'bg-brand-accent-light after:translate-x-full after:bg-white' : 'bg-content-muted/40 after:bg-content-muted/70'}`}
+            />
+          </button>
+        </>
+      )}
+
+      {otherModels.length > 0 && (
+        <>
+          <div className="mx-3 my-1 border-t border-border-subtle" />
+          <button
+            type="button"
+            aria-expanded={showOtherModels}
+            className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowOtherModels((prev) => !prev)
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+              if (isScrollingRef.current) return
+              e.preventDefault()
+              setShowOtherModels((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <span>Other models</span>
+            <ChevronDownIcon
+              className={`h-4 w-4 text-content-muted transition-transform ${showOtherModels ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          </button>
+
+          {showOtherModels &&
+            otherModels.map((model) => renderModelItem(model))}
+        </>
       )}
     </div>
   )
