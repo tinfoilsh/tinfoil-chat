@@ -216,7 +216,7 @@ export type ModelInfo = {
   endpoint?: string
 }
 
-export type LabelType = 'verify' | 'model' | 'info' | 'reasoning' | null
+export type LabelType = 'verify' | 'model' | 'info' | null
 
 // Document processing types
 export type DocumentProcessingStatus =

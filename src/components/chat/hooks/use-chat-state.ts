@@ -255,17 +255,11 @@ export function useChatState({
     codeExecutionEncryptionKey,
   })
 
-  // Add effect to handle dismissing the model/reasoning selectors
+  // Add effect to handle dismissing the model selector
   useEffect(() => {
-    if (expandedLabel === 'model' || expandedLabel === 'reasoning') {
-      const triggerSelector =
-        expandedLabel === 'model'
-          ? '[data-model-selector]'
-          : '[data-reasoning-selector]'
-      const menuSelector =
-        expandedLabel === 'model'
-          ? '[data-model-menu]'
-          : '[data-reasoning-menu]'
+    if (expandedLabel === 'model') {
+      const triggerSelector = '[data-model-selector]'
+      const menuSelector = '[data-model-menu]'
 
       const getSelectorElements = () => ({
         trigger: document.querySelector<HTMLElement>(triggerSelector),

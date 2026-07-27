@@ -1,8 +1,27 @@
-import { getAutoModels, type BaseModel } from '@/config/models'
+import {
+  getAutoModels,
+  resolveModelSelection,
+  type BaseModel,
+} from '@/config/models'
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { PiShuffleAngularBold } from 'react-icons/pi'
+import {
+  supportsReasoningEffort,
+  supportsThinkingToggle,
+  type ReasoningEffort,
+} from './hooks/use-reasoning-effort'
 import type { AIModel } from './types'
+
+const EFFORT_OPTIONS: {
+  value: ReasoningEffort
+  label: string
+  description: string
+}[] = [
+  { value: 'high', label: 'High', description: 'Deep thinking' },
+  { value: 'medium', label: 'Medium', description: 'Balanced reasoning' },
+  { value: 'low', label: 'Low', description: 'Quick responses' },
+]
 
 type ModelSelectorProps = {
   selectedModel: AIModel
@@ -10,6 +29,10 @@ type ModelSelectorProps = {
   isDarkMode: boolean
   models: BaseModel[]
   preferredPosition?: 'above' | 'below'
+  reasoningEffort?: ReasoningEffort
+  onEffortChange?: (effort: ReasoningEffort) => void
+  thinkingEnabled?: boolean
+  onThinkingEnabledChange?: (enabled: boolean) => void
 }
 
 export function ModelSelector({
@@ -18,12 +41,17 @@ export function ModelSelector({
   isDarkMode,
   models,
   preferredPosition = 'above',
+  reasoningEffort,
+  onEffortChange,
+  thinkingEnabled,
+  onThinkingEnabledChange,
 }: ModelSelectorProps) {
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({})
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({})
   const menuRef = useRef<HTMLDivElement>(null)
   const isScrollingRef = useRef(false)
   const [showOtherModels, setShowOtherModels] = useState(false)
+  const [showEffortOptions, setShowEffortOptions] = useState(false)
 
   const [dynamicStyles, setDynamicStyles] = useState<{
     maxHeight: string
@@ -153,6 +181,23 @@ export function ModelSelector({
   }, [preferredPosition])
 
   const autoModels = getAutoModels(models)
+
+  // Reasoning controls live at the bottom of the menu and reflect the
+  // currently selected model (for Auto entries, the representative model the
+  // selection resolves to). They only render when the parent wires the
+  // reasoning props and the model exposes the matching capability.
+  const resolvedModel = resolveModelSelection(selectedModel, models).model
+  const showEffort =
+    supportsReasoningEffort(resolvedModel) &&
+    reasoningEffort !== undefined &&
+    onEffortChange !== undefined
+  const showThinkingToggle =
+    supportsThinkingToggle(resolvedModel) &&
+    thinkingEnabled !== undefined &&
+    onThinkingEnabledChange !== undefined
+  const isThinkingActive = !showThinkingToggle || thinkingEnabled === true
+  const currentEffort =
+    EFFORT_OPTIONS.find((o) => o.value === reasoningEffort) ?? EFFORT_OPTIONS[1]
 
   const displayModels = models.filter(
     (model) =>
@@ -302,6 +347,115 @@ export function ModelSelector({
           {showOtherModels &&
             otherModels.map((model) => renderModelItem(model))}
         </>
+      )}
+
+      {(showEffort || showThinkingToggle) && (
+        <div className="mx-3 my-1 border-t border-border-subtle" />
+      )}
+
+      {showEffort && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showEffortOptions}
+            className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowEffortOptions((prev) => !prev)
+            }}
+            onTouchEnd={(e) => {
+              e.stopPropagation()
+              if (isScrollingRef.current) return
+              e.preventDefault()
+              setShowEffortOptions((prev) => !prev)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <span>Effort</span>
+            <span className="flex items-center gap-1 text-content-muted">
+              <span className="text-xs">
+                {isThinkingActive ? currentEffort.label : 'Off'}
+              </span>
+              <ChevronDownIcon
+                className={`h-4 w-4 transition-transform ${showEffortOptions ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </span>
+          </button>
+
+          {showEffortOptions &&
+            EFFORT_OPTIONS.map((option) => {
+              const isActive =
+                isThinkingActive && reasoningEffort === option.value
+              const handleSelect = () => {
+                if (showThinkingToggle && !thinkingEnabled) {
+                  onThinkingEnabledChange?.(true)
+                }
+                onEffortChange?.(option.value)
+              }
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={isActive}
+                  className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${isActive ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleSelect()
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation()
+                    if (isScrollingRef.current) return
+                    e.preventDefault()
+                    handleSelect()
+                  }}
+                >
+                  <div className="flex flex-1 flex-col">
+                    <span className="font-medium">{option.label}</span>
+                    <span className="text-xs text-content-muted">
+                      {option.description}
+                    </span>
+                  </div>
+                  {isActive && (
+                    <CheckIcon
+                      className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              )
+            })}
+        </>
+      )}
+
+      {showThinkingToggle && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={thinkingEnabled}
+          className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onThinkingEnabledChange?.(!thinkingEnabled)
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation()
+            if (isScrollingRef.current) return
+            e.preventDefault()
+            onThinkingEnabledChange?.(!thinkingEnabled)
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <span>Thinking</span>
+          <span
+            aria-hidden="true"
+            className={`relative h-5 w-9 flex-none rounded-full border border-border-subtle transition-colors after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:shadow-sm after:transition-all after:content-[''] ${thinkingEnabled ? 'bg-brand-accent-light after:translate-x-full after:bg-white' : 'bg-content-muted/40 after:bg-content-muted/70'}`}
+          />
+        </button>
       )}
     </div>
   )
