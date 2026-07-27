@@ -310,8 +310,11 @@ export function ChatMessages({
 
   if (messages.length === 0 && !isWaitingForResponse) {
     return (
-      <div className="relative flex min-h-full w-full items-center justify-center overflow-y-auto">
+      <div className="relative flex min-h-full w-full flex-col items-center overflow-y-auto">
         <GridTexture />
+        {/* Asymmetric spacers bias the panel above center so the model menu,
+            which opens below the input, has room on tall screens. */}
+        <div className="flex-[2]" />
         <div className="relative z-10 w-full max-w-4xl px-8 pb-8 pt-16">
           <WelcomeScreen
             isDarkMode={isDarkMode}
@@ -345,6 +348,7 @@ export function ChatMessages({
             onSelectPromptPreset={onSelectPromptPreset}
           />
         </div>
+        <div className="flex-[3]" />
       </div>
     )
   }
