@@ -268,7 +268,16 @@ export function ModelSelector({
             </>
           )}
         </div>
-        <span className="flex-1 font-medium">{model.name}</span>
+        {!model.isAuto && model.descriptionShort ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="font-medium">{model.name}</span>
+            <span className="text-xs text-content-muted">
+              {model.descriptionShort}
+            </span>
+          </div>
+        ) : (
+          <span className="flex-1 font-medium">{model.name}</span>
+        )}
         {isSelected && (
           <CheckIcon
             className="h-4 w-4 flex-none text-brand-accent-dark dark:text-brand-accent-light"

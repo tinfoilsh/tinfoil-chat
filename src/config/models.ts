@@ -10,6 +10,7 @@ const DEV_MODELS: BaseModel[] = [
     name: 'Gemma 4 31B',
     nameShort: 'Gemma 4',
     description: 'Google Gemma 4 31B',
+    descriptionShort: 'Best for everyday tasks with images',
     type: 'chat',
     chat: true,
     multimodal: true,
@@ -34,6 +35,7 @@ const DEV_MODELS: BaseModel[] = [
     name: 'Kimi K2.6',
     nameShort: 'Kimi K2.6',
     description: 'Moonshot Kimi K2.6',
+    descriptionShort: 'Best for coding and visual tasks',
     type: 'chat',
     chat: true,
     multimodal: true,
@@ -44,6 +46,7 @@ const DEV_MODELS: BaseModel[] = [
     name: 'GPT-OSS 120B',
     nameShort: 'GPT-OSS',
     description: 'OpenAI GPT-OSS 120B',
+    descriptionShort: 'Best for quick reasoning tasks',
     type: 'chat',
     chat: true,
   },
@@ -96,6 +99,8 @@ export type BaseModel = {
   name: string
   nameShort: string
   description: string
+  /** Short "Best for x" blurb shown under the name in the model picker. */
+  descriptionShort?: string
   details?: string
   parameters?: string
   contextWindow?: string
