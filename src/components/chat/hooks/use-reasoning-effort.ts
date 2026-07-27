@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
-const DEFAULT_EFFORT: ReasoningEffort = 'medium'
+export const DEFAULT_EFFORT: ReasoningEffort = 'medium'
 
 export function useReasoningEffort() {
   const [reasoningEffort, setReasoningEffortState] =

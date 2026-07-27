@@ -1,10 +1,6 @@
 import { Favicon } from '@/components/ui/favicon'
 import { Modal, ModalTitle } from '@/components/ui/modal'
-import {
-  findSelectableModel,
-  resolveModelSelection,
-  type BaseModel,
-} from '@/config/models'
+import { findSelectableModel, type BaseModel } from '@/config/models'
 import { USER_PREFS_NICKNAME } from '@/constants/storage-keys'
 import { useUser } from '@clerk/nextjs'
 import { motion } from 'framer-motion'
@@ -14,15 +10,9 @@ import { ChatInput } from './chat-input'
 import { PromptPresetSuggestions } from './components/prompt-preset-suggestions'
 import { CONSTANTS } from './constants'
 import { DataFlowDiagram } from './DataFlowDiagram'
-import {
-  isReasoningModel,
-  supportsReasoningEffort,
-  supportsThinkingToggle,
-  type ReasoningEffort,
-} from './hooks/use-reasoning-effort'
+import { type ReasoningEffort } from './hooks/use-reasoning-effort'
 import { ModelSelector } from './model-selector'
 import type { PromptPreset } from './prompts/types'
-import { ReasoningEffortSelector } from './reasoning-effort-selector'
 import type { ProcessedDocument } from './renderers/types'
 import type { LabelType, LoadingState } from './types'
 
@@ -500,46 +490,15 @@ export const WelcomeScreen = memo(function WelcomeScreen({
                             isDarkMode={isDarkMode}
                             models={models}
                             preferredPosition="below"
+                            reasoningEffort={reasoningEffort}
+                            onEffortChange={setReasoningEffort}
+                            thinkingEnabled={thinkingEnabled}
+                            onThinkingEnabledChange={setThinkingEnabled}
                           />
                         )}
                       </div>
                     ) : undefined
                   }
-                  reasoningSelectorButton={(() => {
-                    if (
-                      !reasoningEffort ||
-                      !setReasoningEffort ||
-                      !handleLabelClick ||
-                      thinkingEnabled === undefined ||
-                      !setThinkingEnabled
-                    )
-                      return undefined
-                    const m =
-                      models && selectedModel
-                        ? resolveModelSelection(selectedModel, models).model
-                        : undefined
-                    const supportsEffort = supportsReasoningEffort(m)
-                    const supportsToggle = supportsThinkingToggle(m)
-                    if (
-                      !isReasoningModel(m) ||
-                      (!supportsEffort && !supportsToggle)
-                    )
-                      return undefined
-                    return (
-                      <ReasoningEffortSelector
-                        supportsEffort={supportsEffort}
-                        supportsToggle={supportsToggle}
-                        reasoningEffort={reasoningEffort}
-                        onEffortChange={setReasoningEffort}
-                        thinkingEnabled={thinkingEnabled}
-                        onThinkingEnabledChange={setThinkingEnabled}
-                        isOpen={expandedLabel === 'reasoning'}
-                        onToggle={() => handleLabelClick('reasoning', () => {})}
-                        onClose={() => handleLabelClick('reasoning', () => {})}
-                        preferredPosition="below"
-                      />
-                    )
-                  })()}
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={onWebSearchToggle}
                   codeExecutionEnabled={codeExecutionEnabled}

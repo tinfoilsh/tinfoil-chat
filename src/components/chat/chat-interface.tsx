@@ -2,7 +2,6 @@ import {
   findSelectableModel,
   getAIModels,
   getSystemPromptAndRules,
-  resolveModelSelection,
   type BaseModel,
 } from '@/config/models'
 import {
@@ -118,9 +117,6 @@ import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
 import { useMessageQueue } from './hooks/use-message-queue'
 import { usePromptLibrary } from './hooks/use-prompt-library'
 import {
-  isReasoningModel,
-  supportsReasoningEffort,
-  supportsThinkingToggle,
   useReasoningEffort,
   useThinkingEnabled,
 } from './hooks/use-reasoning-effort'
@@ -128,7 +124,6 @@ import { useSidebarChat } from './hooks/use-sidebar-chat'
 import { MessageQueue } from './message-queue'
 import { ModelSelector } from './model-selector'
 import { QuoteSelectionPopover } from './quote-selection-popover'
-import { ReasoningEffortSelector } from './reasoning-effort-selector'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
@@ -3575,41 +3570,15 @@ export function ChatInterface({
                                   onSelect={handleModelSelect}
                                   isDarkMode={isDarkMode}
                                   models={models}
+                                  reasoningEffort={reasoningEffort}
+                                  onEffortChange={setReasoningEffort}
+                                  thinkingEnabled={thinkingEnabled}
+                                  onThinkingEnabledChange={setThinkingEnabled}
                                 />
                               )}
                             </div>
                           ) : undefined
                         }
-                        reasoningSelectorButton={(() => {
-                          const m = resolveModelSelection(
-                            selectedModel,
-                            models,
-                          ).model
-                          const supportsEffort = supportsReasoningEffort(m)
-                          const supportsToggle = supportsThinkingToggle(m)
-                          if (
-                            !isReasoningModel(m) ||
-                            (!supportsEffort && !supportsToggle)
-                          )
-                            return undefined
-                          return (
-                            <ReasoningEffortSelector
-                              supportsEffort={supportsEffort}
-                              supportsToggle={supportsToggle}
-                              reasoningEffort={reasoningEffort}
-                              onEffortChange={setReasoningEffort}
-                              thinkingEnabled={thinkingEnabled}
-                              onThinkingEnabledChange={setThinkingEnabled}
-                              isOpen={expandedLabel === 'reasoning'}
-                              onToggle={() =>
-                                handleLabelClick('reasoning', () => {})
-                              }
-                              onClose={() =>
-                                handleLabelClick('reasoning', () => {})
-                              }
-                            />
-                          )
-                        })()}
                         webSearchEnabled={effectiveWebSearchEnabled}
                         onWebSearchToggle={
                           webSearchAvailable ? handleWebSearchToggle : undefined

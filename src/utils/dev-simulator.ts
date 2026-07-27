@@ -7,6 +7,7 @@ export const DEV_SIMULATOR_MODEL: BaseModel = {
   name: 'Dev Simulator',
   nameShort: 'Dev',
   description: 'Development model for testing streaming and thinking behaviors',
+  descriptionShort: 'Best for testing streaming behaviors',
   details:
     'Simulates various streaming patterns including thinking, content generation, and edge cases',
   parameters: 'Configurable via query patterns',

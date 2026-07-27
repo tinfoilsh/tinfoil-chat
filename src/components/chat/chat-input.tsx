@@ -68,7 +68,6 @@ type ChatInputProps = {
   hasMessages?: boolean
   audioModel?: string
   modelSelectorButton?: React.ReactNode
-  reasoningSelectorButton?: React.ReactNode
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
   codeExecutionEnabled?: boolean
@@ -106,7 +105,6 @@ export function ChatInput({
   hasMessages,
   audioModel,
   modelSelectorButton,
-  reasoningSelectorButton,
   webSearchEnabled,
   onWebSearchToggle,
   codeExecutionEnabled,
@@ -1184,12 +1182,6 @@ export function ChatInput({
                           <ContextUsageIndicator usage={contextUsage} />
                         </div>
                       )}
-                      {reasoningSelectorButton && (
-                        <div className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary">
-                          <span className="flex-1">Thinking</span>
-                          {reasoningSelectorButton}
-                        </div>
-                      )}
                     </div>
                   </>
                 )}
@@ -1236,8 +1228,8 @@ export function ChatInput({
                       <PiGlobeX className="h-5 w-5" />
                     )}
                     {webSearchEnabled && (
-                      <span className="text-xs font-medium leading-none">
-                        Web Search
+                      <span className="translate-y-px text-xs font-medium leading-none">
+                        Search
                       </span>
                     )}
                   </button>
@@ -1269,7 +1261,7 @@ export function ChatInput({
                   >
                     <PiTerminalWindow className="h-5 w-5" />
                     {codeExecutionEnabled && (
-                      <span className="text-xs font-medium leading-none">
+                      <span className="translate-y-px text-xs font-medium leading-none">
                         Code
                       </span>
                     )}
@@ -1291,9 +1283,6 @@ export function ChatInput({
                 />
               )}
               {modelSelectorButton && <div>{modelSelectorButton}</div>}
-              {reasoningSelectorButton && (
-                <div className="hidden md:block">{reasoningSelectorButton}</div>
-              )}
               {isPremium && audioModel && (
                 <button
                   type="button"
