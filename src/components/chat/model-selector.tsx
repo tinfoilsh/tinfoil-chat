@@ -8,7 +8,14 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type TouchEvent,
+} from 'react'
 import { PiShuffleAngularBold } from 'react-icons/pi'
 import {
   DEFAULT_EFFORT,
@@ -69,7 +76,7 @@ export function ModelSelector({
   const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [effortFlyout, setEffortFlyout] = useState<{
     top: number
-    side: 'left' | 'right'
+    left: number
   } | null>(null)
 
   const [dynamicStyles, setDynamicStyles] = useState<{
@@ -208,8 +215,8 @@ export function ModelSelector({
   }, [])
 
   // Anchors the effort flyout beside the menu at the Effort row's height,
-  // flipping to the left edge when the right side lacks space and clamping
-  // to the viewport so the options stay fully visible.
+  // preferring the right side, otherwise the roomier side, and clamping into
+  // the viewport (overlapping the menu beats rendering off-screen).
   const recalcEffortFlyout = useCallback(() => {
     const menuElement = menuRef.current
     const rowElement = effortRowRef.current
@@ -218,15 +225,27 @@ export function ModelSelector({
     const rowRect = rowElement.getBoundingClientRect()
     const viewportWidth = window.innerWidth
     const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-    const side =
-      menuRect.right + EFFORT_FLYOUT_GAP_PX + EFFORT_FLYOUT_WIDTH_PX <=
-      viewportWidth - VIEWPORT_MARGIN_PX
-        ? 'right'
-        : 'left'
+    const spaceRight =
+      viewportWidth -
+      VIEWPORT_MARGIN_PX -
+      (menuRect.right + EFFORT_FLYOUT_GAP_PX)
+    const spaceLeft = menuRect.left - EFFORT_FLYOUT_GAP_PX - VIEWPORT_MARGIN_PX
+    const useRight =
+      spaceRight >= EFFORT_FLYOUT_WIDTH_PX || spaceRight >= spaceLeft
+    const desiredLeft = useRight
+      ? menuRect.right + EFFORT_FLYOUT_GAP_PX
+      : menuRect.left - EFFORT_FLYOUT_GAP_PX - EFFORT_FLYOUT_WIDTH_PX
+    const left = Math.max(
+      VIEWPORT_MARGIN_PX,
+      Math.min(
+        desiredLeft,
+        viewportWidth - VIEWPORT_MARGIN_PX - EFFORT_FLYOUT_WIDTH_PX,
+      ),
+    )
     const flyoutHeight = effortFlyoutRef.current?.offsetHeight ?? 0
     const maxTop = viewportHeight - VIEWPORT_MARGIN_PX - flyoutHeight
     const top = Math.min(rowRect.top, Math.max(VIEWPORT_MARGIN_PX, maxTop))
-    setEffortFlyout({ top: top - menuRect.top, side })
+    setEffortFlyout({ top: top - menuRect.top, left: left - menuRect.left })
   }, [])
 
   useLayoutEffect(() => {
@@ -286,6 +305,24 @@ export function ModelSelector({
     })
   }
 
+  // Shared handlers for every actionable menu row: taps only activate when
+  // the touch was not a scroll gesture, and propagation is stopped so the
+  // document-level dismiss handler does not close the menu first.
+  const menuItemHandlers = (action: () => void) => ({
+    onClick: (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      action()
+    },
+    onTouchEnd: (e: TouchEvent) => {
+      e.stopPropagation()
+      if (isScrollingRef.current) return
+      e.preventDefault()
+      action()
+    },
+    onMouseDown: (e: MouseEvent) => e.stopPropagation(),
+  })
+
   const renderEffortContent = () => (
     <>
       <p className="px-3 py-1 text-xs text-content-muted">{EFFORT_EXPLAINER}</p>
@@ -304,17 +341,7 @@ export function ModelSelector({
             role="menuitemradio"
             aria-checked={isActive}
             className={`relative flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${isActive ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              handleSelect()
-            }}
-            onTouchEnd={(e) => {
-              e.stopPropagation()
-              if (isScrollingRef.current) return
-              e.preventDefault()
-              handleSelect()
-            }}
+            {...menuItemHandlers(handleSelect)}
           >
             <span className="font-medium">{option.label}</span>
             {option.value === DEFAULT_EFFORT && (
@@ -344,19 +371,10 @@ export function ModelSelector({
         role="menuitemradio"
         aria-checked={isSelected}
         className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${isSelected ? 'text-content-primary' : 'cursor-pointer text-content-secondary hover:bg-surface-card/70'}`}
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
+        {...menuItemHandlers(() => {
           onSelect(model.modelName as AIModel)
           focusTrigger()
-        }}
-        onTouchEnd={(e) => {
-          e.stopPropagation()
-          if (isScrollingRef.current) return
-          e.preventDefault()
-          onSelect(model.modelName as AIModel)
-          focusTrigger()
-        }}
+        })}
       >
         <div className="relative flex h-5 w-5 flex-none items-center justify-center">
           {model.isAuto ? (
@@ -451,18 +469,7 @@ export function ModelSelector({
               aria-haspopup="menu"
               aria-expanded={showEffortOptions}
               className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium transition-colors ${showEffortOptions ? 'bg-surface-card/70 text-content-primary' : 'text-content-secondary hover:bg-surface-card/70'}`}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setShowEffortOptions((prev) => !prev)
-              }}
-              onTouchEnd={(e) => {
-                e.stopPropagation()
-                if (isScrollingRef.current) return
-                e.preventDefault()
-                setShowEffortOptions((prev) => !prev)
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
+              {...menuItemHandlers(() => setShowEffortOptions((prev) => !prev))}
             >
               <span>Effort</span>
               <span className="flex items-center gap-1 text-content-muted">
@@ -490,18 +497,9 @@ export function ModelSelector({
               role="switch"
               aria-checked={thinkingEnabled}
               className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onThinkingEnabledChange?.(!thinkingEnabled)
-              }}
-              onTouchEnd={(e) => {
-                e.stopPropagation()
-                if (isScrollingRef.current) return
-                e.preventDefault()
-                onThinkingEnabledChange?.(!thinkingEnabled)
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
+              {...menuItemHandlers(() =>
+                onThinkingEnabledChange?.(!thinkingEnabled),
+              )}
             >
               <div className="flex min-w-0 flex-1 flex-col">
                 <span>Thinking</span>
@@ -524,18 +522,7 @@ export function ModelSelector({
               type="button"
               aria-expanded={showOtherModels}
               className="flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm font-medium text-content-secondary transition-colors hover:bg-surface-card/70"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setShowOtherModels((prev) => !prev)
-              }}
-              onTouchEnd={(e) => {
-                e.stopPropagation()
-                if (isScrollingRef.current) return
-                e.preventDefault()
-                setShowOtherModels((prev) => !prev)
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
+              {...menuItemHandlers(() => setShowOtherModels((prev) => !prev))}
             >
               <span>Other models</span>
               <ChevronDownIcon
@@ -559,9 +546,7 @@ export function ModelSelector({
           style={{
             width: `${EFFORT_FLYOUT_WIDTH_PX}px`,
             top: `${effortFlyout?.top ?? 0}px`,
-            ...(effortFlyout?.side === 'left'
-              ? { right: `calc(100% + ${EFFORT_FLYOUT_GAP_PX}px)` }
-              : { left: `calc(100% + ${EFFORT_FLYOUT_GAP_PX}px)` }),
+            left: `${effortFlyout?.left ?? 0}px`,
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
