@@ -9,6 +9,15 @@ async function flushMicrotasks(): Promise<void> {
   })
 }
 
+// handleQuery mock whose 'A' dispatch never settles, mimicking a cancelled
+// stream whose cleanup hangs; every other dispatch resolves immediately.
+function createWedgedHandleQuery() {
+  return vi.fn((text: string) => {
+    if (text === 'A') return new Promise<void>(() => {})
+    return Promise.resolve()
+  })
+}
+
 describe('useMessageQueue concurrency', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
@@ -359,12 +368,9 @@ describe('useMessageQueue concurrency', () => {
   })
 
   it('sends a queued message on demand while the pump is wedged on a cancelled stream', async () => {
-    // First dispatch's promise never settles, mimicking a stream whose
-    // cleanup hangs after the user presses Stop. The chat itself goes idle.
-    const handleQuery = vi.fn((text: string) => {
-      if (text === 'A') return new Promise<void>(() => {})
-      return Promise.resolve()
-    })
+    // The chat goes idle after Stop but the pump stays parked on A's
+    // unsettled promise.
+    const handleQuery = createWedgedHandleQuery()
 
     const { result, rerender } = renderHook(
       ({ loadingState }) =>
@@ -386,12 +392,13 @@ describe('useMessageQueue concurrency', () => {
     rerender({ loadingState: 'loading' as LoadingState })
     act(() => {
       result.current.submit({ text: 'B', quote: 'quoted' })
+      result.current.submit({ text: 'C' })
     })
     await flushMicrotasks()
     expect(handleQuery).toHaveBeenCalledTimes(1)
 
     // User presses Stop; the chat goes idle but the pump stays parked on
-    // A's unsettled promise, so B is not auto-dispatched.
+    // A's unsettled promise, so nothing is auto-dispatched.
     rerender({ loadingState: 'idle' as LoadingState })
     await flushMicrotasks()
     expect(handleQuery).toHaveBeenCalledTimes(1)
@@ -402,24 +409,24 @@ describe('useMessageQueue concurrency', () => {
     })
     await flushMicrotasks()
 
-    expect(handleQuery).toHaveBeenCalledTimes(2)
-    expect(handleQuery).toHaveBeenLastCalledWith(
+    // The send unwedges the pump, which dispatches B and then keeps
+    // draining the rest of the queue (C) without further manual sends.
+    expect(handleQuery).toHaveBeenCalledTimes(3)
+    expect(handleQuery.mock.calls[1]).toEqual([
       'B',
       undefined,
       undefined,
       undefined,
       'quoted',
-    )
+    ])
+    expect(handleQuery.mock.calls[2][0]).toBe('C')
     expect(result.current.queuedMessages).toEqual([])
   })
 
   it('interrupts the active stream when sending a queued message midstream', async () => {
     // The active stream's promise never settles even after cancellation,
     // mimicking the worst-case cancelled-stream cleanup.
-    const handleQuery = vi.fn((text: string) => {
-      if (text === 'A') return new Promise<void>(() => {})
-      return Promise.resolve()
-    })
+    const handleQuery = createWedgedHandleQuery()
     const cancelGeneration = vi.fn()
 
     const { result, rerender } = renderHook(
@@ -471,10 +478,7 @@ describe('useMessageQueue concurrency', () => {
   })
 
   it('auto-drains after Stop even when the cancelled dispatch never settles', async () => {
-    const handleQuery = vi.fn((text: string) => {
-      if (text === 'A') return new Promise<void>(() => {})
-      return Promise.resolve()
-    })
+    const handleQuery = createWedgedHandleQuery()
 
     const { result, rerender } = renderHook(
       ({ loadingState }) =>

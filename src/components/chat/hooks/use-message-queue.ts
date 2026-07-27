@@ -427,14 +427,15 @@ export function useMessageQueue({
     [getQueue, setQueueFor],
   )
 
-  // Explicit "send now" for a single queued message. When the chat is
-  // idle it dispatches directly (bypassing the pump) so it works even if a
-  // pump is wedged awaiting a dead promise. When the chat is still busy it
-  // interrupts: the message is promoted to the front of the queue, the
-  // active stream is cancelled, and the pump dispatches it as soon as the
-  // cancellation settles the chat back to idle. Dispatching straight into
-  // a busy chat is never attempted since handleQuery's busy guard would
-  // silently drop the message.
+  // Explicit "send now" for a single queued message: promote it to the
+  // front of the queue and let the pump dispatch it, so every send stays
+  // serialized and the rest of the queue keeps draining afterwards. The
+  // cancel signal unwedges a pump parked on a dead dispatch (making the
+  // button work even then), and when the chat is still busy the active
+  // stream is cancelled so the promoted message goes out as soon as the
+  // chat settles back to idle. Dispatching straight into a busy chat is
+  // never attempted since handleQuery's busy guard would silently drop
+  // the message.
   const sendQueuedMessage = useCallback(
     (queuedId: string): void => {
       const id = currentChatIdRef.current
@@ -443,47 +444,12 @@ export function useMessageQueue({
       const item = currentQueue.find((m) => m.id === queuedId)
       if (!item) return
 
+      setQueueFor(id, [item, ...currentQueue.filter((m) => m.id !== queuedId)])
+      notifyGenerationCancelled(id)
       if (loadingStateRef.current !== 'idle') {
-        setQueueFor(id, [
-          item,
-          ...currentQueue.filter((m) => m.id !== queuedId),
-        ])
-        notifyGenerationCancelled(id)
         void cancelGenerationRef.current?.(id)
-        void runPump(id)
-        return
       }
-
-      if (isRateLimitedRef.current()) {
-        if (!rateLimitPromptShownRef.current) {
-          rateLimitPromptShownRef.current = true
-          onRateLimitedRef.current?.()
-        }
-        return
-      }
-      rateLimitPromptShownRef.current = false
-
-      setQueueFor(
-        id,
-        currentQueue.filter((m) => m.id !== queuedId),
-      )
-      onBeforeDispatchRef.current?.()
-      try {
-        const result = handleQueryRef.current(
-          item.text,
-          item.attachments,
-          undefined,
-          undefined,
-          item.quote,
-        )
-        if (result && typeof (result as Promise<unknown>).then === 'function') {
-          void (result as Promise<unknown>).catch(() => {
-            /* errors are surfaced by the chat itself */
-          })
-        }
-      } catch {
-        /* errors are surfaced by the chat itself */
-      }
+      void runPump(id)
     },
     [getQueue, setQueueFor, runPump, notifyGenerationCancelled],
   )
