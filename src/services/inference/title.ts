@@ -1,6 +1,25 @@
 import { CONSTANTS } from '@/components/chat/constants'
+import type { Message } from '@/components/chat/types'
 import { logError } from '@/utils/error-handling'
 import { summarize } from './summary-client'
+
+export function getTitleContent(
+  message: Pick<Message, 'content' | 'attachments'>,
+): string {
+  return (
+    message.content?.trim() ||
+    (message.attachments
+      ?.map(
+        (attachment) =>
+          attachment.textContent?.trim() ||
+          attachment.description?.trim() ||
+          attachment.fileName.trim(),
+      )
+      .filter(Boolean)
+      .join('\n') ??
+      '')
+  )
+}
 
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,

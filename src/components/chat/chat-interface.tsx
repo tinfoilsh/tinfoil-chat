@@ -13,11 +13,16 @@ import {
   SETTINGS_WEB_SEARCH_AVAILABLE,
   UI_EXPAND_PROJECT_DOCUMENTS,
 } from '@/constants/storage-keys'
+import {
+  useChatRecoveryActiveTurnIds,
+  useChatRecoveryDrafts,
+} from '@/hooks/use-chat-recovery-drafts'
 import { useChatRouter } from '@/hooks/use-chat-router'
 import { useProjects } from '@/hooks/use-projects'
 import { useSubscriptionStatus } from '@/hooks/use-subscription-status'
 import { useSyncHealthAttention } from '@/hooks/use-sync-health'
 import { useToast } from '@/hooks/use-toast'
+import { isChatRecoveryActive } from '@/services/inference/chat-recovery-drafts'
 import {
   getRateLimitInfo,
   getSessionToken,
@@ -25,7 +30,7 @@ import {
   snapshotAndDecrementRemaining,
   type RateLimitInfo,
 } from '@/services/inference/tinfoil-client'
-import { generateTitle } from '@/services/inference/title'
+import { generateTitle, getTitleContent } from '@/services/inference/title'
 import { useAuth, useUser } from '@clerk/nextjs'
 import {
   ArrowDownIcon,
@@ -776,6 +781,14 @@ export function ChatInterface({
   })
 
   const isTemporaryMode = currentChat?.isTemporary === true
+  const currentChatId = currentChat?.id
+  const recoveryDrafts = useChatRecoveryDrafts(currentChatId ?? '')
+  const activeRecoveryTurnIds = useChatRecoveryActiveTurnIds(
+    currentChatId ?? '',
+  )
+  const hasPendingRecovery = Boolean(currentChat?.pendingRecoveries?.length)
+  const hasPendingRecoveryRef = useRef(hasPendingRecovery)
+  hasPendingRecoveryRef.current = hasPendingRecovery
 
   const effectiveWebSearchEnabled = resolveWebSearchEnabled(
     webSearchAvailable,
@@ -858,6 +871,10 @@ export function ChatInterface({
     loadingState,
     handleQuery,
     isRateLimited,
+    isDispatchBlocked: () =>
+      hasPendingRecoveryRef.current ||
+      (currentChatId ? isChatRecoveryActive(currentChatId) : false),
+    dispatchBlocked: hasPendingRecovery || activeRecoveryTurnIds.length > 0,
     onBeforeDispatch: handleQueueDispatch,
     onRateLimited: handleQueueRateLimited,
     cancelGeneration,
@@ -1259,7 +1276,6 @@ export function ChatInterface({
   // Keyed on the chat id, not the chat object: the object's identity changes
   // on every stream flush and sync update, which would re-run this effect and
   // repeatedly steal focus from whatever the user is typing in.
-  const currentChatId = currentChat?.id
   useEffect(() => {
     if (isClient && !isLoadingConfig && currentChatId) {
       // Skip auto-focus when sidebar is open on mobile — focusing the input
@@ -1734,13 +1750,7 @@ export function ChatInterface({
           const firstUser = permanentChat.messages.find(
             (m) => m.role === 'user',
           )
-          const titleContent =
-            firstUser?.content?.trim() ||
-            (firstUser?.attachments
-              ?.map((a) => a.textContent || a.description || a.fileName)
-              .filter(Boolean)
-              .join('\n') ??
-              '')
+          const titleContent = firstUser ? getTitleContent(firstUser) : ''
           if (titleContent) {
             generateTitle([{ role: 'user', content: titleContent }])
               .then((generated) => {
@@ -3368,6 +3378,9 @@ export function ChatInterface({
                 <div className="flex min-h-full min-w-0 flex-1 [container-type:inline-size]">
                   <ChatMessages
                     messages={currentChat?.messages || []}
+                    pendingRecoveries={currentChat?.pendingRecoveries}
+                    recoveryDrafts={recoveryDrafts}
+                    activeRecoveryTurnIds={activeRecoveryTurnIds}
                     isDarkMode={isDarkMode}
                     chatId={currentChat.id}
                     isWaitingForResponse={isWaitingForResponse}

@@ -543,6 +543,7 @@ export async function* simulateStream(
   }
 
   // Send done signal
+  yield 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
   yield 'data: [DONE]\n\n'
 }
 

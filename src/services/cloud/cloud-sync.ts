@@ -27,10 +27,12 @@ import {
   type ChatSyncStatus,
   type UploadChatOptions,
 } from './cloud-storage'
-import type { EditClock } from './edit-clock'
 import { adoptLocalKeyForMigration } from './ensure-current-key'
 import {
   finalizeAlternativesIfMigrated,
+  markRecoveryHistoryReady,
+  needsRecoveryHistorySync,
+  resetAlternativesFinalizationState,
   runLegacyBlobMigration,
   type MigrationReport,
 } from './legacy-blob-migration'
@@ -44,7 +46,11 @@ import {
   reportSyncPaused,
   reportSyncSuccess,
 } from './sync-health'
-import { isUploadableChat, remoteWins } from './sync-predicates'
+import {
+  isUploadableChat,
+  remoteWins,
+  trustedChatClock,
+} from './sync-predicates'
 import { SyncStatusCache } from './sync-status-cache'
 import { UploadCoalescer, type UploadAttempt } from './upload-coalescer'
 
@@ -144,6 +150,7 @@ export class CloudSyncService {
     this.accountGeneration++
     this.uploadCoalescer.clear()
     this.streamingCallbacks.clear()
+    resetAlternativesFinalizationState()
     this.clearSyncStatus()
     // The deletes watermark is scoped to the account's tombstone history,
     // so the next account (or re-login) must replay from epoch rather than
@@ -626,6 +633,30 @@ export class CloudSyncService {
     }
   }
 
+  private async markRecoveryHistoryReadyIfAuthoritative(
+    generation: number,
+    expectedCloudVersions: ReadonlyMap<string, number>,
+  ): Promise<void> {
+    if (!this.isCurrentGeneration(generation) || !needsRecoveryHistorySync()) {
+      return
+    }
+    try {
+      const authoritative = await indexedDBStorage.isChatHistoryAuthoritative(
+        expectedCloudVersions,
+      )
+      if (this.isCurrentGeneration(generation) && authoritative) {
+        await markRecoveryHistoryReady(() =>
+          this.isCurrentGeneration(generation),
+        )
+      }
+    } catch (error) {
+      logError('Failed to verify recovery history after sync', error, {
+        component: 'CloudSync',
+        action: 'markRecoveryHistoryReadyIfAuthoritative',
+      })
+    }
+  }
+
   // Backup a single chat to the cloud with coalescing and retry
   async backupChat(chatId: string): Promise<void> {
     const generation = this.accountGeneration
@@ -660,6 +691,43 @@ export class CloudSyncService {
     // - Proper concurrency control per chat
     if (!this.isCurrentGeneration(generation)) return
     this.uploadCoalescer.enqueue(chatId)
+  }
+
+  async backupChatAndWait(chatId: string): Promise<void> {
+    const generation = this.accountGeneration
+    if (!(await cloudStorage.isAuthenticated())) {
+      throw new Error('Cloud authentication is unavailable')
+    }
+    if (!this.isCurrentGeneration(generation) || !(await canWriteToCloud())) {
+      throw new Error('Cloud synchronization is unavailable')
+    }
+
+    const chat = await indexedDBStorage.getChat(chatId)
+    if (!this.isCurrentGeneration(generation)) {
+      throw new Error('Cloud account changed during synchronization')
+    }
+    if (!chat || !isUploadableChat(chat, isStreaming)) {
+      throw new Error('Chat is not eligible for cloud synchronization')
+    }
+
+    await this.uploadCoalescer.ensureUploadAndWait(chatId)
+    const latest = await indexedDBStorage.getChat(chatId)
+    if (!this.isCurrentGeneration(generation)) {
+      throw new Error('Cloud account changed during synchronization')
+    }
+    if (!latest) {
+      throw new Error('Chat changed during required cloud synchronization')
+    }
+    if (!latest.locallyModified) {
+      if (latest.updatedAt !== chat.updatedAt) {
+        throw new Error('Chat changed on another device before synchronization')
+      }
+      return
+    }
+    await this.backupChatNow(chatId)
+    if (!this.isCurrentGeneration(generation)) {
+      throw new Error('Cloud account changed during synchronization')
+    }
   }
 
   /**
@@ -999,27 +1067,9 @@ export class CloudSyncService {
       }
       if (!this.isCurrentGeneration(generation)) return
 
-      // A chat's edit clock is trusted only when it was maintained at
-      // the row's current synced version; otherwise a clock-unaware
-      // write intervened and we fall back to updatedAt arbitration.
-      const trustedClock = (
-        c: typeof localChat | typeof remoteChat,
-      ): EditClock | undefined => {
-        if (
-          !c ||
-          typeof c.clock !== 'number' ||
-          typeof c.writer !== 'string' ||
-          c.clockVersion == null ||
-          c.clockVersion !== (c.syncVersion ?? -1)
-        ) {
-          return undefined
-        }
-        return { v: c.clock, w: c.writer }
-      }
-
       const remoteIsWinner = remoteWins({
-        localClock: trustedClock(localChat),
-        remoteClock: trustedClock(remoteChat),
+        localClock: trustedChatClock(localChat),
+        remoteClock: trustedChatClock(remoteChat),
         localUpdatedAt: localChat?.updatedAt,
         remoteUpdatedAt: remoteChat.updatedAt,
       })
@@ -1220,8 +1270,26 @@ export class CloudSyncService {
       downloaded: 0,
       errors: [],
     }
+    let recoveryHistoryStatusBefore: ChatSyncStatus | null = null
+    let recoveryHistoryStatusAfter: ChatSyncStatus | null = null
 
     try {
+      if (deep && needsRecoveryHistorySync()) {
+        try {
+          recoveryHistoryStatusBefore = await cloudStorage.getChatSyncStatus()
+        } catch (statusError) {
+          logError(
+            'Failed to capture recovery history status before full sync',
+            statusError,
+            {
+              component: 'CloudSync',
+              action: 'syncAllChats',
+            },
+          )
+        }
+      }
+      if (!this.isCurrentGeneration(generation)) return result
+
       // Apply remote deletions BEFORE uploading local changes so a chat
       // deleted on another device is dropped locally first, instead of
       // getting re-uploaded by backupUnsyncedChats.
@@ -1250,6 +1318,15 @@ export class CloudSyncService {
       if (!this.isCurrentGeneration(generation)) return result
 
       const remoteConversations = [...(remoteList.conversations || [])]
+      const remoteChatIds = new Set(
+        remoteConversations.map((conversation) => conversation.id),
+      )
+      const remoteChatVersions = new Map<string, number>()
+      for (const conversation of remoteConversations) {
+        if (typeof conversation.syncVersion === 'number') {
+          remoteChatVersions.set(conversation.id, conversation.syncVersion)
+        }
+      }
 
       // Only sync the first page - new chats always appear at the top
       // No need to fetch older chats every 15 seconds
@@ -1289,6 +1366,12 @@ export class CloudSyncService {
             limit: PAGINATION.CHATS_PER_PAGE,
             continuationToken,
           })
+          for (const conversation of nextPage.conversations || []) {
+            remoteChatIds.add(conversation.id)
+            if (typeof conversation.syncVersion === 'number') {
+              remoteChatVersions.set(conversation.id, conversation.syncVersion)
+            }
+          }
           const nextIngest = await ingestRemoteChats(
             [...(nextPage.conversations || [])],
             {
@@ -1313,6 +1396,7 @@ export class CloudSyncService {
         if (localCount !== null) {
           newStatus.localCount = localCount
         }
+        recoveryHistoryStatusAfter = newStatus
         this.chatSyncCache.save(newStatus)
       } catch (statusError) {
         // Non-fatal: continue even if we can't update status
@@ -1324,6 +1408,20 @@ export class CloudSyncService {
 
       // Detect cross-scope moves (chats moving between projects)
       await this.syncCrossScope(result, generation)
+      const recoveryHistorySnapshotStable =
+        recoveryHistoryStatusBefore !== null &&
+        recoveryHistoryStatusAfter !== null &&
+        recoveryHistoryStatusBefore.count === remoteChatIds.size &&
+        recoveryHistoryStatusAfter.count === remoteChatIds.size &&
+        recoveryHistoryStatusBefore.lastUpdated ===
+          recoveryHistoryStatusAfter.lastUpdated &&
+        remoteChatVersions.size === remoteChatIds.size
+      if (deep && result.errors.length === 0 && recoveryHistorySnapshotStable) {
+        await this.markRecoveryHistoryReadyIfAuthoritative(
+          generation,
+          remoteChatVersions,
+        )
+      }
       if (this.isCurrentGeneration(generation)) {
         void this.kickLegacyBlobMigration()
       }
@@ -1436,7 +1534,7 @@ export class CloudSyncService {
     void runLegacyBlobMigration()
       .then(async (report) => {
         if (!this.isCurrentGeneration(generation)) return
-        finalizeAlternativesIfMigrated(report)
+        await finalizeAlternativesIfMigrated(report)
         logInfo('Legacy blob migration completed', {
           component: 'CloudSync',
           action: 'kickLegacyBlobMigration',
@@ -1556,6 +1654,9 @@ export class CloudSyncService {
     if (this.syncLock) {
       throw new Error('Sync already in progress')
     }
+    if (!projectId && needsRecoveryHistorySync()) {
+      return this.syncAllChats({ deep: true })
+    }
 
     const status = await this.checkSyncStatus(projectId)
     if (!this.isCurrentGeneration(generation)) {
@@ -1578,7 +1679,6 @@ export class CloudSyncService {
       if (!this.isCurrentGeneration(generation)) {
         return { uploaded: 0, downloaded: 0, errors: [] }
       }
-
       logInfo('Smart sync: no changes detected, skipping sync', {
         component: 'CloudSync',
         action: 'smartSync',

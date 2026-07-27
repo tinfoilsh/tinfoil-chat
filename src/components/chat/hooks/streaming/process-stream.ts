@@ -267,6 +267,8 @@ export async function processStreamingResponse(
       flushThrottled()
     }
 
+    normalizer.assertComplete()
+
     // Flush normalizer tail (buffered first-chunk or unclosed thinking)
     for (const event of normalizer.flush()) {
       applyEvent(event)
