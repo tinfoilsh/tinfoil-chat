@@ -23,6 +23,7 @@ type UseMessageQueueArgs = {
   isRateLimited: () => boolean
   onBeforeDispatch?: () => void
   onRateLimited?: () => void
+  cancelGeneration?: (chatId?: string) => void | Promise<void>
 }
 
 type UseMessageQueueReturn = {
@@ -30,6 +31,7 @@ type UseMessageQueueReturn = {
   submit: (input: QueueSubmitInput) => void
   removeQueuedMessage: (id: string) => void
   sendQueuedMessage: (id: string) => void
+  notifyGenerationCancelled: (chatId: string) => void
 }
 
 const isBrowser = typeof window !== 'undefined'
@@ -98,6 +100,16 @@ function writeToStorage(key: string | null, queue: QueuedMessage[]): void {
  *   then loops to the next message. Stale `loadingState` writes from a
  *   previously-cancelled stream can't trigger anything because nothing
  *   observes them.
+ *
+ * Cancellation (Stop button):
+ *
+ *   A cancelled stream's promise is not guaranteed to settle (cleanup can
+ *   hang), which would wedge the pump forever. Callers report explicit
+ *   cancellations via `notifyGenerationCancelled(chatId)`; the pump races
+ *   its dispatch await against that signal, abandons the dead promise,
+ *   and resumes draining once the chat settles back to idle. This is an
+ *   explicit structured signal, not a `loadingState` heuristic, so stale
+ *   idle writes still can't cause a parallel dispatch.
  */
 export function useMessageQueue({
   chatId,
@@ -106,6 +118,7 @@ export function useMessageQueue({
   isRateLimited,
   onBeforeDispatch,
   onRateLimited,
+  cancelGeneration,
 }: UseMessageQueueArgs): UseMessageQueueReturn {
   // Per-chat queues so several conversations can hold pending messages at
   // once. Hydrated lazily from sessionStorage on first access.
@@ -149,10 +162,12 @@ export function useMessageQueue({
   const isRateLimitedRef = useRef(isRateLimited)
   const onBeforeDispatchRef = useRef(onBeforeDispatch)
   const onRateLimitedRef = useRef(onRateLimited)
+  const cancelGenerationRef = useRef(cancelGeneration)
   handleQueryRef.current = handleQuery
   isRateLimitedRef.current = isRateLimited
   onBeforeDispatchRef.current = onBeforeDispatch
   onRateLimitedRef.current = onRateLimited
+  cancelGenerationRef.current = cancelGeneration
 
   // Live mirror of the active chat's `loadingState`, used by the pump to
   // gate the next dispatch on that chat actually being idle.
@@ -178,6 +193,47 @@ export function useMessageQueue({
 
   // Rate-limit prompt latch: show at most once per exhaustion window.
   const rateLimitPromptShownRef = useRef(false)
+
+  // Resolvers armed while a pump awaits a dispatch, keyed by chat id.
+  // Fired by `notifyGenerationCancelled` so a cancelled stream whose
+  // promise never settles can't wedge the pump.
+  const cancelWaitersRef = useRef<Map<string, Set<() => void>>>(new Map())
+
+  const notifyGenerationCancelled = useCallback((id: string): void => {
+    const waiters = cancelWaitersRef.current.get(id)
+    if (!waiters) return
+    cancelWaitersRef.current.delete(id)
+    for (const resolve of waiters) resolve()
+  }, [])
+
+  // Resolves when the given chat's generation is explicitly cancelled.
+  // `arm` registers the resolver; callers must `disarm` after the race so
+  // abandoned resolvers don't accumulate.
+  const armCancelWaiter = useCallback(
+    (id: string): { promise: Promise<void>; disarm: () => void } => {
+      let resolver!: () => void
+      const promise = new Promise<void>((resolve) => {
+        resolver = resolve
+      })
+      let set = cancelWaitersRef.current.get(id)
+      if (!set) {
+        set = new Set()
+        cancelWaitersRef.current.set(id, set)
+      }
+      set.add(resolver)
+      // Scan every entry rather than only `id`: a blank chat's waiters get
+      // re-keyed to the real id mid-dispatch (see the chat-sync effect).
+      const disarm = () => {
+        for (const [key, current] of cancelWaitersRef.current) {
+          if (current.delete(resolver) && current.size === 0) {
+            cancelWaitersRef.current.delete(key)
+          }
+        }
+      }
+      return { promise, disarm }
+    },
+    [],
+  )
 
   // One single-flight pump per chat. Dispatch always targets the chat on
   // screen (handleQuery is bound to it), so the pump only proceeds while
@@ -228,7 +284,20 @@ export function useMessageQueue({
               result &&
               typeof (result as Promise<unknown>).then === 'function'
             ) {
-              await (result as Promise<unknown>)
+              // Race the dispatch against an explicit cancellation signal:
+              // a cancelled stream's promise may never settle, and without
+              // the race the pump would wedge on it and stop draining.
+              const cancelWaiter = armCancelWaiter(pump.id)
+              try {
+                await Promise.race([
+                  (result as Promise<unknown>).catch(() => {
+                    /* errors are surfaced by the chat itself; keep draining */
+                  }),
+                  cancelWaiter.promise,
+                ])
+              } finally {
+                cancelWaiter.disarm()
+              }
             }
           } catch {
             /* errors are surfaced by the chat itself; keep draining */
@@ -253,7 +322,7 @@ export function useMessageQueue({
         }
       }
     },
-    [getQueue, setQueueFor, waitForIdle],
+    [getQueue, setQueueFor, waitForIdle, armCancelWaiter],
   )
 
   // When the rate limit clears, reset the one-shot prompt latch and resume
@@ -326,6 +395,18 @@ export function useMessageQueue({
         pumpsRef.current.delete('')
         pumpsRef.current.set(chatId, pump)
       }
+      // Follow the conversion for armed cancel waiters too, so a Stop on
+      // the (now real) chat still unwedges a dispatch started while blank.
+      const cancelWaiters = cancelWaitersRef.current.get('')
+      if (cancelWaiters) {
+        cancelWaitersRef.current.delete('')
+        const existing = cancelWaitersRef.current.get(chatId)
+        if (existing) {
+          for (const waiter of cancelWaiters) existing.add(waiter)
+        } else {
+          cancelWaitersRef.current.set(chatId, cancelWaiters)
+        }
+      }
     }
 
     setQueue(getQueue(chatId))
@@ -346,11 +427,14 @@ export function useMessageQueue({
     [getQueue, setQueueFor],
   )
 
-  // Explicit "send now" for a single queued message. Dispatches directly
-  // (bypassing the pump) so it works even when a pump is wedged awaiting a
-  // cancelled stream's promise. While the chat is still busy it instead
-  // promotes the message to the front of the queue, since dispatching into
-  // a non-idle chat would be silently dropped by handleQuery's busy guard.
+  // Explicit "send now" for a single queued message. When the chat is
+  // idle it dispatches directly (bypassing the pump) so it works even if a
+  // pump is wedged awaiting a dead promise. When the chat is still busy it
+  // interrupts: the message is promoted to the front of the queue, the
+  // active stream is cancelled, and the pump dispatches it as soon as the
+  // cancellation settles the chat back to idle. Dispatching straight into
+  // a busy chat is never attempted since handleQuery's busy guard would
+  // silently drop the message.
   const sendQueuedMessage = useCallback(
     (queuedId: string): void => {
       const id = currentChatIdRef.current
@@ -364,6 +448,8 @@ export function useMessageQueue({
           item,
           ...currentQueue.filter((m) => m.id !== queuedId),
         ])
+        notifyGenerationCancelled(id)
+        void cancelGenerationRef.current?.(id)
         void runPump(id)
         return
       }
@@ -399,7 +485,7 @@ export function useMessageQueue({
         /* errors are surfaced by the chat itself */
       }
     },
-    [getQueue, setQueueFor, runPump],
+    [getQueue, setQueueFor, runPump, notifyGenerationCancelled],
   )
 
   return {
@@ -407,5 +493,6 @@ export function useMessageQueue({
     submit,
     removeQueuedMessage,
     sendQueuedMessage,
+    notifyGenerationCancelled,
   }
 }

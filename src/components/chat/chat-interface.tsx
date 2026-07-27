@@ -853,6 +853,7 @@ export function ChatInterface({
     submit: submitMessage,
     removeQueuedMessage,
     sendQueuedMessage,
+    notifyGenerationCancelled,
   } = useMessageQueue({
     chatId: currentChat?.id ?? null,
     loadingState,
@@ -860,7 +861,17 @@ export function ChatInterface({
     isRateLimited,
     onBeforeDispatch: handleQueueDispatch,
     onRateLimited: handleQueueRateLimited,
+    cancelGeneration,
   })
+
+  // Stop button path: tell the queue about the cancellation first so its
+  // pump abandons the cancelled dispatch (whose promise may never settle)
+  // and resumes draining queued messages once the chat goes idle.
+  const cancelGenerationAndResumeQueue = useCallback(() => {
+    const id = currentChat?.id
+    if (id != null) notifyGenerationCancelled(id)
+    void cancelGeneration()
+  }, [currentChat?.id, notifyGenerationCancelled, cancelGeneration])
 
   const canEnableCodeExecution =
     canUseCodeExecution && codeExecutionEncryptionKey != null
@@ -3370,7 +3381,7 @@ export function ChatInterface({
                     setInput={setInput}
                     loadingState={loadingState}
                     retryInfo={retryInfo}
-                    cancelGeneration={cancelGeneration}
+                    cancelGeneration={cancelGenerationAndResumeQueue}
                     inputRef={inputRef}
                     handleInputFocus={handleInputFocusWithRateLimitCheck}
                     handleDocumentUpload={handleFileUpload}
@@ -3471,7 +3482,7 @@ export function ChatInterface({
                         setInput={setInput}
                         handleSubmit={handleSubmit}
                         loadingState={loadingState}
-                        cancelGeneration={cancelGeneration}
+                        cancelGeneration={cancelGenerationAndResumeQueue}
                         inputRef={inputRef}
                         handleInputFocus={handleInputFocusWithRateLimitCheck}
                         inputMinHeight={inputMinHeight}
