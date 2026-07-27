@@ -29,6 +29,7 @@ type UseMessageQueueReturn = {
   queuedMessages: QueuedMessage[]
   submit: (input: QueueSubmitInput) => void
   removeQueuedMessage: (id: string) => void
+  sendQueuedMessage: (id: string) => void
 }
 
 const isBrowser = typeof window !== 'undefined'
@@ -345,5 +346,66 @@ export function useMessageQueue({
     [getQueue, setQueueFor],
   )
 
-  return { queuedMessages: queue, submit, removeQueuedMessage }
+  // Explicit "send now" for a single queued message. Dispatches directly
+  // (bypassing the pump) so it works even when a pump is wedged awaiting a
+  // cancelled stream's promise. While the chat is still busy it instead
+  // promotes the message to the front of the queue, since dispatching into
+  // a non-idle chat would be silently dropped by handleQuery's busy guard.
+  const sendQueuedMessage = useCallback(
+    (queuedId: string): void => {
+      const id = currentChatIdRef.current
+      if (id == null) return
+      const currentQueue = getQueue(id)
+      const item = currentQueue.find((m) => m.id === queuedId)
+      if (!item) return
+
+      if (loadingStateRef.current !== 'idle') {
+        setQueueFor(id, [
+          item,
+          ...currentQueue.filter((m) => m.id !== queuedId),
+        ])
+        void runPump(id)
+        return
+      }
+
+      if (isRateLimitedRef.current()) {
+        if (!rateLimitPromptShownRef.current) {
+          rateLimitPromptShownRef.current = true
+          onRateLimitedRef.current?.()
+        }
+        return
+      }
+      rateLimitPromptShownRef.current = false
+
+      setQueueFor(
+        id,
+        currentQueue.filter((m) => m.id !== queuedId),
+      )
+      onBeforeDispatchRef.current?.()
+      try {
+        const result = handleQueryRef.current(
+          item.text,
+          item.attachments,
+          undefined,
+          undefined,
+          item.quote,
+        )
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          void (result as Promise<unknown>).catch(() => {
+            /* errors are surfaced by the chat itself */
+          })
+        }
+      } catch {
+        /* errors are surfaced by the chat itself */
+      }
+    },
+    [getQueue, setQueueFor, runPump],
+  )
+
+  return {
+    queuedMessages: queue,
+    submit,
+    removeQueuedMessage,
+    sendQueuedMessage,
+  }
 }

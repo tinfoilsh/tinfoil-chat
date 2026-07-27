@@ -852,6 +852,7 @@ export function ChatInterface({
     queuedMessages,
     submit: submitMessage,
     removeQueuedMessage,
+    sendQueuedMessage,
   } = useMessageQueue({
     chatId: currentChat?.id ?? null,
     loadingState,
@@ -3463,6 +3464,7 @@ export function ChatInterface({
                       <MessageQueue
                         queue={queuedMessages}
                         onRemove={removeQueuedMessage}
+                        onSend={sendQueuedMessage}
                       />
                       <ChatInput
                         input={input}

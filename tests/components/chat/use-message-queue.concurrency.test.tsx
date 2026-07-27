@@ -358,6 +358,126 @@ describe('useMessageQueue concurrency', () => {
     expect(result.current.queuedMessages.map((m) => m.text)).toEqual(['a-msg'])
   })
 
+  it('sends a queued message on demand while the pump is wedged on a cancelled stream', async () => {
+    // First dispatch's promise never settles, mimicking a stream whose
+    // cleanup hangs after the user presses Stop. The chat itself goes idle.
+    const handleQuery = vi.fn((text: string) => {
+      if (text === 'A') return new Promise<void>(() => {})
+      return Promise.resolve()
+    })
+
+    const { result, rerender } = renderHook(
+      ({ loadingState }) =>
+        useMessageQueue({
+          chatId: 'chat-a',
+          loadingState,
+          handleQuery,
+          isRateLimited: () => false,
+        }),
+      { initialProps: { loadingState: 'idle' as LoadingState } },
+    )
+
+    act(() => {
+      result.current.submit({ text: 'A' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    rerender({ loadingState: 'loading' as LoadingState })
+    act(() => {
+      result.current.submit({ text: 'B', quote: 'quoted' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    // User presses Stop; the chat goes idle but the pump stays parked on
+    // A's unsettled promise, so B is not auto-dispatched.
+    rerender({ loadingState: 'idle' as LoadingState })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    const queuedId = result.current.queuedMessages[0].id
+    act(() => {
+      result.current.sendQueuedMessage(queuedId)
+    })
+    await flushMicrotasks()
+
+    expect(handleQuery).toHaveBeenCalledTimes(2)
+    expect(handleQuery).toHaveBeenLastCalledWith(
+      'B',
+      undefined,
+      undefined,
+      undefined,
+      'quoted',
+    )
+    expect(result.current.queuedMessages).toEqual([])
+  })
+
+  it('promotes a queued message to the front when sent while the chat is busy', async () => {
+    const handleQuery = vi.fn(() => new Promise<void>(() => {}))
+
+    const { result } = renderHook(() =>
+      useMessageQueue({
+        chatId: 'chat-a',
+        loadingState: 'loading' as LoadingState,
+        handleQuery,
+        isRateLimited: () => false,
+      }),
+    )
+
+    act(() => {
+      result.current.submit({ text: 'q1' })
+      result.current.submit({ text: 'q2' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).not.toHaveBeenCalled()
+
+    const secondId = result.current.queuedMessages[1].id
+    act(() => {
+      result.current.sendQueuedMessage(secondId)
+    })
+    await flushMicrotasks()
+
+    // Not dispatched into a busy chat (handleQuery would drop it), just
+    // reordered so it goes out first once the chat is idle.
+    expect(handleQuery).not.toHaveBeenCalled()
+    expect(result.current.queuedMessages.map((m) => m.text)).toEqual([
+      'q2',
+      'q1',
+    ])
+  })
+
+  it('holds an on-demand send while rate-limited', async () => {
+    const handleQuery = vi.fn(() => Promise.resolve())
+    const onRateLimited = vi.fn()
+
+    const { result } = renderHook(() =>
+      useMessageQueue({
+        chatId: 'chat-a',
+        loadingState: 'idle' as LoadingState,
+        handleQuery,
+        isRateLimited: () => true,
+        onRateLimited,
+      }),
+    )
+
+    act(() => {
+      result.current.submit({ text: 'q1' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).not.toHaveBeenCalled()
+
+    const queuedId = result.current.queuedMessages[0].id
+    act(() => {
+      result.current.sendQueuedMessage(queuedId)
+    })
+    await flushMicrotasks()
+
+    expect(handleQuery).not.toHaveBeenCalled()
+    expect(result.current.queuedMessages.map((m) => m.text)).toEqual(['q1'])
+    expect(onRateLimited).toHaveBeenCalled()
+  })
+
   it('drains multiple messages when handleQuery is synchronous (void)', async () => {
     const calls: string[] = []
     const handleQuery = vi.fn((text: string) => {
