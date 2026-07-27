@@ -9,6 +9,15 @@ async function flushMicrotasks(): Promise<void> {
   })
 }
 
+// handleQuery mock whose 'A' dispatch never settles, mimicking a cancelled
+// stream whose cleanup hangs; every other dispatch resolves immediately.
+function createWedgedHandleQuery() {
+  return vi.fn((text: string) => {
+    if (text === 'A') return new Promise<void>(() => {})
+    return Promise.resolve()
+  })
+}
+
 describe('useMessageQueue concurrency', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
@@ -356,6 +365,194 @@ describe('useMessageQueue concurrency', () => {
 
     rerender({ chatId: 'A' })
     expect(result.current.queuedMessages.map((m) => m.text)).toEqual(['a-msg'])
+  })
+
+  it('sends a queued message on demand while the pump is wedged on a cancelled stream', async () => {
+    // The chat goes idle after Stop but the pump stays parked on A's
+    // unsettled promise.
+    const handleQuery = createWedgedHandleQuery()
+
+    const { result, rerender } = renderHook(
+      ({ loadingState }) =>
+        useMessageQueue({
+          chatId: 'chat-a',
+          loadingState,
+          handleQuery,
+          isRateLimited: () => false,
+        }),
+      { initialProps: { loadingState: 'idle' as LoadingState } },
+    )
+
+    act(() => {
+      result.current.submit({ text: 'A' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    rerender({ loadingState: 'loading' as LoadingState })
+    act(() => {
+      result.current.submit({ text: 'B', quote: 'quoted' })
+      result.current.submit({ text: 'C' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    // User presses Stop; the chat goes idle but the pump stays parked on
+    // A's unsettled promise, so nothing is auto-dispatched.
+    rerender({ loadingState: 'idle' as LoadingState })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    const queuedId = result.current.queuedMessages[0].id
+    act(() => {
+      result.current.sendQueuedMessage(queuedId)
+    })
+    await flushMicrotasks()
+
+    // The send unwedges the pump, which dispatches B and then keeps
+    // draining the rest of the queue (C) without further manual sends.
+    expect(handleQuery).toHaveBeenCalledTimes(3)
+    expect(handleQuery.mock.calls[1]).toEqual([
+      'B',
+      undefined,
+      undefined,
+      undefined,
+      'quoted',
+    ])
+    expect(handleQuery.mock.calls[2][0]).toBe('C')
+    expect(result.current.queuedMessages).toEqual([])
+  })
+
+  it('interrupts the active stream when sending a queued message midstream', async () => {
+    // The active stream's promise never settles even after cancellation,
+    // mimicking the worst-case cancelled-stream cleanup.
+    const handleQuery = createWedgedHandleQuery()
+    const cancelGeneration = vi.fn()
+
+    const { result, rerender } = renderHook(
+      ({ loadingState }) =>
+        useMessageQueue({
+          chatId: 'chat-a',
+          loadingState,
+          handleQuery,
+          isRateLimited: () => false,
+          cancelGeneration,
+        }),
+      { initialProps: { loadingState: 'idle' as LoadingState } },
+    )
+
+    act(() => {
+      result.current.submit({ text: 'A' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    rerender({ loadingState: 'loading' as LoadingState })
+    act(() => {
+      result.current.submit({ text: 'q1' })
+      result.current.submit({ text: 'q2' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    // Send q2 midstream: the active stream is cancelled and q2 jumps the
+    // queue, dispatching as soon as the chat settles back to idle.
+    const secondId = result.current.queuedMessages[1].id
+    act(() => {
+      result.current.sendQueuedMessage(secondId)
+    })
+    await flushMicrotasks()
+    expect(cancelGeneration).toHaveBeenCalledWith('chat-a')
+    expect(result.current.queuedMessages.map((m) => m.text)).toEqual([
+      'q2',
+      'q1',
+    ])
+
+    // Cancellation settles the chat to idle; q2 goes out first, then q1.
+    rerender({ loadingState: 'idle' as LoadingState })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(3)
+    expect(handleQuery.mock.calls[1][0]).toBe('q2')
+    expect(handleQuery.mock.calls[2][0]).toBe('q1')
+    expect(result.current.queuedMessages).toEqual([])
+  })
+
+  it('auto-drains after Stop even when the cancelled dispatch never settles', async () => {
+    const handleQuery = createWedgedHandleQuery()
+
+    const { result, rerender } = renderHook(
+      ({ loadingState }) =>
+        useMessageQueue({
+          chatId: 'chat-a',
+          loadingState,
+          handleQuery,
+          isRateLimited: () => false,
+        }),
+      { initialProps: { loadingState: 'idle' as LoadingState } },
+    )
+
+    act(() => {
+      result.current.submit({ text: 'A' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    rerender({ loadingState: 'loading' as LoadingState })
+    act(() => {
+      result.current.submit({ text: 'B' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).toHaveBeenCalledTimes(1)
+
+    // Stop button: the cancellation is reported explicitly, then the chat
+    // settles to idle. The pump abandons A's dead promise and sends B
+    // without any manual action.
+    act(() => {
+      result.current.notifyGenerationCancelled('chat-a')
+    })
+    rerender({ loadingState: 'idle' as LoadingState })
+    await flushMicrotasks()
+
+    expect(handleQuery).toHaveBeenCalledTimes(2)
+    expect(handleQuery).toHaveBeenLastCalledWith(
+      'B',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
+    expect(result.current.queuedMessages).toEqual([])
+  })
+
+  it('holds an on-demand send while rate-limited', async () => {
+    const handleQuery = vi.fn(() => Promise.resolve())
+    const onRateLimited = vi.fn()
+
+    const { result } = renderHook(() =>
+      useMessageQueue({
+        chatId: 'chat-a',
+        loadingState: 'idle' as LoadingState,
+        handleQuery,
+        isRateLimited: () => true,
+        onRateLimited,
+      }),
+    )
+
+    act(() => {
+      result.current.submit({ text: 'q1' })
+    })
+    await flushMicrotasks()
+    expect(handleQuery).not.toHaveBeenCalled()
+
+    const queuedId = result.current.queuedMessages[0].id
+    act(() => {
+      result.current.sendQueuedMessage(queuedId)
+    })
+    await flushMicrotasks()
+
+    expect(handleQuery).not.toHaveBeenCalled()
+    expect(result.current.queuedMessages.map((m) => m.text)).toEqual(['q1'])
+    expect(onRateLimited).toHaveBeenCalled()
   })
 
   it('drains multiple messages when handleQuery is synchronous (void)', async () => {

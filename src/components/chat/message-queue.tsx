@@ -1,3 +1,4 @@
+import { FiArrowUp } from '@/components/icons/lazy-icons'
 import { cn } from '@/components/ui/utils'
 import { TrashIcon } from '@heroicons/react/24/outline'
 import { HiOutlineQueueList } from 'react-icons/hi2'
@@ -41,9 +42,10 @@ function QueuedImagePreview({ attachments }: { attachments?: Attachment[] }) {
 type MessageQueueProps = {
   queue: QueuedMessage[]
   onRemove: (id: string) => void
+  onSend: (id: string) => void
 }
 
-export function MessageQueue({ queue, onRemove }: MessageQueueProps) {
+export function MessageQueue({ queue, onRemove, onSend }: MessageQueueProps) {
   if (queue.length === 0) return null
 
   return (
@@ -77,6 +79,14 @@ export function MessageQueue({ queue, onRemove }: MessageQueueProps) {
                 {truncated || fallbackLabel}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => onSend(item.id)}
+              aria-label="Send queued message now"
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+            >
+              <FiArrowUp className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={() => onRemove(item.id)}
