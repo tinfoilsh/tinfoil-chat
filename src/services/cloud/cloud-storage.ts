@@ -708,8 +708,18 @@ export class CloudStorageService {
     return
   }
 
-  async getDeletedChatsSince(since: string): Promise<{ deletedIds: string[] }> {
-    const deletedIds: string[] = []
+  /**
+   * Walk the list-status pages once and return both event streams since
+   * `since`: row updates and delete tombstones. The deletion reconciliation
+   * pass needs both from the same walk so it can arbitrate a tombstone
+   * against a later re-create of the same row.
+   */
+  async listChatEventsSince(since: string): Promise<{
+    updates: Array<{ id: string; updatedAt: string }>
+    deletes: Array<{ id: string; deletedAt: string }>
+  }> {
+    const updates: Array<{ id: string; updatedAt: string }> = []
+    const deletes: Array<{ id: string; deletedAt: string }> = []
     let cursor: string | undefined = since
     do {
       const status = await enclaveListStatus({
@@ -717,10 +727,15 @@ export class CloudStorageService {
         cursor,
         limit: 500,
       })
-      for (const d of status.deletes) deletedIds.push(d.id)
+      for (const u of status.updates) {
+        updates.push({ id: u.id, updatedAt: u.updated_at })
+      }
+      for (const d of status.deletes) {
+        deletes.push({ id: d.id, deletedAt: d.deleted_at })
+      }
       cursor = status.next_cursor
     } while (cursor)
-    return { deletedIds }
+    return { updates, deletes }
   }
 
   async getChatsUpdatedSince(options: {

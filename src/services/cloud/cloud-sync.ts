@@ -19,6 +19,7 @@ import {
   primaryKeyIdHexOrNull,
 } from './cek-encoding'
 import { processRemoteChat } from './chat-codec'
+import { clearChatDeletesWatermark } from './chat-deletes-watermark'
 import { ingestRemoteChats, syncRemoteDeletions } from './chat-ingestion'
 import { canWriteToCloud } from './cloud-key-authorization'
 import {
@@ -450,19 +451,24 @@ export class CloudSyncService {
       // device deleted a chat, we must drop it locally first; otherwise
       // backupUnsyncedChats can re-upload a chat with pending edits and
       // resurrect it server-side.
-      if (cachedStatus?.lastUpdated) {
-        await syncRemoteDeletions(
-          cachedStatus.lastUpdated,
-          'syncChangedChats',
-          () => this.isCurrentGeneration(generation),
-        )
-      }
+      const deletions = await syncRemoteDeletions('syncChangedChats', () =>
+        this.isCurrentGeneration(generation),
+      )
       if (!this.isCurrentGeneration(generation)) return result
 
-      // Backup any unsynced local changes
-      const backupResult = await this.backupUnsyncedChats()
-      result.uploaded = backupResult.uploaded
-      result.errors.push(...backupResult.errors)
+      if (deletions.failed) {
+        // Uploading dirty chats before deletions reconcile can resurrect
+        // chats deleted on another device, so keep local changes queued
+        // until a pass succeeds.
+        result.errors.push(
+          'Skipped uploading local changes: remote deletions could not be reconciled',
+        )
+      } else {
+        // Backup any unsynced local changes
+        const backupResult = await this.backupUnsyncedChats()
+        result.uploaded = backupResult.uploaded
+        result.errors.push(...backupResult.errors)
+      }
 
       if (!cachedStatus?.lastUpdated) {
         // No cached status, fall back to full sync (first page only)
@@ -572,6 +578,10 @@ export class CloudSyncService {
       cache.clear()
     }
     this.projectSyncCaches.clear()
+    // The deletes watermark is scoped to the account's tombstone history,
+    // so the next account (or re-login) must replay from epoch rather than
+    // resume at the previous account's position.
+    clearChatDeletesWatermark()
     // `cloudSync` is a module-level singleton so this flag survives
     // logout → login on the same page load. Without the reset, the
     // second user's first syncAllChats would skip the legacy-blob
@@ -911,10 +921,30 @@ export class CloudSyncService {
         cloudStorage.downloadChat(chatId),
       ])
 
-      // The remote row vanished (concurrent delete). Leave the local
-      // copy untouched; it stays `locallyModified` and the deletion
-      // reconciles on the next sync cycle.
+      // The remote row vanished (concurrent delete). A clean local copy
+      // is removed by the deletion reconciliation pass. A locally
+      // modified copy carries writes the server never saw; there is no
+      // etag left to CAS against, so a plain re-upload would loop on
+      // STALE_BLOB forever. Per §C5 the newer local content wins by
+      // re-creating the row through the explicit restore path — unless
+      // the reconciliation pass has already recorded the tombstone, in
+      // which case the deletion is being applied right now and wins.
       if (!remoteChat) {
+        if (!this.isCurrentGeneration(generation)) return
+        if (
+          localChat?.locallyModified &&
+          !localChat.isLocalOnly &&
+          !deletedChatsTracker.isDeleted(chatId)
+        ) {
+          await this.backupChatNow(chatId, { restoreDeleted: true })
+          if (!this.isCurrentGeneration(generation)) return
+          reportChatSynced(chatId)
+          logInfo('Conflict resolved by restoring locally modified chat', {
+            component: 'CloudSync',
+            action: 'resolveConflictByPullingRemote',
+            metadata: { chatId },
+          })
+        }
         return
       }
       if (!this.isCurrentGeneration(generation)) return
@@ -1142,24 +1172,27 @@ export class CloudSyncService {
     }
 
     try {
-      const cachedStatus = this.chatSyncCache.load()
-
       // Apply remote deletions BEFORE uploading local changes so a chat
       // deleted on another device is dropped locally first, instead of
       // getting re-uploaded by backupUnsyncedChats.
-      if (cachedStatus?.lastUpdated) {
-        await syncRemoteDeletions(
-          cachedStatus.lastUpdated,
-          'syncAllChats',
-          () => this.isCurrentGeneration(generation),
-        )
-      }
+      const deletions = await syncRemoteDeletions('syncAllChats', () =>
+        this.isCurrentGeneration(generation),
+      )
       if (!this.isCurrentGeneration(generation)) return result
 
-      // Backup any unsynced local changes
-      const backupResult = await this.backupUnsyncedChats()
-      result.uploaded = backupResult.uploaded
-      result.errors.push(...backupResult.errors)
+      if (deletions.failed) {
+        // Uploading dirty chats before deletions reconcile can resurrect
+        // chats deleted on another device, so keep local changes queued
+        // until a pass succeeds.
+        result.errors.push(
+          'Skipped uploading local changes: remote deletions could not be reconciled',
+        )
+      } else {
+        // Backup any unsynced local changes
+        const backupResult = await this.backupUnsyncedChats()
+        result.uploaded = backupResult.uploaded
+        result.errors.push(...backupResult.errors)
+      }
 
       // Then, get list of remote chats with content
       const remoteList = await this.listChatsWithRetry({
@@ -1490,12 +1523,9 @@ export class CloudSyncService {
       // the next tick. The pass is idempotent and only emits when a chat
       // is actually removed locally.
       if (!projectId) {
-        const cachedStatus = this.chatSyncCache.load()
-        if (cachedStatus?.lastUpdated) {
-          await syncRemoteDeletions(cachedStatus.lastUpdated, 'smartSync', () =>
-            this.isCurrentGeneration(generation),
-          )
-        }
+        await syncRemoteDeletions('smartSync', () =>
+          this.isCurrentGeneration(generation),
+        )
       }
       if (!this.isCurrentGeneration(generation)) {
         return { uploaded: 0, downloaded: 0, errors: [] }
