@@ -708,6 +708,23 @@ describe('CloudSyncService', () => {
       expect(localStorage.getItem(SYNC_CHAT_DELETES_WATERMARK)).toBeNull()
     })
 
+    it('keeps the deletes watermark when only the status caches are cleared', () => {
+      localStorage.setItem(
+        SYNC_CHAT_DELETES_WATERMARK,
+        '2026-01-01T00:00:00.000Z',
+      )
+
+      // The start-fresh flow clears the status caches while local chats
+      // await re-upload; an epoch replay there could apply surviving
+      // tombstones to the chats being re-uploaded.
+      const service = new CloudSyncService()
+      service.clearSyncStatus()
+
+      expect(localStorage.getItem(SYNC_CHAT_DELETES_WATERMARK)).toBe(
+        '2026-01-01T00:00:00.000Z',
+      )
+    })
+
     it('retries listing remote chats before succeeding', async () => {
       mockGetUnsyncedChats.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])

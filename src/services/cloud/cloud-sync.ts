@@ -143,6 +143,14 @@ export class CloudSyncService {
     this.uploadCoalescer.clear()
     this.streamingCallbacks.clear()
     this.clearSyncStatus()
+    // The deletes watermark is scoped to the account's tombstone history,
+    // so the next account (or re-login) must replay from epoch rather than
+    // resume at the previous account's position. Deliberately not part of
+    // clearSyncStatus(): the start-fresh flow (§H4) clears the status
+    // caches while local chats await re-upload as fresh creates, and an
+    // epoch replay there could apply surviving tombstones to the very
+    // chats the user chose to keep.
+    clearChatDeletesWatermark()
   }
 
   /**
@@ -578,10 +586,6 @@ export class CloudSyncService {
       cache.clear()
     }
     this.projectSyncCaches.clear()
-    // The deletes watermark is scoped to the account's tombstone history,
-    // so the next account (or re-login) must replay from epoch rather than
-    // resume at the previous account's position.
-    clearChatDeletesWatermark()
     // `cloudSync` is a module-level singleton so this flag survives
     // logout → login on the same page load. Without the reset, the
     // second user's first syncAllChats would skip the legacy-blob
