@@ -50,6 +50,15 @@
   function v() {
     return u ? s + (Date.now() - u) : s
   }
+  function x() {
+    return (
+      '/share' === location.pathname ||
+      0 === location.pathname.indexOf('/share/') ||
+      '/chat' === location.pathname ||
+      0 === location.pathname.indexOf('/chat/') ||
+      /^\/project\/[^/]+\/chat(?:\/|$)/.test(location.pathname)
+    )
+  }
   function f() {
     var t = document.body || {},
       n = document.documentElement || {}
@@ -71,6 +80,7 @@
   }
   function g(i, v) {
     var g = 'pageview' === i
+    if (x()) return m(i, v)
     if (
       (g && c && (w(), (n = f()), (e = h())),
       /^localhost$|^127(\.[0-9]+){0,2}\.[0-9]+$|^\[::1?\]$/.test(

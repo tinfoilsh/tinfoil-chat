@@ -1,5 +1,4 @@
 import { Head, Html, Main, NextScript } from 'next/document'
-import Script from 'next/script'
 
 export default function Document() {
   // Inline script to set theme before first paint to prevent flash
@@ -135,16 +134,6 @@ export default function Document() {
 
         <link rel="icon" href="/android-chrome-192x192.png" sizes="192x192" />
         <link rel="icon" href="/android-chrome-512x512.png" sizes="512x512" />
-
-        <Script
-          defer
-          data-domain="chat.tinfoil.sh"
-          data-api="https://plausible.io/api/event"
-          src="/js/plausible.js"
-          integrity="sha384-2koU+A5hG/EjBLH1x5k5ThN+dPO7wtgAfkwcsSgQq3kNc0ouUd56j17YOJ0aE0yv"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
       </Head>
       <body className="font-aeonik-fono antialiased">
         <Main />
