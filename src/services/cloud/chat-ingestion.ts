@@ -238,7 +238,10 @@ export async function syncRemoteDeletions(
         // A tombstone whose timestamp cannot be parsed cannot be
         // arbitrated or applied. Hold the watermark behind it so the next
         // pass replays it, instead of advancing past the deletion and
-        // skipping it forever.
+        // skipping it forever. Record it in the tracker too, so ingestion
+        // and the gone-row restore path won't resurrect a dirty local
+        // copy while arbitration is impossible.
+        deletedChatsTracker.markAsDeleted(del.id)
         allResolved = false
         continue
       }

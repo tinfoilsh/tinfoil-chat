@@ -268,6 +268,9 @@ describe('syncRemoteDeletions', () => {
     // advance the watermark past the deletion it could not arbitrate.
     expect(result).toEqual({ reconciled: false, failed: false })
     expect(mockMarkAsDeleted).toHaveBeenCalledWith('gone')
+    // The unarbitratable tombstone is still tracked so ingestion and the
+    // gone-row restore path cannot resurrect the chat in the meantime.
+    expect(mockMarkAsDeleted).toHaveBeenCalledWith('malformed')
     expect(localStorage.getItem(SYNC_CHAT_DELETES_WATERMARK)).toBeNull()
   })
 
