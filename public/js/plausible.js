@@ -53,7 +53,10 @@
   function x() {
     return (
       '/share' === location.pathname ||
-      0 === location.pathname.indexOf('/share/')
+      0 === location.pathname.indexOf('/share/') ||
+      '/chat' === location.pathname ||
+      0 === location.pathname.indexOf('/chat/') ||
+      /^\/project\/[^/]+\/chat(?:\/|$)/.test(location.pathname)
     )
   }
   function f() {

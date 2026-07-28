@@ -11,7 +11,13 @@ import localFont from 'next/font/local'
 import Head from 'next/head'
 import Script from 'next/script'
 
-const SHARED_CHAT_ROUTE = '/share/[[...slug]]'
+const ANALYTICS_EXCLUDED_ROUTES = new Set([
+  '/share/[[...slug]]',
+  '/chat/[[...slug]]',
+  '/chat/[chatId]',
+  '/chat/local/[chatId]',
+  '/project/[projectId]/chat/[chatId]',
+])
 
 const aeonikFono = localFont({
   src: [
@@ -156,13 +162,13 @@ export default function App({ Component, pageProps, router }: AppProps) {
           content="Private AI chat application supporting open source models through Tinfoil"
         />
       </Head>
-      {router.pathname !== SHARED_CHAT_ROUTE && (
+      {!ANALYTICS_EXCLUDED_ROUTES.has(router.pathname) && (
         <Script
           defer
           data-domain="chat.tinfoil.sh"
           data-api="https://plausible.io/api/event"
           src="/js/plausible.js"
-          integrity="sha384-rgNzWRUP78OzHT0L9HCoK0WC+gccgf9jPZT65GCqSE3ZKQWZtT/ptpetz0T2WB4b"
+          integrity="sha384-b9XvNgc2+VPXI896lpD5wayk8mrDF40D+0aMR10g+8OO5zij+GXEhu2NhUSz1Oxz"
           crossOrigin="anonymous"
           strategy="afterInteractive"
         />

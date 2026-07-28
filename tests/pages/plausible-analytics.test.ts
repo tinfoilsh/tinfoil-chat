@@ -85,24 +85,27 @@ describe('Plausible analytics', () => {
     vi.restoreAllMocks()
   })
 
-  it('does not send events from shared chat URLs', () => {
-    const analytics = loadPlausible(
-      'https://chat.tinfoil.sh/share/chat-id#v2:throwaway-key',
-    )
+  it.each([
+    ['shared chat', 'https://chat.tinfoil.sh/share/chat-id#v2:throwaway-key'],
+    ['chat root', 'https://chat.tinfoil.sh/chat'],
+    ['chat', 'https://chat.tinfoil.sh/chat/chat-id'],
+    ['local chat', 'https://chat.tinfoil.sh/chat/local/chat-id'],
+    ['project chat', 'https://chat.tinfoil.sh/project/project-id/chat/chat-id'],
+  ])('does not send events from %s URLs', (_, url) => {
+    const analytics = loadPlausible(url)
 
-    analytics.plausible?.('Share Viewed')
+    analytics.plausible?.('Chat Viewed')
 
     expect(analytics.fetchMock).not.toHaveBeenCalled()
   })
 
-  it('stops sending events after navigating to a shared chat URL', () => {
-    const analytics = loadPlausible('https://chat.tinfoil.sh/chat/local/id')
+  it('stops sending events after navigating to a chat URL', () => {
+    const analytics = loadPlausible('https://chat.tinfoil.sh/signin')
     expect(analytics.fetchMock).toHaveBeenCalledTimes(1)
 
-    analytics.location.href =
-      'https://chat.tinfoil.sh/share/chat-id#v2:throwaway-key'
-    analytics.location.pathname = '/share/chat-id'
-    analytics.history.pushState({}, '', '/share/chat-id')
+    analytics.location.href = 'https://chat.tinfoil.sh/chat/local/chat-id'
+    analytics.location.pathname = '/chat/local/chat-id'
+    analytics.history.pushState({}, '', '/chat/local/chat-id')
 
     expect(analytics.fetchMock).toHaveBeenCalledTimes(1)
   })
