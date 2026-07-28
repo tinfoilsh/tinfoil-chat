@@ -9,6 +9,9 @@ import { ClerkProvider } from '@clerk/nextjs'
 import type { AppProps } from 'next/app'
 import localFont from 'next/font/local'
 import Head from 'next/head'
+import Script from 'next/script'
+
+const SHARED_CHAT_ROUTE = '/share/[[...slug]]'
 
 const aeonikFono = localFont({
   src: [
@@ -114,7 +117,7 @@ const openDyslexic = localFont({
 
 migrateStorageKeys()
 
-export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, pageProps, router }: AppProps) {
   useChatFontSync()
 
   return (
@@ -153,6 +156,17 @@ export default function App({ Component, pageProps }: AppProps) {
           content="Private AI chat application supporting open source models through Tinfoil"
         />
       </Head>
+      {router.pathname !== SHARED_CHAT_ROUTE && (
+        <Script
+          defer
+          data-domain="chat.tinfoil.sh"
+          data-api="https://plausible.io/api/event"
+          src="/js/plausible.js"
+          integrity="sha384-rgNzWRUP78OzHT0L9HCoK0WC+gccgf9jPZT65GCqSE3ZKQWZtT/ptpetz0T2WB4b"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
+      )}
       <style jsx global>{`
         :root {
           --font-aeonik-fono: ${aeonikFono.style.fontFamily};
