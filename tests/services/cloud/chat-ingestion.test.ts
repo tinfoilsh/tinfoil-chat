@@ -253,6 +253,24 @@ describe('syncRemoteDeletions', () => {
     expect(localStorage.getItem(SYNC_CHAT_DELETES_WATERMARK)).toBeNull()
   })
 
+  it('holds the watermark when a tombstone timestamp cannot be parsed', async () => {
+    mockListChatEventsSince.mockResolvedValue(
+      events([
+        { id: 'malformed', deletedAt: 'not-a-timestamp' },
+        { id: 'gone', deletedAt },
+      ]),
+    )
+    mockGetChat.mockResolvedValue(null)
+
+    const result = await syncRemoteDeletions('test')
+
+    // The parseable tombstone is still applied, but the pass must not
+    // advance the watermark past the deletion it could not arbitrate.
+    expect(result).toEqual({ reconciled: false, failed: false })
+    expect(mockMarkAsDeleted).toHaveBeenCalledWith('gone')
+    expect(localStorage.getItem(SYNC_CHAT_DELETES_WATERMARK)).toBeNull()
+  })
+
   it('keeps a chat whose row was re-created after its tombstone and unblocks ingestion', async () => {
     mockListChatEventsSince.mockResolvedValue(
       events(

@@ -230,10 +230,18 @@ export async function syncRemoteDeletions(
         Math.max(ms, latestUpdateAtMs.get(update.id) ?? 0),
       )
     }
+    let allResolved = true
     const latestDeleteAtMs = new Map<string, number>()
     for (const del of deletes) {
       const ms = Date.parse(del.deletedAt)
-      if (Number.isNaN(ms)) continue
+      if (Number.isNaN(ms)) {
+        // A tombstone whose timestamp cannot be parsed cannot be
+        // arbitrated or applied. Hold the watermark behind it so the next
+        // pass replays it, instead of advancing past the deletion and
+        // skipping it forever.
+        allResolved = false
+        continue
+      }
       latestEventAtMs = Math.max(latestEventAtMs, ms)
       latestDeleteAtMs.set(
         del.id,
@@ -242,7 +250,6 @@ export async function syncRemoteDeletions(
     }
 
     let failed = false
-    let allResolved = true
     const successfulIds: string[] = []
     for (const [id, deletedAtMs] of latestDeleteAtMs) {
       if (!isCurrent()) return { reconciled: false, failed: true }
