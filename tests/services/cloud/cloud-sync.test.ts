@@ -194,6 +194,7 @@ describe('CloudSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.removeItem(SYNC_CHAT_STATUS)
+    localStorage.removeItem(SYNC_CHAT_DELETES_WATERMARK)
     mockSaveChat.mockResolvedValue(undefined)
     mockSaveExistingChat.mockResolvedValue(undefined)
     mockMarkAsSynced.mockResolvedValue(undefined)
@@ -1322,6 +1323,56 @@ describe('CloudSyncService', () => {
       expect(mockReportChatSynced).toHaveBeenCalledWith('conflict-1')
       expect(mockApplyRemoteChatIfFresh).not.toHaveBeenCalled()
       expect(mockRebaseSyncVersion).not.toHaveBeenCalled()
+      // The restore arbitration re-checks the deletion window first so a
+      // tombstone written after the last pass cannot be overwritten.
+      expect(mockSyncRemoteDeletions).toHaveBeenCalledWith(
+        'resolveConflictByPullingRemote',
+        expect.any(Function),
+      )
+    })
+
+    it('does not restore a vanished row when the fresh deletion pass records its tombstone', async () => {
+      mockGetChat.mockResolvedValue(localChat('2024-06-01T00:00:00.000Z', 1))
+      mockDownloadChat.mockResolvedValue(null)
+      mockUploadChat.mockRejectedValueOnce(staleBlob())
+      // The pre-restore reconciliation discovers the deletion that made
+      // the row vanish and applies it.
+      mockSyncRemoteDeletions.mockImplementation(async () => {
+        deletedChatsTracker.markAsDeleted('conflict-1')
+        return { reconciled: true, failed: false }
+      })
+
+      try {
+        const service = new CloudSyncService()
+        await service.backupChat('conflict-1')
+        await service.waitForUpload('conflict-1')
+        await flush()
+
+        expect(mockUploadChat).toHaveBeenCalledTimes(1)
+        expect(mockReportChatSynced).not.toHaveBeenCalled()
+      } finally {
+        deletedChatsTracker.removeFromDeleted('conflict-1')
+      }
+    })
+
+    it('does not restore a vanished row when the fresh deletion pass fails', async () => {
+      mockGetChat.mockResolvedValue(localChat('2024-06-01T00:00:00.000Z', 1))
+      mockDownloadChat.mockResolvedValue(null)
+      mockUploadChat.mockRejectedValueOnce(staleBlob())
+      mockSyncRemoteDeletions.mockResolvedValue({
+        reconciled: false,
+        failed: true,
+      })
+
+      const service = new CloudSyncService()
+      await service.backupChat('conflict-1')
+      await service.waitForUpload('conflict-1')
+      await flush()
+
+      // Without a trustworthy deletion window the restore is deferred;
+      // the chat stays locally modified so the next sync retries.
+      expect(mockUploadChat).toHaveBeenCalledTimes(1)
+      expect(mockReportChatSynced).not.toHaveBeenCalled()
     })
 
     it('leaves the local copy untouched when the remote row is gone and its tombstone is already recorded', async () => {

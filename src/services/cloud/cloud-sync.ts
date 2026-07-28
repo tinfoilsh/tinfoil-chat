@@ -71,6 +71,8 @@ const UPLOAD_BASE_DELAY_MS = 1000
 const UPLOAD_MAX_DELAY_MS = 8000
 const UPLOAD_MAX_RETRIES = 3
 const REMOTE_LIST_MAX_ATTEMPTS = 2
+const UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR =
+  'Skipped uploading local changes: remote deletions could not be reconciled'
 const isStreaming = (id: string) => streamingTracker.isStreaming(id)
 
 export class CloudSyncService {
@@ -468,9 +470,7 @@ export class CloudSyncService {
         // Uploading dirty chats before deletions reconcile can resurrect
         // chats deleted on another device, so keep local changes queued
         // until a pass succeeds.
-        result.errors.push(
-          'Skipped uploading local changes: remote deletions could not be reconciled',
-        )
+        result.errors.push(UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR)
       } else {
         // Backup any unsynced local changes
         const backupResult = await this.backupUnsyncedChats()
@@ -940,6 +940,20 @@ export class CloudSyncService {
           !localChat.isLocalOnly &&
           !deletedChatsTracker.isDeleted(chatId)
         ) {
+          // The row may have been tombstoned after this pass fetched its
+          // deletion window, in which case the tracker doesn't know about
+          // it yet. Reconcile deletions now so a fresh tombstone is
+          // applied and recorded rather than overwritten by the restore
+          // below; a failed pass skips the restore and the next sync
+          // retries the upload (and this arbitration) from scratch.
+          const deletions = await syncRemoteDeletions(
+            'resolveConflictByPullingRemote',
+            () => this.isCurrentGeneration(generation),
+          )
+          if (!this.isCurrentGeneration(generation)) return
+          if (deletions.failed || deletedChatsTracker.isDeleted(chatId)) {
+            return
+          }
           await this.backupChatNow(chatId, { restoreDeleted: true })
           if (!this.isCurrentGeneration(generation)) return
           reportChatSynced(chatId)
@@ -1188,9 +1202,7 @@ export class CloudSyncService {
         // Uploading dirty chats before deletions reconcile can resurrect
         // chats deleted on another device, so keep local changes queued
         // until a pass succeeds.
-        result.errors.push(
-          'Skipped uploading local changes: remote deletions could not be reconciled',
-        )
+        result.errors.push(UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR)
       } else {
         // Backup any unsynced local changes
         const backupResult = await this.backupUnsyncedChats()
