@@ -53,7 +53,6 @@ export function advanceChatDeletesWatermark(latestEventAtMs: number): void {
   if (typeof window === 'undefined') return
   if (!Number.isFinite(latestEventAtMs)) return
   const candidateMs = latestEventAtMs - CHAT_DELETES_WATERMARK_OVERLAP_MS
-  if (candidateMs <= 0) return
   if (candidateMs <= Date.parse(loadChatDeletesWatermark())) return
   try {
     localStorage.setItem(
