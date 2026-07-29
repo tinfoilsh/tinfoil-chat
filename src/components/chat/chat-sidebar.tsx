@@ -295,6 +295,10 @@ export function ChatSidebar({
   }, [])
   const modKey = isMac ? '⌘' : 'Ctrl+'
   const newChatHref = getNewChatPath({ isLocalOnly: activeTab === 'local' })
+  const isCurrentNewChat =
+    currentChat?.isBlankChat &&
+    !currentChat.isTemporary &&
+    Boolean(currentChat.isLocalOnly) === (activeTab === 'local')
 
   const {
     projects,
@@ -1169,16 +1173,16 @@ export function ChatSidebar({
           <div className="relative z-10 flex-none px-2 py-2">
             <Link
               href={newChatHref}
-              aria-current={currentChat?.isBlankChat ? 'page' : undefined}
+              aria-current={isCurrentNewChat ? 'page' : undefined}
               onClick={(e) => {
                 if (!isPlainPrimaryClick(e)) return
                 e.preventDefault()
-                if (currentChat?.isBlankChat) return
+                if (isCurrentNewChat) return
                 createNewChat(activeTab === 'local', true)
               }}
               className={cn(
                 'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
-                currentChat?.isBlankChat
+                isCurrentNewChat
                   ? 'cursor-default border-transparent bg-transparent text-content-muted'
                   : isDarkMode
                     ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'

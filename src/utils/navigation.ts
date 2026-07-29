@@ -10,11 +10,6 @@ interface ChatPathOptions {
   projectId?: string
 }
 
-interface NewChatPathOptions {
-  isLocalOnly?: boolean
-  projectId?: string
-}
-
 export const NEW_CHAT_STORAGE_QUERY_KEY = 'storage'
 export const LOCAL_NEW_CHAT_STORAGE = 'local'
 
@@ -40,7 +35,7 @@ export function getChatPath(
 export function getNewChatPath({
   isLocalOnly = false,
   projectId,
-}: NewChatPathOptions = {}): string {
+}: ChatPathOptions = {}): string {
   if (projectId) return `/project/${projectId}`
   if (isLocalOnly) {
     return `/newchat?${NEW_CHAT_STORAGE_QUERY_KEY}=${LOCAL_NEW_CHAT_STORAGE}`
