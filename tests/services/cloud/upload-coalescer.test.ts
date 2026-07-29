@@ -452,12 +452,18 @@ describe('UploadCoalescer', () => {
       expect(coalescer.hasPendingUpload('chat-1')).toBe(false)
     })
 
-    it('handles enqueue during retry backoff', async () => {
-      const attemptFn = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('Fail'))
-        .mockResolvedValue(undefined)
-      const prepareFn = prepareWith(attemptFn)
+    it('finishes a frozen retry before uploading newer dirty state', async () => {
+      let source = 'v1'
+      const attempts: Array<{ payload: string; idempotencyKey: string }> = []
+      const prepareFn = vi.fn(
+        async (_chatId: string, idempotencyKey: string) => {
+          const payload = source
+          return async () => {
+            attempts.push({ payload, idempotencyKey })
+            if (attempts.length === 1) throw new Error('Fail')
+          }
+        },
+      )
 
       // Pin the jitter to its upper bound so the backoff window is
       // deterministic. A random delay of 0 would let the first retry
@@ -477,18 +483,22 @@ describe('UploadCoalescer', () => {
       await vi.advanceTimersByTimeAsync(0) // First attempt fails
 
       // Enqueue during backoff
+      source = 'v2'
       coalescer.enqueue('chat-1')
 
       // Advance to trigger retry
       await vi.advanceTimersByTimeAsync(1000)
 
-      // Should succeed (dirty flag causes fresh data)
       await vi.runAllTimersAsync()
 
-      expect(attemptFn).toHaveBeenCalledTimes(2)
-      // The abandoned first write plus the new logical write each
-      // prepared once
+      expect(attempts.map((attempt) => attempt.payload)).toEqual([
+        'v1',
+        'v1',
+        'v2',
+      ])
       expect(prepareFn).toHaveBeenCalledTimes(2)
+      expect(attempts[0].idempotencyKey).toBe(attempts[1].idempotencyKey)
+      expect(attempts[2].idempotencyKey).not.toBe(attempts[1].idempotencyKey)
     })
   })
 })
