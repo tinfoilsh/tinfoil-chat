@@ -68,7 +68,7 @@ export function useChatRouter(): UseChatRouterReturn {
   const updateUrlForProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
 
-    const newPath = getNewChatPath(projectId)
+    const newPath = getNewChatPath({ projectId })
 
     if (window.location.pathname !== newPath) {
       window.history.replaceState(

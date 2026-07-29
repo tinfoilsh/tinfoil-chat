@@ -22,6 +22,7 @@ interface UseChatStorageProps {
   scrollToBottom?: () => void
   initialChatId?: string | null
   isLocalChatUrl?: boolean
+  initialNewChatIsLocalOnly?: boolean
 }
 
 interface UseChatStorageReturn {
@@ -51,6 +52,7 @@ export function useChatStorage({
   storeHistory,
   initialChatId,
   isLocalChatUrl = false,
+  initialNewChatIsLocalOnly = false,
 }: UseChatStorageProps): UseChatStorageReturn {
   const { isSignedIn } = useAuth()
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -69,7 +71,9 @@ export function useChatStorage({
     return [createBlankChat(false), createBlankChat(true)]
   })
 
-  const [currentChat, setCurrentChat] = useState<Chat>(chats[0])
+  const [currentChat, setCurrentChat] = useState<Chat>(
+    () => getBlankChat(chats, initialNewChatIsLocalOnly) ?? chats[0],
+  )
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -198,6 +202,10 @@ export function useChatStorage({
 
         // Combine and sort
         const finalChats = sortChats([cloudBlank, localBlank, ...nonBlankChats])
+        const initialBlankChat = getBlankChat(
+          finalChats,
+          initialNewChatIsLocalOnly,
+        )
 
         setChats(finalChats)
 
@@ -206,7 +214,7 @@ export function useChatStorage({
         setCurrentChat((prev) =>
           isSwitchingChatRef.current || !prev.isBlankChat
             ? prev
-            : finalChats[0],
+            : (initialBlankChat ?? finalChats[0]),
         )
       } catch (error) {
         logError('Failed to load initial chats', error, {
@@ -224,7 +232,7 @@ export function useChatStorage({
     return () => {
       mounted = false
     }
-  }, [storeHistory, isSignedIn])
+  }, [storeHistory, isSignedIn, initialNewChatIsLocalOnly])
 
   // Create new chat (switch to the appropriate blank chat)
   const createNewChat = useCallback(

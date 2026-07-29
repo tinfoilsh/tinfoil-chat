@@ -10,6 +10,14 @@ interface ChatPathOptions {
   projectId?: string
 }
 
+interface NewChatPathOptions {
+  isLocalOnly?: boolean
+  projectId?: string
+}
+
+export const NEW_CHAT_STORAGE_QUERY_KEY = 'storage'
+export const LOCAL_NEW_CHAT_STORAGE = 'local'
+
 export function isPlainPrimaryClick(event: LinkClick): boolean {
   return (
     event.button === 0 &&
@@ -29,6 +37,19 @@ export function getChatPath(
   return `/chat/${chatId}`
 }
 
-export function getNewChatPath(projectId?: string): string {
-  return projectId ? `/project/${projectId}` : '/newchat'
+export function getNewChatPath({
+  isLocalOnly = false,
+  projectId,
+}: NewChatPathOptions = {}): string {
+  if (projectId) return `/project/${projectId}`
+  if (isLocalOnly) {
+    return `/newchat?${NEW_CHAT_STORAGE_QUERY_KEY}=${LOCAL_NEW_CHAT_STORAGE}`
+  }
+  return '/newchat'
+}
+
+export function isLocalNewChatStorage(
+  storage: string | string[] | undefined,
+): boolean {
+  return storage === LOCAL_NEW_CHAT_STORAGE
 }

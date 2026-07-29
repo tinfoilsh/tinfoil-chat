@@ -181,6 +181,7 @@ type ChatInterfaceProps = {
   initialChatId?: string | null
   initialProjectId?: string | null
   isLocalChatUrl?: boolean
+  initialNewChatIsLocalOnly?: boolean
   /**
    * When true, suppresses auto-opening intro/setup modals on this mount
    * (onboarding, passkey setup/recovery prompts, cloud sync setup, and the
@@ -239,6 +240,7 @@ export function ChatInterface({
   initialChatId,
   initialProjectId,
   isLocalChatUrl: isLocalChatUrlProp,
+  initialNewChatIsLocalOnly = false,
   suppressIntroModals = false,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
@@ -763,6 +765,7 @@ export function ChatInterface({
     thinkingEnabled,
     initialChatId,
     isLocalChatUrl,
+    initialNewChatIsLocalOnly,
     webSearchAvailable,
     // Feature flag gates key derivation in useExecSnapshot; the toggle
     // gates request plumbing. Both layers must be on to use code-exec.
@@ -2901,11 +2904,14 @@ export function ChatInterface({
             currentChat?.messages &&
             currentChat.messages.length > 0 && (
               <Link
-                href={getNewChatPath(activeProject?.id)}
+                href={getNewChatPath({
+                  isLocalOnly: currentChat.isLocalOnly,
+                  projectId: activeProject?.id,
+                })}
                 onClick={(e) => {
                   if (!isPlainPrimaryClick(e)) return
                   e.preventDefault()
-                  createNewChat()
+                  createNewChat(currentChat.isLocalOnly, true)
                 }}
                 className="flex items-center justify-center rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
                 aria-label="New chat"
@@ -3064,6 +3070,7 @@ export function ChatInterface({
                   isOpen={isSidebarOpen}
                   setIsOpen={setIsSidebarOpen}
                   project={null}
+                  loadingProjectId={loadingProject?.id}
                   projectName={loadingProject?.name}
                   isLoading={true}
                   isDarkMode={isDarkMode}

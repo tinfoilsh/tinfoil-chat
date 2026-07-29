@@ -92,6 +92,7 @@ interface ProjectSidebarProps {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   project: Project | null
+  loadingProjectId?: string
   projectName?: string
   isLoading?: boolean
   isDarkMode: boolean
@@ -260,6 +261,7 @@ export function ProjectSidebar({
   isOpen,
   setIsOpen,
   project,
+  loadingProjectId,
   projectName,
   isLoading,
   isDarkMode,
@@ -608,7 +610,8 @@ export function ProjectSidebar({
     }
   }, [onNewChat, windowWidth, setIsOpen])
 
-  const newChatHref = getNewChatPath(projectId)
+  const resolvedProjectId = project?.id ?? loadingProjectId
+  const newChatHref = getNewChatPath({ projectId: resolvedProjectId })
 
   const handleRemoveDocument = useCallback(
     async (docId: string) => {
@@ -914,46 +917,33 @@ export function ProjectSidebar({
 
           {/* New Chat button */}
           <div className="relative z-10 mt-3 flex-none px-2 py-2">
-            {!currentChatId ? (
-              <button
-                type="button"
-                disabled
-                className="flex w-full cursor-default items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-2 text-sm text-content-muted"
-              >
-                <span className="flex items-center gap-2">
-                  <PiNotePencilLight className="h-4 w-4" />
-                  <span className="font-aeonik font-medium">New chat</span>
-                </span>
-                <span className="text-xs text-content-muted">
-                  {modKey}
-                  {isMac ? '⇧' : 'Shift+'}O
-                </span>
-              </button>
-            ) : (
-              <Link
-                href={newChatHref}
-                onClick={(e) => {
-                  if (!isPlainPrimaryClick(e)) return
-                  e.preventDefault()
-                  handleNewChat()
-                }}
-                className={cn(
-                  'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
-                  isDarkMode
+            <Link
+              href={newChatHref}
+              aria-current={!currentChatId ? 'page' : undefined}
+              onClick={(e) => {
+                if (!isPlainPrimaryClick(e)) return
+                e.preventDefault()
+                if (!currentChatId) return
+                handleNewChat()
+              }}
+              className={cn(
+                'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
+                !currentChatId
+                  ? 'cursor-default border-transparent bg-transparent text-content-muted'
+                  : isDarkMode
                     ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
                     : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <PiNotePencilLight className="h-4 w-4" />
-                  <span className="font-aeonik font-medium">New chat</span>
-                </span>
-                <span className="text-xs text-content-muted">
-                  {modKey}
-                  {isMac ? '⇧' : 'Shift+'}O
-                </span>
-              </Link>
-            )}
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <PiNotePencilLight className="h-4 w-4" />
+                <span className="font-aeonik font-medium">New chat</span>
+              </span>
+              <span className="text-xs text-content-muted">
+                {modKey}
+                {isMac ? '⇧' : 'Shift+'}O
+              </span>
+            </Link>
           </div>
 
           {/* Project Settings Dropdown */}
@@ -1401,9 +1391,11 @@ export function ProjectSidebar({
               showMoveToProject={!!onMoveChatToProject && projects.length > 0}
               projects={projects.filter((p) => p.id !== project?.id)}
               getChatHref={(chat) =>
-                chat.isBlankChat || !projectId
-                  ? undefined
-                  : getChatPath(chat.id, { projectId })
+                chat.isBlankChat
+                  ? newChatHref
+                  : resolvedProjectId
+                    ? getChatPath(chat.id, { projectId: resolvedProjectId })
+                    : undefined
               }
               onSelectChat={(chatId) => {
                 if (chatId.startsWith('blank-') || chatId === '') {

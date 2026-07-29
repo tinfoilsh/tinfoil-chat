@@ -251,6 +251,9 @@ export function ChatSidebar({
     upgradeError,
   } = useUpgradeToPro()
   const [activeTab, setActiveTab] = useState<'cloud' | 'local'>(() => {
+    if (currentChat?.isBlankChat && currentChat.isLocalOnly) {
+      return 'local'
+    }
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem(UI_SIDEBAR_ACTIVE_TAB)
       if (stored === 'local' && isLocalOnlyModeEnabled()) {
@@ -291,6 +294,7 @@ export function ChatSidebar({
     setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
   }, [])
   const modKey = isMac ? '⌘' : 'Ctrl+'
+  const newChatHref = getNewChatPath({ isLocalOnly: activeTab === 'local' })
 
   const {
     projects,
@@ -845,7 +849,7 @@ export function ChatSidebar({
               {/* New chat button */}
               <div className="group relative">
                 <Link
-                  href="/newchat"
+                  href={newChatHref}
                   onClick={(e) => {
                     if (!isPlainPrimaryClick(e)) return
                     e.preventDefault()
@@ -1163,46 +1167,33 @@ export function ChatSidebar({
 
           {/* New Chat button */}
           <div className="relative z-10 flex-none px-2 py-2">
-            {currentChat?.isBlankChat ? (
-              <button
-                type="button"
-                disabled
-                className="flex w-full cursor-default items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-2 text-sm text-content-muted"
-              >
-                <span className="flex items-center gap-2">
-                  <PiNotePencilLight className="h-4 w-4" />
-                  <span className="font-aeonik font-medium">New chat</span>
-                </span>
-                <span className="text-xs text-content-muted">
-                  {modKey}
-                  {isMac ? '⇧' : 'Shift+'}O
-                </span>
-              </button>
-            ) : (
-              <Link
-                href="/newchat"
-                onClick={(e) => {
-                  if (!isPlainPrimaryClick(e)) return
-                  e.preventDefault()
-                  createNewChat(activeTab === 'local', true)
-                }}
-                className={cn(
-                  'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
-                  isDarkMode
+            <Link
+              href={newChatHref}
+              aria-current={currentChat?.isBlankChat ? 'page' : undefined}
+              onClick={(e) => {
+                if (!isPlainPrimaryClick(e)) return
+                e.preventDefault()
+                if (currentChat?.isBlankChat) return
+                createNewChat(activeTab === 'local', true)
+              }}
+              className={cn(
+                'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
+                currentChat?.isBlankChat
+                  ? 'cursor-default border-transparent bg-transparent text-content-muted'
+                  : isDarkMode
                     ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
                     : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <PiNotePencilLight className="h-4 w-4" />
-                  <span className="font-aeonik font-medium">New chat</span>
-                </span>
-                <span className="text-xs text-content-muted">
-                  {modKey}
-                  {isMac ? '⇧' : 'Shift+'}O
-                </span>
-              </Link>
-            )}
+              )}
+            >
+              <span className="flex items-center gap-2">
+                <PiNotePencilLight className="h-4 w-4" />
+                <span className="font-aeonik font-medium">New chat</span>
+              </span>
+              <span className="text-xs text-content-muted">
+                {modKey}
+                {isMac ? '⇧' : 'Shift+'}O
+              </span>
+            </Link>
           </div>
 
           {/* Projects dropdown - show for premium users */}
@@ -1577,7 +1568,9 @@ export function ChatSidebar({
                                 return (
                                   <Link
                                     key={project.id}
-                                    href={getNewChatPath(project.id)}
+                                    href={getNewChatPath({
+                                      projectId: project.id,
+                                    })}
                                     prefetch={false}
                                     draggable={false}
                                     onClick={(e) => {
@@ -2068,7 +2061,9 @@ export function ChatSidebar({
                       }
                       getChatHref={(chat) =>
                         chat.isBlankChat
-                          ? undefined
+                          ? getNewChatPath({
+                              isLocalOnly: chat.isLocalOnly,
+                            })
                           : getChatPath(chat.id, {
                               isLocalOnly: chat.isLocalOnly,
                             })

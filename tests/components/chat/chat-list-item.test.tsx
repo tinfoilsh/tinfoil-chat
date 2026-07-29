@@ -47,10 +47,12 @@ describe('ChatListItem navigation semantics', () => {
     expect(onSelect).toHaveBeenCalledOnce()
   })
 
-  it('preserves modified-click link behavior', () => {
+  it('preserves modified- and middle-click link behavior', () => {
     const onSelect = renderChatListItem({ href: '/chat/chat-123' })
+    const link = screen.getByRole('link')
 
-    fireEvent.click(screen.getByRole('link'), { ctrlKey: true })
+    fireEvent.click(link, { ctrlKey: true })
+    fireEvent(link, new MouseEvent('auxclick', { bubbles: true, button: 1 }))
     expect(onSelect).not.toHaveBeenCalled()
   })
 

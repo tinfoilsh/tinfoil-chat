@@ -1,6 +1,7 @@
 import {
   getChatPath,
   getNewChatPath,
+  isLocalNewChatStorage,
   isPlainPrimaryClick,
 } from '@/utils/navigation'
 import { describe, expect, it } from 'vitest'
@@ -15,7 +16,17 @@ describe('navigation utilities', () => {
       '/project/project-1/chat/chat-1',
     )
     expect(getNewChatPath()).toBe('/newchat')
-    expect(getNewChatPath('project-1')).toBe('/project/project-1')
+    expect(getNewChatPath({ isLocalOnly: true })).toBe('/newchat?storage=local')
+    expect(getNewChatPath({ projectId: 'project-1' })).toBe(
+      '/project/project-1',
+    )
+  })
+
+  it('recognizes local new-chat destinations', () => {
+    expect(isLocalNewChatStorage('local')).toBe(true)
+    expect(isLocalNewChatStorage('cloud')).toBe(false)
+    expect(isLocalNewChatStorage(['local'])).toBe(false)
+    expect(isLocalNewChatStorage(undefined)).toBe(false)
   })
 
   it('only classifies unmodified primary clicks as in-place navigation', () => {
