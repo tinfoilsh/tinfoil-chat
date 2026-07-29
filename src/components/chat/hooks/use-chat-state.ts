@@ -97,6 +97,7 @@ export function useChatState({
   thinkingEnabled,
   initialChatId,
   isLocalChatUrl = false,
+  initialNewChatIsLocalOnly = false,
   webSearchAvailable,
   canUseCodeExecution = false,
   codeExecutionEnabled,
@@ -112,6 +113,7 @@ export function useChatState({
   thinkingEnabled?: boolean
   initialChatId?: string | null
   isLocalChatUrl?: boolean
+  initialNewChatIsLocalOnly?: boolean
   webSearchAvailable?: boolean
   // Feature flag: when false, useExecSnapshot stays a no-op and no
   // key material is derived. Distinct from `codeExecutionEnabled`,
@@ -164,6 +166,7 @@ export function useChatState({
     scrollToBottom,
     initialChatId,
     isLocalChatUrl,
+    initialNewChatIsLocalOnly,
   })
 
   // Model Management - the hook owns model validation, the device-local

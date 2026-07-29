@@ -26,6 +26,25 @@ describe('useChatStorage.reloadChats', () => {
     vi.clearAllMocks()
   })
 
+  it('keeps a routed local new chat selected after loading storage', async () => {
+    const { result } = renderHook(() =>
+      useChatStorage({
+        storeHistory: true,
+        initialNewChatIsLocalOnly: true,
+      }),
+    )
+
+    expect(result.current.currentChat.isBlankChat).toBe(true)
+    expect(result.current.currentChat.isLocalOnly).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.isInitialLoad).toBe(false)
+    })
+
+    expect(result.current.currentChat.isBlankChat).toBe(true)
+    expect(result.current.currentChat.isLocalOnly).toBe(true)
+  })
+
   it('does not reset currentChat to blank during temp-id window', async () => {
     const { result } = renderHook(() =>
       useChatStorage({

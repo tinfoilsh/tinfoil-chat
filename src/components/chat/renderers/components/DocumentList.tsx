@@ -290,34 +290,27 @@ export const DocumentList = memo(function DocumentList({
               : getPreviewForDocument(documentContent, attachment.fileName)
 
             return (
-              <div
+              <button
                 key={attachment.id}
-                role="button"
-                tabIndex={0}
+                type="button"
                 onClick={() => openModal(attachment)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    openModal(attachment)
-                  }
-                }}
-                className="flex min-w-[200px] max-w-[300px] cursor-pointer flex-col rounded-lg bg-surface-message-user/90 p-3 shadow-sm backdrop-blur-sm transition-colors hover:bg-surface-message-user"
+                className="flex min-w-[200px] max-w-[300px] cursor-pointer flex-col rounded-lg bg-surface-message-user/90 p-3 text-left shadow-sm backdrop-blur-sm transition-colors hover:bg-surface-message-user"
               >
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center p-1">
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center justify-center p-1">
                     {getFileIcon(attachment.fileName, 20)}
-                  </div>
+                  </span>
                   <span className="truncate text-sm font-medium text-content-primary">
                     {attachment.fileName}
                   </span>
-                </div>
+                </span>
 
                 {preview && (
-                  <div className="mt-2 line-clamp-2 text-xs text-content-muted">
+                  <span className="mt-2 line-clamp-2 text-xs text-content-muted">
                     {preview}
-                  </div>
+                  </span>
                 )}
-              </div>
+              </button>
             )
           })}
         </div>

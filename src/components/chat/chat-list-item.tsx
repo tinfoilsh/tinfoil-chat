@@ -1,5 +1,6 @@
 'use client'
 
+import { isPlainPrimaryClick } from '@/utils/navigation'
 import {
   CheckIcon,
   CloudArrowUpIcon,
@@ -11,6 +12,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
+import Link from 'next/link'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
@@ -79,6 +81,7 @@ interface ChatListItemProps {
   isDraggable?: boolean
   showMoveToProject?: boolean
   projects?: ProjectOption[]
+  href?: string
   onSelect: () => void
   onStartEdit: () => void
   onTitleChange: (title: string) => void
@@ -91,6 +94,52 @@ interface ChatListItemProps {
   onConvertToCloud?: () => void
   onConvertToLocal?: () => void
   onRemoveFromProject?: () => void
+}
+
+function ChatSelectionControl({
+  href,
+  isSelected,
+  onSelect,
+  children,
+}: {
+  href?: string
+  isSelected: boolean
+  onSelect: () => void
+  children: React.ReactNode
+}) {
+  const className =
+    'min-w-0 flex-1 cursor-pointer rounded-md pr-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-strong'
+  const ariaCurrent = isSelected ? 'page' : undefined
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        prefetch={false}
+        draggable={false}
+        aria-current={ariaCurrent}
+        className={className}
+        onClick={(event) => {
+          if (event.defaultPrevented || !isPlainPrimaryClick(event)) return
+          event.preventDefault()
+          onSelect()
+        }}
+      >
+        {children}
+      </Link>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={ariaCurrent}
+      className={className}
+    >
+      {children}
+    </button>
+  )
 }
 
 export function ChatListItem({
@@ -107,6 +156,7 @@ export function ChatListItem({
   isDraggable = false,
   showMoveToProject = false,
   projects = [],
+  href,
   onSelect,
   onStartEdit,
   onTitleChange,
@@ -311,14 +361,13 @@ export function ChatListItem({
           </form>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={onSelect}
-          aria-current={isSelected ? 'true' : undefined}
-          className="min-w-0 flex-1 cursor-pointer rounded-md pr-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-border-strong"
+        <ChatSelectionControl
+          href={href}
+          isSelected={isSelected}
+          onSelect={onSelect}
         >
           <>
-            <div className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5">
               {showEncryptionStatus && chat.decryptionFailed && (
                 <FaLock
                   className="h-3.5 w-3.5 flex-shrink-0 text-orange-500"
@@ -326,7 +375,7 @@ export function ChatListItem({
                   aria-hidden="true"
                 />
               )}
-              <div
+              <span
                 className={cn(
                   'truncate font-aeonik-fono text-sm font-medium',
                   chat.decryptionFailed
@@ -345,7 +394,7 @@ export function ChatListItem({
                 ) : (
                   displayTitle
                 )}
-              </div>
+              </span>
               {isStreaming ? (
                 <span
                   className="mx-2 flex w-[18px] flex-shrink-0 items-center justify-center"
@@ -356,14 +405,14 @@ export function ChatListItem({
                 </span>
               ) : (
                 isNewChat && (
-                  <div
+                  <span
                     className="h-1.5 w-1.5 rounded-full bg-blue-500"
                     title="New chat"
                     aria-hidden="true"
                   />
                 )
               )}
-            </div>
+            </span>
             {(chat.decryptionFailed ||
               (messageCount > 0 && timestamp) ||
               (showSyncStatus &&
@@ -372,22 +421,22 @@ export function ChatListItem({
                   (!chat.isBlankChat &&
                     chat.pendingSave &&
                     !isStreaming)))) && (
-              <div className="mt-1 flex min-h-[16px] w-full flex-wrap items-center gap-2 @container">
+              <span className="mt-1 flex min-h-[16px] w-full flex-wrap items-center gap-2 @container">
                 {chat.decryptionFailed ? (
-                  <div className="text-xs text-red-500">
+                  <span className="text-xs text-red-500">
                     {chat.dataCorrupted
                       ? 'Failed to decrypt: corrupted data'
                       : 'Failed to decrypt: wrong key'}
-                  </div>
+                  </span>
                 ) : messageCount > 0 && timestamp ? (
-                  <div className="text-xs leading-none text-content-muted">
+                  <span className="text-xs leading-none text-content-muted">
                     <span className="text-content-secondary">
                       {formatRelativeTime(createdAt ?? timestamp)}
                     </span>
                     {showUpdatedTime && (
                       <> · Updated {formatRelativeTime(timestamp)}</>
                     )}
-                  </div>
+                  </span>
                 ) : null}
                 {showSyncStatus && (
                   <>
@@ -430,10 +479,10 @@ export function ChatListItem({
                     ) : null}
                   </>
                 )}
-              </div>
+              </span>
             )}
           </>
-        </button>
+        </ChatSelectionControl>
       )}
 
       {!isEditing && (
@@ -441,6 +490,7 @@ export function ChatListItem({
           <div className="pointer-events-none hidden items-center opacity-0 transition-opacity md:flex md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100 md:group-hover:pointer-events-auto md:group-hover:opacity-100">
             {!chat.decryptionFailed && !chat.isBlankChat && (
               <button
+                type="button"
                 className={cn(
                   'mr-1 rounded p-1 transition-colors',
                   isDarkMode
@@ -456,6 +506,7 @@ export function ChatListItem({
             )}
             {!chat.isBlankChat && (
               <button
+                type="button"
                 className={cn(
                   'rounded p-1 transition-colors',
                   isDarkMode

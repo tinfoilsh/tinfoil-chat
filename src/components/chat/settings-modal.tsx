@@ -2138,6 +2138,7 @@ ${encryptionKey.replace('key_', '')}
                 isUsingPersonalization &&
                 hasUnsavedPersonalization && (
                   <button
+                    type="button"
                     onClick={handleSavePersonalization}
                     className="rounded-lg bg-brand-accent-dark px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
                   >
@@ -2145,7 +2146,9 @@ ${encryptionKey.replace('key_', '')}
                   </button>
                 )}
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
+                aria-label="Close settings"
                 className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat"
               >
                 <XMarkIcon className="h-5 w-5" />
@@ -2194,7 +2197,9 @@ ${encryptionKey.replace('key_', '')}
           {/* Close button */}
           <div className="flex h-14 items-center px-4">
             <button
+              type="button"
               onClick={() => setIsOpen(false)}
+              aria-label="Close settings"
               className="rounded-lg p-1.5 text-content-secondary transition-colors hover:bg-surface-chat"
             >
               <XMarkIcon className="h-5 w-5" />
