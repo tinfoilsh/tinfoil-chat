@@ -1,3 +1,4 @@
+import { getChatPath, getNewChatPath } from '@/utils/navigation'
 import { useRouter } from 'next/router'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -39,9 +40,7 @@ export function useChatRouter(): UseChatRouterReturn {
   const updateUrlForChat = useCallback((chatId: string, projectId?: string) => {
     if (typeof window === 'undefined') return
 
-    const newPath = projectId
-      ? `/project/${projectId}/chat/${chatId}`
-      : `/chat/${chatId}`
+    const newPath = getChatPath(chatId, { projectId })
 
     if (window.location.pathname !== newPath) {
       window.history.replaceState(
@@ -55,7 +54,7 @@ export function useChatRouter(): UseChatRouterReturn {
   const updateUrlForLocalChat = useCallback((chatId: string) => {
     if (typeof window === 'undefined') return
 
-    const newPath = `/chat/local/${chatId}`
+    const newPath = getChatPath(chatId, { isLocalOnly: true })
 
     if (window.location.pathname !== newPath) {
       window.history.replaceState(
@@ -69,7 +68,7 @@ export function useChatRouter(): UseChatRouterReturn {
   const updateUrlForProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
 
-    const newPath = `/project/${projectId}`
+    const newPath = getNewChatPath(projectId)
 
     if (window.location.pathname !== newPath) {
       window.history.replaceState(

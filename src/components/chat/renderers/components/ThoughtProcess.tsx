@@ -398,9 +398,12 @@ export const ThoughtProcess = memo(function ThoughtProcess({
                     )
                   }
                 }
+                if (!href) {
+                  return <span>{children}</span>
+                }
                 return (
                   <a
-                    href={href ? sanitizeUrl(href) : undefined}
+                    href={sanitizeUrl(href)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-500 underline hover:text-blue-600"

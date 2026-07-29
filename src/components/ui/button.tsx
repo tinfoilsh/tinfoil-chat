@@ -81,6 +81,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       back = false,
       chevron = false,
       children,
+      type,
       ...props
     },
     ref,
@@ -93,6 +94,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           chevron && 'group/button',
         )}
         ref={ref}
+        type={asChild ? type : (type ?? 'button')}
         {...props}
       >
         {chevron ? (

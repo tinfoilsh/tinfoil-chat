@@ -141,7 +141,7 @@ export function QuoteSelectionPopover({
   return (
     <div
       ref={popoverRef}
-      role="dialog"
+      role="toolbar"
       aria-label="Selection actions"
       style={{
         position: 'fixed',

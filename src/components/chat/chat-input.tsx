@@ -760,6 +760,7 @@ export function ChatInput({
                 >
                   {removeDocument && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         removeDocument(doc.id)

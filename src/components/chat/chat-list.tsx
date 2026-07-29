@@ -35,6 +35,7 @@ interface ChatListProps {
   isDraggable?: boolean
   showMoveToProject?: boolean
   projects?: ProjectOption[]
+  getChatHref?: (chat: ChatItemData) => string | undefined
   onSelectChat: (chatId: string) => void
   onAfterSelect?: () => void
   onUpdateTitle?: (chatId: string, title: string) => void
@@ -70,6 +71,7 @@ export function ChatList({
   isDraggable = false,
   showMoveToProject = false,
   projects = [],
+  getChatHref,
   onSelectChat,
   onAfterSelect,
   onUpdateTitle,
@@ -223,6 +225,7 @@ export function ChatList({
                   !chat.decryptionFailed
                 }
                 projects={projects}
+                href={getChatHref?.(chat)}
                 onSelect={() => handleSelect(chat)}
                 onStartEdit={() => handleStartEdit(chat)}
                 onTitleChange={setEditingTitle}

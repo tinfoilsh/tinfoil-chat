@@ -497,30 +497,23 @@ function PresetDetail({
                 className="w-full rounded-md border border-border-subtle bg-surface-chat-background px-2 py-0.5 text-base font-semibold text-content-primary outline-none focus:border-brand-accent-dark/40 dark:focus:border-brand-accent-light/40"
               />
             ) : (
-              <h3
-                className={cn(
-                  'line-clamp-2 rounded-md px-1.5 py-0.5 text-base font-semibold text-content-primary md:truncate',
-                  !preset.isBuiltIn && 'cursor-text hover:bg-surface-chat',
+              <h3 className="line-clamp-2 rounded-md px-1.5 py-0.5 text-base font-semibold text-content-primary md:truncate">
+                {preset.isBuiltIn ? (
+                  preset.name
+                ) : (
+                  <button
+                    type="button"
+                    aria-label="Rename prompt"
+                    title="Click to rename"
+                    onClick={() => {
+                      setNameDraft(preset.name)
+                      setIsEditingName(true)
+                    }}
+                    className="max-w-full cursor-text rounded-md text-left hover:bg-surface-chat"
+                  >
+                    {preset.name}
+                  </button>
                 )}
-                title={preset.isBuiltIn ? undefined : 'Click to rename'}
-                role={preset.isBuiltIn ? undefined : 'button'}
-                tabIndex={preset.isBuiltIn ? undefined : 0}
-                aria-label={preset.isBuiltIn ? undefined : 'Rename prompt'}
-                onClick={() => {
-                  if (preset.isBuiltIn) return
-                  setNameDraft(preset.name)
-                  setIsEditingName(true)
-                }}
-                onKeyDown={(e) => {
-                  if (preset.isBuiltIn) return
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setNameDraft(preset.name)
-                    setIsEditingName(true)
-                  }
-                }}
-              >
-                {preset.name}
               </h3>
             )}
             {preset.description && (

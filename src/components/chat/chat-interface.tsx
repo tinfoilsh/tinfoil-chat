@@ -71,6 +71,7 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import { isProbablyTextFile, isSupportedFile } from '@/utils/file-types'
+import { getNewChatPath, isPlainPrimaryClick } from '@/utils/navigation'
 import {
   getProjectUploadPreference,
   setProjectUploadPreference,
@@ -2649,15 +2650,12 @@ export function ChatInterface({
           <p className="mb-6 text-content-secondary">
             This local chat may have been deleted from your browser.
           </p>
-          <button
-            onClick={() => {
-              clearUrl()
-              window.location.href = '/'
-            }}
+          <Link
+            href="/"
             className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90"
           >
             Start new chat
-          </button>
+          </Link>
         </div>
       </div>
     )
@@ -2679,15 +2677,12 @@ export function ChatInterface({
           <p className="mb-6 text-content-secondary">
             This chat may have been deleted or is no longer available.
           </p>
-          <button
-            onClick={() => {
-              clearUrl()
-              window.location.href = '/'
-            }}
+          <Link
+            href="/"
             className="rounded-lg bg-brand-accent-dark px-6 py-2.5 text-white transition-colors hover:bg-brand-accent-dark/90"
           >
             Start new chat
-          </button>
+          </Link>
         </div>
       </div>
     )
@@ -2735,15 +2730,12 @@ export function ChatInterface({
             >
               Try again
             </button>
-            <button
-              onClick={() => {
-                clearUrl()
-                window.location.href = '/'
-              }}
+            <Link
+              href="/"
               className="rounded-lg border border-border-subtle px-6 py-2.5 text-content-primary transition-colors hover:bg-surface-chat"
             >
               Start new chat
-            </button>
+            </Link>
           </div>
         </div>
       </div>
@@ -2908,14 +2900,18 @@ export function ChatInterface({
           {windowWidth < CONSTANTS.MOBILE_BREAKPOINT &&
             currentChat?.messages &&
             currentChat.messages.length > 0 && (
-              <button
-                type="button"
-                onClick={() => createNewChat()}
+              <Link
+                href={getNewChatPath(activeProject?.id)}
+                onClick={(e) => {
+                  if (!isPlainPrimaryClick(e)) return
+                  e.preventDefault()
+                  createNewChat()
+                }}
                 className="flex items-center justify-center rounded-lg border border-border-subtle bg-surface-chat-background p-2.5 text-content-secondary transition-all duration-200 hover:bg-surface-chat hover:text-content-primary"
                 aria-label="New chat"
               >
                 <PiNotePencilLight className="h-4 w-4" />
-              </button>
+              </Link>
             )}
 
           {canToggleTemporaryChat(currentChat) &&

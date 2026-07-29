@@ -19,6 +19,11 @@ import { UI_EXPAND_PROJECT_DOCUMENTS } from '@/constants/storage-keys'
 import { toast } from '@/hooks/use-toast'
 import type { Fact } from '@/types/memory'
 import type { Project } from '@/types/project'
+import {
+  getChatPath,
+  getNewChatPath,
+  isPlainPrimaryClick,
+} from '@/utils/navigation'
 import { useAuth } from '@clerk/nextjs'
 import {
   ArrowLeftIcon,
@@ -34,13 +39,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { AnimatePresence, motion } from 'framer-motion'
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BsFile,
   BsFiletypeCss,
@@ -609,36 +608,7 @@ export function ProjectSidebar({
     }
   }, [onNewChat, windowWidth, setIsOpen])
 
-  const newChatHref = projectId ? `/project/${projectId}` : '/newchat'
-
-  const openNewChatInNewTab = useCallback(() => {
-    window.open(newChatHref, '_blank', 'noopener,noreferrer')
-  }, [newChatHref])
-
-  // The New chat control is a button for parity with the other sidebar
-  // actions; modifier clicks still open a new tab so the link affordance is
-  // preserved, otherwise the plain click runs the in-app handler.
-  const handleNewChatButtonClick = useCallback(
-    (e: ReactMouseEvent<HTMLButtonElement>, action: () => void) => {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
-        openNewChatInNewTab()
-        return
-      }
-      action()
-    },
-    [openNewChatInNewTab],
-  )
-
-  // onClick never fires for the middle button, so open the new tab
-  // explicitly to guarantee middle-click "open in new tab" works.
-  const handleNewChatAuxClick = useCallback(
-    (e: ReactMouseEvent<HTMLButtonElement>) => {
-      if (e.button !== 1) return
-      e.preventDefault()
-      openNewChatInNewTab()
-    },
-    [openNewChatInNewTab],
-  )
+  const newChatHref = getNewChatPath(projectId)
 
   const handleRemoveDocument = useCallback(
     async (docId: string) => {
@@ -744,10 +714,13 @@ export function ProjectSidebar({
           <div className="flex flex-col items-center gap-1 px-2">
             {/* New chat button */}
             <div className="group relative">
-              <button
-                type="button"
-                onClick={(e) => handleNewChatButtonClick(e, onNewChat)}
-                onAuxClick={handleNewChatAuxClick}
+              <Link
+                href={newChatHref}
+                onClick={(e) => {
+                  if (!isPlainPrimaryClick(e)) return
+                  e.preventDefault()
+                  onNewChat()
+                }}
                 className={cn(
                   'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
                   'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
@@ -755,7 +728,7 @@ export function ProjectSidebar({
                 aria-label="New chat"
               >
                 <PiNotePencilLight className="h-5 w-5" />
-              </button>
+              </Link>
               <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                 New chat{' '}
                 <span className="text-content-muted">
@@ -784,16 +757,7 @@ export function ProjectSidebar({
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              title="Home"
-              className="flex items-center"
-              onAuxClick={(e) => {
-                if (e.button !== 1) return
-                e.preventDefault()
-                window.open('/', '_blank', 'noopener,noreferrer')
-              }}
-            >
+            <Link href="/" title="Home" className="flex items-center">
               <Logo className="h-6 w-auto" dark={isDarkMode} />
             </Link>
             {/* Settings button */}
@@ -801,6 +765,7 @@ export function ProjectSidebar({
               <button
                 type="button"
                 onClick={onSettingsClick}
+                aria-label="Settings"
                 className="rounded p-1.5 text-content-muted transition-all duration-200 hover:text-content-secondary"
               >
                 <Cog6ToothIcon className="h-5 w-5" />
@@ -919,23 +884,26 @@ export function ProjectSidebar({
                 </form>
               ) : project ? (
                 <>
-                  <div
-                    className="group flex cursor-pointer items-center gap-2"
-                    onClick={() => setIsEditingProjectName(true)}
-                  >
-                    <h2 className="truncate font-aeonik text-lg font-semibold text-content-primary">
-                      {isAnimatingName ? (
-                        <TypingAnimation
-                          fromText={animationFromName}
-                          toText={animationToName}
-                          onComplete={handleNameAnimationComplete}
-                        />
-                      ) : (
-                        displayProjectName
-                      )}
-                    </h2>
-                    <PencilSquareIcon className="h-4 w-4 text-content-muted opacity-0 transition-opacity group-hover:opacity-100" />
-                  </div>
+                  <h2 className="font-aeonik text-lg font-semibold text-content-primary">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingProjectName(true)}
+                      className="group flex max-w-full items-center gap-2 text-left"
+                    >
+                      <span className="truncate">
+                        {isAnimatingName ? (
+                          <TypingAnimation
+                            fromText={animationFromName}
+                            toText={animationToName}
+                            onComplete={handleNameAnimationComplete}
+                          />
+                        ) : (
+                          displayProjectName
+                        )}
+                      </span>
+                      <PencilSquareIcon className="h-4 w-4 shrink-0 text-content-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                    </button>
+                  </h2>
                   <p className="mt-0.5 font-aeonik-fono text-xs text-content-muted">
                     Updated {formatRelativeTime(new Date(project.updatedAt))}
                   </p>
@@ -946,34 +914,46 @@ export function ProjectSidebar({
 
           {/* New Chat button */}
           <div className="relative z-10 mt-3 flex-none px-2 py-2">
-            <button
-              type="button"
-              aria-disabled={!currentChatId}
-              onClick={(e) =>
-                handleNewChatButtonClick(e, () => {
-                  if (!currentChatId) return
+            {!currentChatId ? (
+              <button
+                type="button"
+                disabled
+                className="flex w-full cursor-default items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-2 text-sm text-content-muted"
+              >
+                <span className="flex items-center gap-2">
+                  <PiNotePencilLight className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">New chat</span>
+                </span>
+                <span className="text-xs text-content-muted">
+                  {modKey}
+                  {isMac ? '⇧' : 'Shift+'}O
+                </span>
+              </button>
+            ) : (
+              <Link
+                href={newChatHref}
+                onClick={(e) => {
+                  if (!isPlainPrimaryClick(e)) return
+                  e.preventDefault()
                   handleNewChat()
-                })
-              }
-              onAuxClick={handleNewChatAuxClick}
-              className={cn(
-                'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
-                !currentChatId
-                  ? 'cursor-default border-transparent bg-transparent text-content-muted'
-                  : isDarkMode
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
+                  isDarkMode
                     ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
                     : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <PiNotePencilLight className="h-4 w-4" />
-                <span className="font-aeonik font-medium">New chat</span>
-              </span>
-              <span className="text-xs text-content-muted">
-                {modKey}
-                {isMac ? '⇧' : 'Shift+'}O
-              </span>
-            </button>
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <PiNotePencilLight className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">New chat</span>
+                </span>
+                <span className="text-xs text-content-muted">
+                  {modKey}
+                  {isMac ? '⇧' : 'Shift+'}O
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Project Settings Dropdown */}
@@ -1231,12 +1211,14 @@ export function ProjectSidebar({
                     )}
                   >
                     {/* Drag and drop zone - at top */}
-                    <div
+                    <button
+                      type="button"
                       onClick={() =>
                         !contextLoading && fileInputRef.current?.click()
                       }
+                      disabled={contextLoading}
                       className={cn(
-                        'flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
+                        'flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 transition-colors',
                         contextLoading
                           ? 'cursor-not-allowed opacity-50'
                           : 'cursor-pointer',
@@ -1263,15 +1245,15 @@ export function ProjectSidebar({
                       {projectDocuments.length === 0 &&
                         contextUploadingFiles.length === 0 && (
                           <>
-                            <p className="text-center font-aeonik-fono text-xs text-content-muted">
+                            <span className="text-center font-aeonik-fono text-xs text-content-muted">
                               Click to upload
-                            </p>
-                            <p className="mt-1 text-center font-aeonik-fono text-[10px] text-content-muted">
+                            </span>
+                            <span className="mt-1 text-center font-aeonik-fono text-[10px] text-content-muted">
                               PDF, TXT, MD, DOCX, XLSX, PPTX, HTML, CSV, images
-                            </p>
+                            </span>
                           </>
                         )}
-                    </div>
+                    </button>
 
                     {/* Document list */}
                     {(projectDocuments.length > 0 ||
@@ -1335,8 +1317,10 @@ export function ProjectSidebar({
                               </div>
                             </div>
                             <button
+                              type="button"
                               onClick={() => handleRemoveDocument(doc.id)}
                               disabled={contextLoading}
+                              aria-label={`Remove ${doc.filename}`}
                               className={cn(
                                 'rounded p-0.5 transition-colors',
                                 isDarkMode
@@ -1416,6 +1400,11 @@ export function ProjectSidebar({
               isDraggable={!!onRemoveChatFromProject}
               showMoveToProject={!!onMoveChatToProject && projects.length > 0}
               projects={projects.filter((p) => p.id !== project?.id)}
+              getChatHref={(chat) =>
+                chat.isBlankChat || !projectId
+                  ? undefined
+                  : getChatPath(chat.id, { projectId })
+              }
               onSelectChat={(chatId) => {
                 if (chatId.startsWith('blank-') || chatId === '') {
                   handleNewChat()

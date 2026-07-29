@@ -389,9 +389,8 @@ export function ArtifactPreviewPanel({
 
 /**
  * Full-width inline card shown in the chat scroll. The row itself is a
- * single click target that toggles the artifact sidebar. The download
- * button lives inside the row but stops propagation so the sidebar
- * doesn't toggle when the user just wants to save the file.
+ * single click target that toggles the artifact sidebar, with a separate
+ * download action beside it.
  */
 function ArtifactPreviewInlineCard({
   title,
@@ -408,36 +407,29 @@ function ArtifactPreviewInlineCard({
   const displayTitle = title ?? getSourceLabel(source)
   const subtitle = description ?? getSourceLabel(source)
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => openArtifactPreviewSidebar(detail)}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          openArtifactPreviewSidebar(detail)
-        }
-      }}
-      className="my-3 flex w-full cursor-pointer items-center gap-4 rounded-lg border border-border-subtle bg-surface-card px-4 py-4 text-left transition-colors hover:bg-surface-chat-background"
-    >
-      <FileText
-        className="h-6 w-6 flex-shrink-0 text-content-muted"
-        aria-hidden
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium text-content-primary">
-          {displayTitle}
-        </span>
-        <span className="truncate text-xs text-content-muted">{subtitle}</span>
-      </div>
+    <div className="my-3 flex w-full items-center rounded-lg border border-border-subtle bg-surface-card text-left transition-colors hover:bg-surface-chat-background">
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          downloadArtifact(source, title)
-        }}
-        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-card"
+        onClick={() => openArtifactPreviewSidebar(detail)}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 self-stretch px-4 py-4 text-left"
+      >
+        <FileText
+          className="h-6 w-6 flex-shrink-0 text-content-muted"
+          aria-hidden
+        />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium text-content-primary">
+            {displayTitle}
+          </span>
+          <span className="truncate text-xs text-content-muted">
+            {subtitle}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => downloadArtifact(source, title)}
+        className="mr-4 inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-xs font-medium text-content-primary transition-colors hover:bg-surface-card"
         aria-label="Download artifact"
       >
         <Download className="h-3.5 w-3.5" />

@@ -63,6 +63,11 @@ import { useCloudPagination } from '@/hooks/use-cloud-pagination'
 
 import { useChatSearch } from '@/hooks/use-chat-search'
 import { logError } from '@/utils/error-handling'
+import {
+  getChatPath,
+  getNewChatPath,
+  isPlainPrimaryClick,
+} from '@/utils/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '../link'
 import { Logo } from '../logo'
@@ -839,19 +844,12 @@ export function ChatSidebar({
             <div className="flex flex-col items-center gap-1 px-2">
               {/* New chat button */}
               <div className="group relative">
-                <button
-                  type="button"
+                <Link
+                  href="/newchat"
                   onClick={(e) => {
-                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
-                      window.open('/newchat', '_blank', 'noopener,noreferrer')
-                      return
-                    }
-                    createNewChat(activeTab === 'local', true)
-                  }}
-                  onAuxClick={(e) => {
-                    if (e.button !== 1) return
+                    if (!isPlainPrimaryClick(e)) return
                     e.preventDefault()
-                    window.open('/newchat', '_blank', 'noopener,noreferrer')
+                    createNewChat(activeTab === 'local', true)
                   }}
                   className={cn(
                     'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
@@ -860,7 +858,7 @@ export function ChatSidebar({
                   aria-label="New chat"
                 >
                   <PiNotePencilLight className="h-5 w-5" />
-                </button>
+                </Link>
                 <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                   New chat{' '}
                   <span className="text-content-muted">
@@ -976,16 +974,7 @@ export function ChatSidebar({
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              title="Home"
-              className="flex items-center"
-              onAuxClick={(e) => {
-                if (e.button !== 1) return
-                e.preventDefault()
-                window.open('/', '_blank', 'noopener,noreferrer')
-              }}
-            >
+            <Link href="/" title="Home" className="flex items-center">
               <Logo className="h-6 w-auto" dark={isDarkMode} />
             </Link>
             {/* Settings button */}
@@ -1174,64 +1163,59 @@ export function ChatSidebar({
 
           {/* New Chat button */}
           <div className="relative z-10 flex-none px-2 py-2">
-            <button
-              type="button"
-              aria-disabled={currentChat?.isBlankChat}
-              onClick={(e) => {
-                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
-                  window.open('/newchat', '_blank', 'noopener,noreferrer')
-                  return
-                }
-                if (currentChat?.isBlankChat) return
-                createNewChat(activeTab === 'local', true)
-              }}
-              onAuxClick={(e) => {
-                if (e.button !== 1) return
-                e.preventDefault()
-                window.open('/newchat', '_blank', 'noopener,noreferrer')
-              }}
-              className={cn(
-                'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
-                currentChat?.isBlankChat
-                  ? 'cursor-default border-transparent bg-transparent text-content-muted'
-                  : isDarkMode
+            {currentChat?.isBlankChat ? (
+              <button
+                type="button"
+                disabled
+                className="flex w-full cursor-default items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-2 text-sm text-content-muted"
+              >
+                <span className="flex items-center gap-2">
+                  <PiNotePencilLight className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">New chat</span>
+                </span>
+                <span className="text-xs text-content-muted">
+                  {modKey}
+                  {isMac ? '⇧' : 'Shift+'}O
+                </span>
+              </button>
+            ) : (
+              <Link
+                href="/newchat"
+                onClick={(e) => {
+                  if (!isPlainPrimaryClick(e)) return
+                  e.preventDefault()
+                  createNewChat(activeTab === 'local', true)
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-lg border px-2 py-2 text-sm transition-colors',
+                  isDarkMode
                     ? 'border-border-strong bg-surface-chat text-content-primary hover:bg-surface-chat/80'
                     : 'border-border-subtle bg-white text-content-primary hover:bg-gray-50',
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <PiNotePencilLight className="h-4 w-4" />
-                <span className="font-aeonik font-medium">New chat</span>
-              </span>
-              <span className="text-xs text-content-muted">
-                {modKey}
-                {isMac ? '⇧' : 'Shift+'}O
-              </span>
-            </button>
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <PiNotePencilLight className="h-4 w-4" />
+                  <span className="font-aeonik font-medium">New chat</span>
+                </span>
+                <span className="text-xs text-content-muted">
+                  {modKey}
+                  {isMac ? '⇧' : 'Shift+'}O
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Projects dropdown - show for premium users */}
           {isSignedIn && isPremium && (
             <div className="relative z-10 flex-none border-t border-border-subtle">
-              <div
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
                 aria-expanded={isProjectsExpanded}
                 onClick={() => {
                   const newExpanded = !isProjectsExpanded
                   setIsProjectsExpanded(newExpanded)
                   if (newExpanded && projects.length === 0) {
                     refreshProjects()
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    const newExpanded = !isProjectsExpanded
-                    setIsProjectsExpanded(newExpanded)
-                    if (newExpanded && projects.length === 0) {
-                      refreshProjects()
-                    }
                   }
                 }}
                 onDragOver={(e) => {
@@ -1286,14 +1270,14 @@ export function ChatSidebar({
                       : 'Projects'}
                   </span>
                 </span>
-                <div className="flex items-center gap-1">
+                <span className="flex items-center gap-1">
                   {isProjectsExpanded ? (
                     <ChevronDownIcon className="h-4 w-4" />
                   ) : (
                     <ChevronRightIcon className="h-4 w-4" />
                   )}
-                </div>
-              </div>
+                </span>
+              </button>
 
               {/* Expanded projects list */}
               <AnimatePresence initial={false}>
@@ -1377,32 +1361,115 @@ export function ChatSidebar({
                             </div>
                           ) : (
                             <>
-                              {projects.map((project) => (
-                                <div
-                                  key={project.id}
-                                  role="button"
-                                  tabIndex={project.decryptionFailed ? -1 : 0}
-                                  onClick={async () => {
-                                    if (project.decryptionFailed) return
-
-                                    if (onEnterProject) {
-                                      await onEnterProject(
-                                        project.id,
-                                        project.name,
-                                      )
-                                    }
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (
-                                      (e.key === 'Enter' || e.key === ' ') &&
-                                      onEnterProject &&
-                                      !project.decryptionFailed
-                                    ) {
-                                      e.preventDefault()
-                                      onEnterProject(project.id, project.name)
-                                    }
-                                  }}
-                                  onDragOver={(e) => {
+                              {projects.map((project) => {
+                                const projectContent = (
+                                  <>
+                                    {project.decryptionFailed ? (
+                                      <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
+                                    ) : (
+                                      <FolderIcon
+                                        className={cn(
+                                          'mt-0.5 h-4 w-4 shrink-0 self-start',
+                                          !getProjectColor(project.color) &&
+                                            'text-content-muted',
+                                        )}
+                                        style={
+                                          getProjectColor(project.color)
+                                            ? {
+                                                color: getProjectColor(
+                                                  project.color,
+                                                )!.hex,
+                                              }
+                                            : undefined
+                                        }
+                                      />
+                                    )}
+                                    <div className="flex min-w-0 flex-1 flex-col text-left">
+                                      <span
+                                        className={cn(
+                                          'truncate leading-5',
+                                          project.decryptionFailed &&
+                                            'text-orange-500',
+                                        )}
+                                      >
+                                        {project.name}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          'text-xs',
+                                          project.decryptionFailed
+                                            ? 'text-red-500'
+                                            : 'text-content-muted',
+                                        )}
+                                      >
+                                        {project.decryptionFailed
+                                          ? 'Failed to decrypt: wrong key'
+                                          : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
+                                      </span>
+                                    </div>
+                                    {project.decryptionFailed && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          if (deletingProjectId === project.id)
+                                            return
+                                          setDeletingProjectId(project.id)
+                                          try {
+                                            await deleteProject(project.id)
+                                            await refreshProjects()
+                                          } catch (error) {
+                                            toast({
+                                              title: 'Failed to delete project',
+                                              description:
+                                                error instanceof Error
+                                                  ? error.message
+                                                  : 'Please try again.',
+                                              variant: 'destructive',
+                                            })
+                                          } finally {
+                                            setDeletingProjectId(null)
+                                          }
+                                        }}
+                                        disabled={
+                                          deletingProjectId === project.id
+                                        }
+                                        className={cn(
+                                          'shrink-0 rounded p-1 transition-colors',
+                                          isDarkMode
+                                            ? 'text-content-muted hover:bg-surface-chat hover:text-white'
+                                            : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
+                                          deletingProjectId === project.id &&
+                                            'opacity-50',
+                                        )}
+                                        aria-label="Delete encrypted project"
+                                        title="Delete encrypted project"
+                                      >
+                                        {deletingProjectId === project.id ? (
+                                          <PiSpinner className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <TrashIcon className="h-4 w-4" />
+                                        )}
+                                      </button>
+                                    )}
+                                  </>
+                                )
+                                const projectClassName = cn(
+                                  'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
+                                  dropTargetProjectId === project.id
+                                    ? isDarkMode
+                                      ? 'border-white/30 bg-white/10'
+                                      : 'border-gray-400 bg-gray-200/30'
+                                    : 'border-transparent hover:border-border-subtle',
+                                  project.decryptionFailed
+                                    ? 'cursor-default'
+                                    : isDarkMode
+                                      ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
+                                      : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
+                                )
+                                const projectDragHandlers = {
+                                  onDragOver: (
+                                    e: React.DragEvent<HTMLElement>,
+                                  ) => {
                                     if (
                                       e.dataTransfer.types.includes(
                                         'application/x-chat-id',
@@ -1413,8 +1480,10 @@ export function ChatSidebar({
                                       e.dataTransfer.dropEffect = 'move'
                                       setDropTargetProject(project.id)
                                     }
-                                  }}
-                                  onDragEnter={(e) => {
+                                  },
+                                  onDragEnter: (
+                                    e: React.DragEvent<HTMLElement>,
+                                  ) => {
                                     if (
                                       e.dataTransfer.types.includes(
                                         'application/x-chat-id',
@@ -1438,8 +1507,10 @@ export function ChatSidebar({
                                         400,
                                       )
                                     }
-                                  }}
-                                  onDragLeave={(e) => {
+                                  },
+                                  onDragLeave: (
+                                    e: React.DragEvent<HTMLElement>,
+                                  ) => {
                                     // Only clear if actually leaving the button (not just moving between children)
                                     if (
                                       !e.currentTarget.contains(
@@ -1456,8 +1527,10 @@ export function ChatSidebar({
                                         projectHoverTimerRef.current = null
                                       }
                                     }
-                                  }}
-                                  onDrop={async (e) => {
+                                  },
+                                  onDrop: async (
+                                    e: React.DragEvent<HTMLElement>,
+                                  ) => {
                                     e.preventDefault()
                                     if (projectHoverTimerRef.current) {
                                       clearTimeout(projectHoverTimerRef.current)
@@ -1487,109 +1560,45 @@ export function ChatSidebar({
                                       )
                                     }
                                     clearDragState()
-                                  }}
-                                  className={cn(
-                                    'group flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
-                                    dropTargetProjectId === project.id
-                                      ? isDarkMode
-                                        ? 'border-white/30 bg-white/10'
-                                        : 'border-gray-400 bg-gray-200/30'
-                                      : 'border-transparent hover:border-border-subtle',
-                                    project.decryptionFailed
-                                      ? 'cursor-default'
-                                      : isDarkMode
-                                        ? 'cursor-pointer text-content-secondary hover:bg-surface-chat'
-                                        : 'cursor-pointer text-content-secondary hover:bg-surface-sidebar',
-                                  )}
-                                >
-                                  {project.decryptionFailed ? (
-                                    <FaLock className="mt-0.5 h-4 w-4 shrink-0 self-start text-orange-500" />
-                                  ) : (
-                                    <FolderIcon
-                                      className={cn(
-                                        'mt-0.5 h-4 w-4 shrink-0 self-start',
-                                        !getProjectColor(project.color) &&
-                                          'text-content-muted',
-                                      )}
-                                      style={
-                                        getProjectColor(project.color)
-                                          ? {
-                                              color: getProjectColor(
-                                                project.color,
-                                              )!.hex,
-                                            }
-                                          : undefined
-                                      }
-                                    />
-                                  )}
-                                  <div className="flex min-w-0 flex-1 flex-col text-left">
-                                    <span
-                                      className={cn(
-                                        'truncate leading-5',
-                                        project.decryptionFailed &&
-                                          'text-orange-500',
-                                      )}
+                                  },
+                                }
+
+                                if (project.decryptionFailed) {
+                                  return (
+                                    <div
+                                      key={project.id}
+                                      className={projectClassName}
                                     >
-                                      {project.name}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        'text-xs',
-                                        project.decryptionFailed
-                                          ? 'text-red-500'
-                                          : 'text-content-muted',
-                                      )}
-                                    >
-                                      {project.decryptionFailed
-                                        ? 'Failed to decrypt: wrong key'
-                                        : `Updated ${formatRelativeTime(new Date(project.updatedAt))}`}
-                                    </span>
-                                  </div>
-                                  {project.decryptionFailed && (
-                                    <button
-                                      onClick={async (e) => {
-                                        e.stopPropagation()
-                                        if (deletingProjectId === project.id)
-                                          return
-                                        setDeletingProjectId(project.id)
-                                        try {
-                                          await deleteProject(project.id)
-                                          await refreshProjects()
-                                        } catch (error) {
-                                          toast({
-                                            title: 'Failed to delete project',
-                                            description:
-                                              error instanceof Error
-                                                ? error.message
-                                                : 'Please try again.',
-                                            variant: 'destructive',
-                                          })
-                                        } finally {
-                                          setDeletingProjectId(null)
-                                        }
-                                      }}
-                                      disabled={
-                                        deletingProjectId === project.id
-                                      }
-                                      className={cn(
-                                        'shrink-0 rounded p-1 transition-colors',
-                                        isDarkMode
-                                          ? 'text-content-muted hover:bg-surface-chat hover:text-white'
-                                          : 'text-content-muted hover:bg-surface-sidebar hover:text-content-secondary',
-                                        deletingProjectId === project.id &&
-                                          'opacity-50',
-                                      )}
-                                      title="Delete encrypted project"
-                                    >
-                                      {deletingProjectId === project.id ? (
-                                        <PiSpinner className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <TrashIcon className="h-4 w-4" />
-                                      )}
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
+                                      {projectContent}
+                                    </div>
+                                  )
+                                }
+
+                                return (
+                                  <Link
+                                    key={project.id}
+                                    href={getNewChatPath(project.id)}
+                                    prefetch={false}
+                                    draggable={false}
+                                    onClick={(e) => {
+                                      if (
+                                        !isPlainPrimaryClick(e) ||
+                                        !onEnterProject
+                                      )
+                                        return
+                                      e.preventDefault()
+                                      void onEnterProject(
+                                        project.id,
+                                        project.name,
+                                      )
+                                    }}
+                                    className={projectClassName}
+                                    {...projectDragHandlers}
+                                  >
+                                    {projectContent}
+                                  </Link>
+                                )
+                              })}
 
                               {/* Load more button */}
                               {hasMoreProjects && (
@@ -1627,17 +1636,6 @@ export function ChatSidebar({
             )}
           >
             <div
-              role="button"
-              tabIndex={0}
-              aria-expanded={isChatHistoryExpanded}
-              aria-label="Chats"
-              onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  setIsChatHistoryExpanded(!isChatHistoryExpanded)
-                }
-              }}
               onDragOver={(e) => {
                 const chatId = e.dataTransfer.types.includes(
                   'application/x-chat-id',
@@ -1670,7 +1668,7 @@ export function ChatSidebar({
                 clearDragState()
               }}
               className={cn(
-                'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                'relative flex w-full items-center bg-surface-sidebar text-sm transition-colors',
                 isDropTargetChatHistory
                   ? isDarkMode
                     ? 'border border-white/30 bg-white/10'
@@ -1678,38 +1676,43 @@ export function ChatSidebar({
                   : 'text-content-secondary',
               )}
             >
-              <span className="flex items-center gap-2">
-                <IoChatbubblesOutline className="h-4 w-4" />
-                <span className="truncate font-aeonik font-medium">Chats</span>
-              </span>
-              <div className="flex items-center gap-1">
-                {isSignedIn && cloudSyncEnabled && onManualSync && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (isSyncing) return
-                      void onManualSync()
-                    }}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    disabled={isSyncing}
-                    aria-label="Sync chats"
-                    title="Sync chats"
-                    className="rounded p-1 text-content-muted transition-colors hover:text-content-secondary disabled:cursor-default disabled:opacity-60"
-                  >
-                    {isSyncing ? (
-                      <PiSpinner className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <GoSync className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
+              <button
+                type="button"
+                aria-expanded={isChatHistoryExpanded}
+                onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
+                className="flex w-full items-center justify-between px-4 py-3 text-left"
+              >
+                <span className="flex items-center gap-2">
+                  <IoChatbubblesOutline className="h-4 w-4" />
+                  <span className="truncate font-aeonik font-medium">
+                    Chats
+                  </span>
+                </span>
                 {isChatHistoryExpanded ? (
                   <ChevronDownIcon className="h-4 w-4" />
                 ) : (
                   <ChevronRightIcon className="h-4 w-4" />
                 )}
-              </div>
+              </button>
+              {isSignedIn && cloudSyncEnabled && onManualSync && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSyncing) return
+                    void onManualSync()
+                  }}
+                  disabled={isSyncing}
+                  aria-label="Sync chats"
+                  title="Sync chats"
+                  className="absolute right-9 rounded p-1 text-content-muted transition-colors hover:text-content-secondary disabled:cursor-default disabled:opacity-60"
+                >
+                  {isSyncing ? (
+                    <PiSpinner className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <GoSync className="h-4 w-4" />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Expanded Chats content */}
@@ -2062,6 +2065,13 @@ export function ChatSidebar({
                         isPremium &&
                         cloudSyncEnabled &&
                         !!onMoveChatToProject
+                      }
+                      getChatHref={(chat) =>
+                        chat.isBlankChat
+                          ? undefined
+                          : getChatPath(chat.id, {
+                              isLocalOnly: chat.isLocalOnly,
+                            })
                       }
                       onSelectChat={
                         isSearchActive
