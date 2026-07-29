@@ -172,12 +172,7 @@ export class UploadCoalescer {
         const idempotencyKey = newIdempotencyKey()
 
         try {
-          await this.uploadWithRetry(
-            chatId,
-            state,
-            idempotencyKey,
-            workerGeneration,
-          )
+          await this.uploadWithRetry(chatId, idempotencyKey, workerGeneration)
           // Success - reset failure count
           state.failureCount = 0
           state.lastError = null
@@ -249,7 +244,6 @@ export class UploadCoalescer {
    */
   private async uploadWithRetry(
     chatId: string,
-    state: ChatUploadState,
     idempotencyKey: string,
     workerGeneration: number,
   ): Promise<void> {
@@ -303,12 +297,6 @@ export class UploadCoalescer {
 
         await this.scheduler.sleep(delay)
         if (workerGeneration !== this.generation) return
-
-        // Check if new changes came in during wait
-        if (state.dirty) {
-          // New changes - let the outer loop handle it with fresh data
-          return
-        }
       }
     }
 
