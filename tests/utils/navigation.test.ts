@@ -30,5 +30,8 @@ describe('navigation utilities', () => {
     expect(isPlainPrimaryClick(primaryClick)).toBe(true)
     expect(isPlainPrimaryClick({ ...primaryClick, button: 1 })).toBe(false)
     expect(isPlainPrimaryClick({ ...primaryClick, ctrlKey: true })).toBe(false)
+    expect(isPlainPrimaryClick({ ...primaryClick, metaKey: true })).toBe(false)
+    expect(isPlainPrimaryClick({ ...primaryClick, shiftKey: true })).toBe(false)
+    expect(isPlainPrimaryClick({ ...primaryClick, altKey: true })).toBe(false)
   })
 })

@@ -503,7 +503,7 @@ function PresetDetail({
                 ) : (
                   <button
                     type="button"
-                    aria-label="Rename prompt"
+                    aria-label={`Rename ${preset.name}`}
                     title="Click to rename"
                     onClick={() => {
                       setNameDraft(preset.name)
