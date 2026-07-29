@@ -712,7 +712,6 @@ ${generatedKey.replace('key_', '')}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pem"
             onChange={handleFileSelect}
             className="hidden"
           />
