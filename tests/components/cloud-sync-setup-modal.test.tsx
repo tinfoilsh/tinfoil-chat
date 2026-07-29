@@ -247,4 +247,17 @@ describe('CloudSyncSetupModal onboarding', () => {
       screen.queryByRole('heading', { name: 'Encrypted Backups & Sync' }),
     ).not.toBeInTheDocument()
   })
+
+  it('does not restrict the native recovery-key file picker', async () => {
+    render(<CloudSyncSetupModal {...baseProps} manualRecoveryNeeded />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Restore Encryption Key' }),
+    )
+    await screen.findByRole('heading', { name: 'Restore Encryption Key' })
+
+    const fileInput =
+      document.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(fileInput?.accept).toBe('')
+  })
 })
