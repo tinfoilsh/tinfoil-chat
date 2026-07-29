@@ -46,7 +46,7 @@ import {
 } from './sync-health'
 import { isUploadableChat, remoteWins } from './sync-predicates'
 import { SyncStatusCache } from './sync-status-cache'
-import { UploadCoalescer } from './upload-coalescer'
+import { UploadCoalescer, type UploadAttempt } from './upload-coalescer'
 
 export interface SyncResult {
   uploaded: number
@@ -96,7 +96,7 @@ export class CloudSyncService {
   private projectSyncCaches = new Map<string, SyncStatusCache<ChatSyncStatus>>()
 
   constructor() {
-    // Initialize upload coalescer with doBackupChat as the upload function
+    // Initialize upload coalescer with doBackupChat as the prepare function
     this.uploadCoalescer = new UploadCoalescer(
       (chatId, idempotencyKey) => this.doBackupChat(chatId, idempotencyKey),
       {
@@ -728,17 +728,27 @@ export class CloudSyncService {
     })
   }
 
+  /**
+   * Prepare one logical chat upload for the coalescer. Runs the
+   * eligibility checks, snapshots the chat, and returns a frozen
+   * attempt closure; the coalescer replays that closure on every
+   * retry so the enclave sees byte-identical plaintext under the
+   * same idempotency key (§9.6 R1). Re-reading the chat per retry
+   * instead would replay different bytes whenever the chat was
+   * edited between attempts, turning a committed-but-lost write
+   * into a 409 IDEMPOTENCY_CONFLICT. Returns null when there is
+   * nothing to upload.
+   */
   private async doBackupChat(
     chatId: string,
     idempotencyKey: string,
-  ): Promise<void> {
+  ): Promise<UploadAttempt | null> {
     const generation = this.accountGeneration
-    const startedAt = Date.now()
     try {
       if (!(await canWriteToCloud())) {
-        return
+        return null
       }
-      if (!this.isCurrentGeneration(generation)) return
+      if (!this.isCurrentGeneration(generation)) return null
 
       // Check if chat is currently streaming
       if (streamingTracker.isStreaming(chatId)) {
@@ -749,7 +759,7 @@ export class CloudSyncService {
             action: 'backupChat',
             metadata: { chatId },
           })
-          return
+          return null
         }
 
         logInfo('Chat is streaming, registering for sync after stream ends', {
@@ -777,13 +787,13 @@ export class CloudSyncService {
           this.backupChat(chatId)
         })
 
-        return
+        return null
       }
 
       const chat = await indexedDBStorage.getChat(chatId)
-      if (!this.isCurrentGeneration(generation)) return
+      if (!this.isCurrentGeneration(generation)) return null
       if (!chat) {
-        return // Chat might have been deleted
+        return null // Chat might have been deleted
       }
 
       // Use centralized predicate for upload eligibility
@@ -799,7 +809,7 @@ export class CloudSyncService {
             decryptionFailed: chat.decryptionFailed,
           },
         })
-        return
+        return null
       }
 
       // Double-check streaming status right before upload (in case it started during async ops)
@@ -809,91 +819,113 @@ export class CloudSyncService {
           action: 'backupChat',
           metadata: { chatId },
         })
-        return
+        return null
       }
 
       const preUploadUpdatedAt = chat.updatedAt
       const preUploadVersion = chat.syncVersion ?? 0
-      if (!this.isCurrentGeneration(generation)) return
-      const { syncVersion, rewrites } = await cloudStorage.uploadChat(chat, {
-        idempotencyKey,
-      })
-      if (!this.isCurrentGeneration(generation)) return
+      if (!this.isCurrentGeneration(generation)) return null
+      return async () => {
+        try {
+          const { syncVersion, rewrites } = await cloudStorage.uploadChat(
+            chat,
+            { idempotencyKey },
+          )
+          if (!this.isCurrentGeneration(generation)) return
 
-      await indexedDBStorage.finalizeUpload({
-        chatId,
-        rewrites,
-        preUploadUpdatedAt,
-        syncVersion: syncVersion ?? preUploadVersion + 1,
-      })
-      reportChatSynced(chatId)
-    } catch (error) {
-      if (!this.isCurrentGeneration(generation)) return
-      // Silently fail if no auth token set
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
-        return
-      }
-      // §9.6 R4 — surface the typed decision and ACT on the codes
-      // that have a defined client-side recovery (§C5). For STALE_BLOB
-      // / SYNC_CONFLICT, last-write-wins by pulling the remote and
-      // replacing the local row so the chat exits `locallyModified`
-      // and stops re-attempting. Terminal failures report into the
-      // sync-health store so the settings status row and the sidebar
-      // badge surface them. Other codes still bubble up so the
-      // coalescer can retry where the recovery table says transient.
-      const decision = decideRecovery(error)
-      logInfo('upload-chat recovery decision', {
-        component: 'CloudSync',
-        action: 'backupChat',
-        metadata: {
-          chatId,
-          action: decision.action.type,
-          code: decision.classification.code ?? null,
-          kind: decision.classification.kind,
-        },
-      })
-      if (decision.action.type === 'surface-conflict') {
-        await this.resolveConflictByPullingRemote(chatId, generation)
-        return
-      }
-      if (decision.action.type === 'refresh-current-key-and-retry') {
-        reportKeyActionRequired('key-mismatch')
-        return
-      }
-      if (decision.action.type === 'trigger-recovery-wizard') {
-        reportKeyActionRequired('key-recovery')
-        return
-      }
-      if (decision.action.type === 'block-all-sync') {
-        reportSyncPaused('attestation')
-        return
-      }
-      if (decision.action.type === 'surface-existing-data-under-other-key') {
-        reportKeyActionRequired('key-conflict')
-        return
-      }
-      if (decision.action.type === 'surface-not-found') {
-        reportChatSyncFailed(chatId, 'This chat no longer exists in the cloud')
-        return
-      }
-      if (decision.action.type === 'migrate-legacy-and-retry') {
-        // Handled out-of-band by the migration kick on the next sync
-        // pass; nothing for the user to act on.
-        return
-      }
-      if (decision.action.type === 'abort') {
-        if (decision.action.reason === 'FORBIDDEN') {
-          reportKeyActionRequired('account-blocked')
-        } else {
-          reportChatSyncFailed(chatId, "This chat couldn't be synced")
+          await indexedDBStorage.finalizeUpload({
+            chatId,
+            rewrites,
+            preUploadUpdatedAt,
+            syncVersion: syncVersion ?? preUploadVersion + 1,
+          })
+          reportChatSynced(chatId)
+        } catch (error) {
+          await this.recoverFromChatUploadError(chatId, generation, error)
         }
-        return
       }
-      throw error
+    } catch (error) {
+      await this.recoverFromChatUploadError(chatId, generation, error)
+      return null
     }
+  }
+
+  /**
+   * Shared error dispatch for both phases of a coalesced chat upload
+   * (prepare and the frozen attempt). Handles the codes that have a
+   * defined client-side recovery and swallows them; rethrows anything
+   * the recovery table marks transient so the coalescer retries it.
+   */
+  private async recoverFromChatUploadError(
+    chatId: string,
+    generation: number,
+    error: unknown,
+  ): Promise<void> {
+    if (!this.isCurrentGeneration(generation)) return
+    // Silently fail if no auth token set
+    if (
+      error instanceof Error &&
+      error.message.includes('Authentication token not set')
+    ) {
+      return
+    }
+    // §9.6 R4 — surface the typed decision and ACT on the codes
+    // that have a defined client-side recovery (§C5). For STALE_BLOB
+    // / SYNC_CONFLICT, last-write-wins by pulling the remote and
+    // replacing the local row so the chat exits `locallyModified`
+    // and stops re-attempting. Terminal failures report into the
+    // sync-health store so the settings status row and the sidebar
+    // badge surface them. Other codes still bubble up so the
+    // coalescer can retry where the recovery table says transient.
+    const decision = decideRecovery(error)
+    logInfo('upload-chat recovery decision', {
+      component: 'CloudSync',
+      action: 'backupChat',
+      metadata: {
+        chatId,
+        action: decision.action.type,
+        code: decision.classification.code ?? null,
+        kind: decision.classification.kind,
+      },
+    })
+    if (decision.action.type === 'surface-conflict') {
+      await this.resolveConflictByPullingRemote(chatId, generation)
+      return
+    }
+    if (decision.action.type === 'refresh-current-key-and-retry') {
+      reportKeyActionRequired('key-mismatch')
+      return
+    }
+    if (decision.action.type === 'trigger-recovery-wizard') {
+      reportKeyActionRequired('key-recovery')
+      return
+    }
+    if (decision.action.type === 'block-all-sync') {
+      reportSyncPaused('attestation')
+      return
+    }
+    if (decision.action.type === 'surface-existing-data-under-other-key') {
+      reportKeyActionRequired('key-conflict')
+      return
+    }
+    if (decision.action.type === 'surface-not-found') {
+      reportChatSyncFailed(chatId, 'This chat no longer exists in the cloud')
+      return
+    }
+    if (decision.action.type === 'migrate-legacy-and-retry') {
+      // Handled out-of-band by the migration kick on the next sync
+      // pass; nothing for the user to act on.
+      return
+    }
+    if (decision.action.type === 'abort') {
+      if (decision.action.reason === 'FORBIDDEN') {
+        reportKeyActionRequired('account-blocked')
+      } else {
+        reportChatSyncFailed(chatId, "This chat couldn't be synced")
+      }
+      return
+    }
+    throw error
   }
 
   /**

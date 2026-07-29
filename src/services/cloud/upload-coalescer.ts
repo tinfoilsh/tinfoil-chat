@@ -61,12 +61,27 @@ interface ChatUploadState {
 }
 
 /**
- * Upload function signature. The coalescer owns the idempotency key
- * (§9.6 R1): it mints one per logical write and passes the same value
- * into every retry of that write, so the enclave can de-duplicate
- * replays into a single committed effect.
+ * One frozen upload attempt. The prepare function captures the chat
+ * snapshot and returns this closure; every retry replays it, so the
+ * bytes pushed to the enclave are identical across attempts and the
+ * enclave can de-duplicate them into a single committed effect.
  */
-type UploadFn = (chatId: string, idempotencyKey: string) => Promise<void>
+export type UploadAttempt = () => Promise<void>
+
+/**
+ * Prepare function signature. The coalescer owns the idempotency key
+ * (§9.6 R1): it mints one per logical write and calls prepare once to
+ * freeze that write's payload; `null` means there is nothing to
+ * upload (deleted/ineligible/streaming chat). Retries re-run the
+ * returned attempt, never prepare — the enclave's operation hash
+ * covers the plaintext, so a retry that re-read a chat edited between
+ * attempts would replay different bytes under the same key and fail
+ * with 409 IDEMPOTENCY_CONFLICT instead of deduping.
+ */
+type PrepareUploadFn = (
+  chatId: string,
+  idempotencyKey: string,
+) => Promise<UploadAttempt | null>
 
 /**
  * UploadCoalescer - manages coalescing upload queue for chat backups
@@ -74,7 +89,11 @@ type UploadFn = (chatId: string, idempotencyKey: string) => Promise<void>
  * Usage:
  * ```typescript
  * const coalescer = new UploadCoalescer(
- *   (chatId) => cloudStorage.uploadChat(chatId),
+ *   async (chatId, idempotencyKey) => {
+ *     const chat = await readChat(chatId)
+ *     if (!chat) return null
+ *     return () => cloudStorage.uploadChat(chat, { idempotencyKey })
+ *   },
  * )
  *
  * // Enqueue uploads - rapid calls for same chat are coalesced
@@ -85,13 +104,16 @@ type UploadFn = (chatId: string, idempotencyKey: string) => Promise<void>
  */
 export class UploadCoalescer {
   private states: Map<string, ChatUploadState> = new Map()
-  private uploadFn: UploadFn
+  private prepareUpload: PrepareUploadFn
   private config: Required<Omit<UploadCoalescerConfig, 'scheduler'>>
   private scheduler: RetryScheduler
   private generation = 0
 
-  constructor(uploadFn: UploadFn, config: UploadCoalescerConfig = {}) {
-    this.uploadFn = uploadFn
+  constructor(
+    prepareUpload: PrepareUploadFn,
+    config: UploadCoalescerConfig = {},
+  ) {
+    this.prepareUpload = prepareUpload
     this.config = {
       baseDelayMs: config.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
       maxDelayMs: config.maxDelayMs ?? DEFAULT_MAX_DELAY_MS,
@@ -232,11 +254,21 @@ export class UploadCoalescer {
     workerGeneration: number,
   ): Promise<void> {
     let lastError: Error | null = null
+    // Frozen on the first successful prepare so every retry replays
+    // the exact payload the enclave may have already committed. Only
+    // a failed prepare re-runs; a failed attempt never re-reads the
+    // chat. Edits that land mid-write set `dirty` and go out as the
+    // next logical write under a fresh key.
+    let preparedAttempt: UploadAttempt | null | undefined
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       if (workerGeneration !== this.generation) return
       try {
-        await this.uploadFn(chatId, idempotencyKey)
+        if (preparedAttempt === undefined) {
+          preparedAttempt = await this.prepareUpload(chatId, idempotencyKey)
+        }
+        if (preparedAttempt === null) return // Nothing to upload
+        await preparedAttempt()
         return // Success
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
@@ -384,11 +416,11 @@ function shouldRetryUploadError(error: Error): boolean {
 }
 
 /**
- * Create a singleton upload coalescer for a given upload function.
+ * Create a singleton upload coalescer for a given prepare function.
  */
 export function createUploadCoalescer(
-  uploadFn: UploadFn,
+  prepareUpload: PrepareUploadFn,
   config?: UploadCoalescerConfig,
 ): UploadCoalescer {
-  return new UploadCoalescer(uploadFn, config)
+  return new UploadCoalescer(prepareUpload, config)
 }
