@@ -107,6 +107,34 @@ describe('UploadCoalescer', () => {
       expect(prepareFn).toHaveBeenCalledTimes(1)
     })
 
+    it('replays the frozen snapshot even when the source changes between retries', async () => {
+      let source = 'v1'
+      const seenPayloads: string[] = []
+      const prepareFn = vi.fn(async () => {
+        const snapshot = source
+        return async () => {
+          seenPayloads.push(snapshot)
+          if (seenPayloads.length === 1) throw new Error('flake')
+        }
+      })
+
+      const coalescer = new UploadCoalescer(prepareFn, {
+        baseDelayMs: 10,
+        maxRetries: 2,
+      })
+
+      coalescer.enqueue('chat-1')
+      await vi.advanceTimersByTimeAsync(0) // First attempt fails
+      source = 'v2' // An edit lands between attempts
+      await vi.runAllTimersAsync()
+
+      // The retry replays the snapshot captured at prepare time, not
+      // the mutated source — that byte-identity is what lets the
+      // enclave replay a committed-but-lost write instead of failing
+      // with IDEMPOTENCY_CONFLICT.
+      expect(seenPayloads).toEqual(['v1', 'v1'])
+    })
+
     it('re-runs prepare when prepare itself fails before freezing a payload', async () => {
       const attemptFn = vi.fn().mockResolvedValue(undefined)
       const prepareFn = vi

@@ -266,6 +266,7 @@ export class UploadCoalescer {
       try {
         if (preparedAttempt === undefined) {
           preparedAttempt = await this.prepareUpload(chatId, idempotencyKey)
+          if (workerGeneration !== this.generation) return
         }
         if (preparedAttempt === null) return // Nothing to upload
         await preparedAttempt()
