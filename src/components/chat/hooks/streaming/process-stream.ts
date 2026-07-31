@@ -258,11 +258,22 @@ export async function processStreamingResponse(
     }
   }
 
+  const flushBufferedEvents = () => {
+    for (const event of normalizer.flush()) {
+      applyEvent(event)
+    }
+    const { text: tail } = preprocessor.flush()
+    if (tail) {
+      applyEvent({ type: 'content_delta', content: tail })
+    }
+  }
+
   let interruptionPublished = false
   const publishInterruption = () => {
     if (interruptionPublished) return
     interruptionPublished = true
     clearTrailingFlush()
+    flushBufferedEvents()
     const message = finalizeInterruptedMessage(
       assembler.toMessage(timeline.snapshot()),
       ctx.turnId,
@@ -296,16 +307,7 @@ export async function processStreamingResponse(
     }
     normalizer.assertComplete()
 
-    // Flush normalizer tail (buffered first-chunk or unclosed thinking)
-    for (const event of normalizer.flush()) {
-      applyEvent(event)
-    }
-
-    // Flush preprocessor tail (partial tinfoil/channel tags)
-    const { text: tail } = preprocessor.flush()
-    if (tail) {
-      applyEvent({ type: 'content_delta', content: tail })
-    }
+    flushBufferedEvents()
 
     // Finalize any open thinking block
     if (timeline.isThinkingOpen) {

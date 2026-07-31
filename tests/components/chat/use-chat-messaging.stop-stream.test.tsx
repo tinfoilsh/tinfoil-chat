@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   cancelChatRecoveryMock,
+  containerAuthTokenMock,
   initialSaveMock,
   persistInterruptedAssistantMock,
   sendChatStreamMock,
@@ -14,6 +15,7 @@ const {
   streamingChats,
 } = vi.hoisted(() => ({
   cancelChatRecoveryMock: vi.fn(async (..._args: unknown[]) => false),
+  containerAuthTokenMock: vi.fn(async (..._args: unknown[]) => null),
   initialSaveMock: vi.fn(async (chat: unknown) => chat),
   persistInterruptedAssistantMock: vi.fn(
     async (..._args: unknown[]) => undefined,
@@ -117,7 +119,8 @@ vi.mock('@/services/exec-snapshot/access-token', () => ({
 }))
 
 vi.mock('@/services/exec-snapshot/use-exec-snapshot', () => ({
-  getCodeExecutionContainerAuthTokenForChat: async () => null,
+  getCodeExecutionContainerAuthTokenForChat: (...args: unknown[]) =>
+    containerAuthTokenMock(...args),
 }))
 
 vi.mock('@/utils/cloud-sync-settings', () => ({
@@ -155,6 +158,7 @@ describe('useChatMessaging stopped streams', () => {
     vi.clearAllMocks()
     initialSaveMock.mockImplementation(async (chat: unknown) => chat)
     persistInterruptedAssistantMock.mockResolvedValue(undefined)
+    containerAuthTokenMock.mockResolvedValue(null)
     streamControllers.clear()
     streamingChats.clear()
   })
@@ -311,5 +315,61 @@ describe('useChatMessaging stopped streams', () => {
     await act(async () => {
       await query
     })
+  })
+
+  it('does not start stream tracking after pre-stream cancellation', async () => {
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [
+        { role: 'user', content: 'Earlier', timestamp: new Date() },
+        { role: 'assistant', content: 'Earlier reply', timestamp: new Date() },
+      ],
+    }
+    let finishContainerAuth!: () => void
+    containerAuthTokenMock.mockImplementationOnce(
+      () =>
+        new Promise<null>((resolve) => {
+          finishContainerAuth = () => resolve(null)
+        }),
+    )
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: false,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+        messagesEndRef: { current: null },
+        codeExecutionEnabled: true,
+      })
+      return { messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'New prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(containerAuthTokenMock).toHaveBeenCalled())
+
+    await act(async () => {
+      await result.current.messaging.cancelGeneration()
+    })
+    finishContainerAuth()
+    await act(async () => {
+      await query
+    })
+
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
+    expect(streamingChats).toEqual(new Set())
   })
 })

@@ -400,14 +400,19 @@ export async function cancelChatRecovery(
 
       let persisted = false
       if (stoppedMessage && hasVisibleAssistantMessage(stoppedMessage)) {
-        await completePendingRecovery(
+        const completedChat = await completePendingRecovery(
           recovery.chatId,
           recovery.envelope,
           finalizeInterruptedMessage(stoppedMessage, recovery.turnId),
           {},
           isCurrent,
         )
-        persisted = true
+        persisted = completedChat.messages.some(
+          (message) =>
+            message.role === 'assistant' &&
+            message.turnId === recovery.turnId &&
+            hasVisibleAssistantMessage(message),
+        )
         await deleteRecoveryQuietly(recovery.sessionId)
       } else {
         try {

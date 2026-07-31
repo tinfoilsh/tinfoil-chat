@@ -742,6 +742,8 @@ export function useChatMessaging({
         }
       }
 
+      if (controller.signal.aborted) return
+
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = streamChatIdRef.current
       const activeGeneration: ActiveLiveGeneration = {
@@ -858,6 +860,10 @@ export function useChatMessaging({
               },
             )
           }
+        }
+
+        if (controller.signal.aborted) {
+          throw new DOMException('Aborted', 'AbortError')
         }
 
         // Mark the chat as streaming up front (after the initial creation

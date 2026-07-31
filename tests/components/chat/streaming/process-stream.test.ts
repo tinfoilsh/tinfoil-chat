@@ -177,6 +177,40 @@ describe('processStreamingResponse interruption', () => {
     await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
   })
 
+  it('includes content buffered for stream format detection', async () => {
+    const controller = new AbortController()
+    const stream = createOpenResponse()
+    const interrupted: Array<Message | null> = []
+    const context = createContext({
+      signal: controller.signal,
+      turnId: 'turn-1',
+      onInterrupted: (message) => interrupted.push(message),
+    })
+    const processing = processStreamingResponse(stream.response, context)
+
+    stream.send(
+      { choices: [{ delta: { content: 'Hi' } }] },
+      {
+        type: 'web_search_call',
+        status: 'in_progress',
+        action: { query: 'test query' },
+      },
+    )
+    await vi.waitFor(() =>
+      expect(context.setIsWaitingForResponse).toHaveBeenCalledWith(false),
+    )
+
+    controller.abort()
+
+    expect(interrupted[0]).toMatchObject({
+      content: 'Hi',
+      turnId: 'turn-1',
+    })
+
+    stream.close()
+    await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
   it('does not publish an empty assistant placeholder', async () => {
     const controller = new AbortController()
     const stream = createOpenResponse()

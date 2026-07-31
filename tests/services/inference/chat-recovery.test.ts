@@ -211,6 +211,23 @@ describe('chat recovery lifecycle', () => {
     expect(deleteChatRecovery).not.toHaveBeenCalled()
   })
 
+  it('reports a no-op completion without an assistant as unpersisted', async () => {
+    await persistActiveRecovery()
+    completePendingRecovery.mockResolvedValueOnce({
+      id: 'chat-1',
+      messages: [{ role: 'user', content: 'Question', turnId: 'turn-1' }],
+    })
+
+    const persisted = await cancelChatRecovery('chat-1', {
+      role: 'assistant',
+      content: 'Partial answer',
+      turnId: 'turn-1',
+      timestamp: new Date(),
+    })
+
+    expect(persisted).toBe(false)
+  })
+
   it('stores a local recovery token without a cloud encryption key', async () => {
     cloudSyncEnabled = false
     getChat.mockResolvedValue({ id: 'chat-1', isLocalOnly: true })
@@ -1109,6 +1126,18 @@ describe('chat recovery lifecycle', () => {
           },
         ],
       },
+    })
+    completePendingRecovery.mockResolvedValueOnce({
+      id: 'chat-1',
+      messages: [
+        {
+          role: 'assistant',
+          content: '',
+          thoughts: 'Recovered reasoning so far',
+          isThinking: false,
+          turnId: 'turn-1',
+        },
+      ],
     })
 
     const scan = scanPendingChatRecoveries('user-1')
