@@ -193,20 +193,31 @@ describe('UploadCoalescer', () => {
   describe('Coalescing behavior', () => {
     it('waits for an existing upload without scheduling another write', async () => {
       let resolveUpload: (() => void) | undefined
-      const uploadFn = vi.fn(
+      const attemptFn = vi.fn(
         () =>
           new Promise<void>((resolve) => {
             resolveUpload = resolve
           }),
       )
-      const coalescer = new UploadCoalescer(uploadFn)
+      const prepareFn = prepareWith(attemptFn)
+      const coalescer = new UploadCoalescer(prepareFn)
       coalescer.enqueue('chat-1')
+      await vi.advanceTimersByTimeAsync(0)
 
       const ensured = coalescer.ensureUploadAndWait('chat-1')
-      resolveUpload?.()
+      let settled = false
+      void ensured.then(() => {
+        settled = true
+      })
+      await Promise.resolve()
+      expect(settled).toBe(false)
+
+      resolveUpload!()
       await ensured
 
-      expect(uploadFn).toHaveBeenCalledOnce()
+      expect(settled).toBe(true)
+      expect(prepareFn).toHaveBeenCalledOnce()
+      expect(attemptFn).toHaveBeenCalledOnce()
     })
 
     it('coalesces rapid enqueues for the same chat', async () => {
