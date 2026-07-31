@@ -1318,8 +1318,7 @@ export function ChatInput({
                 </button>
               )}
               {(() => {
-                const isBusy =
-                  loadingState === 'loading' || loadingState === 'retrying'
+                const isBusy = loadingState !== 'idle'
                 const hasCompletedDocuments = Boolean(
                   processedDocuments &&
                   processedDocuments.some((doc) => isDocumentSubmittable(doc)),

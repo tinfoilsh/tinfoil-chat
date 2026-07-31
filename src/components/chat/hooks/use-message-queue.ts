@@ -21,6 +21,8 @@ type UseMessageQueueArgs = {
   loadingState: LoadingState
   handleQuery: HandleQuery
   isRateLimited: () => boolean
+  isDispatchBlocked?: () => boolean
+  dispatchBlocked?: boolean
   onBeforeDispatch?: () => void
   onRateLimited?: () => void
   cancelGeneration?: (chatId?: string) => void | Promise<void>
@@ -116,6 +118,8 @@ export function useMessageQueue({
   loadingState,
   handleQuery,
   isRateLimited,
+  isDispatchBlocked,
+  dispatchBlocked = false,
   onBeforeDispatch,
   onRateLimited,
   cancelGeneration,
@@ -160,11 +164,13 @@ export function useMessageQueue({
   // pump dispatches in a microtask (an effect would lag a paint behind).
   const handleQueryRef = useRef(handleQuery)
   const isRateLimitedRef = useRef(isRateLimited)
+  const isDispatchBlockedRef = useRef(isDispatchBlocked)
   const onBeforeDispatchRef = useRef(onBeforeDispatch)
   const onRateLimitedRef = useRef(onRateLimited)
   const cancelGenerationRef = useRef(cancelGeneration)
   handleQueryRef.current = handleQuery
   isRateLimitedRef.current = isRateLimited
+  isDispatchBlockedRef.current = isDispatchBlocked
   onBeforeDispatchRef.current = onBeforeDispatch
   onRateLimitedRef.current = onRateLimited
   cancelGenerationRef.current = cancelGeneration
@@ -266,6 +272,7 @@ export function useMessageQueue({
             return
           }
           rateLimitPromptShownRef.current = false
+          if (isDispatchBlockedRef.current?.()) return
 
           const [next, ...rest] = getQueue(pump.id)
           if (!next) break
@@ -314,7 +321,8 @@ export function useMessageQueue({
         if (
           pump.id === currentChatIdRef.current &&
           getQueue(pump.id).length > 0 &&
-          !isRateLimitedRef.current()
+          !isRateLimitedRef.current() &&
+          !isDispatchBlockedRef.current?.()
         ) {
           queueMicrotask(() => {
             void runPump(pump.id)
@@ -337,6 +345,14 @@ export function useMessageQueue({
       }
     }
   }, [isRateLimited, getQueue, runPump])
+
+  useEffect(() => {
+    if (dispatchBlocked) return
+    const id = currentChatIdRef.current
+    if (id != null && getQueue(id).length > 0) {
+      void runPump(id)
+    }
+  }, [dispatchBlocked, getQueue, runPump])
 
   const submit = useCallback(
     (input: QueueSubmitInput): void => {

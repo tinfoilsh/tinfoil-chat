@@ -161,6 +161,7 @@ export interface EventNormalizer {
     logger?: StreamLogger,
   ): NormalizedEvent[]
   flush(): NormalizedEvent[]
+  assertComplete(): void
 }
 
 /**
@@ -219,6 +220,7 @@ export function createEventNormalizer(): EventNormalizer {
   let initialBuffer = ''
   let isInThinking = false
   let isReasoningFormat = false
+  let receivedFinishReason = false
   // True while the last thinking block was closed by content (not by a
   // tool boundary). Reasoning arriving in that state is the late tail of
   // that block — routers/upstreams race the think-close boundary so the
@@ -230,6 +232,16 @@ export function createEventNormalizer(): EventNormalizer {
   return {
     processChunk(sseJson, preprocessor, logger): NormalizedEvent[] {
       const events: NormalizedEvent[] = []
+      if (
+        Array.isArray(sseJson.choices) &&
+        sseJson.choices.some(
+          (choice: SSEJson) =>
+            choice?.finish_reason !== null &&
+            choice?.finish_reason !== undefined,
+        )
+      ) {
+        receivedFinishReason = true
+      }
 
       // Legacy top-level web_search_call records
       if (sseJson.type === 'web_search_call') {
@@ -464,6 +476,12 @@ export function createEventNormalizer(): EventNormalizer {
         isInThinking = false
       }
       return events
+    },
+
+    assertComplete(): void {
+      if (!receivedFinishReason) {
+        throw new Error('Chat response ended before its completion marker')
+      }
     },
   }
 }
