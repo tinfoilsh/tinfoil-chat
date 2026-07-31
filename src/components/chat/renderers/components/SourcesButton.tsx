@@ -52,7 +52,8 @@ function FaviconBadge({
       url={url}
       width={size}
       height={size}
-      className={`shrink-0 rounded-full bg-white p-[1px] ${className ?? ''}`}
+      className={`shrink-0 rounded-full bg-white object-contain p-[1px] ${className ?? ''}`}
+      style={{ width: size, height: size }}
       placeholder={fallback}
       fallback={fallback}
     />
