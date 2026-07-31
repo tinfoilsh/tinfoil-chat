@@ -13,6 +13,19 @@ const RESOLVED_FAVICON_DATA_URLS = new Map<string, string>()
 // every re-render; the TTL still allows retries after transient outages.
 const FAILED_FAVICON_EXPIRY = new Map<string, number>()
 const FAILED_FAVICON_TTL_MS = 60_000
+const FAVICON_CACHE_MAX_ENTRIES = 200
+
+function setBoundedCacheEntry<Value>(
+  cache: Map<string, Value>,
+  key: string,
+  value: Value,
+): void {
+  if (!cache.has(key) && cache.size >= FAVICON_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey !== undefined) cache.delete(oldestKey)
+  }
+  cache.set(key, value)
+}
 
 function isFailureCached(key: string): boolean {
   const expiry = FAILED_FAVICON_EXPIRY.get(key)
@@ -25,7 +38,11 @@ function isFailureCached(key: string): boolean {
 }
 
 function cacheFailure(key: string): void {
-  FAILED_FAVICON_EXPIRY.set(key, Date.now() + FAILED_FAVICON_TTL_MS)
+  setBoundedCacheEntry(
+    FAILED_FAVICON_EXPIRY,
+    key,
+    Date.now() + FAILED_FAVICON_TTL_MS,
+  )
 }
 
 type FaviconState = 'loading' | 'ready' | 'error'
@@ -114,7 +131,11 @@ function FaviconForHost({
             return
           }
           FAILED_FAVICON_EXPIRY.delete(cacheKey)
-          RESOLVED_FAVICON_DATA_URLS.set(cacheKey, faviconDataUrl)
+          setBoundedCacheEntry(
+            RESOLVED_FAVICON_DATA_URLS,
+            cacheKey,
+            faviconDataUrl,
+          )
           if (!cancelled) {
             setResolved({ src: faviconDataUrl, state: 'ready' })
           }
