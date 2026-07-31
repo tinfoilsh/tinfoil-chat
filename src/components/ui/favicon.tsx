@@ -8,6 +8,26 @@ import { useEffect, useState } from 'react'
 // fetched.
 const RESOLVED_FAVICON_DATA_URLS = new Map<string, string>()
 
+// Hostnames whose favicon lookup recently failed, with the time the failure
+// expires. Streaming remounts would otherwise re-request a failing host on
+// every re-render; the TTL still allows retries after transient outages.
+const FAILED_FAVICON_EXPIRY = new Map<string, number>()
+const FAILED_FAVICON_TTL_MS = 60_000
+
+function isFailureCached(key: string): boolean {
+  const expiry = FAILED_FAVICON_EXPIRY.get(key)
+  if (expiry === undefined) return false
+  if (Date.now() > expiry) {
+    FAILED_FAVICON_EXPIRY.delete(key)
+    return false
+  }
+  return true
+}
+
+function cacheFailure(key: string): void {
+  FAILED_FAVICON_EXPIRY.set(key, Date.now() + FAILED_FAVICON_TTL_MS)
+}
+
 type FaviconState = 'loading' | 'ready' | 'error'
 
 interface ResolvedFavicon {
@@ -18,6 +38,7 @@ interface ResolvedFavicon {
 function initialResolved(key: string): ResolvedFavicon {
   const existing = RESOLVED_FAVICON_DATA_URLS.get(key)
   if (existing) return { src: existing, state: 'ready' }
+  if (isFailureCached(key)) return { src: '', state: 'error' }
   return { src: '', state: 'loading' }
 }
 
@@ -79,7 +100,15 @@ function FaviconForHost({
   useEffect(() => {
     let cancelled = false
 
-    if (RESOLVED_FAVICON_DATA_URLS.has(cacheKey)) {
+    const cached = RESOLVED_FAVICON_DATA_URLS.get(cacheKey)
+    if (cached) {
+      setResolved({ src: cached, state: 'ready' })
+      return () => {
+        cancelled = true
+      }
+    }
+    if (isFailureCached(cacheKey)) {
+      setResolved({ src: '', state: 'error' })
       return () => {
         cancelled = true
       }
@@ -89,6 +118,7 @@ function FaviconForHost({
       .then((faviconDataUrl) => {
         if (cancelled) return
         if (!faviconDataUrl) {
+          cacheFailure(cacheKey)
           setResolved({ src: '', state: 'error' })
           return
         }
@@ -97,6 +127,7 @@ function FaviconForHost({
       })
       .catch(() => {
         if (cancelled) return
+        cacheFailure(cacheKey)
         setResolved({ src: '', state: 'error' })
       })
 
