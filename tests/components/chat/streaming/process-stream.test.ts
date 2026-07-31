@@ -1,6 +1,6 @@
 import { processStreamingResponse } from '@/components/chat/hooks/streaming/process-stream'
 import type { StreamingContext } from '@/components/chat/hooks/streaming/types'
-import type { Chat } from '@/components/chat/types'
+import type { Chat, Message } from '@/components/chat/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { endStreamingMock, startStreamingMock } = vi.hoisted(() => ({
@@ -26,7 +26,7 @@ function createResponse(): Response {
   return new Response(`${body}data: [DONE]\n\n`)
 }
 
-function createContext(): StreamingContext {
+function createContext(overrides: Partial<StreamingContext> = {}) {
   const chat: Chat = {
     id: 'chat-1',
     title: 'Chat',
@@ -50,6 +50,30 @@ function createContext(): StreamingContext {
     setLoadingState: vi.fn(),
     storeHistory: true,
     startingChatId: chat.id,
+    ...overrides,
+  } satisfies StreamingContext
+}
+
+function createOpenResponse() {
+  let streamController!: ReadableStreamDefaultController<Uint8Array>
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller
+      },
+    }),
+  )
+  const encoder = new TextEncoder()
+  return {
+    response,
+    close: () => streamController.close(),
+    send: (...events: Record<string, unknown>[]) => {
+      streamController.enqueue(
+        encoder.encode(
+          events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''),
+        ),
+      )
+    },
   }
 }
 
@@ -69,10 +93,7 @@ describe('processStreamingResponse lifecycle', () => {
   })
 
   it('keeps the stream active when the caller has recovery to finalize', async () => {
-    const context = {
-      ...createContext(),
-      deferStreamCleanup: true,
-    }
+    const context = createContext({ deferStreamCleanup: true })
 
     await processStreamingResponse(createResponse(), context)
 
@@ -80,5 +101,98 @@ describe('processStreamingResponse lifecycle', () => {
     expect(context.setLoadingState).not.toHaveBeenCalled()
     expect(context.setIsStreaming).not.toHaveBeenCalled()
     expect(endStreamingMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('processStreamingResponse interruption', () => {
+  it('publishes the latest content with its turn identity on abort', async () => {
+    const controller = new AbortController()
+    const stream = createOpenResponse()
+    const interrupted: Array<Message | null> = []
+    const context = createContext({
+      signal: controller.signal,
+      turnId: 'turn-1',
+      onInterrupted: (message) => interrupted.push(message),
+    })
+    const processing = processStreamingResponse(stream.response, context)
+
+    stream.send(
+      { choices: [{ delta: { content: 'Hello world' } }] },
+      { choices: [{ delta: { content: ' before stopping' } }] },
+    )
+    await vi.waitFor(() =>
+      expect(context.updateChatWithHistoryCheck).toHaveBeenCalled(),
+    )
+
+    controller.abort()
+
+    expect(interrupted).toEqual([
+      expect.objectContaining({
+        role: 'assistant',
+        content: 'Hello world before stopping',
+        turnId: 'turn-1',
+        isThinking: false,
+      }),
+    ])
+
+    stream.close()
+    await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
+    expect(context.setLoadingState).not.toHaveBeenCalled()
+  })
+
+  it('preserves partial reasoning instead of dropping the message', async () => {
+    const controller = new AbortController()
+    const stream = createOpenResponse()
+    const interrupted: Array<Message | null> = []
+    const context = createContext({
+      signal: controller.signal,
+      turnId: 'turn-1',
+      onInterrupted: (message) => interrupted.push(message),
+    })
+    const processing = processStreamingResponse(stream.response, context)
+
+    stream.send({
+      choices: [{ delta: { reasoning_content: 'Keep this reasoning' } }],
+    })
+    await vi.waitFor(() =>
+      expect(context.updateChatWithHistoryCheck).toHaveBeenCalled(),
+    )
+
+    controller.abort()
+
+    expect(interrupted[0]).toMatchObject({
+      thoughts: 'Keep this reasoning',
+      isThinking: false,
+      turnId: 'turn-1',
+      timeline: [
+        expect.objectContaining({
+          type: 'thinking',
+          content: 'Keep this reasoning',
+          isThinking: false,
+        }),
+      ],
+    })
+
+    stream.close()
+    await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('does not publish an empty assistant placeholder', async () => {
+    const controller = new AbortController()
+    const stream = createOpenResponse()
+    const interrupted: Array<Message | null> = []
+    const context = createContext({
+      signal: controller.signal,
+      turnId: 'turn-1',
+      onInterrupted: (message) => interrupted.push(message),
+    })
+    const processing = processStreamingResponse(stream.response, context)
+
+    controller.abort()
+
+    expect(interrupted).toEqual([null])
+
+    stream.close()
+    await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
   })
 })

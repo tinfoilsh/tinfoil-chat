@@ -21,16 +21,20 @@ const moveStatusMock = vi.fn()
 const registerControllerMock = vi.fn()
 const clearControllerMock = vi.fn()
 const streamStatuses: Record<string, object> = {}
-const { authState, cloudSyncState, scanPendingChatRecoveriesMock } = vi.hoisted(
-  () => ({
-    authState: {
-      isSignedIn: false,
-      userId: undefined as string | undefined,
-    },
-    cloudSyncState: { enabled: true },
-    scanPendingChatRecoveriesMock: vi.fn(),
-  }),
-)
+const {
+  authState,
+  cancelChatRecoveryMock,
+  cloudSyncState,
+  scanPendingChatRecoveriesMock,
+} = vi.hoisted(() => ({
+  authState: {
+    isSignedIn: false,
+    userId: undefined as string | undefined,
+  },
+  cancelChatRecoveryMock: vi.fn(async () => false),
+  cloudSyncState: { enabled: true },
+  scanPendingChatRecoveriesMock: vi.fn(),
+}))
 
 vi.mock('@clerk/nextjs', () => ({
   useAuth: () => authState,
@@ -66,7 +70,7 @@ vi.mock('@/utils/cloud-sync-settings', () => ({
 
 vi.mock('@/services/inference/chat-recovery', () => ({
   abandonChatRecoveryAttempt: vi.fn(),
-  cancelChatRecovery: vi.fn(async () => undefined),
+  cancelChatRecovery: cancelChatRecoveryMock,
   completeLiveChatRecovery: vi.fn(),
   persistChatRecoveryToken: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
@@ -151,7 +155,7 @@ describe('useChatMessaging cancelGeneration', () => {
     }
   })
 
-  it('targets the latest rendered chat during a chat switch', () => {
+  it('targets the latest rendered chat during a chat switch', async () => {
     const firstChat = createChat('chat-a')
     const secondChat = createChat('chat-b')
 
@@ -170,10 +174,17 @@ describe('useChatMessaging cancelGeneration', () => {
     })
 
     expect(abortMock).toHaveBeenCalledWith('chat-b')
+    await vi.waitFor(() =>
+      expect(patchStatusMock).toHaveBeenCalledWith(
+        'chat-b',
+        expect.objectContaining({
+          loadingState: 'idle',
+        }),
+      ),
+    )
     expect(patchStatusMock).toHaveBeenCalledWith(
       'chat-b',
       expect.objectContaining({
-        loadingState: 'idle',
         retryInfo: null,
         isThinking: false,
         isWaitingForResponse: false,
@@ -249,6 +260,55 @@ describe('useChatMessaging cancelGeneration', () => {
 
     expect(result.current.loadingState).toBe('loading')
     expect(result.current.isStreaming).toBe(true)
+  })
+
+  it('keeps recovery cancellation loading and deduplicates repeated stops', async () => {
+    let finishCancellation!: (persisted: boolean) => void
+    cancelChatRecoveryMock.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishCancellation = resolve
+        }),
+    )
+    const chat = createChat('chat-a')
+    const { result } = renderHook(useChatMessagingHarness, {
+      initialProps: {
+        currentChat: chat,
+        triggerCancelOnLayout: false,
+      },
+    })
+    act(() => {
+      setChatRecoveryActive('chat-a', 'turn-1', true)
+    })
+
+    let firstCancellation!: Promise<void>
+    let secondCancellation!: Promise<void>
+    act(() => {
+      firstCancellation = result.current.cancelGeneration()
+      secondCancellation = result.current.cancelGeneration()
+    })
+
+    expect(firstCancellation).toBe(secondCancellation)
+    expect(abortMock).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() =>
+      expect(cancelChatRecoveryMock).toHaveBeenCalledTimes(1),
+    )
+    expect(patchStatusMock).toHaveBeenCalledWith(
+      'chat-a',
+      expect.objectContaining({ loadingState: 'loading' }),
+    )
+    expect(patchStatusMock).not.toHaveBeenCalledWith('chat-a', {
+      loadingState: 'idle',
+    })
+
+    finishCancellation(false)
+    await act(async () => {
+      await firstCancellation
+    })
+
+    expect(patchStatusMock).toHaveBeenCalledWith('chat-a', {
+      loadingState: 'idle',
+    })
   })
 
   it('rescans pending recoveries when cloud sync downloads a chat', () => {

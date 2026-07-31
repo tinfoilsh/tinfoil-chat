@@ -127,6 +127,9 @@ export interface StreamingContext {
   storeHistory: boolean
   startingChatId: string
   deferStreamCleanup?: boolean
+  signal?: AbortSignal
+  turnId?: string
+  onInterrupted?: (message: Message | null) => void
 }
 
 export interface StreamingHandlers {

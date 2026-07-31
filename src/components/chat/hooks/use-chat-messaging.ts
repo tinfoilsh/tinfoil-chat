@@ -34,6 +34,7 @@ import {
   scanPendingChatRecoveries,
   startChatRecoveryAttempt,
 } from '@/services/inference/chat-recovery'
+import { persistInterruptedAssistant } from '@/services/inference/chat-recovery-sync'
 import { sendChatStream } from '@/services/inference/inference-client'
 import {
   getRateLimitInfo,
@@ -58,7 +59,11 @@ import {
   sortChats,
 } from './chat-operations'
 import { createUpdateChatWithHistoryCheck } from './chat-persistence'
-import { processStreamingResponse } from './streaming'
+import {
+  hasVisibleAssistantMessage,
+  mergeInterruptedAssistant,
+  processStreamingResponse,
+} from './streaming'
 import {
   IDLE_STREAM_STATUS,
   useChatStreams,
@@ -115,6 +120,14 @@ interface UseChatMessagingReturn {
     resultText: string,
     resultData?: unknown,
   ) => void
+}
+
+type ActiveLiveGeneration = {
+  chat: Chat
+  messages: Message[]
+  turnId?: string
+  interruptedMessage: Message | null
+  initialSave?: Promise<void>
 }
 
 const CHAT_RECOVERY_POLL_INTERVAL_MS = 10_000
@@ -268,6 +281,11 @@ export function useChatMessaging({
   const chatsRef = useRef<Chat[]>(chats)
   chatsRef.current = chats
 
+  const activeLiveGenerationsRef = useRef(
+    new Map<string, ActiveLiveGeneration>(),
+  )
+  const cancellationPromisesRef = useRef(new Map<string, Promise<void>>())
+
   const dismissStreamError = useCallback(() => {
     patchStatus(viewedChatIdRef.current, { streamError: null })
   }, [patchStatus])
@@ -290,92 +308,131 @@ export function useChatMessaging({
   // Passing an explicit id lets callers stop a background stream without
   // first switching to it.
   const cancelGeneration = useCallback(
-    async (chatId?: string) => {
+    (chatId?: string) => {
       const targetId = chatId ?? viewedChatIdRef.current
+      const existingCancellation = cancellationPromisesRef.current.get(targetId)
+      if (existingCancellation) return existingCancellation
 
-      const recoveryCancellation = cancelChatRecovery(targetId)
-      abort(targetId)
-      patchStatus(targetId, {
-        loadingState: 'idle',
-        retryInfo: null,
-        isThinking: false,
-        isWaitingForResponse: false,
-        isStreaming: false,
-      })
+      const cancellation = (async () => {
+        const activeGeneration = activeLiveGenerationsRef.current.get(targetId)
 
-      // If a stream was mid-flight, drop a dangling "thinking" placeholder
-      // and persist the truncated transcript for the affected chat.
-      if (streamingTracker.isStreaming(targetId)) {
-        const stripThinking = (messages: Message[]): Message[] =>
-          messages.filter(
-            (msg, idx) => !(idx === messages.length - 1 && msg.isThinking),
-          )
-
-        setChats((prevChats) => {
-          const newChats = prevChats.map((chat) =>
-            chat.id === targetId
-              ? {
-                  ...chat,
-                  messages: stripThinking(chat.messages),
-                  pendingSave: false,
-                }
-              : chat,
-          )
-          const updatedChat = newChats.find((c) => c.id === targetId)
-          if (updatedChat && !updatedChat.isTemporary) {
-            if (storeHistory) {
-              chatStorage
-                .saveChatAndSync(updatedChat)
-                .then((savedChat) => {
-                  // Only update if the ID actually changed
-                  if (savedChat.id !== updatedChat.id) {
-                    moveStatus(updatedChat.id, savedChat.id)
-                    if (viewedChatIdRef.current === updatedChat.id) {
-                      viewedChatIdRef.current = savedChat.id
-                      setCurrentChat(savedChat)
-                    }
-                    setChats((prev) =>
-                      prev.map((c) =>
-                        c.id === updatedChat.id ? savedChat : c,
-                      ),
-                    )
-                  }
-                })
-                .catch((error) => {
-                  logError('Failed to save chat after cancellation', error, {
-                    component: 'useChatMessaging',
-                  })
-                })
-            } else {
-              // Save to session storage for non-signed-in users
-              sessionChatStorage.saveChat(updatedChat)
-            }
-          }
-          return newChats
+        abort(targetId)
+        const interruptedMessage =
+          activeGeneration?.interruptedMessage &&
+          hasVisibleAssistantMessage(activeGeneration.interruptedMessage)
+            ? activeGeneration.interruptedMessage
+            : null
+        patchStatus(targetId, {
+          loadingState: 'loading',
+          retryInfo: null,
+          isThinking: false,
+          isWaitingForResponse: false,
+          isStreaming: false,
         })
 
-        // Mirror the truncation into the active view if it's the same chat
-        setCurrentChat((prev) =>
-          prev.id === targetId
-            ? {
-                ...prev,
-                messages: stripThinking(prev.messages),
-                pendingSave: false,
-              }
-            : prev,
-        )
+        let stoppedChat: Chat | undefined
+        if (activeGeneration) {
+          const finalizeChat = (chat: Chat): Chat => {
+            const hasOriginatingUser = activeGeneration.turnId
+              ? chat.messages.some(
+                  (message) =>
+                    message.role === 'user' &&
+                    message.turnId === activeGeneration.turnId,
+                )
+              : false
+            const sourceMessages = hasOriginatingUser
+              ? chat.messages
+              : activeGeneration.messages
+            const messages = activeGeneration.turnId
+              ? mergeInterruptedAssistant(
+                  sourceMessages,
+                  activeGeneration.turnId,
+                  interruptedMessage,
+                )
+              : interruptedMessage
+                ? [...activeGeneration.messages, interruptedMessage]
+                : activeGeneration.messages
+            return {
+              ...chat,
+              messages,
+              pendingRecoveries: chat.pendingRecoveries?.filter(
+                (recovery) => recovery.turnId !== activeGeneration.turnId,
+              ),
+              pendingSave: false,
+            }
+          }
+          const latestChat =
+            chatsRef.current.find((chat) => chat.id === targetId) ??
+            activeGeneration.chat
+          const finalizedChat = finalizeChat(latestChat)
+          stoppedChat = finalizedChat
+          setChats((prevChats) =>
+            prevChats.map((chat) =>
+              chat.id === targetId ? finalizeChat(chat) : chat,
+            ),
+          )
+          setCurrentChat((prev) =>
+            prev.id === targetId ? finalizeChat(prev) : prev,
+          )
+        }
+
+        await activeGeneration?.initialSave
+
+        let assistantPersistedByRecovery = false
+        try {
+          assistantPersistedByRecovery = await cancelChatRecovery(
+            targetId,
+            interruptedMessage ?? undefined,
+          )
+        } catch (error) {
+          logError('Failed to cancel chat recovery', error, {
+            component: 'useChatMessaging',
+            action: 'cancelGeneration.recovery',
+            metadata: { chatId: targetId },
+          })
+        }
+
+        if (
+          interruptedMessage &&
+          stoppedChat &&
+          !stoppedChat.isTemporary &&
+          !assistantPersistedByRecovery
+        ) {
+          try {
+            if (storeHistory && activeGeneration?.turnId) {
+              await persistInterruptedAssistant(
+                targetId,
+                activeGeneration.turnId,
+                interruptedMessage,
+              )
+            } else if (storeHistory) {
+              await chatStorage.saveChatAndSync(stoppedChat)
+            } else {
+              sessionChatStorage.saveChat(stoppedChat)
+            }
+          } catch (error) {
+            logError('Failed to save chat after cancellation', error, {
+              component: 'useChatMessaging',
+              action: 'cancelGeneration.save',
+              metadata: { chatId: targetId },
+            })
+          }
+        }
 
         streamingTracker.endStreaming(targetId)
+        patchStatus(targetId, { loadingState: 'idle' })
+      })()
+
+      cancellationPromisesRef.current.set(targetId, cancellation)
+      const clearCancellation = () => {
+        if (cancellationPromisesRef.current.get(targetId) === cancellation) {
+          cancellationPromisesRef.current.delete(targetId)
+        }
       }
-
-      await recoveryCancellation
-
-      // Wait for any pending state updates
-      await new Promise((resolve) =>
-        setTimeout(resolve, CONSTANTS.ASYNC_STATE_DELAY_MS),
-      )
+      void cancellation.then(clearCancellation, clearCancellation)
+      return cancellation
     },
-    [abort, patchStatus, moveStatus, storeHistory, setChats, setCurrentChat],
+    [abort, patchStatus, storeHistory, setChats, setCurrentChat],
   )
 
   // Handle chat query
@@ -435,6 +492,7 @@ export function useChatMessaging({
         current: null,
       }
       let earlyTitlePromise: Promise<string> | null = null
+      let initialSavePromise: Promise<void> | undefined
 
       const setLoadingStateFor = (s: LoadingState) =>
         patchStatus(streamChatIdRef.current, { loadingState: s })
@@ -571,7 +629,7 @@ export function useChatMessaging({
         }
 
         // Save immediately (and sync if applicable). ID is already server-valid.
-        chatStorage
+        initialSavePromise = chatStorage
           .saveChatAndSync(updatedChat)
           .then(() => {
             setChats((prevChats) =>
@@ -686,6 +744,14 @@ export function useChatMessaging({
 
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = streamChatIdRef.current
+      const activeGeneration: ActiveLiveGeneration = {
+        chat: updatedChat,
+        messages: updatedMessages,
+        turnId: turnId ?? undefined,
+        interruptedMessage: null,
+        initialSave: initialSavePromise,
+      }
+      activeLiveGenerationsRef.current.set(startingChatId, activeGeneration)
 
       // Fire title generation in parallel with streaming (based on user's message).
       // The promise is awaited after streaming completes, before the final save.
@@ -860,20 +926,18 @@ export function useChatMessaging({
           storeHistory,
           startingChatId,
           deferStreamCleanup: recoveryEnabled,
+          signal: controller.signal,
+          turnId: turnId ?? undefined,
+          onInterrupted: (message) => {
+            activeGeneration.interruptedMessage = message
+          },
         })
         if (assistantMessage && turnId) {
           assistantMessage.turnId = turnId
         }
 
         const hasAssistantMessageToSave =
-          !!assistantMessage &&
-          (!!assistantMessage.content ||
-            !!assistantMessage.thoughts ||
-            !!assistantMessage.webSearch ||
-            !!assistantMessage.urlFetches?.length ||
-            !!assistantMessage.toolCalls?.length ||
-            !!assistantMessage.codeExecCalls?.length ||
-            !!assistantMessage.timeline?.length)
+          !!assistantMessage && hasVisibleAssistantMessage(assistantMessage)
 
         if (assistantMessage && hasAssistantMessageToSave) {
           // Use this stream's own id (already reflects any server id swap).
@@ -1067,20 +1131,25 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
-        releaseActiveChatRecovery(streamChatIdRef.current)
-        if (
-          typeof userId === 'string' &&
-          canUseChatRecovery({ isSignedIn, userId, storeHistory })
-        ) {
-          void scanPendingChatRecoveries(userId)
+        const wasAborted =
+          controller.signal.aborted ||
+          (error instanceof DOMException && error.name === 'AbortError')
+        if (!wasAborted) {
+          releaseActiveChatRecovery(streamChatIdRef.current)
+          if (
+            typeof userId === 'string' &&
+            canUseChatRecovery({ isSignedIn, userId, storeHistory })
+          ) {
+            void scanPendingChatRecoveries(userId)
+          }
         }
         // Ensure UI loading flags are reset on pre-stream errors
         setIsWaitingForResponseFor(false)
         setIsStreamingFor(false)
-        setLoadingStateFor('idle')
+        if (!wasAborted) setLoadingStateFor('idle')
         setIsThinkingFor(false)
         thinkingStartTimeRef.current = null
-        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        if (!wasAborted) {
           logError('Chat query failed', error, {
             component: 'useChatMessaging',
             action: 'handleQuery',
@@ -1134,16 +1203,24 @@ export function useChatMessaging({
         // Settle this stream's status (preserving any streamError so the
         // banner can surface when the user returns to the chat).
         patchStatus(streamChatIdRef.current, {
-          loadingState: 'idle',
+          ...(controller.signal.aborted ? {} : { loadingState: 'idle' }),
           retryInfo: null,
           isWaitingForResponse: false,
           isStreaming: false,
           isThinking: false,
         })
         clearController(streamChatIdRef.current)
-        // Covers pre-stream failures where the processor (which normally
-        // ends streaming) never ran. Idempotent if already ended.
-        streamingTracker.endStreaming(streamChatIdRef.current)
+        if (
+          activeLiveGenerationsRef.current.get(startingChatId) ===
+          activeGeneration
+        ) {
+          activeLiveGenerationsRef.current.delete(startingChatId)
+        }
+        if (!controller.signal.aborted) {
+          // Covers pre-stream failures where the processor (which normally
+          // ends streaming) never ran. Idempotent if already ended.
+          streamingTracker.endStreaming(streamChatIdRef.current)
+        }
       }
     },
     [
