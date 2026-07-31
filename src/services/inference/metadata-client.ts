@@ -141,13 +141,14 @@ async function doFetchFavicon(url: string): Promise<string | null> {
   })
 
   if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
     logError(
       `Favicon fetch failed with status: ${response.status}`,
       undefined,
       {
         component: 'metadata-client',
         action: 'fetchFavicon',
-        metadata: { status: response.status },
+        metadata: { status: response.status, error: errorText },
       },
     )
     throw new Error(`Favicon fetch failed: ${response.status}`)

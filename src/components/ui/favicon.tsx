@@ -118,7 +118,9 @@ function FaviconForHost({
         onResolve?.()
       }}
       onError={() => {
-        RESOLVED_FAVICON_DATA_URLS.delete(cacheKey)
+        if (RESOLVED_FAVICON_DATA_URLS.get(cacheKey) === resolved.src) {
+          RESOLVED_FAVICON_DATA_URLS.delete(cacheKey)
+        }
         setResolved({ src: '', state: 'error' })
         onResolveError?.()
       }}
