@@ -4,12 +4,10 @@ import { SecureClient } from 'tinfoil'
 /**
  * Opengraph-metadata client.
  *
- * Fetches title/description/site_name/image/favicon-bytes for a URL
+ * Fetches title/description/site_name/image for a URL
  * from the attested `opengraph-metadata.tinfoil.sh` enclave. Used by
  * the GenUI link-preview widget to replace model-generated fields with
- * verified values scraped server-side inside a Tinfoil CVM. Favicon
- * bytes are inlined in the response so the browser never has to make a
- * follow-up GET to an external icon host.
+ * verified values scraped server-side inside a Tinfoil CVM.
  */
 
 const METADATA_ENCLAVE = 'https://opengraph-metadata.tinfoil.sh'
@@ -33,15 +31,6 @@ export interface LinkMetadata {
   description: string | null
   siteName: string | null
   image: string | null
-  /**
-   * `data:` URL for the page's favicon, already encoded so consumers can
-   * drop it straight into an `<img src>` without managing a Blob or
-   * object URL lifecycle. The bytes never leave the original base64
-   * envelope, which sidesteps the race conditions that come with
-   * `URL.createObjectURL` / `URL.revokeObjectURL` when the same icon is
-   * rendered by multiple components.
-   */
-  faviconDataUrl: string | null
   cached: boolean
 }
 
@@ -51,9 +40,12 @@ interface MetadataResponse {
   description: string | null
   site_name: string | null
   image: string | null
-  favicon_bytes?: string | null
-  favicon_content_type?: string | null
   cached: boolean
+}
+
+interface FaviconResponse {
+  favicon_bytes: string
+  favicon_content_type: string
 }
 
 /**
@@ -69,6 +61,7 @@ interface MetadataResponse {
  * data and grow unbounded over a session).
  */
 const metadataPromiseByUrl = new Map<string, Promise<LinkMetadata>>()
+const faviconPromiseByHost = new Map<string, Promise<string | null>>()
 
 /**
  * Fetch OpenGraph metadata for a URL from the Tinfoil enclave.
@@ -87,6 +80,19 @@ export function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
     metadataPromiseByUrl.delete(url)
   })
   metadataPromiseByUrl.set(url, promise)
+  return promise
+}
+
+/** Fetch only a favicon without requesting the page through Zyte. */
+export function fetchFavicon(url: string): Promise<string | null> {
+  const key = faviconRequestKey(url)
+  const existing = faviconPromiseByHost.get(key)
+  if (existing) return existing
+
+  const promise = doFetchFavicon(url).finally(() => {
+    faviconPromiseByHost.delete(key)
+  })
+  faviconPromiseByHost.set(key, promise)
   return promise
 }
 
@@ -123,11 +129,40 @@ async function doFetchLinkMetadata(url: string): Promise<LinkMetadata> {
     description: data.description,
     siteName: data.site_name,
     image: data.image,
-    faviconDataUrl: buildFaviconDataUrl(
-      data.favicon_bytes,
-      data.favicon_content_type,
-    ),
     cached: data.cached,
+  }
+}
+
+async function doFetchFavicon(url: string): Promise<string | null> {
+  const response = await getClient().fetch(`${METADATA_ENCLAVE}/favicon`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    logError(
+      `Favicon fetch failed with status: ${response.status}`,
+      undefined,
+      {
+        component: 'metadata-client',
+        action: 'fetchFavicon',
+        metadata: { status: response.status, error: errorText },
+      },
+    )
+    throw new Error(`Favicon fetch failed: ${response.status}`)
+  }
+
+  const data: FaviconResponse = await response.json()
+  return buildFaviconDataUrl(data.favicon_bytes, data.favicon_content_type)
+}
+
+function faviconRequestKey(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase()
+  } catch {
+    return url
   }
 }
 
