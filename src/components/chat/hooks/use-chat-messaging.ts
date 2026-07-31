@@ -859,6 +859,7 @@ export function useChatMessaging({
           setLoadingState: setLoadingStateFor,
           storeHistory,
           startingChatId,
+          deferStreamCleanup: recoveryEnabled,
         })
         if (assistantMessage && turnId) {
           assistantMessage.turnId = turnId

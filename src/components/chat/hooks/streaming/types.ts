@@ -126,6 +126,7 @@ export interface StreamingContext {
   setLoadingState: (s: 'idle' | 'loading') => void
   storeHistory: boolean
   startingChatId: string
+  deferStreamCleanup?: boolean
 }
 
 export interface StreamingHandlers {

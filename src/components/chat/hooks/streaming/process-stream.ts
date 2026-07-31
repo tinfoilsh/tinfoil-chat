@@ -296,15 +296,17 @@ export async function processStreamingResponse(
   } finally {
     // Drop any pending trailing flush so it can't fire after teardown.
     clearTrailingFlush()
-    ctx.setLoadingState('idle')
-    ctx.setIsStreaming(false)
-    if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
-    // The backend may have swapped the id mid-stream; clear that too.
-    if (
-      ctx.streamChatIdRef.current &&
-      ctx.streamChatIdRef.current !== streamingChatId
-    ) {
-      streamingTracker.endStreaming(ctx.streamChatIdRef.current)
+    if (!ctx.deferStreamCleanup) {
+      ctx.setLoadingState('idle')
+      ctx.setIsStreaming(false)
+      if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
+      // The backend may have swapped the id mid-stream; clear that too.
+      if (
+        ctx.streamChatIdRef.current &&
+        ctx.streamChatIdRef.current !== streamingChatId
+      ) {
+        streamingTracker.endStreaming(ctx.streamChatIdRef.current)
+      }
     }
     ctx.setIsThinking(false)
     ctx.thinkingStartTimeRef.current = null
