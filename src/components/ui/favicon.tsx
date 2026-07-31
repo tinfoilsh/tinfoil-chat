@@ -103,33 +103,27 @@ function FaviconForHost({
     const cached = RESOLVED_FAVICON_DATA_URLS.get(cacheKey)
     if (cached) {
       setResolved({ src: cached, state: 'ready' })
-      return () => {
-        cancelled = true
-      }
-    }
-    if (isFailureCached(cacheKey)) {
+    } else if (isFailureCached(cacheKey)) {
       setResolved({ src: '', state: 'error' })
-      return () => {
-        cancelled = true
-      }
-    }
-
-    fetchFavicon(url)
-      .then((faviconDataUrl) => {
-        if (cancelled) return
-        if (!faviconDataUrl) {
+    } else {
+      fetchFavicon(url)
+        .then((faviconDataUrl) => {
+          if (!faviconDataUrl) {
+            cacheFailure(cacheKey)
+            if (!cancelled) setResolved({ src: '', state: 'error' })
+            return
+          }
+          FAILED_FAVICON_EXPIRY.delete(cacheKey)
+          RESOLVED_FAVICON_DATA_URLS.set(cacheKey, faviconDataUrl)
+          if (!cancelled) {
+            setResolved({ src: faviconDataUrl, state: 'ready' })
+          }
+        })
+        .catch(() => {
           cacheFailure(cacheKey)
-          setResolved({ src: '', state: 'error' })
-          return
-        }
-        RESOLVED_FAVICON_DATA_URLS.set(cacheKey, faviconDataUrl)
-        setResolved({ src: faviconDataUrl, state: 'ready' })
-      })
-      .catch(() => {
-        if (cancelled) return
-        cacheFailure(cacheKey)
-        setResolved({ src: '', state: 'error' })
-      })
+          if (!cancelled) setResolved({ src: '', state: 'error' })
+        })
+    }
 
     return () => {
       cancelled = true
@@ -151,6 +145,7 @@ function FaviconForHost({
       onError={() => {
         if (RESOLVED_FAVICON_DATA_URLS.get(cacheKey) === resolved.src) {
           RESOLVED_FAVICON_DATA_URLS.delete(cacheKey)
+          cacheFailure(cacheKey)
         }
         setResolved({ src: '', state: 'error' })
         onResolveError?.()
