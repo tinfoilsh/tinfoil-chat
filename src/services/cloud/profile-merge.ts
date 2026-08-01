@@ -32,6 +32,11 @@ export const PROFILE_MERGE_FIELDS = [
   'projectUploadPreference',
 ] as const
 
+// Older clients omit this field, while the setting itself has no unset state.
+const PRESERVE_LOCAL_WHEN_REMOTE_OMITS = new Set<
+  (typeof PROFILE_MERGE_FIELDS)[number]
+>(['pixelateSidebarChatTitlesEnabled'])
+
 // A blob's field clocks are trustworthy only when they were maintained
 // at the row's current server version. If a clock-unaware client wrote
 // since, clockVersion lags the etag and we must not trust the clocks.
@@ -147,11 +152,13 @@ export function mergeProfilesThreeWay(args: {
     if (valuesEqual(localValue, baselineValue)) {
       if (Object.prototype.hasOwnProperty.call(remote, field)) {
         ;(merged as Record<string, unknown>)[field] = remoteValue
+        if (rc) mergedClocks[field] = rc
+        adoptedRemote ||= !valuesEqual(localValue, remoteValue)
+      } else if (PRESERVE_LOCAL_WHEN_REMOTE_OMITS.has(field)) {
+        if (lc) mergedClocks[field] = lc
       } else {
         delete (merged as Record<string, unknown>)[field]
       }
-      if (rc) mergedClocks[field] = rc
-      adoptedRemote ||= !valuesEqual(localValue, remoteValue)
     } else if (valuesEqual(localValue, remoteValue)) {
       const clock = laterClock(lc, rc)
       if (clock) mergedClocks[field] = clock

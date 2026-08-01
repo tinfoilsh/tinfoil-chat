@@ -273,6 +273,17 @@ describe('mergeProfilesThreeWay', () => {
     expect(result.conflicts).toEqual([])
   })
 
+  it('preserves pixelation preferences omitted by older profiles', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pixelateSidebarChatTitlesEnabled: false },
+      local: { pixelateSidebarChatTitlesEnabled: false },
+      remote: { version: 2 },
+    })
+
+    expect(result.merged.pixelateSidebarChatTitlesEnabled).toBe(false)
+    expect(result.conflicts).toEqual([])
+  })
+
   it('retains local data and reports an ambiguous conflict', () => {
     const result = mergeProfilesThreeWay({
       baseline: { nickname: 'Ada' },

@@ -64,7 +64,7 @@ interface ChatListItemProps {
   isEditing: boolean
   editingTitle: string
   isDarkMode: boolean
-  pixelateSidebarChatTitles?: boolean
+  pixelateSidebarChatTitles: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
   /**
@@ -150,7 +150,7 @@ export function ChatListItem({
   isEditing,
   editingTitle,
   isDarkMode,
-  pixelateSidebarChatTitles = true,
+  pixelateSidebarChatTitles,
   showEncryptionStatus = false,
   showSyncStatus = false,
   isStreaming = false,

@@ -16,7 +16,7 @@ function renderChatListItem({
   onSelect = vi.fn(),
   chat = savedChat,
   isSelected = false,
-  pixelateSidebarChatTitles,
+  pixelateSidebarChatTitles = true,
   enableTitleAnimation = false,
 }: {
   href?: string

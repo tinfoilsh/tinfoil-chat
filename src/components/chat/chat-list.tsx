@@ -27,7 +27,7 @@ interface ChatListProps {
   currentChatIsBlank?: boolean
   currentChatIsLocalOnly?: boolean
   isDarkMode: boolean
-  pixelateSidebarChatTitles?: boolean
+  pixelateSidebarChatTitles: boolean
   isLoading?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
@@ -64,7 +64,7 @@ export function ChatList({
   currentChatIsBlank,
   currentChatIsLocalOnly,
   isDarkMode,
-  pixelateSidebarChatTitles = true,
+  pixelateSidebarChatTitles,
   isLoading = false,
   showEncryptionStatus = false,
   showSyncStatus = false,
