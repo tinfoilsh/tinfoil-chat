@@ -43,7 +43,6 @@ import {
 import {
   addPendingRecovery,
   completePendingRecovery,
-  persistInterruptedAssistant,
   removePendingRecovery,
   replacePendingRecovery,
   resetChatRecoverySyncState,
@@ -376,14 +375,18 @@ export async function cancelChatRecovery(
     setChatRecoveryActive(recovery.chatId, recovery.turnId, false)
   }
   const recoveries = [...active, ...scanned]
-  const persistedTurns = new Set<string>()
-  const results = await Promise.all(
+  const envelopeTurns = new Set(
+    recoveries
+      .filter((recovery) => recovery.envelope !== undefined)
+      .map((recovery) => recovery.turnId),
+  )
+  await Promise.all(
     recoveries.map(async (recovery) => {
       const isCurrent = () => recovery.generation === recoveryGeneration
-      if (!isCurrent()) return false
+      if (!isCurrent()) return
       if (!recovery.envelope) {
         await deleteRecoveryQuietly(recovery.sessionId)
-        return false
+        return
       }
 
       const recoveryDraft = getChatRecoveryDraft(
@@ -399,7 +402,6 @@ export async function cancelChatRecovery(
           ? assistantMessage
           : draftMessage
 
-      let persisted = false
       if (stoppedMessage && hasVisibleAssistantMessage(stoppedMessage)) {
         const finalizedMessage = finalizeInterruptedMessage(
           stoppedMessage,
@@ -412,25 +414,12 @@ export async function cancelChatRecovery(
           {},
           isCurrent,
         )
-        persisted = completedChat.messages.some(
+        const persisted = completedChat.messages.some(
           (message) =>
             message.role === 'assistant' &&
             message.turnId === recovery.turnId &&
             hasVisibleAssistantMessage(message),
         )
-        if (!persisted) {
-          const fallbackChat = await persistInterruptedAssistant(
-            recovery.chatId,
-            recovery.turnId,
-            finalizedMessage,
-          )
-          persisted = fallbackChat.messages.some(
-            (message) =>
-              message.role === 'assistant' &&
-              message.turnId === recovery.turnId &&
-              hasVisibleAssistantMessage(message),
-          )
-        }
         if (persisted) await deleteRecoveryQuietly(recovery.sessionId)
       } else {
         try {
@@ -443,15 +432,11 @@ export async function cancelChatRecovery(
           await deleteRecoveryQuietly(recovery.sessionId)
         }
       }
-      return persisted
     }),
   )
-  results.forEach((persisted, index) => {
-    if (persisted) persistedTurns.add(recoveries[index].turnId)
-  })
   return assistantMessage?.turnId
-    ? persistedTurns.has(assistantMessage.turnId)
-    : persistedTurns.size > 0
+    ? envelopeTurns.has(assistantMessage.turnId)
+    : envelopeTurns.size > 0
 }
 
 export function releaseActiveChatRecovery(chatId: string): void {

@@ -378,13 +378,14 @@ export function useChatMessaging({
 
         await activeGeneration?.initialSave
 
-        let assistantPersistedByRecovery = false
+        let recoveryHandled = false
         try {
-          assistantPersistedByRecovery = await cancelChatRecovery(
+          recoveryHandled = await cancelChatRecovery(
             targetId,
             interruptedMessage ?? undefined,
           )
         } catch (error) {
+          recoveryHandled = true
           logError('Failed to cancel chat recovery', error, {
             component: 'useChatMessaging',
             action: 'cancelGeneration.recovery',
@@ -396,7 +397,7 @@ export function useChatMessaging({
           interruptedMessage &&
           stoppedChat &&
           !stoppedChat.isTemporary &&
-          !assistantPersistedByRecovery
+          !recoveryHandled
         ) {
           try {
             if (storeHistory && activeGeneration?.turnId) {

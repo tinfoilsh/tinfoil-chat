@@ -393,6 +393,9 @@ describe('useChatMessaging stopped streams', () => {
     authState.isSignedIn = true
     authState.userId = 'user-1'
     recoveryAvailableState.available = true
+    cancelChatRecoveryMock.mockRejectedValueOnce(
+      new Error('recovery state changed'),
+    )
     const initialChat: Chat = {
       id: 'chat-1',
       title: 'Existing chat',
@@ -459,6 +462,7 @@ describe('useChatMessaging stopped streams', () => {
       'chat-1',
       expect.objectContaining({ content: 'Complete answer' }),
     )
+    expect(persistInterruptedAssistantMock).not.toHaveBeenCalled()
 
     finishRecovery()
     await act(async () => {

@@ -9,7 +9,6 @@ const fetchRecoveredChatResponse = vi.fn()
 const getChatRecoveryState = vi.fn()
 const addPendingRecovery = vi.fn()
 const completePendingRecovery = vi.fn()
-const persistInterruptedAssistant = vi.fn()
 const removePendingRecovery = vi.fn()
 const replacePendingRecovery = vi.fn()
 const resetChatRecoverySyncState = vi.fn()
@@ -59,8 +58,6 @@ vi.mock('@/services/inference/chat-recovery-sync', () => ({
   addPendingRecovery: (...args: unknown[]) => addPendingRecovery(...args),
   completePendingRecovery: (...args: unknown[]) =>
     completePendingRecovery(...args),
-  persistInterruptedAssistant: (...args: unknown[]) =>
-    persistInterruptedAssistant(...args),
   removePendingRecovery: (...args: unknown[]) => removePendingRecovery(...args),
   replacePendingRecovery: (...args: unknown[]) =>
     replacePendingRecovery(...args),
@@ -171,7 +168,6 @@ describe('chat recovery lifecycle', () => {
     removePendingRecovery.mockResolvedValue(undefined)
     addPendingRecovery.mockResolvedValue(undefined)
     completePendingRecovery.mockResolvedValue(undefined)
-    persistInterruptedAssistant.mockResolvedValue(undefined)
     replacePendingRecovery.mockResolvedValue(undefined)
     retryDeferredAlternativesFinalization.mockResolvedValue(undefined)
   })
@@ -192,7 +188,7 @@ describe('chat recovery lifecycle', () => {
         },
       }),
     ).rejects.toMatchObject({ name: 'AbortError' })
-    await cancellation
+    await expect(cancellation).resolves.toBe(false)
 
     expect(encryptRecoveryEnvelope).not.toHaveBeenCalled()
     expect(addPendingRecovery).not.toHaveBeenCalled()
@@ -215,60 +211,21 @@ describe('chat recovery lifecycle', () => {
     expect(deleteChatRecovery).not.toHaveBeenCalled()
   })
 
-  it('falls back when completion does not retain the stopped assistant', async () => {
+  it('does not overwrite a concurrently removed recovery', async () => {
     await persistActiveRecovery()
     completePendingRecovery.mockResolvedValueOnce({
       id: 'chat-1',
       messages: [{ role: 'user', content: 'Question', turnId: 'turn-1' }],
     })
 
-    persistInterruptedAssistant.mockResolvedValueOnce({
-      id: 'chat-1',
-      messages: [
-        {
-          role: 'assistant',
-          content: 'Partial answer',
-          turnId: 'turn-1',
-        },
-      ],
-    })
-
-    const stoppedMessage = {
-      role: 'assistant' as const,
+    const handled = await cancelChatRecovery('chat-1', {
+      role: 'assistant',
       content: 'Partial answer',
       turnId: 'turn-1',
       timestamp: new Date(),
-    }
-    const persisted = await cancelChatRecovery('chat-1', stoppedMessage)
-
-    expect(persistInterruptedAssistant).toHaveBeenCalledWith(
-      'chat-1',
-      'turn-1',
-      expect.objectContaining(stoppedMessage),
-    )
-    expect(persisted).toBe(true)
-    expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
-  })
-
-  it('retains the recovery session when no-op fallback persistence fails', async () => {
-    await persistActiveRecovery()
-    completePendingRecovery.mockResolvedValueOnce({
-      id: 'chat-1',
-      messages: [{ role: 'user', content: 'Question', turnId: 'turn-1' }],
     })
-    persistInterruptedAssistant.mockRejectedValueOnce(
-      new Error('fallback failed'),
-    )
 
-    await expect(
-      cancelChatRecovery('chat-1', {
-        role: 'assistant',
-        content: 'Partial answer',
-        turnId: 'turn-1',
-        timestamp: new Date(),
-      }),
-    ).rejects.toThrow('fallback failed')
-
+    expect(handled).toBe(true)
     expect(deleteChatRecovery).not.toHaveBeenCalled()
   })
 
