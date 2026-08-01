@@ -204,7 +204,7 @@ describe('profile-settings-serializer', () => {
     expect(loadLocalSettings().webSearchAvailable).toBe(true)
   })
 
-  it('defaults sidebar chat title pixelation to on', () => {
-    expect(loadLocalSettings().pixelateSidebarChatTitlesEnabled).toBe(true)
+  it('omits sidebar chat title pixelation when it has not been set', () => {
+    expect(loadLocalSettings().pixelateSidebarChatTitlesEnabled).toBeUndefined()
   })
 })

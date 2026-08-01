@@ -139,14 +139,25 @@ export function PixelatedText({
       startRendering()
     }
 
-    pointerQuery?.addEventListener('change', handlePointerCapabilityChange)
+    if (typeof pointerQuery?.addEventListener === 'function') {
+      pointerQuery.addEventListener('change', handlePointerCapabilityChange)
+    } else {
+      pointerQuery?.addListener(handlePointerCapabilityChange)
+    }
     startRendering()
 
     void document.fonts?.ready.then(startRendering)
 
     return () => {
       cancelled = true
-      pointerQuery?.removeEventListener('change', handlePointerCapabilityChange)
+      if (typeof pointerQuery?.removeEventListener === 'function') {
+        pointerQuery.removeEventListener(
+          'change',
+          handlePointerCapabilityChange,
+        )
+      } else {
+        pointerQuery?.removeListener(handlePointerCapabilityChange)
+      }
       resizeObserver?.disconnect()
     }
   }, [active, renderKey, text])

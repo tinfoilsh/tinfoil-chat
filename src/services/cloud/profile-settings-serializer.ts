@@ -217,10 +217,10 @@ export function loadLocalSettings(): ProfileData {
   const pixelateSidebarChatTitlesEnabled = localStorage.getItem(
     SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   )
-  settings.pixelateSidebarChatTitlesEnabled =
-    pixelateSidebarChatTitlesEnabled === null
-      ? true
-      : pixelateSidebarChatTitlesEnabled === 'true'
+  if (pixelateSidebarChatTitlesEnabled !== null) {
+    settings.pixelateSidebarChatTitlesEnabled =
+      pixelateSidebarChatTitlesEnabled === 'true'
+  }
 
   const piiCheckEnabled = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
   if (piiCheckEnabled !== null) {

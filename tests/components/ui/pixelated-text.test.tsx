@@ -121,4 +121,35 @@ describe('PixelatedText', () => {
     )
     expect(fillText).toHaveBeenCalled()
   })
+
+  it('supports legacy media query listeners', () => {
+    let handleChange: (() => void) | undefined
+    const pointerQuery = {
+      matches: false,
+      addListener: vi.fn((listener: () => void) => {
+        handleChange = listener
+      }),
+      removeListener: vi.fn(),
+    }
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => pointerQuery),
+    )
+
+    const view = render(
+      <PixelatedText text="Legacy browser title" active={true}>
+        Legacy browser title
+      </PixelatedText>,
+    )
+
+    pointerQuery.matches = true
+    act(() => handleChange?.())
+
+    expect(
+      screen.getByText('Legacy browser title').parentElement,
+    ).toHaveAttribute('data-pixelation-ready', 'true')
+
+    view.unmount()
+    expect(pointerQuery.removeListener).toHaveBeenCalledWith(handleChange)
+  })
 })
