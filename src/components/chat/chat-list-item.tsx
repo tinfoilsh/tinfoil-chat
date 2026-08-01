@@ -385,7 +385,7 @@ export function ChatListItem({
                   chat.decryptionFailed
                     ? 'text-orange-500'
                     : 'text-content-primary',
-                  shouldBlurTitle && 'sidebar-chat-title-blurred',
+                  shouldBlurTitle && 'sidebar-chat-title-motion-blurred',
                 )}
               >
                 {chat.decryptionFailed ? (

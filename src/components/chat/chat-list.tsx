@@ -13,6 +13,9 @@ import {
 } from './chat-list-item'
 import { DeleteConfirmation } from './delete-confirmation'
 
+const SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID = 'sidebar-chat-title-horizontal-blur'
+const SIDEBAR_CHAT_TITLE_BLUR_STD_DEVIATION = '1.5 0.15'
+
 function Shimmer({ className }: { className?: string }) {
   return (
     <div
@@ -200,7 +203,28 @@ export function ChatList({
 
   return (
     <>
-      <div role="list" className="space-y-2 p-2">
+      <svg aria-hidden="true" className="absolute h-0 w-0" focusable="false">
+        <defs>
+          <filter
+            id={SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID}
+            colorInterpolationFilters="sRGB"
+          >
+            <feGaussianBlur
+              in="SourceGraphic"
+              stdDeviation={SIDEBAR_CHAT_TITLE_BLUR_STD_DEVIATION}
+            />
+          </filter>
+        </defs>
+      </svg>
+      <div
+        role="list"
+        className="space-y-2 p-2"
+        style={
+          {
+            '--sidebar-chat-title-blur-filter': `url(#${SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID})`,
+          } as React.CSSProperties
+        }
+      >
         {lastBlankIndex < 0 && loadingIndicator}
         {visibleChats.map((chat, index) => (
           <Fragment key={getChatKey(chat)}>

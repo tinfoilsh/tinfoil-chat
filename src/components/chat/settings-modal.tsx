@@ -2357,8 +2357,8 @@ ${encryptionKey.replace('key_', '')}
                             Blur sidebar chat titles
                           </div>
                           <div className="font-aeonik-fono text-xs text-content-muted">
-                            Subtly blur inactive chat titles until you hover
-                            over them.
+                            Apply a horizontal blur to inactive titles until you
+                            hover over them.
                           </div>
                         </div>
                         <label className="relative inline-flex cursor-pointer items-center">

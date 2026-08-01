@@ -77,7 +77,7 @@ describe('ChatListItem title privacy', () => {
     renderChatListItem()
 
     expect(screen.getByText('Trip planning')).toHaveClass(
-      'sidebar-chat-title-blurred',
+      'sidebar-chat-title-motion-blurred',
     )
   })
 
@@ -85,7 +85,7 @@ describe('ChatListItem title privacy', () => {
     renderChatListItem({ isSelected: true })
 
     expect(screen.getByText('Trip planning')).not.toHaveClass(
-      'sidebar-chat-title-blurred',
+      'sidebar-chat-title-motion-blurred',
     )
   })
 
@@ -100,7 +100,7 @@ describe('ChatListItem title privacy', () => {
     })
 
     expect(screen.getByText('New Chat')).not.toHaveClass(
-      'sidebar-chat-title-blurred',
+      'sidebar-chat-title-motion-blurred',
     )
   })
 
@@ -108,7 +108,7 @@ describe('ChatListItem title privacy', () => {
     renderChatListItem({ blurSidebarChatTitles: false })
 
     expect(screen.getByText('Trip planning')).not.toHaveClass(
-      'sidebar-chat-title-blurred',
+      'sidebar-chat-title-motion-blurred',
     )
   })
 })
