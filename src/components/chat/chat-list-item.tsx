@@ -383,6 +383,7 @@ export function ChatListItem({
                     : 'text-content-primary',
                   !chat.isBlankChat &&
                     !chat.decryptionFailed &&
+                    !isSelected &&
                     'blur-sm group-focus-within:blur-none group-hover:blur-none',
                 )}
               >
