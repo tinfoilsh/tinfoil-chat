@@ -197,7 +197,7 @@ describe('passkey-service', () => {
       // this as an unhandled rejection between fake-timer ticks.
       resultPromise.catch(() => {})
 
-      await vi.advanceTimersByTimeAsync(15_000)
+      await vi.advanceTimersByTimeAsync(65_000)
 
       await expect(resultPromise).rejects.toBeInstanceOf(PasskeyTimeoutError)
     })
@@ -210,18 +210,19 @@ describe('passkey-service', () => {
       const resultPromise = authenticatePrfPasskey(['AAAA'])
       resultPromise.catch(() => {})
 
-      await vi.advanceTimersByTimeAsync(15_000)
+      await vi.advanceTimersByTimeAsync(65_000)
 
       await expect(resultPromise).rejects.toBeInstanceOf(PasskeyTimeoutError)
     })
 
-    it('authenticatePrfPasskey returns null when PRF output is missing from assertion', async () => {
+    it('authenticatePrfPasskey throws when PRF output is missing from assertion', async () => {
       installCredentialsMock({
         get: vi.fn(async () => fakePublicKeyCredential({ prfEnabled: false })),
       })
 
-      const result = await authenticatePrfPasskey(['AAAA'])
-      expect(result).toBeNull()
+      await expect(authenticatePrfPasskey(['AAAA'])).rejects.toBeInstanceOf(
+        PrfNotSupportedError,
+      )
     })
   })
 })
