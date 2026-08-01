@@ -1,5 +1,5 @@
 import { PixelatedText } from '@/components/ui/pixelated-text'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const CANVAS_TEXT_WIDTH_PER_CHARACTER = 4
@@ -85,10 +85,20 @@ describe('PixelatedText', () => {
     expect(source.parentElement?.querySelector('canvas')).toBeNull()
   })
 
-  it('skips canvas rendering on touch-only devices', () => {
+  it('renders when a touch-only device gains a hover-capable pointer', () => {
+    let handleChange: (() => void) | undefined
+    const pointerQuery = {
+      matches: false,
+      addEventListener: vi.fn(
+        (_event: string, listener: EventListenerOrEventListenerObject) => {
+          handleChange = listener as () => void
+        },
+      ),
+      removeEventListener: vi.fn(),
+    }
     vi.stubGlobal(
       'matchMedia',
-      vi.fn(() => ({ matches: false })),
+      vi.fn(() => pointerQuery),
     )
 
     render(
@@ -101,5 +111,14 @@ describe('PixelatedText', () => {
       'data-pixelation-ready',
     )
     expect(fillText).not.toHaveBeenCalled()
+
+    pointerQuery.matches = true
+    act(() => handleChange?.())
+
+    expect(screen.getByText('Touch title').parentElement).toHaveAttribute(
+      'data-pixelation-ready',
+      'true',
+    )
+    expect(fillText).toHaveBeenCalled()
   })
 })

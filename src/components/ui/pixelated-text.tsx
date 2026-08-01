@@ -65,12 +65,6 @@ export function PixelatedText({
   useIsomorphicLayoutEffect(() => {
     setIsCanvasReady(false)
     if (!active) return
-    if (
-      typeof window.matchMedia === 'function' &&
-      !window.matchMedia(HOVER_CAPABLE_POINTER_QUERY).matches
-    ) {
-      return
-    }
 
     const container = containerRef.current
     const source = sourceRef.current
@@ -78,6 +72,11 @@ export function PixelatedText({
     if (!container || !source || !canvas) return
 
     let cancelled = false
+    let resizeObserver: ResizeObserver | null = null
+    const pointerQuery =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia(HOVER_CAPABLE_POINTER_QUERY)
+        : null
 
     const drawPixelatedText = () => {
       if (cancelled) return
@@ -118,18 +117,36 @@ export function PixelatedText({
       setIsCanvasReady(true)
     }
 
-    drawPixelatedText()
+    const stopRendering = () => {
+      resizeObserver?.disconnect()
+      resizeObserver = null
+      setIsCanvasReady(false)
+    }
 
-    const resizeObserver =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(drawPixelatedText)
-    resizeObserver?.observe(container)
+    const startRendering = () => {
+      if (cancelled) return
+      if (pointerQuery && !pointerQuery.matches) return
 
-    void document.fonts?.ready.then(drawPixelatedText)
+      drawPixelatedText()
+      if (typeof ResizeObserver !== 'undefined' && !resizeObserver) {
+        resizeObserver = new ResizeObserver(drawPixelatedText)
+        resizeObserver.observe(container)
+      }
+    }
+
+    const handlePointerCapabilityChange = () => {
+      stopRendering()
+      startRendering()
+    }
+
+    pointerQuery?.addEventListener('change', handlePointerCapabilityChange)
+    startRendering()
+
+    void document.fonts?.ready.then(startRendering)
 
     return () => {
       cancelled = true
+      pointerQuery?.removeEventListener('change', handlePointerCapabilityChange)
       resizeObserver?.disconnect()
     }
   }, [active, renderKey, text])

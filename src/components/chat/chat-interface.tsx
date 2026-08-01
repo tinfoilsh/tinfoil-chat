@@ -1191,7 +1191,12 @@ export function ChatInterface({
     const handlePixelateSidebarChatTitlesStorageChange = (
       event: StorageEvent,
     ) => {
-      if (event.key !== SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED) return
+      if (
+        event.key !== null &&
+        event.key !== SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED
+      ) {
+        return
+      }
       setPixelateSidebarChatTitles(
         event.newValue === null ? true : event.newValue === 'true',
       )

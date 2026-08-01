@@ -195,6 +195,13 @@ export function ChatListItem({
     pixelateSidebarChatTitles && hasRealTitle && !isNewChat && !isSelected
 
   useEffect(() => {
+    if (shouldPixelateTitle) {
+      setDisplayTitle(chat.title)
+      setIsAnimating(false)
+      prevTitleRef.current = chat.title
+      return
+    }
+
     if (
       enableTitleAnimation &&
       prevTitleRef.current !== chat.title &&
@@ -208,7 +215,7 @@ export function ChatListItem({
       setDisplayTitle(chat.title)
       prevTitleRef.current = chat.title
     }
-  }, [chat.title, enableTitleAnimation])
+  }, [chat.title, enableTitleAnimation, shouldPixelateTitle])
 
   const handleAnimationComplete = () => {
     setDisplayTitle(chat.title)

@@ -17,36 +17,44 @@ function renderChatListItem({
   chat = savedChat,
   isSelected = false,
   pixelateSidebarChatTitles,
+  enableTitleAnimation = false,
 }: {
   href?: string
   onSelect?: () => void
   chat?: ChatItemData
   isSelected?: boolean
   pixelateSidebarChatTitles?: boolean
+  enableTitleAnimation?: boolean
 } = {}) {
-  render(
+  const renderItem = (item: ChatItemData) => (
     <ChatListItem
-      chat={chat}
+      chat={item}
       href={href}
       isSelected={isSelected}
       isEditing={false}
       editingTitle=""
       isDarkMode={false}
       pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+      enableTitleAnimation={enableTitleAnimation}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
       onSaveTitle={vi.fn()}
       onCancelEdit={vi.fn()}
       onRequestDelete={vi.fn()}
-    />,
+    />
   )
-  return onSelect
+  const view = render(renderItem(chat))
+  return {
+    onSelect,
+    rerenderChat: (updatedChat: ChatItemData) =>
+      view.rerender(renderItem(updatedChat)),
+  }
 }
 
 describe('ChatListItem navigation semantics', () => {
   it('renders persistent chats as links and handles ordinary clicks in place', () => {
-    const onSelect = renderChatListItem({ href: '/chat/chat-123' })
+    const { onSelect } = renderChatListItem({ href: '/chat/chat-123' })
     const link = screen.getByRole('link', { name: /Trip planning/ })
 
     expect(link).toHaveAttribute('href', '/chat/chat-123')
@@ -55,7 +63,7 @@ describe('ChatListItem navigation semantics', () => {
   })
 
   it('preserves modified- and middle-click link behavior', () => {
-    const onSelect = renderChatListItem({ href: '/chat/chat-123' })
+    const { onSelect } = renderChatListItem({ href: '/chat/chat-123' })
     const link = screen.getByRole('link')
 
     fireEvent.click(link, { ctrlKey: true })
@@ -64,7 +72,7 @@ describe('ChatListItem navigation semantics', () => {
   })
 
   it('renders chats without destinations as buttons', () => {
-    const onSelect = renderChatListItem()
+    const { onSelect } = renderChatListItem()
 
     fireEvent.click(screen.getByRole('button', { name: /Trip planning/ }))
     expect(onSelect).toHaveBeenCalledOnce()
@@ -122,6 +130,17 @@ describe('ChatListItem title privacy', () => {
     renderChatListItem({ pixelateSidebarChatTitles: false })
 
     expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
+      'pixelated-text',
+    )
+  })
+
+  it('updates pixelated titles without hiding a stale animation', () => {
+    const { rerenderChat } = renderChatListItem({ enableTitleAnimation: true })
+
+    rerenderChat({ ...savedChat, title: 'Updated trip' })
+
+    expect(screen.queryByText('Trip planning')).not.toBeInTheDocument()
+    expect(screen.getByText('Updated trip').parentElement).toHaveClass(
       'pixelated-text',
     )
   })
