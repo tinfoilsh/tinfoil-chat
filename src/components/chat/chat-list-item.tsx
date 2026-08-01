@@ -5,19 +5,23 @@ import { canRequestChatPin } from '@/services/storage/pinned-chats'
 import { isPlainPrimaryClick } from '@/utils/navigation'
 import {
   CheckIcon,
-  CloudArrowUpIcon,
   CloudIcon,
   EllipsisVerticalIcon,
-  ExclamationTriangleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { TfFolder, TfTrash, TfWriting } from '@tinfoilsh/tinfoil-icons'
+import {
+  TfCloudSync,
+  TfFolder,
+  TfLockLocked,
+  TfTrash,
+  TfWarning,
+  TfWriting,
+} from '@tinfoilsh/tinfoil-icons'
 import Link from 'next/link'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { PiPushPin, PiPushPinFill } from 'react-icons/pi'
-import { FaLock } from '../icons/lazy-icons'
 import { RedactedText } from '../ui/redacted-text'
 import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
@@ -434,8 +438,8 @@ export function ChatListItem({
           <>
             <span className="flex items-center gap-1.5">
               {showEncryptionStatus && chat.decryptionFailed && (
-                <FaLock
-                  className="h-3.5 w-3.5 flex-shrink-0 text-orange-500"
+                <TfLockLocked
+                  className="h-3.5 w-3.5 flex-shrink-0 !text-orange-500"
                   title="Encrypted chat"
                   aria-hidden="true"
                 />
@@ -526,10 +530,7 @@ export function ChatListItem({
                         className="flex items-center text-orange-500"
                         title="This chat couldn't be synced"
                       >
-                        <ExclamationTriangleIcon
-                          className="h-3 w-3"
-                          aria-hidden="true"
-                        />
+                        <TfWarning className="h-3 w-3" aria-hidden="true" />
                         <span className="sr-only">
                           This chat couldn&apos;t be synced
                         </span>
@@ -541,10 +542,7 @@ export function ChatListItem({
                         className="flex items-center text-blue-500"
                         title="Syncing with cloud"
                       >
-                        <CloudArrowUpIcon
-                          className="h-3 w-3"
-                          aria-hidden="true"
-                        />
+                        <TfCloudSync className="h-3 w-3" aria-hidden="true" />
                         <span className="sr-only">Syncing with cloud</span>
                       </span>
                     ) : null}

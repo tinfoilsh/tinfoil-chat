@@ -84,8 +84,10 @@ import {
   TfChat2,
   TfCloudSync,
   TfComputer,
+  TfLightbulb,
   TfMoon,
   TfPerson,
+  TfShieldCheck,
   TfSunLightMode,
   TfTrash,
   TfWriting,
@@ -96,9 +98,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AiOutlineExport } from 'react-icons/ai'
 import { BsQrCode } from 'react-icons/bs'
 import { GoPasskeyFill } from 'react-icons/go'
-import { IoShieldCheckmark } from 'react-icons/io5'
 import { PiSignIn, PiSpinner } from 'react-icons/pi'
-import { RiLightbulbFill, RiShieldKeyholeFill } from 'react-icons/ri'
+import { RiShieldKeyholeFill } from 'react-icons/ri'
 import QRCode from 'react-qr-code'
 import { CloudSyncHealthCard } from './cloud-sync-health-card'
 import { ConfirmDialog } from './components/confirm-dialog'
@@ -3328,7 +3329,10 @@ ${encryptionKey.replace('key_', '')}
                       className="flex w-full items-center justify-between p-4"
                     >
                       <div className="flex items-center gap-2">
-                        <RiLightbulbFill className="h-4 w-4 text-content-muted" />
+                        <TfLightbulb
+                          className="h-4 w-4 !text-content-muted"
+                          aria-hidden="true"
+                        />
                         <h3 className="font-aeonik text-sm font-medium text-content-secondary">
                           How It Works
                         </h3>
@@ -3646,7 +3650,10 @@ ${encryptionKey.replace('key_', '')}
                               </div>
                             </div>
                             <div className="ml-6 mt-2 flex items-center gap-1.5">
-                              <IoShieldCheckmark className="h-3.5 w-3.5 text-brand-accent-light" />
+                              <TfShieldCheck
+                                className="h-3.5 w-3.5 !text-brand-accent-light"
+                                aria-hidden="true"
+                              />
                               <span className="text-xs font-medium text-brand-accent-light">
                                 Passkey active
                               </span>
