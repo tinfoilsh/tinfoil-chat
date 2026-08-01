@@ -3,16 +3,15 @@ import { acquireInteractionLock } from '@/utils/interaction-lock'
 import {
   ArrowLeftIcon,
   CheckIcon,
-  PencilSquareIcon,
   PlusIcon,
   SparklesIcon,
   Squares2X2Icon,
   StarIcon,
-  TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { TfTrash, TfWriting } from '@tinfoilsh/tinfoil-icons'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ConfirmDialog } from './components/confirm-dialog'
 import { CONSTANTS } from './constants'
@@ -597,7 +596,7 @@ function PresetDetail({
             onClick={onEdit}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-content-secondary transition-colors hover:bg-surface-chat hover:text-content-primary"
           >
-            <PencilSquareIcon className="h-3.5 w-3.5" />
+            <TfWriting className="h-3.5 w-3.5" aria-hidden="true" />
             Edit
           </button>
         )}
@@ -615,7 +614,7 @@ function PresetDetail({
             onClick={onDelete}
             className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-500/10"
           >
-            <TrashIcon className="h-3.5 w-3.5" />
+            <TfTrash className="h-3.5 w-3.5" aria-hidden="true" />
             Delete
           </button>
         )}
