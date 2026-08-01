@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const CANVAS_TEXT_WIDTH_PER_CHARACTER = 4
 const SOURCE_WIDTH = 100
 const SOURCE_HEIGHT = 20
+const EXPECTED_CANVAS_WIDTH = 34
+const EXPECTED_CANVAS_HEIGHT = 7
 
 describe('PixelatedText', () => {
   const fillText = vi.fn()
@@ -62,9 +64,13 @@ describe('PixelatedText', () => {
 
     expect(container).toHaveAttribute('data-pixelation-ready', 'true')
     expect(canvas).toHaveAttribute('aria-hidden', 'true')
-    expect(canvas).toHaveProperty('width', SOURCE_WIDTH / 2)
-    expect(canvas).toHaveProperty('height', SOURCE_HEIGHT / 2)
-    expect(fillText).toHaveBeenCalledWith('Private t...', 0, SOURCE_HEIGHT / 4)
+    expect(canvas).toHaveProperty('width', EXPECTED_CANVAS_WIDTH)
+    expect(canvas).toHaveProperty('height', EXPECTED_CANVAS_HEIGHT)
+    expect(fillText).toHaveBeenCalledWith(
+      'Priva...',
+      0,
+      EXPECTED_CANVAS_HEIGHT / 2,
+    )
   })
 
   it('renders only accessible source text when inactive', () => {
