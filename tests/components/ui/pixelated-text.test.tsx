@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const CANVAS_TEXT_WIDTH_PER_CHARACTER = 4
 const SOURCE_WIDTH = 100
 const SOURCE_HEIGHT = 20
-const EXPECTED_CANVAS_WIDTH = 34
-const EXPECTED_CANVAS_HEIGHT = 7
+const EXPECTED_CANVAS_WIDTH = 40
+const EXPECTED_CANVAS_HEIGHT = 8
 
 describe('PixelatedText', () => {
   const fillText = vi.fn()
@@ -67,7 +67,7 @@ describe('PixelatedText', () => {
     expect(canvas).toHaveProperty('width', EXPECTED_CANVAS_WIDTH)
     expect(canvas).toHaveProperty('height', EXPECTED_CANVAS_HEIGHT)
     expect(fillText).toHaveBeenCalledWith(
-      'Priva...',
+      'Private...',
       0,
       EXPECTED_CANVAS_HEIGHT / 2,
     )

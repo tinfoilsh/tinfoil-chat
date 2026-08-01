@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { cn } from './utils'
 
-const PIXEL_SIZE_CSS_PX = 3
+const PIXEL_SIZE_CSS_PX = 2.5
 const MIN_CANVAS_DIMENSION = 1
 const TEXT_ELLIPSIS = '...'
 const HOVER_CAPABLE_POINTER_QUERY = '(hover: hover) and (pointer: fine)'
