@@ -377,10 +377,13 @@ export function ChatListItem({
               )}
               <span
                 className={cn(
-                  'truncate font-aeonik-fono text-sm font-medium',
+                  'truncate font-aeonik-fono text-sm font-medium transition-[filter]',
                   chat.decryptionFailed
                     ? 'text-orange-500'
                     : 'text-content-primary',
+                  !chat.isBlankChat &&
+                    !chat.decryptionFailed &&
+                    'blur-sm group-focus-within:blur-none group-hover:blur-none',
                 )}
               >
                 {chat.decryptionFailed ? (
