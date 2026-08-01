@@ -104,6 +104,20 @@ describe('ChatListItem title privacy', () => {
     )
   })
 
+  it('keeps saved chats without messages clear', () => {
+    renderChatListItem({
+      chat: {
+        id: 'empty-saved-chat',
+        title: 'Empty saved chat',
+        messageCount: 0,
+      },
+    })
+
+    expect(screen.getByText('Empty saved chat')).not.toHaveClass(
+      'sidebar-chat-title-motion-blurred',
+    )
+  })
+
   it('keeps saved chat titles clear when blurring is disabled', () => {
     renderChatListItem({ blurSidebarChatTitles: false })
 

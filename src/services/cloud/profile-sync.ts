@@ -79,7 +79,7 @@ export interface ProfileData {
   webSearchEnabled?: boolean
   webSearchAvailable?: boolean
   codeExecutionEnabled?: boolean
-  blurSidebarChatTitles?: boolean
+  blurSidebarChatTitlesEnabled?: boolean
   piiCheckEnabled?: boolean
   genUIEnabled?: boolean
   chatFont?: 'system' | 'serif' | 'mono' | 'dyslexic'

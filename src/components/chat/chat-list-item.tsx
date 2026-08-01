@@ -190,7 +190,8 @@ export function ChatListItem({
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
   const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
-  const shouldBlurTitle = blurSidebarChatTitles && hasRealTitle && !isSelected
+  const shouldBlurTitle =
+    blurSidebarChatTitles && hasRealTitle && !isNewChat && !isSelected
 
   useEffect(() => {
     if (

@@ -14,7 +14,7 @@ import {
 import { DeleteConfirmation } from './delete-confirmation'
 
 const SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID = 'sidebar-chat-title-horizontal-blur'
-const SIDEBAR_CHAT_TITLE_BLUR_STD_DEVIATION = '1.5 0.15'
+const SIDEBAR_CHAT_TITLE_BLUR_STD_DEVIATION = '2.25 0.2'
 
 function Shimmer({ className }: { className?: string }) {
   return (

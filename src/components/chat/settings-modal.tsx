@@ -2,8 +2,9 @@ import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
+import { BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
-  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_GENUI_ENABLED,
@@ -645,7 +646,7 @@ export function SettingsModal({
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
 
     const savedBlurSidebarChatTitles = localStorage.getItem(
-      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
     )
     setBlurSidebarChatTitles(
       savedBlurSidebarChatTitles === null
@@ -696,6 +697,11 @@ export function SettingsModal({
     const handleProfileSyncUpdate = () => {
       loadSettingsFromStorage()
     }
+    const handleBlurSidebarChatTitlesUpdate = (
+      event: CustomEvent<{ enabled: boolean }>,
+    ) => {
+      setBlurSidebarChatTitles(event.detail.enabled)
+    }
 
     // Listen for cloud sync setting changes (e.g., from modal or other sources)
     const handleCloudSyncUpdate = () => {
@@ -714,8 +720,8 @@ export function SettingsModal({
       handleProfileSyncUpdate,
     )
     window.addEventListener(
-      'blurSidebarChatTitlesChanged',
-      handleProfileSyncUpdate,
+      BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+      handleBlurSidebarChatTitlesUpdate as EventListener,
     )
     window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
 
@@ -735,8 +741,8 @@ export function SettingsModal({
         handleProfileSyncUpdate,
       )
       window.removeEventListener(
-        'blurSidebarChatTitlesChanged',
-        handleProfileSyncUpdate,
+        BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+        handleBlurSidebarChatTitlesUpdate as EventListener,
       )
       window.removeEventListener(
         'cloudSyncSettingChanged',
@@ -2371,12 +2377,12 @@ ${encryptionKey.replace('key_', '')}
                               setBlurSidebarChatTitles(newValue)
                               if (isClient) {
                                 localStorage.setItem(
-                                  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+                                  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
                                   newValue.toString(),
                                 )
                                 window.dispatchEvent(
                                   new CustomEvent(
-                                    'blurSidebarChatTitlesChanged',
+                                    BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
                                     {
                                       detail: { enabled: newValue },
                                     },

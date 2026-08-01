@@ -1,5 +1,5 @@
 import {
-  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
@@ -105,7 +105,7 @@ describe('profile-settings-serializer', () => {
     localStorage.setItem(SETTINGS_WEB_SEARCH_ENABLED, 'false')
     localStorage.setItem(SETTINGS_WEB_SEARCH_AVAILABLE, 'false')
     localStorage.setItem(SETTINGS_CODE_EXECUTION_ENABLED, 'true')
-    localStorage.setItem(SETTINGS_BLUR_SIDEBAR_CHAT_TITLES, 'false')
+    localStorage.setItem(SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED, 'false')
     localStorage.setItem(SETTINGS_PII_CHECK_ENABLED, 'false')
     localStorage.setItem(SETTINGS_CHAT_FONT, 'mono')
     localStorage.setItem(USER_PREFS_PROJECT_UPLOAD, 'project')
@@ -120,7 +120,7 @@ describe('profile-settings-serializer', () => {
       webSearchEnabled: false,
       webSearchAvailable: false,
       codeExecutionEnabled: true,
-      blurSidebarChatTitles: false,
+      blurSidebarChatTitlesEnabled: false,
       piiCheckEnabled: false,
       chatFont: 'mono',
       projectUploadPreference: 'project',
@@ -174,7 +174,7 @@ describe('profile-settings-serializer', () => {
       webSearchEnabled: true,
       webSearchAvailable: false,
       codeExecutionEnabled: false,
-      blurSidebarChatTitles: true,
+      blurSidebarChatTitlesEnabled: true,
       piiCheckEnabled: true,
       chatFont: 'serif',
       projectUploadPreference: 'chat',
@@ -192,7 +192,9 @@ describe('profile-settings-serializer', () => {
     expect(localStorage.getItem(SETTINGS_WEB_SEARCH_ENABLED)).toBe('true')
     expect(localStorage.getItem(SETTINGS_WEB_SEARCH_AVAILABLE)).toBe('false')
     expect(localStorage.getItem(SETTINGS_CODE_EXECUTION_ENABLED)).toBe('false')
-    expect(localStorage.getItem(SETTINGS_BLUR_SIDEBAR_CHAT_TITLES)).toBe('true')
+    expect(
+      localStorage.getItem(SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED),
+    ).toBe('true')
     expect(localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)).toBe('true')
     expect(localStorage.getItem(SETTINGS_CHAT_FONT)).toBe('serif')
     expect(localStorage.getItem(USER_PREFS_PROJECT_UPLOAD)).toBe('chat')
@@ -203,6 +205,6 @@ describe('profile-settings-serializer', () => {
   })
 
   it('defaults sidebar chat title blurring to on', () => {
-    expect(loadLocalSettings().blurSidebarChatTitles).toBe(true)
+    expect(loadLocalSettings().blurSidebarChatTitlesEnabled).toBe(true)
   })
 })

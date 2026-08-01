@@ -4,8 +4,9 @@ import {
   getSystemPromptAndRules,
   type BaseModel,
 } from '@/config/models'
+import { BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
-  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_HAS_SEEN_ONBOARDING,
@@ -498,7 +499,9 @@ export function ChatInterface({
 
   const [blurSidebarChatTitles, setBlurSidebarChatTitles] = useState(() => {
     if (typeof window === 'undefined') return true
-    const saved = localStorage.getItem(SETTINGS_BLUR_SIDEBAR_CHAT_TITLES)
+    const saved = localStorage.getItem(
+      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
+    )
     return saved === null ? true : saved === 'true'
   })
 
@@ -1184,7 +1187,7 @@ export function ChatInterface({
       setBlurSidebarChatTitles(event.detail.enabled)
     }
     const handleBlurSidebarChatTitlesStorageChange = (event: StorageEvent) => {
-      if (event.key !== SETTINGS_BLUR_SIDEBAR_CHAT_TITLES) return
+      if (event.key !== SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED) return
       setBlurSidebarChatTitles(
         event.newValue === null ? true : event.newValue === 'true',
       )
@@ -1195,7 +1198,7 @@ export function ChatInterface({
       handlePiiCheckChange as EventListener,
     )
     window.addEventListener(
-      'blurSidebarChatTitlesChanged',
+      BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
       handleBlurSidebarChatTitlesChange as EventListener,
     )
     window.addEventListener('storage', handleBlurSidebarChatTitlesStorageChange)
@@ -1206,7 +1209,7 @@ export function ChatInterface({
         handlePiiCheckChange as EventListener,
       )
       window.removeEventListener(
-        'blurSidebarChatTitlesChanged',
+        BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
         handleBlurSidebarChatTitlesChange as EventListener,
       )
       window.removeEventListener(

@@ -1,5 +1,6 @@
+import { BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
-  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
@@ -92,7 +93,8 @@ export function hasProfileChanged(
     profile1.webSearchEnabled !== profile2.webSearchEnabled ||
     profile1.webSearchAvailable !== profile2.webSearchAvailable ||
     profile1.codeExecutionEnabled !== profile2.codeExecutionEnabled ||
-    profile1.blurSidebarChatTitles !== profile2.blurSidebarChatTitles ||
+    profile1.blurSidebarChatTitlesEnabled !==
+      profile2.blurSidebarChatTitlesEnabled ||
     profile1.piiCheckEnabled !== profile2.piiCheckEnabled ||
     profile1.genUIEnabled !== profile2.genUIEnabled ||
     profile1.chatFont !== profile2.chatFont ||
@@ -212,11 +214,13 @@ export function loadLocalSettings(): ProfileData {
     settings.codeExecutionEnabled = codeExecutionEnabled === 'true'
   }
 
-  const blurSidebarChatTitles = localStorage.getItem(
-    SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
+  const blurSidebarChatTitlesEnabled = localStorage.getItem(
+    SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   )
-  settings.blurSidebarChatTitles =
-    blurSidebarChatTitles === null ? true : blurSidebarChatTitles === 'true'
+  settings.blurSidebarChatTitlesEnabled =
+    blurSidebarChatTitlesEnabled === null
+      ? true
+      : blurSidebarChatTitlesEnabled === 'true'
 
   const piiCheckEnabled = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
   if (piiCheckEnabled !== null) {
@@ -269,7 +273,7 @@ export function resetSettingsToLocalDefaults(): ProfileData {
     webSearchEnabled: true,
     webSearchAvailable: true,
     codeExecutionEnabled: false,
-    blurSidebarChatTitles: true,
+    blurSidebarChatTitlesEnabled: true,
     piiCheckEnabled: true,
     genUIEnabled: true,
     chatFont: 'system',
@@ -467,14 +471,14 @@ export function applySettingsToLocal(settings: ProfileData): void {
     )
   }
 
-  if (settings.blurSidebarChatTitles !== undefined) {
+  if (settings.blurSidebarChatTitlesEnabled !== undefined) {
     localStorage.setItem(
-      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
-      String(settings.blurSidebarChatTitles),
+      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
+      String(settings.blurSidebarChatTitlesEnabled),
     )
     window.dispatchEvent(
-      new CustomEvent('blurSidebarChatTitlesChanged', {
-        detail: { enabled: settings.blurSidebarChatTitles },
+      new CustomEvent(BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT, {
+        detail: { enabled: settings.blurSidebarChatTitlesEnabled },
       }),
     )
   }
