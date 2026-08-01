@@ -5,12 +5,12 @@ import {
   type BaseModel,
 } from '@/config/models'
 import {
+  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_HAS_SEEN_ONBOARDING,
   SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
   SETTINGS_PII_CHECK_ENABLED,
-  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
   SETTINGS_WEB_SEARCH_AVAILABLE,
   UI_EXPAND_PROJECT_DOCUMENTS,
 } from '@/constants/storage-keys'
@@ -496,13 +496,11 @@ export function ChatInterface({
     return saved === null ? true : saved === 'true'
   })
 
-  const [pixelateSidebarChatTitles, setPixelateSidebarChatTitles] = useState(
-    () => {
-      if (typeof window === 'undefined') return true
-      const saved = localStorage.getItem(SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES)
-      return saved === null ? true : saved === 'true'
-    },
-  )
+  const [blurSidebarChatTitles, setBlurSidebarChatTitles] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const saved = localStorage.getItem(SETTINGS_BLUR_SIDEBAR_CHAT_TITLES)
+    return saved === null ? true : saved === 'true'
+  })
 
   // Generative UI setting (controlled from settings modal, defaults to on)
   const [genUIEnabled, setGenUIEnabled] = useState(() => {
@@ -1180,16 +1178,14 @@ export function ChatInterface({
     const handlePiiCheckChange = (event: CustomEvent<{ enabled: boolean }>) => {
       setPiiCheckEnabled(event.detail.enabled)
     }
-    const handlePixelateSidebarChatTitlesChange = (
+    const handleBlurSidebarChatTitlesChange = (
       event: CustomEvent<{ enabled: boolean }>,
     ) => {
-      setPixelateSidebarChatTitles(event.detail.enabled)
+      setBlurSidebarChatTitles(event.detail.enabled)
     }
-    const handlePixelateSidebarChatTitlesStorageChange = (
-      event: StorageEvent,
-    ) => {
-      if (event.key !== SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES) return
-      setPixelateSidebarChatTitles(
+    const handleBlurSidebarChatTitlesStorageChange = (event: StorageEvent) => {
+      if (event.key !== SETTINGS_BLUR_SIDEBAR_CHAT_TITLES) return
+      setBlurSidebarChatTitles(
         event.newValue === null ? true : event.newValue === 'true',
       )
     }
@@ -1199,13 +1195,10 @@ export function ChatInterface({
       handlePiiCheckChange as EventListener,
     )
     window.addEventListener(
-      'pixelateSidebarChatTitlesChanged',
-      handlePixelateSidebarChatTitlesChange as EventListener,
+      'blurSidebarChatTitlesChanged',
+      handleBlurSidebarChatTitlesChange as EventListener,
     )
-    window.addEventListener(
-      'storage',
-      handlePixelateSidebarChatTitlesStorageChange,
-    )
+    window.addEventListener('storage', handleBlurSidebarChatTitlesStorageChange)
 
     return () => {
       window.removeEventListener(
@@ -1213,12 +1206,12 @@ export function ChatInterface({
         handlePiiCheckChange as EventListener,
       )
       window.removeEventListener(
-        'pixelateSidebarChatTitlesChanged',
-        handlePixelateSidebarChatTitlesChange as EventListener,
+        'blurSidebarChatTitlesChanged',
+        handleBlurSidebarChatTitlesChange as EventListener,
       )
       window.removeEventListener(
         'storage',
-        handlePixelateSidebarChatTitlesStorageChange,
+        handleBlurSidebarChatTitlesStorageChange,
       )
     }
   }, [])
@@ -3079,7 +3072,7 @@ export function ChatInterface({
                   setIsOpen={setIsSidebarOpen}
                   project={activeProject}
                   isDarkMode={isDarkMode}
-                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                  blurSidebarChatTitles={blurSidebarChatTitles}
                   onExitProject={handleExitProject}
                   onExitProjectWhileDragging={handleExitProjectWhileDragging}
                   onNewChat={() => createNewChat(false, true)}
@@ -3123,7 +3116,7 @@ export function ChatInterface({
                   projectName={loadingProject?.name}
                   isLoading={true}
                   isDarkMode={isDarkMode}
-                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                  blurSidebarChatTitles={blurSidebarChatTitles}
                   onExitProject={handleExitProject}
                   onExitProjectWhileDragging={handleExitProjectWhileDragging}
                   onNewChat={() => {}}
@@ -3149,7 +3142,7 @@ export function ChatInterface({
                 chats={chats}
                 currentChat={currentChat}
                 isDarkMode={isDarkMode}
-                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                blurSidebarChatTitles={blurSidebarChatTitles}
                 createNewChat={createNewChat}
                 handleChatSelect={handleChatSelect}
                 onOpenChatById={(chatId) => loadChatById(chatId, false)}

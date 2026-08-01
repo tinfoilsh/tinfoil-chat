@@ -90,6 +90,7 @@
     --chart-4: 210 34% 18%;
     --chart-5: 221 39.3% 11%;
     --radius: 0.375rem;
+    --sidebar-chat-title-blur: 1.5px;
   }
 
   [data-theme='dark'],
@@ -163,32 +164,13 @@
 
 @layer utilities {
   @media (hover: hover) and (pointer: fine) {
-    .sidebar-chat-title-pixelated {
-      position: relative;
+    .sidebar-chat-title-blurred {
+      filter: blur(var(--sidebar-chat-title-blur));
     }
 
-    .sidebar-chat-title-pixelated .sidebar-chat-title-text {
-      opacity: 0;
-    }
-
-    .sidebar-chat-title-pixelated::after {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
-      color: inherit;
-      content: attr(data-pixelated-title);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .group:hover .sidebar-chat-title-pixelated .sidebar-chat-title-text,
-    .group:focus-within .sidebar-chat-title-pixelated .sidebar-chat-title-text {
-      opacity: 1;
-    }
-
-    .group:hover .sidebar-chat-title-pixelated::after,
-    .group:focus-within .sidebar-chat-title-pixelated::after {
-      content: none;
+    .group:hover .sidebar-chat-title-blurred,
+    .group:focus-within .sidebar-chat-title-blurred {
+      filter: blur(0);
     }
   }
 }

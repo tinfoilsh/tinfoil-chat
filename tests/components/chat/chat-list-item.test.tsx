@@ -16,13 +16,13 @@ function renderChatListItem({
   onSelect = vi.fn(),
   chat = savedChat,
   isSelected = false,
-  pixelateSidebarChatTitles,
+  blurSidebarChatTitles,
 }: {
   href?: string
   onSelect?: () => void
   chat?: ChatItemData
   isSelected?: boolean
-  pixelateSidebarChatTitles?: boolean
+  blurSidebarChatTitles?: boolean
 } = {}) {
   render(
     <ChatListItem
@@ -32,7 +32,7 @@ function renderChatListItem({
       isEditing={false}
       editingTitle=""
       isDarkMode={false}
-      pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+      blurSidebarChatTitles={blurSidebarChatTitles}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
@@ -73,23 +73,19 @@ describe('ChatListItem navigation semantics', () => {
 })
 
 describe('ChatListItem title privacy', () => {
-  it('pixelates inactive saved chat titles by default', () => {
+  it('blurs inactive saved chat titles by default', () => {
     renderChatListItem()
 
-    expect(screen.getByText('Trip planning').parentElement).toHaveClass(
-      'sidebar-chat-title-pixelated',
-    )
-    expect(screen.getByText('Trip planning').parentElement).toHaveAttribute(
-      'data-pixelated-title',
-      '■■■■ ■■■■■■■■',
+    expect(screen.getByText('Trip planning')).toHaveClass(
+      'sidebar-chat-title-blurred',
     )
   })
 
   it('keeps the active chat title clear', () => {
     renderChatListItem({ isSelected: true })
 
-    expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
-      'sidebar-chat-title-pixelated',
+    expect(screen.getByText('Trip planning')).not.toHaveClass(
+      'sidebar-chat-title-blurred',
     )
   })
 
@@ -103,16 +99,16 @@ describe('ChatListItem title privacy', () => {
       },
     })
 
-    expect(screen.getByText('New Chat').parentElement).not.toHaveClass(
-      'sidebar-chat-title-pixelated',
+    expect(screen.getByText('New Chat')).not.toHaveClass(
+      'sidebar-chat-title-blurred',
     )
   })
 
-  it('keeps saved chat titles clear when pixelation is disabled', () => {
-    renderChatListItem({ pixelateSidebarChatTitles: false })
+  it('keeps saved chat titles clear when blurring is disabled', () => {
+    renderChatListItem({ blurSidebarChatTitles: false })
 
-    expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
-      'sidebar-chat-title-pixelated',
+    expect(screen.getByText('Trip planning')).not.toHaveClass(
+      'sidebar-chat-title-blurred',
     )
   })
 })

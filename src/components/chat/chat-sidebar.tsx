@@ -87,7 +87,7 @@ type ChatSidebarProps = {
   chats: Chat[]
   currentChat: Chat
   isDarkMode: boolean
-  pixelateSidebarChatTitles: boolean
+  blurSidebarChatTitles: boolean
   createNewChat: (isLocalOnly?: boolean, fromUserAction?: boolean) => void
   handleChatSelect: (chatId: string) => void
   /**
@@ -170,7 +170,7 @@ export function ChatSidebar({
   chats,
   currentChat,
   isDarkMode,
-  pixelateSidebarChatTitles,
+  blurSidebarChatTitles,
   createNewChat,
   handleChatSelect,
   onOpenChatById,
@@ -2042,7 +2042,7 @@ export function ChatSidebar({
                       currentChatIsBlank={currentChat?.isBlankChat}
                       currentChatIsLocalOnly={currentChat?.isLocalOnly}
                       isDarkMode={isDarkMode}
-                      pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                      blurSidebarChatTitles={blurSidebarChatTitles}
                       isLoading={
                         isSearchActive &&
                         chatSearch.isSearching &&

@@ -21,12 +21,6 @@ import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
 import { TypingAnimation } from './typing-animation'
 
-const TITLE_PIXEL = '■'
-
-function pixelateTitle(title: string): string {
-  return title.replace(/\S/g, TITLE_PIXEL)
-}
-
 export interface ChatItemData {
   id: string
   title: string
@@ -69,7 +63,7 @@ interface ChatListItemProps {
   isEditing: boolean
   editingTitle: string
   isDarkMode: boolean
-  pixelateSidebarChatTitles?: boolean
+  blurSidebarChatTitles?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
   /**
@@ -155,7 +149,7 @@ export function ChatListItem({
   isEditing,
   editingTitle,
   isDarkMode,
-  pixelateSidebarChatTitles = true,
+  blurSidebarChatTitles = true,
   showEncryptionStatus = false,
   showSyncStatus = false,
   isStreaming = false,
@@ -196,8 +190,7 @@ export function ChatListItem({
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
   const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
-  const shouldPixelateTitle =
-    pixelateSidebarChatTitles && hasRealTitle && !isSelected
+  const shouldBlurTitle = blurSidebarChatTitles && hasRealTitle && !isSelected
 
   useEffect(() => {
     if (
@@ -387,30 +380,25 @@ export function ChatListItem({
                 />
               )}
               <span
-                data-pixelated-title={
-                  shouldPixelateTitle ? pixelateTitle(displayTitle) : undefined
-                }
                 className={cn(
-                  'truncate font-aeonik-fono text-sm font-medium',
+                  'truncate font-aeonik-fono text-sm font-medium transition-[filter]',
                   chat.decryptionFailed
                     ? 'text-orange-500'
                     : 'text-content-primary',
-                  shouldPixelateTitle && 'sidebar-chat-title-pixelated',
+                  shouldBlurTitle && 'sidebar-chat-title-blurred',
                 )}
               >
-                <span className="sidebar-chat-title-text">
-                  {chat.decryptionFailed ? (
-                    'Encrypted'
-                  ) : isAnimating ? (
-                    <TypingAnimation
-                      fromText={animationFromTitle}
-                      toText={animationToTitle}
-                      onComplete={handleAnimationComplete}
-                    />
-                  ) : (
-                    displayTitle
-                  )}
-                </span>
+                {chat.decryptionFailed ? (
+                  'Encrypted'
+                ) : isAnimating ? (
+                  <TypingAnimation
+                    fromText={animationFromTitle}
+                    toText={animationToTitle}
+                    onComplete={handleAnimationComplete}
+                  />
+                ) : (
+                  displayTitle
+                )}
               </span>
               {isStreaming ? (
                 <span

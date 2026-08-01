@@ -343,7 +343,7 @@ export function useProfileSync() {
       'webSearchEnabledChanged',
       'webSearchAvailableChanged',
       'codeExecutionEnabledChanged',
-      'pixelateSidebarChatTitlesChanged',
+      'blurSidebarChatTitlesChanged',
       'piiCheckEnabledChanged',
       'genUIEnabledChanged',
       'chatFontChanged',

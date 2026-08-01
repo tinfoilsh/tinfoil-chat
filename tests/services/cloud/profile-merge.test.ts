@@ -193,19 +193,19 @@ describe('changedProfileFields', () => {
       traits: ['x'],
       thinkingEnabled: true,
       webSearchAvailable: true,
-      pixelateSidebarChatTitles: true,
+      blurSidebarChatTitles: true,
     }
     const local: ProfileData = {
       nickname: 'b',
       traits: ['x', 'y'],
       thinkingEnabled: true,
       webSearchAvailable: false,
-      pixelateSidebarChatTitles: false,
+      blurSidebarChatTitles: false,
     }
     const fields = changedProfileFields(local, baseline)
     expect(fields.sort()).toEqual([
+      'blurSidebarChatTitles',
       'nickname',
-      'pixelateSidebarChatTitles',
       'traits',
       'webSearchAvailable',
     ])

@@ -27,7 +27,7 @@ interface ChatListProps {
   currentChatIsBlank?: boolean
   currentChatIsLocalOnly?: boolean
   isDarkMode: boolean
-  pixelateSidebarChatTitles?: boolean
+  blurSidebarChatTitles?: boolean
   isLoading?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
@@ -64,7 +64,7 @@ export function ChatList({
   currentChatIsBlank,
   currentChatIsLocalOnly,
   isDarkMode,
-  pixelateSidebarChatTitles = true,
+  blurSidebarChatTitles = true,
   isLoading = false,
   showEncryptionStatus = false,
   showSyncStatus = false,
@@ -211,7 +211,7 @@ export function ChatList({
                 isEditing={editingChatId === chat.id}
                 editingTitle={editingTitle}
                 isDarkMode={isDarkMode}
-                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                blurSidebarChatTitles={blurSidebarChatTitles}
                 showEncryptionStatus={showEncryptionStatus}
                 showSyncStatus={showSyncStatus}
                 isStreaming={!chat.isBlankChat && streamingChats.has(chat.id)}

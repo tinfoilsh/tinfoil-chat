@@ -3,11 +3,11 @@ import { cn } from '@/components/ui/utils'
 import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
 import {
+  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
-  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
   SETTINGS_WEB_SEARCH_AVAILABLE,
   USER_PREFS_ADDITIONAL_CONTEXT,
   USER_PREFS_CUSTOM_PROMPT_ENABLED,
@@ -434,7 +434,7 @@ export function SettingsModal({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
-  const [pixelateSidebarChatTitles, setPixelateSidebarChatTitles] =
+  const [blurSidebarChatTitles, setBlurSidebarChatTitles] =
     useState<boolean>(true)
 
   const [webSearchAvailable, setWebSearchAvailable] = useState<boolean>(true)
@@ -644,13 +644,13 @@ export function SettingsModal({
     const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
 
-    const savedPixelateSidebarChatTitles = localStorage.getItem(
-      SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
+    const savedBlurSidebarChatTitles = localStorage.getItem(
+      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
     )
-    setPixelateSidebarChatTitles(
-      savedPixelateSidebarChatTitles === null
+    setBlurSidebarChatTitles(
+      savedBlurSidebarChatTitles === null
         ? true
-        : savedPixelateSidebarChatTitles === 'true',
+        : savedBlurSidebarChatTitles === 'true',
     )
 
     const savedWebSearchAvailable = localStorage.getItem(
@@ -714,7 +714,7 @@ export function SettingsModal({
       handleProfileSyncUpdate,
     )
     window.addEventListener(
-      'pixelateSidebarChatTitlesChanged',
+      'blurSidebarChatTitlesChanged',
       handleProfileSyncUpdate,
     )
     window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
@@ -735,7 +735,7 @@ export function SettingsModal({
         handleProfileSyncUpdate,
       )
       window.removeEventListener(
-        'pixelateSidebarChatTitlesChanged',
+        'blurSidebarChatTitlesChanged',
         handleProfileSyncUpdate,
       )
       window.removeEventListener(
@@ -2354,29 +2354,29 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start justify-between">
                         <div className="mr-3 flex-1">
                           <div className="font-aeonik text-sm font-medium text-content-primary">
-                            Pixelate sidebar chat titles
+                            Blur sidebar chat titles
                           </div>
                           <div className="font-aeonik-fono text-xs text-content-muted">
-                            Pixelate inactive chat titles until you hover over
-                            them.
+                            Subtly blur inactive chat titles until you hover
+                            over them.
                           </div>
                         </div>
                         <label className="relative inline-flex cursor-pointer items-center">
                           <input
                             type="checkbox"
-                            aria-label="Pixelate sidebar chat titles"
-                            checked={pixelateSidebarChatTitles}
+                            aria-label="Blur sidebar chat titles"
+                            checked={blurSidebarChatTitles}
                             onChange={(e) => {
                               const newValue = e.target.checked
-                              setPixelateSidebarChatTitles(newValue)
+                              setBlurSidebarChatTitles(newValue)
                               if (isClient) {
                                 localStorage.setItem(
-                                  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
+                                  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES,
                                   newValue.toString(),
                                 )
                                 window.dispatchEvent(
                                   new CustomEvent(
-                                    'pixelateSidebarChatTitlesChanged',
+                                    'blurSidebarChatTitlesChanged',
                                     {
                                       detail: { enabled: newValue },
                                     },
