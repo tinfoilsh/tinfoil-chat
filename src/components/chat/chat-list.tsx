@@ -13,9 +13,6 @@ import {
 } from './chat-list-item'
 import { DeleteConfirmation } from './delete-confirmation'
 
-const SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID = 'sidebar-chat-title-horizontal-blur'
-const SIDEBAR_CHAT_TITLE_BLUR_STD_DEVIATION = '2.25 0.2'
-
 function Shimmer({ className }: { className?: string }) {
   return (
     <div
@@ -30,7 +27,7 @@ interface ChatListProps {
   currentChatIsBlank?: boolean
   currentChatIsLocalOnly?: boolean
   isDarkMode: boolean
-  blurSidebarChatTitles?: boolean
+  pixelateSidebarChatTitles?: boolean
   isLoading?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
@@ -67,7 +64,7 @@ export function ChatList({
   currentChatIsBlank,
   currentChatIsLocalOnly,
   isDarkMode,
-  blurSidebarChatTitles = true,
+  pixelateSidebarChatTitles = true,
   isLoading = false,
   showEncryptionStatus = false,
   showSyncStatus = false,
@@ -203,28 +200,7 @@ export function ChatList({
 
   return (
     <>
-      <svg aria-hidden="true" className="absolute h-0 w-0" focusable="false">
-        <defs>
-          <filter
-            id={SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID}
-            colorInterpolationFilters="sRGB"
-          >
-            <feGaussianBlur
-              in="SourceGraphic"
-              stdDeviation={SIDEBAR_CHAT_TITLE_BLUR_STD_DEVIATION}
-            />
-          </filter>
-        </defs>
-      </svg>
-      <div
-        role="list"
-        className="space-y-2 p-2"
-        style={
-          {
-            '--sidebar-chat-title-blur-filter': `url(#${SIDEBAR_CHAT_TITLE_BLUR_FILTER_ID})`,
-          } as React.CSSProperties
-        }
-      >
+      <div role="list" className="space-y-2 p-2">
         {lastBlankIndex < 0 && loadingIndicator}
         {visibleChats.map((chat, index) => (
           <Fragment key={getChatKey(chat)}>
@@ -235,7 +211,7 @@ export function ChatList({
                 isEditing={editingChatId === chat.id}
                 editingTitle={editingTitle}
                 isDarkMode={isDarkMode}
-                blurSidebarChatTitles={blurSidebarChatTitles}
+                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
                 showEncryptionStatus={showEncryptionStatus}
                 showSyncStatus={showSyncStatus}
                 isStreaming={!chat.isBlankChat && streamingChats.has(chat.id)}

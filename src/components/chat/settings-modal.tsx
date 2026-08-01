@@ -2,13 +2,13 @@ import { TextureGrid } from '@/components/texture-grid'
 import { cn } from '@/components/ui/utils'
 import { UserAvatar } from '@/components/user-avatar'
 import { API_BASE_URL } from '@/config'
-import { BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
+import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
-  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_CHAT_FONT,
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_WEB_SEARCH_AVAILABLE,
   USER_PREFS_ADDITIONAL_CONTEXT,
   USER_PREFS_CUSTOM_PROMPT_ENABLED,
@@ -435,7 +435,7 @@ export function SettingsModal({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
-  const [blurSidebarChatTitles, setBlurSidebarChatTitles] =
+  const [pixelateSidebarChatTitles, setPixelateSidebarChatTitles] =
     useState<boolean>(true)
 
   const [webSearchAvailable, setWebSearchAvailable] = useState<boolean>(true)
@@ -645,13 +645,13 @@ export function SettingsModal({
     const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
 
-    const savedBlurSidebarChatTitles = localStorage.getItem(
-      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
+    const savedPixelateSidebarChatTitles = localStorage.getItem(
+      SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
     )
-    setBlurSidebarChatTitles(
-      savedBlurSidebarChatTitles === null
+    setPixelateSidebarChatTitles(
+      savedPixelateSidebarChatTitles === null
         ? true
-        : savedBlurSidebarChatTitles === 'true',
+        : savedPixelateSidebarChatTitles === 'true',
     )
 
     const savedWebSearchAvailable = localStorage.getItem(
@@ -697,10 +697,10 @@ export function SettingsModal({
     const handleProfileSyncUpdate = () => {
       loadSettingsFromStorage()
     }
-    const handleBlurSidebarChatTitlesUpdate = (
+    const handlePixelateSidebarChatTitlesUpdate = (
       event: CustomEvent<{ enabled: boolean }>,
     ) => {
-      setBlurSidebarChatTitles(event.detail.enabled)
+      setPixelateSidebarChatTitles(event.detail.enabled)
     }
 
     // Listen for cloud sync setting changes (e.g., from modal or other sources)
@@ -720,8 +720,8 @@ export function SettingsModal({
       handleProfileSyncUpdate,
     )
     window.addEventListener(
-      BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
-      handleBlurSidebarChatTitlesUpdate as EventListener,
+      PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+      handlePixelateSidebarChatTitlesUpdate as EventListener,
     )
     window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
 
@@ -741,8 +741,8 @@ export function SettingsModal({
         handleProfileSyncUpdate,
       )
       window.removeEventListener(
-        BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
-        handleBlurSidebarChatTitlesUpdate as EventListener,
+        PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+        handlePixelateSidebarChatTitlesUpdate as EventListener,
       )
       window.removeEventListener(
         'cloudSyncSettingChanged',
@@ -2360,29 +2360,29 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start justify-between">
                         <div className="mr-3 flex-1">
                           <div className="font-aeonik text-sm font-medium text-content-primary">
-                            Blur sidebar chat titles
+                            Pixelate sidebar chat titles
                           </div>
                           <div className="font-aeonik-fono text-xs text-content-muted">
-                            Apply a horizontal blur to inactive titles until you
-                            hover over them.
+                            Pixelate inactive chat titles until you hover over
+                            them.
                           </div>
                         </div>
                         <label className="relative inline-flex cursor-pointer items-center">
                           <input
                             type="checkbox"
-                            aria-label="Blur sidebar chat titles"
-                            checked={blurSidebarChatTitles}
+                            aria-label="Pixelate sidebar chat titles"
+                            checked={pixelateSidebarChatTitles}
                             onChange={(e) => {
                               const newValue = e.target.checked
-                              setBlurSidebarChatTitles(newValue)
+                              setPixelateSidebarChatTitles(newValue)
                               if (isClient) {
                                 localStorage.setItem(
-                                  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
+                                  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
                                   newValue.toString(),
                                 )
                                 window.dispatchEvent(
                                   new CustomEvent(
-                                    BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+                                    PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
                                     {
                                       detail: { enabled: newValue },
                                     },

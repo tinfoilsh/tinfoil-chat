@@ -1,2 +1,2 @@
-export const BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT =
-  'blurSidebarChatTitlesChanged'
+export const PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT =
+  'pixelateSidebarChatTitlesChanged'

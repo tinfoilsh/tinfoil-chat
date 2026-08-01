@@ -162,14 +162,29 @@
 }
 
 @layer utilities {
+  .pixelated-text-canvas {
+    display: none;
+  }
+
   @media (hover: hover) and (pointer: fine) {
-    .sidebar-chat-title-motion-blurred {
-      filter: var(--sidebar-chat-title-blur-filter);
+    .pixelated-text[data-pixelation-ready='true'] .pixelated-text-source {
+      opacity: 0;
     }
 
-    .group:hover .sidebar-chat-title-motion-blurred,
-    .group:focus-within .sidebar-chat-title-motion-blurred {
-      filter: none;
+    .pixelated-text[data-pixelation-ready='true'] .pixelated-text-canvas {
+      display: block;
+      image-rendering: pixelated;
+      opacity: 1;
+    }
+
+    .group:hover .pixelated-text .pixelated-text-source,
+    .group:focus-within .pixelated-text .pixelated-text-source {
+      opacity: 1;
+    }
+
+    .group:hover .pixelated-text .pixelated-text-canvas,
+    .group:focus-within .pixelated-text .pixelated-text-canvas {
+      opacity: 0;
     }
   }
 }

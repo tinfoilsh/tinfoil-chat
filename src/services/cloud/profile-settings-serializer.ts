@@ -1,10 +1,10 @@
-import { BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
+import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
-  SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_REASONING_EFFORT,
   SETTINGS_THEME,
   SETTINGS_THEME_MODE,
@@ -93,8 +93,8 @@ export function hasProfileChanged(
     profile1.webSearchEnabled !== profile2.webSearchEnabled ||
     profile1.webSearchAvailable !== profile2.webSearchAvailable ||
     profile1.codeExecutionEnabled !== profile2.codeExecutionEnabled ||
-    profile1.blurSidebarChatTitlesEnabled !==
-      profile2.blurSidebarChatTitlesEnabled ||
+    profile1.pixelateSidebarChatTitlesEnabled !==
+      profile2.pixelateSidebarChatTitlesEnabled ||
     profile1.piiCheckEnabled !== profile2.piiCheckEnabled ||
     profile1.genUIEnabled !== profile2.genUIEnabled ||
     profile1.chatFont !== profile2.chatFont ||
@@ -214,13 +214,13 @@ export function loadLocalSettings(): ProfileData {
     settings.codeExecutionEnabled = codeExecutionEnabled === 'true'
   }
 
-  const blurSidebarChatTitlesEnabled = localStorage.getItem(
-    SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
+  const pixelateSidebarChatTitlesEnabled = localStorage.getItem(
+    SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   )
-  settings.blurSidebarChatTitlesEnabled =
-    blurSidebarChatTitlesEnabled === null
+  settings.pixelateSidebarChatTitlesEnabled =
+    pixelateSidebarChatTitlesEnabled === null
       ? true
-      : blurSidebarChatTitlesEnabled === 'true'
+      : pixelateSidebarChatTitlesEnabled === 'true'
 
   const piiCheckEnabled = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
   if (piiCheckEnabled !== null) {
@@ -273,7 +273,7 @@ export function resetSettingsToLocalDefaults(): ProfileData {
     webSearchEnabled: true,
     webSearchAvailable: true,
     codeExecutionEnabled: false,
-    blurSidebarChatTitlesEnabled: true,
+    pixelateSidebarChatTitlesEnabled: true,
     piiCheckEnabled: true,
     genUIEnabled: true,
     chatFont: 'system',
@@ -471,14 +471,14 @@ export function applySettingsToLocal(settings: ProfileData): void {
     )
   }
 
-  if (settings.blurSidebarChatTitlesEnabled !== undefined) {
+  if (settings.pixelateSidebarChatTitlesEnabled !== undefined) {
     localStorage.setItem(
-      SETTINGS_BLUR_SIDEBAR_CHAT_TITLES_ENABLED,
-      String(settings.blurSidebarChatTitlesEnabled),
+      SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
+      String(settings.pixelateSidebarChatTitlesEnabled),
     )
     window.dispatchEvent(
-      new CustomEvent(BLUR_SIDEBAR_CHAT_TITLES_CHANGED_EVENT, {
-        detail: { enabled: settings.blurSidebarChatTitlesEnabled },
+      new CustomEvent(PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT, {
+        detail: { enabled: settings.pixelateSidebarChatTitlesEnabled },
       }),
     )
   }

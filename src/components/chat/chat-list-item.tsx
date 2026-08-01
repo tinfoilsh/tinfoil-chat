@@ -17,6 +17,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from '../icons/lazy-icons'
+import { PixelatedText } from '../ui/pixelated-text'
 import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
 import { TypingAnimation } from './typing-animation'
@@ -63,7 +64,7 @@ interface ChatListItemProps {
   isEditing: boolean
   editingTitle: string
   isDarkMode: boolean
-  blurSidebarChatTitles?: boolean
+  pixelateSidebarChatTitles?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
   /**
@@ -149,7 +150,7 @@ export function ChatListItem({
   isEditing,
   editingTitle,
   isDarkMode,
-  blurSidebarChatTitles = true,
+  pixelateSidebarChatTitles = true,
   showEncryptionStatus = false,
   showSyncStatus = false,
   isStreaming = false,
@@ -190,8 +191,8 @@ export function ChatListItem({
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
   const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
-  const shouldBlurTitle =
-    blurSidebarChatTitles && hasRealTitle && !isNewChat && !isSelected
+  const shouldPixelateTitle =
+    pixelateSidebarChatTitles && hasRealTitle && !isNewChat && !isSelected
 
   useEffect(() => {
     if (
@@ -380,13 +381,15 @@ export function ChatListItem({
                   aria-hidden="true"
                 />
               )}
-              <span
+              <PixelatedText
+                text={displayTitle}
+                active={shouldPixelateTitle}
+                renderKey={isDarkMode}
                 className={cn(
-                  'truncate font-aeonik-fono text-sm font-medium transition-[filter]',
+                  'truncate font-aeonik-fono text-sm font-medium',
                   chat.decryptionFailed
                     ? 'text-orange-500'
                     : 'text-content-primary',
-                  shouldBlurTitle && 'sidebar-chat-title-motion-blurred',
                 )}
               >
                 {chat.decryptionFailed ? (
@@ -400,7 +403,7 @@ export function ChatListItem({
                 ) : (
                   displayTitle
                 )}
-              </span>
+              </PixelatedText>
               {isStreaming ? (
                 <span
                   className="mx-2 flex w-[18px] flex-shrink-0 items-center justify-center"

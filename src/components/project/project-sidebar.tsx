@@ -96,7 +96,7 @@ interface ProjectSidebarProps {
   projectName?: string
   isLoading?: boolean
   isDarkMode: boolean
-  blurSidebarChatTitles: boolean
+  pixelateSidebarChatTitles: boolean
   onExitProject: () => void
   onExitProjectWhileDragging?: () => void
   onNewChat: () => void
@@ -266,7 +266,7 @@ export function ProjectSidebar({
   projectName,
   isLoading,
   isDarkMode,
-  blurSidebarChatTitles,
+  pixelateSidebarChatTitles,
   onExitProject,
   onExitProjectWhileDragging,
   onNewChat,
@@ -1386,7 +1386,7 @@ export function ProjectSidebar({
               currentChatId={currentChatId}
               currentChatIsBlank={!currentChatId}
               isDarkMode={isDarkMode}
-              blurSidebarChatTitles={blurSidebarChatTitles}
+              pixelateSidebarChatTitles={pixelateSidebarChatTitles}
               isLoading={isLoading}
               enableTitleAnimation={true}
               animatedDeleteConfirmation={false}
