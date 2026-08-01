@@ -7,6 +7,10 @@ const SOURCE_WIDTH = 100
 const SOURCE_HEIGHT = 20
 const EXPECTED_CANVAS_WIDTH = 40
 const EXPECTED_CANVAS_HEIGHT = 8
+const FONT_ASCENT = 4
+const FONT_DESCENT = 1
+const EXPECTED_TEXT_BASELINE =
+  (EXPECTED_CANVAS_HEIGHT + FONT_ASCENT - FONT_DESCENT) / 2
 
 describe('PixelatedText', () => {
   const fillText = vi.fn()
@@ -17,6 +21,8 @@ describe('PixelatedText', () => {
     font: '',
     imageSmoothingEnabled: true,
     measureText: vi.fn((text: string) => ({
+      fontBoundingBoxAscent: FONT_ASCENT,
+      fontBoundingBoxDescent: FONT_DESCENT,
       width: text.length * CANVAS_TEXT_WIDTH_PER_CHARACTER,
     })),
     textBaseline: 'alphabetic',
@@ -69,7 +75,7 @@ describe('PixelatedText', () => {
     expect(fillText).toHaveBeenCalledWith(
       'Private...',
       0,
-      EXPECTED_CANVAS_HEIGHT / 2,
+      EXPECTED_TEXT_BASELINE,
     )
   })
 

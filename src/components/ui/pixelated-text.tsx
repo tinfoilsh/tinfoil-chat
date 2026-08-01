@@ -42,6 +42,22 @@ function fitTextToWidth(
   return `${characters.slice(0, lowerBound).join('')}${TEXT_ELLIPSIS}`
 }
 
+function getCenteredTextBaseline(
+  metrics: TextMetrics,
+  canvasHeight: number,
+): number {
+  const ascent =
+    metrics.fontBoundingBoxAscent ?? metrics.actualBoundingBoxAscent
+  const descent =
+    metrics.fontBoundingBoxDescent ?? metrics.actualBoundingBoxDescent
+
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent)) {
+    return canvasHeight / 2
+  }
+
+  return (canvasHeight + ascent - descent) / 2
+}
+
 interface PixelatedTextProps {
   text: string
   active: boolean
@@ -110,10 +126,14 @@ export function PixelatedText({
         styles.fontFamily,
       ].join(' ')
       context.imageSmoothingEnabled = false
-      context.textBaseline = 'middle'
+      context.textBaseline = 'alphabetic'
 
       const fittedText = fitTextToWidth(context, text, canvas.width)
-      context.fillText(fittedText, 0, canvas.height / 2)
+      const baseline = getCenteredTextBaseline(
+        context.measureText(fittedText),
+        canvas.height,
+      )
+      context.fillText(fittedText, 0, baseline)
       setIsCanvasReady(true)
     }
 
