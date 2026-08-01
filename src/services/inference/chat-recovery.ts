@@ -1,4 +1,8 @@
-import { parseRichStreamingResponse } from '@/components/chat/hooks/streaming'
+import {
+  finalizeInterruptedMessage,
+  hasVisibleAssistantMessage,
+  parseRichStreamingResponse,
+} from '@/components/chat/hooks/streaming'
 import type { Message } from '@/components/chat/types'
 import { retryDeferredAlternativesFinalization } from '@/services/cloud/legacy-blob-migration'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -350,7 +354,10 @@ export async function completeLiveChatRecovery(args: {
   await deleteRecoveryQuietly(active.sessionId)
 }
 
-export async function cancelChatRecovery(chatId: string): Promise<void> {
+export async function cancelChatRecovery(
+  chatId: string,
+  assistantMessage?: Message,
+): Promise<boolean> {
   const active = [...activeRecoveries.values()].filter(
     (candidate) => candidate.chatId === chatId,
   )
@@ -368,20 +375,68 @@ export async function cancelChatRecovery(chatId: string): Promise<void> {
     setChatRecoveryActive(recovery.chatId, recovery.turnId, false)
   }
   const recoveries = [...active, ...scanned]
-  try {
-    await Promise.all(
-      recoveries.map((recovery) => {
-        const isCurrent = () => recovery.generation === recoveryGeneration
-        return isCurrent() && recovery.envelope
-          ? removePendingRecovery(recovery.chatId, recovery.envelope, isCurrent)
+  const envelopeTurns = new Set(
+    recoveries
+      .filter((recovery) => recovery.envelope !== undefined)
+      .map((recovery) => recovery.turnId),
+  )
+  await Promise.all(
+    recoveries.map(async (recovery) => {
+      const isCurrent = () => recovery.generation === recoveryGeneration
+      if (!isCurrent()) return
+      if (!recovery.envelope) {
+        await deleteRecoveryQuietly(recovery.sessionId)
+        return
+      }
+
+      const recoveryDraft = getChatRecoveryDraft(
+        recovery.chatId,
+        recovery.turnId,
+      )
+      const draftMessage =
+        recoveryDraft?.sessionId === recovery.sessionId
+          ? recoveryDraft.message
           : undefined
-      }),
-    )
-  } finally {
-    await Promise.all(
-      recoveries.map((recovery) => deleteRecoveryQuietly(recovery.sessionId)),
-    )
-  }
+      const stoppedMessage =
+        assistantMessage?.turnId === recovery.turnId
+          ? assistantMessage
+          : draftMessage
+
+      if (stoppedMessage && hasVisibleAssistantMessage(stoppedMessage)) {
+        const finalizedMessage = finalizeInterruptedMessage(
+          stoppedMessage,
+          recovery.turnId,
+        )
+        const completedChat = await completePendingRecovery(
+          recovery.chatId,
+          recovery.envelope,
+          finalizedMessage,
+          {},
+          isCurrent,
+        )
+        const persisted = completedChat.messages.some(
+          (message) =>
+            message.role === 'assistant' &&
+            message.turnId === recovery.turnId &&
+            hasVisibleAssistantMessage(message),
+        )
+        if (persisted) await deleteRecoveryQuietly(recovery.sessionId)
+      } else {
+        try {
+          await removePendingRecovery(
+            recovery.chatId,
+            recovery.envelope,
+            isCurrent,
+          )
+        } finally {
+          await deleteRecoveryQuietly(recovery.sessionId)
+        }
+      }
+    }),
+  )
+  return assistantMessage?.turnId
+    ? envelopeTurns.has(assistantMessage.turnId)
+    : envelopeTurns.size > 0
 }
 
 export function releaseActiveChatRecovery(chatId: string): void {

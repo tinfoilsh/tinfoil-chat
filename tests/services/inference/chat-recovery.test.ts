@@ -83,7 +83,10 @@ vi.mock('@/services/cloud/legacy-blob-migration', () => ({
     retryDeferredAlternativesFinalization(),
 }))
 
-vi.mock('@/components/chat/hooks/streaming', () => ({
+vi.mock('@/components/chat/hooks/streaming', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@/components/chat/hooks/streaming')
+  >()),
   parseRichStreamingResponse: (...args: unknown[]) =>
     parseRichStreamingResponse(...args),
 }))
@@ -185,11 +188,45 @@ describe('chat recovery lifecycle', () => {
         },
       }),
     ).rejects.toMatchObject({ name: 'AbortError' })
-    await cancellation
+    await expect(cancellation).resolves.toBe(false)
 
     expect(encryptRecoveryEnvelope).not.toHaveBeenCalled()
     expect(addPendingRecovery).not.toHaveBeenCalled()
     expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
+  })
+
+  it('retains the recovery session when interrupted output cannot be saved', async () => {
+    await persistActiveRecovery()
+    completePendingRecovery.mockRejectedValueOnce(new Error('save failed'))
+
+    await expect(
+      cancelChatRecovery('chat-1', {
+        role: 'assistant',
+        content: 'Partial answer',
+        turnId: 'turn-1',
+        timestamp: new Date(),
+      }),
+    ).rejects.toThrow('save failed')
+
+    expect(deleteChatRecovery).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite a concurrently removed recovery', async () => {
+    await persistActiveRecovery()
+    completePendingRecovery.mockResolvedValueOnce({
+      id: 'chat-1',
+      messages: [{ role: 'user', content: 'Question', turnId: 'turn-1' }],
+    })
+
+    const handled = await cancelChatRecovery('chat-1', {
+      role: 'assistant',
+      content: 'Partial answer',
+      turnId: 'turn-1',
+      timestamp: new Date(),
+    })
+
+    expect(handled).toBe(true)
+    expect(deleteChatRecovery).not.toHaveBeenCalled()
   })
 
   it('stores a local recovery token without a cloud encryption key', async () => {
@@ -1038,7 +1075,7 @@ describe('chat recovery lifecycle', () => {
     await vi.waitFor(() => expect(getAllChats).toHaveBeenCalledTimes(2))
   })
 
-  it('cancels a recovery stream resumed by a scan', async () => {
+  it('saves the visible draft when cancelling a resumed recovery stream', async () => {
     getAllChats.mockResolvedValue([
       { id: 'chat-1', pendingRecoveries: [envelope] },
     ])
@@ -1071,16 +1108,38 @@ describe('chat recovery lifecycle', () => {
           }
         }),
     )
-    let finishRemoval: (() => void) | undefined
-    removePendingRecovery.mockImplementationOnce(
-      (_chatId: string, _turnId: string, isCurrent: () => boolean) =>
-        new Promise<void>((resolve) => {
-          finishRemoval = () => {
-            expect(isCurrent()).toBe(true)
-            resolve()
-          }
-        }),
-    )
+    getChatRecoveryDraft.mockReturnValue({
+      chatId: 'chat-1',
+      turnId: 'turn-1',
+      sessionId: SESSION_ID,
+      message: {
+        role: 'assistant',
+        content: '',
+        thoughts: 'Recovered reasoning so far',
+        isThinking: true,
+        timestamp: new Date(),
+        timeline: [
+          {
+            type: 'thinking',
+            id: 'thinking-0',
+            content: 'Recovered reasoning so far',
+            isThinking: true,
+          },
+        ],
+      },
+    })
+    completePendingRecovery.mockResolvedValueOnce({
+      id: 'chat-1',
+      messages: [
+        {
+          role: 'assistant',
+          content: '',
+          thoughts: 'Recovered reasoning so far',
+          isThinking: false,
+          turnId: 'turn-1',
+        },
+      ],
+    })
 
     const scan = scanPendingChatRecoveries('user-1')
     await vi.waitFor(() => {
@@ -1091,24 +1150,35 @@ describe('chat recovery lifecycle', () => {
       )
     })
 
-    const cancellation = cancelChatRecovery('chat-1')
-    await vi.waitFor(() => expect(removePendingRecovery).toHaveBeenCalled())
-    await scanPendingChatRecoveries('user-1', true)
-    finishRemoval?.()
-    await cancellation
+    const result = await cancelChatRecovery('chat-1')
     await scan
 
+    expect(result).toBe(true)
     expect(recoverySignal?.aborted).toBe(true)
     expect(setChatRecoveryActive).toHaveBeenCalledWith(
       'chat-1',
       'turn-1',
       false,
     )
-    expect(removePendingRecovery).toHaveBeenCalledWith(
+    expect(completePendingRecovery).toHaveBeenCalledWith(
       'chat-1',
       expect.objectContaining({ turnId: 'turn-1' }),
+      expect.objectContaining({
+        turnId: 'turn-1',
+        thoughts: 'Recovered reasoning so far',
+        isThinking: false,
+        timeline: [
+          expect.objectContaining({
+            type: 'thinking',
+            content: 'Recovered reasoning so far',
+            isThinking: false,
+          }),
+        ],
+      }),
+      {},
       expect.any(Function),
     )
+    expect(removePendingRecovery).not.toHaveBeenCalled()
     expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
   })
 

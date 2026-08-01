@@ -93,6 +93,7 @@ vi.mock('@/services/sync-enclave/sync-api', () => ({
 import {
   addPendingRecovery,
   completePendingRecovery,
+  persistInterruptedAssistant,
   removePendingRecovery,
   replacePendingRecovery,
   resetChatRecoverySyncState,
@@ -303,6 +304,36 @@ describe('chat recovery sync mutations', () => {
     expect(remoteChat.messages[1].content).toBe('Recovered answer')
     expect(remoteChat.messages[1].isThinking).toBeUndefined()
     expect(remoteChat.pendingRecoveries).toBeUndefined()
+  })
+
+  it('persists only the interrupted turn without dropping later messages', async () => {
+    remoteChat.messages.push(
+      message('user', 'Later question', 'turn-2'),
+      message('assistant', 'Later answer', 'turn-2'),
+    )
+    remoteChat.pendingRecoveries = [envelope('turn-1'), envelope('turn-2')]
+    localChat = structuredClone(remoteChat)
+
+    await persistInterruptedAssistant(remoteChat.id, 'turn-1', {
+      ...message('assistant', '', 'turn-1'),
+      thoughts: 'Partial reasoning',
+      isThinking: false,
+    })
+
+    expect(remoteChat.messages.map((item) => item.turnId)).toEqual([
+      'turn-1',
+      'turn-1',
+      'turn-2',
+      'turn-2',
+    ])
+    expect(remoteChat.messages[1]).toMatchObject({
+      role: 'assistant',
+      thoughts: 'Partial reasoning',
+      isThinking: false,
+    })
+    expect(remoteChat.pendingRecoveries?.map((item) => item.turnId)).toEqual([
+      'turn-2',
+    ])
   })
 
   it('updates recovered search reasoning when response content is unchanged', async () => {

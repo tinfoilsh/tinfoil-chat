@@ -22,6 +22,10 @@ import { CONSTANTS } from '../../constants'
 import type { Message, URLFetchState } from '../../types'
 import { createContentPreprocessor } from './content-preprocessor'
 import { createEventNormalizer } from './event-normalizer'
+import {
+  finalizeInterruptedMessage,
+  hasVisibleAssistantMessage,
+} from './interrupted-message'
 import { MessageAssembler } from './message-assembler'
 import { readSSEStream } from './sse-reader'
 import { TimelineBuilder } from './timeline-builder'
@@ -64,7 +68,10 @@ export async function processStreamingResponse(
   // background stream updates the list entry without disturbing the view.
   const flushToUI = () => {
     dirty = false
-    const message = assembler.toMessage(timeline.snapshot())
+    const message = {
+      ...assembler.toMessage(timeline.snapshot()),
+      turnId: ctx.turnId,
+    }
     const newMessages = [...ctx.updatedMessages, message]
     ctx.updateChatWithHistoryCheck(
       ctx.setChats,
@@ -251,10 +258,37 @@ export async function processStreamingResponse(
     }
   }
 
+  const flushBufferedEvents = () => {
+    for (const event of normalizer.flush()) {
+      applyEvent(event)
+    }
+    const { text: tail } = preprocessor.flush()
+    if (tail) {
+      applyEvent({ type: 'content_delta', content: tail })
+    }
+  }
+
+  let interruptionPublished = false
+  const publishInterruption = () => {
+    if (interruptionPublished) return
+    interruptionPublished = true
+    clearTrailingFlush()
+    flushBufferedEvents()
+    const message = finalizeInterruptedMessage(
+      assembler.toMessage(timeline.snapshot()),
+      ctx.turnId,
+    )
+    ctx.onInterrupted?.(hasVisibleAssistantMessage(message) ? message : null)
+  }
+
+  ctx.signal?.addEventListener('abort', publishInterruption, { once: true })
+  if (ctx.signal?.aborted) publishInterruption()
+
   try {
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
 
     for await (const sseJson of readSSEStream(response, streamLogger)) {
+      if (ctx.signal?.aborted) break
       const events = normalizer.processChunk(
         sseJson,
         preprocessor,
@@ -264,21 +298,16 @@ export async function processStreamingResponse(
         applyEvent(event)
       }
 
+      if (ctx.signal?.aborted) break
       flushThrottled()
     }
 
+    if (ctx.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
     normalizer.assertComplete()
 
-    // Flush normalizer tail (buffered first-chunk or unclosed thinking)
-    for (const event of normalizer.flush()) {
-      applyEvent(event)
-    }
-
-    // Flush preprocessor tail (partial tinfoil/channel tags)
-    const { text: tail } = preprocessor.flush()
-    if (tail) {
-      applyEvent({ type: 'content_delta', content: tail })
-    }
+    flushBufferedEvents()
 
     // Finalize any open thinking block
     if (timeline.isThinkingOpen) {
@@ -292,11 +321,14 @@ export async function processStreamingResponse(
     if (dirty) flushToUI()
 
     streamLogger?.flush(streamingChatId)
-    return assembler.toMessage(timeline.snapshot())
+    return {
+      ...assembler.toMessage(timeline.snapshot()),
+      turnId: ctx.turnId,
+    }
   } finally {
     // Drop any pending trailing flush so it can't fire after teardown.
     clearTrailingFlush()
-    if (!ctx.deferStreamCleanup) {
+    if (!ctx.deferStreamCleanup && !ctx.signal?.aborted) {
       ctx.setLoadingState('idle')
       ctx.setIsStreaming(false)
       if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
@@ -311,5 +343,6 @@ export async function processStreamingResponse(
     ctx.setIsThinking(false)
     ctx.thinkingStartTimeRef.current = null
     ctx.setIsWaitingForResponse(false)
+    ctx.signal?.removeEventListener('abort', publishInterruption)
   }
 }

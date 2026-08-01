@@ -1,3 +1,4 @@
+import { mergeInterruptedAssistant } from '@/components/chat/hooks/streaming/interrupted-message'
 import type { Message } from '@/components/chat/types'
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { nextClock } from '@/services/cloud/edit-clock'
@@ -317,6 +318,33 @@ export function removePendingRecovery(
     isCurrent,
     signal,
   )
+}
+
+export function persistInterruptedAssistant(
+  chatId: string,
+  turnId: string,
+  assistantMessage: Message,
+): Promise<StoredChat> {
+  return mutateSyncedChat(chatId, (chat) => {
+    const messages = mergeInterruptedAssistant(
+      chat.messages,
+      turnId,
+      assistantMessage,
+    )
+    const currentPending = chat.pendingRecoveries ?? []
+    const pending = currentPending.filter(
+      (recovery) => recovery.turnId !== turnId,
+    )
+    return {
+      chat: {
+        ...chat,
+        messages,
+        pendingRecoveries: pending.length > 0 ? pending : undefined,
+      },
+      changed:
+        messages !== chat.messages || pending.length !== currentPending.length,
+    }
+  })
 }
 
 export function sameRecoveredResponse(
