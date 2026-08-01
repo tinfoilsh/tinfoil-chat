@@ -2,6 +2,7 @@ import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
   SETTINGS_REASONING_EFFORT,
   SETTINGS_SELECTED_MODEL,
   SETTINGS_THINKING_ENABLED,
@@ -104,6 +105,7 @@ describe('profile-settings-serializer', () => {
     localStorage.setItem(SETTINGS_WEB_SEARCH_ENABLED, 'false')
     localStorage.setItem(SETTINGS_WEB_SEARCH_AVAILABLE, 'false')
     localStorage.setItem(SETTINGS_CODE_EXECUTION_ENABLED, 'true')
+    localStorage.setItem(SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES, 'false')
     localStorage.setItem(SETTINGS_PII_CHECK_ENABLED, 'false')
     localStorage.setItem(SETTINGS_CHAT_FONT, 'mono')
     localStorage.setItem(USER_PREFS_PROJECT_UPLOAD, 'project')
@@ -118,6 +120,7 @@ describe('profile-settings-serializer', () => {
       webSearchEnabled: false,
       webSearchAvailable: false,
       codeExecutionEnabled: true,
+      pixelateSidebarChatTitles: false,
       piiCheckEnabled: false,
       chatFont: 'mono',
       projectUploadPreference: 'project',
@@ -171,6 +174,7 @@ describe('profile-settings-serializer', () => {
       webSearchEnabled: true,
       webSearchAvailable: false,
       codeExecutionEnabled: false,
+      pixelateSidebarChatTitles: true,
       piiCheckEnabled: true,
       chatFont: 'serif',
       projectUploadPreference: 'chat',
@@ -188,6 +192,9 @@ describe('profile-settings-serializer', () => {
     expect(localStorage.getItem(SETTINGS_WEB_SEARCH_ENABLED)).toBe('true')
     expect(localStorage.getItem(SETTINGS_WEB_SEARCH_AVAILABLE)).toBe('false')
     expect(localStorage.getItem(SETTINGS_CODE_EXECUTION_ENABLED)).toBe('false')
+    expect(localStorage.getItem(SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES)).toBe(
+      'true',
+    )
     expect(localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)).toBe('true')
     expect(localStorage.getItem(SETTINGS_CHAT_FONT)).toBe('serif')
     expect(localStorage.getItem(USER_PREFS_PROJECT_UPLOAD)).toBe('chat')
@@ -195,5 +202,9 @@ describe('profile-settings-serializer', () => {
 
   it('defaults web search availability to on', () => {
     expect(loadLocalSettings().webSearchAvailable).toBe(true)
+  })
+
+  it('defaults sidebar chat title pixelation to on', () => {
+    expect(loadLocalSettings().pixelateSidebarChatTitles).toBe(true)
   })
 })

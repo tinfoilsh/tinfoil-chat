@@ -161,6 +161,38 @@
   }
 }
 
+@layer utilities {
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar-chat-title-pixelated {
+      position: relative;
+    }
+
+    .sidebar-chat-title-pixelated .sidebar-chat-title-text {
+      opacity: 0;
+    }
+
+    .sidebar-chat-title-pixelated::after {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      color: inherit;
+      content: attr(data-pixelated-title);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .group:hover .sidebar-chat-title-pixelated .sidebar-chat-title-text,
+    .group:focus-within .sidebar-chat-title-pixelated .sidebar-chat-title-text {
+      opacity: 1;
+    }
+
+    .group:hover .sidebar-chat-title-pixelated::after,
+    .group:focus-within .sidebar-chat-title-pixelated::after {
+      content: none;
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

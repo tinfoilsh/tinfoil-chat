@@ -3,6 +3,7 @@ import {
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
   SETTINGS_REASONING_EFFORT,
   SETTINGS_THEME,
   SETTINGS_THEME_MODE,
@@ -91,6 +92,7 @@ export function hasProfileChanged(
     profile1.webSearchEnabled !== profile2.webSearchEnabled ||
     profile1.webSearchAvailable !== profile2.webSearchAvailable ||
     profile1.codeExecutionEnabled !== profile2.codeExecutionEnabled ||
+    profile1.pixelateSidebarChatTitles !== profile2.pixelateSidebarChatTitles ||
     profile1.piiCheckEnabled !== profile2.piiCheckEnabled ||
     profile1.genUIEnabled !== profile2.genUIEnabled ||
     profile1.chatFont !== profile2.chatFont ||
@@ -210,6 +212,14 @@ export function loadLocalSettings(): ProfileData {
     settings.codeExecutionEnabled = codeExecutionEnabled === 'true'
   }
 
+  const pixelateSidebarChatTitles = localStorage.getItem(
+    SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
+  )
+  settings.pixelateSidebarChatTitles =
+    pixelateSidebarChatTitles === null
+      ? true
+      : pixelateSidebarChatTitles === 'true'
+
   const piiCheckEnabled = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
   if (piiCheckEnabled !== null) {
     settings.piiCheckEnabled = piiCheckEnabled === 'true'
@@ -261,6 +271,7 @@ export function resetSettingsToLocalDefaults(): ProfileData {
     webSearchEnabled: true,
     webSearchAvailable: true,
     codeExecutionEnabled: false,
+    pixelateSidebarChatTitles: true,
     piiCheckEnabled: true,
     genUIEnabled: true,
     chatFont: 'system',
@@ -454,6 +465,18 @@ export function applySettingsToLocal(settings: ProfileData): void {
     window.dispatchEvent(
       new CustomEvent('codeExecutionEnabledChanged', {
         detail: { enabled: settings.codeExecutionEnabled },
+      }),
+    )
+  }
+
+  if (settings.pixelateSidebarChatTitles !== undefined) {
+    localStorage.setItem(
+      SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
+      String(settings.pixelateSidebarChatTitles),
+    )
+    window.dispatchEvent(
+      new CustomEvent('pixelateSidebarChatTitlesChanged', {
+        detail: { enabled: settings.pixelateSidebarChatTitles },
       }),
     )
   }

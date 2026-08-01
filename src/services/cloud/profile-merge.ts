@@ -25,6 +25,7 @@ export const PROFILE_MERGE_FIELDS = [
   'webSearchEnabled',
   'webSearchAvailable',
   'codeExecutionEnabled',
+  'pixelateSidebarChatTitles',
   'piiCheckEnabled',
   'genUIEnabled',
   'chatFont',

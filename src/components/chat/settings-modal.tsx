@@ -7,6 +7,7 @@ import {
   SETTINGS_CLOUD_SYNC_EXPLICITLY_DISABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
   SETTINGS_WEB_SEARCH_AVAILABLE,
   USER_PREFS_ADDITIONAL_CONTEXT,
   USER_PREFS_CUSTOM_PROMPT_ENABLED,
@@ -433,6 +434,9 @@ export function SettingsModal({
   // Web Search PII check setting (defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState<boolean>(true)
 
+  const [pixelateSidebarChatTitles, setPixelateSidebarChatTitles] =
+    useState<boolean>(true)
+
   const [webSearchAvailable, setWebSearchAvailable] = useState<boolean>(true)
 
   // Generative UI setting (defaults to on)
@@ -640,6 +644,15 @@ export function SettingsModal({
     const savedPiiCheck = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     setPiiCheckEnabled(savedPiiCheck === null ? true : savedPiiCheck === 'true')
 
+    const savedPixelateSidebarChatTitles = localStorage.getItem(
+      SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
+    )
+    setPixelateSidebarChatTitles(
+      savedPixelateSidebarChatTitles === null
+        ? true
+        : savedPixelateSidebarChatTitles === 'true',
+    )
+
     const savedWebSearchAvailable = localStorage.getItem(
       SETTINGS_WEB_SEARCH_AVAILABLE,
     )
@@ -700,6 +713,10 @@ export function SettingsModal({
       'webSearchAvailableChanged',
       handleProfileSyncUpdate,
     )
+    window.addEventListener(
+      'pixelateSidebarChatTitlesChanged',
+      handleProfileSyncUpdate,
+    )
     window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
 
     return () => {
@@ -715,6 +732,10 @@ export function SettingsModal({
       )
       window.removeEventListener(
         'webSearchAvailableChanged',
+        handleProfileSyncUpdate,
+      )
+      window.removeEventListener(
+        'pixelateSidebarChatTitlesChanged',
         handleProfileSyncUpdate,
       )
       window.removeEventListener(
@@ -2322,6 +2343,51 @@ ${encryptionKey.replace('key_', '')}
                             </span>
                           </button>
                         ))}
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        'rounded-lg border border-border-subtle p-4',
+                        isDarkMode ? 'bg-surface-sidebar' : 'bg-white',
+                      )}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="mr-3 flex-1">
+                          <div className="font-aeonik text-sm font-medium text-content-primary">
+                            Pixelate sidebar chat titles
+                          </div>
+                          <div className="font-aeonik-fono text-xs text-content-muted">
+                            Pixelate inactive chat titles until you hover over
+                            them.
+                          </div>
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            aria-label="Pixelate sidebar chat titles"
+                            checked={pixelateSidebarChatTitles}
+                            onChange={(e) => {
+                              const newValue = e.target.checked
+                              setPixelateSidebarChatTitles(newValue)
+                              if (isClient) {
+                                localStorage.setItem(
+                                  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES,
+                                  newValue.toString(),
+                                )
+                                window.dispatchEvent(
+                                  new CustomEvent(
+                                    'pixelateSidebarChatTitlesChanged',
+                                    {
+                                      detail: { enabled: newValue },
+                                    },
+                                  ),
+                                )
+                              }
+                            }}
+                            className="peer sr-only"
+                          />
+                          <div className="peer h-5 w-9 rounded-full border border-border-subtle bg-content-muted/40 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-content-muted/70 after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-brand-accent-light peer-checked:after:translate-x-full peer-checked:after:bg-white peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-border-strong" />
+                        </label>
                       </div>
                     </div>
                   </div>

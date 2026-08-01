@@ -5,7 +5,7 @@ import {
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-const chat: ChatItemData = {
+const savedChat: ChatItemData = {
   id: 'chat-123',
   title: 'Trip planning',
   messageCount: 2,
@@ -14,18 +14,25 @@ const chat: ChatItemData = {
 function renderChatListItem({
   href,
   onSelect = vi.fn(),
+  chat = savedChat,
+  isSelected = false,
+  pixelateSidebarChatTitles,
 }: {
   href?: string
   onSelect?: () => void
+  chat?: ChatItemData
+  isSelected?: boolean
+  pixelateSidebarChatTitles?: boolean
 } = {}) {
   render(
     <ChatListItem
       chat={chat}
       href={href}
-      isSelected={false}
+      isSelected={isSelected}
       isEditing={false}
       editingTitle=""
       isDarkMode={false}
+      pixelateSidebarChatTitles={pixelateSidebarChatTitles}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
@@ -62,5 +69,50 @@ describe('ChatListItem navigation semantics', () => {
     fireEvent.click(screen.getByRole('button', { name: /Trip planning/ }))
     expect(onSelect).toHaveBeenCalledOnce()
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+})
+
+describe('ChatListItem title privacy', () => {
+  it('pixelates inactive saved chat titles by default', () => {
+    renderChatListItem()
+
+    expect(screen.getByText('Trip planning').parentElement).toHaveClass(
+      'sidebar-chat-title-pixelated',
+    )
+    expect(screen.getByText('Trip planning').parentElement).toHaveAttribute(
+      'data-pixelated-title',
+      '■■■■ ■■■■■■■■',
+    )
+  })
+
+  it('keeps the active chat title clear', () => {
+    renderChatListItem({ isSelected: true })
+
+    expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
+      'sidebar-chat-title-pixelated',
+    )
+  })
+
+  it('keeps the new chat title clear', () => {
+    renderChatListItem({
+      chat: {
+        id: 'blank-chat',
+        title: 'New Chat',
+        isBlankChat: true,
+        messageCount: 0,
+      },
+    })
+
+    expect(screen.getByText('New Chat').parentElement).not.toHaveClass(
+      'sidebar-chat-title-pixelated',
+    )
+  })
+
+  it('keeps saved chat titles clear when pixelation is disabled', () => {
+    renderChatListItem({ pixelateSidebarChatTitles: false })
+
+    expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
+      'sidebar-chat-title-pixelated',
+    )
   })
 })

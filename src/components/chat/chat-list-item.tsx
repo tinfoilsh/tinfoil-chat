@@ -21,6 +21,12 @@ import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
 import { TypingAnimation } from './typing-animation'
 
+const TITLE_PIXEL = '■'
+
+function pixelateTitle(title: string): string {
+  return title.replace(/\S/g, TITLE_PIXEL)
+}
+
 export interface ChatItemData {
   id: string
   title: string
@@ -63,6 +69,7 @@ interface ChatListItemProps {
   isEditing: boolean
   editingTitle: string
   isDarkMode: boolean
+  pixelateSidebarChatTitles?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
   /**
@@ -148,6 +155,7 @@ export function ChatListItem({
   isEditing,
   editingTitle,
   isDarkMode,
+  pixelateSidebarChatTitles = true,
   showEncryptionStatus = false,
   showSyncStatus = false,
   isStreaming = false,
@@ -187,6 +195,9 @@ export function ChatListItem({
 
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
+  const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
+  const shouldPixelateTitle =
+    pixelateSidebarChatTitles && hasRealTitle && !isSelected
 
   useEffect(() => {
     if (
@@ -376,28 +387,30 @@ export function ChatListItem({
                 />
               )}
               <span
+                data-pixelated-title={
+                  shouldPixelateTitle ? pixelateTitle(displayTitle) : undefined
+                }
                 className={cn(
-                  'truncate font-aeonik-fono text-sm font-medium transition-[filter]',
+                  'truncate font-aeonik-fono text-sm font-medium',
                   chat.decryptionFailed
                     ? 'text-orange-500'
                     : 'text-content-primary',
-                  !chat.isBlankChat &&
-                    !chat.decryptionFailed &&
-                    !isSelected &&
-                    'blur-sm group-focus-within:blur-none group-hover:blur-none',
+                  shouldPixelateTitle && 'sidebar-chat-title-pixelated',
                 )}
               >
-                {chat.decryptionFailed ? (
-                  'Encrypted'
-                ) : isAnimating ? (
-                  <TypingAnimation
-                    fromText={animationFromTitle}
-                    toText={animationToTitle}
-                    onComplete={handleAnimationComplete}
-                  />
-                ) : (
-                  displayTitle
-                )}
+                <span className="sidebar-chat-title-text">
+                  {chat.decryptionFailed ? (
+                    'Encrypted'
+                  ) : isAnimating ? (
+                    <TypingAnimation
+                      fromText={animationFromTitle}
+                      toText={animationToTitle}
+                      onComplete={handleAnimationComplete}
+                    />
+                  ) : (
+                    displayTitle
+                  )}
+                </span>
               </span>
               {isStreaming ? (
                 <span
@@ -492,7 +505,7 @@ export function ChatListItem({
       {!isEditing && (
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <div className="pointer-events-none hidden items-center opacity-0 transition-opacity md:flex md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100 md:group-hover:pointer-events-auto md:group-hover:opacity-100">
-            {!chat.decryptionFailed && !chat.isBlankChat && (
+            {hasRealTitle && (
               <button
                 type="button"
                 className={cn(
