@@ -96,7 +96,7 @@ export async function processStreamingResponse(
   // trailing timer guarantees the latest content still paints when the stream
   // pauses (e.g. before a tool call) instead of waiting for the next chunk.
   const flushThrottled = () => {
-    if (!dirty || ctx.signal?.aborted) return
+    if (!dirty) return
     const now = Date.now()
     const elapsed = now - lastFlushAt
     if (elapsed >= CONSTANTS.STREAM_FLUSH_INTERVAL_MS) {

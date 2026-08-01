@@ -1,26 +1,38 @@
-import type { Message, TimelineBlock } from '../../types'
+import type {
+  Message,
+  TimelineBlock,
+  ToolCallState,
+  URLFetchState,
+  WebSearchState,
+} from '../../types'
+
+function finalizeWebSearchState(state: WebSearchState): WebSearchState {
+  return state.status === 'searching' ? { ...state, status: 'failed' } : state
+}
+
+function finalizeURLFetchState(state: URLFetchState): URLFetchState {
+  return state.status === 'fetching' ? { ...state, status: 'failed' } : state
+}
+
+function finalizeToolCallState(state: ToolCallState): ToolCallState {
+  return state.status === 'running' ? { ...state, status: 'failed' } : state
+}
 
 function finalizeTimelineBlock(block: TimelineBlock): TimelineBlock {
   switch (block.type) {
     case 'thinking':
       return block.isThinking ? { ...block, isThinking: false } : block
     case 'web_search':
-      return block.state.status === 'searching'
-        ? { ...block, state: { ...block.state, status: 'failed' } }
-        : block
+      return { ...block, state: finalizeWebSearchState(block.state) }
     case 'url_fetches':
       return {
         ...block,
-        fetches: block.fetches.map((fetch) =>
-          fetch.status === 'fetching' ? { ...fetch, status: 'failed' } : fetch,
-        ),
+        fetches: block.fetches.map(finalizeURLFetchState),
       }
     case 'code_exec':
       return {
         ...block,
-        calls: block.calls.map((call) =>
-          call.status === 'running' ? { ...call, status: 'failed' } : call,
-        ),
+        calls: block.calls.map(finalizeToolCallState),
       }
     default:
       return block
@@ -48,16 +60,11 @@ export function finalizeInterruptedMessage(
     ...message,
     turnId: turnId ?? message.turnId,
     isThinking: false,
-    webSearch:
-      message.webSearch?.status === 'searching'
-        ? { ...message.webSearch, status: 'failed' }
-        : message.webSearch,
-    urlFetches: message.urlFetches?.map((fetch) =>
-      fetch.status === 'fetching' ? { ...fetch, status: 'failed' } : fetch,
-    ),
-    codeExecCalls: message.codeExecCalls?.map((call) =>
-      call.status === 'running' ? { ...call, status: 'failed' } : call,
-    ),
+    webSearch: message.webSearch
+      ? finalizeWebSearchState(message.webSearch)
+      : undefined,
+    urlFetches: message.urlFetches?.map(finalizeURLFetchState),
+    codeExecCalls: message.codeExecCalls?.map(finalizeToolCallState),
     timeline: message.timeline?.map(finalizeTimelineBlock),
   }
 }

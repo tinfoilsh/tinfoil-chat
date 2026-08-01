@@ -5,7 +5,9 @@ import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   cancelChatRecoveryMock,
+  completeLiveChatRecoveryMock,
   containerAuthTokenMock,
   initialSaveMock,
   persistInterruptedAssistantMock,
@@ -13,8 +15,16 @@ const {
   sessionSaveMock,
   streamControllers,
   streamingChats,
+  recoveryAvailableState,
 } = vi.hoisted(() => ({
+  authState: {
+    isSignedIn: false,
+    userId: undefined as string | undefined,
+  },
   cancelChatRecoveryMock: vi.fn(async (..._args: unknown[]) => false),
+  completeLiveChatRecoveryMock: vi.fn(
+    async (..._args: unknown[]): Promise<void> => {},
+  ),
   containerAuthTokenMock: vi.fn(async (..._args: unknown[]) => null),
   initialSaveMock: vi.fn(async (chat: unknown) => chat),
   persistInterruptedAssistantMock: vi.fn(
@@ -24,10 +34,11 @@ const {
   sessionSaveMock: vi.fn(),
   streamControllers: new Map<string, AbortController>(),
   streamingChats: new Set<string>(),
+  recoveryAvailableState: { available: false },
 }))
 
 vi.mock('@clerk/nextjs', () => ({
-  useAuth: () => ({ isSignedIn: false, userId: undefined }),
+  useAuth: () => authState,
 }))
 
 vi.mock('@/components/project', () => ({
@@ -75,7 +86,8 @@ vi.mock('@/components/chat/hooks/use-chat-streams', async (importOriginal) => ({
 vi.mock('@/services/inference/chat-recovery', () => ({
   abandonChatRecoveryAttempt: vi.fn(),
   cancelChatRecovery: (...args: unknown[]) => cancelChatRecoveryMock(...args),
-  completeLiveChatRecovery: vi.fn(),
+  completeLiveChatRecovery: (...args: unknown[]) =>
+    completeLiveChatRecoveryMock(...args),
   persistChatRecoveryToken: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
   scanPendingChatRecoveries: vi.fn(),
@@ -93,7 +105,7 @@ vi.mock('@/services/inference/chat-recovery-sync', () => ({
 
 vi.mock('@/services/inference/tinfoil-client', () => ({
   getRateLimitInfo: () => null,
-  isChatRecoveryAvailable: () => false,
+  isChatRecoveryAvailable: () => recoveryAvailableState.available,
   refreshRateLimit: vi.fn(),
 }))
 
@@ -159,6 +171,10 @@ describe('useChatMessaging stopped streams', () => {
     initialSaveMock.mockImplementation(async (chat: unknown) => chat)
     persistInterruptedAssistantMock.mockResolvedValue(undefined)
     containerAuthTokenMock.mockResolvedValue(null)
+    completeLiveChatRecoveryMock.mockResolvedValue(undefined)
+    authState.isSignedIn = false
+    authState.userId = undefined
+    recoveryAvailableState.available = false
     streamControllers.clear()
     streamingChats.clear()
   })
@@ -371,5 +387,82 @@ describe('useChatMessaging stopped streams', () => {
 
     expect(sendChatStreamMock).not.toHaveBeenCalled()
     expect(streamingChats).toEqual(new Set())
+  })
+
+  it('keeps a completed response when stopped during recovery finalization', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [
+        { role: 'user', content: 'Earlier', timestamp: new Date() },
+        { role: 'assistant', content: 'Earlier reply', timestamp: new Date() },
+      ],
+      isLocalOnly: true,
+    }
+    const stream = createOpenResponse()
+    sendChatStreamMock.mockResolvedValue(stream.response)
+    let finishRecovery!: () => void
+    completeLiveChatRecoveryMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRecovery = resolve
+        }),
+    )
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+        messagesEndRef: { current: null },
+      })
+      return { currentChat, messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'New prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
+    stream.send({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    })
+    stream.close()
+    await vi.waitFor(() =>
+      expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),
+    )
+
+    await act(async () => {
+      await result.current.messaging.cancelGeneration()
+    })
+
+    expect(result.current.currentChat.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'Complete answer',
+      turnId: expect.any(String),
+    })
+    expect(cancelChatRecoveryMock).toHaveBeenCalledWith(
+      'chat-1',
+      expect.objectContaining({ content: 'Complete answer' }),
+    )
+
+    finishRecovery()
+    await act(async () => {
+      await query
+    })
   })
 })

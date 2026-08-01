@@ -126,7 +126,7 @@ type ActiveLiveGeneration = {
   chat: Chat
   messages: Message[]
   turnId?: string
-  interruptedMessage: Message | null
+  latestAssistantMessage: Message | null
   initialSave?: Promise<void>
 }
 
@@ -318,9 +318,9 @@ export function useChatMessaging({
 
         abort(targetId)
         const interruptedMessage =
-          activeGeneration?.interruptedMessage &&
-          hasVisibleAssistantMessage(activeGeneration.interruptedMessage)
-            ? activeGeneration.interruptedMessage
+          activeGeneration?.latestAssistantMessage &&
+          hasVisibleAssistantMessage(activeGeneration.latestAssistantMessage)
+            ? activeGeneration.latestAssistantMessage
             : null
         patchStatus(targetId, {
           loadingState: 'loading',
@@ -750,7 +750,7 @@ export function useChatMessaging({
         chat: updatedChat,
         messages: updatedMessages,
         turnId: turnId ?? undefined,
-        interruptedMessage: null,
+        latestAssistantMessage: null,
         initialSave: initialSavePromise,
       }
       activeLiveGenerationsRef.current.set(startingChatId, activeGeneration)
@@ -935,7 +935,7 @@ export function useChatMessaging({
           signal: controller.signal,
           turnId: turnId ?? undefined,
           onInterrupted: (message) => {
-            activeGeneration.interruptedMessage = message
+            activeGeneration.latestAssistantMessage = message
           },
         })
         if (assistantMessage && turnId) {
@@ -944,6 +944,9 @@ export function useChatMessaging({
 
         const hasAssistantMessageToSave =
           !!assistantMessage && hasVisibleAssistantMessage(assistantMessage)
+        if (assistantMessage && hasAssistantMessageToSave) {
+          activeGeneration.latestAssistantMessage = assistantMessage
+        }
 
         if (assistantMessage && hasAssistantMessageToSave) {
           // Use this stream's own id (already reflects any server id swap).

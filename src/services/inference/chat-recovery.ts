@@ -43,6 +43,7 @@ import {
 import {
   addPendingRecovery,
   completePendingRecovery,
+  persistInterruptedAssistant,
   removePendingRecovery,
   replacePendingRecovery,
   resetChatRecoverySyncState,
@@ -400,10 +401,14 @@ export async function cancelChatRecovery(
 
       let persisted = false
       if (stoppedMessage && hasVisibleAssistantMessage(stoppedMessage)) {
+        const finalizedMessage = finalizeInterruptedMessage(
+          stoppedMessage,
+          recovery.turnId,
+        )
         const completedChat = await completePendingRecovery(
           recovery.chatId,
           recovery.envelope,
-          finalizeInterruptedMessage(stoppedMessage, recovery.turnId),
+          finalizedMessage,
           {},
           isCurrent,
         )
@@ -413,7 +418,20 @@ export async function cancelChatRecovery(
             message.turnId === recovery.turnId &&
             hasVisibleAssistantMessage(message),
         )
-        await deleteRecoveryQuietly(recovery.sessionId)
+        if (!persisted) {
+          const fallbackChat = await persistInterruptedAssistant(
+            recovery.chatId,
+            recovery.turnId,
+            finalizedMessage,
+          )
+          persisted = fallbackChat.messages.some(
+            (message) =>
+              message.role === 'assistant' &&
+              message.turnId === recovery.turnId &&
+              hasVisibleAssistantMessage(message),
+          )
+        }
+        if (persisted) await deleteRecoveryQuietly(recovery.sessionId)
       } else {
         try {
           await removePendingRecovery(
