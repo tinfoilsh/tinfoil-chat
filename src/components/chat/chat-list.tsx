@@ -27,6 +27,7 @@ interface ChatListProps {
   currentChatIsBlank?: boolean
   currentChatIsLocalOnly?: boolean
   isDarkMode: boolean
+  pixelateSidebarChatTitles: boolean
   isLoading?: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
@@ -63,6 +64,7 @@ export function ChatList({
   currentChatIsBlank,
   currentChatIsLocalOnly,
   isDarkMode,
+  pixelateSidebarChatTitles,
   isLoading = false,
   showEncryptionStatus = false,
   showSyncStatus = false,
@@ -198,7 +200,7 @@ export function ChatList({
 
   return (
     <>
-      <div role="list" className="space-y-2 p-2">
+      <div role="list" className="chat-title-privacy-region space-y-2 p-2">
         {lastBlankIndex < 0 && loadingIndicator}
         {visibleChats.map((chat, index) => (
           <Fragment key={getChatKey(chat)}>
@@ -209,6 +211,7 @@ export function ChatList({
                 isEditing={editingChatId === chat.id}
                 editingTitle={editingTitle}
                 isDarkMode={isDarkMode}
+                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
                 showEncryptionStatus={showEncryptionStatus}
                 showSyncStatus={showSyncStatus}
                 isStreaming={!chat.isBlankChat && streamingChats.has(chat.id)}

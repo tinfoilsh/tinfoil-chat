@@ -1,8 +1,10 @@
+import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SETTINGS_CHAT_FONT,
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_REASONING_EFFORT,
   SETTINGS_THEME,
   SETTINGS_THEME_MODE,
@@ -91,6 +93,8 @@ export function hasProfileChanged(
     profile1.webSearchEnabled !== profile2.webSearchEnabled ||
     profile1.webSearchAvailable !== profile2.webSearchAvailable ||
     profile1.codeExecutionEnabled !== profile2.codeExecutionEnabled ||
+    profile1.pixelateSidebarChatTitlesEnabled !==
+      profile2.pixelateSidebarChatTitlesEnabled ||
     profile1.piiCheckEnabled !== profile2.piiCheckEnabled ||
     profile1.genUIEnabled !== profile2.genUIEnabled ||
     profile1.chatFont !== profile2.chatFont ||
@@ -210,6 +214,14 @@ export function loadLocalSettings(): ProfileData {
     settings.codeExecutionEnabled = codeExecutionEnabled === 'true'
   }
 
+  const pixelateSidebarChatTitlesEnabled = localStorage.getItem(
+    SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
+  )
+  if (pixelateSidebarChatTitlesEnabled !== null) {
+    settings.pixelateSidebarChatTitlesEnabled =
+      pixelateSidebarChatTitlesEnabled === 'true'
+  }
+
   const piiCheckEnabled = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
   if (piiCheckEnabled !== null) {
     settings.piiCheckEnabled = piiCheckEnabled === 'true'
@@ -261,6 +273,7 @@ export function resetSettingsToLocalDefaults(): ProfileData {
     webSearchEnabled: true,
     webSearchAvailable: true,
     codeExecutionEnabled: false,
+    pixelateSidebarChatTitlesEnabled: true,
     piiCheckEnabled: true,
     genUIEnabled: true,
     chatFont: 'system',
@@ -454,6 +467,18 @@ export function applySettingsToLocal(settings: ProfileData): void {
     window.dispatchEvent(
       new CustomEvent('codeExecutionEnabledChanged', {
         detail: { enabled: settings.codeExecutionEnabled },
+      }),
+    )
+  }
+
+  if (settings.pixelateSidebarChatTitlesEnabled !== undefined) {
+    localStorage.setItem(
+      SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
+      String(settings.pixelateSidebarChatTitlesEnabled),
+    )
+    window.dispatchEvent(
+      new CustomEvent(PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT, {
+        detail: { enabled: settings.pixelateSidebarChatTitlesEnabled },
       }),
     )
   }

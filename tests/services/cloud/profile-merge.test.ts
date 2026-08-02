@@ -193,15 +193,22 @@ describe('changedProfileFields', () => {
       traits: ['x'],
       thinkingEnabled: true,
       webSearchAvailable: true,
+      pixelateSidebarChatTitlesEnabled: true,
     }
     const local: ProfileData = {
       nickname: 'b',
       traits: ['x', 'y'],
       thinkingEnabled: true,
       webSearchAvailable: false,
+      pixelateSidebarChatTitlesEnabled: false,
     }
     const fields = changedProfileFields(local, baseline)
-    expect(fields.sort()).toEqual(['nickname', 'traits', 'webSearchAvailable'])
+    expect(fields.sort()).toEqual([
+      'nickname',
+      'pixelateSidebarChatTitlesEnabled',
+      'traits',
+      'webSearchAvailable',
+    ])
   })
 })
 
@@ -263,6 +270,17 @@ describe('mergeProfilesThreeWay', () => {
     })
 
     expect(result.merged.customSystemPrompt).toBe('')
+    expect(result.conflicts).toEqual([])
+  })
+
+  it('preserves pixelation preferences omitted by older profiles', () => {
+    const result = mergeProfilesThreeWay({
+      baseline: { pixelateSidebarChatTitlesEnabled: false },
+      local: { pixelateSidebarChatTitlesEnabled: false },
+      remote: { version: 2 },
+    })
+
+    expect(result.merged.pixelateSidebarChatTitlesEnabled).toBe(false)
     expect(result.conflicts).toEqual([])
   })
 

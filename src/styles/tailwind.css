@@ -161,6 +161,38 @@
   }
 }
 
+@layer utilities {
+  .pixelated-text-canvas {
+    display: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .pixelated-text[data-pixelation-ready='true'] .pixelated-text-source {
+      opacity: 0;
+    }
+
+    .pixelated-text[data-pixelation-ready='true'] .pixelated-text-canvas {
+      display: block;
+      image-rendering: pixelated;
+      opacity: 1;
+    }
+
+    .chat-title-privacy-region:hover .pixelated-text .pixelated-text-source,
+    .chat-title-privacy-region:focus-within
+      .pixelated-text
+      .pixelated-text-source {
+      opacity: 1;
+    }
+
+    .chat-title-privacy-region:hover .pixelated-text .pixelated-text-canvas,
+    .chat-title-privacy-region:focus-within
+      .pixelated-text
+      .pixelated-text-canvas {
+      opacity: 0;
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

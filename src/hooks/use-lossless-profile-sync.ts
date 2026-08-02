@@ -1,4 +1,5 @@
 import { CLOUD_SYNC } from '@/config'
+import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SYNC_PROFILE_CHANGED_AT,
   SYNC_PROFILE_DIRTY,
@@ -343,6 +344,7 @@ export function useProfileSync() {
       'webSearchEnabledChanged',
       'webSearchAvailableChanged',
       'codeExecutionEnabledChanged',
+      PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
       'piiCheckEnabledChanged',
       'genUIEnabledChanged',
       'chatFontChanged',

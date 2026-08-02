@@ -17,6 +17,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from '../icons/lazy-icons'
+import { PixelatedText } from '../ui/pixelated-text'
 import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
 import { TypingAnimation } from './typing-animation'
@@ -63,6 +64,7 @@ interface ChatListItemProps {
   isEditing: boolean
   editingTitle: string
   isDarkMode: boolean
+  pixelateSidebarChatTitles: boolean
   showEncryptionStatus?: boolean
   showSyncStatus?: boolean
   /**
@@ -148,6 +150,7 @@ export function ChatListItem({
   isEditing,
   editingTitle,
   isDarkMode,
+  pixelateSidebarChatTitles,
   showEncryptionStatus = false,
   showSyncStatus = false,
   isStreaming = false,
@@ -187,8 +190,18 @@ export function ChatListItem({
 
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
+  const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
+  const shouldPixelateTitle =
+    pixelateSidebarChatTitles && hasRealTitle && !isNewChat && !isSelected
 
   useEffect(() => {
+    if (shouldPixelateTitle) {
+      setDisplayTitle(chat.title)
+      setIsAnimating(false)
+      prevTitleRef.current = chat.title
+      return
+    }
+
     if (
       enableTitleAnimation &&
       prevTitleRef.current !== chat.title &&
@@ -202,7 +215,7 @@ export function ChatListItem({
       setDisplayTitle(chat.title)
       prevTitleRef.current = chat.title
     }
-  }, [chat.title, enableTitleAnimation])
+  }, [chat.title, enableTitleAnimation, shouldPixelateTitle])
 
   const handleAnimationComplete = () => {
     setDisplayTitle(chat.title)
@@ -375,7 +388,10 @@ export function ChatListItem({
                   aria-hidden="true"
                 />
               )}
-              <span
+              <PixelatedText
+                text={displayTitle}
+                active={shouldPixelateTitle}
+                renderKey={isDarkMode}
                 className={cn(
                   'truncate font-aeonik-fono text-sm font-medium',
                   chat.decryptionFailed
@@ -394,7 +410,7 @@ export function ChatListItem({
                 ) : (
                   displayTitle
                 )}
-              </span>
+              </PixelatedText>
               {isStreaming ? (
                 <span
                   className="mx-2 flex w-[18px] flex-shrink-0 items-center justify-center"
@@ -488,7 +504,7 @@ export function ChatListItem({
       {!isEditing && (
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <div className="pointer-events-none hidden items-center opacity-0 transition-opacity md:flex md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100 md:group-hover:pointer-events-auto md:group-hover:opacity-100">
-            {!chat.decryptionFailed && !chat.isBlankChat && (
+            {hasRealTitle && (
               <button
                 type="button"
                 className={cn(

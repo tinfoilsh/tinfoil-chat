@@ -39,6 +39,8 @@ export const SETTINGS_WEB_SEARCH_AVAILABLE =
   'tinfoil-settings-web-search-available'
 export const SETTINGS_CODE_EXECUTION_ENABLED =
   'tinfoil-settings-code-execution-enabled'
+export const SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED =
+  'tinfoil-settings-pixelate-sidebar-chat-titles-enabled'
 export const SETTINGS_PII_CHECK_ENABLED = 'tinfoil-settings-pii-check-enabled'
 export const SETTINGS_GENUI_ENABLED = 'tinfoil-settings-genui-enabled'
 export const SETTINGS_THEME_MODE = 'tinfoil-settings-theme-mode'

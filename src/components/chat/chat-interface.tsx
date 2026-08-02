@@ -4,12 +4,14 @@ import {
   getSystemPromptAndRules,
   type BaseModel,
 } from '@/config/models'
+import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SETTINGS_CODE_EXECUTION_ENABLED,
   SETTINGS_GENUI_ENABLED,
   SETTINGS_HAS_SEEN_ONBOARDING,
   SETTINGS_HAS_SEEN_WEB_SEARCH_INTRO,
   SETTINGS_PII_CHECK_ENABLED,
+  SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
   SETTINGS_WEB_SEARCH_AVAILABLE,
   UI_EXPAND_PROJECT_DOCUMENTS,
 } from '@/constants/storage-keys'
@@ -494,6 +496,16 @@ export function ChatInterface({
     const saved = localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)
     return saved === null ? true : saved === 'true'
   })
+
+  const [pixelateSidebarChatTitles, setPixelateSidebarChatTitles] = useState(
+    () => {
+      if (typeof window === 'undefined') return true
+      const saved = localStorage.getItem(
+        SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED,
+      )
+      return saved === null ? true : saved === 'true'
+    },
+  )
 
   // Generative UI setting (controlled from settings modal, defaults to on)
   const [genUIEnabled, setGenUIEnabled] = useState(() => {
@@ -1166,21 +1178,55 @@ export function ChatInterface({
     }
   }, [])
 
-  // Listen for PII check setting changes from settings modal
+  // Listen for privacy setting changes from settings modal
   useEffect(() => {
     const handlePiiCheckChange = (event: CustomEvent<{ enabled: boolean }>) => {
       setPiiCheckEnabled(event.detail.enabled)
+    }
+    const handlePixelateSidebarChatTitlesChange = (
+      event: CustomEvent<{ enabled: boolean }>,
+    ) => {
+      setPixelateSidebarChatTitles(event.detail.enabled)
+    }
+    const handlePixelateSidebarChatTitlesStorageChange = (
+      event: StorageEvent,
+    ) => {
+      if (
+        event.key !== null &&
+        event.key !== SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED
+      ) {
+        return
+      }
+      setPixelateSidebarChatTitles(
+        event.newValue === null ? true : event.newValue === 'true',
+      )
     }
 
     window.addEventListener(
       'piiCheckEnabledChanged',
       handlePiiCheckChange as EventListener,
     )
+    window.addEventListener(
+      PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+      handlePixelateSidebarChatTitlesChange as EventListener,
+    )
+    window.addEventListener(
+      'storage',
+      handlePixelateSidebarChatTitlesStorageChange,
+    )
 
     return () => {
       window.removeEventListener(
         'piiCheckEnabledChanged',
         handlePiiCheckChange as EventListener,
+      )
+      window.removeEventListener(
+        PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
+        handlePixelateSidebarChatTitlesChange as EventListener,
+      )
+      window.removeEventListener(
+        'storage',
+        handlePixelateSidebarChatTitlesStorageChange,
       )
     }
   }, [])
@@ -3041,6 +3087,7 @@ export function ChatInterface({
                   setIsOpen={setIsSidebarOpen}
                   project={activeProject}
                   isDarkMode={isDarkMode}
+                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
                   onExitProject={handleExitProject}
                   onExitProjectWhileDragging={handleExitProjectWhileDragging}
                   onNewChat={() => createNewChat(false, true)}
@@ -3084,6 +3131,7 @@ export function ChatInterface({
                   projectName={loadingProject?.name}
                   isLoading={true}
                   isDarkMode={isDarkMode}
+                  pixelateSidebarChatTitles={pixelateSidebarChatTitles}
                   onExitProject={handleExitProject}
                   onExitProjectWhileDragging={handleExitProjectWhileDragging}
                   onNewChat={() => {}}
@@ -3109,6 +3157,7 @@ export function ChatInterface({
                 chats={chats}
                 currentChat={currentChat}
                 isDarkMode={isDarkMode}
+                pixelateSidebarChatTitles={pixelateSidebarChatTitles}
                 createNewChat={createNewChat}
                 handleChatSelect={handleChatSelect}
                 onOpenChatById={(chatId) => loadChatById(chatId, false)}
