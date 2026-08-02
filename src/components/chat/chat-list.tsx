@@ -200,7 +200,7 @@ export function ChatList({
 
   return (
     <>
-      <div role="list" className="space-y-2 p-2">
+      <div role="list" className="chat-title-privacy-region space-y-2 p-2">
         {lastBlankIndex < 0 && loadingIndicator}
         {visibleChats.map((chat, index) => (
           <Fragment key={getChatKey(chat)}>
