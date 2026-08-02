@@ -42,6 +42,10 @@ import {
   refreshRateLimit,
 } from '@/services/inference/tinfoil-client'
 import { generateTitle, getTitleContent } from '@/services/inference/title'
+import {
+  clearActiveStreamSession,
+  setActiveStreamSession,
+} from '@/services/notifications/active-stream-sessions'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -902,6 +906,9 @@ export function useChatMessaging({
                       turnId,
                       sessionId,
                     )
+                    // Expose the live session so the notify banner can watch
+                    // this stream for a push notification.
+                    setActiveStreamSession(streamChatIdRef.current, sessionId)
                   },
                   onTokenCaptured: (sessionId, token) =>
                     persistChatRecoveryToken({
@@ -1220,6 +1227,7 @@ export function useChatMessaging({
           isThinking: false,
         })
         clearController(streamChatIdRef.current)
+        clearActiveStreamSession(streamChatIdRef.current)
         if (
           activeLiveGenerationsRef.current.get(startingChatId) ===
           activeGeneration
