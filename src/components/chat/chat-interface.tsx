@@ -46,11 +46,13 @@ import { IoShareOutline } from 'react-icons/io5'
 import { PiFilePlusLight, PiNotePencilLight, PiSpinner } from 'react-icons/pi'
 import { SlGhost } from 'react-icons/sl'
 
+import { useStreamNotifyBanner } from '@/components/chat/hooks/use-stream-notify-banner'
 import {
   RateLimitBanner,
   shouldShowRateLimitBanner,
 } from '@/components/chat/rate-limit-banner'
 import { StreamErrorBanner } from '@/components/chat/stream-error-banner'
+import { StreamNotifyBanner } from '@/components/chat/stream-notify-banner'
 import { classifyCloudKeySetupError } from '@/components/modals/cloud-sync-setup-mode'
 import {
   ProjectSidebar,
@@ -806,6 +808,20 @@ export function ChatInterface({
     webSearchAvailable,
     currentChat?.webSearchEnabled,
   )
+
+  const {
+    bannerState: notifyBannerState,
+    requestNotification,
+    dismissBanner: dismissNotifyBanner,
+  } = useStreamNotifyBanner({
+    chatId: currentChatId ?? '',
+    // Local-only chats live under /chat/local/, so the push deep link needs
+    // the prefix to land on the right route.
+    watchChatId: currentChat?.isLocalOnly
+      ? `local/${currentChatId ?? ''}`
+      : (currentChatId ?? ''),
+    responsePending: isWaitingForResponse || isStreaming || isThinking,
+  })
 
   const currentChatRef = useRef<Chat | null>(null)
   useEffect(() => {
@@ -3532,6 +3548,12 @@ export function ChatInterface({
                           isDarkMode={isDarkMode}
                         />
                       )}
+                      <StreamNotifyBanner
+                        bannerState={notifyBannerState}
+                        onNotify={requestNotification}
+                        onDismiss={dismissNotifyBanner}
+                        isDarkMode={isDarkMode}
+                      />
                       <MessageQueue
                         queue={queuedMessages}
                         onRemove={removeQueuedMessage}

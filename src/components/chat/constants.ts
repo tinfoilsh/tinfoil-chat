@@ -62,6 +62,11 @@ export const CONSTANTS = {
   TITLE_GENERATION_WORD_THRESHOLD: 100, // Words needed to trigger early title generation during streaming
   // Document processing timeout in milliseconds (10 minutes)
   DOCUMENT_PROCESSING_TIMEOUT_MS: 600000,
+  // How long a response must be pending before the push-notification offer
+  // appears above the input area
+  NOTIFY_BANNER_DELAY_MS: 5000,
+  // How long the "you'll be notified" confirmation stays before auto-hiding
+  NOTIFY_BANNER_CONFIRMATION_MS: 4000,
   // Retry settings
   VERIFICATION_MAX_RETRIES: 5,
   VERIFICATION_RETRY_DELAY_MS: 2000, // Base delay between retries (exponential backoff)
