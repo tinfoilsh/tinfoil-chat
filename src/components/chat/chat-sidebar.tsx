@@ -960,7 +960,7 @@ export function ChatSidebar({
         aria-label="Chat history"
         inert={!isOpen}
         className={cn(
-          'fixed z-40 flex h-dvh flex-col overflow-hidden border-r',
+          'chat-title-privacy-region fixed z-40 flex h-dvh flex-col overflow-hidden border-r',
           // On mobile: slide in/out. On desktop: always positioned, just toggle width
           isMobile
             ? isOpen

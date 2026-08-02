@@ -749,7 +749,7 @@ export function ProjectSidebar({
       <div
         inert={!isOpen}
         className={cn(
-          'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-r',
+          'chat-title-privacy-region fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-r',
           isOpen ? 'translate-x-0' : '-translate-x-full',
           'border-border-subtle bg-surface-sidebar text-content-primary',
           'transition-all duration-200 ease-in-out',

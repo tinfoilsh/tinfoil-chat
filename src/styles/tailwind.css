@@ -177,13 +177,17 @@
       opacity: 1;
     }
 
-    .group:hover .pixelated-text .pixelated-text-source,
-    .group:focus-within .pixelated-text .pixelated-text-source {
+    .chat-title-privacy-region:hover .pixelated-text .pixelated-text-source,
+    .chat-title-privacy-region:focus-within
+      .pixelated-text
+      .pixelated-text-source {
       opacity: 1;
     }
 
-    .group:hover .pixelated-text .pixelated-text-canvas,
-    .group:focus-within .pixelated-text .pixelated-text-canvas {
+    .chat-title-privacy-region:hover .pixelated-text .pixelated-text-canvas,
+    .chat-title-privacy-region:focus-within
+      .pixelated-text
+      .pixelated-text-canvas {
       opacity: 0;
     }
   }
