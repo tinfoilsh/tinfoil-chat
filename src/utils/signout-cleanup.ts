@@ -13,6 +13,14 @@ import { resetSyncHealth } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetChatRecoveryState } from '@/services/inference/chat-recovery'
 import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
+import {
+  clearAllActiveStreamSessions,
+  getActiveStreamSessionSnapshot,
+} from '@/services/notifications/active-stream-sessions'
+import {
+  resetPushNotifications,
+  unwatchStreamForPush,
+} from '@/services/notifications/push-notifications'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -71,6 +79,16 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Reset tinfoil client to clear cached API key
   resetTinfoilClient()
   resetChatRecoveryState()
+
+  // Revoke stream-notification bindings before dropping local state:
+  // pending watches and the device registration belong to the signing-out
+  // account and must not deliver its pushes to whoever uses this browser
+  // next. Fire-and-forget while the auth token is still valid.
+  for (const sessionId of getActiveStreamSessionSnapshot().values()) {
+    void unwatchStreamForPush(sessionId)
+  }
+  clearAllActiveStreamSessions()
+  resetPushNotifications()
 
   // Drop the verified sync-enclave SecureClient so the next signed-in
   // user re-runs attestation from scratch.

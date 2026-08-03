@@ -42,6 +42,10 @@ import {
   refreshRateLimit,
 } from '@/services/inference/tinfoil-client'
 import { generateTitle, getTitleContent } from '@/services/inference/title'
+import {
+  clearActiveStreamSession,
+  setActiveStreamSession,
+} from '@/services/notifications/active-stream-sessions'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -783,6 +787,11 @@ export function useChatMessaging({
       //   })
       // }
 
+      // The recovery session this stream most recently published to the
+      // notify-banner store; used to clear only our own entry (a newer
+      // stream for the same chat may have replaced it).
+      let publishedSessionId: string | undefined
+
       try {
         // Auto selections prefer a multimodal candidate when the turn carries
         // images, and a tool-calling candidate when web search, code execution,
@@ -902,6 +911,10 @@ export function useChatMessaging({
                       turnId,
                       sessionId,
                     )
+                    // Expose the live session so the notify banner can watch
+                    // this stream for a push notification.
+                    publishedSessionId = sessionId
+                    setActiveStreamSession(streamChatIdRef.current, sessionId)
                   },
                   onTokenCaptured: (sessionId, token) =>
                     persistChatRecoveryToken({
@@ -911,7 +924,13 @@ export function useChatMessaging({
                       sessionId,
                       token,
                     }),
-                  onAttemptAbandoned: abandonChatRecoveryAttempt,
+                  onAttemptAbandoned: (sessionId) => {
+                    // Retract the dead session immediately so the notify
+                    // banner cannot register a watch on it during the retry
+                    // backoff; the replacement attempt publishes a fresh one.
+                    clearActiveStreamSession(streamChatIdRef.current, sessionId)
+                    return abandonChatRecoveryAttempt(sessionId)
+                  },
                 }
               : undefined,
         })
@@ -1220,6 +1239,12 @@ export function useChatMessaging({
           isThinking: false,
         })
         clearController(streamChatIdRef.current)
+        // Scoped to our own session: a newer stream for this chat may have
+        // already published a replacement, which must survive our cleanup.
+        // Streams that never published (failed pre-recovery) clear nothing.
+        if (publishedSessionId !== undefined) {
+          clearActiveStreamSession(streamChatIdRef.current, publishedSessionId)
+        }
         if (
           activeLiveGenerationsRef.current.get(startingChatId) ===
           activeGeneration

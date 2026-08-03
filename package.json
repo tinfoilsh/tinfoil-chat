@@ -42,6 +42,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fflate": "^0.8.3",
+    "firebase": "^12.17.0",
     "framer-motion": "^11.18.2",
     "html2pdf.js": "^0.14.0",
     "isomorphic-dompurify": "^2.35.0",

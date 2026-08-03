@@ -48,3 +48,17 @@ export const CLOUD_SYNC = {
 export const PASSKEY = {
   CREDENTIAL_SAVE_MAX_ATTEMPTS: 3,
 } as const
+
+// Firebase Cloud Messaging (web push). All values are public identifiers
+// (the Firebase web config is not secret); push stays disabled when unset.
+export const FIREBASE_CONFIG = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
+} as const
+
+// Public VAPID key ("Web Push certificates" key pair in the Firebase console).
+export const FIREBASE_VAPID_KEY =
+  process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || ''
