@@ -134,6 +134,17 @@ export async function watchStreamForPush(
   }
 }
 
+/**
+ * Forgets the in-memory registration state, e.g. on sign-out or account
+ * switch. The FCM token itself is device-scoped, but the controlplane
+ * registration is per-user, so the next account must re-register instead of
+ * hitting the previous account's already-registered cache.
+ */
+export function resetPushNotifications(): void {
+  cachedFcmToken = null
+  enablePromise = null
+}
+
 /** Cancels a pending stream watch. Best-effort. */
 export async function unwatchStreamForPush(sessionId: string): Promise<void> {
   try {

@@ -13,6 +13,8 @@ import { resetSyncHealth } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetChatRecoveryState } from '@/services/inference/chat-recovery'
 import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
+import { clearAllActiveStreamSessions } from '@/services/notifications/active-stream-sessions'
+import { resetPushNotifications } from '@/services/notifications/push-notifications'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -71,6 +73,11 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Reset tinfoil client to clear cached API key
   resetTinfoilClient()
   resetChatRecoveryState()
+
+  // Drop stream-notification state: tracked live sessions and the
+  // per-account FCM device registration cache.
+  clearAllActiveStreamSessions()
+  resetPushNotifications()
 
   // Drop the verified sync-enclave SecureClient so the next signed-in
   // user re-runs attestation from scratch.

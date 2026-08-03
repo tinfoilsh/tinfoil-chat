@@ -10,6 +10,18 @@
  *   { type: 'stream-finished', chatId, title, body, success }
  */
 
+/**
+ * Validates the chat identifier used to build the deep-link path. Chat IDs
+ * are `<digits>_<uuid>` (optionally prefixed with `local/` for local-only
+ * chats); anything else - path traversal, query strings, absolute URLs - is
+ * rejected so a forged payload cannot steer navigation.
+ */
+function sanitizedChatId(raw) {
+  if (typeof raw !== 'string') return null
+  const match = /^(local\/)?[0-9A-Za-z_-]{1,64}$/.exec(raw)
+  return match ? raw : null
+}
+
 /** True when a focused window is already showing the chat. */
 async function chatIsVisible(chatId) {
   const windows = await self.clients.matchAll({
@@ -32,13 +44,15 @@ self.addEventListener('push', (event) => {
     return
   }
   const data = payload?.data
-  if (data?.type !== 'stream-finished' || !data.chatId) return
+  if (data?.type !== 'stream-finished') return
+  const chatId = sanitizedChatId(data.chatId)
+  if (!chatId) return
 
   event.waitUntil(
     (async () => {
       // The user is already looking at this chat: the finished response is
       // on screen, so an OS notification would only be noise.
-      if (await chatIsVisible(data.chatId)) return
+      if (await chatIsVisible(chatId)) return
 
       await self.registration.showNotification(
         data.title || 'Your response is ready',
@@ -46,8 +60,8 @@ self.addEventListener('push', (event) => {
           body: data.body || '',
           icon: '/android-chrome-192x192.png',
           badge: '/favicon-32x32.png',
-          tag: `stream-finished-${data.chatId}`,
-          data: { chatId: data.chatId },
+          tag: `stream-finished-${chatId}`,
+          data: { chatId },
         },
       )
     })(),
@@ -56,7 +70,9 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const chatId = event.notification.data?.chatId
+  // Re-validated even though showNotification only stores sanitized IDs:
+  // notification data survives SW updates, so don't trust old payloads.
+  const chatId = sanitizedChatId(event.notification.data?.chatId)
   if (!chatId) return
 
   const chatPath = `/chat/${chatId}`

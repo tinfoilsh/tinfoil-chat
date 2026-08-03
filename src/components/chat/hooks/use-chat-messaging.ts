@@ -787,6 +787,11 @@ export function useChatMessaging({
       //   })
       // }
 
+      // The recovery session this stream most recently published to the
+      // notify-banner store; used to clear only our own entry (a newer
+      // stream for the same chat may have replaced it).
+      let publishedSessionId: string | undefined
+
       try {
         // Auto selections prefer a multimodal candidate when the turn carries
         // images, and a tool-calling candidate when web search, code execution,
@@ -908,6 +913,7 @@ export function useChatMessaging({
                     )
                     // Expose the live session so the notify banner can watch
                     // this stream for a push notification.
+                    publishedSessionId = sessionId
                     setActiveStreamSession(streamChatIdRef.current, sessionId)
                   },
                   onTokenCaptured: (sessionId, token) =>
@@ -918,7 +924,13 @@ export function useChatMessaging({
                       sessionId,
                       token,
                     }),
-                  onAttemptAbandoned: abandonChatRecoveryAttempt,
+                  onAttemptAbandoned: (sessionId) => {
+                    // Retract the dead session immediately so the notify
+                    // banner cannot register a watch on it during the retry
+                    // backoff; the replacement attempt publishes a fresh one.
+                    clearActiveStreamSession(streamChatIdRef.current, sessionId)
+                    return abandonChatRecoveryAttempt(sessionId)
+                  },
                 }
               : undefined,
         })
@@ -1227,7 +1239,9 @@ export function useChatMessaging({
           isThinking: false,
         })
         clearController(streamChatIdRef.current)
-        clearActiveStreamSession(streamChatIdRef.current)
+        // Scoped to our own session: a newer stream for this chat may have
+        // already published a replacement, which must survive our cleanup.
+        clearActiveStreamSession(streamChatIdRef.current, publishedSessionId)
         if (
           activeLiveGenerationsRef.current.get(startingChatId) ===
           activeGeneration

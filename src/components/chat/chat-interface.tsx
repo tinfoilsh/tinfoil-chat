@@ -80,7 +80,11 @@ import {
 } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import { isProbablyTextFile, isSupportedFile } from '@/utils/file-types'
-import { getNewChatPath, isPlainPrimaryClick } from '@/utils/navigation'
+import {
+  getNewChatPath,
+  getPushWatchChatId,
+  isPlainPrimaryClick,
+} from '@/utils/navigation'
 import {
   getProjectUploadPreference,
   setProjectUploadPreference,
@@ -815,11 +819,10 @@ export function ChatInterface({
     dismissBanner: dismissNotifyBanner,
   } = useStreamNotifyBanner({
     chatId: currentChatId ?? '',
-    // Local-only chats live under /chat/local/, so the push deep link needs
-    // the prefix to land on the right route.
-    watchChatId: currentChat?.isLocalOnly
-      ? `local/${currentChatId ?? ''}`
-      : (currentChatId ?? ''),
+    watchChatId: getPushWatchChatId(
+      currentChatId ?? '',
+      currentChat?.isLocalOnly === true,
+    ),
     responsePending: isWaitingForResponse || isStreaming || isThinking,
   })
 

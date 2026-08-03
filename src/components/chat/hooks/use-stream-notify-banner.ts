@@ -66,6 +66,10 @@ export function useStreamNotifyBanner({
   // Sessions the user dismissed or already set a watch on; keyed by session
   // so a retried stream (fresh session) can offer again.
   const handledSessionsRef = useRef<Set<string>>(new Set())
+  // Mirrors chatId so async work started before a chat switch can detect
+  // that its result no longer belongs to the banner on screen.
+  const chatIdRef = useRef(chatId)
+  chatIdRef.current = chatId
 
   const eligible =
     Boolean(sessionId) &&
@@ -74,12 +78,30 @@ export function useStreamNotifyBanner({
     !pushPermissionDenied() &&
     !handledSessionsRef.current.has(sessionId as string)
 
+  // Each chat gets its own banner lifecycle: switching chats resets the
+  // state machine so a confirmation can't linger into another chat.
+  useEffect(() => {
+    setBannerState('hidden')
+  }, [chatId])
+
+  // A replacement session (stream retry) also restarts the state machine,
+  // so a confirmation for the dead session can't swallow the fresh offer.
+  const previousSessionRef = useRef(sessionId)
+  useEffect(() => {
+    const previous = previousSessionRef.current
+    previousSessionRef.current = sessionId
+    if (sessionId && previous && sessionId !== previous) {
+      setBannerState('hidden')
+    }
+  }, [sessionId])
+
   useEffect(() => {
     if (!eligible) {
       setBannerState((current) => {
-        // Let the confirmation linger through its own timeout even if the
-        // stream finishes quickly; everything else hides immediately.
-        if (current === 'confirmed') return current
+        // Let the confirmation and failure notices linger through their own
+        // timeout even if the stream finishes (or permission gets denied)
+        // meanwhile; everything else hides immediately.
+        if (current === 'confirmed' || current === 'failed') return current
         return 'hidden'
       })
       return
@@ -100,19 +122,39 @@ export function useStreamNotifyBanner({
 
   const requestNotification = useCallback(() => {
     if (!sessionId) return
+    const requestChatId = chatId
     setBannerState('enabling')
     void (async () => {
       const enabled = await enablePushNotifications()
-      const watching =
-        enabled && (await watchStreamForPush(sessionId, watchChatId))
-      if (watching) {
-        handledSessionsRef.current.add(sessionId)
-        setBannerState('confirmed')
-      } else {
+      // The permission prompt and FCM registration can take arbitrarily
+      // long; the user may have switched chats, or the stream may have
+      // finished or retried onto a fresh session. Re-read the live session
+      // and watch that one, not the session captured at click time.
+      if (chatIdRef.current !== requestChatId) return
+      const liveSessionId =
+        getActiveStreamSessionSnapshot().get(requestChatId) ?? null
+      if (!enabled) {
         setBannerState('failed')
+        return
+      }
+      if (!liveSessionId) {
+        // The stream already finished; its response is on screen.
+        setBannerState('hidden')
+        return
+      }
+      const watching = await watchStreamForPush(liveSessionId, watchChatId)
+      if (chatIdRef.current !== requestChatId) return
+      if (watching) {
+        handledSessionsRef.current.add(liveSessionId)
+        setBannerState('confirmed')
+      } else if (getActiveStreamSessionSnapshot().get(requestChatId)) {
+        setBannerState('failed')
+      } else {
+        // Watch rejected because the stream completed in the meantime.
+        setBannerState('hidden')
       }
     })()
-  }, [sessionId, watchChatId])
+  }, [sessionId, chatId, watchChatId])
 
   const dismissBanner = useCallback(() => {
     if (sessionId) {

@@ -45,3 +45,10 @@ export function clearActiveStreamSession(
   sessionsByChat.delete(chatId)
   publish()
 }
+
+/** Clears all tracked sessions, e.g. on sign-out or account switch. */
+export function clearAllActiveStreamSessions(): void {
+  if (sessionsByChat.size === 0) return
+  sessionsByChat.clear()
+  publish()
+}

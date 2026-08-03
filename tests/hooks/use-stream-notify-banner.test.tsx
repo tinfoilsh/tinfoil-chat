@@ -143,6 +143,93 @@ describe('useStreamNotifyBanner', () => {
     expect(result.current.bannerState).toBe('failed')
   })
 
+  it('keeps the failure notice visible after the user denies permission', async () => {
+    enablePushNotifications.mockImplementation(async () => {
+      // Denying the prompt flips the browser permission to denied, which
+      // makes the banner ineligible at the same moment enabling fails.
+      pushPermissionDenied.mockReturnValue(true)
+      return false
+    })
+    const { result } = renderBanner()
+    act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    act(() => result.current.requestNotification())
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync()
+    })
+    expect(result.current.bannerState).toBe('failed')
+
+    // The failure notice hides via its own timeout, not immediately.
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_CONFIRMATION_MS)
+    })
+    expect(result.current.bannerState).toBe('hidden')
+  })
+
+  it('watches the live session when the stream was retried mid-enable', async () => {
+    const freshSession = 'b'.repeat(32)
+    enablePushNotifications.mockImplementation(async () => {
+      setActiveStreamSession(CHAT_ID, freshSession)
+      return true
+    })
+    const { result } = renderBanner()
+    act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    act(() => result.current.requestNotification())
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync()
+    })
+    expect(watchStreamForPush).toHaveBeenCalledWith(freshSession, CHAT_ID)
+    expect(result.current.bannerState).toBe('confirmed')
+  })
+
+  it('hides quietly when the stream finishes while enabling', async () => {
+    enablePushNotifications.mockImplementation(async () => {
+      clearActiveStreamSession(CHAT_ID)
+      return true
+    })
+    const { result } = renderBanner()
+    act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    act(() => result.current.requestNotification())
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync()
+    })
+    expect(watchStreamForPush).not.toHaveBeenCalled()
+    expect(result.current.bannerState).toBe('hidden')
+  })
+
+  it('resets the banner when switching chats', async () => {
+    const { result, rerender } = renderHook(
+      ({ chatId }: { chatId: string }) =>
+        useStreamNotifyBanner({
+          chatId,
+          watchChatId: chatId,
+          responsePending: true,
+        }),
+      { initialProps: { chatId: CHAT_ID } },
+    )
+    act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    act(() => result.current.requestNotification())
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync()
+    })
+    expect(result.current.bannerState).toBe('confirmed')
+
+    // The confirmation must not follow the user into another chat.
+    rerender({ chatId: 'chat-2' })
+    expect(result.current.bannerState).toBe('hidden')
+  })
+
   it('stays hidden for the same session after dismissal, but re-offers for a new session', () => {
     const { result } = renderBanner()
     act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))

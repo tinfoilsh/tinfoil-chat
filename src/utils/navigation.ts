@@ -32,6 +32,20 @@ export function getChatPath(
   return `/chat/${chatId}`
 }
 
+/**
+ * Identifier embedded in a stream-completion push payload. The service
+ * worker deep-links to `/chat/{watchChatId}`, so local-only chats carry the
+ * `local/` route segment. Project chats use the bare id: `/chat/{id}` loads
+ * them fine and the app canonicalizes the URL to the project route itself.
+ * Must stay in sync with sanitizedChatId in public/firebase-messaging-sw.js.
+ */
+export function getPushWatchChatId(
+  chatId: string,
+  isLocalOnly: boolean,
+): string {
+  return isLocalOnly ? `local/${chatId}` : chatId
+}
+
 export function getNewChatPath({
   isLocalOnly = false,
   projectId,

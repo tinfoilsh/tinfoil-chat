@@ -1,5 +1,6 @@
 import {
   clearActiveStreamSession,
+  clearAllActiveStreamSessions,
   getActiveStreamSessionSnapshot,
   setActiveStreamSession,
   subscribeActiveStreamSessions,
@@ -55,6 +56,13 @@ describe('active-stream-sessions', () => {
     setActiveStreamSession('chat-1', 'a'.repeat(32))
     clearActiveStreamSession('chat-1')
     expect(getActiveStreamSessionSnapshot().has('chat-1')).toBe(false)
+  })
+
+  it('clears everything on account switch', () => {
+    setActiveStreamSession('chat-1', 'a'.repeat(32))
+    setActiveStreamSession('chat-2', 'b'.repeat(32))
+    clearAllActiveStreamSessions()
+    expect(getActiveStreamSessionSnapshot().size).toBe(0)
   })
 
   it('returns stable snapshots between mutations', () => {
