@@ -11,10 +11,14 @@
  */
 
 /**
- * Validates the chat identifier used to build the deep-link path. Chat IDs
- * are `<digits>_<uuid>` (optionally prefixed with `local/` for local-only
- * chats); anything else - path traversal, query strings, absolute URLs - is
- * rejected so a forged payload cannot steer navigation.
+ * Validates the chat identifier used to build the deep-link path. The
+ * security boundary is the URL shape, not the ID format: the allowed
+ * charset admits exactly one path segment (optionally under `local/` for
+ * local-only chats), so a forged payload cannot traverse (`../`), add query
+ * strings or fragments, or steer navigation outside `/chat/`. Chat ID
+ * formats vary across app versions and imports, so the exact shape is
+ * deliberately not enforced here; an unknown ID lands on the harmless
+ * "chat not found" view.
  */
 function sanitizedChatId(raw) {
   if (typeof raw !== 'string') return null

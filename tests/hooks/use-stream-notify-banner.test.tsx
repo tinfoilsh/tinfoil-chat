@@ -205,6 +205,49 @@ describe('useStreamNotifyBanner', () => {
     expect(result.current.bannerState).toBe('hidden')
   })
 
+  it('re-offers a retried session even when the store clears before republishing', async () => {
+    const { result } = renderBanner()
+    act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    act(() => result.current.requestNotification())
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync()
+    })
+    expect(result.current.bannerState).toBe('confirmed')
+
+    // Retry lifecycle: old session clears first, fresh one publishes later.
+    act(() => clearActiveStreamSession(CHAT_ID))
+    act(() => setActiveStreamSession(CHAT_ID, 'b'.repeat(32)))
+    expect(result.current.bannerState).toBe('hidden')
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    expect(result.current.bannerState).toBe('offer')
+  })
+
+  it('hides quietly when the stream retries while the watch call is in flight', async () => {
+    watchStreamForPush.mockImplementation(async () => {
+      // Fresh session replaces the watched one mid-request.
+      setActiveStreamSession(CHAT_ID, 'b'.repeat(32))
+      return true
+    })
+    const { result } = renderBanner()
+    act(() => setActiveStreamSession(CHAT_ID, SESSION_ID))
+    act(() => {
+      vi.advanceTimersByTime(CONSTANTS.NOTIFY_BANNER_DELAY_MS)
+    })
+    act(() => result.current.requestNotification())
+    await act(async () => {
+      // Settles the watch promise and the fresh session's offer delay.
+      await vi.runOnlyPendingTimersAsync()
+    })
+    // No misleading confirmation for the dead session; the fresh session
+    // runs its own offer cycle instead.
+    expect(result.current.bannerState).toBe('offer')
+  })
+
   it('resets the banner when switching chats', async () => {
     const { result, rerender } = renderHook(
       ({ chatId }: { chatId: string }) =>

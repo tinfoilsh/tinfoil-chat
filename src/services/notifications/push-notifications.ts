@@ -9,6 +9,9 @@ const SERVICE_WORKER_URL = '/firebase-messaging-sw.js'
 let firebaseApp: FirebaseApp | null = null
 let cachedFcmToken: string | null = null
 let enablePromise: Promise<boolean> | null = null
+// Bumped by resetPushNotifications() so an in-flight enable started under a
+// previous account cannot write its results into the next account's state.
+let enableGeneration = 0
 
 export function pushNotificationsConfigured(): boolean {
   return Boolean(
@@ -62,7 +65,8 @@ export async function enablePushNotifications(): Promise<boolean> {
   if (!pushNotificationsAvailable()) return false
   if (enablePromise) return enablePromise
 
-  enablePromise = (async () => {
+  const generation = enableGeneration
+  const thisAttempt = (async () => {
     try {
       if (!(await isSupported())) return false
 
@@ -84,6 +88,9 @@ export async function enablePushNotifications(): Promise<boolean> {
         serviceWorkerRegistration: registration,
       })
       if (!fcmToken) return false
+      // The account changed mid-flight: this registration belonged to the
+      // previous user; do not record it (or report success) for the next.
+      if (generation !== enableGeneration) return false
 
       // Re-registering after a token rotation: the old token is pruned
       // server-side when FCM reports it unregistered, so only the fresh
@@ -94,7 +101,9 @@ export async function enablePushNotifications(): Promise<boolean> {
           body: { token: fcmToken },
         })
         if (!response.ok) return false
-        cachedFcmToken = fcmToken
+        if (generation === enableGeneration) {
+          cachedFcmToken = fcmToken
+        }
       }
       return true
     } catch (error) {
@@ -104,10 +113,15 @@ export async function enablePushNotifications(): Promise<boolean> {
       })
       return false
     } finally {
-      enablePromise = null
+      // Only release the guard we own; a reset (account switch) bumps the
+      // generation and takes over the shared state for the next account.
+      if (generation === enableGeneration) {
+        enablePromise = null
+      }
     }
   })()
-  return enablePromise
+  enablePromise = thisAttempt
+  return thisAttempt
 }
 
 /**
@@ -135,14 +149,35 @@ export async function watchStreamForPush(
 }
 
 /**
- * Forgets the in-memory registration state, e.g. on sign-out or account
- * switch. The FCM token itself is device-scoped, but the controlplane
- * registration is per-user, so the next account must re-register instead of
- * hitting the previous account's already-registered cache.
+ * Revokes this browser's push bindings for the signing-out account and
+ * forgets the in-memory registration state. Best-effort and fire-and-forget:
+ * it must run while the account's auth token is still valid.
+ *
+ * The FCM token itself is device-scoped, but the controlplane registration
+ * is per-user, so the next account must re-register instead of hitting the
+ * previous account's already-registered cache — hence the generation bump,
+ * which also disowns any enable attempt still in flight.
  */
 export function resetPushNotifications(): void {
+  const staleToken = cachedFcmToken
   cachedFcmToken = null
   enablePromise = null
+  enableGeneration += 1
+
+  if (staleToken) {
+    // Unregister the device server-side so stream watches created by the
+    // signing-out account (whose payloads FCM would still deliver to this
+    // browser) have no registered device to fan out to.
+    void apiFetch('/api/notifications/devices', {
+      method: 'DELETE',
+      body: { token: staleToken },
+    }).catch((error) => {
+      logError('Failed to unregister push device on signout', error, {
+        component: 'push-notifications',
+        action: 'resetPushNotifications',
+      })
+    })
+  }
 }
 
 /** Cancels a pending stream watch. Best-effort. */

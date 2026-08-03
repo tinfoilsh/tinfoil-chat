@@ -86,11 +86,15 @@ export function useStreamNotifyBanner({
 
   // A replacement session (stream retry) also restarts the state machine,
   // so a confirmation for the dead session can't swallow the fresh offer.
-  const previousSessionRef = useRef(sessionId)
+  // Tracks the last non-null session: retries may clear the store before
+  // publishing the replacement (old -> null -> new), and the comparison must
+  // span that gap while confirmed/failed notices linger through it.
+  const lastSessionRef = useRef(sessionId)
   useEffect(() => {
-    const previous = previousSessionRef.current
-    previousSessionRef.current = sessionId
-    if (sessionId && previous && sessionId !== previous) {
+    if (!sessionId) return
+    const previous = lastSessionRef.current
+    lastSessionRef.current = sessionId
+    if (previous && sessionId !== previous) {
       setBannerState('hidden')
     }
   }, [sessionId])
@@ -144,14 +148,23 @@ export function useStreamNotifyBanner({
       }
       const watching = await watchStreamForPush(liveSessionId, watchChatId)
       if (chatIdRef.current !== requestChatId) return
+      const sessionAfterWatch =
+        getActiveStreamSessionSnapshot().get(requestChatId) ?? null
+      // The watched session is no longer live: the stream finished (watch
+      // acceptance means the push will still arrive, but the response is on
+      // screen) or retried onto a fresh session (watch is dead; let the
+      // fresh session run its own offer cycle). Either way a lingering
+      // confirmation or failure notice would mislead, so hide quietly.
+      if (sessionAfterWatch !== liveSessionId) {
+        if (watching) handledSessionsRef.current.add(liveSessionId)
+        setBannerState('hidden')
+        return
+      }
       if (watching) {
         handledSessionsRef.current.add(liveSessionId)
         setBannerState('confirmed')
-      } else if (getActiveStreamSessionSnapshot().get(requestChatId)) {
-        setBannerState('failed')
       } else {
-        // Watch rejected because the stream completed in the meantime.
-        setBannerState('hidden')
+        setBannerState('failed')
       }
     })()
   }, [sessionId, chatId, watchChatId])

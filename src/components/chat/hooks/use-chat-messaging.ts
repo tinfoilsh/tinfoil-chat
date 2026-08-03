@@ -1241,7 +1241,10 @@ export function useChatMessaging({
         clearController(streamChatIdRef.current)
         // Scoped to our own session: a newer stream for this chat may have
         // already published a replacement, which must survive our cleanup.
-        clearActiveStreamSession(streamChatIdRef.current, publishedSessionId)
+        // Streams that never published (failed pre-recovery) clear nothing.
+        if (publishedSessionId !== undefined) {
+          clearActiveStreamSession(streamChatIdRef.current, publishedSessionId)
+        }
         if (
           activeLiveGenerationsRef.current.get(startingChatId) ===
           activeGeneration

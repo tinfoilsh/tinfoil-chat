@@ -13,8 +13,14 @@ import { resetSyncHealth } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetChatRecoveryState } from '@/services/inference/chat-recovery'
 import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
-import { clearAllActiveStreamSessions } from '@/services/notifications/active-stream-sessions'
-import { resetPushNotifications } from '@/services/notifications/push-notifications'
+import {
+  clearAllActiveStreamSessions,
+  getActiveStreamSessionSnapshot,
+} from '@/services/notifications/active-stream-sessions'
+import {
+  resetPushNotifications,
+  unwatchStreamForPush,
+} from '@/services/notifications/push-notifications'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -74,8 +80,13 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   resetTinfoilClient()
   resetChatRecoveryState()
 
-  // Drop stream-notification state: tracked live sessions and the
-  // per-account FCM device registration cache.
+  // Revoke stream-notification bindings before dropping local state:
+  // pending watches and the device registration belong to the signing-out
+  // account and must not deliver its pushes to whoever uses this browser
+  // next. Fire-and-forget while the auth token is still valid.
+  for (const sessionId of getActiveStreamSessionSnapshot().values()) {
+    void unwatchStreamForPush(sessionId)
+  }
   clearAllActiveStreamSessions()
   resetPushNotifications()
 
