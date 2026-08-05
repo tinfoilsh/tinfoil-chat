@@ -286,6 +286,12 @@ export function ChatListItem({
       e.preventDefault()
       return
     }
+    // The mousedown that initiates a drag focuses the row's link, and since
+    // the drag suppresses the click, focus would stay parked inside the
+    // privacy region and keep pixelated titles revealed after the drop.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
     setIsDragging(true)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', chat.id)

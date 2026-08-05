@@ -177,15 +177,19 @@
       opacity: 1;
     }
 
+    /* Reveal on hover, or on keyboard focus only (:focus-visible).
+       Plain :focus-within would also match mouse-initiated focus, which
+       gets parked inside the region after a drag-and-drop and would keep
+       every title revealed until focus leaves the sidebar. */
     .chat-title-privacy-region:hover .pixelated-text .pixelated-text-source,
-    .chat-title-privacy-region:focus-within
+    .chat-title-privacy-region:has(:focus-visible)
       .pixelated-text
       .pixelated-text-source {
       opacity: 1;
     }
 
     .chat-title-privacy-region:hover .pixelated-text .pixelated-text-canvas,
-    .chat-title-privacy-region:focus-within
+    .chat-title-privacy-region:has(:focus-visible)
       .pixelated-text
       .pixelated-text-canvas {
       opacity: 0;
