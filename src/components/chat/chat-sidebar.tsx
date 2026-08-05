@@ -242,8 +242,7 @@ export function ChatSidebar({
     }
     return true
   })
-  const [isChatListScrolled, setIsChatListScrolled] = useState(false)
-  const chatListRef = useRef<HTMLDivElement>(null)
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   const [isIOS, setIsIOS] = useState(false)
   const [nativeAppDismissed, setNativeAppDismissed] = useState(false)
@@ -598,19 +597,6 @@ export function ChatSidebar({
     }
   }, [isClient])
 
-  useEffect(() => {
-    const chatList = chatListRef.current
-    if (!chatList) return
-
-    const handleScroll = () => {
-      setIsChatListScrolled(chatList.scrollTop > 0)
-    }
-
-    handleScroll()
-    chatList.addEventListener('scroll', handleScroll)
-    return () => chatList.removeEventListener('scroll', handleScroll)
-  }, [isChatHistoryExpanded])
-
   // Auto-load more chats when scrolling to bottom
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current
@@ -629,7 +615,7 @@ export function ChatSidebar({
         }
       },
       {
-        root: chatListRef.current,
+        root: sidebarScrollRef.current,
         rootMargin: '100px',
         threshold: 0,
       },
@@ -1027,8 +1013,14 @@ export function ChatSidebar({
           </div>
         </div>
 
-        {/* Main sidebar content */}
-        <div className="relative flex h-full flex-col overflow-hidden">
+        {/* Main sidebar content - one scroll area covering the upsell box,
+            New Chat button, Projects, and Chats so long project or chat
+            lists never squeeze each other out of view. The footer (and iOS
+            banner) stay pinned below. */}
+        <div
+          ref={sidebarScrollRef}
+          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
           {/* Message for non-premium users (signed in or not) */}
           {!isPremium && (
             <div
@@ -1247,7 +1239,7 @@ export function ChatSidebar({
                   setIsDropTargetProjectsHeader(false)
                 }}
                 className={cn(
-                  'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  'sticky top-0 z-20 flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                   isDropTargetProjectsHeader
                     ? isDarkMode
                       ? 'border border-white/30 bg-white/10'
@@ -1287,10 +1279,7 @@ export function ChatSidebar({
                     className="overflow-hidden"
                   >
                     <div
-                      className={cn(
-                        'min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2',
-                        expandedPanelClass,
-                      )}
+                      className={cn('space-y-1 px-2 py-2', expandedPanelClass)}
                     >
                       {/* Cloud sync disabled message */}
                       {!cloudSyncEnabled ? (
@@ -1667,7 +1656,7 @@ export function ChatSidebar({
                 clearDragState()
               }}
               className={cn(
-                'relative flex w-full items-center bg-surface-sidebar text-sm transition-colors',
+                'sticky top-0 z-20 flex w-full items-center bg-surface-sidebar text-sm transition-colors',
                 isDropTargetChatHistory
                   ? isDarkMode
                     ? 'border border-white/30 bg-white/10'
@@ -1947,331 +1936,328 @@ export function ChatSidebar({
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
 
-          {/* Scrollable Chat List */}
-          <AnimatePresence initial={false}>
-            {isChatHistoryExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                className={cn('flex-1 overflow-hidden', expandedPanelClass)}
-              >
-                <div
-                  id="chat-storage-panel"
-                  role="tabpanel"
-                  aria-labelledby={
-                    activeTab === 'cloud' ? 'chat-cloud-tab' : 'chat-local-tab'
-                  }
-                  ref={chatListRef}
-                  onDragOver={(e) => {
-                    if (
-                      e.dataTransfer.types.includes('application/x-chat-id')
-                    ) {
-                      e.preventDefault()
-                      e.dataTransfer.dropEffect = 'move'
-                      setIsDropTargetChatList(true)
-                    }
-                  }}
-                  onDragEnter={(e) => {
-                    if (
-                      e.dataTransfer.types.includes('application/x-chat-id')
-                    ) {
-                      e.preventDefault()
-                      setIsDropTargetChatList(true)
-                    }
-                  }}
-                  onDragLeave={(e) => {
-                    // Only clear if leaving the container entirely
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                      setIsDropTargetChatList(false)
-                    }
-                  }}
-                  onDrop={async (e) => {
-                    e.preventDefault()
-                    const chatId = e.dataTransfer.getData(
-                      'application/x-chat-id',
-                    )
-                    if (chatId) {
-                      const chat = chats.find((c) => c.id === chatId)
-                      if (draggingChatFromProjectId) {
-                        // Dragging from project - remove from project
-                        if (activeTab === 'local' && onConvertChatToLocal) {
-                          await onConvertChatToLocal(chatId)
-                        } else if (onRemoveChatFromProject) {
-                          await onRemoveChatFromProject(chatId)
-                        }
-                      } else if (
-                        chat?.isLocalOnly &&
-                        activeTab === 'cloud' &&
-                        onConvertChatToCloud
-                      ) {
-                        // Local chat dropped on cloud tab area - convert to cloud
-                        await onConvertChatToCloud(chatId)
-                      } else if (
-                        !chat?.isLocalOnly &&
-                        activeTab === 'local' &&
-                        onConvertChatToLocal
-                      ) {
-                        // Cloud chat dropped on local tab area - convert to local
-                        await onConvertChatToLocal(chatId)
-                      }
-                    }
-                    setIsDropTargetChatList(false)
-                    clearDragState()
-                  }}
-                  className={cn(
-                    'relative z-10 h-full overflow-y-auto',
-                    isChatListScrolled && 'border-t border-border-subtle',
-                    isDropTargetChatList &&
-                      (isDarkMode
-                        ? 'border border-white/30 bg-white/10'
-                        : 'border border-gray-400 bg-gray-200/30'),
-                  )}
+            {/* Chat List - flows within the unified sidebar scroll area */}
+            <AnimatePresence initial={false}>
+              {isChatHistoryExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className={cn('overflow-hidden', expandedPanelClass)}
                 >
-                  {isClient && (
-                    <ChatList
-                      chats={
-                        isSearchActive
-                          ? searchResultChats
-                          : (sortedChats as ChatItemData[])
+                  <div
+                    id="chat-storage-panel"
+                    role="tabpanel"
+                    aria-labelledby={
+                      activeTab === 'cloud'
+                        ? 'chat-cloud-tab'
+                        : 'chat-local-tab'
+                    }
+                    onDragOver={(e) => {
+                      if (
+                        e.dataTransfer.types.includes('application/x-chat-id')
+                      ) {
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        setIsDropTargetChatList(true)
                       }
-                      currentChatId={currentChat?.id}
-                      currentChatIsBlank={currentChat?.isBlankChat}
-                      currentChatIsLocalOnly={currentChat?.isLocalOnly}
-                      isDarkMode={isDarkMode}
-                      pixelateSidebarChatTitles={pixelateSidebarChatTitles}
-                      isLoading={
-                        isSearchActive &&
-                        chatSearch.isSearching &&
-                        searchResultChats.length === 0
+                    }}
+                    onDragEnter={(e) => {
+                      if (
+                        e.dataTransfer.types.includes('application/x-chat-id')
+                      ) {
+                        e.preventDefault()
+                        setIsDropTargetChatList(true)
                       }
-                      showEncryptionStatus={true}
-                      showSyncStatus={true}
-                      enableTitleAnimation={true}
-                      isDraggable={
-                        !isSearchActive &&
-                        isSignedIn &&
-                        cloudSyncEnabled &&
-                        (!!onMoveChatToProject ||
-                          !!onConvertChatToCloud ||
-                          !!onConvertChatToLocal)
+                    }}
+                    onDragLeave={(e) => {
+                      // Only clear if leaving the container entirely
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setIsDropTargetChatList(false)
                       }
-                      showMoveToProject={
-                        !isSearchActive &&
-                        isSignedIn &&
-                        isPremium &&
-                        cloudSyncEnabled &&
-                        !!onMoveChatToProject
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault()
+                      const chatId = e.dataTransfer.getData(
+                        'application/x-chat-id',
+                      )
+                      if (chatId) {
+                        const chat = chats.find((c) => c.id === chatId)
+                        if (draggingChatFromProjectId) {
+                          // Dragging from project - remove from project
+                          if (activeTab === 'local' && onConvertChatToLocal) {
+                            await onConvertChatToLocal(chatId)
+                          } else if (onRemoveChatFromProject) {
+                            await onRemoveChatFromProject(chatId)
+                          }
+                        } else if (
+                          chat?.isLocalOnly &&
+                          activeTab === 'cloud' &&
+                          onConvertChatToCloud
+                        ) {
+                          // Local chat dropped on cloud tab area - convert to cloud
+                          await onConvertChatToCloud(chatId)
+                        } else if (
+                          !chat?.isLocalOnly &&
+                          activeTab === 'local' &&
+                          onConvertChatToLocal
+                        ) {
+                          // Cloud chat dropped on local tab area - convert to local
+                          await onConvertChatToLocal(chatId)
+                        }
                       }
-                      getChatHref={(chat) =>
-                        chat.isBlankChat
-                          ? getNewChatPath({
-                              isLocalOnly: chat.isLocalOnly,
-                            })
-                          : getChatPath(chat.id, {
-                              isLocalOnly: chat.isLocalOnly,
-                            })
-                      }
-                      onSelectChat={
-                        isSearchActive
-                          ? handleSearchResultSelect
-                          : handleChatSelect
-                      }
-                      onAfterSelect={undefined}
-                      onUpdateTitle={updateChatTitle}
-                      onDeleteChat={deleteChat}
-                      onEncryptionKeyClick={onEncryptionKeyClick}
-                      onDragStart={(chatId) => setDraggingChat(chatId, null)}
-                      onDragEnd={() => {
-                        clearDragState()
-                      }}
-                      projects={projects.map((p) => ({
-                        id: p.id,
-                        name: p.name,
-                      }))}
-                      onMoveToProject={
-                        onMoveChatToProject
-                          ? async (chatId, projectId) => {
-                              // Convert local chat to cloud first if needed
-                              const chat = chats.find((c) => c.id === chatId)
-                              if (chat?.isLocalOnly && onConvertChatToCloud) {
-                                await onConvertChatToCloud(chatId)
+                      setIsDropTargetChatList(false)
+                      clearDragState()
+                    }}
+                    className={cn(
+                      'relative z-10',
+                      isDropTargetChatList &&
+                        (isDarkMode
+                          ? 'border border-white/30 bg-white/10'
+                          : 'border border-gray-400 bg-gray-200/30'),
+                    )}
+                  >
+                    {isClient && (
+                      <ChatList
+                        chats={
+                          isSearchActive
+                            ? searchResultChats
+                            : (sortedChats as ChatItemData[])
+                        }
+                        currentChatId={currentChat?.id}
+                        currentChatIsBlank={currentChat?.isBlankChat}
+                        currentChatIsLocalOnly={currentChat?.isLocalOnly}
+                        isDarkMode={isDarkMode}
+                        pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                        isLoading={
+                          isSearchActive &&
+                          chatSearch.isSearching &&
+                          searchResultChats.length === 0
+                        }
+                        showEncryptionStatus={true}
+                        showSyncStatus={true}
+                        enableTitleAnimation={true}
+                        isDraggable={
+                          !isSearchActive &&
+                          isSignedIn &&
+                          cloudSyncEnabled &&
+                          (!!onMoveChatToProject ||
+                            !!onConvertChatToCloud ||
+                            !!onConvertChatToLocal)
+                        }
+                        showMoveToProject={
+                          !isSearchActive &&
+                          isSignedIn &&
+                          isPremium &&
+                          cloudSyncEnabled &&
+                          !!onMoveChatToProject
+                        }
+                        getChatHref={(chat) =>
+                          chat.isBlankChat
+                            ? getNewChatPath({
+                                isLocalOnly: chat.isLocalOnly,
+                              })
+                            : getChatPath(chat.id, {
+                                isLocalOnly: chat.isLocalOnly,
+                              })
+                        }
+                        onSelectChat={
+                          isSearchActive
+                            ? handleSearchResultSelect
+                            : handleChatSelect
+                        }
+                        onAfterSelect={undefined}
+                        onUpdateTitle={updateChatTitle}
+                        onDeleteChat={deleteChat}
+                        onEncryptionKeyClick={onEncryptionKeyClick}
+                        onDragStart={(chatId) => setDraggingChat(chatId, null)}
+                        onDragEnd={() => {
+                          clearDragState()
+                        }}
+                        projects={projects.map((p) => ({
+                          id: p.id,
+                          name: p.name,
+                        }))}
+                        onMoveToProject={
+                          onMoveChatToProject
+                            ? async (chatId, projectId) => {
+                                // Convert local chat to cloud first if needed
+                                const chat = chats.find((c) => c.id === chatId)
+                                if (chat?.isLocalOnly && onConvertChatToCloud) {
+                                  await onConvertChatToCloud(chatId)
+                                }
+                                await onMoveChatToProject(chatId, projectId)
                               }
-                              await onMoveChatToProject(chatId, projectId)
-                            }
-                          : undefined
-                      }
-                      loadingIndicator={
-                        isSearchActive && chatSearch.isIndexing ? (
-                          <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
-                            <PiSpinner className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">
-                              Building search index...
-                            </span>
-                          </div>
-                        ) : chatDecryptionProgress?.isDecrypting ? (
-                          <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
-                            <PiSpinner className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">
-                              Loading chats
-                              {chatDecryptionProgress.total > 0
-                                ? ` (${chatDecryptionProgress.current}/${chatDecryptionProgress.total})`
-                                : '...'}
-                            </span>
-                          </div>
-                        ) : undefined
-                      }
-                      onConvertToCloud={onConvertChatToCloud}
-                      onConvertToLocal={onConvertChatToLocal}
-                      emptyState={
-                        isSearchActive ? (
-                          <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                            <p className="text-sm text-content-muted">
-                              No matching chats
-                            </p>
-                            {chatSearch.isIndexing && (
-                              <p className="mt-1 text-balance text-xs text-content-muted">
-                                The search index is still being built; results
-                                will fill in shortly
+                            : undefined
+                        }
+                        loadingIndicator={
+                          isSearchActive && chatSearch.isIndexing ? (
+                            <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
+                              <PiSpinner className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">
+                                Building search index...
+                              </span>
+                            </div>
+                          ) : chatDecryptionProgress?.isDecrypting ? (
+                            <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
+                              <PiSpinner className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">
+                                Loading chats
+                                {chatDecryptionProgress.total > 0
+                                  ? ` (${chatDecryptionProgress.current}/${chatDecryptionProgress.total})`
+                                  : '...'}
+                              </span>
+                            </div>
+                          ) : undefined
+                        }
+                        onConvertToCloud={onConvertChatToCloud}
+                        onConvertToLocal={onConvertChatToLocal}
+                        emptyState={
+                          isSearchActive ? (
+                            <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                              <p className="text-sm text-content-muted">
+                                No matching chats
                               </p>
-                            )}
-                          </div>
-                        ) : activeTab === 'local' ? (
-                          <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                            <p className="text-sm text-content-muted">
-                              No local chats yet
-                            </p>
-                            <p className="mt-1 text-xs text-content-muted">
-                              Disable cloud sync in settings to create
-                              local-only chats
-                            </p>
-                          </div>
-                        ) : undefined
-                      }
-                      loadMoreButton={
-                        isSearchActive ? undefined : (
-                          <>
-                            {/* Sentinel element for intersection observer */}
-                            <div ref={loadMoreSentinelRef} className="h-1" />
-                            {/* Shimmer placeholder while loading or waiting for chats to render */}
-                            {(isLoadingMore || pendingChatsRender) && (
-                              <div className="space-y-1 px-2">
-                                {[...Array(3)].map((_, i) => (
-                                  <div
-                                    key={i}
-                                    className="animate-pulse rounded-lg px-3 py-2"
-                                  >
+                              {chatSearch.isIndexing && (
+                                <p className="mt-1 text-balance text-xs text-content-muted">
+                                  The search index is still being built; results
+                                  will fill in shortly
+                                </p>
+                              )}
+                            </div>
+                          ) : activeTab === 'local' ? (
+                            <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                              <p className="text-sm text-content-muted">
+                                No local chats yet
+                              </p>
+                              <p className="mt-1 text-xs text-content-muted">
+                                Disable cloud sync in settings to create
+                                local-only chats
+                              </p>
+                            </div>
+                          ) : undefined
+                        }
+                        loadMoreButton={
+                          isSearchActive ? undefined : (
+                            <>
+                              {/* Sentinel element for intersection observer */}
+                              <div ref={loadMoreSentinelRef} className="h-1" />
+                              {/* Shimmer placeholder while loading or waiting for chats to render */}
+                              {(isLoadingMore || pendingChatsRender) && (
+                                <div className="space-y-1 px-2">
+                                  {[...Array(3)].map((_, i) => (
                                     <div
-                                      className={cn(
-                                        'mb-1.5 h-3.5 w-3/4 rounded',
-                                        isDarkMode
-                                          ? 'bg-gray-700'
-                                          : 'bg-gray-200',
-                                      )}
-                                    />
-                                    <div
-                                      className={cn(
-                                        'h-3 w-1/3 rounded',
-                                        isDarkMode
-                                          ? 'bg-gray-700'
-                                          : 'bg-gray-200',
-                                      )}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {isSignedIn &&
-                              !shouldShowLoadMore &&
-                              !hasMoreRemote &&
-                              hasAttemptedLoadMore && (
-                                <div className="px-3 py-2 text-center text-xs text-content-muted">
-                                  No more chats
+                                      key={i}
+                                      className="animate-pulse rounded-lg px-3 py-2"
+                                    >
+                                      <div
+                                        className={cn(
+                                          'mb-1.5 h-3.5 w-3/4 rounded',
+                                          isDarkMode
+                                            ? 'bg-gray-700'
+                                            : 'bg-gray-200',
+                                        )}
+                                      />
+                                      <div
+                                        className={cn(
+                                          'h-3 w-1/3 rounded',
+                                          isDarkMode
+                                            ? 'bg-gray-700'
+                                            : 'bg-gray-200',
+                                        )}
+                                      />
+                                    </div>
+                                  ))}
                                 </div>
                               )}
-                          </>
-                        )
-                      }
-                    />
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* App Store button for iOS users */}
-          {isClient && isIOS && !nativeAppDismissed && (
-            <div className="relative z-10 flex-none border-t border-border-subtle p-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setNativeAppDismissed(true)
-                  try {
-                    localStorage.setItem(
-                      USER_PREFS_NATIVE_APP_DISMISSED,
-                      'true',
-                    )
-                  } catch {}
-                }}
-                aria-label="Dismiss"
-                className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center text-content-muted transition-colors hover:text-content-primary"
-              >
-                <XMarkIcon className="h-4 w-4" />
-              </button>
-              <div className="text-center">
-                <p
-                  className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
-                >
-                  Get the native app
-                </p>
-                <a
-                  href="https://apps.apple.com/app/tinfoil/id6745201750"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full"
-                >
-                  <img
-                    src={
-                      isDarkMode ? '/appstore-dark.svg' : '/appstore-light.svg'
-                    }
-                    alt="Download on the App Store"
-                    className="mx-auto h-10 w-auto transition-opacity hover:opacity-80"
-                  />
-                </a>
-              </div>
-            </div>
-          )}
-
-          {/* Terms and privacy policy */}
-          <div className="relative z-10 mt-auto flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
-            <p className="text-balance text-center text-xs leading-relaxed text-content-secondary">
-              By using this service, you agree to Tinfoil&apos;s{' '}
-              <Link
-                href="https://tinfoil.sh/terms"
-                className={
-                  isDarkMode
-                    ? 'text-white underline hover:text-content-secondary'
-                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
-                }
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                href="https://tinfoil.sh/privacy"
-                className={
-                  isDarkMode
-                    ? 'text-white underline hover:text-content-secondary'
-                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
-                }
-              >
-                Privacy Policy
-              </Link>
-            </p>
+                              {isSignedIn &&
+                                !shouldShowLoadMore &&
+                                !hasMoreRemote &&
+                                hasAttemptedLoadMore && (
+                                  <div className="px-3 py-2 text-center text-xs text-content-muted">
+                                    No more chats
+                                  </div>
+                                )}
+                            </>
+                          )
+                        }
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+        </div>
+
+        {/* App Store button for iOS users - pinned below the scroll area */}
+        {isClient && isIOS && !nativeAppDismissed && (
+          <div className="relative z-10 flex-none border-t border-border-subtle p-3">
+            <button
+              type="button"
+              onClick={() => {
+                setNativeAppDismissed(true)
+                try {
+                  localStorage.setItem(USER_PREFS_NATIVE_APP_DISMISSED, 'true')
+                } catch {}
+              }}
+              aria-label="Dismiss"
+              className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center text-content-muted transition-colors hover:text-content-primary"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+            <div className="text-center">
+              <p
+                className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
+              >
+                Get the native app
+              </p>
+              <a
+                href="https://apps.apple.com/app/tinfoil/id6745201750"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full"
+              >
+                <img
+                  src={
+                    isDarkMode ? '/appstore-dark.svg' : '/appstore-light.svg'
+                  }
+                  alt="Download on the App Store"
+                  className="mx-auto h-10 w-auto transition-opacity hover:opacity-80"
+                />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Terms and privacy policy */}
+        <div className="relative z-10 mt-auto flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
+          <p className="text-balance text-center text-xs leading-relaxed text-content-secondary">
+            By using this service, you agree to Tinfoil&apos;s{' '}
+            <Link
+              href="https://tinfoil.sh/terms"
+              className={
+                isDarkMode
+                  ? 'text-white underline hover:text-content-secondary'
+                  : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
+              }
+            >
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link
+              href="https://tinfoil.sh/privacy"
+              className={
+                isDarkMode
+                  ? 'text-white underline hover:text-content-secondary'
+                  : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
+              }
+            >
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </nav>
 
