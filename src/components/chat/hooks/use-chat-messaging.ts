@@ -53,6 +53,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getMessageAttachments, getMessageImages } from '../attachment-helpers'
 import { ChatError } from '../chat-utils'
 import { CONSTANTS } from '../constants'
+import { regenerateToolCallArguments } from '../genui/retry'
 import type { Chat, LoadingState, Message } from '../types'
 import {
   createBlankChat,
@@ -122,6 +123,7 @@ interface UseChatMessagingReturn {
     resultText: string,
     resultData?: unknown,
   ) => void
+  retryToolCall: (messageIndex: number, toolCallId: string) => Promise<boolean>
 }
 
 type ActiveLiveGeneration = {
@@ -1424,6 +1426,86 @@ export function useChatMessaging({
     [loadingState, currentChat, setChats, setCurrentChat, handleQuery],
   )
 
+  /**
+   * Retry a single failed GenUI tool call without regenerating the whole
+   * assistant response. Re-asks the model for just that widget's arguments
+   * via a structured completion, validates them against the widget schema,
+   * and patches the failed block (and its `toolCalls` mirror) in place.
+   *
+   * Returns true when the widget was repaired; false lets the caller fall
+   * back to a full regeneration.
+   */
+  const retryToolCall = useCallback(
+    async (messageIndex: number, toolCallId: string): Promise<boolean> => {
+      if (loadingState !== 'idle' || !currentChat) return false
+
+      const message = currentChat.messages[messageIndex]
+      if (!message || message.role !== 'assistant') return false
+      const block = message.timeline?.find(
+        (candidate) =>
+          candidate.type === 'tool_call' && candidate.toolCallId === toolCallId,
+      )
+      if (!block || block.type !== 'tool_call') return false
+
+      const { model } = resolveModelSelection(selectedModel, models, {})
+      if (!model) return false
+
+      const newArguments = await regenerateToolCallArguments({
+        toolName: block.name,
+        contextMessages: currentChat.messages.slice(0, messageIndex + 1),
+        model,
+      })
+      if (newArguments === null) return false
+
+      const patchMessage = (msg: Message): Message => ({
+        ...msg,
+        timeline: msg.timeline?.map((candidate) =>
+          candidate.type === 'tool_call' && candidate.toolCallId === toolCallId
+            ? { ...candidate, arguments: newArguments }
+            : candidate,
+        ),
+        toolCalls: msg.toolCalls?.map((tc) =>
+          tc.id === toolCallId ? { ...tc, arguments: newArguments } : tc,
+        ),
+      })
+
+      const patchedMessages = currentChat.messages.map((msg, index) =>
+        index === messageIndex ? patchMessage(msg) : msg,
+      )
+      const patchedChat: Chat = { ...currentChat, messages: patchedMessages }
+
+      setCurrentChat(patchedChat)
+      setChats((prevChats) =>
+        prevChats.map((c) => (c.id === patchedChat.id ? patchedChat : c)),
+      )
+
+      if (!patchedChat.isTemporary) {
+        if (storeHistory) {
+          chatStorage.saveChatAndSync(patchedChat).catch((error) => {
+            logError('Failed to persist repaired widget', error, {
+              component: 'useChatMessaging',
+              action: 'retryToolCall',
+              metadata: { chatId: patchedChat.id, toolCallId },
+            })
+          })
+        } else {
+          sessionChatStorage.saveChat(patchedChat)
+        }
+      }
+
+      return true
+    },
+    [
+      loadingState,
+      currentChat,
+      selectedModel,
+      models,
+      storeHistory,
+      setChats,
+      setCurrentChat,
+    ],
+  )
+
   // Tracks a regenerate request issued while a stream is in flight. Once
   // the in-progress generation has been cancelled and `loadingState`
   // settles back to 'idle', the deferred request is fired by the effect
@@ -1554,5 +1636,6 @@ export function useChatMessaging({
     regenerateMessage,
     retryLastMessage,
     resolveInputToolCall,
+    retryToolCall,
   }
 }

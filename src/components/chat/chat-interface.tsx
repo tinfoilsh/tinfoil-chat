@@ -764,6 +764,7 @@ export function ChatInterface({
     editMessage,
     regenerateMessage,
     resolveInputToolCall,
+    retryToolCall,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
     localChatNotFound,
@@ -3461,6 +3462,7 @@ export function ChatInterface({
                     handleLabelClick={handleLabelClick}
                     onEditMessage={editMessage}
                     onRegenerateMessage={regenerateMessage}
+                    onRetryToolCall={retryToolCall}
                     showScrollButton={showScrollButton}
                     webSearchEnabled={effectiveWebSearchEnabled}
                     onWebSearchToggle={

@@ -59,6 +59,13 @@ interface GenUIToolCallRendererProps {
    * call. Intended to be bound to the chat-level regenerate handler.
    */
   onRetry?: () => void
+  /**
+   * Widget-only retry: re-request just this tool call's arguments and patch
+   * the block in place, leaving the rest of the answer intact. Resolves
+   * false when the repair failed, in which case the card falls back to
+   * offering `onRetry` (full regeneration).
+   */
+  onRetryToolCall?: (toolCallId: string) => Promise<boolean>
 }
 
 function resolveInput(tc: GenUIToolCall): Record<string, unknown> | null {
@@ -79,6 +86,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   isStreaming,
   isDarkMode,
   onRetry,
+  onRetryToolCall,
 }: GenUIToolCallRendererProps) {
   return (
     <React.Fragment>
@@ -97,9 +105,9 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           const rendered = renderGenUIInline(tc.name, input, { isDarkMode })
           if (rendered) {
             return (
-              <div key={tc.id} className="my-4">
-                {rendered}
-              </div>
+              <GenUIWidgetErrorBoundary key={tc.id} toolName={tc.name}>
+                <div className="my-4">{rendered}</div>
+              </GenUIWidgetErrorBoundary>
             )
           }
         }
@@ -143,12 +151,69 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
             toolName={tc.name}
             hasInput={!!input}
             onRetry={onRetry}
+            onRetryToolCall={
+              onRetryToolCall ? () => onRetryToolCall(tc.id) : undefined
+            }
           />
         )
       })}
     </React.Fragment>
   )
 })
+
+interface GenUIWidgetErrorBoundaryProps {
+  toolName: string
+  children: React.ReactNode
+}
+
+/**
+ * Catches render-time throws inside a widget so a single bad widget shows
+ * a compact notice instead of crashing the whole message tree.
+ */
+class GenUIWidgetErrorBoundary extends React.Component<
+  GenUIWidgetErrorBoundaryProps,
+  { hasError: boolean }
+> {
+  constructor(props: GenUIWidgetErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error): void {
+    logError('GenUI widget crashed while rendering', error, {
+      component: 'GenUIWidgetErrorBoundary',
+      action: 'render',
+      metadata: { toolName: this.props.toolName },
+    })
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) {
+      return (
+        <div className="my-4 flex items-start gap-2.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2.5 text-sm">
+          <Sparkles
+            className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-500"
+            aria-hidden
+          />
+          <div className="flex flex-col">
+            <span className="font-medium text-content-primary">
+              Couldn&apos;t display this widget
+            </span>
+            <span className="text-xs text-content-muted">
+              The {prettyWidgetName(this.props.toolName)} component ran into a
+              problem while rendering.
+            </span>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 /**
  * Live tracer shown while the model is streaming a GenUI tool call.
@@ -215,11 +280,18 @@ function ParseFailureCard({
   toolName,
   hasInput,
   onRetry,
+  onRetryToolCall,
 }: {
   toolName: string
   hasInput: boolean
   onRetry?: () => void
+  onRetryToolCall?: () => Promise<boolean>
 }) {
+  const [isRetrying, setIsRetrying] = useState(false)
+  // Set when a widget-only retry failed; the card then falls back to
+  // offering the full-response regeneration.
+  const [widgetRetryFailed, setWidgetRetryFailed] = useState(false)
+
   // Logging is a side effect — kept out of render so React's render-twice
   // strict mode and re-renders from parent state changes don't produce
   // duplicate log lines for the same failure.
@@ -235,6 +307,29 @@ function ParseFailureCard({
     )
   }, [toolName, hasInput])
 
+  const canRetryWidgetOnly = !!onRetryToolCall && !widgetRetryFailed
+
+  const handleRetry = async () => {
+    if (isRetrying) return
+    if (!canRetryWidgetOnly) {
+      onRetry?.()
+      return
+    }
+    setIsRetrying(true)
+    try {
+      const repaired = await onRetryToolCall()
+      if (!repaired) {
+        setWidgetRetryFailed(true)
+      }
+      // On success the patched arguments re-render the widget and this
+      // card unmounts on its own.
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
+  const showRetryButton = canRetryWidgetOnly || !!onRetry
+
   return (
     <div className="my-4 flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-card px-4 py-3 text-sm">
       <div className="flex flex-col">
@@ -242,18 +337,26 @@ function ParseFailureCard({
           Couldn&apos;t display this widget
         </span>
         <span className="text-xs text-content-muted">
-          The response didn&apos;t match the {toolName} widget&apos;s expected
-          shape.
+          {widgetRetryFailed
+            ? 'Retrying the widget alone didn\u2019t work. Trying again will regenerate the whole response.'
+            : `The response didn't match the ${toolName} widget's expected shape.`}
         </span>
       </div>
-      {onRetry && (
+      {showRetryButton && (
         <button
           type="button"
-          onClick={onRetry}
-          className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card"
+          onClick={() => void handleRetry()}
+          disabled={isRetrying}
+          className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Try again
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${isRetrying ? 'animate-spin' : ''}`}
+          />
+          {isRetrying
+            ? 'Fixing widget...'
+            : canRetryWidgetOnly
+              ? 'Retry widget'
+              : 'Regenerate response'}
         </button>
       )}
     </div>

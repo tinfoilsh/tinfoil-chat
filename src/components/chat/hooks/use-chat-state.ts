@@ -80,6 +80,7 @@ interface UseChatStateReturn {
     resultText: string,
     resultData?: unknown,
   ) => void
+  retryToolCall: (messageIndex: number, toolCallId: string) => Promise<boolean>
   initialChatDecryptionFailed: boolean
   clearInitialChatDecryptionFailed: () => void
   localChatNotFound: boolean
@@ -236,6 +237,7 @@ export function useChatState({
     regenerateMessage,
     retryLastMessage,
     resolveInputToolCall,
+    retryToolCall,
   } = useChatMessaging({
     systemPrompt,
     rules,
@@ -384,6 +386,7 @@ export function useChatState({
     regenerateMessage,
     retryLastMessage,
     resolveInputToolCall,
+    retryToolCall,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
     localChatNotFound,
