@@ -7,7 +7,7 @@ import {
   ChevronDownIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 
 interface StreamErrorBannerProps {
   error: StreamErrorInfo
@@ -19,6 +19,24 @@ interface StreamErrorBannerProps {
 type ErrorExplanation = {
   title: string
   suggestion: string
+}
+
+function subscribeToConnectivity(onChange: () => void): () => void {
+  window.addEventListener('online', onChange)
+  window.addEventListener('offline', onChange)
+  return () => {
+    window.removeEventListener('online', onChange)
+    window.removeEventListener('offline', onChange)
+  }
+}
+
+function getIsOnline(): boolean {
+  return typeof navigator === 'undefined' ? true : navigator.onLine !== false
+}
+
+/** Live `navigator.onLine` mirror; updates as connectivity changes. */
+function useIsOnline(): boolean {
+  return useSyncExternalStore(subscribeToConnectivity, getIsOnline, () => true)
 }
 
 // Map a stream failure to a human-readable explanation. The structured
@@ -119,7 +137,21 @@ export function StreamErrorBanner({
   isDarkMode,
 }: StreamErrorBannerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const isOnline = useIsOnline()
   const { title, suggestion } = explainError(error)
+
+  // Retrying always re-sends the last message; make the label say so for
+  // connection failures instead of the ambiguous "Try again" (which reads
+  // like it might just reconnect). While offline the resend is gated —
+  // it would only burn the automatic in-request retries and fail again.
+  const isConnectionError = error.code === 'FETCH_ERROR'
+  // A rate-limited request will fail identically until the limit resets,
+  // so a retry button is just an invitation to frustration.
+  const isLimitError =
+    error.code === 'RATE_LIMIT' || error.code === 'HOURLY_LIMIT'
+  const retryLabel = isConnectionError ? 'Resend message' : 'Try again'
+  const retryDisabled = isConnectionError && !isOnline
+  const showRetry = !!onRetry && !isLimitError
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -149,22 +181,26 @@ export function StreamErrorBanner({
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-1">
-          {onRetry && (
+          {showRetry && (
             <button
               type="button"
+              disabled={retryDisabled}
+              title={retryDisabled ? 'Waiting for connection...' : undefined}
               onClick={(e) => {
                 e.stopPropagation()
-                onRetry()
+                onRetry?.()
               }}
               className={cn(
                 'flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors',
                 isDarkMode
                   ? 'border-red-500/40 hover:bg-red-500/20'
                   : 'border-red-300 hover:bg-red-500/10',
+                retryDisabled &&
+                  'cursor-default opacity-50 hover:bg-transparent',
               )}
             >
               <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              Try again
+              {retryDisabled ? 'Offline' : retryLabel}
             </button>
           )}
           <button
