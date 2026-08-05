@@ -217,6 +217,7 @@ export function useChatStorage({
             if (
               prev.syncedAt !== existingChat.syncedAt ||
               prev.title !== existingChat.title ||
+              prev.presetId !== existingChat.presetId ||
               !pendingRecoveriesMatch(
                 prev.pendingRecoveries,
                 existingChat.pendingRecoveries,
@@ -226,6 +227,7 @@ export function useChatStorage({
                 ...prev,
                 syncedAt: existingChat.syncedAt,
                 title: existingChat.title,
+                presetId: existingChat.presetId,
                 pendingRecoveries: existingChat.pendingRecoveries,
               }
             }
@@ -595,6 +597,8 @@ export function useChatStorage({
           projectId: downloadedChat.projectId,
           model: downloadedChat.model,
           pendingRecoveries: downloadedChat.pendingRecoveries,
+          presetId: downloadedChat.presetId,
+          webSearchEnabled: downloadedChat.webSearchEnabled,
         }
 
         if (storeHistory) {
