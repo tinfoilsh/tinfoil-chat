@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { AIModel, Chat, LabelType, LoadingState, Message } from '../types'
 import { useChatMessaging } from './use-chat-messaging'
 import { useChatStorage } from './use-chat-storage'
+import type { StreamErrorInfo } from './use-chat-streams'
 import { resolveChatModel, useModelManagement } from './use-model-management'
 import type { ReasoningEffort } from './use-reasoning-effort'
 import { useUIState, type ThemeMode } from './use-ui-state'
@@ -29,7 +30,7 @@ interface UseChatStateReturn {
   verificationSuccess: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
-  streamError: string | null
+  streamError: StreamErrorInfo | null
   dismissStreamError: () => void
   selectedModel: AIModel
   hasValidatedModel: boolean

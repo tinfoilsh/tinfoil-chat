@@ -1,10 +1,21 @@
 import { useCallback, useRef, useState } from 'react'
+import type { ChatErrorCode } from '../chat-utils'
 import type { LoadingState } from '../types'
 
 export interface RetryInfo {
   attempt: number
   maxRetries: number
   error?: string
+}
+
+/**
+ * A stream failure surfaced to the UI. `code` carries the structured
+ * classification (when the failure produced a ChatError) so the error
+ * banner can choose retry semantics without inspecting message text.
+ */
+export interface StreamErrorInfo {
+  message: string
+  code: ChatErrorCode | null
 }
 
 /**
@@ -22,7 +33,7 @@ export interface ChatStreamStatus {
   isThinking: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
-  streamError: string | null
+  streamError: StreamErrorInfo | null
 }
 
 export const IDLE_STREAM_STATUS: ChatStreamStatus = {

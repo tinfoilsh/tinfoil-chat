@@ -1,5 +1,6 @@
 'use client'
 
+import type { StreamErrorInfo } from '@/components/chat/hooks/use-chat-streams'
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
@@ -9,7 +10,7 @@ import {
 import { useState } from 'react'
 
 interface StreamErrorBannerProps {
-  message: string
+  error: StreamErrorInfo
   onDismiss: () => void
   onRetry?: () => void
   isDarkMode: boolean
@@ -20,9 +21,26 @@ type ErrorExplanation = {
   suggestion: string
 }
 
-// Map raw backend/SDK error text to a human-readable explanation. The raw
-// message stays available in the expandable details section.
-function explainError(message: string): ErrorExplanation {
+// Map a stream failure to a human-readable explanation. The structured
+// code is authoritative when present; the message-text heuristics below
+// are a display-only fallback for errors that carry no classification.
+// The raw message stays available in the expandable details section.
+function explainError({ message, code }: StreamErrorInfo): ErrorExplanation {
+  if (code === 'FETCH_ERROR') {
+    return {
+      title: 'Connection problem',
+      suggestion:
+        'Check your internet connection, then resend your message. Your message was not lost.',
+    }
+  }
+
+  if (code === 'RATE_LIMIT' || code === 'HOURLY_LIMIT') {
+    return {
+      title: 'Usage limit reached',
+      suggestion: 'Please wait for the limit to reset before trying again.',
+    }
+  }
+
   const lower = message.toLowerCase()
 
   if (
@@ -95,13 +113,13 @@ function explainError(message: string): ErrorExplanation {
  * expandable details section. Stays visible until dismissed or retried.
  */
 export function StreamErrorBanner({
-  message,
+  error,
   onDismiss,
   onRetry,
   isDarkMode,
 }: StreamErrorBannerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const { title, suggestion } = explainError(message)
+  const { title, suggestion } = explainError(error)
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -187,7 +205,7 @@ export function StreamErrorBanner({
             isDarkMode ? 'border-red-500/30' : 'border-red-300',
           )}
         >
-          <p className="whitespace-pre-wrap break-words">{message}</p>
+          <p className="whitespace-pre-wrap break-words">{error.message}</p>
         </div>
       )}
     </div>

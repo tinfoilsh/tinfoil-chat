@@ -3534,7 +3534,7 @@ export function ChatInterface({
                       )}
                       {streamError && (
                         <StreamErrorBanner
-                          message={streamError}
+                          error={streamError}
                           onDismiss={dismissStreamError}
                           onRetry={retryLastMessage}
                           isDarkMode={isDarkMode}

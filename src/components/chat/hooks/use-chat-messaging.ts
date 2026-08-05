@@ -51,6 +51,7 @@ import { generateReverseId } from '@/utils/reverse-id'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getMessageAttachments, getMessageImages } from '../attachment-helpers'
+import { ChatError } from '../chat-utils'
 import { CONSTANTS } from '../constants'
 import type { Chat, LoadingState, Message } from '../types'
 import {
@@ -68,6 +69,7 @@ import {
   IDLE_STREAM_STATUS,
   useChatStreams,
   type RetryInfo,
+  type StreamErrorInfo,
 } from './use-chat-streams'
 import type { ReasoningEffort } from './use-reasoning-effort'
 
@@ -100,7 +102,7 @@ interface UseChatMessagingReturn {
   isThinking: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
-  streamError: string | null
+  streamError: StreamErrorInfo | null
   dismissStreamError: () => void
   setInput: (input: string) => void
   handleSubmit: (e: React.FormEvent) => void
@@ -526,7 +528,7 @@ export function useChatMessaging({
         patchStatus(streamChatIdRef.current, { isWaitingForResponse: v })
       const setIsStreamingFor = (v: boolean) =>
         patchStatus(streamChatIdRef.current, { isStreaming: v })
-      const setStreamErrorFor = (e: string | null) =>
+      const setStreamErrorFor = (e: StreamErrorInfo | null) =>
         patchStatus(streamChatIdRef.current, { streamError: e })
 
       const controller = new AbortController()
@@ -1210,15 +1212,15 @@ export function useChatMessaging({
 
           const errorMsg =
             error instanceof Error ? error.message : 'Unknown error occurred'
-          const lowerMsg = errorMsg.toLowerCase()
-          const isHourlyRateLimitError =
-            lowerMsg.includes('hourly usage limit') ||
-            lowerMsg.includes('hourly limit')
+          // Classify by structured signals only (error codes and HTTP
+          // status), never by message text.
+          const chatError = error instanceof ChatError ? error : null
+          const status = (error as { status?: unknown })?.status
+          const isHourlyRateLimitError = chatError?.code === 'HOURLY_LIMIT'
           const isRateLimitError =
-            lowerMsg.includes('rate limit') ||
-            lowerMsg.includes('request limit') ||
-            lowerMsg.includes('usage limit') ||
-            lowerMsg.includes('insufficient_quota')
+            isHourlyRateLimitError ||
+            chatError?.code === 'RATE_LIMIT' ||
+            status === 429
 
           if (isRateLimitError) {
             const errorMessage: Message = {
@@ -1242,7 +1244,10 @@ export function useChatMessaging({
             )
           } else {
             // Surface as a dismissable floating banner instead of a chat message
-            setStreamErrorFor(errorMsg)
+            setStreamErrorFor({
+              message: errorMsg,
+              code: chatError?.code ?? null,
+            })
           }
         }
       } finally {
