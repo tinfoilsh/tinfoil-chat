@@ -30,6 +30,9 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
     endStreaming: vi.fn(),
     startStreaming: vi.fn(),
     onStreamEnd: vi.fn(),
+    beginPendingStream: vi.fn(),
+    endPendingStream: vi.fn(),
+    isStreamingOrPending: vi.fn(() => false),
   },
 }))
 
@@ -47,6 +50,8 @@ vi.mock('@/components/chat/hooks/use-chat-streams', async () => {
       moveStatus: moveStatusMock,
       registerController: registerControllerMock,
       clearController: clearControllerMock,
+      ownsController: () => true,
+      hasActiveController: () => false,
       abort: abortMock,
     }),
   }

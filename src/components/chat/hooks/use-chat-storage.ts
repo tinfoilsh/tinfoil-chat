@@ -166,7 +166,11 @@ export function useChatStorage({
           // Only update metadata (syncedAt, title) if the same chat exists in storage
           const existingChat = loadedChats.find((c) => c.id === prev.id)
           if (existingChat) {
-            const isStreaming = streamingTracker.isStreaming(prev.id)
+            // Include sends still in their pre-stream phase: a recovery
+            // reload racing a just-resumed generation must not adopt the
+            // stored copy (which still holds the previous interrupted
+            // answer) over the messages the new stream is about to write.
+            const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
             const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
             if (isRecoveryReload && isStreaming) {
               return {

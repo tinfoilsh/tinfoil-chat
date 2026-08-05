@@ -242,6 +242,8 @@ export function useChatMessaging({
     moveStatus,
     registerController,
     clearController,
+    ownsController,
+    hasActiveController,
     abort,
   } = useChatStreams()
 
@@ -310,8 +312,13 @@ export function useChatMessaging({
   const cancelGeneration = useCallback(
     (chatId?: string) => {
       const targetId = chatId ?? viewedChatIdRef.current
+      // Dedupe repeated stop presses for the same stream, but not when a
+      // newer stream has registered a controller since: its abort must not
+      // be swallowed by a previous cancellation still finishing its tail.
       const existingCancellation = cancellationPromisesRef.current.get(targetId)
-      if (existingCancellation) return existingCancellation
+      if (existingCancellation && !hasActiveController(targetId)) {
+        return existingCancellation
+      }
 
       const cancellation = (async () => {
         const activeGeneration = activeLiveGenerationsRef.current.get(targetId)
@@ -420,8 +427,15 @@ export function useChatMessaging({
           }
         }
 
-        streamingTracker.endStreaming(targetId)
-        patchStatus(targetId, { loadingState: 'idle' })
+        // A new stream may have started on this chat while the async saves
+        // above were in flight (e.g. the user quickly resumed). Its
+        // controller registration marks ownership; in that case leave the
+        // streaming marker and status alone so the tail of this cancel
+        // can't idle the successor mid-stream.
+        if (!hasActiveController(targetId)) {
+          streamingTracker.endStreaming(targetId)
+          patchStatus(targetId, { loadingState: 'idle' })
+        }
       })()
 
       cancellationPromisesRef.current.set(targetId, cancellation)
@@ -433,7 +447,14 @@ export function useChatMessaging({
       void cancellation.then(clearCancellation, clearCancellation)
       return cancellation
     },
-    [abort, patchStatus, storeHistory, setChats, setCurrentChat],
+    [
+      abort,
+      hasActiveController,
+      patchStatus,
+      storeHistory,
+      setChats,
+      setCurrentChat,
+    ],
   )
 
   // Handle chat query
@@ -516,6 +537,20 @@ export function useChatMessaging({
         isStreaming: true,
       })
 
+      // Mark the pre-stream phase (saves, token fetches) so storage reloads
+      // don't adopt a stale stored copy of this chat before the stream's
+      // first flush. Follows the stream's id across blank-chat conversions.
+      let pendingStreamId: string | null = null
+      const markPendingStream = (id: string) => {
+        if (pendingStreamId === id) return
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+        }
+        pendingStreamId = id
+        streamingTracker.beginPendingStream(id)
+      }
+      markPendingStream(streamChatIdRef.current)
+
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
       const hasUserContent =
@@ -561,6 +596,7 @@ export function useChatMessaging({
 
         moveStatus(streamChatIdRef.current, updatedChat.id)
         streamChatIdRef.current = updatedChat.id
+        markPendingStream(updatedChat.id)
         setCurrentChat(updatedChat)
         setChats((prevChats) =>
           prevChats.map((c) => (c.id === updatedChat.id ? updatedChat : c)),
@@ -602,6 +638,7 @@ export function useChatMessaging({
         // Update state immediately for instant UI feedback
         moveStatus(streamChatIdRef.current, chatId)
         streamChatIdRef.current = chatId
+        markPendingStream(chatId)
         setCurrentChat(updatedChat)
 
         // Replace the blank chat with the new real chat
@@ -675,6 +712,7 @@ export function useChatMessaging({
 
         moveStatus(streamChatIdRef.current, updatedChat.id)
         streamChatIdRef.current = updatedChat.id
+        markPendingStream(updatedChat.id)
         setCurrentChat(updatedChat)
 
         // Replace blank chat with the new chat
@@ -1153,11 +1191,16 @@ export function useChatMessaging({
             void scanPendingChatRecoveries(userId)
           }
         }
-        // Ensure UI loading flags are reset on pre-stream errors
-        setIsWaitingForResponseFor(false)
-        setIsStreamingFor(false)
-        if (!wasAborted) setLoadingStateFor('idle')
-        setIsThinkingFor(false)
+        // Ensure UI loading flags are reset on pre-stream errors. Skip if a
+        // newer stream owns this chat's controller slot (this stream was
+        // aborted and superseded); resetting then would clear the
+        // successor's flags mid-stream.
+        if (ownsController(streamChatIdRef.current, controller)) {
+          setIsWaitingForResponseFor(false)
+          setIsStreamingFor(false)
+          if (!wasAborted) setLoadingStateFor('idle')
+          setIsThinkingFor(false)
+        }
         thinkingStartTimeRef.current = null
         if (!wasAborted) {
           logError('Chat query failed', error, {
@@ -1203,6 +1246,10 @@ export function useChatMessaging({
           }
         }
       } finally {
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+        }
+
         // Refresh rate limit from server for free-tier users so the
         // banner/send-blocking reflects the server's actual count
         // (covers both success and error paths, e.g. 429 responses).
@@ -1211,22 +1258,29 @@ export function useChatMessaging({
         }
 
         // Settle this stream's status (preserving any streamError so the
-        // banner can surface when the user returns to the chat).
-        patchStatus(streamChatIdRef.current, {
-          ...(controller.signal.aborted ? {} : { loadingState: 'idle' }),
-          retryInfo: null,
-          isWaitingForResponse: false,
-          isStreaming: false,
-          isThinking: false,
-        })
-        clearController(streamChatIdRef.current)
+        // banner can surface when the user returns to the chat). Only if
+        // this stream still owns the chat's controller slot: an aborted
+        // stream can reach this finally block after a newer stream has
+        // registered its own controller for the same chat, and patching
+        // then would stomp the successor's flags mid-stream.
+        const ownsStream = ownsController(streamChatIdRef.current, controller)
+        if (ownsStream) {
+          patchStatus(streamChatIdRef.current, {
+            ...(controller.signal.aborted ? {} : { loadingState: 'idle' }),
+            retryInfo: null,
+            isWaitingForResponse: false,
+            isStreaming: false,
+            isThinking: false,
+          })
+        }
+        clearController(streamChatIdRef.current, controller)
         if (
           activeLiveGenerationsRef.current.get(startingChatId) ===
           activeGeneration
         ) {
           activeLiveGenerationsRef.current.delete(startingChatId)
         }
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && ownsStream) {
           // Covers pre-stream failures where the processor (which normally
           // ends streaming) never ran. Idempotent if already ended.
           streamingTracker.endStreaming(streamChatIdRef.current)
@@ -1261,6 +1315,7 @@ export function useChatMessaging({
       moveStatus,
       registerController,
       clearController,
+      ownsController,
     ],
   )
 

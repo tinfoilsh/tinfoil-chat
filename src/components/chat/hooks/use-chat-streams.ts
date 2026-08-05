@@ -43,7 +43,17 @@ export interface UseChatStreamsReturn {
   /** Re-key a chat's status and abort controller after a server id swap. */
   moveStatus: (fromId: string, toId: string) => void
   registerController: (chatId: string, controller: AbortController) => void
-  clearController: (chatId: string) => void
+  /**
+   * Remove a chat's controller, but only if `controller` is still the one
+   * registered. A stream that was aborted (and possibly superseded by a
+   * newer stream on the same chat) must never delete its successor's
+   * controller, or the next stop press would silently fail to abort.
+   */
+  clearController: (chatId: string, controller: AbortController) => void
+  /** True if `controller` is still the registered controller for the chat. */
+  ownsController: (chatId: string, controller: AbortController) => boolean
+  /** True if any stream currently holds a controller for the chat. */
+  hasActiveController: (chatId: string) => boolean
   /** Abort the stream for a chat. Returns true if a controller existed. */
   abort: (chatId: string) => boolean
 }
@@ -107,9 +117,25 @@ export function useChatStreams(): UseChatStreamsReturn {
     [],
   )
 
-  const clearController = useCallback((chatId: string) => {
-    abortControllersRef.current.delete(chatId)
-  }, [])
+  const clearController = useCallback(
+    (chatId: string, controller: AbortController) => {
+      if (abortControllersRef.current.get(chatId) === controller) {
+        abortControllersRef.current.delete(chatId)
+      }
+    },
+    [],
+  )
+
+  const ownsController = useCallback(
+    (chatId: string, controller: AbortController): boolean =>
+      abortControllersRef.current.get(chatId) === controller,
+    [],
+  )
+
+  const hasActiveController = useCallback(
+    (chatId: string): boolean => abortControllersRef.current.has(chatId),
+    [],
+  )
 
   const abort = useCallback((chatId: string): boolean => {
     const controller = abortControllersRef.current.get(chatId)
@@ -126,6 +152,8 @@ export function useChatStreams(): UseChatStreamsReturn {
     moveStatus,
     registerController,
     clearController,
+    ownsController,
+    hasActiveController,
     abort,
   }
 }
