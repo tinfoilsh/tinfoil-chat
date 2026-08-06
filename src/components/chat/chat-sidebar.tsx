@@ -249,7 +249,6 @@ export function ChatSidebar({
     return true
   })
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
-  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   // Hides the sidebar scrollbar while a section expand/collapse animates;
   // the scroll height changes every frame and the scrollbar would flicker.
   const [hideScrollbarDuringAnimation, setHideScrollbarDuringAnimation] =
@@ -656,40 +655,6 @@ export function ChatSidebar({
     sidebarScrollRef.current?.scrollTo({ top: 0 })
   }, [hideScrollbarWhileSectionsAnimate])
 
-  // Auto-load more chats when scrolling to bottom
-  useEffect(() => {
-    const sentinel = loadMoreSentinelRef.current
-    if (!sentinel) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (
-          entry.isIntersecting &&
-          shouldShowLoadMore &&
-          !isLoadingMore &&
-          isSignedIn
-        ) {
-          loadMoreChats()
-        }
-      },
-      {
-        root: sidebarScrollRef.current,
-        rootMargin: '100px',
-        threshold: 0,
-      },
-    )
-
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [
-    shouldShowLoadMore,
-    isLoadingMore,
-    isSignedIn,
-    loadMoreChats,
-    isChatHistoryExpanded,
-  ])
-
   const sortedChats = useMemo(() => {
     // The incoming `chats` array is already sorted by `sortChats`
     // (blank-first, then most-recently-updated). We only filter
@@ -737,6 +702,57 @@ export function ChatSidebar({
     !(localOnlyModeEnabled && activeTab === 'local')
   const chatSearch = useChatSearch(chatSearchTerm, searchEnabled)
   const isSearchActive = searchEnabled && chatSearchTerm.trim().length > 0
+
+  // Auto-load more chats when the user scrolls near the bottom of the
+  // sidebar. Deliberately scroll-event driven rather than an
+  // IntersectionObserver: recreating an observer (this effect re-runs every
+  // time isLoadingMore flips after a page) re-fires its initial callback,
+  // and with the sentinel sitting inside the unified scroller that cascaded
+  // into fetching every remaining page. Scroll events only fire on real
+  // user scrolling, so each near-bottom scroll loads at most one page.
+  useEffect(() => {
+    const scroller = sidebarScrollRef.current
+    if (!scroller) return
+
+    const maybeLoadMore = () => {
+      if (
+        !shouldShowLoadMore ||
+        isLoadingMore ||
+        pendingChatsRender ||
+        !isSignedIn ||
+        !isChatHistoryExpanded ||
+        isSearchActive
+      ) {
+        return
+      }
+      const distanceFromBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+      if (
+        distanceFromBottom <= CONSTANTS.SIDEBAR_AUTOLOAD_BOTTOM_THRESHOLD_PX
+      ) {
+        loadMoreChats()
+      }
+    }
+
+    // Under-filled viewport: without a scrollbar the scroll listener can
+    // never fire, so top up one page at a time (each render round-trips
+    // through pendingChatsRender before the next check) until the list
+    // overflows or the last page is reached.
+    if (scroller.scrollHeight <= scroller.clientHeight) {
+      maybeLoadMore()
+    }
+
+    scroller.addEventListener('scroll', maybeLoadMore, { passive: true })
+    return () => scroller.removeEventListener('scroll', maybeLoadMore)
+  }, [
+    shouldShowLoadMore,
+    isLoadingMore,
+    pendingChatsRender,
+    isSignedIn,
+    loadMoreChats,
+    isChatHistoryExpanded,
+    isSearchActive,
+  ])
 
   const searchResultChats = useMemo((): ChatItemData[] => {
     if (!isSearchActive) return []
@@ -2246,8 +2262,6 @@ export function ChatSidebar({
                         loadMoreButton={
                           isSearchActive ? undefined : (
                             <>
-                              {/* Sentinel element for intersection observer */}
-                              <div ref={loadMoreSentinelRef} className="h-1" />
                               {/* Shimmer placeholder while loading or waiting for chats to render */}
                               {(isLoadingMore || pendingChatsRender) && (
                                 <div className="space-y-1 px-2">

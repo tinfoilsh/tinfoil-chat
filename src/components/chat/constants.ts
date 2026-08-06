@@ -53,6 +53,9 @@ export const CONSTANTS = {
   // header offsets by this amount so it stacks below the pinned Projects
   // header while scrolling.
   SIDEBAR_PINNED_HEADER_OFFSET_PX: 44,
+  // How close to the bottom of the sidebar scroll area (in px) a downward
+  // user scroll must get before the next page of chats is fetched.
+  SIDEBAR_AUTOLOAD_BOTTOM_THRESHOLD_PX: 200,
   // Duration of a sidebar section expand/collapse animation (seconds),
   // shared by the Projects and Chats height animations.
   SIDEBAR_SECTION_ANIMATION_S: 0.2,
