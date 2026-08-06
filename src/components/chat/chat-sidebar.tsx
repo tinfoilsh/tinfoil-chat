@@ -244,6 +244,13 @@ export function ChatSidebar({
   })
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+  // Hides the sidebar scrollbar while a section expand/collapse animates;
+  // the scroll height changes every frame and the scrollbar would flicker.
+  const [hideScrollbarDuringAnimation, setHideScrollbarDuringAnimation] =
+    useState(false)
+  const scrollbarHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
   const [isIOS, setIsIOS] = useState(false)
   const [nativeAppDismissed, setNativeAppDismissed] = useState(false)
   const {
@@ -600,6 +607,26 @@ export function ChatSidebar({
   // The Projects header renders (and pins) only for premium users.
   const hasPinnedProjectsHeader = Boolean(isSignedIn && isPremium)
 
+  const hideScrollbarWhileSectionsAnimate = useCallback(() => {
+    setHideScrollbarDuringAnimation(true)
+    if (scrollbarHideTimeoutRef.current !== null) {
+      clearTimeout(scrollbarHideTimeoutRef.current)
+    }
+    scrollbarHideTimeoutRef.current = setTimeout(() => {
+      scrollbarHideTimeoutRef.current = null
+      setHideScrollbarDuringAnimation(false)
+    }, CONSTANTS.SIDEBAR_SECTION_SCROLLBAR_HIDE_MS)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (scrollbarHideTimeoutRef.current !== null) {
+        clearTimeout(scrollbarHideTimeoutRef.current)
+      }
+    },
+    [],
+  )
+
   // Projects and Chats behave as an accordion: expanding one collapses the
   // other. This keeps the newly opened section at the top of the scroll
   // area (expanding a section while scrolled deep into the other would
@@ -607,19 +634,21 @@ export function ChatSidebar({
   // flow position far above the viewport) and resets the scroll so the
   // opened section's content is immediately visible.
   const expandProjectsSection = useCallback(() => {
+    hideScrollbarWhileSectionsAnimate()
     setIsProjectsExpanded(true)
     setIsChatHistoryExpanded(false)
     sidebarScrollRef.current?.scrollTo({ top: 0 })
     if (projects.length === 0) {
       refreshProjects()
     }
-  }, [projects.length, refreshProjects])
+  }, [projects.length, refreshProjects, hideScrollbarWhileSectionsAnimate])
 
   const expandChatsSection = useCallback(() => {
+    hideScrollbarWhileSectionsAnimate()
     setIsChatHistoryExpanded(true)
     setIsProjectsExpanded(false)
     sidebarScrollRef.current?.scrollTo({ top: 0 })
-  }, [])
+  }, [hideScrollbarWhileSectionsAnimate])
 
   // Auto-load more chats when scrolling to bottom
   useEffect(() => {
@@ -1043,7 +1072,10 @@ export function ChatSidebar({
             banner) stay pinned below. */}
         <div
           ref={sidebarScrollRef}
-          className="relative flex min-h-0 flex-1 flex-col overflow-y-auto"
+          className={cn(
+            'relative flex min-h-0 flex-1 flex-col overflow-y-auto',
+            hideScrollbarDuringAnimation && 'scrollbar-hide',
+          )}
         >
           {/* Message for non-premium users (signed in or not) */}
           {!isPremium && (
@@ -1229,6 +1261,7 @@ export function ChatSidebar({
                 aria-expanded={isProjectsExpanded}
                 onClick={() => {
                   if (isProjectsExpanded) {
+                    hideScrollbarWhileSectionsAnimate()
                     setIsProjectsExpanded(false)
                   } else {
                     expandProjectsSection()
@@ -1299,7 +1332,10 @@ export function ChatSidebar({
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    transition={{
+                      duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                      ease: 'easeInOut',
+                    }}
                     className="overflow-hidden"
                   >
                     <div
@@ -1703,6 +1739,7 @@ export function ChatSidebar({
                 aria-expanded={isChatHistoryExpanded}
                 onClick={() => {
                   if (isChatHistoryExpanded) {
+                    hideScrollbarWhileSectionsAnimate()
                     setIsChatHistoryExpanded(false)
                   } else {
                     expandChatsSection()
@@ -1750,7 +1787,10 @@ export function ChatSidebar({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  transition={{
+                    duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                    ease: 'easeInOut',
+                  }}
                   className={cn('overflow-hidden', expandedPanelClass)}
                 >
                   {/* Tabs for Cloud/Local chats - show when signed in, cloud sync enabled, and local-only mode enabled */}
@@ -1984,7 +2024,10 @@ export function ChatSidebar({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  transition={{
+                    duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                    ease: 'easeInOut',
+                  }}
                   className={cn('overflow-hidden', expandedPanelClass)}
                 >
                   <div
