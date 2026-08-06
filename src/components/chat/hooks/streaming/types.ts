@@ -5,7 +5,7 @@
  * The main loop switches on `event.type` — no format sniffing needed.
  */
 
-import type { Chat, Message } from '../../types'
+import type { Message } from '../../types'
 
 // ---------------------------------------------------------------------------
 // Normalized events
@@ -95,46 +95,15 @@ export type NormalizedEvent =
   | GenUIToolCallDeltaEvent
   | CodeExecToolCallEvent
 
-// ---------------------------------------------------------------------------
-// Context passed by callers (unchanged from the old processor)
-// ---------------------------------------------------------------------------
-
 export interface StreamingContext {
-  updatedChat: Chat
-  updatedMessages: Message[]
-  isFirstMessage: boolean
-  modelsLength: number
-  // Tracks the id of the chat this specific stream writes to. Created per
-  // `handleQuery` call so concurrent streams never clobber each other, and
-  // updated in place if the backend swaps the id mid-flight.
-  streamChatIdRef: React.MutableRefObject<string>
-  thinkingStartTimeRef: React.MutableRefObject<number | null>
+  streamChatIdRef: { current: string }
+  onUpdate: (message: Message) => void | Promise<void>
   setIsThinking: (val: boolean) => void
   setIsWaitingForResponse: (val: boolean) => void
   setIsStreaming: (val: boolean) => void
-  updateChatWithHistoryCheck: (
-    setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
-    chatSnapshot: Chat,
-    setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
-    chatId: string,
-    newMessages: Message[],
-    skipCloudSync?: boolean,
-    skipIndexedDBSave?: boolean,
-  ) => void
-  setChats: React.Dispatch<React.SetStateAction<Chat[]>>
-  setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
   setLoadingState: (s: 'idle' | 'loading') => void
-  storeHistory: boolean
-  startingChatId: string
   deferStreamCleanup?: boolean
   signal?: AbortSignal
   turnId?: string
   onInterrupted?: (message: Message | null) => void
-}
-
-export interface StreamingHandlers {
-  onAssistantMessageReady: (
-    assistantMessage: Message,
-    finalMessages: Message[],
-  ) => Promise<void>
 }

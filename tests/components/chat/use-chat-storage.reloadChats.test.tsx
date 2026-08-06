@@ -99,6 +99,34 @@ describe('useChatStorage.reloadChats', () => {
     expect(result.current.currentChat.isLocalOnly).toBe(true)
   })
 
+  it('preserves a temporary chat opened while initial storage is loading', async () => {
+    let finishLoading!: (chats: []) => void
+    mockLoadChats.mockReturnValueOnce(
+      new Promise<[]>((resolve) => {
+        finishLoading = resolve
+      }),
+    )
+    const { result } = renderHook(() =>
+      useChatStorage({
+        storeHistory: true,
+      }),
+    )
+    const temporaryChat = {
+      id: '0000000000001_12345678-1234-4234-8234-123456789abc',
+      title: 'Temporary Chat',
+      messages: [],
+      createdAt: new Date(),
+      isBlankChat: true,
+      isTemporary: true,
+      isLocalOnly: true,
+    }
+
+    act(() => result.current.setCurrentChat(temporaryChat))
+    await act(async () => finishLoading([]))
+
+    expect(result.current.currentChat).toMatchObject(temporaryChat)
+  })
+
   it('does not reset currentChat to blank during temp-id window', async () => {
     const { result } = renderHook(() =>
       useChatStorage({
@@ -280,6 +308,30 @@ describe('useChatStorage.reloadChats', () => {
     await waitFor(() => {
       expect(result.current.currentChat.pendingRecoveries).toEqual([recovery])
     })
+  })
+
+  it('switches an already-loaded chat without entering a loading delay', async () => {
+    const selected = {
+      id: 'chat-2',
+      title: 'Selected chat',
+      messages: [],
+      createdAt: new Date(),
+      isBlankChat: false,
+    }
+    mockLoadChats.mockResolvedValue([selected])
+    const { result } = renderHook(() =>
+      useChatStorage({
+        storeHistory: true,
+      }),
+    )
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+
+    await act(async () => {
+      await result.current.switchChat(selected)
+    })
+
+    expect(result.current.currentChat.id).toBe(selected.id)
+    expect(result.current.isInitialLoad).toBe(false)
   })
 
   it('does not let an older sync reload clear recovery progress', async () => {

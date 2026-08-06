@@ -7,7 +7,6 @@ interface LogEntry {
 }
 
 export interface StreamLogger {
-  logRaw(line: string): void
   logParsedEvent(json: unknown): void
   logTinfoilEvent(event: unknown): void
   logWebSearchDispatch(event: unknown): void
@@ -15,7 +14,6 @@ export interface StreamLogger {
 }
 
 const noopLogger: StreamLogger = {
-  logRaw() {},
   logParsedEvent() {},
   logTinfoilEvent() {},
   logWebSearchDispatch() {},
@@ -28,10 +26,6 @@ export function createStreamLogger(): StreamLogger {
   const entries: LogEntry[] = []
 
   return {
-    logRaw(line: string) {
-      entries.push({ t: Date.now(), type: 'raw', data: line })
-    },
-
     logParsedEvent(json: unknown) {
       entries.push({ t: Date.now(), type: 'parsed', data: json })
     },

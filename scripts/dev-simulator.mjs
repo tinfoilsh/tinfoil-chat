@@ -200,6 +200,7 @@ async function* simulateStream(query) {
     await delay(pattern.streamDelayMs || 40, variance)
   }
 
+  yield 'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'
   yield 'data: [DONE]\n\n'
 }
 

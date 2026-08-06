@@ -3,13 +3,7 @@ import {
   SETTINGS_THEME_MODE,
   UI_SIDEBAR_OPEN,
 } from '@/constants/storage-keys'
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -19,7 +13,6 @@ interface UseUIStateReturn {
   isDarkMode: boolean
   themeMode: ThemeMode
   windowWidth: number
-  messagesEndRef: React.RefObject<HTMLDivElement | null>
   setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>
   toggleTheme: () => void
   setThemeMode: (mode: ThemeMode) => void
@@ -43,8 +36,6 @@ export function useUIState(): UseUIStateReturn {
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 0,
   )
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Client-side initialization
   useEffect(() => {
@@ -223,7 +214,6 @@ export function useUIState(): UseUIStateReturn {
     isDarkMode,
     themeMode,
     windowWidth,
-    messagesEndRef,
     setIsSidebarOpen,
     toggleTheme,
     setThemeMode,

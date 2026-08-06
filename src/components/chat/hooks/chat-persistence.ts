@@ -17,20 +17,17 @@ import type { Chat, Message } from '../types'
 
 interface CreateUpdateChatWithHistoryCheckParams {
   storeHistory: boolean
-  // Mirrors the id of the chat currently on screen. Used to decide whether
-  // a streamed update should also be reflected into `currentChat`. With
-  // concurrent streams this is independent of which chat is streaming.
-  viewedChatIdRef: React.MutableRefObject<string>
   // Live mirror of the chats state. Streamed updates spread a send-time
-  // chat snapshot, so per-chat preferences toggled mid-stream must be
-  // re-read from here or they would be reverted by the next flush.
+  // chat snapshot, so metadata changed mid-stream must be re-read from here
+  // or it would be reverted by the next flush.
   chatsRef: React.MutableRefObject<Chat[]>
+  currentChatRef: React.MutableRefObject<Chat>
 }
 
 export function createUpdateChatWithHistoryCheck({
   storeHistory,
-  viewedChatIdRef,
   chatsRef,
+  currentChatRef,
 }: CreateUpdateChatWithHistoryCheckParams) {
   return function updateChatWithHistoryCheck(
     setChats: React.Dispatch<React.SetStateAction<Chat[]>>,
@@ -40,15 +37,17 @@ export function createUpdateChatWithHistoryCheck({
     newMessages: Message[],
     skipCloudSync = false,
     skipIndexedDBSave = false,
+    metadataPatch: Partial<Chat> = {},
   ) {
-    const isCurrentChat = viewedChatIdRef.current === chatId
-
-    // Only update messages and set isBlankChat based on message count
-    // Keep all other properties from chatSnapshot (including title, isLocalOnly, etc.)
-    // IMPORTANT: Preserve title from current state to avoid race with early title generation
-    const liveChat = chatsRef.current.find((c) => c.id === chatId)
+    const liveChat =
+      chatsRef.current.find((c) => c.id === chatId) ??
+      (currentChatRef.current.id === chatId
+        ? currentChatRef.current
+        : undefined)
     const updatedChat: Chat = {
       ...chatSnapshot,
+      ...liveChat,
+      ...metadataPatch,
       id: chatId,
       messages: newMessages,
       isBlankChat: newMessages.length === 0,
@@ -65,21 +64,27 @@ export function createUpdateChatWithHistoryCheck({
         if (c.id === chatId) {
           return {
             ...updatedChat,
-            title: c.title, // Preserve title from state (may have been updated by early title gen)
-            titleState: c.titleState,
+            ...c,
+            ...metadataPatch,
+            messages: newMessages,
+            isBlankChat: newMessages.length === 0,
           }
         }
         return c
       })
     })
 
-    if (isCurrentChat) {
-      setCurrentChat((prev) => ({
-        ...updatedChat,
-        title: prev.title, // Preserve title from state (may have been updated by early title gen)
-        titleState: prev.titleState,
-      }))
-    }
+    setCurrentChat((prev) =>
+      prev.id === chatId
+        ? {
+            ...updatedChat,
+            ...prev,
+            ...metadataPatch,
+            messages: newMessages,
+            isBlankChat: newMessages.length === 0,
+          }
+        : prev,
+    )
 
     if (updatedChat.isTemporary) {
       return
@@ -121,23 +126,6 @@ export function createUpdateChatWithHistoryCheck({
               idChanged: savedChat.id !== updatedChat.id,
             },
           })
-          if (savedChat.id !== updatedChat.id) {
-            // ID changed (server assigned new ID).
-            // Carry the streaming marker across so cloud-sync gating and
-            // the sidebar indicator keep tracking the same conversation.
-            if (streamingTracker.isStreaming(updatedChat.id)) {
-              streamingTracker.endStreaming(updatedChat.id)
-              streamingTracker.startStreaming(savedChat.id)
-            }
-            if (isCurrentChat && viewedChatIdRef.current === updatedChat.id) {
-              viewedChatIdRef.current = savedChat.id
-              setCurrentChat(savedChat)
-            }
-            setChats((prevChats) =>
-              prevChats.map((c) => (c.id === updatedChat.id ? savedChat : c)),
-            )
-          }
-
           // The save (and cloud sync, when applicable) has resolved, so
           // clear the pending flag that drives the "Syncing with cloud"
           // sidebar badge. Streaming chunks skip the save path above, so

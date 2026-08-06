@@ -1,7 +1,7 @@
 /**
  * Event normalizer.
  *
- * Consumes raw SSE JSON objects (after content preprocessing) and emits
+ * Consumes parsed chat chunks (after content preprocessing) and emits
  * a flat list of NormalizedEvent[]. Encapsulates all three thinking format
  * detection strategies and the first-chunk buffering heuristic.
  *
@@ -10,6 +10,7 @@
  * sniffing needed.
  */
 
+import type { ChatChunk } from '@/services/inference/chat-stream'
 import type { StreamLogger } from '@/utils/dev-stream-logger'
 import {
   TINFOIL_TOOL_CALL_TYPE,
@@ -23,13 +24,7 @@ import type { NormalizedEvent } from './types'
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Untyped SSE JSON from the stream. We access `choices[0].delta.*`
- * extensively; a proper OpenAI type would be overkill here since
- * we handle missing fields with optional chaining throughout.
- */
-
-type SSEJson = any
+type SSEJson = ChatChunk
 
 function extractReasoningContent(json: SSEJson): string | null {
   const delta =
@@ -235,7 +230,7 @@ export function createEventNormalizer(): EventNormalizer {
       if (
         Array.isArray(sseJson.choices) &&
         sseJson.choices.some(
-          (choice: SSEJson) =>
+          (choice) =>
             choice?.finish_reason !== null &&
             choice?.finish_reason !== undefined,
         )

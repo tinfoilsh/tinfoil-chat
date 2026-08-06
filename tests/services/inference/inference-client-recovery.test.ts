@@ -92,15 +92,17 @@ describe('recoverable inference retries', () => {
   })
 
   it('reuses attestation and preserves retries when cleanup fails', async () => {
+    const sdkStream = successfulStream()
     createCompletion
       .mockRejectedValueOnce(new TypeError('network unavailable'))
-      .mockResolvedValueOnce(successfulStream())
+      .mockResolvedValueOnce(sdkStream)
     const recovery = recoveryCallbacks()
     recovery.onAttemptAbandoned.mockRejectedValueOnce(
       new Error('cleanup unavailable'),
     )
 
-    await expect(send(recovery).promise).resolves.toBeInstanceOf(Response)
+    const stream = await send(recovery).promise
+    expect(stream).toBe(sdkStream)
 
     expect(createRecoverableTransport).toHaveBeenCalledOnce()
     expect(createRecoverableClient).toHaveBeenCalledTimes(2)
@@ -119,7 +121,8 @@ describe('recoverable inference retries', () => {
       )
       .mockResolvedValueOnce(successfulStream())
 
-    await expect(send().promise).resolves.toBeInstanceOf(Response)
+    const stream = await send().promise
+    expect(typeof stream[Symbol.asyncIterator]).toBe('function')
 
     expect(resetTinfoilClient).toHaveBeenCalledOnce()
     expect(createRecoverableTransport).toHaveBeenCalledOnce()

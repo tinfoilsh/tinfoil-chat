@@ -48,6 +48,7 @@ import {
   resetChatRecoverySyncState,
   sameRecoveredResponse,
 } from './chat-recovery-sync'
+import { chatChunkStreamFromSSE } from './chat-stream'
 import { generateTitle, getTitleContent } from './title'
 
 type ActiveRecovery = {
@@ -696,27 +697,30 @@ async function processEnvelope(
           }
           return
         }
-        assistantMessage = await parseRichStreamingResponse(response, {
-          onUpdate: (message) => {
-            if (!isRecoveryCurrent()) return
-            if (!checkpointReached && attemptCheckpoint) {
-              checkpointReached = sameRecoveredResponse(
-                attemptCheckpoint,
-                message,
-              )
-              return
-            }
-            const published = publishDraft(message)
-            if (
-              published &&
-              (!presentationCheckpoint ||
-                !sameRecoveredResponse(presentationCheckpoint, published))
-            ) {
-              presentationCheckpoint = published
-              markRecoveryProgress()
-            }
+        assistantMessage = await parseRichStreamingResponse(
+          chatChunkStreamFromSSE(response),
+          {
+            onUpdate: (message) => {
+              if (!isRecoveryCurrent()) return
+              if (!checkpointReached && attemptCheckpoint) {
+                checkpointReached = sameRecoveredResponse(
+                  attemptCheckpoint,
+                  message,
+                )
+                return
+              }
+              const published = publishDraft(message)
+              if (
+                published &&
+                (!presentationCheckpoint ||
+                  !sameRecoveredResponse(presentationCheckpoint, published))
+              ) {
+                presentationCheckpoint = published
+                markRecoveryProgress()
+              }
+            },
           },
-        })
+        )
       } catch {
         if (!isRecoveryCurrent()) return
         const retryStatus = await getChatRecoveryStatus(payload.sessionId)

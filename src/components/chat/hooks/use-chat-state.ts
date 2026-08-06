@@ -23,7 +23,6 @@ interface UseChatStateReturn {
   isSidebarOpen: boolean
   isDarkMode: boolean
   themeMode: ThemeMode
-  messagesEndRef: React.RefObject<HTMLDivElement | null>
   isInitialLoad: boolean
   isThinking: boolean
   verificationComplete: boolean
@@ -133,7 +132,6 @@ export function useChatState({
     isSidebarOpen,
     isDarkMode,
     windowWidth,
-    messagesEndRef,
     setIsSidebarOpen,
     toggleTheme,
     setThemeMode,
@@ -248,7 +246,6 @@ export function useChatState({
     currentChat,
     setChats,
     setCurrentChat,
-    messagesEndRef,
     scrollToBottom,
     reasoningEffort,
     thinkingEnabled,
@@ -342,7 +339,6 @@ export function useChatState({
     isSidebarOpen,
     isDarkMode,
     themeMode,
-    messagesEndRef,
     isInitialLoad,
     isThinking,
     verificationComplete,

@@ -51,7 +51,7 @@ export interface UseChatStreamsReturn {
   patchStatus: (chatId: string, partial: Partial<ChatStreamStatus>) => void
   /** Reset to idle, optionally overriding specific fields. */
   resetStatus: (chatId: string, partial?: Partial<ChatStreamStatus>) => void
-  /** Re-key a chat's status and abort controller after a server id swap. */
+  /** Re-key a chat's status and abort controller after identity assignment. */
   moveStatus: (fromId: string, toId: string) => void
   registerController: (chatId: string, controller: AbortController) => void
   /**

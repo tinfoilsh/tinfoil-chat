@@ -19,6 +19,7 @@ import {
 } from 'openai'
 import type { SessionRecoveryToken } from 'tinfoil'
 import { ChatQueryBuilder } from './chat-query-builder'
+import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
 import {
   createRecoverableTinfoilClient,
   createRecoverableTinfoilTransport,
@@ -229,7 +230,7 @@ export interface SendChatStreamParams {
 
 export async function sendChatStream(
   params: SendChatStreamParams,
-): Promise<Response> {
+): Promise<ChatChunkStream> {
   const {
     model,
     autoCandidates,
@@ -309,7 +310,7 @@ export async function sendChatStream(
           )
         }
 
-        return response
+        return chatChunkStreamFromSSE(response)
       } catch (err: unknown) {
         lastError = err
         const anyErr = err as any
@@ -477,38 +478,11 @@ export async function sendChatStream(
         client = await getTinfoilClient()
       }
 
-      const stream: any = await (client.chat.completions.create as Function)(
+      const stream = await (client.chat.completions.create as Function)(
         requestBody,
         { signal },
       )
-
-      const encoder = new TextEncoder()
-      const readableStream = new ReadableStream({
-        async start(controller) {
-          try {
-            for await (const chunk of stream) {
-              if (signal.aborted) {
-                controller.close()
-                return
-              }
-              const sseData = `data: ${JSON.stringify(chunk)}\n\n`
-              controller.enqueue(encoder.encode(sseData))
-            }
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-            controller.close()
-          } catch (error) {
-            logError('Stream processing error', error, {
-              component: 'inference-client',
-              action: 'sendChatStream',
-            })
-            controller.error(error)
-          }
-        },
-      })
-
-      return new Response(readableStream, {
-        headers: { 'Content-Type': 'text/event-stream' },
-      })
+      return stream as ChatChunkStream
     } catch (err: unknown) {
       if (recoverySessionId && recovery) {
         try {

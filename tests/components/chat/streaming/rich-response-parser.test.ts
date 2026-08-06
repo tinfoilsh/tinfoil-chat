@@ -1,23 +1,28 @@
 import { parseRichStreamingResponse } from '@/components/chat/hooks/streaming'
+import type {
+  ChatChunk,
+  ChatChunkStream,
+} from '@/services/inference/chat-stream'
 import { describe, expect, it } from 'vitest'
 
-function sseResponse(events: unknown[]): Response {
-  const body = [
-    ...events,
-    { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
-  ]
-    .map((event) => `data: ${JSON.stringify(event)}\n\n`)
-    .join('')
-  return new Response(`${body}data: [DONE]\n\n`, {
-    headers: { 'Content-Type': 'text/event-stream' },
-  })
+function chunkStream(events: ChatChunk[]): ChatChunkStream {
+  return (async function* () {
+    yield* events
+    yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }
+  })()
+}
+
+function chunkStreamWithoutCompletion(events: ChatChunk[]): ChatChunkStream {
+  return (async function* () {
+    yield* events
+  })()
 }
 
 describe('parseRichStreamingResponse', () => {
   it('rejects a stream without an authenticated completion marker', async () => {
-    const response = new Response(
-      'data: {"choices":[{"delta":{"content":"partial"}}]}\n\ndata: [DONE]\n\n',
-    )
+    const response = chunkStreamWithoutCompletion([
+      { choices: [{ delta: { content: 'partial' } }] },
+    ])
 
     await expect(parseRichStreamingResponse(response)).rejects.toThrow(
       'Chat response ended before its completion marker',
@@ -25,10 +30,10 @@ describe('parseRichStreamingResponse', () => {
   })
 
   it('accepts a completion marker without relying on the SSE sentinel', async () => {
-    const response = new Response(
-      'data: {"choices":[{"delta":{"content":"complete"}}]}\n\n' +
-        'data: {"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}\n\n',
-    )
+    const response = chunkStreamWithoutCompletion([
+      { choices: [{ delta: { content: 'complete' } }] },
+      { choices: [{ index: 0, delta: {}, finish_reason: 'length' }] },
+    ])
 
     await expect(parseRichStreamingResponse(response)).resolves.toMatchObject({
       content: 'complete',
@@ -37,7 +42,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('reconstructs reasoning, content, citations, and tool calls', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           choices: [{ delta: { reasoning_content: 'Check sources. ' } }],
         },
@@ -115,7 +120,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('preserves the query from a terminal-only web search event', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           id: 'search-1',
@@ -133,7 +138,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('keeps separate terminal-only web searches distinct', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           id: 'search-1',
@@ -158,7 +163,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('matches interleaved web-search completions by event ID', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           id: 'search-1',
@@ -191,7 +196,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('updates a blocked web search by event ID', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           id: 'search-1',
@@ -222,7 +227,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('matches an id-less blocked search by query', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           status: 'in_progress',
@@ -261,7 +266,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('matches an identified terminal event to an id-less search start', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           status: 'in_progress',
@@ -290,7 +295,7 @@ describe('parseRichStreamingResponse', () => {
 
   it('does not match an identified terminal event to concurrent id-less searches', async () => {
     const message = await parseRichStreamingResponse(
-      sseResponse([
+      chunkStream([
         {
           type: 'web_search_call',
           status: 'in_progress',
@@ -321,26 +326,10 @@ describe('parseRichStreamingResponse', () => {
   })
 
   it('ends thinking callbacks when the response stream fails', async () => {
-    const encoder = new TextEncoder()
-    let emitted = false
-    const response = new Response(
-      new ReadableStream({
-        pull(controller) {
-          if (!emitted) {
-            emitted = true
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  choices: [{ delta: { reasoning_content: 'thinking' } }],
-                })}\n\n`,
-              ),
-            )
-            return
-          }
-          controller.error(new Error('stream failed'))
-        },
-      }),
-    )
+    const response = (async function* (): AsyncGenerator<ChatChunk> {
+      yield { choices: [{ delta: { reasoning_content: 'thinking' } }] }
+      throw new Error('stream failed')
+    })()
     const thinkingChanges: boolean[] = []
 
     await expect(
