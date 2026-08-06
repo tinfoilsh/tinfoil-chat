@@ -235,6 +235,12 @@ export function ChatSidebar({
       if (expandSection === 'projects') {
         return false
       }
+      // Accordion invariant: Projects and Chats are never open together.
+      // Stored states predating the accordion (or written independently)
+      // can both be 'true'; Projects wins and Chats stays collapsed.
+      if (sessionStorage.getItem(UI_SIDEBAR_PROJECTS_EXPANDED) === 'true') {
+        return false
+      }
       const stored = sessionStorage.getItem(UI_SIDEBAR_CHAT_HISTORY_EXPANDED)
       if (stored !== null) {
         return stored === 'true'
@@ -1295,8 +1301,19 @@ export function ChatSidebar({
                 onDrop={() => {
                   setIsDropTargetProjectsHeader(false)
                 }}
+                style={{
+                  // Explicit height shared with the Chats header's stacking
+                  // offset so the pinned headers always sit flush; a
+                  // content-driven height can drift from the constant and
+                  // open a seam where scrolled content shows through.
+                  height: `${CONSTANTS.SIDEBAR_PINNED_HEADER_OFFSET_PX}px`,
+                }}
                 className={cn(
-                  'sticky top-0 z-30 flex w-full cursor-pointer items-center justify-between border-t border-border-subtle bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  // flex-none is load-bearing: header and panel are direct
+                  // children of the flex-col scroll container, and without
+                  // it flexbox shrinks them to fit the viewport instead of
+                  // letting the container scroll.
+                  'sticky top-0 z-30 flex w-full flex-none cursor-pointer items-center justify-between border-t border-border-subtle bg-surface-sidebar px-4 text-sm transition-colors',
                   isDropTargetProjectsHeader
                     ? isDarkMode
                       ? 'border border-white/30 bg-white/10'
@@ -1325,7 +1342,11 @@ export function ChatSidebar({
                 </span>
               </button>
 
-              {/* Expanded projects list */}
+              {/* Expanded projects list. flex-none matters here too: this
+                  panel is a direct child of the flex-col scroll container,
+                  and overflow-hidden (required by the height animation)
+                  would otherwise clip the list when flexbox shrinks it to
+                  the viewport instead of letting the sidebar scroll. */}
               <AnimatePresence initial={false}>
                 {isProjectsExpanded && (
                   <motion.div
@@ -1336,7 +1357,7 @@ export function ChatSidebar({
                       duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
                       ease: 'easeInOut',
                     }}
-                    className="overflow-hidden"
+                    className="flex-none overflow-hidden"
                   >
                     <div
                       className={cn('space-y-1 px-2 py-2', expandedPanelClass)}
