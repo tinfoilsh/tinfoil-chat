@@ -614,69 +614,6 @@ export function ChatInput({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">
-        {/* Project tab - manila folder style, absolutely positioned */}
-        {isProjectMode &&
-          activeProject &&
-          (() => {
-            const projectColor = getProjectColor(activeProject.color)
-            const colorStyle = projectColor
-              ? {
-                  borderColor: projectColor.hex,
-                  backgroundColor: projectColor.hex,
-                }
-              : undefined
-            return (
-              <div className="pointer-events-none absolute right-8 top-px z-10 hidden -translate-y-full md:block">
-                <div
-                  className={cn(
-                    'pointer-events-auto inline-flex items-center gap-1.5 rounded-t-site-tab border border-b-0 px-2.5 py-1',
-                    projectColor
-                      ? 'text-gray-900'
-                      : 'border-border-subtle bg-surface-chat text-content-secondary',
-                  )}
-                  style={colorStyle}
-                >
-                  <FolderIcon className="h-3 w-3" />
-                  <span className="text-xs font-medium">
-                    {activeProject.name}
-                  </span>
-                </div>
-              </div>
-            )
-          })()}
-        {/* Prompt preset tab - shows the active prompt for this chat */}
-        {activePromptPreset &&
-          (() => {
-            const ActivePresetIcon = activePromptPreset.Icon
-            return (
-              <div className="pointer-events-none absolute left-8 top-px z-10 -translate-y-full">
-                <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
-                  <button
-                    type="button"
-                    onClick={onOpenPromptLibrary}
-                    disabled={!onOpenPromptLibrary}
-                    className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
-                    aria-label={`Change prompt (currently ${activePromptPreset.name})`}
-                  >
-                    <ActivePresetIcon className="h-3 w-3" />
-                    <span className="text-xs font-medium">
-                      {activePromptPreset.name}
-                    </span>
-                  </button>
-                  {onClearPromptPreset && (
-                    <button
-                      type="button"
-                      onClick={onClearPromptPreset}
-                      aria-label="Stop using this prompt"
-                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
         {mobileHeader}
         {(isProjectMode && activeProject) || loadingProject ? (
           <ProjectModeBanner
@@ -687,12 +624,80 @@ export function ChatInput({
         ) : null}
         <div
           className={cn(
-            'rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
+            // relative anchors the folder-style tabs below to the card
+            // itself. Anchoring them to the outer container breaks on
+            // mobile, where in-flow elements (the Prompts button, project
+            // banner) sit above the card and push the container's top edge
+            // away from the card top the tabs are meant to attach to.
+            'relative rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
             isTemporaryMode
               ? 'border-dashed border-content-muted'
               : 'border-border-subtle',
           )}
         >
+          {/* Project tab - manila folder style, absolutely positioned */}
+          {isProjectMode &&
+            activeProject &&
+            (() => {
+              const projectColor = getProjectColor(activeProject.color)
+              const colorStyle = projectColor
+                ? {
+                    borderColor: projectColor.hex,
+                    backgroundColor: projectColor.hex,
+                  }
+                : undefined
+              return (
+                <div className="pointer-events-none absolute right-8 top-px z-10 hidden -translate-y-full md:block">
+                  <div
+                    className={cn(
+                      'pointer-events-auto inline-flex items-center gap-1.5 rounded-t-site-tab border border-b-0 px-2.5 py-1',
+                      projectColor
+                        ? 'text-gray-900'
+                        : 'border-border-subtle bg-surface-chat text-content-secondary',
+                    )}
+                    style={colorStyle}
+                  >
+                    <FolderIcon className="h-3 w-3" />
+                    <span className="text-xs font-medium">
+                      {activeProject.name}
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+          {/* Prompt preset tab - shows the active prompt for this chat */}
+          {activePromptPreset &&
+            (() => {
+              const ActivePresetIcon = activePromptPreset.Icon
+              return (
+                <div className="pointer-events-none absolute left-8 top-px z-10 -translate-y-full">
+                  <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
+                    <button
+                      type="button"
+                      onClick={onOpenPromptLibrary}
+                      disabled={!onOpenPromptLibrary}
+                      className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
+                      aria-label={`Change prompt (currently ${activePromptPreset.name})`}
+                    >
+                      <ActivePresetIcon className="h-3 w-3" />
+                      <span className="text-xs font-medium">
+                        {activePromptPreset.name}
+                      </span>
+                    </button>
+                    {onClearPromptPreset && (
+                      <button
+                        type="button"
+                        onClick={onClearPromptPreset}
+                        aria-label="Stop using this prompt"
+                        className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
+                      >
+                        <XMarkIcon className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           {/* No accept filter: unknown extensions are sniffed for text
               content and rejected gracefully after selection instead of
               being blocked by the picker. */}

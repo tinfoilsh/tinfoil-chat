@@ -3569,7 +3569,10 @@ export function ChatInterface({
                         onOpenPromptLibrary={handleOpenPromptLibrary}
                         onClearPromptPreset={() => handleSetActivePreset(null)}
                         mobileHeader={
-                          !currentChat?.messages?.length ? (
+                          // With a preset active, the preset tab attached to
+                          // the input card already opens the library; the
+                          // mobile Prompts button would collide with it.
+                          !currentChat?.messages?.length && !activePreset ? (
                             <div className="mb-3 md:hidden">
                               <PromptPresetSuggestions
                                 activePreset={activePreset}
