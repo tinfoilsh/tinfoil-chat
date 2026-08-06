@@ -53,9 +53,6 @@ export const CONSTANTS = {
   // header offsets by this amount so it stacks below the pinned Projects
   // header while scrolling.
   SIDEBAR_PINNED_HEADER_OFFSET_PX: 44,
-  // Tolerance when checking whether the Chats header has reached its
-  // pinned position (fractional scroll positions on zoomed displays).
-  SIDEBAR_PINNED_HEADER_EPSILON_PX: 1,
   SETTINGS_SIDEBAR_WIDTH_PX: 345,
   VERIFIER_SIDEBAR_WIDTH_PX: 345,
   ASK_SIDEBAR_WIDTH_PX: 420,

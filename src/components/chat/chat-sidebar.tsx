@@ -243,8 +243,6 @@ export function ChatSidebar({
     return true
   })
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
-  const chatsSectionRef = useRef<HTMLDivElement>(null)
-  const lastSidebarScrollTopRef = useRef(0)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   const [isIOS, setIsIOS] = useState(false)
   const [nativeAppDismissed, setNativeAppDismissed] = useState(false)
@@ -602,39 +600,26 @@ export function ChatSidebar({
   // The Projects header renders (and pins) only for premium users.
   const hasPinnedProjectsHeader = Boolean(isSignedIn && isPremium)
 
-  // Auto-collapse the projects list once the user scrolls down into the
-  // chat list: when the Chats header reaches its pinned position, the
-  // projects are out of view anyway, and collapsing them snaps the scroll
-  // back to the top of the chats instead of leaving a long dead scroll.
-  useEffect(() => {
-    const scroller = sidebarScrollRef.current
-    if (!scroller || !isProjectsExpanded) return
-
-    lastSidebarScrollTopRef.current = scroller.scrollTop
-
-    const handleScroll = () => {
-      const scrollTop = scroller.scrollTop
-      const isScrollingDown = scrollTop > lastSidebarScrollTopRef.current
-      lastSidebarScrollTopRef.current = scrollTop
-      if (!isScrollingDown) return
-
-      const chatsSection = chatsSectionRef.current
-      if (!chatsSection) return
-
-      const pinOffset = hasPinnedProjectsHeader
-        ? CONSTANTS.SIDEBAR_PINNED_HEADER_OFFSET_PX
-        : 0
-      const chatsTop =
-        chatsSection.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top
-      if (chatsTop <= pinOffset + CONSTANTS.SIDEBAR_PINNED_HEADER_EPSILON_PX) {
-        setIsProjectsExpanded(false)
-      }
+  // Projects and Chats behave as an accordion: expanding one collapses the
+  // other. This keeps the newly opened section at the top of the scroll
+  // area (expanding a section while scrolled deep into the other would
+  // otherwise appear to do nothing, since the new content renders at its
+  // flow position far above the viewport) and resets the scroll so the
+  // opened section's content is immediately visible.
+  const expandProjectsSection = useCallback(() => {
+    setIsProjectsExpanded(true)
+    setIsChatHistoryExpanded(false)
+    sidebarScrollRef.current?.scrollTo({ top: 0 })
+    if (projects.length === 0) {
+      refreshProjects()
     }
+  }, [projects.length, refreshProjects])
 
-    scroller.addEventListener('scroll', handleScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', handleScroll)
-  }, [isProjectsExpanded, hasPinnedProjectsHeader])
+  const expandChatsSection = useCallback(() => {
+    setIsChatHistoryExpanded(true)
+    setIsProjectsExpanded(false)
+    sidebarScrollRef.current?.scrollTo({ top: 0 })
+  }, [])
 
   // Auto-load more chats when scrolling to bottom
   useEffect(() => {
@@ -1243,10 +1228,10 @@ export function ChatSidebar({
                 type="button"
                 aria-expanded={isProjectsExpanded}
                 onClick={() => {
-                  const newExpanded = !isProjectsExpanded
-                  setIsProjectsExpanded(newExpanded)
-                  if (newExpanded && projects.length === 0) {
-                    refreshProjects()
+                  if (isProjectsExpanded) {
+                    setIsProjectsExpanded(false)
+                  } else {
+                    expandProjectsSection()
                   }
                 }}
                 onDragOver={(e) => {
@@ -1267,10 +1252,7 @@ export function ChatSidebar({
                     e.preventDefault()
                     setIsDropTargetProjectsHeader(true)
                     if (!isProjectsExpanded) {
-                      setIsProjectsExpanded(true)
-                      if (projects.length === 0) {
-                        refreshProjects()
-                      }
+                      expandProjectsSection()
                     }
                   }
                 }}
@@ -1662,7 +1644,6 @@ export function ChatSidebar({
               in the scroll container; the header pins below the Projects
               header while the chat list scrolls. */}
           <div
-            ref={chatsSectionRef}
             className={cn(
               'relative z-10 flex-none border-t border-border-subtle',
               !isChatHistoryExpanded && 'border-b',
@@ -1686,7 +1667,9 @@ export function ChatSidebar({
                 if (chatId) {
                   e.preventDefault()
                   setDropTargetChatHistory(true)
-                  setIsChatHistoryExpanded(true)
+                  if (!isChatHistoryExpanded) {
+                    expandChatsSection()
+                  }
                 }
               }}
               onDragLeave={() => {
@@ -1718,7 +1701,13 @@ export function ChatSidebar({
               <button
                 type="button"
                 aria-expanded={isChatHistoryExpanded}
-                onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
+                onClick={() => {
+                  if (isChatHistoryExpanded) {
+                    setIsChatHistoryExpanded(false)
+                  } else {
+                    expandChatsSection()
+                  }
+                }}
                 className="flex w-full items-center justify-between px-4 py-3 text-left"
               >
                 <span className="flex items-center gap-2">
