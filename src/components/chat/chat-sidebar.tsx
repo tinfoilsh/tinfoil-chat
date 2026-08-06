@@ -243,6 +243,8 @@ export function ChatSidebar({
     return true
   })
   const sidebarScrollRef = useRef<HTMLDivElement>(null)
+  const chatsSectionRef = useRef<HTMLDivElement>(null)
+  const lastSidebarScrollTopRef = useRef(0)
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
   const [isIOS, setIsIOS] = useState(false)
   const [nativeAppDismissed, setNativeAppDismissed] = useState(false)
@@ -596,6 +598,43 @@ export function ChatSidebar({
       )
     }
   }, [isClient])
+
+  // The Projects header renders (and pins) only for premium users.
+  const hasPinnedProjectsHeader = Boolean(isSignedIn && isPremium)
+
+  // Auto-collapse the projects list once the user scrolls down into the
+  // chat list: when the Chats header reaches its pinned position, the
+  // projects are out of view anyway, and collapsing them snaps the scroll
+  // back to the top of the chats instead of leaving a long dead scroll.
+  useEffect(() => {
+    const scroller = sidebarScrollRef.current
+    if (!scroller || !isProjectsExpanded) return
+
+    lastSidebarScrollTopRef.current = scroller.scrollTop
+
+    const handleScroll = () => {
+      const scrollTop = scroller.scrollTop
+      const isScrollingDown = scrollTop > lastSidebarScrollTopRef.current
+      lastSidebarScrollTopRef.current = scrollTop
+      if (!isScrollingDown) return
+
+      const chatsSection = chatsSectionRef.current
+      if (!chatsSection) return
+
+      const pinOffset = hasPinnedProjectsHeader
+        ? CONSTANTS.SIDEBAR_PINNED_HEADER_OFFSET_PX
+        : 0
+      const chatsTop =
+        chatsSection.getBoundingClientRect().top -
+        scroller.getBoundingClientRect().top
+      if (chatsTop <= pinOffset + CONSTANTS.SIDEBAR_PINNED_HEADER_EPSILON_PX) {
+        setIsProjectsExpanded(false)
+      }
+    }
+
+    scroller.addEventListener('scroll', handleScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', handleScroll)
+  }, [isProjectsExpanded, hasPinnedProjectsHeader])
 
   // Auto-load more chats when scrolling to bottom
   useEffect(() => {
@@ -1194,9 +1233,12 @@ export function ChatSidebar({
             </Link>
           </div>
 
-          {/* Projects dropdown - show for premium users */}
+          {/* Projects dropdown - show for premium users. The header and
+              list are direct children of the scroll container (no section
+              wrapper) so the sticky header pins to the scroll area itself
+              and stays visible for the rest of the scroll. */}
           {isSignedIn && isPremium && (
-            <div className="relative z-10 flex-none border-t border-border-subtle">
+            <>
               <button
                 type="button"
                 aria-expanded={isProjectsExpanded}
@@ -1239,7 +1281,7 @@ export function ChatSidebar({
                   setIsDropTargetProjectsHeader(false)
                 }}
                 className={cn(
-                  'sticky top-0 z-20 flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  'sticky top-0 z-30 flex w-full cursor-pointer items-center justify-between border-t border-border-subtle bg-surface-sidebar px-4 py-3 text-sm transition-colors',
                   isDropTargetProjectsHeader
                     ? isDarkMode
                       ? 'border border-white/30 bg-white/10'
@@ -1613,11 +1655,14 @@ export function ChatSidebar({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </>
           )}
 
-          {/* Chats Header */}
+          {/* Chats section. Like Projects, header and content sit directly
+              in the scroll container; the header pins below the Projects
+              header while the chat list scrolls. */}
           <div
+            ref={chatsSectionRef}
             className={cn(
               'relative z-10 flex-none border-t border-border-subtle',
               !isChatHistoryExpanded && 'border-b',
@@ -1656,13 +1701,19 @@ export function ChatSidebar({
                 clearDragState()
               }}
               className={cn(
-                'sticky top-0 z-20 flex w-full items-center bg-surface-sidebar text-sm transition-colors',
+                'sticky z-20 flex w-full items-center bg-surface-sidebar text-sm transition-colors',
                 isDropTargetChatHistory
                   ? isDarkMode
                     ? 'border border-white/30 bg-white/10'
                     : 'border border-gray-400 bg-gray-200/30'
                   : 'text-content-secondary',
               )}
+              style={{
+                // Stack below the pinned Projects header when present.
+                top: hasPinnedProjectsHeader
+                  ? `${CONSTANTS.SIDEBAR_PINNED_HEADER_OFFSET_PX}px`
+                  : 0,
+              }}
             >
               <button
                 type="button"
