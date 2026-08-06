@@ -1,5 +1,6 @@
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
+import { isChatRecoveryTurnCancelled } from '@/services/inference/chat-recovery'
 import { sameRecoveredResponse } from '@/services/inference/chat-recovery-sync'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
@@ -64,6 +65,23 @@ function pendingRecoveriesMatch(
         : false,
     )
   )
+}
+
+/**
+ * Drop envelopes for turns the user explicitly stopped. An envelope can
+ * land in storage in the window between the stop press and the async
+ * envelope removal completing; adopting it into the on-screen chat would
+ * flash "Recovering stream..." for a turn that is not coming back.
+ */
+function withoutCancelledRecoveries(
+  chatId: string,
+  envelopes: readonly PendingRecoveryEnvelope[] | undefined,
+): PendingRecoveryEnvelope[] | undefined {
+  if (!envelopes?.length) return undefined
+  const remaining = envelopes.filter(
+    (envelope) => !isChatRecoveryTurnCancelled(chatId, envelope.turnId),
+  )
+  return remaining.length > 0 ? remaining : undefined
 }
 
 export function useChatStorage({
@@ -166,6 +184,10 @@ export function useChatStorage({
           // Only update metadata (syncedAt, title) if the same chat exists in storage
           const existingChat = loadedChats.find((c) => c.id === prev.id)
           if (existingChat) {
+            const storedRecoveries = withoutCancelledRecoveries(
+              prev.id,
+              existingChat.pendingRecoveries,
+            )
             // Include sends still in their pre-stream phase: a recovery
             // reload racing a just-resumed generation must not adopt the
             // stored copy (which still holds the previous interrupted
@@ -175,7 +197,7 @@ export function useChatStorage({
             if (isRecoveryReload && isStreaming) {
               return {
                 ...prev,
-                pendingRecoveries: existingChat.pendingRecoveries,
+                pendingRecoveries: storedRecoveries,
               }
             }
             // A turn this view still tracks as pending recovery may have been
@@ -215,6 +237,7 @@ export function useChatStorage({
             ) {
               return {
                 ...existingChat,
+                pendingRecoveries: storedRecoveries,
                 pendingSave: prev.pendingSave,
               }
             }
@@ -222,17 +245,14 @@ export function useChatStorage({
               prev.syncedAt !== existingChat.syncedAt ||
               prev.title !== existingChat.title ||
               prev.presetId !== existingChat.presetId ||
-              !pendingRecoveriesMatch(
-                prev.pendingRecoveries,
-                existingChat.pendingRecoveries,
-              )
+              !pendingRecoveriesMatch(prev.pendingRecoveries, storedRecoveries)
             ) {
               return {
                 ...prev,
                 syncedAt: existingChat.syncedAt,
                 title: existingChat.title,
                 presetId: existingChat.presetId,
-                pendingRecoveries: existingChat.pendingRecoveries,
+                pendingRecoveries: storedRecoveries,
               }
             }
           }

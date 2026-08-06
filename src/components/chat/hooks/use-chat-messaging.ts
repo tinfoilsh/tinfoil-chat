@@ -29,6 +29,7 @@ import {
   abandonChatRecoveryAttempt,
   cancelChatRecovery,
   completeLiveChatRecovery,
+  markChatRecoveryTurnCancelled,
   persistChatRecoveryToken,
   releaseActiveChatRecovery,
   scanPendingChatRecoveries,
@@ -328,6 +329,14 @@ export function useChatMessaging({
         const activeGeneration = activeLiveGenerationsRef.current.get(targetId)
 
         abort(targetId)
+        // Mark the recovery turn cancelled synchronously with the abort.
+        // When stop lands before the first token, the recovery attempt may
+        // still be registering (token capture races the abort); the mark
+        // makes persistChatRecoveryToken discard its envelope instead of
+        // surfacing "Recovering stream..." for a turn the user just stopped.
+        if (activeGeneration?.turnId) {
+          markChatRecoveryTurnCancelled(targetId, activeGeneration.turnId)
+        }
         const interruptedMessage =
           activeGeneration?.latestAssistantMessage &&
           hasVisibleAssistantMessage(activeGeneration.latestAssistantMessage)

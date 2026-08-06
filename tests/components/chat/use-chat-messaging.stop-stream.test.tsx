@@ -104,6 +104,7 @@ vi.mock('@/services/inference/chat-recovery', () => ({
   cancelChatRecovery: (...args: unknown[]) => cancelChatRecoveryMock(...args),
   completeLiveChatRecovery: (...args: unknown[]) =>
     completeLiveChatRecoveryMock(...args),
+  markChatRecoveryTurnCancelled: vi.fn(),
   persistChatRecoveryToken: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
   scanPendingChatRecoveries: vi.fn(),
