@@ -103,6 +103,19 @@ describe('processStreamingResponse lifecycle', () => {
     expect(context.setIsStreaming).not.toHaveBeenCalled()
     expect(endStreamingMock).not.toHaveBeenCalled()
   })
+
+  it('does not start tracking an already-aborted stream', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      processStreamingResponse(
+        createStream(),
+        createContext({ signal: controller.signal }),
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(startStreamingMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('processStreamingResponse interruption', () => {
@@ -369,6 +382,54 @@ describe('processStreamingResponse frame publication', () => {
 
     stream.close()
     await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('treats cancellation during the final frame as an interruption', async () => {
+    const controller = new AbortController()
+    const context = createContext({ signal: controller.signal })
+    const processing = processStreamingResponse(
+      createReasoningStream(),
+      context,
+    )
+
+    await vi.waitFor(() => expect(frames.size).toBe(1))
+    controller.abort()
+
+    await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('drops a queued asynchronous update after cancellation', async () => {
+    const controller = new AbortController()
+    let releaseLeadingUpdate!: () => void
+    const updates: string[] = []
+    const stream = createOpenStream()
+    const processing = processStreamingResponse(
+      stream.stream,
+      createContext({
+        signal: controller.signal,
+        onUpdate: (message) => {
+          updates.push(message.thoughts ?? '')
+          if (updates.length === 1) {
+            return new Promise<void>((resolve) => {
+              releaseLeadingUpdate = resolve
+            })
+          }
+        },
+      }),
+    )
+
+    stream.send(
+      { choices: [{ delta: { reasoning_content: 'A' } }] },
+      { choices: [{ delta: { reasoning_content: 'B' } }] },
+    )
+    await vi.waitFor(() => expect(frames.size).toBe(1))
+    runFrames()
+    controller.abort()
+    releaseLeadingUpdate()
+    stream.close()
+
+    await expect(processing).rejects.toMatchObject({ name: 'AbortError' })
+    expect(updates).toEqual(['A'])
   })
 
   it('matches the rich parser for shared event assembly', async () => {

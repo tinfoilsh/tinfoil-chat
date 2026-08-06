@@ -4,6 +4,7 @@ import {
   parseRichStreamingResponse,
 } from '@/components/chat/hooks/streaming'
 import type { Message } from '@/components/chat/types'
+import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { retryDeferredAlternativesFinalization } from '@/services/cloud/legacy-blob-migration'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -128,7 +129,7 @@ async function recoveredTitlePatch(
 
   const content = getTitleContent(firstUserMessage)
   const title = await generateTitle([{ role: 'user', content }])
-  if (!isCurrent() || title === 'Untitled') return
+  if (!isCurrent() || title === DEFAULT_CHAT_TITLE) return
   return {
     title,
     titleState: 'generated',

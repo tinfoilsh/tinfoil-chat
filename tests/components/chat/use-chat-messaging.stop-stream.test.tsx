@@ -10,6 +10,7 @@ const {
   cancelChatRecoveryMock,
   completeLiveChatRecoveryMock,
   containerAuthTokenMock,
+  generateTitleMock,
   initialSaveMock,
   persistInterruptedAssistantMock,
   saveChatMock,
@@ -28,6 +29,7 @@ const {
     async (..._args: unknown[]): Promise<void> => {},
   ),
   containerAuthTokenMock: vi.fn(async (..._args: unknown[]) => null),
+  generateTitleMock: vi.fn(async () => 'Untitled'),
   initialSaveMock: vi.fn(async (chat: unknown) => chat),
   persistInterruptedAssistantMock: vi.fn(
     async (..._args: unknown[]) => undefined,
@@ -130,7 +132,7 @@ vi.mock('@/services/inference/tinfoil-client', () => ({
 }))
 
 vi.mock('@/services/inference/title', () => ({
-  generateTitle: vi.fn(async () => 'Untitled'),
+  generateTitle: generateTitleMock,
   getTitleContent: (message: { content: string }) => message.content,
 }))
 
@@ -201,6 +203,7 @@ describe('useChatMessaging stopped streams', () => {
     persistInterruptedAssistantMock.mockResolvedValue(undefined)
     containerAuthTokenMock.mockResolvedValue(null)
     completeLiveChatRecoveryMock.mockResolvedValue(undefined)
+    generateTitleMock.mockResolvedValue('Untitled')
     authState.isSignedIn = false
     authState.userId = undefined
     recoveryAvailableState.available = false
@@ -440,6 +443,7 @@ describe('useChatMessaging stopped streams', () => {
         currentChat,
         setChats,
         setCurrentChat,
+        codeExecutionEnabled: true,
       })
       return { chats, currentChat, messaging, setChats, setCurrentChat }
     })
@@ -451,6 +455,9 @@ describe('useChatMessaging stopped streams', () => {
       ) as Promise<unknown>
     })
     await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    expect(sendChatStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({ codeExecutionAccessToken: 'token' }),
+    )
     stream.send({ choices: [{ delta: { content: 'Partial' } }] })
     await vi.waitFor(() =>
       expect(result.current.currentChat.messages.at(-1)?.content).toBe(
@@ -511,6 +518,139 @@ describe('useChatMessaging stopped streams', () => {
       }),
       expect.any(Boolean),
     )
+  })
+
+  it('applies a generated title after recovery completes', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    generateTitleMock.mockResolvedValue('Generated title')
+    const initialChat: Chat = {
+      id: '',
+      title: 'Untitled',
+      titleState: 'placeholder',
+      createdAt: new Date(),
+      messages: [],
+      isBlankChat: true,
+    }
+    const stream = createOpenStream()
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'First prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
+    stream.send({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    })
+    stream.close()
+
+    await act(async () => {
+      await query
+    })
+
+    expect(completeLiveChatRecoveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatPatch: expect.objectContaining({ title: 'Generated title' }),
+      }),
+    )
+    expect(result.current.currentChat).toMatchObject({
+      title: 'Generated title',
+      titleState: 'generated',
+    })
+  })
+
+  it('preserves a manual title changed during recovery completion', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    generateTitleMock.mockResolvedValue('Generated title')
+    let finishRecovery!: () => void
+    completeLiveChatRecoveryMock.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRecovery = resolve
+        }),
+    )
+    const initialChat: Chat = {
+      id: '',
+      title: 'Untitled',
+      titleState: 'placeholder',
+      createdAt: new Date(),
+      messages: [],
+      isBlankChat: true,
+    }
+    const stream = createOpenStream()
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging, setCurrentChat }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'First prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
+    stream.send({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    })
+    stream.close()
+    await vi.waitFor(() =>
+      expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),
+    )
+
+    act(() => {
+      result.current.setCurrentChat((chat) => ({
+        ...chat,
+        title: 'Manual title',
+        titleState: 'manual',
+      }))
+    })
+    await act(async () => {
+      finishRecovery()
+      await query
+    })
+
+    expect(result.current.currentChat).toMatchObject({
+      title: 'Manual title',
+      titleState: 'manual',
+    })
   })
 
   it('keeps a completed response when stopped during recovery finalization', async () => {

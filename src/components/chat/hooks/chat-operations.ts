@@ -1,3 +1,4 @@
+import { TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { sessionChatStorage } from '@/services/storage/session-storage'
@@ -31,7 +32,7 @@ export function createTemporaryChat(
   const { id } = generateReverseId()
   return {
     id,
-    title: 'Temporary Chat',
+    title: TEMPORARY_CHAT_TITLE,
     titleState: 'placeholder',
     messages: [],
     createdAt: new Date(),

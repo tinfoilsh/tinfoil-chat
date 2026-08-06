@@ -92,6 +92,15 @@ describe('chatChunkStreamFromSSE', () => {
     expect(results).toEqual([{ id: 'good' }])
   })
 
+  it('skips non-object JSON', async () => {
+    const results = await collectAll(
+      mockResponse([
+        'data: null\n\ndata: ["invalid"]\n\ndata: {"id":"good"}\n\n',
+      ]),
+    )
+    expect(results).toEqual([{ id: 'good' }])
+  })
+
   it('returns nothing for an empty response body', async () => {
     await expect(collectAll(new Response(null))).resolves.toEqual([])
   })

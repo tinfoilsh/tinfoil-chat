@@ -3,7 +3,7 @@ import type {
   ChatChunk,
   ChatChunkStream,
 } from '@/services/inference/chat-stream'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 function chunkStream(events: ChatChunk[]): ChatChunkStream {
   return (async function* () {
@@ -38,6 +38,27 @@ describe('parseRichStreamingResponse', () => {
     await expect(parseRichStreamingResponse(response)).resolves.toMatchObject({
       content: 'complete',
     })
+  })
+
+  it('ends the initial wait when URL fetching begins', async () => {
+    const onFirstEvent = vi.fn()
+    await parseRichStreamingResponse(
+      chunkStream([
+        {
+          choices: [
+            {
+              delta: {
+                content:
+                  '<tinfoil-event>{"type":"tinfoil.web_search_call","item_id":"fetch-1","status":"in_progress","action":{"type":"open_page","url":"https://example.com"}}</tinfoil-event>',
+              },
+            },
+          ],
+        },
+      ]),
+      { onFirstEvent },
+    )
+
+    expect(onFirstEvent).toHaveBeenCalledOnce()
   })
 
   it('reconstructs reasoning, content, citations, and tool calls', async () => {

@@ -4,6 +4,7 @@ export class AnimationFramePublisher<T> {
   private leadingPublished = false
   private cancelled = false
   private pendingValue: T | undefined
+  private hasPendingValue = false
   private frameId: number | null = null
   private frameCompletion: Promise<void> | null = null
   private resolveFrame: (() => void) | null = null
@@ -19,6 +20,7 @@ export class AnimationFramePublisher<T> {
       return
     }
     this.pendingValue = value
+    this.hasPendingValue = true
     if (this.frameCompletion === null) this.scheduleFrame()
   }
 
@@ -28,6 +30,7 @@ export class AnimationFramePublisher<T> {
       this.publish(value)
     } else {
       this.pendingValue = value
+      this.hasPendingValue = true
       if (document.visibilityState === 'hidden') this.publishPendingNow()
       else if (this.frameCompletion === null) this.scheduleFrame()
     }
@@ -47,6 +50,7 @@ export class AnimationFramePublisher<T> {
   cancel(): void {
     this.cancelled = true
     this.pendingValue = undefined
+    this.hasPendingValue = false
     if (this.frameId !== null) cancelAnimationFrame(this.frameId)
     this.frameId = null
     this.resolveFrame?.()
@@ -63,11 +67,16 @@ export class AnimationFramePublisher<T> {
       this.frameId = null
       const value = this.pendingValue
       this.pendingValue = undefined
-      if (this.cancelled || value === undefined) {
+      const hasValue = this.hasPendingValue
+      this.hasPendingValue = false
+      if (this.cancelled || !hasValue) {
         this.finishFrame(completion)
         return
       }
-      this.publication = this.publication.then(() => this.onUpdate(value))
+      this.publication = this.publication.then(() => {
+        if (this.cancelled) return
+        return this.onUpdate(value as T)
+      })
       void this.publication.then(
         () => this.finishFrame(completion),
         () => this.finishFrame(completion),
@@ -88,16 +97,20 @@ export class AnimationFramePublisher<T> {
   }
 
   private publishPendingNow(): void {
-    const value = this.pendingValue
-    if (value === undefined) return
+    if (!this.hasPendingValue) return
+    const value = this.pendingValue as T
 
     this.pendingValue = undefined
+    this.hasPendingValue = false
     if (this.frameId !== null) cancelAnimationFrame(this.frameId)
     this.frameId = null
     this.resolveFrame?.()
     this.resolveFrame = null
     this.frameCompletion = null
-    this.publication = this.publication.then(() => this.onUpdate(value))
+    this.publication = this.publication.then(() => {
+      if (this.cancelled) return
+      return this.onUpdate(value)
+    })
   }
 
   private finishFrame(completion: Promise<void>): void {
@@ -105,6 +118,6 @@ export class AnimationFramePublisher<T> {
     this.resolveFrame?.()
     this.resolveFrame = null
     this.frameCompletion = null
-    if (!this.cancelled && this.pendingValue !== undefined) this.scheduleFrame()
+    if (!this.cancelled && this.hasPendingValue) this.scheduleFrame()
   }
 }

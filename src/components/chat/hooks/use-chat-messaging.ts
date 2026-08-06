@@ -19,6 +19,7 @@
  */
 import { useProject } from '@/components/project'
 import { resolveModelSelection, type BaseModel } from '@/config/models'
+import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { useChatRecoveryActive } from '@/hooks/use-chat-recovery-drafts'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
@@ -596,11 +597,14 @@ export function useChatMessaging({
         updatedMessages = userMessage ? [userMessage] : []
         updatedChat = {
           ...currentChat,
-          title: 'Temporary Chat',
+          title: TEMPORARY_CHAT_TITLE,
           titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
           createdAt: new Date(),
+          codeExecutionAccessToken:
+            currentChat.codeExecutionAccessToken ??
+            generateCodeExecutionAccessToken(),
         }
 
         moveStatus(streamChatIdRef.current, updatedChat.id)
@@ -632,7 +636,7 @@ export function useChatMessaging({
           ...currentChat,
           id: chatId,
           codeExecutionAccessToken: generateCodeExecutionAccessToken(),
-          title: 'Untitled',
+          title: DEFAULT_CHAT_TITLE,
           titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
@@ -710,7 +714,7 @@ export function useChatMessaging({
         updatedChat = {
           ...currentChat,
           id: `session-${Date.now()}`,
-          title: 'Untitled',
+          title: DEFAULT_CHAT_TITLE,
           titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
@@ -1024,32 +1028,33 @@ export function useChatMessaging({
 
           // Resolve title: await the in-flight title gen promise if one exists
           let liveChat =
-            chatsRef.current.find((chat) => chat.id === chatId) ??
             (currentChatRef.current.id === chatId
               ? currentChatRef.current
-              : undefined)
+              : undefined) ??
+            chatsRef.current.find((chat) => chat.id === chatId)
           let resolvedTitle = liveChat?.title ?? updatedChat.title
           let resolvedTitleState =
             liveChat?.titleState ?? updatedChat.titleState
           let generatedTitle = false
           if (
             isFirstMessage &&
-            resolvedTitle === 'Untitled' &&
+            resolvedTitle === DEFAULT_CHAT_TITLE &&
             earlyTitlePromise
           ) {
             try {
               const generated = await earlyTitlePromise
               liveChat =
-                chatsRef.current.find((chat) => chat.id === chatId) ??
                 (currentChatRef.current.id === chatId
                   ? currentChatRef.current
-                  : liveChat)
+                  : undefined) ??
+                chatsRef.current.find((chat) => chat.id === chatId) ??
+                liveChat
               resolvedTitle = liveChat?.title ?? resolvedTitle
               resolvedTitleState = liveChat?.titleState ?? resolvedTitleState
               if (
                 generated &&
-                generated !== 'Untitled' &&
-                resolvedTitle === 'Untitled' &&
+                generated !== DEFAULT_CHAT_TITLE &&
+                resolvedTitle === DEFAULT_CHAT_TITLE &&
                 resolvedTitleState === 'placeholder'
               ) {
                 resolvedTitle = generated
@@ -1112,6 +1117,33 @@ export function useChatMessaging({
                   projectId: liveChat?.projectId ?? updatedChat.projectId,
                 },
               })
+              const latestChat =
+                (currentChatRef.current.id === chatId
+                  ? currentChatRef.current
+                  : undefined) ??
+                chatsRef.current.find((chat) => chat.id === chatId)
+              const shouldApplyGeneratedTitle =
+                generatedTitle &&
+                latestChat?.title === DEFAULT_CHAT_TITLE &&
+                latestChat.titleState === 'placeholder'
+              updateChatWithHistoryCheck(
+                setChats,
+                chatToSave,
+                setCurrentChat,
+                chatId,
+                finalMessages,
+                true,
+                true,
+                {
+                  pendingSave: false,
+                  ...(shouldApplyGeneratedTitle
+                    ? {
+                        title: resolvedTitle,
+                        titleState: resolvedTitleState,
+                      }
+                    : {}),
+                },
+              )
             } catch (error) {
               releaseActiveChatRecovery(chatId)
               if (

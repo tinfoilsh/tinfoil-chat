@@ -40,10 +40,9 @@ export function createUpdateChatWithHistoryCheck({
     metadataPatch: Partial<Chat> = {},
   ) {
     const liveChat =
-      chatsRef.current.find((c) => c.id === chatId) ??
       (currentChatRef.current.id === chatId
         ? currentChatRef.current
-        : undefined)
+        : undefined) ?? chatsRef.current.find((c) => c.id === chatId)
     const updatedChat: Chat = {
       ...chatSnapshot,
       ...liveChat,
@@ -122,8 +121,6 @@ export function createUpdateChatWithHistoryCheck({
             action: 'updateChatWithHistoryCheck.saved',
             metadata: {
               chatId: savedChat.id,
-              originalId: updatedChat.id,
-              idChanged: savedChat.id !== updatedChat.id,
             },
           })
           // The save (and cloud sync, when applicable) has resolved, so

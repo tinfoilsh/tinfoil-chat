@@ -4,6 +4,7 @@ import {
   getSystemPromptAndRules,
   type BaseModel,
 } from '@/config/models'
+import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SETTINGS_CODE_EXECUTION_ENABLED,
@@ -1772,8 +1773,8 @@ export function ChatInterface({
           isTemporary: false,
           isBlankChat: false,
           title:
-            currentChat.title === 'Temporary Chat'
-              ? 'Untitled'
+            currentChat.title === TEMPORARY_CHAT_TITLE
+              ? DEFAULT_CHAT_TITLE
               : currentChat.title,
           codeExecutionAccessToken:
             currentChat.codeExecutionAccessToken ??
@@ -1801,7 +1802,7 @@ export function ChatInterface({
         // Temporary chats never get titles generated during streaming, so
         // generate one now from the first user message (falling back to
         // attachment text) to avoid a list full of "Untitled" entries.
-        if (permanentChat.title === 'Untitled') {
+        if (permanentChat.title === DEFAULT_CHAT_TITLE) {
           const firstUser = permanentChat.messages.find(
             (m) => m.role === 'user',
           )
@@ -1809,7 +1810,7 @@ export function ChatInterface({
           if (titleContent) {
             generateTitle([{ role: 'user', content: titleContent }])
               .then((generated) => {
-                if (!generated || generated === 'Untitled') return
+                if (!generated || generated === DEFAULT_CHAT_TITLE) return
                 // If the user navigated away while the title was generating,
                 // skip persistence for the inactive chat.
                 const active = currentChatRef.current

@@ -1,5 +1,6 @@
 import { CONSTANTS } from '@/components/chat/constants'
 import type { Message } from '@/components/chat/types'
+import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { logError } from '@/utils/error-handling'
 import { summarize } from './summary-client'
 
@@ -24,11 +25,11 @@ export function getTitleContent(
 export async function generateTitle(
   messages: Array<{ role: string; content: string }>,
 ): Promise<string> {
-  if (!messages || messages.length === 0) return 'Untitled'
+  if (!messages || messages.length === 0) return DEFAULT_CHAT_TITLE
 
   try {
     const userMessage = messages.find((msg) => msg.role === 'user')
-    if (!userMessage?.content) return 'Untitled'
+    if (!userMessage?.content) return DEFAULT_CHAT_TITLE
 
     const words = userMessage.content.split(/\s+/)
     const truncatedContent = words
@@ -44,12 +45,12 @@ export async function generateTitle(
     if (cleanTitle && cleanTitle.length > 0 && cleanTitle.length <= 50) {
       return cleanTitle
     }
-    return 'Untitled'
+    return DEFAULT_CHAT_TITLE
   } catch (error) {
     logError('Failed to generate title', error, {
       component: 'title',
       action: 'generateTitle',
     })
-    return 'Untitled'
+    return DEFAULT_CHAT_TITLE
   }
 }

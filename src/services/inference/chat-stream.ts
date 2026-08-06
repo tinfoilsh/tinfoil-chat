@@ -39,6 +39,10 @@ export interface ChatChunk {
 
 export type ChatChunkStream = AsyncIterable<ChatChunk>
 
+function isChatChunk(value: unknown): value is ChatChunk {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 export async function* chatChunkStreamFromSSE(
   response: Response,
 ): AsyncGenerator<ChatChunk, void, undefined> {
@@ -68,7 +72,11 @@ export async function* chatChunkStreamFromSSE(
 
         try {
           const jsonData = line.replace(/^data:\s*/i, '')
-          yield JSON.parse(jsonData) as ChatChunk
+          const chunk: unknown = JSON.parse(jsonData)
+          if (!isChatChunk(chunk)) {
+            throw new TypeError('SSE data must be a JSON object')
+          }
+          yield chunk
         } catch (error) {
           logError('Failed to parse SSE line', error, {
             component: 'chat-stream',

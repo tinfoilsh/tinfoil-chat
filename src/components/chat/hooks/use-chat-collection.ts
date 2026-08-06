@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from 'react'
+import { useCallback, useMemo, useReducer } from 'react'
 import type { Chat } from '../types'
 
 type EntityKey = string
@@ -31,8 +31,14 @@ function chatIdentity(chat: Chat): string {
   return chat.isLocalOnly ? 'empty:local' : 'empty:cloud'
 }
 
+function getEntity(entities: Map<EntityKey, Chat>, key: EntityKey): Chat {
+  const chat = entities.get(key)
+  if (!chat) throw new Error(`Missing chat entity for key "${key}"`)
+  return chat
+}
+
 function materializeChats(state: ChatCollectionState): Chat[] {
-  return state.orderedKeys.map((key) => state.entities.get(key)!)
+  return state.orderedKeys.map((key) => getEntity(state.entities, key))
 }
 
 function findOrderedKey(
@@ -40,7 +46,7 @@ function findOrderedKey(
   identity: string,
 ): EntityKey | undefined {
   return state.orderedKeys.find(
-    (key) => chatIdentity(state.entities.get(key)!) === identity,
+    (key) => chatIdentity(getEntity(state.entities, key)) === identity,
   )
 }
 
@@ -57,7 +63,7 @@ function initializeChatCollection({
   const currentIdentity = chatIdentity(currentChat)
   const currentKey =
     orderedKeys.find(
-      (key) => chatIdentity(entities.get(key)!) === currentIdentity,
+      (key) => chatIdentity(getEntity(entities, key)) === currentIdentity,
     ) ?? `${currentIdentity}:current:0`
 
   entities.set(currentKey, currentChat)
@@ -72,7 +78,7 @@ function reduceChatCollection(
   if (action.type === 'setCollection') {
     const next = action.action({
       chats: materializeChats(state),
-      currentChat: state.entities.get(state.currentKey)!,
+      currentChat: getEntity(state.entities, state.currentKey),
     })
     const currentIdentity = chatIdentity(next.currentChat)
 
@@ -92,14 +98,14 @@ function reduceChatCollection(
         : action.action
     const availableKeys = [...state.orderedKeys]
     const entities = new Map<EntityKey, Chat>()
-    const currentChat = state.entities.get(state.currentKey)!
+    const currentChat = getEntity(state.entities, state.currentKey)
     const currentIdentity = chatIdentity(currentChat)
     let nextDetachedKey = state.nextDetachedKey
 
     const orderedKeys = nextChats.map((chat) => {
       const identity = chatIdentity(chat)
       const existingIndex = availableKeys.findIndex(
-        (key) => chatIdentity(state.entities.get(key)!) === identity,
+        (key) => chatIdentity(getEntity(state.entities, key)) === identity,
       )
       let key: EntityKey
 
@@ -116,7 +122,7 @@ function reduceChatCollection(
     })
     const currentKey =
       orderedKeys.find(
-        (key) => chatIdentity(entities.get(key)!) === currentIdentity,
+        (key) => chatIdentity(getEntity(entities, key)) === currentIdentity,
       ) ?? state.currentKey
 
     if (!entities.has(currentKey)) {
@@ -126,7 +132,7 @@ function reduceChatCollection(
     return { entities, orderedKeys, currentKey, nextDetachedKey }
   }
 
-  const previousCurrent = state.entities.get(state.currentKey)!
+  const previousCurrent = getEntity(state.entities, state.currentKey)
   const nextCurrent =
     typeof action.action === 'function'
       ? action.action(previousCurrent)
@@ -191,10 +197,11 @@ export function useChatCollection(initializer: () => InitialChatCollection): {
       dispatch({ type: 'setCollection', action }),
     [],
   )
+  const chats = useMemo(() => materializeChats(state), [state])
 
   return {
-    chats: materializeChats(state),
-    currentChat: state.entities.get(state.currentKey)!,
+    chats,
+    currentChat: getEntity(state.entities, state.currentKey),
     setChats,
     setCurrentChat,
     setChatCollection,

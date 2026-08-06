@@ -11,6 +11,7 @@
  * citation processing identical to the main chat view.
  */
 import { resolveModelSelection, type BaseModel } from '@/config/models'
+import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { sendChatStream } from '@/services/inference/inference-client'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useRef, useState } from 'react'
@@ -102,6 +103,7 @@ export function useSidebarChat({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
+      streamingTracker.endStreaming(EPHEMERAL_CHAT_ID)
     }
     setLoadingState('idle')
     setRetryInfo(null)
@@ -195,6 +197,12 @@ export function useSidebarChat({
             webSearchEnabled,
             piiCheckEnabled,
           })
+          if (
+            abortControllerRef.current !== controller ||
+            controller.signal.aborted
+          ) {
+            return
+          }
 
           const assistantMessage = await processStreamingResponse(response, {
             streamChatIdRef,

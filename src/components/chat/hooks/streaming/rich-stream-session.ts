@@ -223,6 +223,7 @@ export class RichStreamSession {
         break
       case 'url_fetch':
         this.applyURLFetch(event)
+        this.markFirstEvent()
         break
       case 'code_exec_tool_call':
         this.applyCodeExec(event)

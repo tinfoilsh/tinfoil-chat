@@ -40,6 +40,7 @@ export async function processStreamingResponse(
   if (ctx.signal?.aborted) publishInterruption()
 
   try {
+    if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
 
     for await (const chunk of stream) {
@@ -54,6 +55,7 @@ export async function processStreamingResponse(
 
     const message = session.complete(ctx.turnId)
     if (session.hasChanges) await publisher.finish(message)
+    if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     publicationCompleted = true
     streamLogger?.flush(streamingChatId)
     return message

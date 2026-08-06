@@ -23,6 +23,16 @@ function renderCollection(chats: Chat[], currentChat: Chat = chats[0]) {
 }
 
 describe('useChatCollection', () => {
+  it('preserves the chats reference across unrelated renders', () => {
+    const chat = createChat()
+    const { result, rerender } = renderCollection([chat])
+    const initialChats = result.current.chats
+
+    rerender()
+
+    expect(result.current.chats).toBe(initialChats)
+  })
+
   it('immediately reflects list entity updates in the current chat', () => {
     const chat = createChat()
     const { result } = renderCollection([chat])
