@@ -59,7 +59,7 @@ This response includes multiple paragraphs to test scrolling behavior when longe
       .fill(0)
       .map(
         (_, i) =>
-          `Thought ${i + 1}: Processing complex information and considering various factors...`
+          `Thought ${i + 1}: Processing complex information and considering various factors...`,
       )
       .join('\n'),
     content: 'Brief response after extensive thinking.',
@@ -164,9 +164,7 @@ function escapeJson(str) {
 
 function delay(ms, variance = 0) {
   const actualDelay =
-    variance > 0
-      ? ms + (Math.random() - 0.5) * 2 * variance
-      : ms
+    variance > 0 ? ms + (Math.random() - 0.5) * 2 * variance : ms
   return new Promise((resolve) => setTimeout(resolve, Math.max(1, actualDelay)))
 }
 
@@ -175,24 +173,18 @@ async function* simulateStream(query) {
 
   await delay(1000)
 
-  // If there are thoughts, yield them first with thinking tags
   if (pattern.thoughts) {
-    yield 'data: {"choices":[{"delta":{"content":"<think>"}}]}\n\n'
-
     const thoughtChunks = chunkText(pattern.thoughts, pattern.chunkSize || 5)
     for (const chunk of thoughtChunks) {
-      yield `data: {"choices":[{"delta":{"content":"${escapeJson(chunk)}"}}]}\n\n`
+      yield `data: {"choices":[{"delta":{"reasoning_content":"${escapeJson(chunk)}"}}]}\n\n`
       await delay(pattern.streamDelayMs || 40)
     }
-
-    yield 'data: {"choices":[{"delta":{"content":"</think>\\n\\n"}}]}\n\n'
 
     if (pattern.thinkingDurationMs) {
       await delay(pattern.thinkingDurationMs)
     }
   }
 
-  // Stream main content in chunks
   const contentChunks = chunkText(pattern.content, pattern.chunkSize || 7)
   for (const chunk of contentChunks) {
     yield `data: {"choices":[{"delta":{"content":"${escapeJson(chunk)}"}}]}\n\n`

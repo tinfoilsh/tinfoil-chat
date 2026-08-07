@@ -504,7 +504,6 @@ export async function* simulateStream(
 
   await delay(1000)
 
-  // If there are thoughts, yield them first as reasoning content
   if (pattern.thoughts) {
     if (onThinkingStart) {
       onThinkingStart()
