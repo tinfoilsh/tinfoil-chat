@@ -1,4 +1,3 @@
-import { ChatError } from '@/components/chat/chat-utils'
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { ChatQueryBuilder } from '@/services/inference/chat-query-builder'
@@ -139,26 +138,6 @@ describe('ChatQueryBuilder', () => {
       expect(second).toEqual(first)
     } finally {
       vi.useRealTimers()
-    }
-  })
-
-  it('surfaces an oversized newest turn as a structured context error', () => {
-    try {
-      ChatQueryBuilder.buildMessages({
-        model: { ...model, contextWindow: '128k tokens' },
-        contextWindows: ['128k tokens', '32k tokens'],
-        systemPrompt: 'be helpful',
-        messages: [
-          {
-            ...userMessage,
-            content: 'x'.repeat(120000),
-          },
-        ],
-      })
-      throw new Error('Expected request context limit')
-    } catch (error) {
-      expect(error).toBeInstanceOf(ChatError)
-      expect((error as ChatError).code).toBe('CONTEXT_LIMIT')
     }
   })
 })

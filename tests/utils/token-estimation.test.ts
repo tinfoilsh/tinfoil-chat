@@ -1,49 +1,66 @@
 import type { Message } from '@/components/chat/types'
 import {
-  CONTEXT_BUDGET,
-  RequestContextLimitError,
+  CONTEXT_WINDOW_USAGE_RATIO,
   estimateMessageTokens,
   estimateTokenCount,
   findContextStartIndex,
   getContextTokenBudget,
-  getMinimumContextWindowTokens,
   parseContextWindowTokens,
-  planRequestContext,
-  selectMessagesForRequest,
   selectMessagesWithinBudget,
 } from '@/utils/token-estimation'
 import { describe, expect, it } from 'vitest'
 
-function makeMessage(role: 'user' | 'assistant', tokenCount: number): Message {
+function makeMessage(
+  role: 'user' | 'assistant',
+  contentLength: number,
+): Message {
   return {
     role,
-    content: 'a'.repeat(tokenCount * CONTEXT_BUDGET.charsPerToken),
+    content: 'a'.repeat(contentLength),
     timestamp: new Date(),
   }
 }
 
-const baseBudget = {
-  contextWindows: ['64k tokens'],
-  systemInstructions: '',
-  isMultimodal: false,
-}
-
-describe('token estimation', () => {
-  it('estimates roughly four characters per token', () => {
+describe('estimateTokenCount', () => {
+  it('estimates roughly 4 characters per token', () => {
     expect(estimateTokenCount('a'.repeat(400))).toBe(100)
     expect(estimateTokenCount('abc')).toBe(1)
+    expect(estimateTokenCount('')).toBe(0)
     expect(estimateTokenCount(undefined)).toBe(0)
   })
+})
 
-  it('counts persisted message content without thoughts', () => {
-    const message: Message = {
+describe('parseContextWindowTokens', () => {
+  it('parses "64k tokens" style values', () => {
+    expect(parseContextWindowTokens('64k tokens')).toBe(64000)
+    expect(parseContextWindowTokens('256K tokens')).toBe(256000)
+    expect(parseContextWindowTokens('32000')).toBe(32000)
+  })
+
+  it('falls back to a default for missing or malformed values', () => {
+    expect(parseContextWindowTokens(undefined)).toBe(64000)
+    expect(parseContextWindowTokens('unknown')).toBe(64000)
+  })
+})
+
+describe('getContextTokenBudget', () => {
+  it('reserves headroom below the full context window', () => {
+    expect(getContextTokenBudget('100k tokens')).toBe(
+      Math.floor(100000 * CONTEXT_WINDOW_USAGE_RATIO),
+    )
+  })
+})
+
+describe('estimateMessageTokens', () => {
+  it('includes quote and attachment text but not thoughts', () => {
+    const msg: Message = {
       role: 'user',
       content: 'a'.repeat(40),
       thoughts: 'b'.repeat(40),
       quote: 'c'.repeat(40),
       attachments: [
         {
-          id: 'document',
+          id: '1',
           type: 'document',
           fileName: 'doc.txt',
           textContent: 'd'.repeat(40),
@@ -51,204 +68,65 @@ describe('token estimation', () => {
       ],
       timestamp: new Date(),
     }
-    expect(estimateMessageTokens(message)).toBe(30)
-  })
-})
-
-describe('request context budgeting', () => {
-  it.each([
-    ['32k tokens', 32000],
-    ['64k tokens', 64000],
-    ['128k tokens', 128000],
-  ])(
-    'preserves a conservative margin at the %s boundary',
-    (window, expected) => {
-      const safeLimit = Math.floor(
-        expected * CONTEXT_BUDGET.contextWindowUsageRatio,
-      )
-      const payloadLimit =
-        safeLimit -
-        CONTEXT_BUDGET.outputReserveTokens -
-        CONTEXT_BUDGET.requestOverheadTokens -
-        CONTEXT_BUDGET.messageOverheadTokens
-      const budget = {
-        ...baseBudget,
-        contextWindows: [window],
-      }
-      const plan = planRequestContext(
-        [makeMessage('user', payloadLimit)],
-        budget,
-      )
-      expect(plan.limitTokens).toBe(safeLimit)
-      expect(plan.usedTokens).toBe(safeLimit)
-      expect(() =>
-        selectMessagesForRequest(
-          [makeMessage('user', payloadLimit + 1)],
-          budget,
-        ),
-      ).toThrow(RequestContextLimitError)
-    },
-  )
-
-  it('uses the smallest window among mixed Auto candidates', () => {
-    expect(
-      getMinimumContextWindowTokens([
-        '128k tokens',
-        '32k tokens',
-        '64k tokens',
-      ]),
-    ).toBe(32000)
+    expect(estimateMessageTokens(msg)).toBe(30)
   })
 
-  it('deducts large system and project context before selecting history', () => {
-    const messages = [
-      makeMessage('user', 10000),
-      makeMessage('assistant', 10000),
-      makeMessage('user', 10000),
-    ]
-    const plan = planRequestContext(messages, {
-      ...baseBudget,
-      contextWindows: ['32k tokens'],
-      systemInstructions: 's'.repeat(20000),
-    })
-    expect(plan.startIndex).toBe(2)
-    expect(plan.fixedTokens).toBeGreaterThan(CONTEXT_BUDGET.outputReserveTokens)
-  })
-
-  it('deducts GenUI tool schemas and the time reminder', () => {
-    const withoutTools = planRequestContext([], baseBudget)
-    const withTools = planRequestContext([], {
-      ...baseBudget,
-      toolDefinitions: JSON.stringify({ tools: 'x'.repeat(16000) }),
-      timeReminder: '<system-reminder>time</system-reminder>',
-    })
-    expect(withTools.availableTokens).toBeLessThan(withoutTools.availableTokens)
-  })
-
-  it('reserves context for router-provided tools', () => {
-    const withoutRouterTools = planRequestContext([], baseBudget)
-    const withRouterTools = planRequestContext([], {
-      ...baseBudget,
-      additionalToolCount: 2,
-    })
-
-    expect(
-      withoutRouterTools.availableTokens - withRouterTools.availableTokens,
-    ).toBe(CONTEXT_BUDGET.routerToolAllowanceTokens * 2)
-  })
-
-  it('enforces the message cap when only fixed messages are present', () => {
-    const plan = planRequestContext([], {
-      ...baseBudget,
-      systemInstructions: 'system prompt',
-      maxMessages: 0,
-    })
-
-    expect(plan.exceedsLimit).toBe(true)
-  })
-
-  it('enforces the fixed message cap with an empty assistant placeholder', () => {
-    const plan = planRequestContext([makeMessage('assistant', 0)], {
-      ...baseBudget,
-      systemInstructions: 'system prompt',
-      maxMessages: 0,
-    })
-
-    expect(plan.exceedsLimit).toBe(true)
-  })
-
-  it('keeps complete recent turns and assistant tool-call result groups', () => {
-    const messages = [
-      makeMessage('user', 14000),
-      makeMessage('assistant', 14000),
-      makeMessage('user', 100),
-      {
-        ...makeMessage('assistant', 100),
-        toolCalls: [
-          { id: 'call_1', name: 'render_chart', arguments: '{"value":1}' },
-        ],
-      },
-    ]
-    const selected = selectMessagesForRequest(messages, {
-      ...baseBudget,
-      contextWindows: ['32k tokens'],
-    })
-    expect(selected).toEqual(messages.slice(2))
-  })
-
-  it('throws a typed error instead of sending an oversized newest turn', () => {
-    const oversized = [makeMessage('user', 30000)]
-    expect(() =>
-      selectMessagesForRequest(oversized, {
-        ...baseBudget,
-        contextWindows: ['32k tokens'],
-      }),
-    ).toThrow(RequestContextLimitError)
-  })
-
-  it('accounts for a conservative multimodal image allowance', () => {
-    const imageMessage: Message = {
-      role: 'user',
-      content: 'describe this',
-      attachments: [
+  it('counts assistant tool calls and search reasoning', () => {
+    const msg: Message = {
+      role: 'assistant',
+      content: 'a'.repeat(40),
+      searchReasoning: 'b'.repeat(40),
+      toolCalls: [
         {
-          id: 'image',
-          type: 'image',
-          fileName: 'image.png',
-          mimeType: 'image/png',
-          base64: 'data',
+          id: 'call_1',
+          name: 'cccc',
+          arguments: 'd'.repeat(40),
         },
       ],
       timestamp: new Date(),
     }
-    const textPlan = planRequestContext([imageMessage], baseBudget)
-    const imagePlan = planRequestContext([imageMessage], {
-      ...baseBudget,
-      isMultimodal: true,
-    })
-    expect(imagePlan.usedTokens - textPlan.usedTokens).toBe(
-      CONTEXT_BUDGET.imageInputAllowanceTokens,
-    )
+    expect(estimateMessageTokens(msg)).toBe(31)
   })
 })
 
-describe('parseContextWindowTokens', () => {
-  it('parses reported windows and falls back for malformed values', () => {
-    expect(parseContextWindowTokens('64k tokens')).toBe(64000)
-    expect(parseContextWindowTokens('128K tokens')).toBe(128000)
-    expect(parseContextWindowTokens('unknown')).toBe(64000)
-  })
-})
-
-describe('legacy history helpers', () => {
-  it('keeps the conservative context budget used by fallback views', () => {
-    expect(getContextTokenBudget('100k tokens')).toBe(
-      90000 -
-        CONTEXT_BUDGET.outputReserveTokens -
-        CONTEXT_BUDGET.requestOverheadTokens,
-    )
-  })
-
-  it('archives oldest messages and keeps the latest substantive message', () => {
+describe('findContextStartIndex', () => {
+  it('returns 0 when all messages fit', () => {
     const messages = [
-      makeMessage('user', 100),
-      makeMessage('assistant', 100),
-      makeMessage('user', 100),
+      makeMessage('user', 40),
+      makeMessage('assistant', 40),
+      makeMessage('user', 40),
     ]
-
-    expect(findContextStartIndex(messages, 250)).toBe(1)
-    expect(findContextStartIndex([makeMessage('user', 1000)], 10)).toBe(0)
+    expect(findContextStartIndex(messages, 1000)).toBe(0)
   })
 
-  it('selects the newest fallback history within the safe model budget', () => {
+  it('archives the oldest messages once the budget is exceeded', () => {
+    // Each message is ~100 tokens; budget fits only the last two
     const messages = [
       makeMessage('user', 400),
       makeMessage('assistant', 400),
       makeMessage('user', 400),
+      makeMessage('assistant', 400),
     ]
+    expect(findContextStartIndex(messages, 250)).toBe(2)
+  })
 
-    expect(selectMessagesWithinBudget(messages, '1k tokens')).toEqual([
-      messages[2],
-    ])
+  it('always keeps the most recent message even when over budget', () => {
+    const messages = [makeMessage('user', 400), makeMessage('user', 4000)]
+    expect(findContextStartIndex(messages, 10)).toBe(1)
+  })
+})
+
+describe('selectMessagesWithinBudget', () => {
+  it('selects the most recent messages that fit the model budget', () => {
+    // 1k-token context window → 900-token budget; each message is 400 tokens
+    const messages = [
+      makeMessage('user', 1600),
+      makeMessage('assistant', 1600),
+      makeMessage('user', 1600),
+    ]
+    const selected = selectMessagesWithinBudget(messages, '1k tokens')
+    expect(selected).toHaveLength(2)
+    expect(selected[0]).toBe(messages[1])
+    expect(selected[1]).toBe(messages[2])
   })
 })

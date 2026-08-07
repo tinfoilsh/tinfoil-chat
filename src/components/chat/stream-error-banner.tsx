@@ -101,7 +101,6 @@ function classifyError({
     return CLASSIFICATIONS['rate-limit']
   }
   if (code === 'SERVER_ERROR') return CLASSIFICATIONS.server
-  if (code === 'CONTEXT_LIMIT') return CLASSIFICATIONS['context-length']
 
   const lower = message.toLowerCase()
 
@@ -174,13 +173,10 @@ export function StreamErrorBanner({
   // connection failures instead of the ambiguous "Try again" (which reads
   // like it might just reconnect). While offline the resend is gated —
   // it would only burn the automatic in-request retries and fail again.
-  const isConnectionError = error.code === 'FETCH_ERROR'
+  const isConnectionError = kind === 'connection'
   // A rate-limited request will fail identically until the limit resets,
   // so a retry button is just an invitation to frustration.
-  const isLimitError =
-    error.code === 'RATE_LIMIT' ||
-    error.code === 'HOURLY_LIMIT' ||
-    error.code === 'CONTEXT_LIMIT'
+  const isLimitError = kind === 'rate-limit'
   const retryLabel = isConnectionError ? 'Resend message' : 'Try again'
   const retryDisabled = isConnectionError && !isOnline
   const showRetry = !!onRetry && !isLimitError

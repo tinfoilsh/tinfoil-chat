@@ -67,7 +67,6 @@ type ChatMessagesProps = {
   activePromptPreset?: PromptPreset | null
   onOpenPromptLibrary?: () => void
   onSelectPromptPreset?: (presetId: string | null) => void
-  contextStartIndex?: number
 }
 
 // Optimized wrapper component that receives expanded state from parent
@@ -277,7 +276,6 @@ export function ChatMessages({
   activePromptPreset,
   onOpenPromptLibrary,
   onSelectPromptPreset,
-  contextStartIndex,
 }: ChatMessagesProps) {
   const [mounted, setMounted] = useState(false)
   const [showSpacer, setShowSpacer] = useState(false)
@@ -338,13 +336,12 @@ export function ChatMessages({
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const budget = getContextTokenBudget(currentModel?.contextWindow)
-    const startIndex =
-      contextStartIndex ?? findContextStartIndex(messages, budget)
+    const startIndex = findContextStartIndex(messages, budget)
     return {
       archivedMessages: messages.slice(0, startIndex),
       liveMessages: messages.slice(startIndex),
     }
-  }, [messages, currentModel?.contextWindow, contextStartIndex])
+  }, [messages, currentModel?.contextWindow])
 
   useEffect(() => {
     setMounted(true)

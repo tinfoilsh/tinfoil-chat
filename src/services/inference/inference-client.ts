@@ -131,10 +131,6 @@ function delay(ms: number): Promise<void> {
 // Statuses the OpenAI SDK itself treats as retryable (client shouldRetry):
 // request timeout, lock timeout, and rate limit. 5xx is handled as a range.
 const RETRYABLE_HTTP_STATUSES = new Set([408, 409, 429])
-const CONTEXT_LIMIT_ERROR_CODES = new Set([
-  'context_length_exceeded',
-  'context_window_exceeded',
-])
 const RECOVERY_SESSION_ID_BYTES = 16
 
 export function generateRecoverySessionId(): string {
@@ -265,7 +261,6 @@ export async function sendChatStream(
       messages: updatedMessages,
       includeGenUIHint: genUIEnabled,
       includeTimeReminder: true,
-      contextWindows: [model.contextWindow],
     })
 
     // Get the last user message for retry test check
@@ -385,13 +380,6 @@ export async function sendChatStream(
     includeGenUIHint: genUIEnabled,
     forcePrependSystemPrompt,
     includeTimeReminder: true,
-    contextWindows: (autoCandidates ?? [model]).map(
-      (candidate) => candidate.contextWindow,
-    ),
-    toolDefinitions:
-      genUITools.length > 0 ? JSON.stringify(genUITools) : undefined,
-    additionalToolCount:
-      (webSearchEnabled ? 1 : 0) + (codeExecutionEnabled ? 1 : 0),
   })
 
   let lastError: unknown = null
@@ -607,21 +595,9 @@ function toTerminalChatError(err: unknown, retries?: number): ChatError {
   if (err instanceof ChatError) {
     return err
   }
-  const anyErr = err as {
-    message?: string
-    status?: unknown
-    code?: unknown
-    error?: { code?: unknown }
-  }
+  const anyErr = err as { message?: string; status?: unknown }
   const msg = anyErr?.message || 'Unknown network error'
   const status = typeof anyErr?.status === 'number' ? anyErr.status : undefined
-  const errorCode = anyErr?.code ?? anyErr?.error?.code
-  if (
-    typeof errorCode === 'string' &&
-    CONTEXT_LIMIT_ERROR_CODES.has(errorCode)
-  ) {
-    return new ChatError(msg, 'CONTEXT_LIMIT', { status })
-  }
   if (status === 429) {
     return new ChatError(msg, 'RATE_LIMIT', { status })
   }

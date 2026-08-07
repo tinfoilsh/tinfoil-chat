@@ -2,7 +2,6 @@ import {
   findSelectableModel,
   getAIModels,
   getSystemPromptAndRules,
-  resolveModelSelection,
   type BaseModel,
 } from '@/config/models'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
@@ -85,16 +84,16 @@ import {
   setProjectUploadPreference,
 } from '@/utils/project-upload-preference'
 import { generateReverseId } from '@/utils/reverse-id'
-import { formatCurrentTimeReminder } from '@/utils/time-reminder'
 import {
+  estimateMessageTokens,
   estimateTokenCount,
-  planRequestContext,
+  findContextStartIndex,
+  getContextTokenBudget,
 } from '@/utils/token-estimation'
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getMessageImages } from './attachment-helpers'
 
 import { SubscribePromptModal } from '../modals/subscribe-prompt-modal'
 import { UrlHashMessageHandler } from '../url-hash-message-handler'
@@ -111,8 +110,6 @@ import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
 import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
 import { selectPendingInputToolCallFromChat } from './genui/pending-input-tool-call'
-import { buildGenUIToolSchemas } from './genui/registry'
-import { buildGenUIPromptHint } from './genui/system-prompt'
 import {
   artifactDetailsEqual,
   OPEN_ARTIFACT_PREVIEW_EVENT,
@@ -138,7 +135,7 @@ import { QuoteSelectionPopover } from './quote-selection-popover'
 import { initializeRenderers } from './renderers/client'
 import type { ProcessedDocument } from './renderers/types'
 import type { SettingsTab } from './settings-modal'
-import type { Attachment, Chat, DocumentPage, Message } from './types'
+import type { Attachment, Chat, DocumentPage } from './types'
 // Lazy-load modals that aren't shown on initial load. The loaders are
 // hoisted so they can be pre-warmed (see preloadCloudSyncModals) before
 // the user clicks, keeping the chunk fetch off the click critical path.
@@ -240,129 +237,6 @@ function buildAttachment(opts: {
     }
   }
   return undefined
-}
-
-function getCompletedAttachments(
-  processedDocuments: ProcessedDocument[],
-): Attachment[] {
-  return processedDocuments
-    .filter(
-      (document) =>
-        !document.isUploading &&
-        !document.isGeneratingDescription &&
-        !document.isUnsupported &&
-        (!document.isImageDescription ||
-          document.imageData ||
-          document.attachment),
-    )
-    .map((document) => {
-      if (document.attachment) return document.attachment
-      return (
-        buildAttachment({
-          id: document.id,
-          fileName: document.name,
-          imageData: document.imageData ?? undefined,
-          textContent: document.content ?? undefined,
-          description:
-            document.isImageDescription && document.content
-              ? document.content
-              : undefined,
-        }) ?? {
-          id: document.id,
-          type: 'document' as const,
-          fileName: document.name,
-        }
-      )
-    })
-}
-
-function buildRequestContextPlan({
-  history,
-  input,
-  quote,
-  pendingAttachments,
-  selectedModel,
-  models,
-  systemPrompt,
-  rules,
-  webSearchEnabled,
-  codeExecutionEnabled,
-  genUIEnabled,
-}: {
-  history: Message[]
-  input: string
-  quote?: string | null
-  pendingAttachments: Attachment[]
-  selectedModel: string
-  models: BaseModel[]
-  systemPrompt: string
-  rules: string
-  webSearchEnabled: boolean
-  codeExecutionEnabled: boolean
-  genUIEnabled: boolean
-}) {
-  const pendingMessage: Message | null =
-    input.trim() || quote || pendingAttachments.length > 0
-      ? {
-          role: 'user',
-          content: input.trim(),
-          attachments: pendingAttachments,
-          quote: quote ?? undefined,
-          timestamp: new Date(),
-        }
-      : null
-  const messages = pendingMessage ? [...history, pendingMessage] : history
-  const preferMultimodal = messages.some(
-    (message) => getMessageImages(message).length > 0,
-  )
-  const preferToolCalling = Boolean(
-    webSearchEnabled || codeExecutionEnabled || genUIEnabled,
-  )
-  const { model, autoCandidates } = resolveModelSelection(
-    selectedModel,
-    models,
-    { preferMultimodal, preferToolCalling },
-  )
-  if (!model) return null
-
-  const processedSystemPrompt = systemPrompt.replaceAll(
-    '{MODEL_NAME}',
-    model.name,
-  )
-  const processedRules = rules.replaceAll('{MODEL_NAME}', model.name)
-  const genUIHint = genUIEnabled ? buildGenUIPromptHint() : null
-  const prependSystemPrompt = Boolean(
-    autoCandidates?.some((candidate) =>
-      candidate.modelName.startsWith('deepseek'),
-    ) || model.modelName.startsWith('deepseek'),
-  )
-  const baseInstructions = processedRules
-    ? `${processedSystemPrompt}${prependSystemPrompt ? '\n\n' : '\n'}${processedRules}`
-    : processedSystemPrompt
-  const effectiveInstructions = genUIHint
-    ? `${baseInstructions}\n\n${genUIHint}`
-    : baseInstructions
-  const systemInstructions =
-    prependSystemPrompt && effectiveInstructions.trim()
-      ? `<system>\n${effectiveInstructions}\n</system>`
-      : effectiveInstructions
-  const genUITools =
-    genUIEnabled && model.modelName !== 'dev-simulator'
-      ? buildGenUIToolSchemas()
-      : []
-
-  return planRequestContext(messages, {
-    contextWindows: (autoCandidates ?? [model]).map(
-      (candidate) => candidate.contextWindow,
-    ),
-    systemInstructions,
-    toolDefinitions:
-      genUITools.length > 0 ? JSON.stringify(genUITools) : undefined,
-    timeReminder: formatCurrentTimeReminder(),
-    isMultimodal: model.multimodal === true,
-    additionalToolCount:
-      (webSearchEnabled ? 1 : 0) + (codeExecutionEnabled ? 1 : 0),
-  })
 }
 
 export function ChatInterface({
@@ -615,8 +489,6 @@ export function ChatInterface({
     const saved = localStorage.getItem(SETTINGS_CODE_EXECUTION_ENABLED)
     return saved === null ? false : saved === 'true'
   })
-  const effectiveCodeExecutionEnabled =
-    canUseCodeExecution && codeExecutionEnabled
 
   // PII check setting (controlled from settings modal, defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
@@ -916,7 +788,7 @@ export function ChatInterface({
     // Feature flag gates key derivation in useExecSnapshot; the toggle
     // gates request plumbing. Both layers must be on to use code-exec.
     canUseCodeExecution,
-    codeExecutionEnabled: effectiveCodeExecutionEnabled,
+    codeExecutionEnabled: canUseCodeExecution ? codeExecutionEnabled : false,
     piiCheckEnabled,
     genUIEnabled,
   })
@@ -2160,33 +2032,6 @@ export function ChatInterface({
     [reloadChats, toast],
   )
 
-  const processedDocumentsRef = useRef(processedDocuments)
-  processedDocumentsRef.current = processedDocuments
-  const requestContextRef = useRef({
-    history: currentChat?.messages ?? [],
-    input,
-    quote,
-    selectedModel,
-    models,
-    systemPrompt: finalSystemPrompt,
-    rules: processedRules,
-    webSearchEnabled: effectiveWebSearchEnabled,
-    codeExecutionEnabled: effectiveCodeExecutionEnabled,
-    genUIEnabled,
-  })
-  requestContextRef.current = {
-    history: currentChat?.messages ?? [],
-    input,
-    quote,
-    selectedModel,
-    models,
-    systemPrompt: finalSystemPrompt,
-    rules: processedRules,
-    webSearchEnabled: effectiveWebSearchEnabled,
-    codeExecutionEnabled: effectiveCodeExecutionEnabled,
-    genUIEnabled,
-  }
-
   // Helper to process file and add to chat attachments
   const processFileForChat = useCallback(
     async (file: File) => {
@@ -2219,6 +2064,33 @@ export function ChatInterface({
         file,
         (content, documentId, imageData, hasDescription, pages) => {
           const newDocTokens = estimateTokenCount(content)
+          const contextBudget = getContextTokenBudget(
+            selectedModelDetails?.contextWindow,
+          )
+
+          // Attachments are part of the next message, which cannot be
+          // archived, so all pending attachments together must fit within
+          // the context budget.
+          const pendingTokens = processedDocuments.reduce(
+            (total, doc) => total + estimateTokenCount(doc.content),
+            0,
+          )
+
+          if (pendingTokens + newDocTokens > contextBudget) {
+            setProcessedDocuments((prev) =>
+              prev.filter((doc) => doc.id !== tempDocId),
+            )
+
+            toast({
+              title: 'Attachment too large for this model',
+              description: `"${file.name}" needs ~${Math.round(newDocTokens / 1000)}k tokens but this model can fit ~${Math.round((contextBudget - pendingTokens) / 1000)}k. Remove an attachment or switch to a model with a larger context window.`,
+              variant: 'destructive',
+              position: 'top-right',
+            })
+            return
+          }
+
+          // Build an Attachment object from the upload result
           const attachment = buildAttachment({
             id: documentId,
             fileName: file.name,
@@ -2227,66 +2099,7 @@ export function ChatInterface({
             description: hasDescription && content ? content : undefined,
             pages,
           })
-          const latestContext = requestContextRef.current
-          const pendingAttachments = [
-            ...getCompletedAttachments(
-              processedDocumentsRef.current.filter(
-                (doc) => doc.id !== tempDocId,
-              ),
-            ),
-            attachment ?? {
-              id: documentId,
-              type: 'document' as const,
-              fileName: file.name,
-              textContent: content ?? undefined,
-            },
-          ]
-          const contextPlan = buildRequestContextPlan({
-            history: latestContext.history,
-            input: latestContext.input,
-            quote: latestContext.quote,
-            pendingAttachments,
-            selectedModel: latestContext.selectedModel,
-            models: latestContext.models,
-            systemPrompt: latestContext.systemPrompt,
-            rules: latestContext.rules,
-            webSearchEnabled: latestContext.webSearchEnabled,
-            codeExecutionEnabled: latestContext.codeExecutionEnabled,
-            genUIEnabled: latestContext.genUIEnabled,
-          })
 
-          if (contextPlan?.exceedsLimit) {
-            const remainingDocuments = processedDocumentsRef.current.filter(
-              (doc) => doc.id !== tempDocId,
-            )
-            processedDocumentsRef.current = remainingDocuments
-            setProcessedDocuments(remainingDocuments)
-
-            toast({
-              title: 'Attachment too large for this model',
-              description: `"${file.name}" adds ~${Math.round(newDocTokens / 1000)}k tokens and does not fit with the current prompt and attachments. Remove an attachment or switch to a model with a larger context window.`,
-              variant: 'destructive',
-              position: 'top-right',
-            })
-            return
-          }
-
-          processedDocumentsRef.current = processedDocumentsRef.current.map(
-            (doc) =>
-              doc.id === tempDocId
-                ? {
-                    id: documentId,
-                    name: file.name,
-                    time: new Date(),
-                    content,
-                    imageData,
-                    attachment,
-                    isImageDescription: !!imageData,
-                    hasDescription: hasDescription ?? !!content,
-                    isGeneratingDescription: false,
-                  }
-                : doc,
-          )
           setProcessedDocuments((prev) => {
             return prev.map((doc) =>
               doc.id === tempDocId
@@ -2306,11 +2119,9 @@ export function ChatInterface({
           })
         },
         (error) => {
-          const remainingDocuments = processedDocumentsRef.current.filter(
-            (doc) => doc.id !== tempDocId,
+          setProcessedDocuments((prev) =>
+            prev.filter((doc) => doc.id !== tempDocId),
           )
-          processedDocumentsRef.current = remainingDocuments
-          setProcessedDocuments(remainingDocuments)
 
           toast({
             title: 'Processing failed',
@@ -2343,7 +2154,12 @@ export function ChatInterface({
         },
       )
     },
-    [handleDocumentUpload, toast],
+    [
+      handleDocumentUpload,
+      processedDocuments,
+      selectedModelDetails?.contextWindow,
+      toast,
+    ],
   )
 
   // Helper to process file and add to project context
@@ -2504,47 +2320,39 @@ export function ChatInterface({
 
   // Calculate context usage (memoized to prevent re-calculation during streaming)
   const contextUsage = useMemo(() => {
-    const pendingAttachments = getCompletedAttachments(processedDocuments)
-    const plan = buildRequestContextPlan({
-      history: currentChat?.messages ?? [],
-      input,
-      quote,
-      pendingAttachments,
-      selectedModel,
-      models,
-      systemPrompt: finalSystemPrompt,
-      rules: processedRules,
-      webSearchEnabled: effectiveWebSearchEnabled,
-      codeExecutionEnabled: effectiveCodeExecutionEnabled,
-      genUIEnabled,
-    })
-    if (!plan) {
-      return {
-        percentage: 0,
-        usedTokens: 0,
-        limitTokens: 0,
-        startIndex: 0,
+    const limitTokens = getContextTokenBudget(
+      selectedModelDetails?.contextWindow,
+    )
+
+    let usedTokens = estimateTokenCount(input)
+
+    // Count tokens from messages (including their attachments), skipping
+    // archived messages that are excluded from the prompt
+    if (currentChat?.messages) {
+      const messages = currentChat.messages
+      const startIndex = findContextStartIndex(messages, limitTokens)
+      for (let i = startIndex; i < messages.length; i++) {
+        usedTokens += estimateMessageTokens(messages[i])
       }
     }
 
+    // Count tokens from pending documents not yet attached to a message
+    if (processedDocuments) {
+      processedDocuments.forEach((doc) => {
+        usedTokens += estimateTokenCount(doc.content)
+      })
+    }
+
     return {
-      percentage: (plan.usedTokens / plan.limitTokens) * 100,
-      usedTokens: plan.usedTokens,
-      limitTokens: plan.limitTokens,
-      startIndex: plan.startIndex,
+      percentage: (usedTokens / limitTokens) * 100,
+      usedTokens,
+      limitTokens,
     }
   }, [
     input,
-    quote,
     currentChat?.messages,
     processedDocuments,
-    selectedModel,
-    models,
-    finalSystemPrompt,
-    processedRules,
-    effectiveWebSearchEnabled,
-    effectiveCodeExecutionEnabled,
-    genUIEnabled,
+    selectedModelDetails?.contextWindow,
   ])
 
   // Tracks whether the user already saw and dismissed the rate-limit modal
@@ -2603,7 +2411,26 @@ export function ChatInterface({
     // This prevents the dip when thoughts start streaming
 
     // Build unified attachments array from completed documents
-    const attachments = getCompletedAttachments(completedDocuments)
+    const attachments: Attachment[] = completedDocuments
+      .filter(
+        (doc) => !doc.isImageDescription || doc.imageData || doc.attachment,
+      )
+      .map((doc) => {
+        // Use pre-built attachment if available
+        if (doc.attachment) return doc.attachment
+
+        // Build attachment from legacy ProcessedDocument fields
+        return (
+          buildAttachment({
+            id: doc.id,
+            fileName: doc.name,
+            imageData: doc.imageData ?? undefined,
+            textContent: doc.content ?? undefined,
+            description:
+              doc.isImageDescription && doc.content ? doc.content : undefined,
+          }) ?? { id: doc.id, type: 'document' as const, fileName: doc.name }
+        )
+      })
 
     setInput('')
     submitMessage({
@@ -3657,7 +3484,6 @@ export function ChatInterface({
                     activePromptPreset={activePreset}
                     onOpenPromptLibrary={handleOpenPromptLibrary}
                     onSelectPromptPreset={handleSetActivePreset}
-                    contextStartIndex={contextUsage.startIndex}
                   />
                 </div>
               </div>
