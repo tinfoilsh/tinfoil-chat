@@ -8,6 +8,7 @@ import { logError } from '@/utils/error-handling'
 import {
   FolderIcon,
   MicrophoneIcon,
+  Squares2X2Icon,
   StopIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -21,7 +22,6 @@ import {
 } from 'react'
 import {
   PiGlobe,
-  PiGlobeX,
   PiPaperclipLight,
   PiPlusLight,
   PiQuotes,
@@ -37,6 +37,18 @@ import { CONSTANTS } from './constants'
 import type { PromptPreset } from './prompts/types'
 import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
+
+function MenuCheckmark({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
 
 // Tracks every mounted textarea per shared external ref so an unmounting
 // instance can hand the shared ref over to a surviving instance.
@@ -270,8 +282,8 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // --- Mobile attachment menu state ---
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  // --- Input options menu state (the "+" button) ---
+  const [isInputMenuOpen, setIsInputMenuOpen] = useState(false)
 
   // Random placeholder - use first one initially to avoid SSR hydration mismatch,
   // then randomize after mount
@@ -1101,89 +1113,96 @@ export function ChatInput({
               {audioStatus}
             </span>
             <div className="flex items-center gap-1">
-              {/* Mobile: + button with dropdown menu */}
-              <div className="relative md:hidden">
+              {/* Unified + button opening the input options menu */}
+              <div className="relative">
                 <button
+                  id="input-options-button"
                   type="button"
-                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                  aria-label="Attachment options"
-                  aria-expanded={isMobileMenuOpen}
+                  onClick={() => setIsInputMenuOpen(!isInputMenuOpen)}
+                  aria-label="Input options"
+                  aria-expanded={isInputMenuOpen}
+                  aria-haspopup="menu"
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
                 >
                   <PiPlusLight className="h-5 w-5" />
                 </button>
-                {isMobileMenuOpen && (
+                {isInputMenuOpen && (
                   <>
                     <div
                       className="fixed inset-0 z-10"
-                      onClick={() => setIsMobileMenuOpen(false)}
+                      onClick={() => setIsInputMenuOpen(false)}
                     />
-                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[180px] rounded-xl border border-border-subtle bg-surface-chat py-1.5 shadow-lg">
+                    <div
+                      role="menu"
+                      className="absolute bottom-full left-0 z-20 mb-2 min-w-[220px] rounded-xl border border-border-subtle bg-surface-chat py-1.5 shadow-lg"
+                    >
                       <button
                         type="button"
+                        role="menuitem"
                         onClick={() => {
                           triggerFileInput()
-                          setIsMobileMenuOpen(false)
+                          setIsInputMenuOpen(false)
                         }}
                         className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                       >
                         <PiPaperclipLight className="h-5 w-5 text-content-secondary" />
                         Add files or photos
                       </button>
+                      {onOpenPromptLibrary && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            onOpenPromptLibrary()
+                            setIsInputMenuOpen(false)
+                          }}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
+                        >
+                          <Squares2X2Icon className="h-5 w-5 text-content-secondary" />
+                          Change system prompt
+                        </button>
+                      )}
+                      {(onWebSearchToggle || onCodeExecutionToggle) && (
+                        <div className="my-1.5 border-t border-border-subtle" />
+                      )}
                       {onWebSearchToggle && (
                         <button
                           type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={webSearchEnabled}
                           onClick={() => {
                             onWebSearchToggle()
-                            setIsMobileMenuOpen(false)
+                            setIsInputMenuOpen(false)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
                           <PiGlobe className="h-5 w-5 text-content-secondary" />
                           <span className="flex-1">Web search</span>
                           {webSearchEnabled && (
-                            <svg
-                              className="h-4 w-4 text-brand-accent-light"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
+                            <MenuCheckmark className="h-4 w-4 text-brand-accent-light" />
                           )}
                         </button>
                       )}
                       {onCodeExecutionToggle && (
                         <button
                           type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={codeExecutionEnabled}
                           onClick={() => {
                             onCodeExecutionToggle()
-                            setIsMobileMenuOpen(false)
+                            setIsInputMenuOpen(false)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
                           <PiTerminalWindow className="h-5 w-5 text-content-secondary" />
                           <span className="flex-1">Code execution</span>
                           {codeExecutionEnabled && (
-                            <svg
-                              className="h-4 w-4 text-brand-accent-light"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
+                            <MenuCheckmark className="h-4 w-4 text-brand-accent-light" />
                           )}
                         </button>
                       )}
                       {contextUsage && (
-                        <div className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary">
+                        <div className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary md:hidden">
                           <span className="flex-1">Context</span>
                           <ContextUsageIndicator usage={contextUsage} />
                         </div>
@@ -1192,92 +1211,46 @@ export function ChatInput({
                   </>
                 )}
               </div>
-
-              {/* Desktop: Original buttons */}
-              <div className="group relative hidden md:block">
+              {/* Web search stays visible outside the menu while enabled so
+                  its active state is glanceable and one-click to turn off. */}
+              {onWebSearchToggle && webSearchEnabled && (
                 <button
-                  id="upload-button"
+                  id="web-search-button"
                   type="button"
-                  onClick={triggerFileInput}
-                  aria-label="Upload document"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
+                  onClick={onWebSearchToggle}
+                  aria-label="Web search"
+                  aria-pressed
+                  className={cn(
+                    'flex h-7 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors',
+                    isDarkMode
+                      ? 'bg-brand-accent-light/20 text-brand-accent-light'
+                      : 'bg-brand-accent-dark/20 text-brand-accent-dark',
+                  )}
                 >
-                  <PiPaperclipLight className="h-5 w-5" />
+                  <PiGlobe className="h-5 w-5" />
+                  <span className="hidden translate-y-px text-xs font-medium leading-none md:inline">
+                    Search
+                  </span>
                 </button>
-                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                  Upload document
-                </span>
-              </div>
-              {onWebSearchToggle && (
-                <div className="group relative hidden md:block">
-                  <button
-                    id="web-search-button"
-                    type="button"
-                    onClick={onWebSearchToggle}
-                    aria-label="Web search"
-                    aria-pressed={webSearchEnabled}
-                    className={cn(
-                      'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
-                      webSearchEnabled
-                        ? cn(
-                            'px-2',
-                            isDarkMode
-                              ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                              : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                          )
-                        : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                    )}
-                  >
-                    {webSearchEnabled ? (
-                      <PiGlobe className="h-5 w-5" />
-                    ) : (
-                      <PiGlobeX className="h-5 w-5" />
-                    )}
-                    {webSearchEnabled && (
-                      <span className="translate-y-px text-xs font-medium leading-none">
-                        Search
-                      </span>
-                    )}
-                  </button>
-                  {!webSearchEnabled && (
-                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                      Web search
-                    </span>
-                  )}
-                </div>
               )}
-              {onCodeExecutionToggle && (
-                <div className="group relative hidden md:block">
-                  <button
-                    type="button"
-                    onClick={onCodeExecutionToggle}
-                    aria-label="Code execution"
-                    aria-pressed={codeExecutionEnabled}
-                    className={cn(
-                      'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
-                      codeExecutionEnabled
-                        ? cn(
-                            'px-2',
-                            isDarkMode
-                              ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                              : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                          )
-                        : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                    )}
-                  >
-                    <PiTerminalWindow className="h-5 w-5" />
-                    {codeExecutionEnabled && (
-                      <span className="translate-y-px text-xs font-medium leading-none">
-                        Code
-                      </span>
-                    )}
-                  </button>
-                  {!codeExecutionEnabled && (
-                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                      Code execution
-                    </span>
+              {onCodeExecutionToggle && codeExecutionEnabled && (
+                <button
+                  type="button"
+                  onClick={onCodeExecutionToggle}
+                  aria-label="Code execution"
+                  aria-pressed
+                  className={cn(
+                    'flex h-7 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors',
+                    isDarkMode
+                      ? 'bg-brand-accent-light/20 text-brand-accent-light'
+                      : 'bg-brand-accent-dark/20 text-brand-accent-dark',
                   )}
-                </div>
+                >
+                  <PiTerminalWindow className="h-5 w-5" />
+                  <span className="hidden translate-y-px text-xs font-medium leading-none md:inline">
+                    Code
+                  </span>
+                </button>
               )}
             </div>
 
