@@ -361,7 +361,7 @@ function buildRequestContextPlan({
     timeReminder: formatCurrentTimeReminder(),
     isMultimodal: model.multimodal === true,
     additionalToolCount:
-      Number(webSearchEnabled) + Number(codeExecutionEnabled),
+      (webSearchEnabled ? 1 : 0) + (codeExecutionEnabled ? 1 : 0),
   })
 }
 
@@ -615,6 +615,8 @@ export function ChatInterface({
     const saved = localStorage.getItem(SETTINGS_CODE_EXECUTION_ENABLED)
     return saved === null ? false : saved === 'true'
   })
+  const effectiveCodeExecutionEnabled =
+    canUseCodeExecution && codeExecutionEnabled
 
   // PII check setting (controlled from settings modal, defaults to on)
   const [piiCheckEnabled, setPiiCheckEnabled] = useState(() => {
@@ -914,7 +916,7 @@ export function ChatInterface({
     // Feature flag gates key derivation in useExecSnapshot; the toggle
     // gates request plumbing. Both layers must be on to use code-exec.
     canUseCodeExecution,
-    codeExecutionEnabled: canUseCodeExecution ? codeExecutionEnabled : false,
+    codeExecutionEnabled: effectiveCodeExecutionEnabled,
     piiCheckEnabled,
     genUIEnabled,
   })
@@ -2169,7 +2171,7 @@ export function ChatInterface({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
     webSearchEnabled: effectiveWebSearchEnabled,
-    codeExecutionEnabled,
+    codeExecutionEnabled: effectiveCodeExecutionEnabled,
     genUIEnabled,
   })
   requestContextRef.current = {
@@ -2181,7 +2183,7 @@ export function ChatInterface({
     systemPrompt: finalSystemPrompt,
     rules: processedRules,
     webSearchEnabled: effectiveWebSearchEnabled,
-    codeExecutionEnabled,
+    codeExecutionEnabled: effectiveCodeExecutionEnabled,
     genUIEnabled,
   }
 
@@ -2513,7 +2515,7 @@ export function ChatInterface({
       systemPrompt: finalSystemPrompt,
       rules: processedRules,
       webSearchEnabled: effectiveWebSearchEnabled,
-      codeExecutionEnabled,
+      codeExecutionEnabled: effectiveCodeExecutionEnabled,
       genUIEnabled,
     })
     if (!plan) {
@@ -2541,7 +2543,7 @@ export function ChatInterface({
     finalSystemPrompt,
     processedRules,
     effectiveWebSearchEnabled,
-    codeExecutionEnabled,
+    effectiveCodeExecutionEnabled,
     genUIEnabled,
   ])
 

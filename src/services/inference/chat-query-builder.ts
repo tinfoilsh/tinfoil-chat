@@ -164,16 +164,10 @@ export class ChatQueryBuilder {
 
         // For models that don't use system role (e.g. DeepSeek): inject system instructions as a separate user message before the first user message
         if (!addedSystemInstructions) {
-          const rawInstructions = processedRules
-            ? `${processedSystemPrompt}\n\n${processedRules}`
-            : processedSystemPrompt
-          const withHint = genUIHint
-            ? `${rawInstructions}\n\n${genUIHint}`
-            : rawInstructions
-          if (withHint.trim()) {
+          if (requestSystemInstructions) {
             result.push({
               role: 'user',
-              content: `<system>\n${withHint}\n</system>`,
+              content: requestSystemInstructions,
             } as ChatCompletionUserMessageParam)
           }
           addedSystemInstructions = true

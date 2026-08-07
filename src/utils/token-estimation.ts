@@ -248,7 +248,9 @@ export function planRequestContext(
       fixedTokens,
       limitTokens,
       availableTokens,
-      exceedsLimit: fixedTokens > limitTokens,
+      exceedsLimit:
+        fixedTokens > limitTokens ||
+        fixedMessages > (budget.maxMessages ?? Number.POSITIVE_INFINITY),
     }
   }
 

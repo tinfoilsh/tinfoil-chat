@@ -391,7 +391,7 @@ export async function sendChatStream(
     toolDefinitions:
       genUITools.length > 0 ? JSON.stringify(genUITools) : undefined,
     additionalToolCount:
-      Number(webSearchEnabled) + Number(codeExecutionEnabled),
+      (webSearchEnabled ? 1 : 0) + (codeExecutionEnabled ? 1 : 0),
   })
 
   let lastError: unknown = null

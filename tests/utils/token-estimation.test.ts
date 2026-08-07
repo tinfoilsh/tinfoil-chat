@@ -137,6 +137,16 @@ describe('request context budgeting', () => {
     ).toBe(CONTEXT_BUDGET.routerToolAllowanceTokens * 2)
   })
 
+  it('enforces the message cap when only fixed messages are present', () => {
+    const plan = planRequestContext([], {
+      ...baseBudget,
+      systemInstructions: 'system prompt',
+      maxMessages: 0,
+    })
+
+    expect(plan.exceedsLimit).toBe(true)
+  })
+
   it('keeps complete recent turns and assistant tool-call result groups', () => {
     const messages = [
       makeMessage('user', 14000),
