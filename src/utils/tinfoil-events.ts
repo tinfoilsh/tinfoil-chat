@@ -124,7 +124,7 @@ export function createTinfoilEventParser(): {
    * to be a partial open tag. If those bytes match the corresponding
    * prefix of OPEN_TAG exactly, hold them back; otherwise release
    * everything. This avoids stalling visible text whenever the model
-   * emits any `<` character (e.g. `<think>`, HTML, `x < y`, generics)
+   * emits any `<` character (e.g. HTML, `x < y`, generics)
    * which would otherwise batch up to 14 bytes per stall.
    */
   const openTagPrefixSuffixLength = (s: string): number => {

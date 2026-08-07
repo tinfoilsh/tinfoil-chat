@@ -49,7 +49,7 @@ describe('EventNormalizer', () => {
 
     it('emits separate deltas after first chunk is flushed', () => {
       const events = processAll([
-        contentChunk('hello world'), // > 5 chars, flushes immediately
+        contentChunk('hello world'),
         contentChunk(' more'),
       ])
       expect(events).toEqual([
@@ -63,149 +63,40 @@ describe('EventNormalizer', () => {
       expect(events).toEqual([{ type: 'content_delta', content: 'hi' }])
     })
 
-    it('does not buffer an unbounded whitespace-only prefix', () => {
-      const whitespace = ' '.repeat(8)
-      const events = processAll([contentChunk(whitespace)])
-
-      expect(events).toEqual([{ type: 'content_delta', content: whitespace }])
-    })
-
-    it('still detects a think tag after emitting excessive leading whitespace', () => {
+    it('emits tag-like text immediately and unchanged', () => {
       const events = processAll([
-        contentChunk(`${' '.repeat(8)}<th`),
-        contentChunk('ink>reasoning</think>answer'),
-      ])
-
-      expect(events.map((event) => event.type)).toEqual([
-        'content_delta',
-        'thinking_start',
-        'thinking_delta',
-        'thinking_end',
-        'content_delta',
-      ])
-    })
-
-    it('strips stray <think> tags from non-first-chunk content', () => {
-      // Stray tags are only stripped in plain content mode (after first-chunk detection).
-      // A <think> in the first chunk is treated as a real thinking block.
-      const normalizer = createEventNormalizer()
-      const preprocessor = createContentPreprocessor()
-
-      // Flush first-chunk buffer with non-think content
-      normalizer.processChunk(contentChunk('initial text here'), preprocessor)
-      // Now subsequent chunks with stray tags get stripped
-      const events = normalizer.processChunk(
-        contentChunk('before<think>after'),
-        preprocessor,
-      )
-      expect(events).toEqual([
-        { type: 'content_delta', content: 'beforeafter' },
-      ])
-    })
-
-    it('does not treat a think tag after visible text as reasoning', () => {
-      const events = processAll([contentChunk('Answer: <think>literal')])
-
-      expect(events).toEqual([
-        { type: 'content_delta', content: 'Answer: literal' },
-      ])
-    })
-  })
-
-  describe('<think> tag format (DeepSeek-style)', () => {
-    it('handles think open and close in separate chunks', () => {
-      const events = processAll([
-        contentChunk('<think>'),
-        contentChunk('reasoning here'),
-        contentChunk('</think>'),
-        contentChunk('answer'),
-      ])
-
-      const types = events.map((e) => e.type)
-      expect(types).toEqual([
-        'thinking_start',
-        'thinking_delta',
-        'thinking_end',
-        'content_delta',
-      ])
-      expect((events[1] as any).content).toBe('reasoning here')
-      expect((events[3] as any).content).toBe('answer')
-    })
-
-    it('handles think open and close in same chunk', () => {
-      const events = processAll([
-        contentChunk('<think>reasoning</think>answer'),
-      ])
-
-      const types = events.map((e) => e.type)
-      expect(types).toEqual([
-        'thinking_start',
-        'thinking_delta',
-        'thinking_end',
-        'content_delta',
-      ])
-    })
-
-    it('normalizes repeated close tags consistently', () => {
-      const events = processAll([
-        contentChunk('<think>reasoning</think>answer</think>tail'),
+        contentChunk('<th'),
+        contentChunk('ink>literal</think>'),
       ])
 
       expect(events).toEqual([
-        { type: 'thinking_start' },
-        { type: 'thinking_delta', content: 'reasoning' },
-        { type: 'thinking_end' },
-        { type: 'content_delta', content: 'answertail' },
+        { type: 'content_delta', content: '<th' },
+        { type: 'content_delta', content: 'ink>literal</think>' },
       ])
-    })
-
-    it('buffers initial content to detect <think> tag', () => {
-      // Short first chunk that could be start of <think>
-      const normalizer = createEventNormalizer()
-      const preprocessor = createContentPreprocessor()
-
-      const first = normalizer.processChunk(contentChunk('<th'), preprocessor)
-      // Should buffer, not emit yet
-      expect(first).toEqual([])
-
-      const second = normalizer.processChunk(
-        contentChunk('ink>thoughts'),
-        preprocessor,
-      )
-      const types = second.map((e) => e.type)
-      expect(types).toContain('thinking_start')
-    })
-
-    it('emits initial content as soon as it cannot be a think tag', () => {
-      const normalizer = createEventNormalizer()
-      const preprocessor = createContentPreprocessor()
-
-      expect(normalizer.processChunk(contentChunk('hi'), preprocessor)).toEqual(
-        [{ type: 'content_delta', content: 'hi' }],
-      )
-    })
-
-    it('flushes open thinking on stream end', () => {
-      const normalizer = createEventNormalizer()
-      const preprocessor = createContentPreprocessor()
-
-      normalizer.processChunk(
-        contentChunk('<think>still thinking'),
-        preprocessor,
-      )
-      const tail = normalizer.flush()
-      expect(tail.some((e) => e.type === 'thinking_end')).toBe(true)
-    })
-
-    it('drops whitespace-only content after </think>', () => {
-      const events = processAll([contentChunk('<think>thought</think>  \n  ')])
-      // Should have thinking_start, thinking_delta, thinking_end but no content_delta
-      const types = events.map((e) => e.type)
-      expect(types).not.toContain('content_delta')
     })
   })
 
   describe('reasoning_content format (OpenAI-style)', () => {
+    it.each([
+      ['delta.reasoning', { choices: [{ delta: { reasoning: 'thinking' } }] }],
+      [
+        'message.reasoning_content',
+        {
+          choices: [{ delta: {}, message: { reasoning_content: 'thinking' } }],
+        },
+      ],
+      [
+        'message.reasoning',
+        { choices: [{ delta: {}, message: { reasoning: 'thinking' } }] },
+      ],
+    ])('reads thinking from %s', (_field, chunk) => {
+      expect(processAll([chunk])).toEqual([
+        { type: 'thinking_start' },
+        { type: 'thinking_delta', content: 'thinking' },
+        { type: 'thinking_end' },
+      ])
+    })
+
     it('detects reasoning format from first reasoning chunk', () => {
       const events = processAll([
         reasoningChunk('thinking...'),
@@ -221,6 +112,15 @@ describe('EventNormalizer', () => {
         'thinking_end',
         'content_delta',
       ])
+    })
+
+    it('closes active structured reasoning when the stream is flushed', () => {
+      const normalizer = createEventNormalizer()
+      const preprocessor = createContentPreprocessor()
+
+      normalizer.processChunk(reasoningChunk('thinking'), preprocessor)
+
+      expect(normalizer.flush()).toEqual([{ type: 'thinking_end' }])
     })
 
     it('handles interleaved reasoning and content', () => {
@@ -636,7 +536,7 @@ describe('EventNormalizer', () => {
 
     it('closes thinking before emitting web_search_call', () => {
       const events = processAll([
-        contentChunk('<think>thinking'),
+        reasoningChunk('thinking'),
         {
           type: 'web_search_call',
           id: 'ws_1',
@@ -653,15 +553,6 @@ describe('EventNormalizer', () => {
   })
 
   describe('flush', () => {
-    it('flushes an ambiguous think-tag prefix when the stream ends', () => {
-      const normalizer = createEventNormalizer()
-      const preprocessor = createContentPreprocessor()
-
-      normalizer.processChunk(contentChunk('<th'), preprocessor)
-      const tail = normalizer.flush()
-      expect(tail).toContainEqual({ type: 'content_delta', content: '<th' })
-    })
-
     it('returns empty when nothing buffered', () => {
       const normalizer = createEventNormalizer()
       expect(normalizer.flush()).toEqual([])

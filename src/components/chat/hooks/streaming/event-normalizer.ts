@@ -2,8 +2,8 @@
  * Event normalizer.
  *
  * Consumes parsed chat chunks (after content preprocessing) and emits
- * a flat list of NormalizedEvent[]. Encapsulates all three thinking format
- * detection strategies and the first-chunk buffering heuristic.
+ * a flat list of NormalizedEvent[]. Thinking is read only from the structured
+ * reasoning fields supported by the chat API.
  *
  * After this module, the downstream processor only sees `thinking_start`,
  * `thinking_delta`, `thinking_end`, `content_delta`, etc. — no format
@@ -25,9 +25,6 @@ import type { NormalizedEvent } from './types'
 // ---------------------------------------------------------------------------
 
 type SSEJson = ChatChunk
-const THINK_OPEN_TAG = '<think>'
-const THINK_CLOSE_TAG = '</think>'
-const MAX_THINK_TAG_LEADING_WHITESPACE = THINK_OPEN_TAG.length
 
 function extractReasoningContent(json: SSEJson): string | null {
   const delta =
@@ -214,8 +211,6 @@ function extractToolCallEvents(
 }
 
 export function createEventNormalizer(): EventNormalizer {
-  let isFirstChunk = true
-  let initialBuffer = ''
   let isInThinking = false
   let isReasoningFormat = false
   let receivedFinishReason = false
@@ -226,25 +221,6 @@ export function createEventNormalizer(): EventNormalizer {
   let thinkingClosedByContent = false
   const toolCallIndexToId = new Map<number, string>()
   const toolCallStartedIds = new Set<string>()
-  const closeThinkingBlock = (
-    content: string,
-    events: NormalizedEvent[],
-  ): boolean => {
-    const parts = content.split(THINK_CLOSE_TAG)
-    if (parts.length === 1) return false
-
-    const finalThinking = parts[0]
-    const remaining = parts.slice(1).join('')
-    if (finalThinking) {
-      events.push({ type: 'thinking_delta', content: finalThinking })
-    }
-    events.push({ type: 'thinking_end' })
-    isInThinking = false
-    if (remaining.trim()) {
-      events.push({ type: 'content_delta', content: remaining })
-    }
-    return true
-  }
 
   return {
     processChunk(sseJson, preprocessor, logger): NormalizedEvent[] {
@@ -318,7 +294,7 @@ export function createEventNormalizer(): EventNormalizer {
         }
       }
 
-      let content = preprocessed.text
+      const content = preprocessed.text
       const reasoningContent = extractReasoningContent(sseJson)
 
       // -----------------------------------------------------------------
@@ -329,7 +305,6 @@ export function createEventNormalizer(): EventNormalizer {
         // First reasoning chunk — enter reasoning format
         isReasoningFormat = true
         isInThinking = true
-        isFirstChunk = false
         thinkingClosedByContent = false
         events.push({ type: 'thinking_start' })
         if (reasoningContent) {
@@ -399,69 +374,6 @@ export function createEventNormalizer(): EventNormalizer {
         return events
       }
 
-      // -----------------------------------------------------------------
-      // <think> tag format (DeepSeek-style)
-      // -----------------------------------------------------------------
-
-      if (isFirstChunk) {
-        initialBuffer += content
-        const possibleOpeningTag = initialBuffer.trimStart()
-        const leadingWhitespaceLength =
-          initialBuffer.length - possibleOpeningTag.length
-        if (leadingWhitespaceLength > MAX_THINK_TAG_LEADING_WHITESPACE) {
-          const whitespace = initialBuffer.slice(0, leadingWhitespaceLength)
-          initialBuffer = possibleOpeningTag
-          events.push({ type: 'content_delta', content: whitespace })
-        }
-        if (
-          !initialBuffer.includes(THINK_OPEN_TAG) &&
-          THINK_OPEN_TAG.startsWith(possibleOpeningTag)
-        ) {
-          return events
-        }
-
-        isFirstChunk = false
-        content = initialBuffer
-        initialBuffer = ''
-
-        const contentWithoutLeadingWhitespace = content.trimStart()
-        const openIdx = content.length - contentWithoutLeadingWhitespace.length
-        if (contentWithoutLeadingWhitespace.startsWith(THINK_OPEN_TAG)) {
-          isInThinking = true
-          content = content.slice(openIdx + THINK_OPEN_TAG.length)
-          events.push({ type: 'thinking_start' })
-
-          if (closeThinkingBlock(content, events)) return events
-
-          if (content) {
-            events.push({ type: 'thinking_delta', content })
-          }
-          return events
-        }
-        // No <think> tag — fall through to content handling below
-      }
-
-      // Mid-stream </think> close
-      if (isInThinking && closeThinkingBlock(content, events)) return events
-
-      // Inside thinking — buffer delta
-      if (isInThinking) {
-        if (content) {
-          events.push({ type: 'thinking_delta', content })
-        }
-        return events
-      }
-
-      // -----------------------------------------------------------------
-      // Plain content
-      // -----------------------------------------------------------------
-
-      // Strip stray think tags that might appear in non-thinking content
-      content = content
-        .split(THINK_OPEN_TAG)
-        .join('')
-        .split(THINK_CLOSE_TAG)
-        .join('')
       if (content) {
         events.push({ type: 'content_delta', content })
       }
@@ -471,10 +383,6 @@ export function createEventNormalizer(): EventNormalizer {
 
     flush(): NormalizedEvent[] {
       const events: NormalizedEvent[] = []
-      if (isFirstChunk && initialBuffer.trim()) {
-        events.push({ type: 'content_delta', content: initialBuffer.trim() })
-        initialBuffer = ''
-      }
       if (isInThinking) {
         events.push({ type: 'thinking_end' })
         isInThinking = false
