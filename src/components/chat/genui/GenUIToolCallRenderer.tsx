@@ -288,8 +288,10 @@ function ParseFailureCard({
   onRetryToolCall?: () => Promise<boolean>
 }) {
   const [isRetrying, setIsRetrying] = useState(false)
-  // Set when a widget-only retry failed; the card then falls back to
-  // offering the full-response regeneration.
+  // Set when a widget-only retry failed. The card then falls back to the
+  // full-response regeneration — unless no regenerate handler was provided,
+  // in which case widget-only retry stays available rather than leaving the
+  // card with no action at all.
   const [widgetRetryFailed, setWidgetRetryFailed] = useState(false)
 
   // Logging is a side effect — kept out of render so React's render-twice
@@ -307,7 +309,8 @@ function ParseFailureCard({
     )
   }, [toolName, hasInput])
 
-  const canRetryWidgetOnly = !!onRetryToolCall && !widgetRetryFailed
+  const canRetryWidgetOnly =
+    !!onRetryToolCall && (!widgetRetryFailed || !onRetry)
 
   const handleRetry = async () => {
     if (isRetrying) return
@@ -317,7 +320,9 @@ function ParseFailureCard({
     }
     setIsRetrying(true)
     try {
-      const repaired = await onRetryToolCall()
+      // A thrown repair (network failure etc.) is the same outcome as a
+      // clean `false` for this card: fall back to full regeneration.
+      const repaired = await onRetryToolCall().catch(() => false)
       if (!repaired) {
         setWidgetRetryFailed(true)
       }
@@ -330,17 +335,27 @@ function ParseFailureCard({
 
   const showRetryButton = canRetryWidgetOnly || !!onRetry
 
+  let retryLabel: string
+  if (isRetrying) {
+    retryLabel = 'Fixing widget...'
+  } else if (canRetryWidgetOnly) {
+    retryLabel = 'Retry widget'
+  } else {
+    retryLabel = 'Regenerate response'
+  }
+
+  const description =
+    widgetRetryFailed && onRetry
+      ? 'Retrying the widget alone didn\u2019t work. Trying again will regenerate the whole response.'
+      : `The response didn't match the ${toolName} widget's expected shape.`
+
   return (
     <div className="my-4 flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-card px-4 py-3 text-sm">
       <div className="flex flex-col">
         <span className="font-medium text-content-primary">
           Couldn&apos;t display this widget
         </span>
-        <span className="text-xs text-content-muted">
-          {widgetRetryFailed
-            ? 'Retrying the widget alone didn\u2019t work. Trying again will regenerate the whole response.'
-            : `The response didn't match the ${toolName} widget's expected shape.`}
-        </span>
+        <span className="text-xs text-content-muted">{description}</span>
       </div>
       {showRetryButton && (
         <button
@@ -352,11 +367,7 @@ function ParseFailureCard({
           <RefreshCw
             className={`h-3.5 w-3.5 ${isRetrying ? 'animate-spin' : ''}`}
           />
-          {isRetrying
-            ? 'Fixing widget...'
-            : canRetryWidgetOnly
-              ? 'Retry widget'
-              : 'Regenerate response'}
+          {retryLabel}
         </button>
       )}
     </div>

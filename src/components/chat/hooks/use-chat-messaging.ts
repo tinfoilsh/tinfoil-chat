@@ -1448,6 +1448,7 @@ export function useChatMessaging({
     async (messageIndex: number, toolCallId: string): Promise<boolean> => {
       if (loadingState !== 'idle' || !currentChat) return false
 
+      const chatId = currentChat.id
       const message = currentChat.messages[messageIndex]
       if (!message || message.role !== 'assistant') return false
       const block = message.timeline?.find(
@@ -1461,6 +1462,7 @@ export function useChatMessaging({
 
       const newArguments = await regenerateToolCallArguments({
         toolName: block.name,
+        originalArguments: block.arguments,
         contextMessages: currentChat.messages.slice(0, messageIndex + 1),
         model,
       })
@@ -1478,27 +1480,45 @@ export function useChatMessaging({
         ),
       })
 
-      const patchedMessages = currentChat.messages.map((msg, index) =>
-        index === messageIndex ? patchMessage(msg) : msg,
-      )
-      const patchedChat: Chat = { ...currentChat, messages: patchedMessages }
+      // The model call above can take seconds; the chat may have gained
+      // messages (or the user may have switched away) since the closure
+      // captured `currentChat`. Patch the tool-call block by id against
+      // the *live* state instead of writing the snapshot back, so the
+      // repair can never roll back newer chat content.
+      const patchChat = (chat: Chat): Chat => ({
+        ...chat,
+        messages: chat.messages.map((msg) =>
+          msg.role === 'assistant' &&
+          msg.timeline?.some(
+            (candidate) =>
+              candidate.type === 'tool_call' &&
+              candidate.toolCallId === toolCallId,
+          )
+            ? patchMessage(msg)
+            : msg,
+        ),
+      })
 
-      setCurrentChat(patchedChat)
       setChats((prevChats) =>
-        prevChats.map((c) => (c.id === patchedChat.id ? patchedChat : c)),
+        prevChats.map((c) => (c.id === chatId ? patchChat(c) : c)),
       )
+      setCurrentChat((prev) => (prev.id === chatId ? patchChat(prev) : prev))
 
-      if (!patchedChat.isTemporary) {
+      const liveChat =
+        chatsRef.current.find((c) => c.id === chatId) ??
+        (currentChat.id === chatId ? currentChat : null)
+      const chatToSave = liveChat ? patchChat(liveChat) : null
+      if (chatToSave && !chatToSave.isTemporary) {
         if (storeHistory) {
-          chatStorage.saveChatAndSync(patchedChat).catch((error) => {
+          chatStorage.saveChatAndSync(chatToSave).catch((error) => {
             logError('Failed to persist repaired widget', error, {
               component: 'useChatMessaging',
               action: 'retryToolCall',
-              metadata: { chatId: patchedChat.id, toolCallId },
+              metadata: { chatId, toolCallId },
             })
           })
         } else {
-          sessionChatStorage.saveChat(patchedChat)
+          sessionChatStorage.saveChat(chatToSave)
         }
       }
 
