@@ -364,7 +364,7 @@ export async function completeLiveChatRecovery(args: {
     pendingSave: false,
     messages: completedChat.messages.map((message) => ({
       ...message,
-      timestamp: new Date(message.timestamp),
+      timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
     })),
   }
 }
