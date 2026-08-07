@@ -35,7 +35,10 @@ import {
   scanPendingChatRecoveries,
   startChatRecoveryAttempt,
 } from '@/services/inference/chat-recovery'
-import { clearActiveChatRecoveriesForChat } from '@/services/inference/chat-recovery-drafts'
+import {
+  clearActiveChatRecoveriesForChat,
+  setChatRecoveryActive,
+} from '@/services/inference/chat-recovery-drafts'
 import { persistInterruptedAssistant } from '@/services/inference/chat-recovery-sync'
 import type { ChatChunkStream } from '@/services/inference/chat-stream'
 import { sendChatStream } from '@/services/inference/inference-client'
@@ -361,8 +364,10 @@ export function useChatMessaging({
         // surfacing "Recovering stream..." for a turn the user just stopped.
         if (activeGeneration?.turnId) {
           markChatRecoveryTurnCancelled(targetId, activeGeneration.turnId)
+          setChatRecoveryActive(targetId, activeGeneration.turnId, false)
+        } else {
+          clearActiveChatRecoveriesForChat(targetId)
         }
-        clearActiveChatRecoveriesForChat(targetId)
         const interruptedMessage =
           activeGeneration?.latestAssistantMessage &&
           hasVisibleAssistantMessage(activeGeneration.latestAssistantMessage)
@@ -377,6 +382,7 @@ export function useChatMessaging({
         })
 
         let stoppedChat: Chat | undefined
+        let finalizeStoppedChat: ((chat: Chat) => Chat) | undefined
         if (activeGeneration) {
           const finalizeChat = (chat: Chat): Chat => {
             const hasOriginatingUser = activeGeneration.turnId
@@ -407,6 +413,7 @@ export function useChatMessaging({
               pendingSave: false,
             }
           }
+          finalizeStoppedChat = finalizeChat
           const latestChat = findLiveChat(targetId) ?? activeGeneration.chat
           const finalizedChat = finalizeChat(latestChat)
           stoppedChat = finalizedChat
@@ -460,20 +467,8 @@ export function useChatMessaging({
                   .find((chat) => chat.id === targetId) ??
                 findLiveChat(targetId) ??
                 stoppedChat
-              const chatToSave = activeGeneration?.turnId
-                ? {
-                    ...latestChat,
-                    messages: mergeInterruptedAssistant(
-                      latestChat.messages,
-                      activeGeneration.turnId,
-                      interruptedMessage,
-                    ),
-                    pendingRecoveries: latestChat.pendingRecoveries?.filter(
-                      (recovery) => recovery.turnId !== activeGeneration.turnId,
-                    ),
-                    pendingSave: false,
-                  }
-                : stoppedChat
+              const chatToSave =
+                finalizeStoppedChat?.(latestChat) ?? stoppedChat
               sessionChatStorage.saveChat(chatToSave)
             }
           } catch (error) {
@@ -887,9 +882,12 @@ export function useChatMessaging({
       // }
 
       let response: ChatChunkStream | null = null
-      let recoveryCleanup: Promise<void> | null = null
+      const recoveryCleanupByChat = new Map<string, Promise<void>>()
       const abandonAndReleaseRecovery = (chatId: string): Promise<void> => {
-        recoveryCleanup ??= (async () => {
+        const existingCleanup = recoveryCleanupByChat.get(chatId)
+        if (existingCleanup) return existingCleanup
+
+        const cleanup = (async () => {
           try {
             await response?.abandonRecovery?.()
           } catch (cleanupError) {
@@ -906,7 +904,8 @@ export function useChatMessaging({
             releaseActiveChatRecovery(chatId)
           }
         })()
-        return recoveryCleanup
+        recoveryCleanupByChat.set(chatId, cleanup)
+        return cleanup
       }
       try {
         // Auto selections prefer a multimodal candidate when the turn carries

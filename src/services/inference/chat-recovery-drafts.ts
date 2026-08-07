@@ -50,7 +50,7 @@ export function getActiveChatRecoverySnapshot(): readonly string[] {
 }
 
 export function isChatRecoveryActive(chatId: string): boolean {
-  const prefix = `${chatId}\u0000`
+  const prefix = draftKey(chatId, '')
   return [...activeTurns].some((key) => key.startsWith(prefix))
 }
 
@@ -118,7 +118,7 @@ export function clearActiveChatRecoveries(): void {
 }
 
 export function clearActiveChatRecoveriesForChat(chatId: string): void {
-  const prefix = `${chatId}\u0000`
+  const prefix = draftKey(chatId, '')
   let changed = false
   for (const key of activeTurns) {
     if (key.startsWith(prefix)) {

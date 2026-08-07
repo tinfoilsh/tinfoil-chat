@@ -409,8 +409,16 @@ export function createEventNormalizer(): EventNormalizer {
         const leadingWhitespaceLength =
           initialBuffer.length - possibleOpeningTag.length
         if (
+          possibleOpeningTag.length === 0 &&
+          leadingWhitespaceLength > MAX_THINK_TAG_LEADING_WHITESPACE
+        ) {
+          const whitespace = initialBuffer
+          initialBuffer = ''
+          events.push({ type: 'content_delta', content: whitespace })
+          return events
+        }
+        if (
           !initialBuffer.includes(THINK_OPEN_TAG) &&
-          leadingWhitespaceLength <= MAX_THINK_TAG_LEADING_WHITESPACE &&
           THINK_OPEN_TAG.startsWith(possibleOpeningTag)
         ) {
           return events

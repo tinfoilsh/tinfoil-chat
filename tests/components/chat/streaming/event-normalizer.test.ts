@@ -70,6 +70,22 @@ describe('EventNormalizer', () => {
       expect(events).toEqual([{ type: 'content_delta', content: whitespace }])
     })
 
+    it('still detects a think tag after emitting excessive leading whitespace', () => {
+      const events = processAll([
+        contentChunk(' '.repeat(8)),
+        contentChunk('<th'),
+        contentChunk('ink>reasoning</think>answer'),
+      ])
+
+      expect(events.map((event) => event.type)).toEqual([
+        'content_delta',
+        'thinking_start',
+        'thinking_delta',
+        'thinking_end',
+        'content_delta',
+      ])
+    })
+
     it('strips stray <think> tags from non-first-chunk content', () => {
       // Stray tags are only stripped in plain content mode (after first-chunk detection).
       // A <think> in the first chunk is treated as a real thinking block.
