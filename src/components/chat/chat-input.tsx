@@ -1184,7 +1184,7 @@ export function ChatInput({
                   <>
                     <div
                       className="fixed inset-0 z-10"
-                      onClick={() => setIsInputMenuOpen(false)}
+                      onClick={() => closeInputMenu(false)}
                     />
                     <div
                       ref={inputMenuRef}
@@ -1198,7 +1198,7 @@ export function ChatInput({
                         role="menuitem"
                         onClick={() => {
                           triggerFileInput()
-                          setIsInputMenuOpen(false)
+                          closeInputMenu(true)
                         }}
                         className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                       >
@@ -1211,7 +1211,7 @@ export function ChatInput({
                           role="menuitem"
                           onClick={() => {
                             onOpenPromptLibrary()
-                            setIsInputMenuOpen(false)
+                            closeInputMenu(true)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
@@ -1229,7 +1229,7 @@ export function ChatInput({
                           aria-checked={webSearchEnabled}
                           onClick={() => {
                             onWebSearchToggle()
-                            setIsInputMenuOpen(false)
+                            closeInputMenu(true)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
@@ -1251,7 +1251,7 @@ export function ChatInput({
                           aria-checked={codeExecutionEnabled}
                           onClick={() => {
                             onCodeExecutionToggle()
-                            setIsInputMenuOpen(false)
+                            closeInputMenu(true)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
