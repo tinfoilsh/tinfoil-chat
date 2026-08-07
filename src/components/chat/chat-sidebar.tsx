@@ -539,7 +539,7 @@ export function ChatSidebar({
         resetPagination()
           .then((result) => {
             if (result?.deletedIds.length && onChatsUpdated) {
-              onChatsUpdated()
+              return onChatsUpdated()
             }
           })
           .catch((error) => {
@@ -563,7 +563,7 @@ export function ChatSidebar({
       try {
         const result = await initPagination()
         if (result?.deletedIds.length && onChatsUpdated) {
-          onChatsUpdated()
+          await onChatsUpdated()
         }
       } catch (error) {
         logError('Failed to cleanup and initialize pagination', error, {
@@ -594,6 +594,14 @@ export function ChatSidebar({
           // count-increase effect never fires in that case, and a stuck
           // flag would permanently gate future pagination).
           await onChatsUpdated?.()
+        } catch (error) {
+          // The page fetch itself succeeded — don't let a reload failure
+          // fall through to the outer catch and read as a failed page
+          // (which would trip the caller's auto-top-up latch).
+          logError('Failed to reload chats after pagination', error, {
+            component: 'ChatSidebar',
+            action: 'loadMoreChats',
+          })
         } finally {
           setPendingChatsRender(false)
         }
@@ -730,8 +738,10 @@ export function ChatSidebar({
   // Latch that disables the automatic under-filled-viewport top-up after a
   // page request fails or adds nothing new. Without it, an error (retried
   // instantly by the effect re-run) or a run of zero-new-chat pages would
-  // loop through requests with no user interaction. A real scroll gesture
-  // re-arms it, making the next attempt deliberate.
+  // loop through requests with no user interaction. Any scroll event
+  // re-arms it (including programmatic ones from the accordion's
+  // scrollTo — acceptable, since those only follow deliberate clicks and
+  // re-arming costs at most one request).
   const autoTopUpDisabledRef = useRef(false)
 
   // Auto-load more chats when the user scrolls near the bottom of the
