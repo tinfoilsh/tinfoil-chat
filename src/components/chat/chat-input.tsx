@@ -285,6 +285,58 @@ export function ChatInput({
 
   // --- Input options menu state (the "+" button) ---
   const [isInputMenuOpen, setIsInputMenuOpen] = useState(false)
+  const inputMenuRef = useRef<HTMLDivElement>(null)
+  const inputMenuTriggerRef = useRef<HTMLButtonElement>(null)
+
+  const getInputMenuItems = (): HTMLElement[] =>
+    Array.from(
+      inputMenuRef.current?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="menuitemcheckbox"]',
+      ) ?? [],
+    )
+
+  // ARIA menu keyboard contract: focus moves into the menu on open,
+  // Escape dismisses and restores focus to the trigger, and arrow keys
+  // move between items (wrapping). Tab closes rather than tabbing through.
+  useEffect(() => {
+    if (isInputMenuOpen) {
+      getInputMenuItems()[0]?.focus()
+    }
+  }, [isInputMenuOpen])
+
+  const closeInputMenu = (restoreFocus: boolean) => {
+    setIsInputMenuOpen(false)
+    if (restoreFocus) {
+      inputMenuTriggerRef.current?.focus()
+    }
+  }
+
+  const handleInputMenuKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      closeInputMenu(true)
+      return
+    }
+    if (e.key === 'Tab') {
+      closeInputMenu(false)
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const items = getInputMenuItems()
+      if (items.length === 0) return
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+      const delta = e.key === 'ArrowDown' ? 1 : -1
+      const nextIndex =
+        currentIndex === -1
+          ? delta === 1
+            ? 0
+            : items.length - 1
+          : (currentIndex + delta + items.length) % items.length
+      items[nextIndex]?.focus()
+    }
+  }
 
   // Random placeholder - use first one initially to avoid SSR hydration mismatch,
   // then randomize after mount
@@ -1118,6 +1170,7 @@ export function ChatInput({
               <div className="relative">
                 <button
                   id="input-options-button"
+                  ref={inputMenuTriggerRef}
                   type="button"
                   onClick={() => setIsInputMenuOpen(!isInputMenuOpen)}
                   aria-label="Input options"
@@ -1134,7 +1187,10 @@ export function ChatInput({
                       onClick={() => setIsInputMenuOpen(false)}
                     />
                     <div
+                      ref={inputMenuRef}
                       role="menu"
+                      aria-label="Input options"
+                      onKeyDown={handleInputMenuKeyDown}
                       className="absolute bottom-full left-0 z-20 mb-2 min-w-[220px] rounded-xl border border-border-subtle bg-surface-chat py-1.5 shadow-lg"
                     >
                       <button
