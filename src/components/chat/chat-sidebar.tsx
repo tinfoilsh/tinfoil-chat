@@ -113,7 +113,7 @@ type ChatSidebarProps = {
    */
   backupWarningNeedsRecovery?: boolean
   onDismissBackupWarning?: () => void
-  onChatsUpdated?: () => void
+  onChatsUpdated?: () => void | Promise<void>
   /** Triggers a deep (all-pages) cloud sync from the sidebar "Sync" button. */
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
@@ -576,17 +576,29 @@ export function ChatSidebar({
     cleanupAndInitialize()
   }, [isSignedIn, user?.id, onChatsUpdated, initPagination])
 
-  // Load more chats from backend (delegated to CloudSync via hook)
-  const loadMoreChats = useCallback(async () => {
+  // Load more chats from backend (delegated to CloudSync via hook).
+  // Returns the number of chats the page added, or null on failure, so the
+  // auto-top-up path can latch itself off when a request stops making
+  // progress instead of looping.
+  const loadMoreChats = useCallback(async (): Promise<number | null> => {
     try {
-      if (isLoadingMore || !isSignedIn) return
+      if (isLoadingMore || !isSignedIn) return null
       const result = await loadMorePage()
       const savedCount = result?.saved ?? 0
       justLoadedMoreRef.current = savedCount > 0
       if (savedCount > 0) {
         setPendingChatsRender(true)
-        onChatsUpdated?.()
+        try {
+          // Await the reload so the render-pending flag is cleared even
+          // when the page's chats were all already present locally (the
+          // count-increase effect never fires in that case, and a stuck
+          // flag would permanently gate future pagination).
+          await onChatsUpdated?.()
+        } finally {
+          setPendingChatsRender(false)
+        }
       }
+      return savedCount
     } catch (error) {
       justLoadedMoreRef.current = false
       setPendingChatsRender(false)
@@ -594,6 +606,7 @@ export function ChatSidebar({
         component: 'ChatSidebar',
         action: 'loadMoreChats',
       })
+      return null
     }
   }, [isLoadingMore, isSignedIn, loadMorePage, onChatsUpdated])
 
@@ -714,6 +727,13 @@ export function ChatSidebar({
   const chatSearch = useChatSearch(chatSearchTerm, searchEnabled)
   const isSearchActive = searchEnabled && chatSearchTerm.trim().length > 0
 
+  // Latch that disables the automatic under-filled-viewport top-up after a
+  // page request fails or adds nothing new. Without it, an error (retried
+  // instantly by the effect re-run) or a run of zero-new-chat pages would
+  // loop through requests with no user interaction. A real scroll gesture
+  // re-arms it, making the next attempt deliberate.
+  const autoTopUpDisabledRef = useRef(false)
+
   // Auto-load more chats when the user scrolls near the bottom of the
   // sidebar. Deliberately scroll-event driven rather than an
   // IntersectionObserver: recreating an observer (this effect re-runs every
@@ -725,7 +745,7 @@ export function ChatSidebar({
     const scroller = sidebarScrollRef.current
     if (!scroller) return
 
-    const maybeLoadMore = () => {
+    const maybeLoadMore = (fromUserScroll: boolean) => {
       if (
         !shouldShowLoadMore ||
         isLoadingMore ||
@@ -736,25 +756,35 @@ export function ChatSidebar({
       ) {
         return
       }
+      if (fromUserScroll) {
+        autoTopUpDisabledRef.current = false
+      } else if (autoTopUpDisabledRef.current) {
+        return
+      }
       const distanceFromBottom =
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
       if (
         distanceFromBottom <= CONSTANTS.SIDEBAR_AUTOLOAD_BOTTOM_THRESHOLD_PX
       ) {
-        loadMoreChats()
+        void loadMoreChats().then((savedCount) => {
+          if (savedCount === null || savedCount === 0) {
+            autoTopUpDisabledRef.current = true
+          }
+        })
       }
     }
 
     // Under-filled viewport: without a scrollbar the scroll listener can
     // never fire, so top up one page at a time (each render round-trips
     // through pendingChatsRender before the next check) until the list
-    // overflows or the last page is reached.
+    // overflows, the last page is reached, or the latch trips.
     if (scroller.scrollHeight <= scroller.clientHeight) {
-      maybeLoadMore()
+      maybeLoadMore(false)
     }
 
-    scroller.addEventListener('scroll', maybeLoadMore, { passive: true })
-    return () => scroller.removeEventListener('scroll', maybeLoadMore)
+    const onScroll = () => maybeLoadMore(true)
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
   }, [
     shouldShowLoadMore,
     isLoadingMore,
