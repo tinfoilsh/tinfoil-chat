@@ -63,6 +63,13 @@ describe('EventNormalizer', () => {
       expect(events).toEqual([{ type: 'content_delta', content: 'hi' }])
     })
 
+    it('does not buffer an unbounded whitespace-only prefix', () => {
+      const whitespace = ' '.repeat(8)
+      const events = processAll([contentChunk(whitespace)])
+
+      expect(events).toEqual([{ type: 'content_delta', content: whitespace }])
+    })
+
     it('strips stray <think> tags from non-first-chunk content', () => {
       // Stray tags are only stripped in plain content mode (after first-chunk detection).
       // A <think> in the first chunk is treated as a real thinking block.
@@ -121,6 +128,19 @@ describe('EventNormalizer', () => {
         'thinking_delta',
         'thinking_end',
         'content_delta',
+      ])
+    })
+
+    it('normalizes repeated close tags consistently', () => {
+      const events = processAll([
+        contentChunk('<think>reasoning</think>answer</think>tail'),
+      ])
+
+      expect(events).toEqual([
+        { type: 'thinking_start' },
+        { type: 'thinking_delta', content: 'reasoning' },
+        { type: 'thinking_end' },
+        { type: 'content_delta', content: 'answertail' },
       ])
     })
 

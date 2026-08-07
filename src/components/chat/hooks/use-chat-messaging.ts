@@ -887,6 +887,27 @@ export function useChatMessaging({
       // }
 
       let response: ChatChunkStream | null = null
+      let recoveryCleanup: Promise<void> | null = null
+      const abandonAndReleaseRecovery = (chatId: string): Promise<void> => {
+        recoveryCleanup ??= (async () => {
+          try {
+            await response?.abandonRecovery?.()
+          } catch (cleanupError) {
+            logError(
+              'Failed to abandon recoverable chat response',
+              cleanupError,
+              {
+                component: 'useChatMessaging',
+                action: 'handleQuery.recoveryAbandon',
+                metadata: { chatId },
+              },
+            )
+          } finally {
+            releaseActiveChatRecovery(chatId)
+          }
+        })()
+        return recoveryCleanup
+      }
       try {
         // Auto selections prefer a multimodal candidate when the turn carries
         // images, and a tool-calling candidate when web search, code execution,
@@ -1210,21 +1231,8 @@ export function useChatMessaging({
               )
             } catch (error) {
               if (!controller.signal.aborted) {
-                try {
-                  await response.abandonRecovery?.()
-                } catch (cleanupError) {
-                  logError(
-                    'Failed to abandon recoverable chat response',
-                    cleanupError,
-                    {
-                      component: 'useChatMessaging',
-                      action: 'handleQuery.recoveryAbandon',
-                      metadata: { chatId },
-                    },
-                  )
-                }
+                await abandonAndReleaseRecovery(chatId)
               }
-              releaseActiveChatRecovery(chatId)
               if (controller.signal.aborted) {
                 throw error
               }
@@ -1248,22 +1256,11 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
+        if (!controller.signal.aborted) {
+          await abandonAndReleaseRecovery(streamChatIdRef.current)
+        }
         const wasAborted = controller.signal.aborted
         if (!wasAborted) {
-          try {
-            await response?.abandonRecovery?.()
-          } catch (cleanupError) {
-            logError(
-              'Failed to abandon recovery after stream error',
-              cleanupError,
-              {
-                component: 'useChatMessaging',
-                action: 'handleQuery.streamRecoveryAbandon',
-                metadata: { chatId: streamChatIdRef.current },
-              },
-            )
-          }
-          releaseActiveChatRecovery(streamChatIdRef.current)
           if (
             typeof userId === 'string' &&
             canUseChatRecovery({ isSignedIn, userId, storeHistory })

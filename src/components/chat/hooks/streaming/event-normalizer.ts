@@ -27,6 +27,7 @@ import type { NormalizedEvent } from './types'
 type SSEJson = ChatChunk
 const THINK_OPEN_TAG = '<think>'
 const THINK_CLOSE_TAG = '</think>'
+const MAX_THINK_TAG_LEADING_WHITESPACE = THINK_OPEN_TAG.length
 
 function extractReasoningContent(json: SSEJson): string | null {
   const delta =
@@ -225,6 +226,25 @@ export function createEventNormalizer(): EventNormalizer {
   let thinkingClosedByContent = false
   const toolCallIndexToId = new Map<number, string>()
   const toolCallStartedIds = new Set<string>()
+  const closeThinkingBlock = (
+    content: string,
+    events: NormalizedEvent[],
+  ): boolean => {
+    const parts = content.split(THINK_CLOSE_TAG)
+    if (parts.length === 1) return false
+
+    const finalThinking = parts[0]
+    const remaining = parts.slice(1).join('')
+    if (finalThinking) {
+      events.push({ type: 'thinking_delta', content: finalThinking })
+    }
+    events.push({ type: 'thinking_end' })
+    isInThinking = false
+    if (remaining.trim()) {
+      events.push({ type: 'content_delta', content: remaining })
+    }
+    return true
+  }
 
   return {
     processChunk(sseJson, preprocessor, logger): NormalizedEvent[] {
@@ -386,8 +406,11 @@ export function createEventNormalizer(): EventNormalizer {
       if (isFirstChunk) {
         initialBuffer += content
         const possibleOpeningTag = initialBuffer.trimStart()
+        const leadingWhitespaceLength =
+          initialBuffer.length - possibleOpeningTag.length
         if (
           !initialBuffer.includes(THINK_OPEN_TAG) &&
+          leadingWhitespaceLength <= MAX_THINK_TAG_LEADING_WHITESPACE &&
           THINK_OPEN_TAG.startsWith(possibleOpeningTag)
         ) {
           return events
@@ -404,21 +427,7 @@ export function createEventNormalizer(): EventNormalizer {
           content = content.slice(openIdx + THINK_OPEN_TAG.length)
           events.push({ type: 'thinking_start' })
 
-          // Handle same-chunk </think>
-          const closeIdx = content.indexOf(THINK_CLOSE_TAG)
-          if (closeIdx !== -1) {
-            const inner = content.slice(0, closeIdx)
-            const remaining = content.slice(closeIdx + THINK_CLOSE_TAG.length)
-            if (inner) {
-              events.push({ type: 'thinking_delta', content: inner })
-            }
-            events.push({ type: 'thinking_end' })
-            isInThinking = false
-            if (remaining.trim()) {
-              events.push({ type: 'content_delta', content: remaining })
-            }
-            return events
-          }
+          if (closeThinkingBlock(content, events)) return events
 
           if (content) {
             events.push({ type: 'thinking_delta', content })
@@ -429,22 +438,7 @@ export function createEventNormalizer(): EventNormalizer {
       }
 
       // Mid-stream </think> close
-      if (content.includes(THINK_CLOSE_TAG) && isInThinking) {
-        const parts = content.split(THINK_CLOSE_TAG)
-        const finalThinking = parts[0] || ''
-        const remaining = parts.slice(1).join('')
-
-        if (finalThinking) {
-          events.push({ type: 'thinking_delta', content: finalThinking })
-        }
-        events.push({ type: 'thinking_end' })
-        isInThinking = false
-
-        if (remaining.trim()) {
-          events.push({ type: 'content_delta', content: remaining })
-        }
-        return events
-      }
+      if (isInThinking && closeThinkingBlock(content, events)) return events
 
       // Inside thinking — buffer delta
       if (isInThinking) {
