@@ -16,6 +16,8 @@ export type ChatErrorCode =
   | 'RATE_LIMIT'
   // Per-account hourly usage cap.
   | 'HOURLY_LIMIT'
+  // The newest complete conversational turn cannot fit in the request.
+  | 'CONTEXT_LIMIT'
 
 export class ChatError extends Error {
   /** HTTP status of the failed request, when one was received. */

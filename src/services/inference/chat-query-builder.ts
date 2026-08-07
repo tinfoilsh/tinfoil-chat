@@ -2,11 +2,16 @@ import {
   getMessageDocuments,
   getMessageImages,
 } from '@/components/chat/attachment-helpers'
+import { ChatError } from '@/components/chat/chat-utils'
 import { buildGenUIPromptHint } from '@/components/chat/genui/system-prompt'
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { formatCurrentTimeReminder } from '@/utils/time-reminder'
-import { selectMessagesWithinBudget } from '@/utils/token-estimation'
+import {
+  CONTEXT_BUDGET,
+  RequestContextLimitError,
+  selectMessagesForRequest,
+} from '@/utils/token-estimation'
 import type {
   ChatCompletionAssistantMessageParam,
   ChatCompletionMessageParam,
@@ -52,6 +57,14 @@ export interface ChatQueryBuilderParams {
    * unaffected.
    */
   includeTimeReminder?: boolean
+  /** Context windows for every model eligible to serve this request. */
+  contextWindows?: Array<string | undefined>
+  /** Serialized request tool schemas, included in context budgeting. */
+  toolDefinitions?: string
+  /** Server-enforced request message cap, when supplied by remote config. */
+  maxMessagesPerRequest?: number
+  /** Router-provided tools whose schemas are not present in the client body. */
+  additionalToolCount?: number
 }
 
 export class ChatQueryBuilder {
@@ -69,6 +82,10 @@ export class ChatQueryBuilder {
       includeGenUIHint,
       forcePrependSystemPrompt,
       includeTimeReminder,
+      contextWindows,
+      toolDefinitions,
+      maxMessagesPerRequest,
+      additionalToolCount,
     } = params
     const modelId = model.modelName
 
@@ -88,14 +105,29 @@ export class ChatQueryBuilder {
     const useSystemRole =
       !forcePrependSystemPrompt && this.shouldUseSystemRole(modelId)
 
+    const systemContent = useSystemRole
+      ? this.buildSystemContent(
+          modelId,
+          processedSystemPrompt,
+          processedRules,
+          genUIHint,
+        )
+      : this.buildPrependedSystemContent(
+          processedSystemPrompt,
+          processedRules,
+          genUIHint,
+        )
+    const requestSystemInstructions = useSystemRole
+      ? (systemContent ?? '')
+      : systemContent
+        ? `<system>\n${systemContent}\n</system>`
+        : ''
+    const timeReminder = includeTimeReminder
+      ? formatCurrentTimeReminder()
+      : undefined
+
     // Add system message/instructions based on model requirements
     if (useSystemRole) {
-      const systemContent = this.buildSystemContent(
-        modelId,
-        processedSystemPrompt,
-        processedRules,
-        genUIHint,
-      )
       if (systemContent) {
         result.push({
           role: 'system',
@@ -105,10 +137,23 @@ export class ChatQueryBuilder {
     }
 
     // Add conversation history that fits within the model's context budget
-    const recentMessages = selectMessagesWithinBudget(
-      conversationMessages,
-      model.contextWindow,
-    )
+    let recentMessages: Message[]
+    try {
+      recentMessages = selectMessagesForRequest(conversationMessages, {
+        contextWindows: contextWindows ?? [model.contextWindow],
+        systemInstructions: requestSystemInstructions,
+        toolDefinitions,
+        timeReminder,
+        isMultimodal: model.multimodal === true,
+        maxMessages: maxMessagesPerRequest,
+        additionalToolCount,
+      })
+    } catch (error) {
+      if (error instanceof RequestContextLimitError) {
+        throw new ChatError(error.message, 'CONTEXT_LIMIT')
+      }
+      throw error
+    }
     let addedSystemInstructions = useSystemRole
 
     for (let index = 0; index < recentMessages.length; index++) {
@@ -173,17 +218,17 @@ export class ChatQueryBuilder {
             result.push({
               role: 'tool',
               tool_call_id: tc.id,
-              content: 'executed',
+              content: CONTEXT_BUDGET.toolResult,
             } as ChatCompletionToolMessageParam)
           }
         }
       }
     }
 
-    if (includeTimeReminder) {
+    if (timeReminder) {
       result.push({
         role: 'user',
-        content: formatCurrentTimeReminder(),
+        content: timeReminder,
       } as ChatCompletionUserMessageParam)
     }
 
@@ -208,6 +253,16 @@ export class ChatQueryBuilder {
     genUIHint: string | null,
   ): string | null {
     const base = rules ? `${systemPrompt}\n${rules}` : systemPrompt
+    const content = genUIHint ? `${base}\n\n${genUIHint}` : base
+    return content.trim() ? content : null
+  }
+
+  private static buildPrependedSystemContent(
+    systemPrompt: string,
+    rules: string,
+    genUIHint: string | null,
+  ): string | null {
+    const base = rules ? `${systemPrompt}\n\n${rules}` : systemPrompt
     const content = genUIHint ? `${base}\n\n${genUIHint}` : base
     return content.trim() ? content : null
   }
