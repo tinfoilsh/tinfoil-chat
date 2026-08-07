@@ -37,7 +37,10 @@ export interface ChatChunk {
   [key: string]: unknown
 }
 
-export type ChatChunkStream = AsyncIterable<ChatChunk>
+export interface ChatChunkStream extends AsyncIterable<ChatChunk> {
+  recoveryReady?: Promise<void>
+  abandonRecovery?: () => Promise<void>
+}
 
 function isChatChunk(value: unknown): value is ChatChunk {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

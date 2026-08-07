@@ -81,6 +81,7 @@ describe('recoverable inference retries', () => {
     vi.clearAllMocks()
     createRecoverableTransport.mockResolvedValue({ transport: true })
     createRecoverableClient.mockResolvedValue({
+      waitForTokenCapture: () => Promise.resolve(),
       client: {
         chat: {
           completions: {
@@ -102,7 +103,8 @@ describe('recoverable inference retries', () => {
     )
 
     const stream = await send(recovery).promise
-    expect(stream).toBe(sdkStream)
+    expect(typeof stream[Symbol.asyncIterator]).toBe('function')
+    await expect(stream.recoveryReady).resolves.toBeUndefined()
 
     expect(createRecoverableTransport).toHaveBeenCalledOnce()
     expect(createRecoverableClient).toHaveBeenCalledTimes(2)
@@ -127,5 +129,57 @@ describe('recoverable inference retries', () => {
     expect(resetTinfoilClient).toHaveBeenCalledOnce()
     expect(createRecoverableTransport).toHaveBeenCalledOnce()
     expect(createRecoverableClient).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns the stream before recovery token persistence completes', async () => {
+    let finishTokenCapture!: () => void
+    const tokenCapture = new Promise<void>((resolve) => {
+      finishTokenCapture = resolve
+    })
+    createRecoverableClient.mockResolvedValueOnce({
+      waitForTokenCapture: () => tokenCapture,
+      client: {
+        chat: {
+          completions: {
+            create: (...args: unknown[]) => createCompletion(...args),
+          },
+        },
+      },
+    })
+    createCompletion.mockResolvedValueOnce(successfulStream())
+
+    const stream = await send().promise
+    let recoveryReady = false
+    void stream.recoveryReady?.then(() => {
+      recoveryReady = true
+    })
+
+    expect(recoveryReady).toBe(false)
+    expect(typeof stream[Symbol.asyncIterator]).toBe('function')
+
+    finishTokenCapture()
+    await stream.recoveryReady
+    expect(recoveryReady).toBe(true)
+  })
+
+  it('abandons recovery when token persistence fails', async () => {
+    const captureError = new Error('persistence unavailable')
+    createRecoverableClient.mockResolvedValueOnce({
+      waitForTokenCapture: () => Promise.reject(captureError),
+      client: {
+        chat: {
+          completions: {
+            create: (...args: unknown[]) => createCompletion(...args),
+          },
+        },
+      },
+    })
+    createCompletion.mockResolvedValueOnce(successfulStream())
+    const { promise, recovery } = send()
+
+    const stream = await promise
+
+    await expect(stream.recoveryReady).rejects.toBe(captureError)
+    expect(recovery.onAttemptAbandoned).toHaveBeenCalledOnce()
   })
 })

@@ -463,6 +463,8 @@ export async function sendChatStream(
       }
 
       let client
+      let waitForTokenCapture: (() => Promise<void>) | undefined
+      let recoverySessionCleanup: (() => Promise<void>) | undefined
       if (recovery) {
         recoverableTransport ??= await createRecoverableTinfoilTransport()
         recoverySessionId = generateRecoverySessionId()
@@ -474,6 +476,14 @@ export async function sendChatStream(
             recovery.onTokenCaptured(recoverySessionId as string, token),
         )
         client = recoverable.client
+        waitForTokenCapture = recoverable.waitForTokenCapture
+        let cleanupPromise: Promise<void> | null = null
+        recoverySessionCleanup = () => {
+          cleanupPromise ??= recovery.onAttemptAbandoned(
+            recoverySessionId as string,
+          )
+          return cleanupPromise
+        }
       } else {
         client = await getTinfoilClient()
       }
@@ -482,7 +492,33 @@ export async function sendChatStream(
         requestBody,
         { signal },
       )
-      return stream as ChatChunkStream
+      if (!waitForTokenCapture || !recoverySessionCleanup) {
+        return stream as ChatChunkStream
+      }
+      const abandonRecovery = recoverySessionCleanup
+      const recoveryReady = waitForTokenCapture().catch(async (error) => {
+        try {
+          await abandonRecovery()
+        } catch (cleanupError) {
+          logError(
+            'Failed to clean up recovery after token capture error',
+            cleanupError,
+            {
+              component: 'inference-client',
+              action: 'sendChatStream.recoveryTokenCleanup',
+              metadata: { sessionId: recoverySessionId },
+            },
+          )
+        }
+        throw error
+      })
+      void recoveryReady.catch(() => undefined)
+      return {
+        recoveryReady,
+        abandonRecovery,
+        [Symbol.asyncIterator]: () =>
+          (stream as ChatChunkStream)[Symbol.asyncIterator](),
+      }
     } catch (err: unknown) {
       if (recoverySessionId && recovery) {
         try {

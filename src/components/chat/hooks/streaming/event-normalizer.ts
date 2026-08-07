@@ -25,6 +25,8 @@ import type { NormalizedEvent } from './types'
 // ---------------------------------------------------------------------------
 
 type SSEJson = ChatChunk
+const THINK_OPEN_TAG = '<think>'
+const THINK_CLOSE_TAG = '</think>'
 
 function extractReasoningContent(json: SSEJson): string | null {
   const delta =
@@ -383,47 +385,52 @@ export function createEventNormalizer(): EventNormalizer {
 
       if (isFirstChunk) {
         initialBuffer += content
-        if (initialBuffer.includes('<think>') || initialBuffer.length > 5) {
-          isFirstChunk = false
-          content = initialBuffer
-          initialBuffer = ''
+        const possibleOpeningTag = initialBuffer.trimStart()
+        if (
+          !initialBuffer.includes(THINK_OPEN_TAG) &&
+          THINK_OPEN_TAG.startsWith(possibleOpeningTag)
+        ) {
+          return events
+        }
 
-          if (content.includes('<think>')) {
-            isInThinking = true
-            content = content.replace(/^[\s\S]*?<think>/, '')
-            events.push({ type: 'thinking_start' })
+        isFirstChunk = false
+        content = initialBuffer
+        initialBuffer = ''
 
-            // Handle same-chunk </think>
-            const closeIdx = content.indexOf('</think>')
-            if (closeIdx !== -1) {
-              const inner = content.slice(0, closeIdx)
-              const remaining = content.slice(closeIdx + 8)
-              if (inner) {
-                events.push({ type: 'thinking_delta', content: inner })
-              }
-              events.push({ type: 'thinking_end' })
-              isInThinking = false
-              if (remaining.trim()) {
-                events.push({ type: 'content_delta', content: remaining })
-              }
-              return events
+        const contentWithoutLeadingWhitespace = content.trimStart()
+        const openIdx = content.length - contentWithoutLeadingWhitespace.length
+        if (contentWithoutLeadingWhitespace.startsWith(THINK_OPEN_TAG)) {
+          isInThinking = true
+          content = content.slice(openIdx + THINK_OPEN_TAG.length)
+          events.push({ type: 'thinking_start' })
+
+          // Handle same-chunk </think>
+          const closeIdx = content.indexOf(THINK_CLOSE_TAG)
+          if (closeIdx !== -1) {
+            const inner = content.slice(0, closeIdx)
+            const remaining = content.slice(closeIdx + THINK_CLOSE_TAG.length)
+            if (inner) {
+              events.push({ type: 'thinking_delta', content: inner })
             }
-
-            if (content) {
-              events.push({ type: 'thinking_delta', content })
+            events.push({ type: 'thinking_end' })
+            isInThinking = false
+            if (remaining.trim()) {
+              events.push({ type: 'content_delta', content: remaining })
             }
             return events
           }
-          // No <think> tag — fall through to content handling below
-        } else {
-          // Still buffering first chunk
+
+          if (content) {
+            events.push({ type: 'thinking_delta', content })
+          }
           return events
         }
+        // No <think> tag — fall through to content handling below
       }
 
       // Mid-stream </think> close
-      if (content.includes('</think>') && isInThinking) {
-        const parts = content.split('</think>')
+      if (content.includes(THINK_CLOSE_TAG) && isInThinking) {
+        const parts = content.split(THINK_CLOSE_TAG)
         const finalThinking = parts[0] || ''
         const remaining = parts.slice(1).join('')
 
@@ -452,7 +459,11 @@ export function createEventNormalizer(): EventNormalizer {
       // -----------------------------------------------------------------
 
       // Strip stray think tags that might appear in non-thinking content
-      content = content.replace(/<think>|<\/think>/g, '')
+      content = content
+        .split(THINK_OPEN_TAG)
+        .join('')
+        .split(THINK_CLOSE_TAG)
+        .join('')
       if (content) {
         events.push({ type: 'content_delta', content })
       }

@@ -277,6 +277,26 @@ describe('processStreamingResponse frame publication', () => {
     for (const [, callback] of pending) callback(performance.now())
   }
 
+  it('publishes a short first content chunk immediately', async () => {
+    const stream = createOpenStream()
+    const updates: string[] = []
+    const processing = processStreamingResponse(
+      stream.stream,
+      createContext({
+        onUpdate: (message) => updates.push(message.content ?? ''),
+      }),
+    )
+
+    stream.send({ choices: [{ delta: { content: 'Hi' } }] })
+
+    await vi.waitFor(() => expect(updates).toEqual(['Hi']))
+    stream.send({ choices: [{ delta: {}, finish_reason: 'stop' }] })
+    stream.close()
+    await vi.waitFor(() => expect(frames.size).toBe(1))
+    runFrames()
+    await processing
+  })
+
   it('publishes the leading chunk and coalesces later chunks per frame', async () => {
     const updates: string[] = []
     const context = createContext({

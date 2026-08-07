@@ -36,6 +36,7 @@ import {
   startChatRecoveryAttempt,
 } from '@/services/inference/chat-recovery'
 import { persistInterruptedAssistant } from '@/services/inference/chat-recovery-sync'
+import type { ChatChunkStream } from '@/services/inference/chat-stream'
 import { sendChatStream } from '@/services/inference/inference-client'
 import {
   getRateLimitInfo,
@@ -151,6 +152,22 @@ function canUseChatRecovery(options: {
     isChatRecoveryAvailable() &&
     chat?.isTemporary !== true
   )
+}
+
+async function waitForRecoveryReady(
+  stream: ChatChunkStream,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!stream.recoveryReady) return
+  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    stream.recoveryReady?.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
 }
 
 export function useChatMessaging({
@@ -840,6 +857,7 @@ export function useChatMessaging({
       //   })
       // }
 
+      let response: ChatChunkStream | null = null
       try {
         // Auto selections prefer a multimodal candidate when the turn carries
         // images, and a tool-calling candidate when web search, code execution,
@@ -930,7 +948,7 @@ export function useChatMessaging({
         // stream processor's own startStreaming call is idempotent.
         streamingTracker.startStreaming(streamChatIdRef.current)
 
-        const response = await sendChatStream({
+        response = await sendChatStream({
           model,
           autoCandidates,
           systemPrompt: baseSystemPrompt,
@@ -1095,7 +1113,7 @@ export function useChatMessaging({
               ? { title: resolvedTitle, titleState: resolvedTitleState }
               : {}
           }
-          const persistFinalChat = () =>
+          const persistFinalChat = (allowCloudSyncWhileStreaming = false) =>
             updateChatWithHistoryCheck(
               setChats,
               chatToSave,
@@ -1103,6 +1121,7 @@ export function useChatMessaging({
               chatId,
               finalMessages,
               {
+                allowCloudSyncWhileStreaming,
                 metadataPatch: {
                   pendingSave: chatToSave.pendingSave,
                   ...generatedTitlePatch(),
@@ -1124,6 +1143,7 @@ export function useChatMessaging({
 
           if (recoveryEnabled && turnId) {
             try {
+              await waitForRecoveryReady(response, controller.signal)
               const titleBeforeRecovery = findLiveChat(chatId)
               const completedChat = await completeLiveChatRecovery({
                 chatId,
@@ -1160,11 +1180,23 @@ export function useChatMessaging({
                 previous.id === chatId ? visibleChat : previous,
               )
             } catch (error) {
+              if (!controller.signal.aborted) {
+                try {
+                  await response.abandonRecovery?.()
+                } catch (cleanupError) {
+                  logError(
+                    'Failed to abandon recoverable chat response',
+                    cleanupError,
+                    {
+                      component: 'useChatMessaging',
+                      action: 'handleQuery.recoveryAbandon',
+                      metadata: { chatId },
+                    },
+                  )
+                }
+              }
               releaseActiveChatRecovery(chatId)
-              if (
-                error instanceof DOMException &&
-                error.name === 'AbortError'
-              ) {
+              if (controller.signal.aborted) {
                 throw error
               }
               logError('Failed to finalize recoverable chat response', error, {
@@ -1172,7 +1204,7 @@ export function useChatMessaging({
                 action: 'handleQuery.recoveryComplete',
                 metadata: { chatId },
               })
-              persistFinalChat()
+              persistFinalChat(true)
             }
           } else {
             persistFinalChat()
@@ -1187,10 +1219,21 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
-        const wasAborted =
-          controller.signal.aborted ||
-          (error instanceof DOMException && error.name === 'AbortError')
+        const wasAborted = controller.signal.aborted
         if (!wasAborted) {
+          try {
+            await response?.abandonRecovery?.()
+          } catch (cleanupError) {
+            logError(
+              'Failed to abandon recovery after stream error',
+              cleanupError,
+              {
+                component: 'useChatMessaging',
+                action: 'handleQuery.streamRecoveryAbandon',
+                metadata: { chatId: streamChatIdRef.current },
+              },
+            )
+          }
           releaseActiveChatRecovery(streamChatIdRef.current)
           if (
             typeof userId === 'string' &&

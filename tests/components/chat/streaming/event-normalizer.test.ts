@@ -40,10 +40,10 @@ function reasoningChunk(
 describe('EventNormalizer', () => {
   describe('plain content (no thinking)', () => {
     it('emits content_delta for simple text', () => {
-      // First-chunk buffering merges short initial chunks until buffer > 5 chars
       const events = processAll([contentChunk('hello'), contentChunk(' world')])
       expect(events).toEqual([
-        { type: 'content_delta', content: 'hello world' },
+        { type: 'content_delta', content: 'hello' },
+        { type: 'content_delta', content: ' world' },
       ])
     })
 
@@ -78,6 +78,14 @@ describe('EventNormalizer', () => {
       )
       expect(events).toEqual([
         { type: 'content_delta', content: 'beforeafter' },
+      ])
+    })
+
+    it('does not treat a think tag after visible text as reasoning', () => {
+      const events = processAll([contentChunk('Answer: <think>literal')])
+
+      expect(events).toEqual([
+        { type: 'content_delta', content: 'Answer: literal' },
       ])
     })
   })
@@ -133,18 +141,13 @@ describe('EventNormalizer', () => {
       expect(types).toContain('thinking_start')
     })
 
-    it('flushes buffered content as plain text when no think tag found', () => {
+    it('emits initial content as soon as it cannot be a think tag', () => {
       const normalizer = createEventNormalizer()
       const preprocessor = createContentPreprocessor()
 
-      normalizer.processChunk(contentChunk('hi'), preprocessor)
-      // Buffer is only 2 chars, still under threshold (5)
-      const second = normalizer.processChunk(
-        contentChunk(' there, world'),
-        preprocessor,
+      expect(normalizer.processChunk(contentChunk('hi'), preprocessor)).toEqual(
+        [{ type: 'content_delta', content: 'hi' }],
       )
-      // Now buffer exceeds 5 chars, should flush as content
-      expect(second.some((e) => e.type === 'content_delta')).toBe(true)
     })
 
     it('flushes open thinking on stream end', () => {
@@ -505,10 +508,12 @@ describe('EventNormalizer', () => {
         contentChunk(' is important.'),
       ])
 
-      expect(events).toContainEqual({
-        type: 'content_delta',
-        content: ' NAD+ is important.',
-      })
+      expect(
+        events
+          .filter((event) => event.type === 'content_delta')
+          .map((event) => event.content)
+          .join(''),
+      ).toBe(' NAD+ is important.')
     })
 
     it('starts a new tool call when router continuations reuse index zero', () => {
@@ -613,13 +618,13 @@ describe('EventNormalizer', () => {
   })
 
   describe('flush', () => {
-    it('flushes small buffered content when stream ends early', () => {
+    it('flushes an ambiguous think-tag prefix when the stream ends', () => {
       const normalizer = createEventNormalizer()
       const preprocessor = createContentPreprocessor()
 
-      normalizer.processChunk(contentChunk('hi'), preprocessor)
+      normalizer.processChunk(contentChunk('<th'), preprocessor)
       const tail = normalizer.flush()
-      expect(tail).toContainEqual({ type: 'content_delta', content: 'hi' })
+      expect(tail).toContainEqual({ type: 'content_delta', content: '<th' })
     })
 
     it('returns empty when nothing buffered', () => {
