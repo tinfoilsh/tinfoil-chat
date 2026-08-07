@@ -147,6 +147,16 @@ describe('request context budgeting', () => {
     expect(plan.exceedsLimit).toBe(true)
   })
 
+  it('enforces the fixed message cap with an empty assistant placeholder', () => {
+    const plan = planRequestContext([makeMessage('assistant', 0)], {
+      ...baseBudget,
+      systemInstructions: 'system prompt',
+      maxMessages: 0,
+    })
+
+    expect(plan.exceedsLimit).toBe(true)
+  })
+
   it('keeps complete recent turns and assistant tool-call result groups', () => {
     const messages = [
       makeMessage('user', 14000),

@@ -235,11 +235,11 @@ export function planRequestContext(
     fixedMessages += 1
   }
 
+  const maxMessages = budget.maxMessages ?? Number.POSITIVE_INFINITY
+  const fixedContentExceedsLimit =
+    fixedTokens > limitTokens || fixedMessages > maxMessages
   const availableTokens = Math.max(0, limitTokens - fixedTokens)
-  const availableMessages = Math.max(
-    0,
-    (budget.maxMessages ?? Number.POSITIVE_INFINITY) - fixedMessages,
-  )
+  const availableMessages = Math.max(0, maxMessages - fixedMessages)
   const groups = requestTurnGroups(messages)
   if (groups.length === 0) {
     return {
@@ -248,9 +248,7 @@ export function planRequestContext(
       fixedTokens,
       limitTokens,
       availableTokens,
-      exceedsLimit:
-        fixedTokens > limitTokens ||
-        fixedMessages > (budget.maxMessages ?? Number.POSITIVE_INFINITY),
+      exceedsLimit: fixedContentExceedsLimit,
     }
   }
 
@@ -292,6 +290,7 @@ export function planRequestContext(
     limitTokens,
     availableTokens,
     exceedsLimit:
+      fixedContentExceedsLimit ||
       newestGroupExceedsLimit ||
       fixedTokens + selectedTokens > limitTokens ||
       selectedMessages > availableMessages,
