@@ -61,9 +61,7 @@ export interface UseChatStreamsReturn {
    * controller, or the next stop press would silently fail to abort.
    */
   clearController: (chatId: string, controller: AbortController) => void
-  /** True if `controller` is still the registered controller for the chat. */
   ownsController: (chatId: string, controller: AbortController) => boolean
-  /** True if any stream currently holds a controller for the chat. */
   hasActiveController: (chatId: string) => boolean
   /** Abort the stream for a chat. Returns true if a controller existed. */
   abort: (chatId: string) => boolean

@@ -289,7 +289,12 @@ export function ChatListItem({
     // The mousedown that initiates a drag focuses the row's link, and since
     // the drag suppresses the click, focus would stay parked inside the
     // privacy region and keep pixelated titles revealed after the drop.
-    if (document.activeElement instanceof HTMLElement) {
+    // Scoped to this row so dragging never steals focus from unrelated
+    // controls (e.g. a rename input on another row or the search field).
+    if (
+      document.activeElement instanceof HTMLElement &&
+      e.currentTarget.contains(document.activeElement)
+    ) {
       document.activeElement.blur()
     }
     setIsDragging(true)

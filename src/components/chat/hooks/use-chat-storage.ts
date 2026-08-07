@@ -158,9 +158,24 @@ export function useChatStorage({
           // reload's loadChats() snapshot resolved but before this setChats runs.
           // Without this re-filter, an in-flight reload would resurrect a chat
           // the user just deleted until the next page refresh.
-          const nonBlankChats = loadedChats.filter(
-            (c) => !c.isBlankChat && !deletedChatsTracker.isDeleted(c.id),
-          )
+          // Cancelled recoveries are stripped here too, not just on
+          // currentChat: switching to a chat adopts its entry from this
+          // list, which must not reintroduce a stopped turn's envelope.
+          const nonBlankChats = loadedChats
+            .filter(
+              (c) => !c.isBlankChat && !deletedChatsTracker.isDeleted(c.id),
+            )
+            .map((c) =>
+              c.pendingRecoveries?.length
+                ? {
+                    ...c,
+                    pendingRecoveries: withoutCancelledRecoveries(
+                      c.id,
+                      c.pendingRecoveries,
+                    ),
+                  }
+                : c,
+            )
 
           // Combine blank chats with loaded chats and sort
           const finalChats = sortChats([
@@ -609,20 +624,13 @@ export function useChatStorage({
           return
         }
 
-        // Convert StoredChat to Chat type
+        // Convert StoredChat to Chat. Spread everything through — an
+        // explicit field list here silently dropped presetId and
+        // webSearchEnabled in the past (chats lost their prompt preset on
+        // refresh); only createdAt needs transforming.
         const chat: Chat = {
-          id: downloadedChat.id,
-          title: downloadedChat.title,
-          messages: downloadedChat.messages,
+          ...downloadedChat,
           createdAt: new Date(downloadedChat.createdAt),
-          syncedAt: downloadedChat.syncedAt,
-          locallyModified: downloadedChat.locallyModified,
-          decryptionFailed: downloadedChat.decryptionFailed,
-          projectId: downloadedChat.projectId,
-          model: downloadedChat.model,
-          pendingRecoveries: downloadedChat.pendingRecoveries,
-          presetId: downloadedChat.presetId,
-          webSearchEnabled: downloadedChat.webSearchEnabled,
         }
 
         if (storeHistory) {

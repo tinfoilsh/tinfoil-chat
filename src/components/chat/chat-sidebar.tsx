@@ -609,8 +609,19 @@ export function ChatSidebar({
     }
   }, [isClient])
 
-  // The Projects header renders (and pins) only for premium users.
+  // Drives both the Projects section's visibility and the Chats header's
+  // sticky offset so the two can never drift apart.
   const hasPinnedProjectsHeader = Boolean(isSignedIn && isPremium)
+
+  // Heal stale accordion state: a stored Projects=true flag (e.g. from a
+  // premium session) would otherwise leave a signed-out/non-premium user
+  // with no Projects section AND a collapsed chat list — an empty sidebar.
+  useEffect(() => {
+    if (!hasPinnedProjectsHeader && isProjectsExpanded) {
+      setIsProjectsExpanded(false)
+      setIsChatHistoryExpanded(true)
+    }
+  }, [hasPinnedProjectsHeader, isProjectsExpanded])
 
   const hideScrollbarWhileSectionsAnimate = useCallback(() => {
     setHideScrollbarDuringAnimation(true)
@@ -1276,7 +1287,7 @@ export function ChatSidebar({
               list are direct children of the scroll container (no section
               wrapper) so the sticky header pins to the scroll area itself
               and stays visible for the rest of the scroll. */}
-          {isSignedIn && isPremium && (
+          {hasPinnedProjectsHeader && (
             <>
               <button
                 type="button"
