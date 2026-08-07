@@ -372,12 +372,18 @@ export async function completeLiveChatRecovery(args: {
 export async function cancelChatRecovery(
   chatId: string,
   assistantMessage?: Message,
+  turnId?: string,
 ): Promise<boolean> {
+  const targetTurnId = assistantMessage?.turnId ?? turnId
   const active = [...activeRecoveries.values()].filter(
-    (candidate) => candidate.chatId === chatId,
+    (candidate) =>
+      candidate.chatId === chatId &&
+      (targetTurnId === undefined || candidate.turnId === targetTurnId),
   )
   const scanned = [...scannedRecoveries.values()].filter(
-    (candidate) => candidate.chatId === chatId,
+    (candidate) =>
+      candidate.chatId === chatId &&
+      (targetTurnId === undefined || candidate.turnId === targetTurnId),
   )
   for (const recovery of active) {
     cancelledTurns.add(turnKey(recovery.chatId, recovery.turnId))

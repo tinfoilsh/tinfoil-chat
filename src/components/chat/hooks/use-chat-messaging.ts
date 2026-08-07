@@ -35,6 +35,7 @@ import {
   scanPendingChatRecoveries,
   startChatRecoveryAttempt,
 } from '@/services/inference/chat-recovery'
+import { clearActiveChatRecoveriesForChat } from '@/services/inference/chat-recovery-drafts'
 import { persistInterruptedAssistant } from '@/services/inference/chat-recovery-sync'
 import type { ChatChunkStream } from '@/services/inference/chat-stream'
 import { sendChatStream } from '@/services/inference/inference-client'
@@ -361,13 +362,14 @@ export function useChatMessaging({
         if (activeGeneration?.turnId) {
           markChatRecoveryTurnCancelled(targetId, activeGeneration.turnId)
         }
+        clearActiveChatRecoveriesForChat(targetId)
         const interruptedMessage =
           activeGeneration?.latestAssistantMessage &&
           hasVisibleAssistantMessage(activeGeneration.latestAssistantMessage)
             ? activeGeneration.latestAssistantMessage
             : null
         patchStatus(targetId, {
-          loadingState: 'loading',
+          loadingState: 'idle',
           retryInfo: null,
           isThinking: false,
           isWaitingForResponse: false,
@@ -425,6 +427,7 @@ export function useChatMessaging({
           recoveryHandled = await cancelChatRecovery(
             targetId,
             interruptedMessage ?? undefined,
+            activeGeneration?.turnId,
           )
         } catch (error) {
           recoveryHandled = true
@@ -451,7 +454,27 @@ export function useChatMessaging({
             } else if (storeHistory) {
               await chatStorage.saveChatAndSync(stoppedChat)
             } else {
-              sessionChatStorage.saveChat(stoppedChat)
+              const latestChat =
+                sessionChatStorage
+                  .getAllChats()
+                  .find((chat) => chat.id === targetId) ??
+                findLiveChat(targetId) ??
+                stoppedChat
+              const chatToSave = activeGeneration?.turnId
+                ? {
+                    ...latestChat,
+                    messages: mergeInterruptedAssistant(
+                      latestChat.messages,
+                      activeGeneration.turnId,
+                      interruptedMessage,
+                    ),
+                    pendingRecoveries: latestChat.pendingRecoveries?.filter(
+                      (recovery) => recovery.turnId !== activeGeneration.turnId,
+                    ),
+                    pendingSave: false,
+                  }
+                : stoppedChat
+              sessionChatStorage.saveChat(chatToSave)
             }
           } catch (error) {
             logError('Failed to save chat after cancellation', error, {
@@ -817,7 +840,13 @@ export function useChatMessaging({
         }
       }
 
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+        }
+        clearController(streamChatIdRef.current, controller)
+        return
+      }
 
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = streamChatIdRef.current

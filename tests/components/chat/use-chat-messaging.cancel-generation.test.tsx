@@ -260,7 +260,7 @@ describe('useChatMessaging cancelGeneration', () => {
     expect(result.current.isStreaming).toBe(true)
   })
 
-  it('keeps recovery cancellation loading and deduplicates repeated stops', async () => {
+  it('returns the input to idle immediately and deduplicates repeated stops', async () => {
     let finishCancellation!: (persisted: boolean) => void
     cancelChatRecoveryMock.mockImplementationOnce(
       () =>
@@ -293,11 +293,11 @@ describe('useChatMessaging cancelGeneration', () => {
     )
     expect(patchStatusMock).toHaveBeenCalledWith(
       'chat-a',
-      expect.objectContaining({ loadingState: 'loading' }),
+      expect.objectContaining({
+        loadingState: 'idle',
+        isStreaming: false,
+      }),
     )
-    expect(patchStatusMock).not.toHaveBeenCalledWith('chat-a', {
-      loadingState: 'idle',
-    })
 
     finishCancellation(false)
     await act(async () => {

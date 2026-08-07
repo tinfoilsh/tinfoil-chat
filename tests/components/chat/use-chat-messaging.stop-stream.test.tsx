@@ -18,7 +18,9 @@ const {
   persistInterruptedAssistantMock,
   saveChatMock,
   sendChatStreamMock,
+  sessionGetAllChatsMock,
   sessionSaveMock,
+  pendingStreams,
   streamControllers,
   streamingChats,
   recoveryAvailableState,
@@ -53,7 +55,9 @@ const {
   ),
   saveChatMock: vi.fn(async (chat: unknown) => chat),
   sendChatStreamMock: vi.fn(),
+  sessionGetAllChatsMock: vi.fn(() => [] as Chat[]),
   sessionSaveMock: vi.fn(),
+  pendingStreams: new Set<string>(),
   streamControllers: new Map<string, AbortController>(),
   streamingChats: new Set<string>(),
   recoveryAvailableState: { available: false },
@@ -79,9 +83,10 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
     startStreaming: (chatId: string) => streamingChats.add(chatId),
     endStreaming: (chatId: string) => streamingChats.delete(chatId),
     isStreaming: (chatId: string) => streamingChats.has(chatId),
-    beginPendingStream: vi.fn(),
-    endPendingStream: vi.fn(),
-    isStreamingOrPending: (chatId: string) => streamingChats.has(chatId),
+    beginPendingStream: (chatId: string) => pendingStreams.add(chatId),
+    endPendingStream: (chatId: string) => pendingStreams.delete(chatId),
+    isStreamingOrPending: (chatId: string) =>
+      streamingChats.has(chatId) || pendingStreams.has(chatId),
   },
 }))
 
@@ -162,7 +167,10 @@ vi.mock('@/services/storage/chat-storage', () => ({
 }))
 
 vi.mock('@/services/storage/session-storage', () => ({
-  sessionChatStorage: { saveChat: sessionSaveMock },
+  sessionChatStorage: {
+    getAllChats: sessionGetAllChatsMock,
+    saveChat: sessionSaveMock,
+  },
 }))
 
 vi.mock('@/services/exec-snapshot/access-token', () => ({
@@ -220,11 +228,13 @@ describe('useChatMessaging stopped streams', () => {
     persistInterruptedAssistantMock.mockResolvedValue(undefined)
     containerAuthTokenMock.mockResolvedValue(null)
     generateTitleMock.mockResolvedValue('Untitled')
+    sessionGetAllChatsMock.mockReturnValue([])
     authState.isSignedIn = false
     authState.userId = undefined
     recoveryAvailableState.available = false
     streamControllers.clear()
     streamingChats.clear()
+    pendingStreams.clear()
   })
 
   it('keeps and persists the assistant response at the stop point', async () => {
@@ -303,6 +313,7 @@ describe('useChatMessaging stopped streams', () => {
     expect(cancelChatRecoveryMock).toHaveBeenCalledWith(
       'chat-1',
       expect.objectContaining({ thoughts: 'Partial reasoning' }),
+      expect.any(String),
     )
   })
 
@@ -379,6 +390,91 @@ describe('useChatMessaging stopped streams', () => {
     })
   })
 
+  it('preserves a successor prompt while cancellation persistence finishes', async () => {
+    let finishRecoveryCancellation!: (persisted: boolean) => void
+    cancelChatRecoveryMock.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishRecoveryCancellation = resolve
+        }),
+    )
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [],
+    }
+    const stream = createOpenStream()
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: false,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'First prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    stream.send({ choices: [{ delta: { content: 'Partial answer' } }] })
+    await vi.waitFor(() =>
+      expect(result.current.currentChat.messages.at(-1)?.content).toBe(
+        'Partial answer',
+      ),
+    )
+
+    let cancellation!: Promise<void>
+    act(() => {
+      cancellation = result.current.messaging.cancelGeneration()
+    })
+    await vi.waitFor(() => expect(cancelChatRecoveryMock).toHaveBeenCalled())
+    const successorMessage: Chat['messages'][number] = {
+      role: 'user',
+      content: 'Successor prompt',
+      timestamp: new Date(),
+      turnId: 'turn-2',
+    }
+    sessionGetAllChatsMock.mockReturnValue([
+      {
+        ...result.current.currentChat,
+        messages: [...result.current.currentChat.messages, successorMessage],
+      },
+    ])
+
+    finishRecoveryCancellation(false)
+    await act(async () => {
+      await cancellation
+    })
+
+    expect(sessionSaveMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ content: 'Partial answer' }),
+          expect.objectContaining({ content: 'Successor prompt' }),
+        ]),
+      }),
+    )
+
+    stream.close()
+    await act(async () => {
+      await query
+    })
+  })
+
   it('does not start stream tracking after pre-stream cancellation', async () => {
     const initialChat: Chat = {
       id: 'chat-1',
@@ -432,6 +528,7 @@ describe('useChatMessaging stopped streams', () => {
 
     expect(sendChatStreamMock).not.toHaveBeenCalled()
     expect(streamingChats).toEqual(new Set())
+    expect(pendingStreams).toEqual(new Set())
   })
 
   it('keeps a temporary chat identity and live metadata when saved mid-stream', async () => {
@@ -969,6 +1066,7 @@ describe('useChatMessaging stopped streams', () => {
     expect(cancelChatRecoveryMock).toHaveBeenCalledWith(
       'chat-1',
       expect.objectContaining({ content: 'Complete answer' }),
+      expect.any(String),
     )
     expect(persistInterruptedAssistantMock).not.toHaveBeenCalled()
 

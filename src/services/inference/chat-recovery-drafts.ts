@@ -116,3 +116,15 @@ export function clearActiveChatRecoveries(): void {
     publish()
   }
 }
+
+export function clearActiveChatRecoveriesForChat(chatId: string): void {
+  const prefix = `${chatId}\u0000`
+  let changed = false
+  for (const key of activeTurns) {
+    if (key.startsWith(prefix)) {
+      activeTurns.delete(key)
+      changed = true
+    }
+  }
+  if (changed) publish()
+}

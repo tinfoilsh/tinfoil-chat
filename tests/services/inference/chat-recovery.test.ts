@@ -221,6 +221,51 @@ describe('chat recovery lifecycle', () => {
     expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
   })
 
+  it('cancels only the stopped turn when a successor is already active', async () => {
+    const successorSessionId = 'fedcba9876543210fedcba9876543210'
+    const successorEnvelope = { ...envelope, turnId: 'turn-2' }
+    encryptRecoveryEnvelope
+      .mockResolvedValueOnce(envelope)
+      .mockResolvedValueOnce(successorEnvelope)
+    startChatRecoveryAttempt('chat-1', 'turn-1', SESSION_ID)
+    await persistChatRecoveryToken({
+      userId: 'user-1',
+      chatId: 'chat-1',
+      turnId: 'turn-1',
+      sessionId: SESSION_ID,
+      token: {
+        exportedSecret: new Uint8Array(32),
+        requestEnc: new Uint8Array(32),
+      },
+    })
+    startChatRecoveryAttempt('chat-1', 'turn-2', successorSessionId)
+    await persistChatRecoveryToken({
+      userId: 'user-1',
+      chatId: 'chat-1',
+      turnId: 'turn-2',
+      sessionId: successorSessionId,
+      token: {
+        exportedSecret: new Uint8Array(32),
+        requestEnc: new Uint8Array(32),
+      },
+    })
+
+    await cancelChatRecovery('chat-1', undefined, 'turn-1')
+
+    expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
+    expect(deleteChatRecovery).not.toHaveBeenCalledWith(successorSessionId)
+    expect(removePendingRecovery).toHaveBeenCalledWith(
+      'chat-1',
+      envelope,
+      expect.any(Function),
+    )
+    expect(removePendingRecovery).not.toHaveBeenCalledWith(
+      'chat-1',
+      successorEnvelope,
+      expect.any(Function),
+    )
+  })
+
   it('discards a cancelled-turn token even when the mark lands mid-persist', async () => {
     // Narrower window: the cancel mark arrives after persistChatRecoveryToken
     // already passed its entry checks and is awaiting envelope encryption.

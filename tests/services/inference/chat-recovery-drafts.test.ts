@@ -1,5 +1,6 @@
 import {
   clearActiveChatRecoveries,
+  clearActiveChatRecoveriesForChat,
   clearChatRecoveryDraft,
   clearChatRecoveryDrafts,
   getActiveChatRecoverySnapshot,
@@ -78,5 +79,16 @@ describe('chat recovery drafts', () => {
     expect(getActiveChatRecoverySnapshot()).toEqual([])
     expect(listener).toHaveBeenCalledTimes(2)
     unsubscribe()
+  })
+
+  it('clears active recoveries for only the stopped chat', () => {
+    setChatRecoveryActive('chat-1', 'turn-1', true)
+    setChatRecoveryActive('chat-1', 'turn-2', true)
+    setChatRecoveryActive('chat-2', 'turn-3', true)
+
+    clearActiveChatRecoveriesForChat('chat-1')
+
+    expect(isChatRecoveryActive('chat-1')).toBe(false)
+    expect(isChatRecoveryActive('chat-2')).toBe(true)
   })
 })
