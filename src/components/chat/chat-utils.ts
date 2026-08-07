@@ -8,8 +8,10 @@ import type { Chat } from './types'
  * on error message text, which varies across browsers, SDKs, and locales.
  */
 export type ChatErrorCode =
-  // Transport/network failure, including exhausted retries.
+  // Transport/network failure (no HTTP response), including exhausted retries.
   | 'FETCH_ERROR'
+  // The server responded with a non-429 error status (5xx, 4xx).
+  | 'SERVER_ERROR'
   // Free-tier or per-request rate limit (HTTP 429 family).
   | 'RATE_LIMIT'
   // Per-account hourly usage cap.

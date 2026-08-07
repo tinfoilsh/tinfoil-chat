@@ -586,8 +586,10 @@ export async function sendChatStream(
 /**
  * Wraps a failed request's error into a typed ChatError, preserving any
  * classification already attached (our own ChatErrors pass through, HTTP
- * 429 maps to RATE_LIMIT) so downstream handling can branch on codes
- * instead of message text.
+ * 429 maps to RATE_LIMIT). FETCH_ERROR is reserved for failures with no
+ * HTTP response at all — a request that reached the server and got an
+ * error status is a SERVER_ERROR, and telling the user to check their
+ * internet for a 500 would be misleading.
  */
 function toTerminalChatError(err: unknown, retries?: number): ChatError {
   if (err instanceof ChatError) {
@@ -599,14 +601,11 @@ function toTerminalChatError(err: unknown, retries?: number): ChatError {
   if (status === 429) {
     return new ChatError(msg, 'RATE_LIMIT', { status })
   }
+  if (status !== undefined) {
+    return new ChatError(msg, 'SERVER_ERROR', { status })
+  }
   const suffix = retries !== undefined ? ` after ${retries} retries` : ''
-  return new ChatError(
-    `Network request failed${suffix}: ${msg}`,
-    'FETCH_ERROR',
-    {
-      status,
-    },
-  )
+  return new ChatError(`Network request failed${suffix}: ${msg}`, 'FETCH_ERROR')
 }
 
 export interface StructuredCompletionParams {
