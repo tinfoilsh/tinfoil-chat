@@ -22,6 +22,7 @@ import {
 } from 'react'
 import {
   PiGlobe,
+  PiGlobeX,
   PiPaperclipLight,
   PiPlusLight,
   PiQuotes,
@@ -1176,7 +1177,11 @@ export function ChatInput({
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
-                          <PiGlobe className="h-5 w-5 text-content-secondary" />
+                          {webSearchEnabled ? (
+                            <PiGlobe className="h-5 w-5 text-content-secondary" />
+                          ) : (
+                            <PiGlobeX className="h-5 w-5 text-content-secondary" />
+                          )}
                           <span className="flex-1">Web search</span>
                           {webSearchEnabled && (
                             <MenuCheckmark className="h-4 w-4 text-brand-accent-light" />
@@ -1211,47 +1216,6 @@ export function ChatInput({
                   </>
                 )}
               </div>
-              {/* Web search stays visible outside the menu while enabled so
-                  its active state is glanceable and one-click to turn off. */}
-              {onWebSearchToggle && webSearchEnabled && (
-                <button
-                  id="web-search-button"
-                  type="button"
-                  onClick={onWebSearchToggle}
-                  aria-label="Web search"
-                  aria-pressed
-                  className={cn(
-                    'flex h-7 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors',
-                    isDarkMode
-                      ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                      : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                  )}
-                >
-                  <PiGlobe className="h-5 w-5" />
-                  <span className="hidden translate-y-px text-xs font-medium leading-none md:inline">
-                    Search
-                  </span>
-                </button>
-              )}
-              {onCodeExecutionToggle && codeExecutionEnabled && (
-                <button
-                  type="button"
-                  onClick={onCodeExecutionToggle}
-                  aria-label="Code execution"
-                  aria-pressed
-                  className={cn(
-                    'flex h-7 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors',
-                    isDarkMode
-                      ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                      : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                  )}
-                >
-                  <PiTerminalWindow className="h-5 w-5" />
-                  <span className="hidden translate-y-px text-xs font-medium leading-none md:inline">
-                    Code
-                  </span>
-                </button>
-              )}
             </div>
 
             <div className="flex items-center gap-2">
