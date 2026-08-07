@@ -113,7 +113,7 @@ type ChatSidebarProps = {
    */
   backupWarningNeedsRecovery?: boolean
   onDismissBackupWarning?: () => void
-  onChatsUpdated?: () => void
+  onChatsUpdated?: () => void | Promise<void>
   /** Triggers a deep (all-pages) cloud sync from the sidebar "Sync" button. */
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
@@ -235,6 +235,12 @@ export function ChatSidebar({
       if (expandSection === 'projects') {
         return false
       }
+      // Accordion invariant: Projects and Chats are never open together.
+      // Stored states predating the accordion (or written independently)
+      // can both be 'true'; Projects wins and Chats stays collapsed.
+      if (sessionStorage.getItem(UI_SIDEBAR_PROJECTS_EXPANDED) === 'true') {
+        return false
+      }
       const stored = sessionStorage.getItem(UI_SIDEBAR_CHAT_HISTORY_EXPANDED)
       if (stored !== null) {
         return stored === 'true'
@@ -242,9 +248,14 @@ export function ChatSidebar({
     }
     return true
   })
-  const [isChatListScrolled, setIsChatListScrolled] = useState(false)
-  const chatListRef = useRef<HTMLDivElement>(null)
-  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
+  // Hides the sidebar scrollbar while a section expand/collapse animates;
+  // the scroll height changes every frame and the scrollbar would flicker.
+  const [hideScrollbarDuringAnimation, setHideScrollbarDuringAnimation] =
+    useState(false)
+  const scrollbarHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
   const [isIOS, setIsIOS] = useState(false)
   const [nativeAppDismissed, setNativeAppDismissed] = useState(false)
   const {
@@ -528,7 +539,7 @@ export function ChatSidebar({
         resetPagination()
           .then((result) => {
             if (result?.deletedIds.length && onChatsUpdated) {
-              onChatsUpdated()
+              return onChatsUpdated()
             }
           })
           .catch((error) => {
@@ -552,7 +563,7 @@ export function ChatSidebar({
       try {
         const result = await initPagination()
         if (result?.deletedIds.length && onChatsUpdated) {
-          onChatsUpdated()
+          await onChatsUpdated()
         }
       } catch (error) {
         logError('Failed to cleanup and initialize pagination', error, {
@@ -565,17 +576,37 @@ export function ChatSidebar({
     cleanupAndInitialize()
   }, [isSignedIn, user?.id, onChatsUpdated, initPagination])
 
-  // Load more chats from backend (delegated to CloudSync via hook)
-  const loadMoreChats = useCallback(async () => {
+  // Load more chats from backend (delegated to CloudSync via hook).
+  // Returns the number of chats the page added, or null on failure, so the
+  // auto-top-up path can latch itself off when a request stops making
+  // progress instead of looping.
+  const loadMoreChats = useCallback(async (): Promise<number | null> => {
     try {
-      if (isLoadingMore || !isSignedIn) return
+      if (isLoadingMore || !isSignedIn) return null
       const result = await loadMorePage()
       const savedCount = result?.saved ?? 0
       justLoadedMoreRef.current = savedCount > 0
       if (savedCount > 0) {
         setPendingChatsRender(true)
-        onChatsUpdated?.()
+        try {
+          // Await the reload so the render-pending flag is cleared even
+          // when the page's chats were all already present locally (the
+          // count-increase effect never fires in that case, and a stuck
+          // flag would permanently gate future pagination).
+          await onChatsUpdated?.()
+        } catch (error) {
+          // The page fetch itself succeeded — don't let a reload failure
+          // fall through to the outer catch and read as a failed page
+          // (which would trip the caller's auto-top-up latch).
+          logError('Failed to reload chats after pagination', error, {
+            component: 'ChatSidebar',
+            action: 'loadMoreChats',
+          })
+        } finally {
+          setPendingChatsRender(false)
+        }
       }
+      return savedCount
     } catch (error) {
       justLoadedMoreRef.current = false
       setPendingChatsRender(false)
@@ -583,6 +614,7 @@ export function ChatSidebar({
         component: 'ChatSidebar',
         action: 'loadMoreChats',
       })
+      return null
     }
   }, [isLoadingMore, isSignedIn, loadMorePage, onChatsUpdated])
 
@@ -598,52 +630,62 @@ export function ChatSidebar({
     }
   }, [isClient])
 
-  useEffect(() => {
-    const chatList = chatListRef.current
-    if (!chatList) return
+  // Drives both the Projects section's visibility and the Chats header's
+  // sticky offset so the two can never drift apart.
+  const hasPinnedProjectsHeader = Boolean(isSignedIn && isPremium)
 
-    const handleScroll = () => {
-      setIsChatListScrolled(chatList.scrollTop > 0)
+  // Heal stale accordion state: a stored Projects=true flag (e.g. from a
+  // premium session) would otherwise leave a signed-out/non-premium user
+  // with no Projects section AND a collapsed chat list — an empty sidebar.
+  useEffect(() => {
+    if (!hasPinnedProjectsHeader && isProjectsExpanded) {
+      setIsProjectsExpanded(false)
+      setIsChatHistoryExpanded(true)
     }
+  }, [hasPinnedProjectsHeader, isProjectsExpanded])
 
-    handleScroll()
-    chatList.addEventListener('scroll', handleScroll)
-    return () => chatList.removeEventListener('scroll', handleScroll)
-  }, [isChatHistoryExpanded])
+  const hideScrollbarWhileSectionsAnimate = useCallback(() => {
+    setHideScrollbarDuringAnimation(true)
+    if (scrollbarHideTimeoutRef.current !== null) {
+      clearTimeout(scrollbarHideTimeoutRef.current)
+    }
+    scrollbarHideTimeoutRef.current = setTimeout(() => {
+      scrollbarHideTimeoutRef.current = null
+      setHideScrollbarDuringAnimation(false)
+    }, CONSTANTS.SIDEBAR_SECTION_SCROLLBAR_HIDE_MS)
+  }, [])
 
-  // Auto-load more chats when scrolling to bottom
-  useEffect(() => {
-    const sentinel = loadMoreSentinelRef.current
-    if (!sentinel) return
+  useEffect(
+    () => () => {
+      if (scrollbarHideTimeoutRef.current !== null) {
+        clearTimeout(scrollbarHideTimeoutRef.current)
+      }
+    },
+    [],
+  )
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (
-          entry.isIntersecting &&
-          shouldShowLoadMore &&
-          !isLoadingMore &&
-          isSignedIn
-        ) {
-          loadMoreChats()
-        }
-      },
-      {
-        root: chatListRef.current,
-        rootMargin: '100px',
-        threshold: 0,
-      },
-    )
+  // Projects and Chats behave as an accordion: expanding one collapses the
+  // other. This keeps the newly opened section at the top of the scroll
+  // area (expanding a section while scrolled deep into the other would
+  // otherwise appear to do nothing, since the new content renders at its
+  // flow position far above the viewport) and resets the scroll so the
+  // opened section's content is immediately visible.
+  const expandProjectsSection = useCallback(() => {
+    hideScrollbarWhileSectionsAnimate()
+    setIsProjectsExpanded(true)
+    setIsChatHistoryExpanded(false)
+    sidebarScrollRef.current?.scrollTo({ top: 0 })
+    if (projects.length === 0) {
+      refreshProjects()
+    }
+  }, [projects.length, refreshProjects, hideScrollbarWhileSectionsAnimate])
 
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [
-    shouldShowLoadMore,
-    isLoadingMore,
-    isSignedIn,
-    loadMoreChats,
-    isChatHistoryExpanded,
-  ])
+  const expandChatsSection = useCallback(() => {
+    hideScrollbarWhileSectionsAnimate()
+    setIsChatHistoryExpanded(true)
+    setIsProjectsExpanded(false)
+    sidebarScrollRef.current?.scrollTo({ top: 0 })
+  }, [hideScrollbarWhileSectionsAnimate])
 
   const sortedChats = useMemo(() => {
     // The incoming `chats` array is already sorted by `sortChats`
@@ -692,6 +734,76 @@ export function ChatSidebar({
     !(localOnlyModeEnabled && activeTab === 'local')
   const chatSearch = useChatSearch(chatSearchTerm, searchEnabled)
   const isSearchActive = searchEnabled && chatSearchTerm.trim().length > 0
+
+  // Latch that disables the automatic under-filled-viewport top-up after a
+  // page request fails or adds nothing new. Without it, an error (retried
+  // instantly by the effect re-run) or a run of zero-new-chat pages would
+  // loop through requests with no user interaction. Any scroll event
+  // re-arms it (including programmatic ones from the accordion's
+  // scrollTo — acceptable, since those only follow deliberate clicks and
+  // re-arming costs at most one request).
+  const autoTopUpDisabledRef = useRef(false)
+
+  // Auto-load more chats when the user scrolls near the bottom of the
+  // sidebar. Deliberately scroll-event driven rather than an
+  // IntersectionObserver: recreating an observer (this effect re-runs every
+  // time isLoadingMore flips after a page) re-fires its initial callback,
+  // and with the sentinel sitting inside the unified scroller that cascaded
+  // into fetching every remaining page. Scroll events only fire on real
+  // user scrolling, so each near-bottom scroll loads at most one page.
+  useEffect(() => {
+    const scroller = sidebarScrollRef.current
+    if (!scroller) return
+
+    const maybeLoadMore = (fromUserScroll: boolean) => {
+      if (
+        !shouldShowLoadMore ||
+        isLoadingMore ||
+        pendingChatsRender ||
+        !isSignedIn ||
+        !isChatHistoryExpanded ||
+        isSearchActive
+      ) {
+        return
+      }
+      if (fromUserScroll) {
+        autoTopUpDisabledRef.current = false
+      } else if (autoTopUpDisabledRef.current) {
+        return
+      }
+      const distanceFromBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+      if (
+        distanceFromBottom <= CONSTANTS.SIDEBAR_AUTOLOAD_BOTTOM_THRESHOLD_PX
+      ) {
+        void loadMoreChats().then((savedCount) => {
+          if (savedCount === null || savedCount === 0) {
+            autoTopUpDisabledRef.current = true
+          }
+        })
+      }
+    }
+
+    // Under-filled viewport: without a scrollbar the scroll listener can
+    // never fire, so top up one page at a time (each render round-trips
+    // through pendingChatsRender before the next check) until the list
+    // overflows, the last page is reached, or the latch trips.
+    if (scroller.scrollHeight <= scroller.clientHeight) {
+      maybeLoadMore(false)
+    }
+
+    const onScroll = () => maybeLoadMore(true)
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [
+    shouldShowLoadMore,
+    isLoadingMore,
+    pendingChatsRender,
+    isSignedIn,
+    loadMoreChats,
+    isChatHistoryExpanded,
+    isSearchActive,
+  ])
 
   const searchResultChats = useMemo((): ChatItemData[] => {
     if (!isSearchActive) return []
@@ -1027,8 +1139,17 @@ export function ChatSidebar({
           </div>
         </div>
 
-        {/* Main sidebar content */}
-        <div className="relative flex h-full flex-col overflow-hidden">
+        {/* Main sidebar content - one scroll area covering the upsell box,
+            New Chat button, Projects, and Chats so long project or chat
+            lists never squeeze each other out of view. The footer (and iOS
+            banner) stay pinned below. */}
+        <div
+          ref={sidebarScrollRef}
+          className={cn(
+            'relative flex min-h-0 flex-1 flex-col overflow-y-auto',
+            hideScrollbarDuringAnimation && 'scrollbar-hide',
+          )}
+        >
           {/* Message for non-premium users (signed in or not) */}
           {!isPremium && (
             <div
@@ -1202,17 +1323,21 @@ export function ChatSidebar({
             </Link>
           </div>
 
-          {/* Projects dropdown - show for premium users */}
-          {isSignedIn && isPremium && (
-            <div className="relative z-10 flex-none border-t border-border-subtle">
+          {/* Projects dropdown - show for premium users. The header and
+              list are direct children of the scroll container (no section
+              wrapper) so the sticky header pins to the scroll area itself
+              and stays visible for the rest of the scroll. */}
+          {hasPinnedProjectsHeader && (
+            <>
               <button
                 type="button"
                 aria-expanded={isProjectsExpanded}
                 onClick={() => {
-                  const newExpanded = !isProjectsExpanded
-                  setIsProjectsExpanded(newExpanded)
-                  if (newExpanded && projects.length === 0) {
-                    refreshProjects()
+                  if (isProjectsExpanded) {
+                    hideScrollbarWhileSectionsAnimate()
+                    setIsProjectsExpanded(false)
+                  } else {
+                    expandProjectsSection()
                   }
                 }}
                 onDragOver={(e) => {
@@ -1233,10 +1358,7 @@ export function ChatSidebar({
                     e.preventDefault()
                     setIsDropTargetProjectsHeader(true)
                     if (!isProjectsExpanded) {
-                      setIsProjectsExpanded(true)
-                      if (projects.length === 0) {
-                        refreshProjects()
-                      }
+                      expandProjectsSection()
                     }
                   }
                 }}
@@ -1246,8 +1368,19 @@ export function ChatSidebar({
                 onDrop={() => {
                   setIsDropTargetProjectsHeader(false)
                 }}
+                style={{
+                  // Explicit height shared with the Chats header's stacking
+                  // offset so the pinned headers always sit flush; a
+                  // content-driven height can drift from the constant and
+                  // open a seam where scrolled content shows through.
+                  height: `${CONSTANTS.SIDEBAR_PINNED_HEADER_OFFSET_PX}px`,
+                }}
                 className={cn(
-                  'flex w-full cursor-pointer items-center justify-between bg-surface-sidebar px-4 py-3 text-sm transition-colors',
+                  // flex-none is load-bearing: header and panel are direct
+                  // children of the flex-col scroll container, and without
+                  // it flexbox shrinks them to fit the viewport instead of
+                  // letting the container scroll.
+                  'sticky top-0 z-30 flex w-full flex-none cursor-pointer items-center justify-between border-t border-border-subtle bg-surface-sidebar px-4 text-sm transition-colors',
                   isDropTargetProjectsHeader
                     ? isDarkMode
                       ? 'border border-white/30 bg-white/10'
@@ -1276,21 +1409,25 @@ export function ChatSidebar({
                 </span>
               </button>
 
-              {/* Expanded projects list */}
+              {/* Expanded projects list. flex-none matters here too: this
+                  panel is a direct child of the flex-col scroll container,
+                  and overflow-hidden (required by the height animation)
+                  would otherwise clip the list when flexbox shrinks it to
+                  the viewport instead of letting the sidebar scroll. */}
               <AnimatePresence initial={false}>
                 {isProjectsExpanded && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: 'easeInOut' }}
-                    className="overflow-hidden"
+                    transition={{
+                      duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                      ease: 'easeInOut',
+                    }}
+                    className="flex-none overflow-hidden"
                   >
                     <div
-                      className={cn(
-                        'min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2',
-                        expandedPanelClass,
-                      )}
+                      className={cn('space-y-1 px-2 py-2', expandedPanelClass)}
                     >
                       {/* Cloud sync disabled message */}
                       {!cloudSyncEnabled ? (
@@ -1624,10 +1761,12 @@ export function ChatSidebar({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </>
           )}
 
-          {/* Chats Header */}
+          {/* Chats section. Like Projects, header and content sit directly
+              in the scroll container; the header pins below the Projects
+              header while the chat list scrolls. */}
           <div
             className={cn(
               'relative z-10 flex-none border-t border-border-subtle',
@@ -1652,7 +1791,9 @@ export function ChatSidebar({
                 if (chatId) {
                   e.preventDefault()
                   setDropTargetChatHistory(true)
-                  setIsChatHistoryExpanded(true)
+                  if (!isChatHistoryExpanded) {
+                    expandChatsSection()
+                  }
                 }
               }}
               onDragLeave={() => {
@@ -1667,18 +1808,31 @@ export function ChatSidebar({
                 clearDragState()
               }}
               className={cn(
-                'relative flex w-full items-center bg-surface-sidebar text-sm transition-colors',
+                'sticky z-20 flex w-full items-center bg-surface-sidebar text-sm transition-colors',
                 isDropTargetChatHistory
                   ? isDarkMode
                     ? 'border border-white/30 bg-white/10'
                     : 'border border-gray-400 bg-gray-200/30'
                   : 'text-content-secondary',
               )}
+              style={{
+                // Stack below the pinned Projects header when present.
+                top: hasPinnedProjectsHeader
+                  ? `${CONSTANTS.SIDEBAR_PINNED_HEADER_OFFSET_PX}px`
+                  : 0,
+              }}
             >
               <button
                 type="button"
                 aria-expanded={isChatHistoryExpanded}
-                onClick={() => setIsChatHistoryExpanded(!isChatHistoryExpanded)}
+                onClick={() => {
+                  if (isChatHistoryExpanded) {
+                    hideScrollbarWhileSectionsAnimate()
+                    setIsChatHistoryExpanded(false)
+                  } else {
+                    expandChatsSection()
+                  }
+                }}
                 className="flex w-full items-center justify-between px-4 py-3 text-left"
               >
                 <span className="flex items-center gap-2">
@@ -1721,7 +1875,10 @@ export function ChatSidebar({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  transition={{
+                    duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                    ease: 'easeInOut',
+                  }}
                   className={cn('overflow-hidden', expandedPanelClass)}
                 >
                   {/* Tabs for Cloud/Local chats - show when signed in, cloud sync enabled, and local-only mode enabled */}
@@ -1947,331 +2104,329 @@ export function ChatSidebar({
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
 
-          {/* Scrollable Chat List */}
-          <AnimatePresence initial={false}>
-            {isChatHistoryExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                className={cn('flex-1 overflow-hidden', expandedPanelClass)}
-              >
-                <div
-                  id="chat-storage-panel"
-                  role="tabpanel"
-                  aria-labelledby={
-                    activeTab === 'cloud' ? 'chat-cloud-tab' : 'chat-local-tab'
-                  }
-                  ref={chatListRef}
-                  onDragOver={(e) => {
-                    if (
-                      e.dataTransfer.types.includes('application/x-chat-id')
-                    ) {
-                      e.preventDefault()
-                      e.dataTransfer.dropEffect = 'move'
-                      setIsDropTargetChatList(true)
-                    }
+            {/* Chat List - flows within the unified sidebar scroll area */}
+            <AnimatePresence initial={false}>
+              {isChatHistoryExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{
+                    duration: CONSTANTS.SIDEBAR_SECTION_ANIMATION_S,
+                    ease: 'easeInOut',
                   }}
-                  onDragEnter={(e) => {
-                    if (
-                      e.dataTransfer.types.includes('application/x-chat-id')
-                    ) {
-                      e.preventDefault()
-                      setIsDropTargetChatList(true)
-                    }
-                  }}
-                  onDragLeave={(e) => {
-                    // Only clear if leaving the container entirely
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                      setIsDropTargetChatList(false)
-                    }
-                  }}
-                  onDrop={async (e) => {
-                    e.preventDefault()
-                    const chatId = e.dataTransfer.getData(
-                      'application/x-chat-id',
-                    )
-                    if (chatId) {
-                      const chat = chats.find((c) => c.id === chatId)
-                      if (draggingChatFromProjectId) {
-                        // Dragging from project - remove from project
-                        if (activeTab === 'local' && onConvertChatToLocal) {
-                          await onConvertChatToLocal(chatId)
-                        } else if (onRemoveChatFromProject) {
-                          await onRemoveChatFromProject(chatId)
-                        }
-                      } else if (
-                        chat?.isLocalOnly &&
-                        activeTab === 'cloud' &&
-                        onConvertChatToCloud
-                      ) {
-                        // Local chat dropped on cloud tab area - convert to cloud
-                        await onConvertChatToCloud(chatId)
-                      } else if (
-                        !chat?.isLocalOnly &&
-                        activeTab === 'local' &&
-                        onConvertChatToLocal
-                      ) {
-                        // Cloud chat dropped on local tab area - convert to local
-                        await onConvertChatToLocal(chatId)
-                      }
-                    }
-                    setIsDropTargetChatList(false)
-                    clearDragState()
-                  }}
-                  className={cn(
-                    'relative z-10 h-full overflow-y-auto',
-                    isChatListScrolled && 'border-t border-border-subtle',
-                    isDropTargetChatList &&
-                      (isDarkMode
-                        ? 'border border-white/30 bg-white/10'
-                        : 'border border-gray-400 bg-gray-200/30'),
-                  )}
+                  className={cn('overflow-hidden', expandedPanelClass)}
                 >
-                  {isClient && (
-                    <ChatList
-                      chats={
-                        isSearchActive
-                          ? searchResultChats
-                          : (sortedChats as ChatItemData[])
+                  <div
+                    id="chat-storage-panel"
+                    role="tabpanel"
+                    aria-labelledby={
+                      activeTab === 'cloud'
+                        ? 'chat-cloud-tab'
+                        : 'chat-local-tab'
+                    }
+                    onDragOver={(e) => {
+                      if (
+                        e.dataTransfer.types.includes('application/x-chat-id')
+                      ) {
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        setIsDropTargetChatList(true)
                       }
-                      currentChatId={currentChat?.id}
-                      currentChatIsBlank={currentChat?.isBlankChat}
-                      currentChatIsLocalOnly={currentChat?.isLocalOnly}
-                      isDarkMode={isDarkMode}
-                      pixelateSidebarChatTitles={pixelateSidebarChatTitles}
-                      isLoading={
-                        isSearchActive &&
-                        chatSearch.isSearching &&
-                        searchResultChats.length === 0
+                    }}
+                    onDragEnter={(e) => {
+                      if (
+                        e.dataTransfer.types.includes('application/x-chat-id')
+                      ) {
+                        e.preventDefault()
+                        setIsDropTargetChatList(true)
                       }
-                      showEncryptionStatus={true}
-                      showSyncStatus={true}
-                      enableTitleAnimation={true}
-                      isDraggable={
-                        !isSearchActive &&
-                        isSignedIn &&
-                        cloudSyncEnabled &&
-                        (!!onMoveChatToProject ||
-                          !!onConvertChatToCloud ||
-                          !!onConvertChatToLocal)
+                    }}
+                    onDragLeave={(e) => {
+                      // Only clear if leaving the container entirely
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setIsDropTargetChatList(false)
                       }
-                      showMoveToProject={
-                        !isSearchActive &&
-                        isSignedIn &&
-                        isPremium &&
-                        cloudSyncEnabled &&
-                        !!onMoveChatToProject
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault()
+                      const chatId = e.dataTransfer.getData(
+                        'application/x-chat-id',
+                      )
+                      if (chatId) {
+                        const chat = chats.find((c) => c.id === chatId)
+                        if (draggingChatFromProjectId) {
+                          // Dragging from project - remove from project
+                          if (activeTab === 'local' && onConvertChatToLocal) {
+                            await onConvertChatToLocal(chatId)
+                          } else if (onRemoveChatFromProject) {
+                            await onRemoveChatFromProject(chatId)
+                          }
+                        } else if (
+                          chat?.isLocalOnly &&
+                          activeTab === 'cloud' &&
+                          onConvertChatToCloud
+                        ) {
+                          // Local chat dropped on cloud tab area - convert to cloud
+                          await onConvertChatToCloud(chatId)
+                        } else if (
+                          !chat?.isLocalOnly &&
+                          activeTab === 'local' &&
+                          onConvertChatToLocal
+                        ) {
+                          // Cloud chat dropped on local tab area - convert to local
+                          await onConvertChatToLocal(chatId)
+                        }
                       }
-                      getChatHref={(chat) =>
-                        chat.isBlankChat
-                          ? getNewChatPath({
-                              isLocalOnly: chat.isLocalOnly,
-                            })
-                          : getChatPath(chat.id, {
-                              isLocalOnly: chat.isLocalOnly,
-                            })
-                      }
-                      onSelectChat={
-                        isSearchActive
-                          ? handleSearchResultSelect
-                          : handleChatSelect
-                      }
-                      onAfterSelect={undefined}
-                      onUpdateTitle={updateChatTitle}
-                      onDeleteChat={deleteChat}
-                      onEncryptionKeyClick={onEncryptionKeyClick}
-                      onDragStart={(chatId) => setDraggingChat(chatId, null)}
-                      onDragEnd={() => {
-                        clearDragState()
-                      }}
-                      projects={projects.map((p) => ({
-                        id: p.id,
-                        name: p.name,
-                      }))}
-                      onMoveToProject={
-                        onMoveChatToProject
-                          ? async (chatId, projectId) => {
-                              // Convert local chat to cloud first if needed
-                              const chat = chats.find((c) => c.id === chatId)
-                              if (chat?.isLocalOnly && onConvertChatToCloud) {
-                                await onConvertChatToCloud(chatId)
+                      setIsDropTargetChatList(false)
+                      clearDragState()
+                    }}
+                    className={cn(
+                      'relative z-10',
+                      isDropTargetChatList &&
+                        (isDarkMode
+                          ? 'border border-white/30 bg-white/10'
+                          : 'border border-gray-400 bg-gray-200/30'),
+                    )}
+                  >
+                    {isClient && (
+                      <ChatList
+                        chats={
+                          isSearchActive
+                            ? searchResultChats
+                            : (sortedChats as ChatItemData[])
+                        }
+                        currentChatId={currentChat?.id}
+                        currentChatIsBlank={currentChat?.isBlankChat}
+                        currentChatIsLocalOnly={currentChat?.isLocalOnly}
+                        isDarkMode={isDarkMode}
+                        pixelateSidebarChatTitles={pixelateSidebarChatTitles}
+                        isLoading={
+                          isSearchActive &&
+                          chatSearch.isSearching &&
+                          searchResultChats.length === 0
+                        }
+                        showEncryptionStatus={true}
+                        showSyncStatus={true}
+                        enableTitleAnimation={true}
+                        isDraggable={
+                          !isSearchActive &&
+                          isSignedIn &&
+                          cloudSyncEnabled &&
+                          (!!onMoveChatToProject ||
+                            !!onConvertChatToCloud ||
+                            !!onConvertChatToLocal)
+                        }
+                        showMoveToProject={
+                          !isSearchActive &&
+                          isSignedIn &&
+                          isPremium &&
+                          cloudSyncEnabled &&
+                          !!onMoveChatToProject
+                        }
+                        getChatHref={(chat) =>
+                          chat.isBlankChat
+                            ? getNewChatPath({
+                                isLocalOnly: chat.isLocalOnly,
+                              })
+                            : getChatPath(chat.id, {
+                                isLocalOnly: chat.isLocalOnly,
+                              })
+                        }
+                        onSelectChat={
+                          isSearchActive
+                            ? handleSearchResultSelect
+                            : handleChatSelect
+                        }
+                        onAfterSelect={undefined}
+                        onUpdateTitle={updateChatTitle}
+                        onDeleteChat={deleteChat}
+                        onEncryptionKeyClick={onEncryptionKeyClick}
+                        onDragStart={(chatId) => setDraggingChat(chatId, null)}
+                        onDragEnd={() => {
+                          clearDragState()
+                        }}
+                        projects={projects.map((p) => ({
+                          id: p.id,
+                          name: p.name,
+                        }))}
+                        onMoveToProject={
+                          onMoveChatToProject
+                            ? async (chatId, projectId) => {
+                                // Convert local chat to cloud first if needed
+                                const chat = chats.find((c) => c.id === chatId)
+                                if (chat?.isLocalOnly && onConvertChatToCloud) {
+                                  await onConvertChatToCloud(chatId)
+                                }
+                                await onMoveChatToProject(chatId, projectId)
                               }
-                              await onMoveChatToProject(chatId, projectId)
-                            }
-                          : undefined
-                      }
-                      loadingIndicator={
-                        isSearchActive && chatSearch.isIndexing ? (
-                          <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
-                            <PiSpinner className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">
-                              Building search index...
-                            </span>
-                          </div>
-                        ) : chatDecryptionProgress?.isDecrypting ? (
-                          <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
-                            <PiSpinner className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">
-                              Loading chats
-                              {chatDecryptionProgress.total > 0
-                                ? ` (${chatDecryptionProgress.current}/${chatDecryptionProgress.total})`
-                                : '...'}
-                            </span>
-                          </div>
-                        ) : undefined
-                      }
-                      onConvertToCloud={onConvertChatToCloud}
-                      onConvertToLocal={onConvertChatToLocal}
-                      emptyState={
-                        isSearchActive ? (
-                          <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                            <p className="text-sm text-content-muted">
-                              No matching chats
-                            </p>
-                            {chatSearch.isIndexing && (
-                              <p className="mt-1 text-balance text-xs text-content-muted">
-                                The search index is still being built; results
-                                will fill in shortly
+                            : undefined
+                        }
+                        loadingIndicator={
+                          isSearchActive && chatSearch.isIndexing ? (
+                            <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
+                              <PiSpinner className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">
+                                Building search index...
+                              </span>
+                            </div>
+                          ) : chatDecryptionProgress?.isDecrypting ? (
+                            <div className="flex items-center gap-2 px-4 py-2 text-content-secondary">
+                              <PiSpinner className="h-4 w-4 animate-spin" />
+                              <span className="text-sm">
+                                Loading chats
+                                {chatDecryptionProgress.total > 0
+                                  ? ` (${chatDecryptionProgress.current}/${chatDecryptionProgress.total})`
+                                  : '...'}
+                              </span>
+                            </div>
+                          ) : undefined
+                        }
+                        onConvertToCloud={onConvertChatToCloud}
+                        onConvertToLocal={onConvertChatToLocal}
+                        emptyState={
+                          isSearchActive ? (
+                            <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                              <p className="text-sm text-content-muted">
+                                No matching chats
                               </p>
-                            )}
-                          </div>
-                        ) : activeTab === 'local' ? (
-                          <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
-                            <p className="text-sm text-content-muted">
-                              No local chats yet
-                            </p>
-                            <p className="mt-1 text-xs text-content-muted">
-                              Disable cloud sync in settings to create
-                              local-only chats
-                            </p>
-                          </div>
-                        ) : undefined
-                      }
-                      loadMoreButton={
-                        isSearchActive ? undefined : (
-                          <>
-                            {/* Sentinel element for intersection observer */}
-                            <div ref={loadMoreSentinelRef} className="h-1" />
-                            {/* Shimmer placeholder while loading or waiting for chats to render */}
-                            {(isLoadingMore || pendingChatsRender) && (
-                              <div className="space-y-1 px-2">
-                                {[...Array(3)].map((_, i) => (
-                                  <div
-                                    key={i}
-                                    className="animate-pulse rounded-lg px-3 py-2"
-                                  >
+                              {chatSearch.isIndexing && (
+                                <p className="mt-1 text-balance text-xs text-content-muted">
+                                  The search index is still being built; results
+                                  will fill in shortly
+                                </p>
+                              )}
+                            </div>
+                          ) : activeTab === 'local' ? (
+                            <div className="rounded-lg border border-border-subtle bg-surface-sidebar p-4 text-center">
+                              <p className="text-sm text-content-muted">
+                                No local chats yet
+                              </p>
+                              <p className="mt-1 text-xs text-content-muted">
+                                Disable cloud sync in settings to create
+                                local-only chats
+                              </p>
+                            </div>
+                          ) : undefined
+                        }
+                        loadMoreButton={
+                          isSearchActive ? undefined : (
+                            <>
+                              {/* Shimmer placeholder while loading or waiting for chats to render */}
+                              {(isLoadingMore || pendingChatsRender) && (
+                                <div className="space-y-1 px-2">
+                                  {[...Array(3)].map((_, i) => (
                                     <div
-                                      className={cn(
-                                        'mb-1.5 h-3.5 w-3/4 rounded',
-                                        isDarkMode
-                                          ? 'bg-gray-700'
-                                          : 'bg-gray-200',
-                                      )}
-                                    />
-                                    <div
-                                      className={cn(
-                                        'h-3 w-1/3 rounded',
-                                        isDarkMode
-                                          ? 'bg-gray-700'
-                                          : 'bg-gray-200',
-                                      )}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {isSignedIn &&
-                              !shouldShowLoadMore &&
-                              !hasMoreRemote &&
-                              hasAttemptedLoadMore && (
-                                <div className="px-3 py-2 text-center text-xs text-content-muted">
-                                  No more chats
+                                      key={i}
+                                      className="animate-pulse rounded-lg px-3 py-2"
+                                    >
+                                      <div
+                                        className={cn(
+                                          'mb-1.5 h-3.5 w-3/4 rounded',
+                                          isDarkMode
+                                            ? 'bg-gray-700'
+                                            : 'bg-gray-200',
+                                        )}
+                                      />
+                                      <div
+                                        className={cn(
+                                          'h-3 w-1/3 rounded',
+                                          isDarkMode
+                                            ? 'bg-gray-700'
+                                            : 'bg-gray-200',
+                                        )}
+                                      />
+                                    </div>
+                                  ))}
                                 </div>
                               )}
-                          </>
-                        )
-                      }
-                    />
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* App Store button for iOS users */}
-          {isClient && isIOS && !nativeAppDismissed && (
-            <div className="relative z-10 flex-none border-t border-border-subtle p-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setNativeAppDismissed(true)
-                  try {
-                    localStorage.setItem(
-                      USER_PREFS_NATIVE_APP_DISMISSED,
-                      'true',
-                    )
-                  } catch {}
-                }}
-                aria-label="Dismiss"
-                className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center text-content-muted transition-colors hover:text-content-primary"
-              >
-                <XMarkIcon className="h-4 w-4" />
-              </button>
-              <div className="text-center">
-                <p
-                  className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
-                >
-                  Get the native app
-                </p>
-                <a
-                  href="https://apps.apple.com/app/tinfoil/id6745201750"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full"
-                >
-                  <img
-                    src={
-                      isDarkMode ? '/appstore-dark.svg' : '/appstore-light.svg'
-                    }
-                    alt="Download on the App Store"
-                    className="mx-auto h-10 w-auto transition-opacity hover:opacity-80"
-                  />
-                </a>
-              </div>
-            </div>
-          )}
-
-          {/* Terms and privacy policy */}
-          <div className="relative z-10 mt-auto flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
-            <p className="text-balance text-center text-xs leading-relaxed text-content-secondary">
-              By using this service, you agree to Tinfoil&apos;s{' '}
-              <Link
-                href="https://tinfoil.sh/terms"
-                className={
-                  isDarkMode
-                    ? 'text-white underline hover:text-content-secondary'
-                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
-                }
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                href="https://tinfoil.sh/privacy"
-                className={
-                  isDarkMode
-                    ? 'text-white underline hover:text-content-secondary'
-                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
-                }
-              >
-                Privacy Policy
-              </Link>
-            </p>
+                              {isSignedIn &&
+                                !shouldShowLoadMore &&
+                                !hasMoreRemote &&
+                                hasAttemptedLoadMore && (
+                                  <div className="px-3 py-2 text-center text-xs text-content-muted">
+                                    No more chats
+                                  </div>
+                                )}
+                            </>
+                          )
+                        }
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+        </div>
+
+        {/* App Store button for iOS users - pinned below the scroll area */}
+        {isClient && isIOS && !nativeAppDismissed && (
+          <div className="relative z-10 flex-none border-t border-border-subtle p-3">
+            <button
+              type="button"
+              onClick={() => {
+                setNativeAppDismissed(true)
+                try {
+                  localStorage.setItem(USER_PREFS_NATIVE_APP_DISMISSED, 'true')
+                } catch {}
+              }}
+              aria-label="Dismiss"
+              className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center text-content-muted transition-colors hover:text-content-primary"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+            <div className="text-center">
+              <p
+                className={`mb-2 text-sm font-medium ${'text-content-secondary'}`}
+              >
+                Get the native app
+              </p>
+              <a
+                href="https://apps.apple.com/app/tinfoil/id6745201750"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full"
+              >
+                <img
+                  src={
+                    isDarkMode ? '/appstore-dark.svg' : '/appstore-light.svg'
+                  }
+                  alt="Download on the App Store"
+                  className="mx-auto h-10 w-auto transition-opacity hover:opacity-80"
+                />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Terms and privacy policy */}
+        <div className="relative z-10 mt-auto flex h-[56px] flex-none items-center justify-center border-t border-border-subtle bg-surface-sidebar p-3">
+          <p className="text-balance text-center text-xs leading-relaxed text-content-secondary">
+            By using this service, you agree to Tinfoil&apos;s{' '}
+            <Link
+              href="https://tinfoil.sh/terms"
+              className={
+                isDarkMode
+                  ? 'text-white underline hover:text-content-secondary'
+                  : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
+              }
+            >
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link
+              href="https://tinfoil.sh/privacy"
+              className={
+                isDarkMode
+                  ? 'text-white underline hover:text-content-secondary'
+                  : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
+              }
+            >
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </nav>
 

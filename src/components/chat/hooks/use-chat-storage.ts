@@ -1,5 +1,6 @@
 import { cloudStorage } from '@/services/cloud/cloud-storage'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
+import { isChatRecoveryTurnCancelled } from '@/services/inference/chat-recovery'
 import { sameRecoveredResponse } from '@/services/inference/chat-recovery-sync'
 import { chatEvents } from '@/services/storage/chat-events'
 import { chatStorage } from '@/services/storage/chat-storage'
@@ -64,6 +65,23 @@ function pendingRecoveriesMatch(
         : false,
     )
   )
+}
+
+/**
+ * Drop envelopes for turns the user explicitly stopped. An envelope can
+ * land in storage in the window between the stop press and the async
+ * envelope removal completing; adopting it into the on-screen chat would
+ * flash "Recovering stream..." for a turn that is not coming back.
+ */
+function withoutCancelledRecoveries(
+  chatId: string,
+  envelopes: readonly PendingRecoveryEnvelope[] | undefined,
+): PendingRecoveryEnvelope[] | undefined {
+  if (!envelopes?.length) return undefined
+  const remaining = envelopes.filter(
+    (envelope) => !isChatRecoveryTurnCancelled(chatId, envelope.turnId),
+  )
+  return remaining.length > 0 ? remaining : undefined
 }
 
 export function useChatStorage({
@@ -140,9 +158,24 @@ export function useChatStorage({
           // reload's loadChats() snapshot resolved but before this setChats runs.
           // Without this re-filter, an in-flight reload would resurrect a chat
           // the user just deleted until the next page refresh.
-          const nonBlankChats = loadedChats.filter(
-            (c) => !c.isBlankChat && !deletedChatsTracker.isDeleted(c.id),
-          )
+          // Cancelled recoveries are stripped here too, not just on
+          // currentChat: switching to a chat adopts its entry from this
+          // list, which must not reintroduce a stopped turn's envelope.
+          const nonBlankChats = loadedChats
+            .filter(
+              (c) => !c.isBlankChat && !deletedChatsTracker.isDeleted(c.id),
+            )
+            .map((c) =>
+              c.pendingRecoveries?.length
+                ? {
+                    ...c,
+                    pendingRecoveries: withoutCancelledRecoveries(
+                      c.id,
+                      c.pendingRecoveries,
+                    ),
+                  }
+                : c,
+            )
 
           // Combine blank chats with loaded chats and sort
           const finalChats = sortChats([
@@ -166,12 +199,20 @@ export function useChatStorage({
           // Only update metadata (syncedAt, title) if the same chat exists in storage
           const existingChat = loadedChats.find((c) => c.id === prev.id)
           if (existingChat) {
-            const isStreaming = streamingTracker.isStreaming(prev.id)
+            const storedRecoveries = withoutCancelledRecoveries(
+              prev.id,
+              existingChat.pendingRecoveries,
+            )
+            // Include sends still in their pre-stream phase: a recovery
+            // reload racing a just-resumed generation must not adopt the
+            // stored copy (which still holds the previous interrupted
+            // answer) over the messages the new stream is about to write.
+            const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
             const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
             if (isRecoveryReload && isStreaming) {
               return {
                 ...prev,
-                pendingRecoveries: existingChat.pendingRecoveries,
+                pendingRecoveries: storedRecoveries,
               }
             }
             // A turn this view still tracks as pending recovery may have been
@@ -211,22 +252,22 @@ export function useChatStorage({
             ) {
               return {
                 ...existingChat,
+                pendingRecoveries: storedRecoveries,
                 pendingSave: prev.pendingSave,
               }
             }
             if (
               prev.syncedAt !== existingChat.syncedAt ||
               prev.title !== existingChat.title ||
-              !pendingRecoveriesMatch(
-                prev.pendingRecoveries,
-                existingChat.pendingRecoveries,
-              )
+              prev.presetId !== existingChat.presetId ||
+              !pendingRecoveriesMatch(prev.pendingRecoveries, storedRecoveries)
             ) {
               return {
                 ...prev,
                 syncedAt: existingChat.syncedAt,
                 title: existingChat.title,
-                pendingRecoveries: existingChat.pendingRecoveries,
+                presetId: existingChat.presetId,
+                pendingRecoveries: storedRecoveries,
               }
             }
           }
@@ -583,18 +624,13 @@ export function useChatStorage({
           return
         }
 
-        // Convert StoredChat to Chat type
+        // Convert StoredChat to Chat. Spread everything through — an
+        // explicit field list here silently dropped presetId and
+        // webSearchEnabled in the past (chats lost their prompt preset on
+        // refresh); only createdAt needs transforming.
         const chat: Chat = {
-          id: downloadedChat.id,
-          title: downloadedChat.title,
-          messages: downloadedChat.messages,
+          ...downloadedChat,
           createdAt: new Date(downloadedChat.createdAt),
-          syncedAt: downloadedChat.syncedAt,
-          locallyModified: downloadedChat.locallyModified,
-          decryptionFailed: downloadedChat.decryptionFailed,
-          projectId: downloadedChat.projectId,
-          model: downloadedChat.model,
-          pendingRecoveries: downloadedChat.pendingRecoveries,
         }
 
         if (storeHistory) {

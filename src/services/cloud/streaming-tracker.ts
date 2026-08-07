@@ -20,11 +20,40 @@ class StreamingTracker {
   // Immutable snapshot handed to React via useSyncExternalStore. A fresh
   // Set is published on every change so referential identity tracks state.
   private snapshot: ReadonlySet<string> = new Set()
+  // Chats with a send in flight that has not yet reached `startStreaming`
+  // (the pre-stream phase awaits saves and token fetches). Kept separate
+  // from `streamingChats` so cloud-sync gating and the sidebar indicator
+  // are unaffected; only `isStreamingOrPending` consumers observe it.
+  // Ref-counted because a chat id can briefly be shared (blank chats).
+  private pendingStreams = new Map<string, number>()
 
   startStreaming(chatId: string): void {
     if (this.streamingChats.has(chatId)) return
     this.streamingChats.add(chatId)
     this.publish()
+  }
+
+  beginPendingStream(chatId: string): void {
+    this.pendingStreams.set(chatId, (this.pendingStreams.get(chatId) ?? 0) + 1)
+  }
+
+  endPendingStream(chatId: string): void {
+    const count = this.pendingStreams.get(chatId)
+    if (!count) return
+    if (count === 1) {
+      this.pendingStreams.delete(chatId)
+    } else {
+      this.pendingStreams.set(chatId, count - 1)
+    }
+  }
+
+  /**
+   * True while the chat has a live stream OR a send that is still in its
+   * pre-stream phase. Storage reloads use this to avoid adopting a stale
+   * stored copy of a chat that is about to be rewritten by a new stream.
+   */
+  isStreamingOrPending(chatId: string): boolean {
+    return this.streamingChats.has(chatId) || this.pendingStreams.has(chatId)
   }
 
   endStreaming(chatId: string): void {

@@ -177,15 +177,24 @@
       opacity: 1;
     }
 
+    /* Reveal on hover, or on keyboard focus only (:focus-visible) of the
+       row containing the title. Plain :focus-within would also match
+       mouse-initiated focus, which gets parked inside the region after a
+       drag-and-drop and would keep titles revealed until focus leaves the
+       sidebar. Deliberately NOT :has(:focus-visible) on the region: :has()
+       invalidation in Firefox re-evaluates the whole (large) chat list
+       subtree on every interaction and can freeze the page. */
     .chat-title-privacy-region:hover .pixelated-text .pixelated-text-source,
-    .chat-title-privacy-region:focus-within
+    .chat-title-privacy-region
+      :focus-visible
       .pixelated-text
       .pixelated-text-source {
       opacity: 1;
     }
 
     .chat-title-privacy-region:hover .pixelated-text .pixelated-text-canvas,
-    .chat-title-privacy-region:focus-within
+    .chat-title-privacy-region
+      :focus-visible
       .pixelated-text
       .pixelated-text-canvas {
       opacity: 0;

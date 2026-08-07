@@ -1,10 +1,21 @@
 import { useCallback, useRef, useState } from 'react'
+import type { ChatErrorCode } from '../chat-utils'
 import type { LoadingState } from '../types'
 
 export interface RetryInfo {
   attempt: number
   maxRetries: number
   error?: string
+}
+
+/**
+ * A stream failure surfaced to the UI. `code` carries the structured
+ * classification (when the failure produced a ChatError) so the error
+ * banner can choose retry semantics without inspecting message text.
+ */
+export interface StreamErrorInfo {
+  message: string
+  code: ChatErrorCode | null
 }
 
 /**
@@ -22,7 +33,7 @@ export interface ChatStreamStatus {
   isThinking: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
-  streamError: string | null
+  streamError: StreamErrorInfo | null
 }
 
 export const IDLE_STREAM_STATUS: ChatStreamStatus = {
@@ -43,7 +54,15 @@ export interface UseChatStreamsReturn {
   /** Re-key a chat's status and abort controller after a server id swap. */
   moveStatus: (fromId: string, toId: string) => void
   registerController: (chatId: string, controller: AbortController) => void
-  clearController: (chatId: string) => void
+  /**
+   * Remove a chat's controller, but only if `controller` is still the one
+   * registered. A stream that was aborted (and possibly superseded by a
+   * newer stream on the same chat) must never delete its successor's
+   * controller, or the next stop press would silently fail to abort.
+   */
+  clearController: (chatId: string, controller: AbortController) => void
+  ownsController: (chatId: string, controller: AbortController) => boolean
+  hasActiveController: (chatId: string) => boolean
   /** Abort the stream for a chat. Returns true if a controller existed. */
   abort: (chatId: string) => boolean
 }
@@ -107,9 +126,25 @@ export function useChatStreams(): UseChatStreamsReturn {
     [],
   )
 
-  const clearController = useCallback((chatId: string) => {
-    abortControllersRef.current.delete(chatId)
-  }, [])
+  const clearController = useCallback(
+    (chatId: string, controller: AbortController) => {
+      if (abortControllersRef.current.get(chatId) === controller) {
+        abortControllersRef.current.delete(chatId)
+      }
+    },
+    [],
+  )
+
+  const ownsController = useCallback(
+    (chatId: string, controller: AbortController): boolean =>
+      abortControllersRef.current.get(chatId) === controller,
+    [],
+  )
+
+  const hasActiveController = useCallback(
+    (chatId: string): boolean => abortControllersRef.current.has(chatId),
+    [],
+  )
 
   const abort = useCallback((chatId: string): boolean => {
     const controller = abortControllersRef.current.get(chatId)
@@ -126,6 +161,8 @@ export function useChatStreams(): UseChatStreamsReturn {
     moveStatus,
     registerController,
     clearController,
+    ownsController,
+    hasActiveController,
     abort,
   }
 }

@@ -286,7 +286,11 @@ export async function persistChatRecoveryToken(args: {
         sessionId: args.sessionId,
         recoveryToken,
       })
-  if (!isCurrentAttempt()) {
+  // Re-check the cancelled set as well: a stop pressed while this token
+  // capture was in flight marks the turn cancelled before the (later)
+  // cancelChatRecovery call deregisters the attempt, so isCurrentAttempt
+  // alone would still pass here and write an envelope for a stopped turn.
+  if (!isCurrentAttempt() || cancelledTurns.has(key)) {
     await deleteRecoveryQuietly(args.sessionId)
     throw new DOMException('Aborted', 'AbortError')
   }
@@ -437,6 +441,28 @@ export async function cancelChatRecovery(
   return assistantMessage?.turnId
     ? envelopeTurns.has(assistantMessage.turnId)
     : envelopeTurns.size > 0
+}
+
+/**
+ * Mark a turn's recovery as cancelled before the async cancellation work
+ * runs. Stopping a generation before the first token races the recovery
+ * registration (the token is captured when response headers arrive):
+ * without this early mark, an in-flight persistChatRecoveryToken would
+ * still write its envelope, briefly surfacing the stopped turn as a
+ * recoverable stream until the envelope removal round-trips.
+ */
+export function markChatRecoveryTurnCancelled(
+  chatId: string,
+  turnId: string,
+): void {
+  cancelledTurns.add(turnKey(chatId, turnId))
+}
+
+export function isChatRecoveryTurnCancelled(
+  chatId: string,
+  turnId: string,
+): boolean {
+  return cancelledTurns.has(turnKey(chatId, turnId))
 }
 
 export function releaseActiveChatRecovery(chatId: string): void {

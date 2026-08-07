@@ -34,6 +34,7 @@ const DefaultMessageComponent = ({
   hideActions,
   onEditMessage,
   onRegenerateMessage,
+  onRetryToolCall,
 }: MessageRenderProps) => {
   const isUser = message.role === 'user'
   const [isEditing, setIsEditing] = React.useState(false)
@@ -342,6 +343,12 @@ const DefaultMessageComponent = ({
                     onRetry={
                       onRegenerateMessage && messageIndex > 0
                         ? () => onRegenerateMessage(messageIndex - 1)
+                        : undefined
+                    }
+                    onRetryToolCall={
+                      onRetryToolCall
+                        ? (toolCallId) =>
+                            onRetryToolCall(messageIndex, toolCallId)
                         : undefined
                     }
                   />

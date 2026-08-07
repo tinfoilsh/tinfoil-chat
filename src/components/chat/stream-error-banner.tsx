@@ -1,28 +1,107 @@
 'use client'
 
+import type { StreamErrorInfo } from '@/components/chat/hooks/use-chat-streams'
 import { cn } from '@/components/ui/utils'
 import {
   ArrowPathIcon,
   ChevronDownIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 
 interface StreamErrorBannerProps {
-  message: string
+  error: StreamErrorInfo
   onDismiss: () => void
   onRetry?: () => void
   isDarkMode: boolean
 }
 
-type ErrorExplanation = {
+// Behavioral class of a stream failure. Drives both the explanation copy
+// and the retry affordance so the same error always produces a coherent
+// combination of message and action.
+type ErrorKind =
+  | 'connection'
+  | 'rate-limit'
+  | 'timeout'
+  | 'context-length'
+  | 'server'
+  | 'unknown'
+
+type ErrorClassification = {
+  kind: ErrorKind
   title: string
   suggestion: string
 }
 
-// Map raw backend/SDK error text to a human-readable explanation. The raw
-// message stays available in the expandable details section.
-function explainError(message: string): ErrorExplanation {
+function subscribeToConnectivity(onChange: () => void): () => void {
+  window.addEventListener('online', onChange)
+  window.addEventListener('offline', onChange)
+  return () => {
+    window.removeEventListener('online', onChange)
+    window.removeEventListener('offline', onChange)
+  }
+}
+
+function getIsOnline(): boolean {
+  return navigator.onLine !== false
+}
+
+/** Live `navigator.onLine` mirror; updates as connectivity changes. */
+function useIsOnline(): boolean {
+  return useSyncExternalStore(subscribeToConnectivity, getIsOnline, () => true)
+}
+
+const CLASSIFICATIONS: Record<
+  Exclude<ErrorKind, 'unknown'>,
+  ErrorClassification
+> = {
+  connection: {
+    kind: 'connection',
+    title: 'Connection problem',
+    suggestion:
+      'Check your internet connection, then resend your message. Your message was not lost.',
+  },
+  'rate-limit': {
+    kind: 'rate-limit',
+    title: 'Usage limit reached',
+    suggestion: 'Please wait for the limit to reset before trying again.',
+  },
+  timeout: {
+    kind: 'timeout',
+    title: 'The model took too long to respond',
+    suggestion:
+      'This is usually a temporary problem on our side. Please try again in a moment.',
+  },
+  'context-length': {
+    kind: 'context-length',
+    title: 'This conversation is too long for the model',
+    suggestion:
+      'Remove an attachment, shorten your message, or switch to a model with a larger context window.',
+  },
+  server: {
+    kind: 'server',
+    title: 'The service is having trouble right now',
+    suggestion:
+      'Our servers may be briefly overloaded. Please try again, or switch to a different model.',
+  },
+}
+
+// Map a stream failure to a behavioral kind plus human-readable copy. The
+// structured code is authoritative when present; the message-text
+// heuristics below are display-only fallbacks for errors that carry no
+// classification, and both the copy and the retry affordance derive from
+// the same result so they can never disagree. The raw message stays
+// available in the expandable details section.
+function classifyError({
+  message,
+  code,
+}: StreamErrorInfo): ErrorClassification {
+  if (code === 'FETCH_ERROR') return CLASSIFICATIONS.connection
+  if (code === 'RATE_LIMIT' || code === 'HOURLY_LIMIT') {
+    return CLASSIFICATIONS['rate-limit']
+  }
+  if (code === 'SERVER_ERROR') return CLASSIFICATIONS.server
+
   const lower = message.toLowerCase()
 
   if (
@@ -32,11 +111,7 @@ function explainError(message: string): ErrorExplanation {
     lower.includes('timeout') ||
     lower.includes('etimedout')
   ) {
-    return {
-      title: 'The model took too long to respond',
-      suggestion:
-        'This is usually a temporary problem on our side. Please try again in a moment.',
-    }
+    return CLASSIFICATIONS.timeout
   }
 
   if (
@@ -47,11 +122,7 @@ function explainError(message: string): ErrorExplanation {
     lower.includes('token limit') ||
     lower.includes('input is too long')
   ) {
-    return {
-      title: 'This conversation is too long for the model',
-      suggestion:
-        'Remove an attachment, shorten your message, or switch to a model with a larger context window.',
-    }
+    return CLASSIFICATIONS['context-length']
   }
 
   if (
@@ -62,11 +133,7 @@ function explainError(message: string): ErrorExplanation {
     lower.includes('internal server error') ||
     /\b5\d\d\b/.test(lower)
   ) {
-    return {
-      title: 'The service is having trouble right now',
-      suggestion:
-        'Our servers may be briefly overloaded. Please try again, or switch to a different model.',
-    }
+    return CLASSIFICATIONS.server
   }
 
   if (
@@ -77,13 +144,11 @@ function explainError(message: string): ErrorExplanation {
     lower.includes('econnreset') ||
     lower.includes('offline')
   ) {
-    return {
-      title: 'Connection problem',
-      suggestion: 'Check your internet connection and try again.',
-    }
+    return CLASSIFICATIONS.connection
   }
 
   return {
+    kind: 'unknown',
     title: 'Something went wrong',
     suggestion: 'Please try again. If the problem persists, contact support.',
   }
@@ -95,13 +160,26 @@ function explainError(message: string): ErrorExplanation {
  * expandable details section. Stays visible until dismissed or retried.
  */
 export function StreamErrorBanner({
-  message,
+  error,
   onDismiss,
   onRetry,
   isDarkMode,
 }: StreamErrorBannerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const { title, suggestion } = explainError(message)
+  const isOnline = useIsOnline()
+  const { kind, title, suggestion } = classifyError(error)
+
+  // Retrying always re-sends the last message; make the label say so for
+  // connection failures instead of the ambiguous "Try again" (which reads
+  // like it might just reconnect). While offline the resend is gated —
+  // it would only burn the automatic in-request retries and fail again.
+  const isConnectionError = kind === 'connection'
+  // A rate-limited request will fail identically until the limit resets,
+  // so a retry button is just an invitation to frustration.
+  const isLimitError = kind === 'rate-limit'
+  const retryLabel = isConnectionError ? 'Resend message' : 'Try again'
+  const retryDisabled = isConnectionError && !isOnline
+  const showRetry = !!onRetry && !isLimitError
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -131,22 +209,26 @@ export function StreamErrorBanner({
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-1">
-          {onRetry && (
+          {showRetry && (
             <button
               type="button"
+              disabled={retryDisabled}
+              title={retryDisabled ? 'Waiting for connection...' : undefined}
               onClick={(e) => {
                 e.stopPropagation()
-                onRetry()
+                onRetry?.()
               }}
               className={cn(
                 'flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors',
                 isDarkMode
                   ? 'border-red-500/40 hover:bg-red-500/20'
                   : 'border-red-300 hover:bg-red-500/10',
+                retryDisabled &&
+                  'cursor-default opacity-50 hover:bg-transparent',
               )}
             >
               <ArrowPathIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              Try again
+              {retryDisabled ? 'Offline' : retryLabel}
             </button>
           )}
           <button
@@ -187,7 +269,7 @@ export function StreamErrorBanner({
             isDarkMode ? 'border-red-500/30' : 'border-red-300',
           )}
         >
-          <p className="whitespace-pre-wrap break-words">{message}</p>
+          <p className="whitespace-pre-wrap break-words">{error.message}</p>
         </div>
       )}
     </div>

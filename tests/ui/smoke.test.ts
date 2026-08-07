@@ -115,18 +115,14 @@ test.describe('Smoke Tests', () => {
     await expect(textarea).toHaveValue('Hello, this is a test message')
   })
 
-  test('document upload button exists', async ({ page }) => {
-    test.skip(
-      page.viewportSize()?.width !== undefined &&
-        page.viewportSize()!.width < 768,
-      'Upload button is hidden on mobile viewports',
-    )
-
+  test('input options menu offers file upload', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const uploadButton = page.locator('#upload-button')
-    await expect(uploadButton).toBeVisible({ timeout: 10000 })
+    const optionsButton = page.locator('#input-options-button')
+    await expect(optionsButton).toBeVisible({ timeout: 10000 })
+    await optionsButton.click()
+    await expect(page.getByText('Add files or photos')).toBeVisible()
   })
 
   test('send button is present', async ({ page }) => {

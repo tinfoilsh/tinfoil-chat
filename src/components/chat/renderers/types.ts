@@ -28,6 +28,15 @@ export interface MessageRenderProps {
   hideActions?: boolean
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
+  /**
+   * Retry a single failed GenUI tool call in place. Resolves true when the
+   * widget was repaired; false signals the caller may fall back to a full
+   * regeneration.
+   */
+  onRetryToolCall?: (
+    messageIndex: number,
+    toolCallId: string,
+  ) => Promise<boolean>
 }
 
 export interface InputRenderProps {

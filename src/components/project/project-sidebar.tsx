@@ -797,8 +797,10 @@ export function ProjectSidebar({
           </div>
         </div>
 
-        {/* Main sidebar content */}
-        <div className="relative flex h-full flex-col overflow-hidden">
+        {/* Main sidebar content - a single scroll area so tall sections
+            (like the expanded Project Settings panel) can never clip
+            content such as the Save button out of reach. */}
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
           {/* Project header with exit button and editable title */}
           <div className="relative z-10 flex-none p-3">
             <button
@@ -1196,12 +1198,7 @@ export function ProjectSidebar({
                   transition={{ duration: 0.2, ease: 'easeInOut' }}
                   className="overflow-hidden"
                 >
-                  <div
-                    className={cn(
-                      'max-h-64 overflow-y-auto px-2 py-2',
-                      expandedPanelClass,
-                    )}
-                  >
+                  <div className={cn('px-2 py-2', expandedPanelClass)}>
                     {/* Drag and drop zone - at top */}
                     <button
                       type="button"
@@ -1374,7 +1371,7 @@ export function ProjectSidebar({
               clearDragState()
             }}
             className={cn(
-              'relative z-10 flex-1 overflow-y-auto',
+              'relative z-10 flex-1',
               isDropTargetChatList &&
                 (isDarkMode
                   ? 'border border-white/30 bg-white/10'
@@ -1417,34 +1414,34 @@ export function ProjectSidebar({
               onRemoveFromProject={onRemoveChatFromProject}
             />
           </div>
+        </div>
 
-          {/* Terms and privacy policy */}
-          <div className="relative z-10 flex h-[56px] flex-none items-center justify-center border-t border-border-subtle p-3">
-            <p className="text-center text-xs leading-relaxed text-content-secondary">
-              By using this service, you agree to Tinfoil&apos;s{' '}
-              <Link
-                href="https://tinfoil.sh/terms"
-                className={
-                  isDarkMode
-                    ? 'text-white underline hover:text-content-secondary'
-                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
-                }
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                href="https://tinfoil.sh/privacy"
-                className={
-                  isDarkMode
-                    ? 'text-white underline hover:text-content-secondary'
-                    : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
-                }
-              >
-                Privacy Policy
-              </Link>
-            </p>
-          </div>
+        {/* Terms and privacy policy - pinned below the scroll area */}
+        <div className="relative z-10 flex h-[56px] flex-none items-center justify-center border-t border-border-subtle p-3">
+          <p className="text-center text-xs leading-relaxed text-content-secondary">
+            By using this service, you agree to Tinfoil&apos;s{' '}
+            <Link
+              href="https://tinfoil.sh/terms"
+              className={
+                isDarkMode
+                  ? 'text-white underline hover:text-content-secondary'
+                  : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
+              }
+            >
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link
+              href="https://tinfoil.sh/privacy"
+              className={
+                isDarkMode
+                  ? 'text-white underline hover:text-content-secondary'
+                  : 'text-brand-accent-dark underline hover:text-brand-accent-dark/80'
+              }
+            >
+              Privacy Policy
+            </Link>
+          </p>
         </div>
       </div>
 

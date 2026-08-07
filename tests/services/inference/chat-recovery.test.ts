@@ -122,6 +122,7 @@ vi.mock('@/utils/error-handling', () => ({
 import {
   abandonChatRecoveryAttempt,
   cancelChatRecovery,
+  markChatRecoveryTurnCancelled,
   persistChatRecoveryToken,
   resetChatRecoveryState,
   scanPendingChatRecoveries,
@@ -191,6 +192,57 @@ describe('chat recovery lifecycle', () => {
     await expect(cancellation).resolves.toBe(false)
 
     expect(encryptRecoveryEnvelope).not.toHaveBeenCalled()
+    expect(addPendingRecovery).not.toHaveBeenCalled()
+    expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
+  })
+
+  it('discards a token captured after the turn was marked cancelled', async () => {
+    // Stop pressed before the first token: cancelGeneration marks the turn
+    // cancelled synchronously with the abort, while the in-flight request's
+    // token capture races it. The late token must not register an envelope
+    // (which would surface "Recovering stream..." for a stopped turn).
+    startChatRecoveryAttempt('chat-1', 'turn-1', SESSION_ID)
+    markChatRecoveryTurnCancelled('chat-1', 'turn-1')
+
+    await expect(
+      persistChatRecoveryToken({
+        userId: 'user-1',
+        chatId: 'chat-1',
+        turnId: 'turn-1',
+        sessionId: SESSION_ID,
+        token: {
+          exportedSecret: new Uint8Array(32),
+          requestEnc: new Uint8Array(32),
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(addPendingRecovery).not.toHaveBeenCalled()
+    expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
+  })
+
+  it('discards a cancelled-turn token even when the mark lands mid-persist', async () => {
+    // Narrower window: the cancel mark arrives after persistChatRecoveryToken
+    // already passed its entry checks and is awaiting envelope encryption.
+    startChatRecoveryAttempt('chat-1', 'turn-1', SESSION_ID)
+    encryptRecoveryEnvelope.mockImplementationOnce(async () => {
+      markChatRecoveryTurnCancelled('chat-1', 'turn-1')
+      return envelope
+    })
+
+    await expect(
+      persistChatRecoveryToken({
+        userId: 'user-1',
+        chatId: 'chat-1',
+        turnId: 'turn-1',
+        sessionId: SESSION_ID,
+        token: {
+          exportedSecret: new Uint8Array(32),
+          requestEnc: new Uint8Array(32),
+        },
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+
     expect(addPendingRecovery).not.toHaveBeenCalled()
     expect(deleteChatRecovery).toHaveBeenCalledWith(SESSION_ID)
   })

@@ -57,6 +57,9 @@ vi.mock('@/services/cloud/streaming-tracker', () => ({
     startStreaming: (chatId: string) => streamingChats.add(chatId),
     endStreaming: (chatId: string) => streamingChats.delete(chatId),
     isStreaming: (chatId: string) => streamingChats.has(chatId),
+    beginPendingStream: vi.fn(),
+    endPendingStream: vi.fn(),
+    isStreamingOrPending: (chatId: string) => streamingChats.has(chatId),
   },
 }))
 
@@ -78,8 +81,21 @@ vi.mock('@/components/chat/hooks/use-chat-streams', async (importOriginal) => ({
     registerController: (chatId: string, controller: AbortController) => {
       streamControllers.set(chatId, controller)
     },
-    clearController: (chatId: string) => streamControllers.delete(chatId),
-    abort: (chatId: string) => streamControllers.get(chatId)?.abort(),
+    clearController: (chatId: string, controller: AbortController) => {
+      if (streamControllers.get(chatId) === controller) {
+        streamControllers.delete(chatId)
+      }
+    },
+    ownsController: (chatId: string, controller: AbortController) =>
+      streamControllers.get(chatId) === controller,
+    hasActiveController: (chatId: string) => streamControllers.has(chatId),
+    abort: (chatId: string) => {
+      const controller = streamControllers.get(chatId)
+      if (!controller) return false
+      controller.abort()
+      streamControllers.delete(chatId)
+      return true
+    },
   }),
 }))
 
@@ -88,6 +104,7 @@ vi.mock('@/services/inference/chat-recovery', () => ({
   cancelChatRecovery: (...args: unknown[]) => cancelChatRecoveryMock(...args),
   completeLiveChatRecovery: (...args: unknown[]) =>
     completeLiveChatRecoveryMock(...args),
+  markChatRecoveryTurnCancelled: vi.fn(),
   persistChatRecoveryToken: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
   scanPendingChatRecoveries: vi.fn(),

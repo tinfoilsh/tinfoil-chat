@@ -1,3 +1,4 @@
+import { ChatError } from '@/components/chat/chat-utils'
 import { API_BASE_URL, DEV_API_KEY, IS_DEV } from '@/config'
 import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { logError } from '@/utils/error-handling'
@@ -77,8 +78,8 @@ function isHourlyLimit(
 }
 
 // Surfaces the per-account hourly usage cap through the shared rate-limit
-// channel (so the banner renders) and throws a message the chat recognizes as a
-// rate limit rather than a generic failure. Never returns.
+// channel (so the banner renders) and throws a typed error the chat
+// classifies as a rate limit rather than a generic failure. Never returns.
 function surfaceHourlyLimit(parsedError: ServerErrorBody | null): never {
   cachedRateLimit = {
     maxRequests: 0,
@@ -87,8 +88,10 @@ function surfaceHourlyLimit(parsedError: ServerErrorBody | null): never {
     kind: 'hourly',
   }
   dispatchRateLimitUpdate()
-  throw new Error(
+  throw new ChatError(
     parsedError?.error ?? 'You have reached your hourly usage limit.',
+    'HOURLY_LIMIT',
+    { status: 429 },
   )
 }
 

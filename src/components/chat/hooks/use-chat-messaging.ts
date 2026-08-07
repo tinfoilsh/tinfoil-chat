@@ -29,6 +29,7 @@ import {
   abandonChatRecoveryAttempt,
   cancelChatRecovery,
   completeLiveChatRecovery,
+  markChatRecoveryTurnCancelled,
   persistChatRecoveryToken,
   releaseActiveChatRecovery,
   scanPendingChatRecoveries,
@@ -51,7 +52,9 @@ import { generateReverseId } from '@/utils/reverse-id'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getMessageAttachments, getMessageImages } from '../attachment-helpers'
+import { ChatError } from '../chat-utils'
 import { CONSTANTS } from '../constants'
+import { regenerateToolCallArguments } from '../genui/retry'
 import type { Chat, LoadingState, Message } from '../types'
 import {
   createBlankChat,
@@ -68,6 +71,7 @@ import {
   IDLE_STREAM_STATUS,
   useChatStreams,
   type RetryInfo,
+  type StreamErrorInfo,
 } from './use-chat-streams'
 import type { ReasoningEffort } from './use-reasoning-effort'
 
@@ -100,7 +104,7 @@ interface UseChatMessagingReturn {
   isThinking: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
-  streamError: string | null
+  streamError: StreamErrorInfo | null
   dismissStreamError: () => void
   setInput: (input: string) => void
   handleSubmit: (e: React.FormEvent) => void
@@ -120,6 +124,7 @@ interface UseChatMessagingReturn {
     resultText: string,
     resultData?: unknown,
   ) => void
+  retryToolCall: (messageIndex: number, toolCallId: string) => Promise<boolean>
 }
 
 type ActiveLiveGeneration = {
@@ -242,6 +247,8 @@ export function useChatMessaging({
     moveStatus,
     registerController,
     clearController,
+    ownsController,
+    hasActiveController,
     abort,
   } = useChatStreams()
 
@@ -310,13 +317,26 @@ export function useChatMessaging({
   const cancelGeneration = useCallback(
     (chatId?: string) => {
       const targetId = chatId ?? viewedChatIdRef.current
+      // Dedupe repeated stop presses for the same stream, but not when a
+      // newer stream has registered a controller since: its abort must not
+      // be swallowed by a previous cancellation still finishing its tail.
       const existingCancellation = cancellationPromisesRef.current.get(targetId)
-      if (existingCancellation) return existingCancellation
+      if (existingCancellation && !hasActiveController(targetId)) {
+        return existingCancellation
+      }
 
       const cancellation = (async () => {
         const activeGeneration = activeLiveGenerationsRef.current.get(targetId)
 
         abort(targetId)
+        // Mark the recovery turn cancelled synchronously with the abort.
+        // When stop lands before the first token, the recovery attempt may
+        // still be registering (token capture races the abort); the mark
+        // makes persistChatRecoveryToken discard its envelope instead of
+        // surfacing "Recovering stream..." for a turn the user just stopped.
+        if (activeGeneration?.turnId) {
+          markChatRecoveryTurnCancelled(targetId, activeGeneration.turnId)
+        }
         const interruptedMessage =
           activeGeneration?.latestAssistantMessage &&
           hasVisibleAssistantMessage(activeGeneration.latestAssistantMessage)
@@ -420,8 +440,15 @@ export function useChatMessaging({
           }
         }
 
-        streamingTracker.endStreaming(targetId)
-        patchStatus(targetId, { loadingState: 'idle' })
+        // A new stream may have started on this chat while the async saves
+        // above were in flight (e.g. the user quickly resumed). Its
+        // controller registration marks ownership; in that case leave the
+        // streaming marker and status alone so the tail of this cancel
+        // can't idle the successor mid-stream.
+        if (!hasActiveController(targetId)) {
+          streamingTracker.endStreaming(targetId)
+          patchStatus(targetId, { loadingState: 'idle' })
+        }
       })()
 
       cancellationPromisesRef.current.set(targetId, cancellation)
@@ -433,7 +460,14 @@ export function useChatMessaging({
       void cancellation.then(clearCancellation, clearCancellation)
       return cancellation
     },
-    [abort, patchStatus, storeHistory, setChats, setCurrentChat],
+    [
+      abort,
+      hasActiveController,
+      patchStatus,
+      storeHistory,
+      setChats,
+      setCurrentChat,
+    ],
   )
 
   // Handle chat query
@@ -505,7 +539,7 @@ export function useChatMessaging({
         patchStatus(streamChatIdRef.current, { isWaitingForResponse: v })
       const setIsStreamingFor = (v: boolean) =>
         patchStatus(streamChatIdRef.current, { isStreaming: v })
-      const setStreamErrorFor = (e: string | null) =>
+      const setStreamErrorFor = (e: StreamErrorInfo | null) =>
         patchStatus(streamChatIdRef.current, { streamError: e })
 
       const controller = new AbortController()
@@ -515,6 +549,20 @@ export function useChatMessaging({
         isWaitingForResponse: true,
         isStreaming: true,
       })
+
+      // Mark the pre-stream phase (saves, token fetches) so storage reloads
+      // don't adopt a stale stored copy of this chat before the stream's
+      // first flush. Follows the stream's id across blank-chat conversions.
+      let pendingStreamId: string | null = null
+      const markPendingStream = (id: string) => {
+        if (pendingStreamId === id) return
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+        }
+        pendingStreamId = id
+        streamingTracker.beginPendingStream(id)
+      }
+      markPendingStream(streamChatIdRef.current)
 
       // Only create a user message if there's actual query content
       // When using system prompt override with empty query, skip user message
@@ -561,6 +609,7 @@ export function useChatMessaging({
 
         moveStatus(streamChatIdRef.current, updatedChat.id)
         streamChatIdRef.current = updatedChat.id
+        markPendingStream(updatedChat.id)
         setCurrentChat(updatedChat)
         setChats((prevChats) =>
           prevChats.map((c) => (c.id === updatedChat.id ? updatedChat : c)),
@@ -602,6 +651,7 @@ export function useChatMessaging({
         // Update state immediately for instant UI feedback
         moveStatus(streamChatIdRef.current, chatId)
         streamChatIdRef.current = chatId
+        markPendingStream(chatId)
         setCurrentChat(updatedChat)
 
         // Replace the blank chat with the new real chat
@@ -675,6 +725,7 @@ export function useChatMessaging({
 
         moveStatus(streamChatIdRef.current, updatedChat.id)
         streamChatIdRef.current = updatedChat.id
+        markPendingStream(updatedChat.id)
         setCurrentChat(updatedChat)
 
         // Replace blank chat with the new chat
@@ -1153,11 +1204,16 @@ export function useChatMessaging({
             void scanPendingChatRecoveries(userId)
           }
         }
-        // Ensure UI loading flags are reset on pre-stream errors
-        setIsWaitingForResponseFor(false)
-        setIsStreamingFor(false)
-        if (!wasAborted) setLoadingStateFor('idle')
-        setIsThinkingFor(false)
+        // Ensure UI loading flags are reset on pre-stream errors. Skip if a
+        // newer stream owns this chat's controller slot (this stream was
+        // aborted and superseded); resetting then would clear the
+        // successor's flags mid-stream.
+        if (ownsController(streamChatIdRef.current, controller)) {
+          setIsWaitingForResponseFor(false)
+          setIsStreamingFor(false)
+          if (!wasAborted) setLoadingStateFor('idle')
+          setIsThinkingFor(false)
+        }
         thinkingStartTimeRef.current = null
         if (!wasAborted) {
           logError('Chat query failed', error, {
@@ -1167,15 +1223,15 @@ export function useChatMessaging({
 
           const errorMsg =
             error instanceof Error ? error.message : 'Unknown error occurred'
-          const lowerMsg = errorMsg.toLowerCase()
-          const isHourlyRateLimitError =
-            lowerMsg.includes('hourly usage limit') ||
-            lowerMsg.includes('hourly limit')
+          // Classify by structured signals only (error codes and HTTP
+          // status), never by message text.
+          const chatError = error instanceof ChatError ? error : null
+          const status = (error as { status?: unknown })?.status
+          const isHourlyRateLimitError = chatError?.code === 'HOURLY_LIMIT'
           const isRateLimitError =
-            lowerMsg.includes('rate limit') ||
-            lowerMsg.includes('request limit') ||
-            lowerMsg.includes('usage limit') ||
-            lowerMsg.includes('insufficient_quota')
+            isHourlyRateLimitError ||
+            chatError?.code === 'RATE_LIMIT' ||
+            status === 429
 
           if (isRateLimitError) {
             const errorMessage: Message = {
@@ -1199,10 +1255,17 @@ export function useChatMessaging({
             )
           } else {
             // Surface as a dismissable floating banner instead of a chat message
-            setStreamErrorFor(errorMsg)
+            setStreamErrorFor({
+              message: errorMsg,
+              code: chatError?.code ?? null,
+            })
           }
         }
       } finally {
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+        }
+
         // Refresh rate limit from server for free-tier users so the
         // banner/send-blocking reflects the server's actual count
         // (covers both success and error paths, e.g. 429 responses).
@@ -1211,22 +1274,29 @@ export function useChatMessaging({
         }
 
         // Settle this stream's status (preserving any streamError so the
-        // banner can surface when the user returns to the chat).
-        patchStatus(streamChatIdRef.current, {
-          ...(controller.signal.aborted ? {} : { loadingState: 'idle' }),
-          retryInfo: null,
-          isWaitingForResponse: false,
-          isStreaming: false,
-          isThinking: false,
-        })
-        clearController(streamChatIdRef.current)
+        // banner can surface when the user returns to the chat). Only if
+        // this stream still owns the chat's controller slot: an aborted
+        // stream can reach this finally block after a newer stream has
+        // registered its own controller for the same chat, and patching
+        // then would stomp the successor's flags mid-stream.
+        const ownsStream = ownsController(streamChatIdRef.current, controller)
+        if (ownsStream) {
+          patchStatus(streamChatIdRef.current, {
+            ...(controller.signal.aborted ? {} : { loadingState: 'idle' }),
+            retryInfo: null,
+            isWaitingForResponse: false,
+            isStreaming: false,
+            isThinking: false,
+          })
+        }
+        clearController(streamChatIdRef.current, controller)
         if (
           activeLiveGenerationsRef.current.get(startingChatId) ===
           activeGeneration
         ) {
           activeLiveGenerationsRef.current.delete(startingChatId)
         }
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && ownsStream) {
           // Covers pre-stream failures where the processor (which normally
           // ends streaming) never ran. Idempotent if already ended.
           streamingTracker.endStreaming(streamChatIdRef.current)
@@ -1261,6 +1331,7 @@ export function useChatMessaging({
       moveStatus,
       registerController,
       clearController,
+      ownsController,
     ],
   )
 
@@ -1362,6 +1433,106 @@ export function useChatMessaging({
       handleQuery(resultText, undefined, undefined, resolvedMessages)
     },
     [loadingState, currentChat, setChats, setCurrentChat, handleQuery],
+  )
+
+  /**
+   * Retry a single failed GenUI tool call without regenerating the whole
+   * assistant response. Re-asks the model for just that widget's arguments
+   * via a structured completion, validates them against the widget schema,
+   * and patches the failed block (and its `toolCalls` mirror) in place.
+   *
+   * Returns true when the widget was repaired; false lets the caller fall
+   * back to a full regeneration.
+   */
+  const retryToolCall = useCallback(
+    async (messageIndex: number, toolCallId: string): Promise<boolean> => {
+      if (loadingState !== 'idle' || !currentChat) return false
+
+      const chatId = currentChat.id
+      const message = currentChat.messages[messageIndex]
+      if (!message || message.role !== 'assistant') return false
+      const block = message.timeline?.find(
+        (candidate) =>
+          candidate.type === 'tool_call' && candidate.toolCallId === toolCallId,
+      )
+      if (!block || block.type !== 'tool_call') return false
+
+      const { model } = resolveModelSelection(selectedModel, models, {})
+      if (!model) return false
+
+      const newArguments = await regenerateToolCallArguments({
+        toolName: block.name,
+        originalArguments: block.arguments,
+        contextMessages: currentChat.messages.slice(0, messageIndex + 1),
+        model,
+      })
+      if (newArguments === null) return false
+
+      const patchMessage = (msg: Message): Message => ({
+        ...msg,
+        timeline: msg.timeline?.map((candidate) =>
+          candidate.type === 'tool_call' && candidate.toolCallId === toolCallId
+            ? { ...candidate, arguments: newArguments }
+            : candidate,
+        ),
+        toolCalls: msg.toolCalls?.map((tc) =>
+          tc.id === toolCallId ? { ...tc, arguments: newArguments } : tc,
+        ),
+      })
+
+      // The model call above can take seconds; the chat may have gained
+      // messages (or the user may have switched away) since the closure
+      // captured `currentChat`. Patch the tool-call block by id against
+      // the *live* state instead of writing the snapshot back, so the
+      // repair can never roll back newer chat content.
+      const patchChat = (chat: Chat): Chat => ({
+        ...chat,
+        messages: chat.messages.map((msg) =>
+          msg.role === 'assistant' &&
+          msg.timeline?.some(
+            (candidate) =>
+              candidate.type === 'tool_call' &&
+              candidate.toolCallId === toolCallId,
+          )
+            ? patchMessage(msg)
+            : msg,
+        ),
+      })
+
+      setChats((prevChats) =>
+        prevChats.map((c) => (c.id === chatId ? patchChat(c) : c)),
+      )
+      setCurrentChat((prev) => (prev.id === chatId ? patchChat(prev) : prev))
+
+      const liveChat =
+        chatsRef.current.find((c) => c.id === chatId) ??
+        (currentChat.id === chatId ? currentChat : null)
+      const chatToSave = liveChat ? patchChat(liveChat) : null
+      if (chatToSave && !chatToSave.isTemporary) {
+        if (storeHistory) {
+          chatStorage.saveChatAndSync(chatToSave).catch((error) => {
+            logError('Failed to persist repaired widget', error, {
+              component: 'useChatMessaging',
+              action: 'retryToolCall',
+              metadata: { chatId, toolCallId },
+            })
+          })
+        } else {
+          sessionChatStorage.saveChat(chatToSave)
+        }
+      }
+
+      return true
+    },
+    [
+      loadingState,
+      currentChat,
+      selectedModel,
+      models,
+      storeHistory,
+      setChats,
+      setCurrentChat,
+    ],
   )
 
   // Tracks a regenerate request issued while a stream is in flight. Once
@@ -1494,5 +1665,6 @@ export function useChatMessaging({
     regenerateMessage,
     retryLastMessage,
     resolveInputToolCall,
+    retryToolCall,
   }
 }

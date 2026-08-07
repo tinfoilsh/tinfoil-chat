@@ -39,6 +39,7 @@ vi.mock('@/components/chat/hooks/chat-operations', async () => {
 vi.mock('@/services/cloud/streaming-tracker', () => ({
   streamingTracker: {
     isStreaming: mockIsStreaming,
+    isStreamingOrPending: mockIsStreaming,
   },
 }))
 

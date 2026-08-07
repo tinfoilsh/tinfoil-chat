@@ -50,6 +50,10 @@ type ChatMessagesProps = {
   ) => void
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
+  onRetryToolCall?: (
+    messageIndex: number,
+    toolCallId: string,
+  ) => Promise<boolean>
   showScrollButton?: boolean
   webSearchEnabled?: boolean
   onWebSearchToggle?: () => void
@@ -77,6 +81,7 @@ const ChatMessage = memo(
     hideActions = false,
     onEditMessage,
     onRegenerateMessage,
+    onRetryToolCall,
   }: {
     message: Message
     messageIndex: number
@@ -87,6 +92,10 @@ const ChatMessage = memo(
     hideActions?: boolean
     onEditMessage?: (messageIndex: number, newContent: string) => void
     onRegenerateMessage?: (messageIndex: number) => void
+    onRetryToolCall?: (
+      messageIndex: number,
+      toolCallId: string,
+    ) => Promise<boolean>
   }) {
     const normalized = ensureTimeline(message)
     const renderer = getRendererRegistry().getMessageRenderer(normalized, model)
@@ -103,6 +112,7 @@ const ChatMessage = memo(
         hideActions={hideActions}
         onEditMessage={onEditMessage}
         onRegenerateMessage={onRegenerateMessage}
+        onRetryToolCall={onRetryToolCall}
       />
     )
   },
@@ -119,7 +129,8 @@ const ChatMessage = memo(
       prevProps.isStreaming === nextProps.isStreaming &&
       prevProps.hideActions === nextProps.hideActions &&
       prevProps.onEditMessage === nextProps.onEditMessage &&
-      prevProps.onRegenerateMessage === nextProps.onRegenerateMessage
+      prevProps.onRegenerateMessage === nextProps.onRegenerateMessage &&
+      prevProps.onRetryToolCall === nextProps.onRetryToolCall
     )
   },
 )
@@ -251,6 +262,7 @@ export function ChatMessages({
   handleLabelClick,
   onEditMessage,
   onRegenerateMessage,
+  onRetryToolCall,
   showScrollButton,
   webSearchEnabled,
   onWebSearchToggle,
@@ -495,6 +507,9 @@ export function ChatMessages({
                       onRegenerateMessage={
                         recoveryDraft ? undefined : onRegenerateMessage
                       }
+                      onRetryToolCall={
+                        recoveryDraft ? undefined : onRetryToolCall
+                      }
                     />
                     {showRecoveryStatusAfter(message) && <RecoveryMessage />}
                     {renderRecoveryAfter(message, i)}
@@ -530,6 +545,7 @@ export function ChatMessages({
                 onRegenerateMessage={
                   recoveryDraft ? undefined : onRegenerateMessage
                 }
+                onRetryToolCall={recoveryDraft ? undefined : onRetryToolCall}
               />
               {showRecoveryStatusAfter(message) && <RecoveryMessage />}
               {renderRecoveryAfter(message, archivedMessages.length + i)}

@@ -8,6 +8,7 @@ import { logError } from '@/utils/error-handling'
 import {
   FolderIcon,
   MicrophoneIcon,
+  Squares2X2Icon,
   StopIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -37,6 +38,18 @@ import { CONSTANTS } from './constants'
 import type { PromptPreset } from './prompts/types'
 import type { ProcessedDocument } from './renderers/types'
 import type { LoadingState } from './types'
+
+function MenuCheckmark({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  )
+}
 
 // Tracks every mounted textarea per shared external ref so an unmounting
 // instance can hand the shared ref over to a surviving instance.
@@ -270,8 +283,60 @@ export function ChatInput({
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // --- Mobile attachment menu state ---
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  // --- Input options menu state (the "+" button) ---
+  const [isInputMenuOpen, setIsInputMenuOpen] = useState(false)
+  const inputMenuRef = useRef<HTMLDivElement>(null)
+  const inputMenuTriggerRef = useRef<HTMLButtonElement>(null)
+
+  const getInputMenuItems = (): HTMLElement[] =>
+    Array.from(
+      inputMenuRef.current?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="menuitemcheckbox"]',
+      ) ?? [],
+    )
+
+  // ARIA menu keyboard contract: focus moves into the menu on open,
+  // Escape dismisses and restores focus to the trigger, and arrow keys
+  // move between items (wrapping). Tab closes rather than tabbing through.
+  useEffect(() => {
+    if (isInputMenuOpen) {
+      getInputMenuItems()[0]?.focus()
+    }
+  }, [isInputMenuOpen])
+
+  const closeInputMenu = (restoreFocus: boolean) => {
+    setIsInputMenuOpen(false)
+    if (restoreFocus) {
+      inputMenuTriggerRef.current?.focus()
+    }
+  }
+
+  const handleInputMenuKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      closeInputMenu(true)
+      return
+    }
+    if (e.key === 'Tab') {
+      closeInputMenu(false)
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const items = getInputMenuItems()
+      if (items.length === 0) return
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement)
+      const delta = e.key === 'ArrowDown' ? 1 : -1
+      const nextIndex =
+        currentIndex === -1
+          ? delta === 1
+            ? 0
+            : items.length - 1
+          : (currentIndex + delta + items.length) % items.length
+      items[nextIndex]?.focus()
+    }
+  }
 
   // Random placeholder - use first one initially to avoid SSR hydration mismatch,
   // then randomize after mount
@@ -614,69 +679,6 @@ export function ChatInput({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">
-        {/* Project tab - manila folder style, absolutely positioned */}
-        {isProjectMode &&
-          activeProject &&
-          (() => {
-            const projectColor = getProjectColor(activeProject.color)
-            const colorStyle = projectColor
-              ? {
-                  borderColor: projectColor.hex,
-                  backgroundColor: projectColor.hex,
-                }
-              : undefined
-            return (
-              <div className="pointer-events-none absolute right-8 top-px z-10 hidden -translate-y-full md:block">
-                <div
-                  className={cn(
-                    'pointer-events-auto inline-flex items-center gap-1.5 rounded-t-site-tab border border-b-0 px-2.5 py-1',
-                    projectColor
-                      ? 'text-gray-900'
-                      : 'border-border-subtle bg-surface-chat text-content-secondary',
-                  )}
-                  style={colorStyle}
-                >
-                  <FolderIcon className="h-3 w-3" />
-                  <span className="text-xs font-medium">
-                    {activeProject.name}
-                  </span>
-                </div>
-              </div>
-            )
-          })()}
-        {/* Prompt preset tab - shows the active prompt for this chat */}
-        {activePromptPreset &&
-          (() => {
-            const ActivePresetIcon = activePromptPreset.Icon
-            return (
-              <div className="pointer-events-none absolute left-8 top-px z-10 -translate-y-full">
-                <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
-                  <button
-                    type="button"
-                    onClick={onOpenPromptLibrary}
-                    disabled={!onOpenPromptLibrary}
-                    className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
-                    aria-label={`Change prompt (currently ${activePromptPreset.name})`}
-                  >
-                    <ActivePresetIcon className="h-3 w-3" />
-                    <span className="text-xs font-medium">
-                      {activePromptPreset.name}
-                    </span>
-                  </button>
-                  {onClearPromptPreset && (
-                    <button
-                      type="button"
-                      onClick={onClearPromptPreset}
-                      aria-label="Stop using this prompt"
-                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
         {mobileHeader}
         {(isProjectMode && activeProject) || loadingProject ? (
           <ProjectModeBanner
@@ -687,12 +689,80 @@ export function ChatInput({
         ) : null}
         <div
           className={cn(
-            'rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
+            // relative anchors the folder-style tabs below to the card
+            // itself. Anchoring them to the outer container breaks on
+            // mobile, where in-flow elements (the Prompts button, project
+            // banner) sit above the card and push the container's top edge
+            // away from the card top the tabs are meant to attach to.
+            'relative rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
             isTemporaryMode
               ? 'border-dashed border-content-muted'
               : 'border-border-subtle',
           )}
         >
+          {/* Project tab - manila folder style, absolutely positioned */}
+          {isProjectMode &&
+            activeProject &&
+            (() => {
+              const projectColor = getProjectColor(activeProject.color)
+              const colorStyle = projectColor
+                ? {
+                    borderColor: projectColor.hex,
+                    backgroundColor: projectColor.hex,
+                  }
+                : undefined
+              return (
+                <div className="pointer-events-none absolute right-8 top-px z-10 hidden -translate-y-full md:block">
+                  <div
+                    className={cn(
+                      'pointer-events-auto inline-flex items-center gap-1.5 rounded-t-site-tab border border-b-0 px-2.5 py-1',
+                      projectColor
+                        ? 'text-gray-900'
+                        : 'border-border-subtle bg-surface-chat text-content-secondary',
+                    )}
+                    style={colorStyle}
+                  >
+                    <FolderIcon className="h-3 w-3" />
+                    <span className="text-xs font-medium">
+                      {activeProject.name}
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+          {/* Prompt preset tab - shows the active prompt for this chat */}
+          {activePromptPreset &&
+            (() => {
+              const ActivePresetIcon = activePromptPreset.Icon
+              return (
+                <div className="pointer-events-none absolute left-8 top-px z-10 -translate-y-full">
+                  <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
+                    <button
+                      type="button"
+                      onClick={onOpenPromptLibrary}
+                      disabled={!onOpenPromptLibrary}
+                      className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
+                      aria-label={`Change prompt (currently ${activePromptPreset.name})`}
+                    >
+                      <ActivePresetIcon className="h-3 w-3" />
+                      <span className="text-xs font-medium">
+                        {activePromptPreset.name}
+                      </span>
+                    </button>
+                    {onClearPromptPreset && (
+                      <button
+                        type="button"
+                        onClick={onClearPromptPreset}
+                        aria-label="Stop using this prompt"
+                        className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
+                      >
+                        <XMarkIcon className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           {/* No accept filter: unknown extensions are sniffed for text
               content and rejected gracefully after selection instead of
               being blocked by the picker. */}
@@ -1096,89 +1166,104 @@ export function ChatInput({
               {audioStatus}
             </span>
             <div className="flex items-center gap-1">
-              {/* Mobile: + button with dropdown menu */}
-              <div className="relative md:hidden">
+              {/* Unified + button opening the input options menu */}
+              <div className="relative">
                 <button
+                  id="input-options-button"
+                  ref={inputMenuTriggerRef}
                   type="button"
-                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                  aria-label="Attachment options"
-                  aria-expanded={isMobileMenuOpen}
+                  onClick={() => setIsInputMenuOpen(!isInputMenuOpen)}
+                  aria-label="Input options"
+                  aria-expanded={isInputMenuOpen}
+                  aria-haspopup="menu"
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
                 >
                   <PiPlusLight className="h-5 w-5" />
                 </button>
-                {isMobileMenuOpen && (
+                {isInputMenuOpen && (
                   <>
                     <div
                       className="fixed inset-0 z-10"
-                      onClick={() => setIsMobileMenuOpen(false)}
+                      onClick={() => closeInputMenu(false)}
                     />
-                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[180px] rounded-xl border border-border-subtle bg-surface-chat py-1.5 shadow-lg">
+                    <div
+                      ref={inputMenuRef}
+                      role="menu"
+                      aria-label="Input options"
+                      onKeyDown={handleInputMenuKeyDown}
+                      className="absolute bottom-full left-0 z-20 mb-2 min-w-[220px] rounded-xl border border-border-subtle bg-surface-chat py-1.5 shadow-lg"
+                    >
                       <button
                         type="button"
+                        role="menuitem"
                         onClick={() => {
                           triggerFileInput()
-                          setIsMobileMenuOpen(false)
+                          closeInputMenu(true)
                         }}
                         className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                       >
                         <PiPaperclipLight className="h-5 w-5 text-content-secondary" />
                         Add files or photos
                       </button>
-                      {onWebSearchToggle && (
+                      {onOpenPromptLibrary && (
                         <button
                           type="button"
+                          role="menuitem"
                           onClick={() => {
-                            onWebSearchToggle()
-                            setIsMobileMenuOpen(false)
+                            onOpenPromptLibrary()
+                            closeInputMenu(true)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
-                          <PiGlobe className="h-5 w-5 text-content-secondary" />
+                          <Squares2X2Icon className="h-5 w-5 text-content-secondary" />
+                          Change system prompt
+                        </button>
+                      )}
+                      {(onWebSearchToggle || onCodeExecutionToggle) && (
+                        <div className="my-1.5 border-t border-border-subtle" />
+                      )}
+                      {onWebSearchToggle && (
+                        <button
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={webSearchEnabled}
+                          onClick={() => {
+                            onWebSearchToggle()
+                            closeInputMenu(true)
+                          }}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
+                        >
+                          {webSearchEnabled ? (
+                            <PiGlobe className="h-5 w-5 text-content-secondary" />
+                          ) : (
+                            <PiGlobeX className="h-5 w-5 text-content-secondary" />
+                          )}
                           <span className="flex-1">Web search</span>
                           {webSearchEnabled && (
-                            <svg
-                              className="h-4 w-4 text-brand-accent-light"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
+                            <MenuCheckmark className="h-4 w-4 text-brand-accent-light" />
                           )}
                         </button>
                       )}
                       {onCodeExecutionToggle && (
                         <button
                           type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={codeExecutionEnabled}
                           onClick={() => {
                             onCodeExecutionToggle()
-                            setIsMobileMenuOpen(false)
+                            closeInputMenu(true)
                           }}
                           className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary hover:bg-surface-chat-background"
                         >
                           <PiTerminalWindow className="h-5 w-5 text-content-secondary" />
                           <span className="flex-1">Code execution</span>
                           {codeExecutionEnabled && (
-                            <svg
-                              className="h-4 w-4 text-brand-accent-light"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
+                            <MenuCheckmark className="h-4 w-4 text-brand-accent-light" />
                           )}
                         </button>
                       )}
                       {contextUsage && (
-                        <div className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary">
+                        <div className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-content-primary md:hidden">
                           <span className="flex-1">Context</span>
                           <ContextUsageIndicator usage={contextUsage} />
                         </div>
@@ -1187,93 +1272,6 @@ export function ChatInput({
                   </>
                 )}
               </div>
-
-              {/* Desktop: Original buttons */}
-              <div className="group relative hidden md:block">
-                <button
-                  id="upload-button"
-                  type="button"
-                  onClick={triggerFileInput}
-                  aria-label="Upload document"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-content-secondary transition-colors hover:bg-surface-chat-background hover:text-content-primary"
-                >
-                  <PiPaperclipLight className="h-5 w-5" />
-                </button>
-                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                  Upload document
-                </span>
-              </div>
-              {onWebSearchToggle && (
-                <div className="group relative hidden md:block">
-                  <button
-                    id="web-search-button"
-                    type="button"
-                    onClick={onWebSearchToggle}
-                    aria-label="Web search"
-                    aria-pressed={webSearchEnabled}
-                    className={cn(
-                      'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
-                      webSearchEnabled
-                        ? cn(
-                            'px-2',
-                            isDarkMode
-                              ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                              : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                          )
-                        : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                    )}
-                  >
-                    {webSearchEnabled ? (
-                      <PiGlobe className="h-5 w-5" />
-                    ) : (
-                      <PiGlobeX className="h-5 w-5" />
-                    )}
-                    {webSearchEnabled && (
-                      <span className="translate-y-px text-xs font-medium leading-none">
-                        Search
-                      </span>
-                    )}
-                  </button>
-                  {!webSearchEnabled && (
-                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                      Web search
-                    </span>
-                  )}
-                </div>
-              )}
-              {onCodeExecutionToggle && (
-                <div className="group relative hidden md:block">
-                  <button
-                    type="button"
-                    onClick={onCodeExecutionToggle}
-                    aria-label="Code execution"
-                    aria-pressed={codeExecutionEnabled}
-                    className={cn(
-                      'flex h-7 items-center justify-center gap-1.5 rounded-lg transition-colors',
-                      codeExecutionEnabled
-                        ? cn(
-                            'px-2',
-                            isDarkMode
-                              ? 'bg-brand-accent-light/20 text-brand-accent-light'
-                              : 'bg-brand-accent-dark/20 text-brand-accent-dark',
-                          )
-                        : 'w-7 text-content-secondary hover:bg-surface-chat-background hover:text-content-primary',
-                    )}
-                  >
-                    <PiTerminalWindow className="h-5 w-5" />
-                    {codeExecutionEnabled && (
-                      <span className="translate-y-px text-xs font-medium leading-none">
-                        Code
-                      </span>
-                    )}
-                  </button>
-                  {!codeExecutionEnabled && (
-                    <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                      Code execution
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="flex items-center gap-2">

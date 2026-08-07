@@ -764,6 +764,7 @@ export function ChatInterface({
     editMessage,
     regenerateMessage,
     resolveInputToolCall,
+    retryToolCall,
     initialChatDecryptionFailed,
     clearInitialChatDecryptionFailed,
     localChatNotFound,
@@ -825,8 +826,16 @@ export function ChatInterface({
         presetId: presetId ?? undefined,
       }
       setCurrentChat(updatedChat)
+      // Blank chats share an empty id (one per storage mode), so also match
+      // the mode to avoid rewriting the other blank entry.
       setChats((prev) =>
-        prev.map((c) => (c.id === currentChat.id ? updatedChat : c)),
+        prev.map((c) =>
+          c.id === currentChat.id &&
+          (!currentChat.isBlankChat ||
+            c.isLocalOnly === currentChat.isLocalOnly)
+            ? updatedChat
+            : c,
+        ),
       )
       const storeHistory = isSignedIn || !isCloudSyncEnabled()
       if (!updatedChat.isTemporary && storeHistory) {
@@ -3453,6 +3462,7 @@ export function ChatInterface({
                     handleLabelClick={handleLabelClick}
                     onEditMessage={editMessage}
                     onRegenerateMessage={regenerateMessage}
+                    onRetryToolCall={retryToolCall}
                     showScrollButton={showScrollButton}
                     webSearchEnabled={effectiveWebSearchEnabled}
                     onWebSearchToggle={
@@ -3526,7 +3536,7 @@ export function ChatInterface({
                       )}
                       {streamError && (
                         <StreamErrorBanner
-                          message={streamError}
+                          error={streamError}
                           onDismiss={dismissStreamError}
                           onRetry={retryLastMessage}
                           isDarkMode={isDarkMode}
@@ -3559,7 +3569,10 @@ export function ChatInterface({
                         onOpenPromptLibrary={handleOpenPromptLibrary}
                         onClearPromptPreset={() => handleSetActivePreset(null)}
                         mobileHeader={
-                          !currentChat?.messages?.length ? (
+                          // With a preset active, the preset tab attached to
+                          // the input card already opens the library; the
+                          // mobile Prompts button would collide with it.
+                          !currentChat?.messages?.length && !activePreset ? (
                             <div className="mb-3 md:hidden">
                               <PromptPresetSuggestions
                                 activePreset={activePreset}

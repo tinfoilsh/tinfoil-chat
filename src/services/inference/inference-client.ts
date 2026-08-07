@@ -164,6 +164,12 @@ export function isRetryableError(error: unknown): boolean {
     return false
   }
 
+  // ChatErrors are terminal classifications produced by our own layers
+  // (e.g. the hourly usage cap); retrying them cannot succeed.
+  if (error instanceof ChatError) {
+    return false
+  }
+
   // Transport failures raised by the SDK, including its request timeout
   // (APIConnectionTimeoutError extends APIConnectionError).
   if (error instanceof APIConnectionError) {
@@ -568,19 +574,38 @@ export async function sendChatStream(
         },
       })
 
-      const msg = anyErr?.message || 'Unknown network error'
-      throw new ChatError(`Network request failed: ${msg}`, 'FETCH_ERROR')
+      throw toTerminalChatError(err)
     }
   }
 
   // Fallback: every branch above should already have thrown, but if the
   // retry loop exits without doing so we still need to surface an error.
-  const anyErr = lastError as any
+  throw toTerminalChatError(lastError, maxRetries)
+}
+
+/**
+ * Wraps a failed request's error into a typed ChatError, preserving any
+ * classification already attached (our own ChatErrors pass through, HTTP
+ * 429 maps to RATE_LIMIT). FETCH_ERROR is reserved for failures with no
+ * HTTP response at all — a request that reached the server and got an
+ * error status is a SERVER_ERROR, and telling the user to check their
+ * internet for a 500 would be misleading.
+ */
+function toTerminalChatError(err: unknown, retries?: number): ChatError {
+  if (err instanceof ChatError) {
+    return err
+  }
+  const anyErr = err as { message?: string; status?: unknown }
   const msg = anyErr?.message || 'Unknown network error'
-  throw new ChatError(
-    `Network request failed after ${maxRetries} retries: ${msg}`,
-    'FETCH_ERROR',
-  )
+  const status = typeof anyErr?.status === 'number' ? anyErr.status : undefined
+  if (status === 429) {
+    return new ChatError(msg, 'RATE_LIMIT', { status })
+  }
+  if (status !== undefined) {
+    return new ChatError(msg, 'SERVER_ERROR', { status })
+  }
+  const suffix = retries !== undefined ? ` after ${retries} retries` : ''
+  return new ChatError(`Network request failed${suffix}: ${msg}`, 'FETCH_ERROR')
 }
 
 export interface StructuredCompletionParams {

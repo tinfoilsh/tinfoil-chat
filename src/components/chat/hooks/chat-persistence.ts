@@ -57,6 +57,7 @@ export function createUpdateChatWithHistoryCheck({
       webSearchEnabled: liveChat
         ? liveChat.webSearchEnabled
         : chatSnapshot.webSearchEnabled,
+      presetId: liveChat ? liveChat.presetId : chatSnapshot.presetId,
     }
 
     setChats((prevChats) => {

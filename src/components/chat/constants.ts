@@ -49,6 +49,21 @@ export const CONSTANTS = {
   // overlap.
   CHAT_SIDEBAR_RAIL_FADE_IN_DURATION_S: 0.15,
   CHAT_SIDEBAR_RAIL_FADE_OUT_DURATION_S: 0.1,
+  // Height of a pinned sidebar section header (Projects/Chats). The Chats
+  // header offsets by this amount so it stacks below the pinned Projects
+  // header while scrolling.
+  SIDEBAR_PINNED_HEADER_OFFSET_PX: 44,
+  // How close to the bottom of the sidebar scroll area (in px) a downward
+  // user scroll must get before the next page of chats is fetched.
+  SIDEBAR_AUTOLOAD_BOTTOM_THRESHOLD_PX: 200,
+  // Duration of a sidebar section expand/collapse animation (seconds),
+  // shared by the Projects and Chats height animations.
+  SIDEBAR_SECTION_ANIMATION_S: 0.2,
+  // How long the sidebar scrollbar stays hidden while sections animate.
+  // Slightly longer than the animation so the scrollbar reappears only
+  // once the scroll height has settled, instead of flickering as it
+  // changes mid-animation.
+  SIDEBAR_SECTION_SCROLLBAR_HIDE_MS: 300,
   SETTINGS_SIDEBAR_WIDTH_PX: 345,
   VERIFIER_SIDEBAR_WIDTH_PX: 345,
   ASK_SIDEBAR_WIDTH_PX: 420,
