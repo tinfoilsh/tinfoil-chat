@@ -72,8 +72,7 @@ describe('EventNormalizer', () => {
 
     it('still detects a think tag after emitting excessive leading whitespace', () => {
       const events = processAll([
-        contentChunk(' '.repeat(8)),
-        contentChunk('<th'),
+        contentChunk(`${' '.repeat(8)}<th`),
         contentChunk('ink>reasoning</think>answer'),
       ])
 
