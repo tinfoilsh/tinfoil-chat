@@ -24,6 +24,12 @@ interface CreateUpdateChatWithHistoryCheckParams {
   currentChatRef: React.MutableRefObject<Chat>
 }
 
+interface UpdateChatOptions {
+  skipCloudSync?: boolean
+  skipIndexedDBSave?: boolean
+  metadataPatch?: Partial<Chat>
+}
+
 export function createUpdateChatWithHistoryCheck({
   storeHistory,
   chatsRef,
@@ -35,10 +41,13 @@ export function createUpdateChatWithHistoryCheck({
     setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>,
     chatId: string,
     newMessages: Message[],
-    skipCloudSync = false,
-    skipIndexedDBSave = false,
-    metadataPatch: Partial<Chat> = {},
+    options: UpdateChatOptions = {},
   ) {
+    const {
+      skipCloudSync = false,
+      skipIndexedDBSave = false,
+      metadataPatch = {},
+    } = options
     const liveChat =
       (currentChatRef.current.id === chatId
         ? currentChatRef.current

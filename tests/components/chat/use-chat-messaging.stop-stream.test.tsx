@@ -26,7 +26,21 @@ const {
   },
   cancelChatRecoveryMock: vi.fn(async (..._args: unknown[]) => false),
   completeLiveChatRecoveryMock: vi.fn(
-    async (..._args: unknown[]): Promise<void> => {},
+    async (...args: unknown[]): Promise<Chat> => {
+      const input = args[0] as {
+        chatId: string
+        assistantMessage: Chat['messages'][number]
+        chatPatch?: Partial<Chat>
+      }
+      return {
+        id: input.chatId,
+        title: input.chatPatch?.title ?? 'Untitled',
+        titleState: input.chatPatch?.titleState ?? 'placeholder',
+        createdAt: new Date(),
+        messages: [input.assistantMessage],
+        isBlankChat: false,
+      }
+    },
   ),
   containerAuthTokenMock: vi.fn(async (..._args: unknown[]) => null),
   generateTitleMock: vi.fn(async () => 'Untitled'),
@@ -202,7 +216,6 @@ describe('useChatMessaging stopped streams', () => {
     initialSaveMock.mockImplementation(async (chat: unknown) => chat)
     persistInterruptedAssistantMock.mockResolvedValue(undefined)
     containerAuthTokenMock.mockResolvedValue(null)
-    completeLiveChatRecoveryMock.mockResolvedValue(undefined)
     generateTitleMock.mockResolvedValue('Untitled')
     authState.isSignedIn = false
     authState.userId = undefined
@@ -525,6 +538,27 @@ describe('useChatMessaging stopped streams', () => {
     authState.userId = 'user-1'
     recoveryAvailableState.available = true
     generateTitleMock.mockResolvedValue('Generated title')
+    const remotelyMergedMessage: Chat['messages'][number] = {
+      role: 'user',
+      content: 'Merged on another device',
+      timestamp: new Date(),
+    }
+    completeLiveChatRecoveryMock.mockImplementationOnce(
+      async (...args: unknown[]) => {
+        const input = args[0] as {
+          chatId: string
+          assistantMessage: Chat['messages'][number]
+        }
+        return {
+          id: input.chatId,
+          title: 'Generated title',
+          titleState: 'generated',
+          createdAt: new Date(),
+          messages: [remotelyMergedMessage, input.assistantMessage],
+          isBlankChat: false,
+        }
+      },
+    )
     const initialChat: Chat = {
       id: '',
       title: 'Untitled',
@@ -578,6 +612,9 @@ describe('useChatMessaging stopped streams', () => {
       title: 'Generated title',
       titleState: 'generated',
     })
+    expect(result.current.currentChat.messages[0]).toEqual(
+      remotelyMergedMessage,
+    )
   })
 
   it('preserves a manual title changed during recovery completion', async () => {
@@ -587,10 +624,23 @@ describe('useChatMessaging stopped streams', () => {
     generateTitleMock.mockResolvedValue('Generated title')
     let finishRecovery!: () => void
     completeLiveChatRecoveryMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          finishRecovery = resolve
-        }),
+      (...args: unknown[]) => {
+        const input = args[0] as {
+          chatId: string
+          assistantMessage: Chat['messages'][number]
+        }
+        return new Promise<Chat>((resolve) => {
+          finishRecovery = () =>
+            resolve({
+              ...initialChat,
+              id: input.chatId,
+              title: 'Generated title',
+              titleState: 'generated',
+              messages: [input.assistantMessage],
+              isBlankChat: false,
+            })
+        })
+      },
     )
     const initialChat: Chat = {
       id: '',
@@ -674,10 +724,20 @@ describe('useChatMessaging stopped streams', () => {
     sendChatStreamMock.mockResolvedValue(stream.stream)
     let finishRecovery!: () => void
     completeLiveChatRecoveryMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          finishRecovery = resolve
-        }),
+      (...args: unknown[]) => {
+        const input = args[0] as {
+          chatId: string
+          assistantMessage: Chat['messages'][number]
+        }
+        return new Promise<Chat>((resolve) => {
+          finishRecovery = () =>
+            resolve({
+              ...initialChat,
+              id: input.chatId,
+              messages: [...initialChat.messages, input.assistantMessage],
+            })
+        })
+      },
     )
 
     const { result } = renderHook(() => {

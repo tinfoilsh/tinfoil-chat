@@ -3,7 +3,7 @@ import {
   hasVisibleAssistantMessage,
   parseRichStreamingResponse,
 } from '@/components/chat/hooks/streaming'
-import type { Message } from '@/components/chat/types'
+import type { Chat, Message } from '@/components/chat/types'
 import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { retryDeferredAlternativesFinalization } from '@/services/cloud/legacy-blob-migration'
 import { encryptionService } from '@/services/encryption/encryption-service'
@@ -338,7 +338,7 @@ export async function completeLiveChatRecovery(args: {
   turnId: string
   assistantMessage: Message
   chatPatch?: Parameters<typeof completePendingRecovery>[3]
-}): Promise<void> {
+}): Promise<Chat> {
   const active = [...activeRecoveries.values()].find(
     (candidate) =>
       candidate.chatId === args.chatId && candidate.turnId === args.turnId,
@@ -349,7 +349,7 @@ export async function completeLiveChatRecovery(args: {
   if (!active?.envelope || !isCurrent()) {
     throw new DOMException('Aborted', 'AbortError')
   }
-  await completePendingRecovery(
+  const completedChat = await completePendingRecovery(
     args.chatId,
     active.envelope,
     args.assistantMessage,
@@ -358,6 +358,15 @@ export async function completeLiveChatRecovery(args: {
   )
   activeRecoveries.delete(active.sessionId)
   await deleteRecoveryQuietly(active.sessionId)
+  return {
+    ...completedChat,
+    createdAt: new Date(completedChat.createdAt),
+    pendingSave: false,
+    messages: completedChat.messages.map((message) => ({
+      ...message,
+      timestamp: new Date(message.timestamp),
+    })),
+  }
 }
 
 export async function cancelChatRecovery(

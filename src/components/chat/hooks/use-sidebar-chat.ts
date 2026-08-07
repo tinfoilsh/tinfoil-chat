@@ -197,10 +197,7 @@ export function useSidebarChat({
             webSearchEnabled,
             piiCheckEnabled,
           })
-          if (
-            abortControllerRef.current !== controller ||
-            controller.signal.aborted
-          ) {
+          if (abortControllerRef.current !== controller) {
             return
           }
 

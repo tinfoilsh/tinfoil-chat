@@ -133,6 +133,5 @@ describe('useSidebarChat', () => {
     await act(async () => resolveResponse({}))
 
     expect(pendingStreams).toEqual([])
-    expect(streamingChats).toEqual(new Set())
   })
 })

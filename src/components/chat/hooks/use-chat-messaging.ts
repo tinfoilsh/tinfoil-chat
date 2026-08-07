@@ -287,6 +287,13 @@ export function useChatMessaging({
   chatsRef.current = chats
   const currentChatRef = useRef(currentChat)
   currentChatRef.current = currentChat
+  const findLiveChat = useCallback(
+    (chatId: string) =>
+      (currentChatRef.current.id === chatId
+        ? currentChatRef.current
+        : undefined) ?? chatsRef.current.find((chat) => chat.id === chatId),
+    [],
+  )
 
   const activeLiveGenerationsRef = useRef(
     new Map<string, ActiveLiveGeneration>(),
@@ -381,9 +388,7 @@ export function useChatMessaging({
               pendingSave: false,
             }
           }
-          const latestChat =
-            chatsRef.current.find((chat) => chat.id === targetId) ??
-            activeGeneration.chat
+          const latestChat = findLiveChat(targetId) ?? activeGeneration.chat
           const finalizedChat = finalizeChat(latestChat)
           stoppedChat = finalizedChat
           setChats((prevChats) =>
@@ -462,6 +467,7 @@ export function useChatMessaging({
     },
     [
       abort,
+      findLiveChat,
       hasActiveController,
       patchStatus,
       storeHistory,
@@ -977,8 +983,7 @@ export function useChatMessaging({
               setCurrentChat,
               chatId,
               [...updatedMessages, message],
-              false,
-              true,
+              { skipIndexedDBSave: true },
             )
           },
           setIsThinking: setIsThinkingFor,
@@ -1027,11 +1032,7 @@ export function useChatMessaging({
           const finalMessages = [...updatedMessages, assistantMessage]
 
           // Resolve title: await the in-flight title gen promise if one exists
-          let liveChat =
-            (currentChatRef.current.id === chatId
-              ? currentChatRef.current
-              : undefined) ??
-            chatsRef.current.find((chat) => chat.id === chatId)
+          let liveChat = findLiveChat(chatId)
           let resolvedTitle = liveChat?.title ?? updatedChat.title
           let resolvedTitleState =
             liveChat?.titleState ?? updatedChat.titleState
@@ -1043,12 +1044,7 @@ export function useChatMessaging({
           ) {
             try {
               const generated = await earlyTitlePromise
-              liveChat =
-                (currentChatRef.current.id === chatId
-                  ? currentChatRef.current
-                  : undefined) ??
-                chatsRef.current.find((chat) => chat.id === chatId) ??
-                liveChat
+              liveChat = findLiveChat(chatId) ?? liveChat
               resolvedTitle = liveChat?.title ?? resolvedTitle
               resolvedTitleState = liveChat?.titleState ?? resolvedTitleState
               if (
@@ -1091,6 +1087,28 @@ export function useChatMessaging({
             // would never clear for them.
             pendingSave: !isTemporary,
           }
+          const generatedTitlePatch = (): Partial<Chat> => {
+            const latestChat = findLiveChat(chatId)
+            return generatedTitle &&
+              latestChat?.title === DEFAULT_CHAT_TITLE &&
+              latestChat.titleState === 'placeholder'
+              ? { title: resolvedTitle, titleState: resolvedTitleState }
+              : {}
+          }
+          const persistFinalChat = () =>
+            updateChatWithHistoryCheck(
+              setChats,
+              chatToSave,
+              setCurrentChat,
+              chatId,
+              finalMessages,
+              {
+                metadataPatch: {
+                  pendingSave: chatToSave.pendingSave,
+                  ...generatedTitlePatch(),
+                },
+              },
+            )
 
           // Single save to IndexedDB + cloud sync
           logInfo('[handleQuery] Saving chat after stream', {
@@ -1106,43 +1124,40 @@ export function useChatMessaging({
 
           if (recoveryEnabled && turnId) {
             try {
-              await completeLiveChatRecovery({
+              const titleBeforeRecovery = findLiveChat(chatId)
+              const completedChat = await completeLiveChatRecovery({
                 chatId,
                 turnId,
                 assistantMessage,
                 chatPatch: {
-                  title: resolvedTitle,
-                  titleState: resolvedTitleState,
-                  model: selectedModel,
-                  projectId: liveChat?.projectId ?? updatedChat.projectId,
-                },
-              })
-              const latestChat =
-                (currentChatRef.current.id === chatId
-                  ? currentChatRef.current
-                  : undefined) ??
-                chatsRef.current.find((chat) => chat.id === chatId)
-              const shouldApplyGeneratedTitle =
-                generatedTitle &&
-                latestChat?.title === DEFAULT_CHAT_TITLE &&
-                latestChat.titleState === 'placeholder'
-              updateChatWithHistoryCheck(
-                setChats,
-                chatToSave,
-                setCurrentChat,
-                chatId,
-                finalMessages,
-                true,
-                true,
-                {
-                  pendingSave: false,
-                  ...(shouldApplyGeneratedTitle
+                  ...(generatedTitle
                     ? {
                         title: resolvedTitle,
                         titleState: resolvedTitleState,
+                        expectedTitleState: 'placeholder' as const,
                       }
                     : {}),
                 },
+              })
+              const latestChat = findLiveChat(chatId)
+              const titleChangedDuringRecovery =
+                latestChat !== undefined &&
+                (latestChat.title !== titleBeforeRecovery?.title ||
+                  latestChat.titleState !== titleBeforeRecovery?.titleState)
+              const visibleChat = titleChangedDuringRecovery
+                ? {
+                    ...completedChat,
+                    title: latestChat.title,
+                    titleState: latestChat.titleState,
+                  }
+                : completedChat
+              setChats((previous) =>
+                previous.map((chat) =>
+                  chat.id === chatId ? visibleChat : chat,
+                ),
+              )
+              setCurrentChat((previous) =>
+                previous.id === chatId ? visibleChat : previous,
               )
             } catch (error) {
               releaseActiveChatRecovery(chatId)
@@ -1157,38 +1172,10 @@ export function useChatMessaging({
                 action: 'handleQuery.recoveryComplete',
                 metadata: { chatId },
               })
-              updateChatWithHistoryCheck(
-                setChats,
-                chatToSave,
-                setCurrentChat,
-                chatId,
-                finalMessages,
-                false,
-                false,
-                {
-                  pendingSave: chatToSave.pendingSave,
-                  ...(generatedTitle
-                    ? { title: resolvedTitle, titleState: resolvedTitleState }
-                    : {}),
-                },
-              )
+              persistFinalChat()
             }
           } else {
-            updateChatWithHistoryCheck(
-              setChats,
-              chatToSave,
-              setCurrentChat,
-              chatId,
-              finalMessages,
-              false,
-              false,
-              {
-                pendingSave: chatToSave.pendingSave,
-                ...(generatedTitle
-                  ? { title: resolvedTitle, titleState: resolvedTitleState }
-                  : {}),
-              },
-            )
+            persistFinalChat()
           }
         } else {
           if (recoveryEnabled) {
@@ -1258,7 +1245,6 @@ export function useChatMessaging({
               setCurrentChat,
               currentId,
               [...updatedMessages, errorMessage],
-              false,
             )
           } else {
             // Surface as a dismissable floating banner instead of a chat message
@@ -1321,6 +1307,7 @@ export function useChatMessaging({
       selectedModel,
       systemPrompt,
       rules,
+      findLiveChat,
       updateChatWithHistoryCheck,
       scrollToBottom,
       reasoningEffort,
