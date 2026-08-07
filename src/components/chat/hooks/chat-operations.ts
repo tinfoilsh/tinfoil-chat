@@ -1,7 +1,9 @@
+import { TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { logError } from '@/utils/error-handling'
+import { generateReverseId } from '@/utils/reverse-id'
 import type { Chat, Message } from '../types'
 
 /**
@@ -21,6 +23,22 @@ export function createBlankChat(isLocalOnly = false): Chat {
     createdAt: new Date(),
     isBlankChat: true,
     isLocalOnly,
+  }
+}
+
+export function createTemporaryChat(
+  metadata: Pick<Chat, 'presetId' | 'webSearchEnabled' | 'isLocalOnly'> = {},
+): Chat {
+  const { id } = generateReverseId()
+  return {
+    id,
+    title: TEMPORARY_CHAT_TITLE,
+    titleState: 'placeholder',
+    messages: [],
+    createdAt: new Date(),
+    isBlankChat: true,
+    isTemporary: true,
+    ...metadata,
   }
 }
 
@@ -176,6 +194,13 @@ export function sortChats(chats: Chat[]): Chat[] {
 
     return chatSortTimestamp(b) - chatSortTimestamp(a)
   })
+}
+
+export function upsertChatById(chats: Chat[], replacement: Chat): Chat[] {
+  return sortChats([
+    replacement,
+    ...chats.filter((chat) => chat.id !== replacement.id),
+  ])
 }
 
 /**

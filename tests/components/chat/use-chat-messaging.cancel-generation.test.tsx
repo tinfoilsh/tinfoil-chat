@@ -6,12 +6,7 @@ import {
 } from '@/services/inference/chat-recovery-drafts'
 import { chatEvents } from '@/services/storage/chat-events'
 import { act, renderHook } from '@testing-library/react'
-import {
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-  useLayoutEffect,
-} from 'react'
+import { type Dispatch, type SetStateAction, useLayoutEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const abortMock = vi.fn()
@@ -115,8 +110,6 @@ function createChat(id: string): Chat {
 
 const noopSetChats: Dispatch<SetStateAction<Chat[]>> = (_value) => undefined
 const noopSetCurrentChat: Dispatch<SetStateAction<Chat>> = (_value) => undefined
-const messagesEndRef = { current: null } as RefObject<HTMLDivElement | null>
-
 type HookProps = {
   currentChat: Chat
   triggerCancelOnLayout: boolean
@@ -136,7 +129,6 @@ function useChatMessagingHarness({
     currentChat,
     setChats: noopSetChats,
     setCurrentChat: noopSetCurrentChat,
-    messagesEndRef,
   })
   const { cancelGeneration } = messaging
 
@@ -268,7 +260,7 @@ describe('useChatMessaging cancelGeneration', () => {
     expect(result.current.isStreaming).toBe(true)
   })
 
-  it('keeps recovery cancellation loading and deduplicates repeated stops', async () => {
+  it('returns the input to idle immediately and deduplicates repeated stops', async () => {
     let finishCancellation!: (persisted: boolean) => void
     cancelChatRecoveryMock.mockImplementationOnce(
       () =>
@@ -301,11 +293,11 @@ describe('useChatMessaging cancelGeneration', () => {
     )
     expect(patchStatusMock).toHaveBeenCalledWith(
       'chat-a',
-      expect.objectContaining({ loadingState: 'loading' }),
+      expect.objectContaining({
+        loadingState: 'idle',
+        isStreaming: false,
+      }),
     )
-    expect(patchStatusMock).not.toHaveBeenCalledWith('chat-a', {
-      loadingState: 'idle',
-    })
 
     finishCancellation(false)
     await act(async () => {
@@ -333,7 +325,6 @@ describe('useChatMessaging cancelGeneration', () => {
         currentChat: chat,
         setChats: noopSetChats,
         setCurrentChat: noopSetCurrentChat,
-        messagesEndRef,
       }),
     )
     scanPendingChatRecoveriesMock.mockClear()
@@ -361,7 +352,6 @@ describe('useChatMessaging cancelGeneration', () => {
         currentChat: chat,
         setChats: noopSetChats,
         setCurrentChat: noopSetCurrentChat,
-        messagesEndRef,
       }),
     )
     scanPendingChatRecoveriesMock.mockClear()
@@ -391,7 +381,6 @@ describe('useChatMessaging cancelGeneration', () => {
         currentChat: chat,
         setChats: noopSetChats,
         setCurrentChat: noopSetCurrentChat,
-        messagesEndRef,
       }),
     )
 
@@ -415,7 +404,6 @@ describe('useChatMessaging cancelGeneration', () => {
           currentChat,
           setChats: noopSetChats,
           setCurrentChat: noopSetCurrentChat,
-          messagesEndRef,
         }),
       {
         initialProps: { currentChat: chat },

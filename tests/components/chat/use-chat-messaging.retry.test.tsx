@@ -1,7 +1,7 @@
 import { useChatMessaging } from '@/components/chat/hooks/use-chat-messaging'
 import type { Chat, Message } from '@/components/chat/types'
 import { act, renderHook } from '@testing-library/react'
-import { type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { type Dispatch, type SetStateAction } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const abortMock = vi.fn()
@@ -127,7 +127,6 @@ function createChatWithUserMessage(id: string): Chat {
 
 const noopSetChats: Dispatch<SetStateAction<Chat[]>> = (_value) => undefined
 const noopSetCurrentChat: Dispatch<SetStateAction<Chat>> = (_value) => undefined
-const messagesEndRef = { current: null } as RefObject<HTMLDivElement | null>
 
 describe('useChatMessaging retryLastMessage', () => {
   beforeEach(() => {
@@ -148,7 +147,6 @@ describe('useChatMessaging retryLastMessage', () => {
         currentChat: chat,
         setChats: noopSetChats,
         setCurrentChat: noopSetCurrentChat,
-        messagesEndRef,
       }),
     )
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { isPlainPrimaryClick } from '@/utils/navigation'
 import {
   CheckIcon,
@@ -205,7 +206,7 @@ export function ChatListItem({
     if (
       enableTitleAnimation &&
       prevTitleRef.current !== chat.title &&
-      chat.title !== 'Untitled' &&
+      chat.title !== DEFAULT_CHAT_TITLE &&
       prevTitleRef.current !== ''
     ) {
       setAnimationFromTitle(prevTitleRef.current)

@@ -454,6 +454,7 @@ export async function getSecureFetch(): Promise<typeof fetch> {
 export interface RecoverableTinfoilClient {
   client: OpenAI
   baseURL: string
+  waitForTokenCapture: () => Promise<void>
 }
 
 export interface RecoverableTinfoilTransport {
@@ -499,15 +500,25 @@ export async function createRecoverableTinfoilClient(
   }
 
   const sessionToken = await fetchSessionToken()
+  let tokenCapturePromise: Promise<void> | null = null
   const recoverableFetch: typeof fetch = async (input, init) => {
     const response = await transport.secureClient.fetch(input, init)
     const token = await transport.secureClient.getSessionRecoveryToken()
-    await onTokenCaptured(token)
+    tokenCapturePromise = onTokenCaptured(token)
+    void tokenCapturePromise.catch(() => undefined)
     return response
   }
 
   return {
     baseURL: transport.baseURL,
+    waitForTokenCapture: () => {
+      if (!tokenCapturePromise) {
+        return Promise.reject(
+          new Error('Recovery token capture did not start with the request'),
+        )
+      }
+      return tokenCapturePromise
+    },
     client: new OpenAI({
       apiKey: sessionToken,
       baseURL: transport.baseURL,

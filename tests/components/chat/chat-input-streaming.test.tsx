@@ -45,4 +45,27 @@ describe('ChatInput streaming action', () => {
       screen.queryByRole('button', { name: 'Send' }),
     ).not.toBeInTheDocument()
   })
+
+  it('returns to the Send action as soon as cancellation is reflected', () => {
+    const props = {
+      input: '',
+      setInput: vi.fn(),
+      handleSubmit: vi.fn(),
+      cancelGeneration: vi.fn(),
+      inputRef: createRef<HTMLTextAreaElement>(),
+      handleInputFocus: vi.fn(),
+      inputMinHeight: '40px',
+      isDarkMode: true,
+    }
+    const { rerender } = render(
+      <ChatInput {...props} loadingState="streaming" />,
+    )
+
+    rerender(<ChatInput {...props} loadingState="idle" />)
+
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Stop generation' }),
+    ).not.toBeInTheDocument()
+  })
 })

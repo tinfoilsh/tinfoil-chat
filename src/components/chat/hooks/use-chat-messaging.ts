@@ -5,21 +5,21 @@
  * - Orchestrates user input → persistence, network streaming, and UI state
  * - Delegates heavy-lift to:
  *   - persistence: hooks/chat-persistence.ts (local/IndexedDB + cloud sync gating)
- *   - network: services/inference (request builder + fetch in inference-client)
- *   - streaming: hooks/streaming-processor.ts (SSE parsing and thinking mode)
+ *   - network: services/inference (request construction + typed chunk streams)
+ *   - streaming: hooks/streaming (normalization, assembly, and publication)
  *
  * State invariants:
  * - Each `handleQuery` call owns a `streamChatIdRef` tracking the chat it
- *   writes to (handles temporary → server id swaps) independently of other
- *   concurrent streams
- * - `viewedChatIdRef` always mirrors the chat on screen (never frozen during
- *   streaming) so background streams update their list entry without
- *   hijacking the active view
+ *   writes to as blank chats receive their permanent identity, independently
+ *   of other concurrent streams
+ * - `viewedChatIdRef` always mirrors the chat on screen so status actions
+ *   target the active conversation while background streams continue
  * - Per-chat stream status lives in `useChatStreams`; the values exposed by
  *   this hook are derived for the currently-viewed chat
  */
 import { useProject } from '@/components/project'
 import { resolveModelSelection, type BaseModel } from '@/config/models'
+import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { useChatRecoveryActive } from '@/hooks/use-chat-recovery-drafts'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
@@ -35,7 +35,12 @@ import {
   scanPendingChatRecoveries,
   startChatRecoveryAttempt,
 } from '@/services/inference/chat-recovery'
+import {
+  clearActiveChatRecoveriesForChat,
+  setChatRecoveryActive,
+} from '@/services/inference/chat-recovery-drafts'
 import { persistInterruptedAssistant } from '@/services/inference/chat-recovery-sync'
+import type { ChatChunkStream } from '@/services/inference/chat-stream'
 import { sendChatStream } from '@/services/inference/inference-client'
 import {
   getRateLimitInfo,
@@ -85,7 +90,6 @@ interface UseChatMessagingProps {
   currentChat: Chat
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
-  messagesEndRef: React.RefObject<HTMLDivElement | null>
   scrollToBottom?: () => void
   reasoningEffort?: ReasoningEffort
   thinkingEnabled?: boolean
@@ -154,6 +158,22 @@ function canUseChatRecovery(options: {
   )
 }
 
+async function waitForRecoveryReady(
+  stream: ChatChunkStream,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!stream.recoveryReady) return
+  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    stream.recoveryReady?.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
+}
+
 export function useChatMessaging({
   systemPrompt,
   rules = '',
@@ -164,7 +184,6 @@ export function useChatMessaging({
   currentChat,
   setChats,
   setCurrentChat,
-  messagesEndRef,
   scrollToBottom,
   reasoningEffort,
   thinkingEnabled,
@@ -287,6 +306,15 @@ export function useChatMessaging({
   // per-chat preferences that changed after a stream's snapshot was taken.
   const chatsRef = useRef<Chat[]>(chats)
   chatsRef.current = chats
+  const currentChatRef = useRef(currentChat)
+  currentChatRef.current = currentChat
+  const findLiveChat = useCallback(
+    (chatId: string) =>
+      (currentChatRef.current.id === chatId
+        ? currentChatRef.current
+        : undefined) ?? chatsRef.current.find((chat) => chat.id === chatId),
+    [],
+  )
 
   const activeLiveGenerationsRef = useRef(
     new Map<string, ActiveLiveGeneration>(),
@@ -305,8 +333,8 @@ export function useChatMessaging({
     () =>
       createUpdateChatWithHistoryCheck({
         storeHistory,
-        viewedChatIdRef,
         chatsRef,
+        currentChatRef,
       }),
     [storeHistory],
   )
@@ -336,6 +364,9 @@ export function useChatMessaging({
         // surfacing "Recovering stream..." for a turn the user just stopped.
         if (activeGeneration?.turnId) {
           markChatRecoveryTurnCancelled(targetId, activeGeneration.turnId)
+          setChatRecoveryActive(targetId, activeGeneration.turnId, false)
+        } else {
+          clearActiveChatRecoveriesForChat(targetId)
         }
         const interruptedMessage =
           activeGeneration?.latestAssistantMessage &&
@@ -343,7 +374,7 @@ export function useChatMessaging({
             ? activeGeneration.latestAssistantMessage
             : null
         patchStatus(targetId, {
-          loadingState: 'loading',
+          loadingState: 'idle',
           retryInfo: null,
           isThinking: false,
           isWaitingForResponse: false,
@@ -351,6 +382,7 @@ export function useChatMessaging({
         })
 
         let stoppedChat: Chat | undefined
+        let finalizeStoppedChat: ((chat: Chat) => Chat) | undefined
         if (activeGeneration) {
           const finalizeChat = (chat: Chat): Chat => {
             const hasOriginatingUser = activeGeneration.turnId
@@ -381,9 +413,8 @@ export function useChatMessaging({
               pendingSave: false,
             }
           }
-          const latestChat =
-            chatsRef.current.find((chat) => chat.id === targetId) ??
-            activeGeneration.chat
+          finalizeStoppedChat = finalizeChat
+          const latestChat = findLiveChat(targetId) ?? activeGeneration.chat
           const finalizedChat = finalizeChat(latestChat)
           stoppedChat = finalizedChat
           setChats((prevChats) =>
@@ -403,6 +434,7 @@ export function useChatMessaging({
           recoveryHandled = await cancelChatRecovery(
             targetId,
             interruptedMessage ?? undefined,
+            activeGeneration?.turnId,
           )
         } catch (error) {
           recoveryHandled = true
@@ -429,7 +461,15 @@ export function useChatMessaging({
             } else if (storeHistory) {
               await chatStorage.saveChatAndSync(stoppedChat)
             } else {
-              sessionChatStorage.saveChat(stoppedChat)
+              const latestChat =
+                sessionChatStorage
+                  .getAllChats()
+                  .find((chat) => chat.id === targetId) ??
+                findLiveChat(targetId) ??
+                stoppedChat
+              const chatToSave =
+                finalizeStoppedChat?.(latestChat) ?? stoppedChat
+              sessionChatStorage.saveChat(chatToSave)
             }
           } catch (error) {
             logError('Failed to save chat after cancellation', error, {
@@ -462,6 +502,7 @@ export function useChatMessaging({
     },
     [
       abort,
+      findLiveChat,
       hasActiveController,
       patchStatus,
       storeHistory,
@@ -473,7 +514,7 @@ export function useChatMessaging({
   // Handle chat query
   // Lifecycle overview:
   // 1) Early exits + input reset
-  // 2) Optimistic state update with the user message (and server id acquisition if needed)
+  // 2) Optimistic state update with the user message (and identity assignment if needed)
   // 3) Persist initial state (session or IndexedDB)
   // 4) Start streaming via inference client
   // 5) streaming-processor applies batched updates until completion
@@ -519,13 +560,10 @@ export function useChatMessaging({
         inputRef.current.style.height = CONSTANTS.INPUT_MIN_HEIGHT
       }
 
-      // This stream owns its own id tracker, thinking timer, and title
-      // promise so it never collides with other in-flight streams. Scoped
-      // setters always target the (possibly swapped) id of this stream.
+      // This stream owns its own id tracker and title promise so it never
+      // collides with other in-flight streams. Scoped setters always target
+      // the (possibly swapped) id of this stream.
       const streamChatIdRef = { current: currentChat.id }
-      const thinkingStartTimeRef: { current: number | null } = {
-        current: null,
-      }
       let earlyTitlePromise: Promise<string> | null = null
       let initialSavePromise: Promise<void> | undefined
 
@@ -600,11 +638,14 @@ export function useChatMessaging({
         updatedMessages = userMessage ? [userMessage] : []
         updatedChat = {
           ...currentChat,
-          title: 'Temporary Chat',
+          title: TEMPORARY_CHAT_TITLE,
           titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
           createdAt: new Date(),
+          codeExecutionAccessToken:
+            currentChat.codeExecutionAccessToken ??
+            generateCodeExecutionAccessToken(),
         }
 
         moveStatus(streamChatIdRef.current, updatedChat.id)
@@ -636,7 +677,7 @@ export function useChatMessaging({
           ...currentChat,
           id: chatId,
           codeExecutionAccessToken: generateCodeExecutionAccessToken(),
-          title: 'Untitled',
+          title: DEFAULT_CHAT_TITLE,
           titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
@@ -714,7 +755,7 @@ export function useChatMessaging({
         updatedChat = {
           ...currentChat,
           id: `session-${Date.now()}`,
-          title: 'Untitled',
+          title: DEFAULT_CHAT_TITLE,
           titleState: 'placeholder',
           messages: updatedMessages,
           isBlankChat: false,
@@ -794,7 +835,13 @@ export function useChatMessaging({
         }
       }
 
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {
+        if (pendingStreamId !== null) {
+          streamingTracker.endPendingStream(pendingStreamId)
+        }
+        clearController(streamChatIdRef.current, controller)
+        return
+      }
 
       // Capture the starting chat ID before any async operations that might change it
       const startingChatId = streamChatIdRef.current
@@ -834,6 +881,32 @@ export function useChatMessaging({
       //   })
       // }
 
+      let response: ChatChunkStream | null = null
+      const recoveryCleanupByChat = new Map<string, Promise<void>>()
+      const abandonAndReleaseRecovery = (chatId: string): Promise<void> => {
+        const existingCleanup = recoveryCleanupByChat.get(chatId)
+        if (existingCleanup) return existingCleanup
+
+        const cleanup = (async () => {
+          try {
+            await response?.abandonRecovery?.()
+          } catch (cleanupError) {
+            logError(
+              'Failed to abandon recoverable chat response',
+              cleanupError,
+              {
+                component: 'useChatMessaging',
+                action: 'handleQuery.recoveryAbandon',
+                metadata: { chatId },
+              },
+            )
+          } finally {
+            releaseActiveChatRecovery(chatId)
+          }
+        })()
+        recoveryCleanupByChat.set(chatId, cleanup)
+        return cleanup
+      }
       try {
         // Auto selections prefer a multimodal candidate when the turn carries
         // images, and a tool-calling candidate when web search, code execution,
@@ -924,7 +997,7 @@ export function useChatMessaging({
         // stream processor's own startStreaming call is idempotent.
         streamingTracker.startStreaming(streamChatIdRef.current)
 
-        const response = await sendChatStream({
+        response = await sendChatStream({
           model,
           autoCandidates,
           systemPrompt: baseSystemPrompt,
@@ -968,21 +1041,22 @@ export function useChatMessaging({
         })
 
         const assistantMessage = await processStreamingResponse(response, {
-          updatedChat,
-          updatedMessages,
-          isFirstMessage,
-          modelsLength: models.length,
           streamChatIdRef,
-          thinkingStartTimeRef,
+          onUpdate: (message) => {
+            const chatId = streamChatIdRef.current
+            updateChatWithHistoryCheck(
+              setChats,
+              { ...updatedChat, id: chatId },
+              setCurrentChat,
+              chatId,
+              [...updatedMessages, message],
+              { skipIndexedDBSave: true },
+            )
+          },
           setIsThinking: setIsThinkingFor,
           setIsWaitingForResponse: setIsWaitingForResponseFor,
           setIsStreaming: setIsStreamingFor,
-          updateChatWithHistoryCheck,
-          setChats,
-          setCurrentChat,
           setLoadingState: setLoadingStateFor,
-          storeHistory,
-          startingChatId,
           deferStreamCleanup: recoveryEnabled,
           signal: controller.signal,
           turnId: turnId ?? undefined,
@@ -1001,44 +1075,10 @@ export function useChatMessaging({
         }
 
         if (assistantMessage && hasAssistantMessageToSave) {
-          // Use this stream's own id (already reflects any server id swap).
+          // Use this stream's own id (already reflects blank-chat conversion).
           // The response is always saved to that chat, even if the user has
           // navigated to a different conversation while it streamed.
           const chatId = streamChatIdRef.current
-          let recoveryFinalized = false
-
-          if (recoveryEnabled && turnId) {
-            try {
-              await completeLiveChatRecovery({
-                chatId,
-                turnId,
-                assistantMessage,
-                chatPatch: {
-                  title: updatedChat.title,
-                  titleState: updatedChat.titleState,
-                  model: selectedModel,
-                  projectId: updatedChat.projectId,
-                },
-              })
-              recoveryFinalized = true
-            } catch (error) {
-              if (
-                error instanceof DOMException &&
-                error.name === 'AbortError'
-              ) {
-                throw error
-              }
-              logError(
-                'Failed to promptly finalize recoverable chat response',
-                error,
-                {
-                  component: 'useChatMessaging',
-                  action: 'handleQuery.recoveryPromptComplete',
-                  metadata: { chatId },
-                },
-              )
-            }
-          }
 
           logInfo('[handleQuery] Streaming completed, processing response', {
             component: 'useChatMessaging',
@@ -1059,18 +1099,30 @@ export function useChatMessaging({
           const finalMessages = [...updatedMessages, assistantMessage]
 
           // Resolve title: await the in-flight title gen promise if one exists
-          let resolvedTitle = updatedChat.title
-          let resolvedTitleState = updatedChat.titleState
+          let liveChat = findLiveChat(chatId)
+          let resolvedTitle = liveChat?.title ?? updatedChat.title
+          let resolvedTitleState =
+            liveChat?.titleState ?? updatedChat.titleState
+          let generatedTitle = false
           if (
             isFirstMessage &&
-            updatedChat.title === 'Untitled' &&
+            resolvedTitle === DEFAULT_CHAT_TITLE &&
             earlyTitlePromise
           ) {
             try {
               const generated = await earlyTitlePromise
-              if (generated && generated !== 'Untitled') {
+              liveChat = findLiveChat(chatId) ?? liveChat
+              resolvedTitle = liveChat?.title ?? resolvedTitle
+              resolvedTitleState = liveChat?.titleState ?? resolvedTitleState
+              if (
+                generated &&
+                generated !== DEFAULT_CHAT_TITLE &&
+                resolvedTitle === DEFAULT_CHAT_TITLE &&
+                resolvedTitleState === 'placeholder'
+              ) {
                 resolvedTitle = generated
                 resolvedTitleState = 'generated'
+                generatedTitle = true
                 logInfo('[handleQuery] Title resolved from parallel gen', {
                   component: 'useChatMessaging',
                   action: 'handleQuery.titleResolved',
@@ -1085,8 +1137,10 @@ export function useChatMessaging({
             }
           }
 
+          const isTemporary = liveChat?.isTemporary ?? updatedChat.isTemporary
           const chatToSave = {
             ...updatedChat,
+            ...liveChat,
             id: chatId,
             title: resolvedTitle,
             titleState: resolvedTitleState,
@@ -1098,32 +1152,31 @@ export function useChatMessaging({
             // is actually syncing - and clears when the save resolves.
             // Temporary chats skip persistence entirely, so the flag
             // would never clear for them.
-            pendingSave: !updatedChat.isTemporary,
+            pendingSave: !isTemporary,
           }
-
-          // Update React state with resolved title
-          setCurrentChat((prev) =>
-            prev.id === chatId
-              ? {
-                  ...prev,
-                  title: resolvedTitle,
-                  titleState: resolvedTitleState,
-                  messages: finalMessages,
-                }
-              : prev,
-          )
-          setChats((prevChats) =>
-            prevChats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    title: resolvedTitle,
-                    titleState: resolvedTitleState,
-                    messages: finalMessages,
-                  }
-                : c,
-            ),
-          )
+          const generatedTitlePatch = (): Partial<Chat> => {
+            const latestChat = findLiveChat(chatId)
+            return generatedTitle &&
+              latestChat?.title === DEFAULT_CHAT_TITLE &&
+              latestChat.titleState === 'placeholder'
+              ? { title: resolvedTitle, titleState: resolvedTitleState }
+              : {}
+          }
+          const persistFinalChat = (allowCloudSyncWhileStreaming = false) =>
+            updateChatWithHistoryCheck(
+              setChats,
+              chatToSave,
+              setCurrentChat,
+              chatId,
+              finalMessages,
+              {
+                allowCloudSyncWhileStreaming,
+                metadataPatch: {
+                  pendingSave: chatToSave.pendingSave,
+                  ...generatedTitlePatch(),
+                },
+              },
+            )
 
           // Single save to IndexedDB + cloud sync
           logInfo('[handleQuery] Saving chat after stream', {
@@ -1137,25 +1190,49 @@ export function useChatMessaging({
             },
           })
 
-          if (recoveryEnabled && turnId && !recoveryFinalized) {
+          if (recoveryEnabled && turnId) {
             try {
-              await completeLiveChatRecovery({
+              await waitForRecoveryReady(response, controller.signal)
+              const titleBeforeRecovery = findLiveChat(chatId)
+              const completedChat = await completeLiveChatRecovery({
                 chatId,
                 turnId,
                 assistantMessage,
                 chatPatch: {
-                  title: resolvedTitle,
-                  titleState: resolvedTitleState,
-                  model: selectedModel,
-                  projectId: updatedChat.projectId,
+                  ...(generatedTitle
+                    ? {
+                        title: resolvedTitle,
+                        titleState: resolvedTitleState,
+                        expectedTitleState: 'placeholder' as const,
+                      }
+                    : {}),
                 },
               })
+              const latestChat = findLiveChat(chatId)
+              const titleChangedDuringRecovery =
+                latestChat !== undefined &&
+                (latestChat.title !== titleBeforeRecovery?.title ||
+                  latestChat.titleState !== titleBeforeRecovery?.titleState)
+              const visibleChat = titleChangedDuringRecovery
+                ? {
+                    ...completedChat,
+                    title: latestChat.title,
+                    titleState: latestChat.titleState,
+                  }
+                : completedChat
+              setChats((previous) =>
+                previous.map((chat) =>
+                  chat.id === chatId ? visibleChat : chat,
+                ),
+              )
+              setCurrentChat((previous) =>
+                previous.id === chatId ? visibleChat : previous,
+              )
             } catch (error) {
-              releaseActiveChatRecovery(chatId)
-              if (
-                error instanceof DOMException &&
-                error.name === 'AbortError'
-              ) {
+              if (!controller.signal.aborted) {
+                await abandonAndReleaseRecovery(chatId)
+              }
+              if (controller.signal.aborted) {
                 throw error
               }
               logError('Failed to finalize recoverable chat response', error, {
@@ -1163,24 +1240,10 @@ export function useChatMessaging({
                 action: 'handleQuery.recoveryComplete',
                 metadata: { chatId },
               })
-              updateChatWithHistoryCheck(
-                setChats,
-                chatToSave,
-                setCurrentChat,
-                chatId,
-                finalMessages,
-                false,
-              )
+              persistFinalChat(true)
             }
           } else {
-            updateChatWithHistoryCheck(
-              setChats,
-              chatToSave,
-              setCurrentChat,
-              chatId,
-              finalMessages,
-              false,
-            )
+            persistFinalChat()
           }
         } else {
           if (recoveryEnabled) {
@@ -1192,11 +1255,11 @@ export function useChatMessaging({
           })
         }
       } catch (error) {
-        const wasAborted =
-          controller.signal.aborted ||
-          (error instanceof DOMException && error.name === 'AbortError')
+        if (!controller.signal.aborted) {
+          await abandonAndReleaseRecovery(streamChatIdRef.current)
+        }
+        const wasAborted = controller.signal.aborted
         if (!wasAborted) {
-          releaseActiveChatRecovery(streamChatIdRef.current)
           if (
             typeof userId === 'string' &&
             canUseChatRecovery({ isSignedIn, userId, storeHistory })
@@ -1214,7 +1277,6 @@ export function useChatMessaging({
           if (!wasAborted) setLoadingStateFor('idle')
           setIsThinkingFor(false)
         }
-        thinkingStartTimeRef.current = null
         if (!wasAborted) {
           logError('Chat query failed', error, {
             component: 'useChatMessaging',
@@ -1251,7 +1313,6 @@ export function useChatMessaging({
               setCurrentChat,
               currentId,
               [...updatedMessages, errorMessage],
-              false,
             )
           } else {
             // Surface as a dismissable floating banner instead of a chat message
@@ -1314,6 +1375,7 @@ export function useChatMessaging({
       selectedModel,
       systemPrompt,
       rules,
+      findLiveChat,
       updateChatWithHistoryCheck,
       scrollToBottom,
       reasoningEffort,

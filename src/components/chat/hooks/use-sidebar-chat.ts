@@ -6,12 +6,12 @@
  * Each call to askQuote() aborts the previous stream and starts fresh.
  *
  * Reuses the existing streaming pipeline (sendChatStream +
- * processStreamingResponse) by shimming updateChatWithHistoryCheck with a
- * pure in-memory setter. This keeps the stream parsing, thinking mode,
- * web search, and citation processing identical to the main chat view
- * without duplicating any of that logic.
+ * processStreamingResponse), while publishing updates directly to its
+ * in-memory messages. This keeps parsing, thinking mode, web search, and
+ * citation processing identical to the main chat view.
  */
 import { resolveModelSelection, type BaseModel } from '@/config/models'
+import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { sendChatStream } from '@/services/inference/inference-client'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useRef, useState } from 'react'
@@ -96,9 +96,6 @@ export function useSidebarChat({
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
 
-  // Refs kept in sync with state so the streaming processor (which captures
-  // them once) can read the latest values.
-  const thinkingStartTimeRef = useRef<number | null>(null)
   const streamChatIdRef = useRef<string>(EPHEMERAL_CHAT_ID)
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -106,8 +103,8 @@ export function useSidebarChat({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
+      streamingTracker.endStreaming(EPHEMERAL_CHAT_ID)
     }
-    thinkingStartTimeRef.current = null
     setLoadingState('idle')
     setRetryInfo(null)
     setIsThinking(false)
@@ -181,29 +178,6 @@ export function useSidebarChat({
       setIsWaitingForResponse(true)
       setIsStreaming(true)
 
-      // In-memory shim for updateChatWithHistoryCheck. The streaming processor
-      // calls this with `[...apiMessages, currentAssistantMessage]`. The UI
-      // must only show the visible user message plus the assistant reply, so
-      // we drop the hidden prefix and keep the tail.
-      const hiddenPrefixLength = hiddenContextMessage ? 1 : 0
-      const inMemoryUpdate = (
-        _setChats: unknown,
-        _chatSnapshot: unknown,
-        _setCurrentChat: unknown,
-        _chatId: string,
-        newMessages: Message[],
-      ) => {
-        setMessages(newMessages.slice(hiddenPrefixLength))
-      }
-
-      // Minimal Chat-shaped object; only id is really used by the processor.
-      const ephemeralChat = {
-        id: EPHEMERAL_CHAT_ID,
-        title: '',
-        messages: apiMessages,
-        createdAt: new Date(),
-      }
-
       ;(async () => {
         try {
           const response = await sendChatStream({
@@ -212,6 +186,7 @@ export function useSidebarChat({
             systemPrompt,
             rules,
             onRetry: (attempt, max, error) => {
+              if (abortControllerRef.current !== controller) return
               setLoadingState('retrying')
               setRetryInfo({ attempt, maxRetries: max, error })
             },
@@ -222,23 +197,37 @@ export function useSidebarChat({
             webSearchEnabled,
             piiCheckEnabled,
           })
+          if (abortControllerRef.current !== controller) {
+            return
+          }
 
           const assistantMessage = await processStreamingResponse(response, {
-            updatedChat: ephemeralChat as never,
-            updatedMessages: apiMessages,
-            isFirstMessage: true,
-            modelsLength: models.length,
             streamChatIdRef,
-            thinkingStartTimeRef,
-            setIsThinking,
-            setIsWaitingForResponse,
-            setIsStreaming,
-            updateChatWithHistoryCheck: inMemoryUpdate as never,
-            setChats: (() => {}) as never,
-            setCurrentChat: (() => {}) as never,
-            setLoadingState: setLoadingState as never,
-            storeHistory: false,
-            startingChatId: EPHEMERAL_CHAT_ID,
+            onUpdate: (message) => {
+              if (
+                abortControllerRef.current !== controller ||
+                controller.signal.aborted
+              )
+                return
+              setMessages([visibleUserMessage, message])
+            },
+            setIsThinking: (value) => {
+              if (abortControllerRef.current === controller)
+                setIsThinking(value)
+            },
+            setIsWaitingForResponse: (value) => {
+              if (abortControllerRef.current === controller)
+                setIsWaitingForResponse(value)
+            },
+            setIsStreaming: (value) => {
+              if (abortControllerRef.current === controller)
+                setIsStreaming(value)
+            },
+            setLoadingState: (value) => {
+              if (abortControllerRef.current === controller)
+                setLoadingState(value)
+            },
+            signal: controller.signal,
           })
 
           if (assistantMessage && abortControllerRef.current === controller) {
@@ -277,7 +266,6 @@ export function useSidebarChat({
             setRetryInfo(null)
             setIsWaitingForResponse(false)
             setIsStreaming(false)
-            thinkingStartTimeRef.current = null
             abortControllerRef.current = null
           }
         }

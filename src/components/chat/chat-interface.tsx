@@ -4,6 +4,7 @@ import {
   getSystemPromptAndRules,
   type BaseModel,
 } from '@/config/models'
+import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SETTINGS_CODE_EXECUTION_ENABLED,
@@ -83,7 +84,6 @@ import {
   getProjectUploadPreference,
   setProjectUploadPreference,
 } from '@/utils/project-upload-preference'
-import { generateReverseId } from '@/utils/reverse-id'
 import {
   estimateMessageTokens,
   estimateTokenCount,
@@ -117,8 +117,9 @@ import {
 } from './genui/widgets/ArtifactPreview'
 import {
   canToggleTemporaryChat,
+  createTemporaryChat,
   resolveWebSearchEnabled,
-  sortChats,
+  upsertChatById,
 } from './hooks/chat-operations'
 import { useChatState } from './hooks/use-chat-state'
 import { useCustomSystemPrompt } from './hooks/use-custom-system-prompt'
@@ -466,7 +467,10 @@ export function ChatInterface({
   // storage, no cloud sync). Disabling restores the previously active chat.
   // The mode is derived from currentChat.isTemporary further below, after
   // useChatState provides currentChat.
-  const previousChatIdRef = useRef<string | null>(null)
+  const previousChatRef = useRef<Pick<
+    Chat,
+    'id' | 'isBlankChat' | 'isLocalOnly'
+  > | null>(null)
 
   // Artifact-sidebar state — opened when a `render_artifact_preview` inline
   // card dispatches `OPEN_ARTIFACT_PREVIEW_EVENT` on the window.
@@ -722,7 +726,6 @@ export function ChatInterface({
     isSidebarOpen,
     isDarkMode,
     themeMode,
-    messagesEndRef,
     isInitialLoad,
     isThinking,
     verificationComplete,
@@ -1765,24 +1768,22 @@ export function ChatInterface({
     if (currentChat?.isTemporary) {
       // Deselecting temporary mode on a started chat saves it permanently.
       if (hasMessages) {
-        const { id: newId } = generateReverseId()
         const permanentChat: Chat = {
           ...currentChat,
-          id: newId,
           isTemporary: false,
           isBlankChat: false,
           title:
-            currentChat.title === 'Temporary Chat'
-              ? 'Untitled'
+            currentChat.title === TEMPORARY_CHAT_TITLE
+              ? DEFAULT_CHAT_TITLE
               : currentChat.title,
           codeExecutionAccessToken:
             currentChat.codeExecutionAccessToken ??
             generateCodeExecutionAccessToken(),
           createdAt: currentChat.createdAt ?? new Date(),
         }
-        previousChatIdRef.current = null
+        previousChatRef.current = null
         setCurrentChat(permanentChat)
-        setChats((prev) => sortChats([permanentChat, ...prev]))
+        setChats((prev) => upsertChatById(prev, permanentChat))
         const persist = (chat: Chat) => {
           if (storeHistory) {
             chatStorage.saveChatAndSync(chat).catch((err) => {
@@ -1801,7 +1802,7 @@ export function ChatInterface({
         // Temporary chats never get titles generated during streaming, so
         // generate one now from the first user message (falling back to
         // attachment text) to avoid a list full of "Untitled" entries.
-        if (permanentChat.title === 'Untitled') {
+        if (permanentChat.title === DEFAULT_CHAT_TITLE) {
           const firstUser = permanentChat.messages.find(
             (m) => m.role === 'user',
           )
@@ -1809,7 +1810,7 @@ export function ChatInterface({
           if (titleContent) {
             generateTitle([{ role: 'user', content: titleContent }])
               .then((generated) => {
-                if (!generated || generated === 'Untitled') return
+                if (!generated || generated === DEFAULT_CHAT_TITLE) return
                 // If the user navigated away while the title was generating,
                 // skip persistence for the inactive chat.
                 const active = currentChatRef.current
@@ -1821,7 +1822,7 @@ export function ChatInterface({
                   return
                 }
                 const titled: Chat = {
-                  ...permanentChat,
+                  ...active,
                   title: generated,
                   titleState: 'generated',
                 }
@@ -1837,11 +1838,14 @@ export function ChatInterface({
         return
       }
 
-      const previousId = previousChatIdRef.current
-      previousChatIdRef.current = null
-      const restored = previousId
-        ? chats.find((c) => c.id === previousId)
-        : undefined
+      const previousChat = previousChatRef.current
+      previousChatRef.current = null
+      const restored = previousChat?.isBlankChat
+        ? chats.find(
+            (chat) =>
+              chat.isBlankChat && chat.isLocalOnly === previousChat.isLocalOnly,
+          )
+        : chats.find((chat) => chat.id === previousChat?.id)
       if (restored) {
         setCurrentChat(restored)
       } else {
@@ -1850,24 +1854,24 @@ export function ChatInterface({
       return
     }
 
-    previousChatIdRef.current = currentChat?.id ?? null
-    const tempChat: Chat = {
-      id: `temp-${Date.now()}`,
-      title: 'Temporary Chat',
-      titleState: 'placeholder',
-      messages: [],
-      createdAt: new Date(),
-      isBlankChat: true,
-      isTemporary: true,
+    previousChatRef.current = currentChat
+      ? {
+          id: currentChat.id,
+          isBlankChat: currentChat.isBlankChat,
+          isLocalOnly: currentChat.isLocalOnly,
+        }
+      : null
+    const tempChat = createTemporaryChat({
       presetId: currentChat?.presetId,
       webSearchEnabled: currentChat?.webSearchEnabled,
-    }
+      isLocalOnly: currentChat?.isLocalOnly,
+    })
     setCurrentChat(tempChat)
   }, [chats, createNewChat, currentChat, isSignedIn, setChats, setCurrentChat])
 
   useEffect(() => {
-    if (!isTemporaryMode && previousChatIdRef.current) {
-      previousChatIdRef.current = null
+    if (!isTemporaryMode && previousChatRef.current !== null) {
+      previousChatRef.current = null
     }
   }, [isTemporaryMode])
 

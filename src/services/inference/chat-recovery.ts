@@ -3,7 +3,8 @@ import {
   hasVisibleAssistantMessage,
   parseRichStreamingResponse,
 } from '@/components/chat/hooks/streaming'
-import type { Message } from '@/components/chat/types'
+import type { Chat, Message } from '@/components/chat/types'
+import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { retryDeferredAlternativesFinalization } from '@/services/cloud/legacy-blob-migration'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
@@ -48,6 +49,7 @@ import {
   resetChatRecoverySyncState,
   sameRecoveredResponse,
 } from './chat-recovery-sync'
+import { chatChunkStreamFromSSE } from './chat-stream'
 import { generateTitle, getTitleContent } from './title'
 
 type ActiveRecovery = {
@@ -127,7 +129,7 @@ async function recoveredTitlePatch(
 
   const content = getTitleContent(firstUserMessage)
   const title = await generateTitle([{ role: 'user', content }])
-  if (!isCurrent() || title === 'Untitled') return
+  if (!isCurrent() || title === DEFAULT_CHAT_TITLE) return
   return {
     title,
     titleState: 'generated',
@@ -336,7 +338,7 @@ export async function completeLiveChatRecovery(args: {
   turnId: string
   assistantMessage: Message
   chatPatch?: Parameters<typeof completePendingRecovery>[3]
-}): Promise<void> {
+}): Promise<Chat> {
   const active = [...activeRecoveries.values()].find(
     (candidate) =>
       candidate.chatId === args.chatId && candidate.turnId === args.turnId,
@@ -347,7 +349,7 @@ export async function completeLiveChatRecovery(args: {
   if (!active?.envelope || !isCurrent()) {
     throw new DOMException('Aborted', 'AbortError')
   }
-  await completePendingRecovery(
+  const completedChat = await completePendingRecovery(
     args.chatId,
     active.envelope,
     args.assistantMessage,
@@ -356,17 +358,32 @@ export async function completeLiveChatRecovery(args: {
   )
   activeRecoveries.delete(active.sessionId)
   await deleteRecoveryQuietly(active.sessionId)
+  return {
+    ...completedChat,
+    createdAt: new Date(completedChat.createdAt),
+    pendingSave: false,
+    messages: completedChat.messages.map((message) => ({
+      ...message,
+      timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
+    })),
+  }
 }
 
 export async function cancelChatRecovery(
   chatId: string,
   assistantMessage?: Message,
+  turnId?: string,
 ): Promise<boolean> {
+  const targetTurnId = assistantMessage?.turnId ?? turnId
   const active = [...activeRecoveries.values()].filter(
-    (candidate) => candidate.chatId === chatId,
+    (candidate) =>
+      candidate.chatId === chatId &&
+      (targetTurnId === undefined || candidate.turnId === targetTurnId),
   )
   const scanned = [...scannedRecoveries.values()].filter(
-    (candidate) => candidate.chatId === chatId,
+    (candidate) =>
+      candidate.chatId === chatId &&
+      (targetTurnId === undefined || candidate.turnId === targetTurnId),
   )
   for (const recovery of active) {
     cancelledTurns.add(turnKey(recovery.chatId, recovery.turnId))
@@ -696,27 +713,30 @@ async function processEnvelope(
           }
           return
         }
-        assistantMessage = await parseRichStreamingResponse(response, {
-          onUpdate: (message) => {
-            if (!isRecoveryCurrent()) return
-            if (!checkpointReached && attemptCheckpoint) {
-              checkpointReached = sameRecoveredResponse(
-                attemptCheckpoint,
-                message,
-              )
-              return
-            }
-            const published = publishDraft(message)
-            if (
-              published &&
-              (!presentationCheckpoint ||
-                !sameRecoveredResponse(presentationCheckpoint, published))
-            ) {
-              presentationCheckpoint = published
-              markRecoveryProgress()
-            }
+        assistantMessage = await parseRichStreamingResponse(
+          chatChunkStreamFromSSE(response),
+          {
+            onUpdate: (message) => {
+              if (!isRecoveryCurrent()) return
+              if (!checkpointReached && attemptCheckpoint) {
+                checkpointReached = sameRecoveredResponse(
+                  attemptCheckpoint,
+                  message,
+                )
+                return
+              }
+              const published = publishDraft(message)
+              if (
+                published &&
+                (!presentationCheckpoint ||
+                  !sameRecoveredResponse(presentationCheckpoint, published))
+              ) {
+                presentationCheckpoint = published
+                markRecoveryProgress()
+              }
+            },
           },
-        })
+        )
       } catch {
         if (!isRecoveryCurrent()) return
         const retryStatus = await getChatRecoveryStatus(payload.sessionId)

@@ -504,11 +504,7 @@ export async function* simulateStream(
 
   await delay(1000)
 
-  // If there are thoughts, yield them first with thinking tags
   if (pattern.thoughts) {
-    // Start with thinking tag
-    yield 'data: {"choices":[{"delta":{"content":"<think>"}}]}\n\n'
-
     if (onThinkingStart) {
       onThinkingStart()
     }
@@ -516,12 +512,9 @@ export async function* simulateStream(
     // Stream thoughts in chunks
     const thoughtChunks = chunkText(pattern.thoughts, pattern.chunkSize || 5)
     for (const chunk of thoughtChunks) {
-      yield `data: {"choices":[{"delta":{"content":"${escapeJson(chunk)}"}}]}\n\n`
+      yield `data: {"choices":[{"delta":{"reasoning_content":"${escapeJson(chunk)}"}}]}\n\n`
       await delay(pattern.streamDelayMs || 40)
     }
-
-    // End thinking tag
-    yield 'data: {"choices":[{"delta":{"content":"</think>\\n\\n"}}]}\n\n'
 
     // Simulate thinking duration
     if (pattern.thinkingDurationMs) {

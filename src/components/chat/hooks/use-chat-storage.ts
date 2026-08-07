@@ -10,7 +10,6 @@ import { samePendingRecoveryEnvelope } from '@/types/chat-recovery'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CONSTANTS } from '../constants'
 import type { Chat, PendingRecoveryEnvelope } from '../types'
 import {
   createBlankChat,
@@ -21,6 +20,7 @@ import {
   sortChats,
 } from './chat-operations'
 import { ChatPersistenceManager } from './chat-persistence-manager'
+import { useChatCollection } from './use-chat-collection'
 
 interface UseChatStorageProps {
   storeHistory: boolean
@@ -39,7 +39,7 @@ interface UseChatStorageReturn {
   deleteChat: (chatId: string) => void
   updateChatTitle: (chatId: string, newTitle: string) => void
   updateChatModel: (model: string) => void
-  switchChat: (chat: Chat) => Promise<void>
+  switchChat: (chat: Chat) => void
   handleChatSelect: (chatId: string) => void
   loadChatById: (chatId: string, isLocalUrl: boolean) => Promise<void>
   setIsInitialLoad: (loading: boolean) => void
@@ -102,16 +102,16 @@ export function useChatStorage({
   const [cloudChatNotFound, setCloudChatNotFound] = useState(false)
 
   // Initialize with blank chats for both modes
-  const [chats, setChats] = useState<Chat[]>(() => {
-    if (typeof window === 'undefined') {
-      return [createBlankChat(false), createBlankChat(true)]
-    }
-    return [createBlankChat(false), createBlankChat(true)]
-  })
-
-  const [currentChat, setCurrentChat] = useState<Chat>(
-    () => getBlankChat(chats, initialNewChatIsLocalOnly) ?? chats[0],
-  )
+  const { chats, currentChat, setChats, setCurrentChat, setChatCollection } =
+    useChatCollection(() => {
+      const initialChats = [createBlankChat(false), createBlankChat(true)]
+      return {
+        chats: initialChats,
+        currentChat:
+          getBlankChat(initialChats, initialNewChatIsLocalOnly) ??
+          initialChats[0],
+      }
+    })
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -146,7 +146,7 @@ export function useChatStorage({
         const pendingRecoveryIds = [...pendingRecoveryReloadIdsRef.current]
         pendingRecoveryReloadIdsRef.current.clear()
 
-        setChats((prevChats) => {
+        setChatCollection(({ chats: prevChats, currentChat: prev }) => {
           // Always ensure we have blank chats for both modes
           const cloudBlank =
             getBlankChat(prevChats, false) || createBlankChat(false)
@@ -184,95 +184,92 @@ export function useChatStorage({
             ...nonBlankChats,
           ])
 
-          return finalChats
-        })
-
-        // Update current chat metadata only - NEVER switch to a different chat.
-        // Chat switching should only happen through explicit user actions.
-        // This prevents race conditions in Safari PWA where timing differences
-        // could cause unexpected chat resets.
-        setCurrentChat((prev) => {
-          if (prev.isBlankChat) {
-            return prev
-          }
-
-          // Only update metadata (syncedAt, title) if the same chat exists in storage
-          const existingChat = loadedChats.find((c) => c.id === prev.id)
-          if (existingChat) {
-            const storedRecoveries = withoutCancelledRecoveries(
-              prev.id,
-              existingChat.pendingRecoveries,
-            )
-            // Include sends still in their pre-stream phase: a recovery
-            // reload racing a just-resumed generation must not adopt the
-            // stored copy (which still holds the previous interrupted
-            // answer) over the messages the new stream is about to write.
-            const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
-            const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
-            if (isRecoveryReload && isStreaming) {
-              return {
-                ...prev,
-                pendingRecoveries: storedRecoveries,
-              }
-            }
-            // A turn this view still tracks as pending recovery may have been
-            // completed elsewhere (another device, or a background scan) and
-            // reached storage through a plain sync. Metadata-only merging
-            // would clear the indicator but keep the stale on-screen
-            // messages, so adopt the stored chat that carries the recovered
-            // response.
-            const recoveryResolvedElsewhere = (
-              prev.pendingRecoveries ?? []
-            ).some(
-              (envelope) =>
-                !existingChat.pendingRecoveries?.some(
-                  (candidate) => candidate.turnId === envelope.turnId,
-                ) &&
-                existingChat.messages.some((message) => {
-                  if (
-                    message.role !== 'assistant' ||
-                    message.turnId !== envelope.turnId
-                  ) {
-                    return false
+          // Update current chat metadata only - NEVER switch to a different chat.
+          // Chat switching should only happen through explicit user actions.
+          // This prevents race conditions in Safari PWA where timing differences
+          // could cause unexpected chat resets.
+          let nextCurrent = prev
+          if (!prev.isBlankChat) {
+            // Only update metadata (syncedAt, title) if the same chat exists in storage
+            const existingChat = loadedChats.find((c) => c.id === prev.id)
+            if (existingChat) {
+              const storedRecoveries = withoutCancelledRecoveries(
+                prev.id,
+                existingChat.pendingRecoveries,
+              )
+              // Include sends still in their pre-stream phase: a recovery
+              // reload racing a just-resumed generation must not adopt the
+              // stored copy over the messages the new stream is about to write.
+              const isStreaming = streamingTracker.isStreamingOrPending(prev.id)
+              const isRecoveryReload = pendingRecoveryIds.includes(prev.id)
+              if (isRecoveryReload && isStreaming) {
+                nextCurrent = {
+                  ...prev,
+                  pendingRecoveries: storedRecoveries,
+                }
+              } else {
+                // A turn this view still tracks as pending recovery may have been
+                // completed elsewhere (another device, or a background scan) and
+                // reached storage through a plain sync. Metadata-only merging
+                // would clear the indicator but keep the stale on-screen
+                // messages, so adopt the stored chat that carries the recovered
+                // response.
+                const recoveryResolvedElsewhere = (
+                  prev.pendingRecoveries ?? []
+                ).some(
+                  (envelope) =>
+                    !existingChat.pendingRecoveries?.some(
+                      (candidate) => candidate.turnId === envelope.turnId,
+                    ) &&
+                    existingChat.messages.some((message) => {
+                      if (
+                        message.role !== 'assistant' ||
+                        message.turnId !== envelope.turnId
+                      ) {
+                        return false
+                      }
+                      const currentResponse = prev.messages.find(
+                        (candidate) =>
+                          candidate.role === 'assistant' &&
+                          candidate.turnId === envelope.turnId,
+                      )
+                      return (
+                        currentResponse === undefined ||
+                        !sameRecoveredResponse(currentResponse, message)
+                      )
+                    }),
+                )
+                if (
+                  (isRecoveryReload || recoveryResolvedElsewhere) &&
+                  !isStreaming
+                ) {
+                  nextCurrent = {
+                    ...existingChat,
+                    pendingRecoveries: storedRecoveries,
+                    pendingSave: prev.pendingSave,
                   }
-                  const currentResponse = prev.messages.find(
-                    (candidate) =>
-                      candidate.role === 'assistant' &&
-                      candidate.turnId === envelope.turnId,
+                } else if (
+                  prev.syncedAt !== existingChat.syncedAt ||
+                  prev.title !== existingChat.title ||
+                  prev.presetId !== existingChat.presetId ||
+                  !pendingRecoveriesMatch(
+                    prev.pendingRecoveries,
+                    storedRecoveries,
                   )
-                  return (
-                    currentResponse === undefined ||
-                    !sameRecoveredResponse(currentResponse, message)
-                  )
-                }),
-            )
-            if (
-              (isRecoveryReload || recoveryResolvedElsewhere) &&
-              !isStreaming
-            ) {
-              return {
-                ...existingChat,
-                pendingRecoveries: storedRecoveries,
-                pendingSave: prev.pendingSave,
-              }
-            }
-            if (
-              prev.syncedAt !== existingChat.syncedAt ||
-              prev.title !== existingChat.title ||
-              prev.presetId !== existingChat.presetId ||
-              !pendingRecoveriesMatch(prev.pendingRecoveries, storedRecoveries)
-            ) {
-              return {
-                ...prev,
-                syncedAt: existingChat.syncedAt,
-                title: existingChat.title,
-                presetId: existingChat.presetId,
-                pendingRecoveries: storedRecoveries,
+                ) {
+                  nextCurrent = {
+                    ...prev,
+                    syncedAt: existingChat.syncedAt,
+                    title: existingChat.title,
+                    presetId: existingChat.presetId,
+                    pendingRecoveries: storedRecoveries,
+                  }
+                }
               }
             }
           }
 
-          return prev
+          return { chats: finalChats, currentChat: nextCurrent }
         })
       } catch (error) {
         logError('Failed to reload chats', error, {
@@ -280,7 +277,7 @@ export function useChatStorage({
         })
       }
     },
-    [storeHistory, isSignedIn],
+    [storeHistory, isSignedIn, setChatCollection],
   )
 
   // Listen for chat events (cloud sync, pagination, etc.)
@@ -315,7 +312,7 @@ export function useChatStorage({
     })
 
     return cleanup
-  }, [reloadChats])
+  }, [reloadChats, setChats, setCurrentChat])
 
   // Initial load
   useEffect(() => {
@@ -338,20 +335,18 @@ export function useChatStorage({
 
         // Combine and sort
         const finalChats = sortChats([cloudBlank, localBlank, ...nonBlankChats])
-        const initialBlankChat = getBlankChat(
-          finalChats,
-          initialNewChatIsLocalOnly,
-        )
-
-        setChats(finalChats)
-
-        // Only set current chat to first loaded chat if we're on a blank chat.
-        // Never reset a non-blank chat - prevents Safari PWA timing issues.
-        setCurrentChat((prev) =>
-          isSwitchingChatRef.current || !prev.isBlankChat
-            ? prev
-            : (initialBlankChat ?? finalChats[0]),
-        )
+        setChatCollection(({ currentChat: current }) => ({
+          chats: finalChats,
+          // Preserve an explicit blank-mode selection made while storage was
+          // loading. Never reset a non-blank chat.
+          currentChat:
+            current.isBlankChat &&
+            current.id === '' &&
+            current.isTemporary !== true
+              ? (getBlankChat(finalChats, current.isLocalOnly === true) ??
+                finalChats[0])
+              : current,
+        }))
       } catch (error) {
         logError('Failed to load initial chats', error, {
           component: 'useChatStorage',
@@ -368,7 +363,7 @@ export function useChatStorage({
     return () => {
       mounted = false
     }
-  }, [storeHistory, isSignedIn, initialNewChatIsLocalOnly])
+  }, [storeHistory, isSignedIn, initialNewChatIsLocalOnly, setChatCollection])
 
   // Create new chat (switch to the appropriate blank chat)
   const createNewChat = useCallback(
@@ -406,22 +401,19 @@ export function useChatStorage({
         setCurrentChat(newBlankChat)
       }
     },
-    [chats, currentChat.isBlankChat],
+    [chats, currentChat.isBlankChat, setChats, setCurrentChat],
   )
 
   // Delete chat
   const deleteChat = useCallback(
     (chatId: string) => {
-      setChats((prevChats) => {
-        const filtered = prevChats.filter((c) => c.id !== chatId)
+      setChatCollection(({ chats: previousChats, currentChat: current }) => {
+        const filtered = previousChats.filter((chat) => chat.id !== chatId)
         const newChats = ensureAtLeastOneChat(filtered)
-
-        // Switch to another chat if we deleted the current one
-        if (currentChat?.id === chatId && newChats.length > 0) {
-          setCurrentChat(newChats[0])
+        return {
+          chats: newChats,
+          currentChat: current.id === chatId ? newChats[0] : current,
         }
-
-        return newChats
       })
 
       // Delete from storage
@@ -432,7 +424,7 @@ export function useChatStorage({
         })
       })
     },
-    [currentChat?.id, isSignedIn],
+    [isSignedIn, setChatCollection],
   )
 
   // Update chat title
@@ -466,7 +458,13 @@ export function useChatStorage({
         }))
       }
     },
-    [storeHistory, currentChat?.id, persistenceManager],
+    [
+      storeHistory,
+      currentChat?.id,
+      persistenceManager,
+      setChats,
+      setCurrentChat,
+    ],
   )
 
   // Set the model for the currently active chat. Blank chats are matched by
@@ -496,41 +494,17 @@ export function useChatStorage({
         })
       }
     },
-    [currentChat, storeHistory, persistenceManager],
+    [currentChat, storeHistory, persistenceManager, setChats, setCurrentChat],
   )
-
-  // Track when we're in the middle of switching chats to prevent reloadChats from interfering
-  const isSwitchingChatRef = useRef(false)
-  const switchChatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Cleanup switch chat timer on unmount
-  useEffect(() => {
-    return () => {
-      if (switchChatTimerRef.current) {
-        clearTimeout(switchChatTimerRef.current)
-      }
-    }
-  }, [])
 
   // Switch to a different chat. Streams keep running in the background, so
   // switching never cancels an in-flight generation.
-  const switchChat = useCallback(async (chat: Chat) => {
-    // Clear any pending timer from a previous switch
-    if (switchChatTimerRef.current) {
-      clearTimeout(switchChatTimerRef.current)
-    }
-
-    isSwitchingChatRef.current = true
-    setCurrentChat(chat)
-    setIsInitialLoad(true)
-
-    // Brief delay to show loading state
-    switchChatTimerRef.current = setTimeout(() => {
-      setIsInitialLoad(false)
-      isSwitchingChatRef.current = false
-      switchChatTimerRef.current = null
-    }, CONSTANTS.CHAT_INIT_DELAY_MS)
-  }, [])
+  const switchChat = useCallback(
+    (chat: Chat) => {
+      setCurrentChat(chat)
+    },
+    [setCurrentChat],
+  )
 
   // Handle chat selection
   const handleChatSelect = useCallback(
@@ -571,11 +545,13 @@ export function useChatStorage({
         return
       }
 
-      // For local chat URLs, load directly from IndexedDB (chatStorage)
-      // This avoids race conditions and ensures we check the right storage
-      // (loadChats routes to sessionStorage when not signed in, but local chats are in IndexedDB)
-      if (isLocalUrl) {
-        try {
+      setIsInitialLoad(true)
+
+      try {
+        // For local chat URLs, load directly from IndexedDB (chatStorage)
+        // This avoids race conditions and ensures we check the right storage
+        // (loadChats routes to sessionStorage when not signed in, but local chats are in IndexedDB)
+        if (isLocalUrl) {
           const loadedChats = await chatStorage.getAllChats()
           const chatFromStorage = loadedChats.find((c) => c.id === chatId)
           if (chatFromStorage) {
@@ -588,31 +564,24 @@ export function useChatStorage({
             setCurrentChat(chatFromStorage)
             return
           }
-        } catch (error) {
-          logError('Failed to load local chat from storage', error, {
+
+          logError('Local chat not found', null, {
             component: 'useChatStorage',
             metadata: { chatId },
           })
+          setLocalChatNotFound(true)
+          return
         }
 
-        logError('Local chat not found', null, {
-          component: 'useChatStorage',
-          metadata: { chatId },
-        })
-        setLocalChatNotFound(true)
-        return
-      }
+        // Chat not in local state, try to fetch from cloud
+        if (!isSignedIn) {
+          logError('Cannot load chat: user not signed in', null, {
+            component: 'useChatStorage',
+            metadata: { chatId },
+          })
+          return
+        }
 
-      // Chat not in local state, try to fetch from cloud
-      if (!isSignedIn) {
-        logError('Cannot load chat: user not signed in', null, {
-          component: 'useChatStorage',
-          metadata: { chatId },
-        })
-        return
-      }
-
-      try {
         const downloadedChat = await cloudStorage.downloadChat(chatId)
 
         if (!downloadedChat) {
@@ -674,9 +643,11 @@ export function useChatStorage({
           metadata: { chatId },
         })
         setInitialChatLoadFailed(true)
+      } finally {
+        setIsInitialLoad(false)
       }
     },
-    [chats, isSignedIn, storeHistory, switchChat],
+    [chats, isSignedIn, storeHistory, switchChat, setChats, setCurrentChat],
   )
 
   // Load initial chat from URL if provided

@@ -7,6 +7,7 @@
  * decrypt has been removed.
  */
 
+import { DEFAULT_CHAT_TITLE } from '@/constants/chat'
 import { ensureValidISODate } from '@/utils/chat-timestamps'
 import { logInfo } from '@/utils/error-handling'
 import type { StoredChat } from '../storage/indexed-db'
@@ -101,7 +102,7 @@ export async function processRemoteChat(
 
   const chat: StoredChat = {
     ...decrypted,
-    title: decrypted.title ?? 'Untitled',
+    title: decrypted.title ?? DEFAULT_CHAT_TITLE,
     // MessageSchema validates the fields the app depends on and
     // passes the rest through, so the runtime shape is a Message.
     messages: decrypted.messages as StoredChat['messages'],

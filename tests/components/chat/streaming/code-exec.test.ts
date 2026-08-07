@@ -114,7 +114,10 @@ describe('event-normalizer code_exec_tool_call handling', () => {
     const normalizer = createEventNormalizer()
     const preprocessor = createContentPreprocessor()
 
-    normalizer.processChunk(buildContentChunk('<think>reasoning'), preprocessor)
+    normalizer.processChunk(
+      { choices: [{ delta: { reasoning_content: 'reasoning' } }] },
+      preprocessor,
+    )
 
     const events = normalizer.processChunk(
       buildContentChunk(

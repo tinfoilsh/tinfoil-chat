@@ -1,283 +1,38 @@
-/**
- * Main streaming orchestrator.
- *
- * A thin `for await` loop that composes the pipeline:
- *   SSE reader → content preprocessor → event normalizer → switch dispatch
- *
- * Each event updates the TimelineBuilder (canonical state). The
- * MessageAssembler only tracks citation annotations and search reasoning;
- * all other flat Message fields are derived from the timeline in toMessage().
- * UI flushes are coalesced to at most one render per
- * CONSTANTS.STREAM_FLUSH_INTERVAL_MS (leading + trailing edge), so a fast
- * stream does not re-parse markdown on every network chunk.
- */
-
 import { IS_DEV } from '@/config'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
+import type { ChatChunkStream } from '@/services/inference/chat-stream'
 import {
   createStreamLogger,
   type StreamLogger,
 } from '@/utils/dev-stream-logger'
-import { CONSTANTS } from '../../constants'
-import type { Message, URLFetchState } from '../../types'
-import { createContentPreprocessor } from './content-preprocessor'
-import { createEventNormalizer } from './event-normalizer'
-import {
-  finalizeInterruptedMessage,
-  hasVisibleAssistantMessage,
-} from './interrupted-message'
-import { MessageAssembler } from './message-assembler'
-import { readSSEStream } from './sse-reader'
-import { TimelineBuilder } from './timeline-builder'
-import type { NormalizedEvent, StreamingContext } from './types'
-
-export function getThinkingDuration(
-  thinkingStartTimeRef: React.MutableRefObject<number | null>,
-): number | undefined {
-  const duration = thinkingStartTimeRef.current
-    ? (Date.now() - thinkingStartTimeRef.current) / 1000
-    : undefined
-  thinkingStartTimeRef.current = null
-  return duration
-}
+import type { Message } from '../../types'
+import { AnimationFramePublisher } from './animation-frame-publisher'
+import { hasVisibleAssistantMessage } from './interrupted-message'
+import { RichStreamSession } from './rich-stream-session'
+import type { StreamingContext } from './types'
 
 export async function processStreamingResponse(
-  response: Response,
+  stream: ChatChunkStream,
   ctx: StreamingContext,
 ): Promise<Message | null> {
-  // Only create the stream logger in dev mode — in production this is undefined
-  // and all logger?.foo() calls throughout the pipeline become no-ops.
   const streamLogger: StreamLogger | undefined = IS_DEV
     ? createStreamLogger()
     : undefined
-  const streamingChatId = ctx.updatedChat.id
-
-  const preprocessor = createContentPreprocessor()
-  const normalizer = createEventNormalizer()
-  const timeline = new TimelineBuilder()
-  const assembler = new MessageAssembler()
-
-  let dirty = false
-  let firstEventSeen = false
-  let lastFlushAt = 0
-  let trailingFlushTimer: ReturnType<typeof setTimeout> | null = null
-
-  // Always write to the chat this stream owns, regardless of which chat is
-  // on screen. `updateChatWithHistoryCheck` mirrors the update into
-  // `currentChat` only when the streamed chat is the one being viewed, so a
-  // background stream updates the list entry without disturbing the view.
-  const flushToUI = () => {
-    dirty = false
-    const message = {
-      ...assembler.toMessage(timeline.snapshot()),
-      turnId: ctx.turnId,
-    }
-    const newMessages = [...ctx.updatedMessages, message]
-    ctx.updateChatWithHistoryCheck(
-      ctx.setChats,
-      { ...ctx.updatedChat, id: ctx.streamChatIdRef.current },
-      ctx.setCurrentChat,
-      ctx.streamChatIdRef.current,
-      newMessages,
-      false,
-      true, // skip IndexedDB during streaming
-    )
-  }
-
-  const clearTrailingFlush = () => {
-    if (trailingFlushTimer !== null) {
-      clearTimeout(trailingFlushTimer)
-      trailingFlushTimer = null
-    }
-  }
-
-  // Coalesce flushes to one render per STREAM_FLUSH_INTERVAL_MS. The leading
-  // edge keeps the first token instant and slow streams unthrottled; the
-  // trailing timer guarantees the latest content still paints when the stream
-  // pauses (e.g. before a tool call) instead of waiting for the next chunk.
-  const flushThrottled = () => {
-    if (!dirty) return
-    const now = Date.now()
-    const elapsed = now - lastFlushAt
-    if (elapsed >= CONSTANTS.STREAM_FLUSH_INTERVAL_MS) {
-      clearTrailingFlush()
-      lastFlushAt = now
-      flushToUI()
-    } else if (trailingFlushTimer === null) {
-      trailingFlushTimer = setTimeout(() => {
-        trailingFlushTimer = null
-        if (dirty) {
-          lastFlushAt = Date.now()
-          flushToUI()
-        }
-      }, CONSTANTS.STREAM_FLUSH_INTERVAL_MS - elapsed)
-    }
-  }
-
-  const markFirstEvent = () => {
-    if (!firstEventSeen) {
-      firstEventSeen = true
-      ctx.setIsWaitingForResponse(false)
-    }
-  }
-
-  const applyEvent = (event: NormalizedEvent): void => {
-    switch (event.type) {
-      case 'thinking_start':
-        timeline.startThinking()
-        markFirstEvent()
-        ctx.setIsThinking(true)
-        ctx.thinkingStartTimeRef.current = Date.now()
-        break
-
-      case 'thinking_delta':
-        timeline.appendThinking(event.content)
-        break
-
-      case 'thinking_tail_delta':
-        timeline.appendThinkingTail(event.content)
-        break
-
-      case 'thinking_end': {
-        const duration = getThinkingDuration(ctx.thinkingStartTimeRef)
-        timeline.endThinking(duration)
-        ctx.setIsThinking(false)
-        break
-      }
-
-      case 'content_delta':
-        timeline.appendContent(event.content)
-        markFirstEvent()
-        break
-
-      case 'web_search':
-        applyWebSearch(event)
-        markFirstEvent()
-        break
-
-      case 'url_fetch':
-        applyURLFetch(event)
-        break
-
-      case 'code_exec_tool_call':
-        applyCodeExecToolCall(event)
-        markFirstEvent()
-        break
-
-      case 'annotation': {
-        assembler.addAnnotation(event.url, event.title)
-        // Update timeline web search sources with accumulated citations
-        const ws = timeline.getLastWebSearchState()
-        if (ws) {
-          timeline.updateWebSearch({
-            ...ws,
-            sources: [...assembler.collectedSources],
-          })
-        }
-        break
-      }
-
-      case 'search_reasoning':
-        assembler.addSearchReasoning(event.content)
-        break
-
-      case 'genui_tool_call_start':
-        timeline.startToolCall(event.id, event.name)
-        markFirstEvent()
-        break
-
-      case 'genui_tool_call_delta':
-        timeline.appendToolCallArguments(event.id, event.argumentsDelta)
-        break
-    }
-
-    dirty = true
-  }
-
-  const applyWebSearch = (
-    event: Extract<NormalizedEvent, { type: 'web_search' }>,
-  ): void => {
-    const { status, query, sources, reason } = event
-
-    if (status === 'in_progress' && query) {
-      timeline.pushWebSearch({ query, status: 'searching' })
-    } else if (status === 'completed') {
-      const ws = timeline.getLastWebSearchState()
-      const resolvedSources = sources
-        ? sources.map((s) => ({ title: s.title || s.url, url: s.url }))
-        : ws?.sources
-      timeline.updateWebSearch({
-        query: ws?.query,
-        status: 'completed',
-        sources: resolvedSources,
-      })
-    } else if (status === 'failed') {
-      const ws = timeline.getLastWebSearchState()
-      timeline.updateWebSearch({
-        query: ws?.query,
-        status: 'failed',
-        sources: [],
-      })
-    } else if (status === 'blocked') {
-      timeline.pushWebSearch({ query, status: 'blocked', reason })
-    }
-  }
-
-  const applyURLFetch = (
-    event: Extract<NormalizedEvent, { type: 'url_fetch' }>,
-  ): void => {
-    if (event.status === 'in_progress') {
-      timeline.addURLFetch({
-        id: event.id,
-        url: event.url,
-        status: 'fetching',
-      })
-    } else {
-      const mapped: URLFetchState['status'] =
-        event.status === 'blocked' ? 'failed' : event.status
-      timeline.updateURLFetch(event.id, mapped)
-    }
-  }
-
-  const applyCodeExecToolCall = (
-    event: Extract<NormalizedEvent, { type: 'code_exec_tool_call' }>,
-  ): void => {
-    if (event.status === 'in_progress') {
-      timeline.pushCodeExecCall({
-        id: event.id,
-        toolName: event.toolName,
-        arguments: event.arguments,
-        status: 'running',
-      })
-    } else {
-      const mapped = event.status === 'blocked' ? 'failed' : event.status
-      timeline.updateCodeExecCall(event.id, {
-        status: mapped as 'completed' | 'failed',
-        output: event.output,
-      })
-    }
-  }
-
-  const flushBufferedEvents = () => {
-    for (const event of normalizer.flush()) {
-      applyEvent(event)
-    }
-    const { text: tail } = preprocessor.flush()
-    if (tail) {
-      applyEvent({ type: 'content_delta', content: tail })
-    }
-  }
-
+  const streamingChatId = ctx.streamChatIdRef.current
+  const session = new RichStreamSession({
+    trackThinkingDuration: true,
+    onFirstEvent: () => ctx.setIsWaitingForResponse(false),
+    onThinkingChange: ctx.setIsThinking,
+  })
+  const publisher = new AnimationFramePublisher(ctx.onUpdate)
   let interruptionPublished = false
+  let publicationCompleted = false
+
   const publishInterruption = () => {
     if (interruptionPublished) return
     interruptionPublished = true
-    clearTrailingFlush()
-    flushBufferedEvents()
-    const message = finalizeInterruptedMessage(
-      assembler.toMessage(timeline.snapshot()),
-      ctx.turnId,
-    )
+    publisher.cancel()
+    const message = session.interruptedSnapshot(ctx.turnId)
     ctx.onInterrupted?.(hasVisibleAssistantMessage(message) ? message : null)
   }
 
@@ -285,54 +40,31 @@ export async function processStreamingResponse(
   if (ctx.signal?.aborted) publishInterruption()
 
   try {
+    if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (streamingChatId) streamingTracker.startStreaming(streamingChatId)
 
-    for await (const sseJson of readSSEStream(response, streamLogger)) {
+    for await (const chunk of stream) {
       if (ctx.signal?.aborted) break
-      const events = normalizer.processChunk(
-        sseJson,
-        preprocessor,
-        streamLogger,
-      )
-      for (const event of events) {
-        applyEvent(event)
+      streamLogger?.logParsedEvent(chunk)
+      if (session.processChunk(chunk, streamLogger)) {
+        publisher.publish(session.snapshot(ctx.turnId))
       }
-
-      if (ctx.signal?.aborted) break
-      flushThrottled()
     }
 
-    if (ctx.signal?.aborted) {
-      throw new DOMException('Aborted', 'AbortError')
-    }
-    normalizer.assertComplete()
+    if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
 
-    flushBufferedEvents()
-
-    // Finalize any open thinking block
-    if (timeline.isThinkingOpen) {
-      const duration = getThinkingDuration(ctx.thinkingStartTimeRef)
-      timeline.endThinking(duration)
-      dirty = true
-    }
-
-    // Final flush — always immediate so the completed message paints in full
-    clearTrailingFlush()
-    if (dirty) flushToUI()
-
+    const message = session.complete(ctx.turnId)
+    if (session.hasChanges) await publisher.finish(message)
+    if (ctx.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    publicationCompleted = true
     streamLogger?.flush(streamingChatId)
-    return {
-      ...assembler.toMessage(timeline.snapshot()),
-      turnId: ctx.turnId,
-    }
+    return message
   } finally {
-    // Drop any pending trailing flush so it can't fire after teardown.
-    clearTrailingFlush()
+    if (!publicationCompleted) publisher.cancel()
     if (!ctx.deferStreamCleanup && !ctx.signal?.aborted) {
       ctx.setLoadingState('idle')
       ctx.setIsStreaming(false)
       if (streamingChatId) streamingTracker.endStreaming(streamingChatId)
-      // The backend may have swapped the id mid-stream; clear that too.
       if (
         ctx.streamChatIdRef.current &&
         ctx.streamChatIdRef.current !== streamingChatId
@@ -340,8 +72,8 @@ export async function processStreamingResponse(
         streamingTracker.endStreaming(ctx.streamChatIdRef.current)
       }
     }
+    session.close()
     ctx.setIsThinking(false)
-    ctx.thinkingStartTimeRef.current = null
     ctx.setIsWaitingForResponse(false)
     ctx.signal?.removeEventListener('abort', publishInterruption)
   }

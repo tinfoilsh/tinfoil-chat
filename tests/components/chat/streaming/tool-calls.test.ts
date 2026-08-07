@@ -108,9 +108,8 @@ describe('event-normalizer tool_call handling', () => {
     const normalizer = createEventNormalizer()
     const preprocessor = createContentPreprocessor()
 
-    // Put the normalizer into thinking state via <think>
     normalizer.processChunk(
-      { choices: [{ delta: { content: '<think>reasoning' } }] },
+      { choices: [{ delta: { reasoning_content: 'reasoning' } }] },
       preprocessor,
     )
 

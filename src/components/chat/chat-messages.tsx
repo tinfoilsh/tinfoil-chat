@@ -25,7 +25,6 @@ type ChatMessagesProps = {
   activeRecoveryTurnIds?: readonly string[]
   isDarkMode: boolean
   chatId: string
-  messagesEndRef?: React.RefObject<HTMLDivElement | null>
   isWaitingForResponse?: boolean
   isStreamingResponse?: boolean
   isPremium?: boolean

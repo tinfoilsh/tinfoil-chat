@@ -1,6 +1,8 @@
 import {
   canToggleTemporaryChat,
+  createTemporaryChat,
   resolveWebSearchEnabled,
+  upsertChatById,
 } from '@/components/chat/hooks/chat-operations'
 import type { Chat } from '@/components/chat/types'
 import { describe, expect, it } from 'vitest'
@@ -34,6 +36,40 @@ describe('canToggleTemporaryChat', () => {
         createChat({ isBlankChat: false, isTemporary: true }),
       ),
     ).toBe(true)
+  })
+})
+
+describe('createTemporaryChat', () => {
+  it('creates a backend-valid stable identity immediately', () => {
+    const chat = createTemporaryChat({
+      webSearchEnabled: false,
+      isLocalOnly: true,
+    })
+
+    expect(chat.id).toMatch(/^\d{13}_[0-9a-f-]{36}$/)
+    expect(chat).toMatchObject({
+      isBlankChat: true,
+      isTemporary: true,
+      isLocalOnly: true,
+      webSearchEnabled: false,
+    })
+  })
+})
+
+describe('upsertChatById', () => {
+  it('replaces every stale copy of the same chat identity', () => {
+    const replacement = createChat({ title: 'Permanent', isTemporary: false })
+    const chats = [
+      createChat({ title: 'Temporary', isTemporary: true }),
+      createChat({ title: 'Duplicate', isTemporary: true }),
+      createChat({ id: 'chat-2' }),
+    ]
+
+    const result = upsertChatById(chats, replacement)
+
+    expect(result.filter((chat) => chat.id === replacement.id)).toEqual([
+      replacement,
+    ])
   })
 })
 
