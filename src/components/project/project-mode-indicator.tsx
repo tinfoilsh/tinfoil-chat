@@ -17,17 +17,14 @@ export function ProjectModeIndicator({
   return (
     <div
       className={cn(
-        'pointer-events-none absolute inset-x-0 top-0 z-20 flex h-3 items-center justify-center overflow-hidden px-12 font-aeonik text-[10px] font-medium leading-none md:hidden',
+        'pointer-events-none absolute left-1/2 top-0.5 z-20 flex h-3 max-w-[calc(100%-2rem)] -translate-x-1/2 items-center justify-center overflow-hidden rounded-full px-2 font-aeonik text-[10px] font-medium leading-none md:hidden',
         projectColor
           ? 'text-gray-900'
           : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-white/60',
       )}
       style={projectColor ? { backgroundColor: projectColor.hex } : undefined}
     >
-      <span className="truncate">
-        You&apos;re working in the{' '}
-        <span className="font-bold">{projectName}</span> project
-      </span>
+      <span className="truncate">Project {projectName}</span>
     </div>
   )
 }

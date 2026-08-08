@@ -6,12 +6,11 @@ describe('ProjectModeIndicator', () => {
   it('shows the project name using its project color', () => {
     render(<ProjectModeIndicator projectName="Research" color="maya-blue" />)
 
-    const indicator = screen.getByText('Research').closest('div')
+    const indicator = screen.getByText('Project Research').closest('div')
 
-    expect(indicator?.textContent).toBe(
-      "You're working in the Research project",
-    )
+    expect(indicator?.textContent).toBe('Project Research')
     expect(indicator?.style.backgroundColor).toBe('#85C6FF')
     expect(indicator?.classList.contains('md:hidden')).toBe(true)
+    expect(indicator?.classList.contains('rounded-full')).toBe(true)
   })
 })
