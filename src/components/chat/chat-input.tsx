@@ -1,5 +1,5 @@
 import { FiArrowUp } from '@/components/icons/lazy-icons'
-import { ProjectModeBanner, useProject } from '@/components/project'
+import { useProject } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { getProjectColor } from '@/constants/project-colors'
 import { useToast } from '@/hooks/use-toast'
@@ -134,7 +134,7 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const documentsScrollRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
-  const { isProjectMode, activeProject, loadingProject } = useProject()
+  const { isProjectMode, activeProject } = useProject()
   const [textareaResetNonce, setTextareaResetNonce] = useState(0)
   const prevInputValueRef = useRef(input)
   const shouldRemountOnClearRef = useRef(false)
@@ -680,49 +680,9 @@ export function ChatInput({
     <div className="flex flex-col gap-2">
       <div className="relative">
         {mobileHeader}
-        {(isProjectMode && activeProject) || loadingProject ? (
-          <ProjectModeBanner
-            projectName={activeProject?.name || loadingProject?.name || ''}
-            isDarkMode={isDarkMode}
-            color={activeProject?.color}
-          />
-        ) : null}
-        {/* Prompt preset tab - shows the active prompt for this chat */}
-        {activePromptPreset &&
-          (() => {
-            const ActivePresetIcon = activePromptPreset.Icon
-            return (
-              <div className="pointer-events-none relative z-10 flex w-full pl-8 md:absolute md:left-8 md:top-px md:w-auto md:-translate-y-full md:pl-0">
-                <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
-                  <button
-                    type="button"
-                    onClick={onOpenPromptLibrary}
-                    disabled={!onOpenPromptLibrary}
-                    className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
-                    aria-label={`Change prompt (currently ${activePromptPreset.name})`}
-                  >
-                    <ActivePresetIcon className="h-3 w-3" />
-                    <span className="text-xs font-medium">
-                      {activePromptPreset.name}
-                    </span>
-                  </button>
-                  {onClearPromptPreset && (
-                    <button
-                      type="button"
-                      onClick={onClearPromptPreset}
-                      aria-label="Stop using this prompt"
-                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
-                    >
-                      <XMarkIcon className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
         <div
           className={cn(
-            // relative anchors the desktop project tab below to the card.
+            // relative anchors the folder-style tabs below to the card itself.
             'relative rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
             isTemporaryMode
               ? 'border-dashed border-content-muted'
@@ -755,6 +715,39 @@ export function ChatInput({
                     <span className="text-xs font-medium">
                       {activeProject.name}
                     </span>
+                  </div>
+                </div>
+              )
+            })()}
+          {/* Prompt preset tab - shows the active prompt for this chat */}
+          {activePromptPreset &&
+            (() => {
+              const ActivePresetIcon = activePromptPreset.Icon
+              return (
+                <div className="pointer-events-none absolute left-8 top-px z-10 -translate-y-full">
+                  <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
+                    <button
+                      type="button"
+                      onClick={onOpenPromptLibrary}
+                      disabled={!onOpenPromptLibrary}
+                      className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
+                      aria-label={`Change prompt (currently ${activePromptPreset.name})`}
+                    >
+                      <ActivePresetIcon className="h-3 w-3" />
+                      <span className="text-xs font-medium">
+                        {activePromptPreset.name}
+                      </span>
+                    </button>
+                    {onClearPromptPreset && (
+                      <button
+                        type="button"
+                        onClick={onClearPromptPreset}
+                        aria-label="Stop using this prompt"
+                        className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
+                      >
+                        <XMarkIcon className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )
