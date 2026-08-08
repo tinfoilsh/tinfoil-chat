@@ -687,13 +687,42 @@ export function ChatInput({
             color={activeProject?.color}
           />
         ) : null}
+        {/* Prompt preset tab - shows the active prompt for this chat */}
+        {activePromptPreset &&
+          (() => {
+            const ActivePresetIcon = activePromptPreset.Icon
+            return (
+              <div className="pointer-events-none relative z-10 flex w-full pl-8 md:absolute md:left-8 md:top-px md:w-auto md:-translate-y-full md:pl-0">
+                <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
+                  <button
+                    type="button"
+                    onClick={onOpenPromptLibrary}
+                    disabled={!onOpenPromptLibrary}
+                    className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
+                    aria-label={`Change prompt (currently ${activePromptPreset.name})`}
+                  >
+                    <ActivePresetIcon className="h-3 w-3" />
+                    <span className="text-xs font-medium">
+                      {activePromptPreset.name}
+                    </span>
+                  </button>
+                  {onClearPromptPreset && (
+                    <button
+                      type="button"
+                      onClick={onClearPromptPreset}
+                      aria-label="Stop using this prompt"
+                      className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
+                    >
+                      <XMarkIcon className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         <div
           className={cn(
-            // relative anchors the folder-style tabs below to the card
-            // itself. Anchoring them to the outer container breaks on
-            // mobile, where in-flow elements (the Prompts button, project
-            // banner) sit above the card and push the container's top edge
-            // away from the card top the tabs are meant to attach to.
+            // relative anchors the desktop project tab below to the card.
             'relative rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
             isTemporaryMode
               ? 'border-dashed border-content-muted'
@@ -726,39 +755,6 @@ export function ChatInput({
                     <span className="text-xs font-medium">
                       {activeProject.name}
                     </span>
-                  </div>
-                </div>
-              )
-            })()}
-          {/* Prompt preset tab - shows the active prompt for this chat */}
-          {activePromptPreset &&
-            (() => {
-              const ActivePresetIcon = activePromptPreset.Icon
-              return (
-                <div className="pointer-events-none absolute left-8 top-px z-10 -translate-y-full">
-                  <div className="pointer-events-auto inline-flex items-center gap-1 rounded-t-3xl border border-b-0 border-border-subtle bg-surface-chat px-2.5 py-1 text-content-secondary">
-                    <button
-                      type="button"
-                      onClick={onOpenPromptLibrary}
-                      disabled={!onOpenPromptLibrary}
-                      className="flex items-center gap-1.5 transition-colors hover:text-content-primary"
-                      aria-label={`Change prompt (currently ${activePromptPreset.name})`}
-                    >
-                      <ActivePresetIcon className="h-3 w-3" />
-                      <span className="text-xs font-medium">
-                        {activePromptPreset.name}
-                      </span>
-                    </button>
-                    {onClearPromptPreset && (
-                      <button
-                        type="button"
-                        onClick={onClearPromptPreset}
-                        aria-label="Stop using this prompt"
-                        className="ml-0.5 rounded-full p-0.5 transition-colors hover:text-content-primary"
-                      >
-                        <XMarkIcon className="h-3 w-3" />
-                      </button>
-                    )}
                   </div>
                 </div>
               )
