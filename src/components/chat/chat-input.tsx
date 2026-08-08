@@ -1,5 +1,5 @@
 import { FiArrowUp } from '@/components/icons/lazy-icons'
-import { ProjectModeBanner, useProject } from '@/components/project'
+import { useProject } from '@/components/project'
 import { cn } from '@/components/ui/utils'
 import { getProjectColor } from '@/constants/project-colors'
 import { useToast } from '@/hooks/use-toast'
@@ -134,7 +134,7 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const documentsScrollRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
-  const { isProjectMode, activeProject, loadingProject } = useProject()
+  const { isProjectMode, activeProject } = useProject()
   const [textareaResetNonce, setTextareaResetNonce] = useState(0)
   const prevInputValueRef = useRef(input)
   const shouldRemountOnClearRef = useRef(false)
@@ -680,20 +680,9 @@ export function ChatInput({
     <div className="flex flex-col gap-2">
       <div className="relative">
         {mobileHeader}
-        {(isProjectMode && activeProject) || loadingProject ? (
-          <ProjectModeBanner
-            projectName={activeProject?.name || loadingProject?.name || ''}
-            isDarkMode={isDarkMode}
-            color={activeProject?.color}
-          />
-        ) : null}
         <div
           className={cn(
-            // relative anchors the folder-style tabs below to the card
-            // itself. Anchoring them to the outer container breaks on
-            // mobile, where in-flow elements (the Prompts button, project
-            // banner) sit above the card and push the container's top edge
-            // away from the card top the tabs are meant to attach to.
+            // relative anchors the folder-style tabs below to the card itself.
             'relative rounded-3xl border bg-white px-3 py-3 shadow-md transition-colors dark:bg-surface-chat md:rounded-4xl md:px-6 md:py-4',
             isTemporaryMode
               ? 'border-dashed border-content-muted'

@@ -54,6 +54,7 @@ import {
 import { StreamErrorBanner } from '@/components/chat/stream-error-banner'
 import { classifyCloudKeySetupError } from '@/components/modals/cloud-sync-setup-mode'
 import {
+  ProjectModeIndicator,
   ProjectSidebar,
   useProject,
   useProjectSystemPrompt,
@@ -3363,6 +3364,12 @@ export function ChatInterface({
           top: 0,
         }}
       >
+        {(isProjectMode && activeProject) || loadingProject ? (
+          <ProjectModeIndicator
+            projectName={activeProject?.name || loadingProject?.name || ''}
+            color={activeProject?.color}
+          />
+        ) : null}
         <div
           className={cn(
             'relative flex h-full flex-col transition-colors',
