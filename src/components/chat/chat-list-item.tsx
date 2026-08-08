@@ -14,7 +14,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import Link from 'next/link'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from '../icons/lazy-icons'
@@ -56,6 +56,11 @@ export function getChatKey(chat: ChatItemData): string {
  */
 export function getBlankChatSelectId(chat: ChatItemData): string {
   return getBlankQueueId(chat.isLocalOnly === true)
+}
+
+const toDate = (value?: Date | string): Date | null => {
+  if (!value) return null
+  return value instanceof Date ? value : new Date(value)
 }
 
 export interface ProjectOption {
@@ -318,13 +323,28 @@ export function ChatListItem({
     onDragEnd?.()
   }
 
-  const toDate = (value?: Date | string): Date | null => {
-    if (!value) return null
-    return value instanceof Date ? value : new Date(value)
-  }
-
-  const createdAt = toDate(chat.createdAt)
-  const timestamp = toDate(chat.updatedAt) ?? createdAt
+  const createdAtInput =
+    chat.createdAt instanceof Date
+      ? chat.createdAt.toISOString()
+      : chat.createdAt
+  const { createdAt, timestamp, createdRelativeTime, updatedRelativeTime } =
+    useMemo(() => {
+      const created = toDate(createdAtInput)
+      const updated = toDate(chat.updatedAt) ?? created
+      return {
+        createdAt: created,
+        timestamp: updated,
+        createdRelativeTime: updated
+          ? formatRelativeTime(created ?? updated)
+          : null,
+        updatedRelativeTime: updated ? formatRelativeTime(updated) : null,
+      }
+    }, [chat.updatedAt, createdAtInput])
+  // Skip the updated time when it would read the same as the created
+  // time, so rows don't repeat "9h ago · Updated 9h ago". Without a
+  // createdAt there is nothing to compare against and the timestamp
+  // may itself be the creation time, so show it unlabeled instead of
+  // claiming "Updated".
   // The first user/assistant turn creates the chat, so its persistence
   // updates are not meaningful history updates. Later turns can show the
   // updated time once streaming has settled.
@@ -333,7 +353,7 @@ export function ChatListItem({
     messageCount > INITIAL_TURN_MESSAGE_COUNT &&
     timestamp !== null &&
     createdAt !== null &&
-    formatRelativeTime(timestamp) !== formatRelativeTime(createdAt)
+    updatedRelativeTime !== createdRelativeTime
 
   return (
     <div
@@ -465,11 +485,9 @@ export function ChatListItem({
                 ) : messageCount > 0 && timestamp ? (
                   <span className="text-xs leading-none text-content-muted">
                     <span className="text-content-secondary">
-                      {formatRelativeTime(createdAt ?? timestamp)}
+                      {createdRelativeTime}
                     </span>
-                    {showUpdatedTime && (
-                      <> · Updated {formatRelativeTime(timestamp)}</>
-                    )}
+                    {showUpdatedTime && <> · Updated {updatedRelativeTime}</>}
                   </span>
                 ) : null}
                 {showSyncStatus && (
