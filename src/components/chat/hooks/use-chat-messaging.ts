@@ -18,7 +18,11 @@
  *   this hook are derived for the currently-viewed chat
  */
 import { useProject } from '@/components/project'
-import { resolveModelSelection, type BaseModel } from '@/config/models'
+import {
+  getKnownModelDisplayName,
+  resolveModelSelection,
+  type BaseModel,
+} from '@/config/models'
 import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
 import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import { useChatRecoveryActive } from '@/hooks/use-chat-recovery-drafts'
@@ -221,7 +225,7 @@ export function useChatMessaging({
       .join('\u0000') ?? ''
 
   useEffect(() => {
-    if (!isSignedIn || !userId || !storeHistory) return
+    if (!isSignedIn || !userId || !storeHistory || models.length === 0) return
 
     const scan = (refreshPending = false) => {
       if (!canUseChatRecovery({ isSignedIn, userId, storeHistory })) return
@@ -247,12 +251,13 @@ export function useChatMessaging({
       unsubscribe()
       window.clearInterval(interval)
     }
-  }, [isSignedIn, storeHistory, userId])
+  }, [isSignedIn, models.length, storeHistory, userId])
 
   useEffect(() => {
     if (
       !recoveryScanKey ||
       !userId ||
+      models.length === 0 ||
       !canUseChatRecovery({
         isSignedIn,
         userId,
@@ -269,6 +274,7 @@ export function useChatMessaging({
     currentChatId,
     currentChatIsTemporary,
     isSignedIn,
+    models.length,
     recoveryScanKey,
     storeHistory,
     userId,
@@ -1277,8 +1283,7 @@ export function useChatMessaging({
           signal: controller.signal,
           turnId: turnId ?? undefined,
           modelDisplayName: model.name,
-          resolveModelDisplayName: (modelName) =>
-            models.find((candidate) => candidate.modelName === modelName)?.name,
+          resolveModelDisplayName: getKnownModelDisplayName,
           onInterrupted: (message) => {
             activeGeneration.latestAssistantMessage = message
           },
