@@ -260,6 +260,7 @@ export async function sendChatStream(
       systemPrompt,
       rules,
       messages: updatedMessages,
+      autoCandidates,
       includeGenUIHint: genUIEnabled,
       includeTimeReminder: true,
     })
@@ -378,6 +379,7 @@ export async function sendChatStream(
     systemPrompt,
     rules,
     messages: updatedMessages,
+    autoCandidates,
     includeGenUIHint: genUIEnabled,
     forcePrependSystemPrompt,
     includeTimeReminder: true,

@@ -5,6 +5,7 @@ import {
   estimateTokenCount,
   findContextStartIndex,
   getContextTokenBudget,
+  getHistoryTokenBudget,
   parseContextWindowTokens,
   selectMessagesWithinBudget,
 } from '@/utils/token-estimation'
@@ -49,10 +50,15 @@ describe('getContextTokenBudget', () => {
       Math.floor(100000 * CONTEXT_WINDOW_USAGE_RATIO),
     )
   })
+
+  it('reserves pending input tokens before budgeting persisted history', () => {
+    expect(getHistoryTokenBudget('1k tokens', 250)).toBe(650)
+    expect(getHistoryTokenBudget('1k tokens', 1000)).toBe(0)
+  })
 })
 
 describe('estimateMessageTokens', () => {
-  it('includes quote and attachment text but not thoughts', () => {
+  it('includes quote and attachment text but excludes thoughts by default', () => {
     const msg: Message = {
       role: 'user',
       content: 'a'.repeat(40),
@@ -69,6 +75,7 @@ describe('estimateMessageTokens', () => {
       timestamp: new Date(),
     }
     expect(estimateMessageTokens(msg)).toBe(30)
+    expect(estimateMessageTokens(msg, { includeReasoning: true })).toBe(40)
   })
 
   it('counts assistant tool calls and search reasoning', () => {
@@ -113,6 +120,25 @@ describe('findContextStartIndex', () => {
   it('always keeps the most recent message even when over budget', () => {
     const messages = [makeMessage('user', 400), makeMessage('user', 4000)]
     expect(findContextStartIndex(messages, 10)).toBe(1)
+  })
+
+  it('can archive every persisted message when a pending draft is newest', () => {
+    const messages = [makeMessage('user', 400)]
+
+    expect(findContextStartIndex(messages, 0, { keepMostRecent: false })).toBe(
+      1,
+    )
+  })
+
+  it('archives more history when preserved reasoning consumes the budget', () => {
+    const assistant = makeMessage('assistant', 40)
+    assistant.thoughts = 'b'.repeat(800)
+    const messages = [assistant, makeMessage('user', 40)]
+
+    expect(findContextStartIndex(messages, 100)).toBe(0)
+    expect(
+      findContextStartIndex(messages, 100, { includeReasoning: true }),
+    ).toBe(1)
   })
 })
 

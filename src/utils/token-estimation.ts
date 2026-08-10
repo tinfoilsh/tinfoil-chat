@@ -24,12 +24,38 @@ export function parseContextWindowTokens(contextWindow?: string): number {
   return tokens
 }
 
-// Estimate the tokens a message contributes to the prompt, including
-// quoted text, attachment contents that get inlined into user content,
-// and assistant tool calls. Thoughts are excluded: they are never sent
-// back in chat prompt payloads.
-export function estimateMessageTokens(msg: Message): number {
+export function getSmallestContextWindow(
+  contextWindows: Array<string | undefined>,
+): string | undefined {
+  if (contextWindows.length === 0) return undefined
+  let smallest = contextWindows[0]
+  for (let index = 1; index < contextWindows.length; index++) {
+    const candidate = contextWindows[index]
+    if (
+      parseContextWindowTokens(candidate) < parseContextWindowTokens(smallest)
+    ) {
+      smallest = candidate
+    }
+  }
+  return smallest
+}
+
+export type TokenEstimationOptions = {
+  includeReasoning?: boolean
+  keepMostRecent?: boolean
+}
+
+// Estimate the tokens a message contributes to the prompt, including quoted
+// text, attachment contents, assistant tool calls, and reasoning when the
+// selected model requires it to be returned in subsequent requests.
+export function estimateMessageTokens(
+  msg: Message,
+  options: TokenEstimationOptions = {},
+): number {
   let tokens = estimateTokenCount(msg.content)
+  if (options.includeReasoning) {
+    tokens += estimateTokenCount(msg.thoughts)
+  }
   if (msg.searchReasoning) {
     tokens += estimateTokenCount(msg.searchReasoning)
   }
@@ -60,6 +86,13 @@ export function getContextTokenBudget(contextWindow?: string): number {
   )
 }
 
+export function getHistoryTokenBudget(
+  contextWindow?: string,
+  pendingTokens = 0,
+): number {
+  return Math.max(0, getContextTokenBudget(contextWindow) - pendingTokens)
+}
+
 /**
  * Returns the index of the first message (from the end) that fits within the
  * token budget. Messages before this index are "archived" and excluded from
@@ -69,11 +102,16 @@ export function getContextTokenBudget(contextWindow?: string): number {
 export function findContextStartIndex(
   messages: Message[],
   budgetTokens: number,
+  options: TokenEstimationOptions = {},
 ): number {
   let usedTokens = 0
+  const keepMostRecent = options.keepMostRecent ?? true
   for (let i = messages.length - 1; i >= 0; i--) {
-    usedTokens += estimateMessageTokens(messages[i])
-    if (usedTokens > budgetTokens && i < messages.length - 1) {
+    usedTokens += estimateMessageTokens(messages[i], options)
+    if (
+      usedTokens > budgetTokens &&
+      (!keepMostRecent || i < messages.length - 1)
+    ) {
       return i + 1
     }
   }
@@ -87,7 +125,8 @@ export function findContextStartIndex(
 export function selectMessagesWithinBudget(
   messages: Message[],
   contextWindow?: string,
+  options: TokenEstimationOptions = {},
 ): Message[] {
   const budget = getContextTokenBudget(contextWindow)
-  return messages.slice(findContextStartIndex(messages, budget))
+  return messages.slice(findContextStartIndex(messages, budget, options))
 }

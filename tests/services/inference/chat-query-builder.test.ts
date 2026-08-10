@@ -19,6 +19,13 @@ const userMessage: Message = {
   timestamp: new Date('2026-01-01T00:00:00Z'),
 }
 
+const preservedHistoryModel: BaseModel = {
+  ...model,
+  modelName: 'kimi-k3',
+  name: 'Kimi K3',
+  reasoningConfig: { requiresCompleteReasoningHistory: true },
+}
+
 describe('ChatQueryBuilder', () => {
   it('omits system messages when there is no prompt content', () => {
     const messages = ChatQueryBuilder.buildMessages({
@@ -139,5 +146,97 @@ describe('ChatQueryBuilder', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('returns exact assistant reasoning alongside content and tool calls', () => {
+    const messages = ChatQueryBuilder.buildMessages({
+      model: preservedHistoryModel,
+      systemPrompt: '',
+      messages: [
+        {
+          role: 'assistant',
+          content: 'answer',
+          thoughts: '  exact reasoning  ',
+          toolCalls: [
+            { id: 'call_1', name: 'render_chart', arguments: '{"value":1}' },
+          ],
+          timestamp: new Date(),
+        },
+      ],
+      includeGenUIHint: false,
+    })
+
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      content: 'answer',
+      reasoning_content: '  exact reasoning  ',
+      tool_calls: [{ id: 'call_1' }],
+    })
+    expect(messages[1]).toEqual({
+      role: 'tool',
+      tool_call_id: 'call_1',
+      content: 'executed',
+    })
+  })
+
+  it('keeps reasoning-only assistant messages when history is required', () => {
+    const messages = ChatQueryBuilder.buildMessages({
+      model: preservedHistoryModel,
+      systemPrompt: '',
+      messages: [
+        {
+          role: 'assistant',
+          content: '',
+          thoughts: 'reasoning only',
+          timestamp: new Date(),
+        },
+      ],
+      includeGenUIHint: false,
+    })
+
+    expect(messages).toEqual([
+      {
+        role: 'assistant',
+        content: '',
+        reasoning_content: 'reasoning only',
+      },
+    ])
+  })
+
+  it('omits reasoning when the model does not require preserved history', () => {
+    const messages = ChatQueryBuilder.buildMessages({
+      model,
+      systemPrompt: '',
+      messages: [
+        {
+          role: 'assistant',
+          content: 'answer',
+          thoughts: 'reasoning',
+          timestamp: new Date(),
+        },
+      ],
+      includeGenUIHint: false,
+    })
+
+    expect(messages[0]).toEqual({ role: 'assistant', content: 'answer' })
+  })
+
+  it('preserves reasoning when any Auto candidate requires it', () => {
+    const messages = ChatQueryBuilder.buildMessages({
+      model,
+      autoCandidates: [model, preservedHistoryModel],
+      systemPrompt: '',
+      messages: [
+        {
+          role: 'assistant',
+          content: 'answer',
+          thoughts: 'reasoning',
+          timestamp: new Date(),
+        },
+      ],
+      includeGenUIHint: false,
+    })
+
+    expect(messages[0]).toMatchObject({ reasoning_content: 'reasoning' })
   })
 })

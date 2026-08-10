@@ -151,6 +151,20 @@ describe('MessageAssembler', () => {
       expect(msg.searchReasoning).toBeUndefined()
     })
 
+    it('preserves an explicitly empty reasoning value', () => {
+      const asm = new MessageAssembler()
+      const msg = asm.toMessage([
+        {
+          type: 'thinking',
+          id: 'thinking-0',
+          content: '',
+          isThinking: false,
+        },
+      ])
+
+      expect(msg.thoughts).toBe('')
+    })
+
     it('passes timeline through', () => {
       const asm = new MessageAssembler()
       const timeline: TimelineBlock[] = [

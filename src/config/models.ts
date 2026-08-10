@@ -2,6 +2,7 @@ import { setGenUIConfig } from '@/components/chat/genui/config'
 import { API_BASE_URL, IS_DEV } from '@/config'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logError } from '@/utils/error-handling'
+import { getSmallestContextWindow } from '@/utils/token-estimation'
 
 const DEV_MODELS: BaseModel[] = [
   {
@@ -71,6 +72,8 @@ export type ReasoningEndpointParams = {
  * - `supportsToggle: true` — thinking mode can be turned on or off per request
  *   via `params[endpoint].enable` / `params[endpoint].disable`.
  * - `defaultEnabled` — initial state of the toggle when `supportsToggle` is true.
+ * - `requiresCompleteReasoningHistory` — prior assistant reasoning must be
+ *   returned as `reasoning_content` on subsequent requests.
  *
  * The presence of a `reasoningConfig` object is itself the capability flag
  * — there is no separate boolean.
@@ -88,6 +91,7 @@ export type ReasoningConfig = {
    */
   effortMap?: Record<string, string>
   params?: Record<string, ReasoningEndpointParams>
+  requiresCompleteReasoningHistory?: boolean
 }
 
 export type AutoTier = 'smart' | 'fast'
@@ -176,6 +180,9 @@ export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
       isAuto: true,
       tier,
       multimodal: members.some((m) => m.multimodal === true),
+      contextWindow: getSmallestContextWindow(
+        members.map((member) => member.contextWindow),
+      ),
     })
   }
   add('smart', AUTO_SMART_ID, 'Auto · Smart')
@@ -228,6 +235,27 @@ export type ResolvedModelSelection = {
    * first entry is the representative model.
    */
   autoCandidates?: BaseModel[]
+}
+
+export const requiresCompleteReasoningHistory = (
+  selection: ResolvedModelSelection,
+): boolean => {
+  const candidates =
+    selection.autoCandidates ?? (selection.model ? [selection.model] : [])
+  return candidates.some(
+    (candidate) =>
+      candidate.reasoningConfig?.requiresCompleteReasoningHistory === true,
+  )
+}
+
+export const getResolvedModelContextWindow = (
+  selection: ResolvedModelSelection,
+): string | undefined => {
+  const candidates =
+    selection.autoCandidates ?? (selection.model ? [selection.model] : [])
+  return getSmallestContextWindow(
+    candidates.map((candidate) => candidate.contextWindow),
+  )
 }
 
 /**
