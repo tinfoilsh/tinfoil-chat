@@ -625,6 +625,31 @@ describe('CloudSyncService', () => {
       expect(result.errors).toHaveLength(1)
       expect(mockFinalizeUpload).not.toHaveBeenCalled()
     })
+
+    it('does not count a terminal upload failure as uploaded', async () => {
+      const chat = {
+        id: 'blocked-chat',
+        title: 'Unsynced',
+        messages: [{ role: 'user', content: 'hi' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        isBlankChat: false,
+        isLocalOnly: false,
+        locallyModified: true,
+        syncVersion: 1,
+      }
+      mockGetUnsyncedChats.mockResolvedValue([chat])
+      mockGetChat.mockResolvedValue(chat)
+      mockUploadChat.mockRejectedValue(
+        new SyncEnclaveError('forbidden', 403, 'FORBIDDEN'),
+      )
+
+      const result = await new CloudSyncService().backupUnsyncedChats()
+
+      expect(result.uploaded).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(mockFinalizeUpload).not.toHaveBeenCalled()
+    })
   })
 
   describe('checkSyncStatus', () => {

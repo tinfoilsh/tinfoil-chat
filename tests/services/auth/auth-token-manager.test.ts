@@ -103,18 +103,17 @@ describe('AuthTokenManager', () => {
     const manager = new AuthTokenManager()
     manager.registerPersistentAuthHandler(handler)
 
-    manager.handlePersistentAuthFailure()
+    const firstHandling = manager.handlePersistentAuthFailure()
     manager.handlePersistentAuthFailure()
     await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce())
 
     manager.reset()
     manager.handlePersistentAuthFailure()
     resolveHandler()
-    await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce())
+    await firstHandling
+    expect(handler).toHaveBeenCalledOnce()
 
-    await vi.waitFor(() => {
-      manager.handlePersistentAuthFailure()
-      expect(handler).toHaveBeenCalledTimes(2)
-    })
+    manager.handlePersistentAuthFailure()
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(2))
   })
 })

@@ -205,7 +205,7 @@ describe('SyncEnclaveClient', () => {
     expect(mockHandlePersistentAuthFailure).toHaveBeenCalledOnce()
   })
 
-  it('throws persistent authentication when forced refresh fails', async () => {
+  it('does not sign out when forced refresh fails before replay', async () => {
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')
     mockFetch.mockResolvedValueOnce(
@@ -214,12 +214,11 @@ describe('SyncEnclaveClient', () => {
     mockRefreshToken.mockRejectedValueOnce(new Error('refresh failed'))
     const client = await getSyncEnclaveClient()
 
-    await expect(client.get('/api/keys/current')).rejects.toMatchObject({
-      name: 'SyncPersistentAuthError',
-      code: 'AUTH_PERSISTENT',
-    })
+    await expect(client.get('/api/keys/current')).rejects.toThrow(
+      'refresh failed',
+    )
     expect(mockFetch).toHaveBeenCalledOnce()
-    expect(mockHandlePersistentAuthFailure).toHaveBeenCalledOnce()
+    expect(mockHandlePersistentAuthFailure).not.toHaveBeenCalled()
   })
 
   it('parses non-2xx responses into SyncEnclaveError with code + details', async () => {

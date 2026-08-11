@@ -1,4 +1,7 @@
-import { fetchFavicon } from '@/services/inference/metadata-client'
+import {
+  fetchFavicon,
+  fetchLinkMetadata,
+} from '@/services/inference/metadata-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { mockFetch } = vi.hoisted(() => ({
@@ -92,5 +95,46 @@ describe('fetchFavicon', () => {
       'data:image/x-icon;base64,aWNvbg==',
     )
     expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('fetchLinkMetadata', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+  })
+
+  it('maps metadata responses', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          url: 'https://example.com/',
+          title: 'Example',
+          description: null,
+          site_name: 'Example Site',
+          image: null,
+          cached: false,
+        }),
+        { status: 200 },
+      ),
+    )
+
+    await expect(fetchLinkMetadata('https://example.com/')).resolves.toEqual({
+      url: 'https://example.com/',
+      title: 'Example',
+      description: null,
+      siteName: 'Example Site',
+      image: null,
+      cached: false,
+    })
+  })
+
+  it('rejects non-success responses', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response('unavailable', { status: 502 }),
+    )
+
+    await expect(fetchLinkMetadata('https://failure.example/')).rejects.toThrow(
+      'Metadata fetch failed: 502',
+    )
   })
 })

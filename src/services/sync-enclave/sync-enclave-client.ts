@@ -1,7 +1,7 @@
 import { SYNC_ENCLAVE_REPO, SYNC_ENCLAVE_URL } from '@/config'
 import { authTokenManager } from '@/services/auth'
 import { logError, logInfo } from '@/utils/error-handling'
-import { AttestationError, SecureClient } from 'tinfoil'
+import { SecureClient } from 'tinfoil'
 
 /**
  * Singleton wrapper around the TinfoilAI SDK's SecureClient pointed at
@@ -126,7 +126,6 @@ export class SyncEnclaveClient {
       try {
         return await this.secure.fetch(requestUrl, { ...fetchInit, headers })
       } catch (error) {
-        if (error instanceof AttestationError) throw error
         if (error instanceof TypeError) {
           throw new SyncNetworkError({ cause: error })
         }
@@ -136,12 +135,7 @@ export class SyncEnclaveClient {
 
     let resp = await send(token)
     if (!init.skipAuth && resp.status === 401) {
-      try {
-        token = await authTokenManager.refreshToken(token as string)
-      } catch (error) {
-        authTokenManager.handlePersistentAuthFailure()
-        throw new SyncPersistentAuthError({ cause: error })
-      }
+      token = await authTokenManager.refreshToken(token as string)
       resp = await send(token)
       if (resp.status === 401) {
         authTokenManager.handlePersistentAuthFailure()

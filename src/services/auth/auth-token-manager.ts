@@ -120,8 +120,10 @@ export class AuthTokenManager {
     }
   }
 
-  handlePersistentAuthFailure(): void {
-    if (this.persistentAuthHandlerPromise || !this.persistentAuthHandler) return
+  handlePersistentAuthFailure(): Promise<void> {
+    if (this.persistentAuthHandlerPromise)
+      return this.persistentAuthHandlerPromise
+    if (!this.persistentAuthHandler) return Promise.resolve()
 
     const handler = this.persistentAuthHandler
     const promise = Promise.resolve()
@@ -140,6 +142,7 @@ export class AuthTokenManager {
         this.persistentAuthHandlerPromise = null
       })
     this.persistentAuthHandlerPromise = promise
+    return promise
   }
 
   reset(): void {

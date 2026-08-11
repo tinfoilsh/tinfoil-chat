@@ -962,19 +962,19 @@ export class CloudSyncService {
     }
     if (decision.action.type === 'refresh-current-key-and-retry') {
       reportKeyActionRequired('key-mismatch')
-      return
+      throw error
     }
     if (decision.action.type === 'trigger-recovery-wizard') {
       reportKeyActionRequired('key-recovery')
-      return
+      throw error
     }
     if (decision.action.type === 'block-all-sync') {
       reportSyncPaused('attestation')
-      return
+      throw error
     }
     if (decision.action.type === 'surface-existing-data-under-other-key') {
       reportKeyActionRequired('key-conflict')
-      return
+      throw error
     }
     if (decision.action.type === 'surface-not-found') {
       reportChatSyncFailed(chatId, 'This chat no longer exists in the cloud')
@@ -983,7 +983,7 @@ export class CloudSyncService {
     if (decision.action.type === 'migrate-legacy-and-retry') {
       // Handled out-of-band by the migration kick on the next sync
       // pass; nothing for the user to act on.
-      return
+      throw error
     }
     if (decision.action.type === 'abort') {
       if (decision.action.reason === 'AUTH_PERSISTENT') {
@@ -994,7 +994,7 @@ export class CloudSyncService {
       } else {
         reportChatSyncFailed(chatId, "This chat couldn't be synced")
       }
-      return
+      throw error
     }
     throw error
   }
