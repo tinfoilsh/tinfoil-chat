@@ -5,6 +5,7 @@ import {
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
+import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
 import { profileSync } from '@/services/cloud/profile-sync'
@@ -12,6 +13,8 @@ import { invalidateProfileSyncGeneration } from '@/services/cloud/profile-sync-c
 import { resetSyncHealth } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetChatRecoveryState } from '@/services/inference/chat-recovery'
+import { resetMetadataClient } from '@/services/inference/metadata-client'
+import { resetSummaryClient } from '@/services/inference/summary-client'
 import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
@@ -71,10 +74,13 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Reset tinfoil client to clear cached API key
   resetTinfoilClient()
   resetChatRecoveryState()
+  resetMetadataClient()
+  resetSummaryClient()
 
   // Drop the verified sync-enclave SecureClient so the next signed-in
   // user re-runs attestation from scratch.
   resetSyncEnclaveClient()
+  authTokenManager.reset()
 
   // Clear profile sync cache
   profileSync.clearCache()

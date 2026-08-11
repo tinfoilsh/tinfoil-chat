@@ -30,6 +30,7 @@ export type SyncActionReason =
   | 'key-mismatch'
   | 'key-conflict'
   | 'account-blocked'
+  | 'authentication'
 
 export type SyncGate =
   | { kind: 'ok' }

@@ -5,6 +5,7 @@ import {
   type EnclaveErrorCode,
 } from '@/services/sync-enclave/enclave-error-classification'
 import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
+import { AttestationError } from 'tinfoil'
 
 function err(code: string, status?: number) {
   return new SyncEnclaveError(code, status, code)
@@ -22,6 +23,7 @@ describe('classifyEnclaveError', () => {
       FORBIDDEN: 'TERMINAL',
       ATTESTATION_FAILED: 'TERMINAL',
       AUTH: 'RETRYABLE_TRANSIENT',
+      AUTH_PERSISTENT: 'TERMINAL',
       NETWORK: 'RETRYABLE_TRANSIENT',
       NOT_FOUND: 'USER_DECISION',
       LEGACY_BLOB_NOT_MIGRATED: 'RETRYABLE_REFRESH',
@@ -70,7 +72,7 @@ describe('classifyEnclaveError', () => {
 
   it('maps attestation failures to TERMINAL/ATTESTATION_FAILED', () => {
     const result = classifyEnclaveError(
-      new Error('enclave attestation verification failed'),
+      new AttestationError('enclave attestation verification failed'),
     )
     expect(result.kind).toBe('TERMINAL')
     expect(result.code).toBe('ATTESTATION_FAILED')

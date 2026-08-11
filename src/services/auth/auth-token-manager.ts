@@ -1,12 +1,42 @@
-import { logError } from '@/utils/error-handling'
+interface TokenReadOptions {
+  skipCache?: boolean
+}
 
-type TokenGetter = () => Promise<string | null>
+type TokenGetter = (options?: TokenReadOptions) => Promise<string | null>
 
-class AuthTokenManager {
+export class AuthTokenUnavailableError extends Error {
+  constructor(
+    public readonly reason: 'not-initialized' | 'unavailable',
+    options?: ErrorOptions,
+  ) {
+    super(
+      reason === 'not-initialized'
+        ? 'Authentication is not initialized'
+        : 'Authentication token is unavailable',
+      options,
+    )
+    this.name = 'AuthTokenUnavailableError'
+  }
+}
+
+export class AuthTokenRefreshError extends Error {
+  constructor(options?: ErrorOptions) {
+    super('Authentication token refresh failed', options)
+    this.name = 'AuthTokenRefreshError'
+  }
+}
+
+export class AuthTokenManager {
   private getToken: TokenGetter | null = null
   private initResolvers: Array<() => void> = []
+  private refreshByRejectedToken = new Map<string, Promise<string>>()
+  private generation = 0
 
   initialize(getToken: TokenGetter) {
+    if (this.getToken !== getToken) {
+      this.generation++
+      this.refreshByRejectedToken.clear()
+    }
     this.getToken = getToken
     for (const resolve of this.initResolvers) {
       resolve()
@@ -44,14 +74,43 @@ class AuthTokenManager {
   }
 
   async getValidToken(): Promise<string> {
-    if (!this.getToken) {
-      throw new Error('Auth not initialized')
+    const getToken = this.getToken
+    const generation = this.generation
+    if (!getToken) {
+      throw new AuthTokenUnavailableError('not-initialized')
     }
-    const token = await this.getToken()
+    let token: string | null
+    try {
+      token = await getToken()
+    } catch (error) {
+      throw new AuthTokenUnavailableError('unavailable', { cause: error })
+    }
+    if (generation !== this.generation || getToken !== this.getToken) {
+      throw new AuthTokenUnavailableError('unavailable')
+    }
     if (!token) {
-      throw new Error('Failed to get authentication token')
+      throw new AuthTokenUnavailableError('unavailable')
     }
     return token
+  }
+
+  refreshToken(rejectedToken: string): Promise<string> {
+    const existing = this.refreshByRejectedToken.get(rejectedToken)
+    if (existing) return existing
+
+    const refresh = this.readFreshToken().finally(() => {
+      if (this.refreshByRejectedToken.get(rejectedToken) === refresh) {
+        this.refreshByRejectedToken.delete(rejectedToken)
+      }
+    })
+    this.refreshByRejectedToken.set(rejectedToken, refresh)
+    return refresh
+  }
+
+  reset(): void {
+    this.generation++
+    this.getToken = null
+    this.refreshByRejectedToken.clear()
   }
 
   async getAuthHeaders(): Promise<Record<string, string>> {
@@ -63,39 +122,35 @@ class AuthTokenManager {
   }
 
   async isAuthenticated(): Promise<boolean> {
-    if (!this.getToken) return false
     try {
-      const token = await this.getToken()
-      return !!token
+      return !!(await this.getValidToken())
     } catch {
       return false
     }
   }
 
-  async withAuthRetry<T>(
-    operation: () => Promise<T>,
-    context?: string,
-  ): Promise<T> {
-    try {
-      return await operation()
-    } catch (error) {
-      if (this.isAuthError(error)) {
-        logError(`Auth error in ${context}, retrying with fresh token`, error)
-        // Call getToken again - Clerk will refresh if the token is expired
-        await this.getValidToken()
-        return await operation()
-      }
-      throw error
+  private async readFreshToken(): Promise<string> {
+    const getToken = this.getToken
+    const generation = this.generation
+    if (!getToken) {
+      throw new AuthTokenRefreshError({
+        cause: new AuthTokenUnavailableError('not-initialized'),
+      })
     }
-  }
 
-  private isAuthError(error: unknown): boolean {
-    if (error instanceof Response && error.status === 401) return true
-    if (error instanceof Error) {
-      const msg = error.message.toLowerCase()
-      return msg.includes('401') || msg.includes('unauthorized')
+    try {
+      const token = await getToken({ skipCache: true })
+      if (generation !== this.generation || getToken !== this.getToken) {
+        throw new AuthTokenUnavailableError('unavailable')
+      }
+      if (!token) {
+        throw new AuthTokenUnavailableError('unavailable')
+      }
+      return token
+    } catch (error) {
+      if (error instanceof AuthTokenRefreshError) throw error
+      throw new AuthTokenRefreshError({ cause: error })
     }
-    return false
   }
 }
 

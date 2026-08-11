@@ -1,1 +1,5 @@
-export { authTokenManager } from './auth-token-manager'
+export {
+  AuthTokenRefreshError,
+  AuthTokenUnavailableError,
+  authTokenManager,
+} from './auth-token-manager'

@@ -1,6 +1,6 @@
 import { SYNC_PROFILE_UNKNOWN_FIELDS } from '@/constants/storage-keys'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
-import { authTokenManager } from '../auth'
+import { AuthTokenUnavailableError, authTokenManager } from '../auth'
 import {
   listStatus as enclaveListStatus,
   pull as enclavePull,
@@ -8,13 +8,17 @@ import {
   newIdempotencyKey,
   pullItemPlaintext,
 } from '../sync-enclave/sync-api'
-import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
+import {
+  SyncEnclaveError,
+  SyncPersistentAuthError,
+} from '../sync-enclave/sync-enclave-client'
 import { WIRE_CODES } from '../sync-enclave/wire-contract'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import type { ProfileSyncStatus } from './cloud-storage'
 import { observe } from './edit-clock'
 import { mergeProfilesThreeWay } from './profile-merge'
 import { ProfileDataSchema } from './schemas'
+import { reportKeyActionRequired } from './sync-health'
 
 const PROFILE_SCOPE = 'profile'
 const PROFILE_ROW_ID = 'profile'
@@ -227,15 +231,16 @@ export class ProfileSyncService {
       return decoded
     } catch (error) {
       // Silently fail if no auth token
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         logInfo('Profile fetch skipped - no auth token', {
           component: 'ProfileSync',
           action: 'fetchProfile',
         })
         return null
+      }
+
+      if (error instanceof SyncPersistentAuthError) {
+        reportKeyActionRequired('authentication')
       }
 
       logError('Failed to fetch profile', error, {
@@ -392,15 +397,16 @@ export class ProfileSyncService {
       }
     } catch (error) {
       // Silently fail if no auth token
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         logInfo('Profile save skipped - no auth token', {
           component: 'ProfileSync',
           action: 'saveProfile',
         })
         return { success: false }
+      }
+
+      if (error instanceof SyncPersistentAuthError) {
+        reportKeyActionRequired('authentication')
       }
 
       logError('Failed to save profile', error, {
@@ -473,11 +479,12 @@ export class ProfileSyncService {
         lastUpdated: current.updated_at,
       }
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         return null
+      }
+
+      if (error instanceof SyncPersistentAuthError) {
+        reportKeyActionRequired('authentication')
       }
 
       logError('Failed to get profile sync status', error, {

@@ -85,7 +85,11 @@ export type RecoveryAction =
    * the user, then drop the operation. Retrying under the same key
    * would 409 again.
    */
-  | { type: 'abort'; reason: 'IDEMPOTENCY_CONFLICT' | 'FORBIDDEN' | 'UNKNOWN' }
+  | {
+      type: 'abort'
+      reason:
+        'IDEMPOTENCY_CONFLICT' | 'FORBIDDEN' | 'AUTH_PERSISTENT' | 'UNKNOWN'
+    }
 
 export interface RecoveryDecision {
   action: RecoveryAction
@@ -156,6 +160,7 @@ const ACTIONS: Record<
     reason: 'ATTESTATION_FAILED',
   }),
   AUTH: () => ({ type: 'retry', reason: 'AUTH_REFRESH' }),
+  AUTH_PERSISTENT: () => ({ type: 'abort', reason: 'AUTH_PERSISTENT' }),
   FORBIDDEN: () => ({ type: 'abort', reason: 'FORBIDDEN' }),
   NETWORK: () => ({ type: 'retry', reason: 'NETWORK' }),
   NOT_FOUND: () => ({ type: 'surface-not-found' }),

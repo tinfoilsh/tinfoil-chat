@@ -592,6 +592,31 @@ describe('CloudSyncService', () => {
       expect(result.uploaded).toBe(1)
       expect(result.errors).toEqual([])
     })
+
+    it('does not count a terminal upload failure as uploaded', async () => {
+      const chat = {
+        id: 'terminal-failure',
+        title: 'Unsynced',
+        messages: [{ role: 'user', content: 'hi' }],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        isBlankChat: false,
+        isLocalOnly: false,
+        locallyModified: true,
+        syncVersion: 1,
+      }
+      mockGetUnsyncedChats.mockResolvedValue([chat])
+      mockGetChat.mockResolvedValue(chat)
+      mockUploadChat.mockRejectedValue(
+        new SyncEnclaveError('forbidden', 403, 'FORBIDDEN'),
+      )
+
+      const result = await new CloudSyncService().backupUnsyncedChats()
+
+      expect(result.uploaded).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(mockFinalizeUpload).not.toHaveBeenCalled()
+    })
   })
 
   describe('checkSyncStatus', () => {
@@ -931,7 +956,7 @@ describe('CloudSyncService', () => {
       mockGetUnsyncedChats.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats
-        .mockRejectedValueOnce(new Error('temporary auth failure'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockResolvedValue({
           conversations: [],
           hasMore: false,
@@ -946,11 +971,11 @@ describe('CloudSyncService', () => {
 
     it('throws when remote chat listing still fails after retry', async () => {
       mockGetUnsyncedChats.mockResolvedValue([])
-      mockListChats.mockRejectedValue(new Error('still failing'))
+      mockListChats.mockRejectedValue(new TypeError('Failed to fetch'))
 
       const service = new CloudSyncService()
 
-      await expect(service.syncAllChats()).rejects.toThrow('still failing')
+      await expect(service.syncAllChats()).rejects.toThrow('Failed to fetch')
       expect(mockListChats).toHaveBeenCalledTimes(2)
     })
 
@@ -1368,7 +1393,7 @@ describe('CloudSyncService', () => {
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
       mockGetAllChats.mockResolvedValue([])
       mockListProjectChats
-        .mockRejectedValueOnce(new Error('temporary auth failure'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockResolvedValue({
           chats: [],
           hasMore: false,
@@ -1560,7 +1585,7 @@ describe('CloudSyncService', () => {
       }
     })
 
-    it('does not restore a vanished row when the fresh deletion pass fails', async () => {
+    it('propagates a failed conflict pull without finalizing local state', async () => {
       mockGetChat.mockResolvedValue(localChat('2024-06-01T00:00:00.000Z', 1))
       mockDownloadChat.mockResolvedValue(null)
       mockUploadChat.mockRejectedValueOnce(staleBlob())
@@ -1570,14 +1595,15 @@ describe('CloudSyncService', () => {
       })
 
       const service = new CloudSyncService()
-      await service.backupChat('conflict-1')
-      await service.waitForUpload('conflict-1')
-      await flush()
+      await expect(service.backupChatAndWait('conflict-1')).rejects.toThrow(
+        'remote deletions could not be reconciled',
+      )
 
       // Without a trustworthy deletion window the restore is deferred;
       // the chat stays locally modified so the next sync retries.
       expect(mockUploadChat).toHaveBeenCalledTimes(1)
       expect(mockReportChatSynced).not.toHaveBeenCalled()
+      expect(mockFinalizeUpload).not.toHaveBeenCalled()
     })
 
     it('leaves the local copy untouched when the remote row is gone and its tombstone is already recorded', async () => {

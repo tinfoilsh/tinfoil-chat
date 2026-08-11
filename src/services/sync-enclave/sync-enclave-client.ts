@@ -30,6 +30,18 @@ export class SyncEnclaveError extends Error {
   }
 }
 
+export class SyncPersistentAuthError extends SyncEnclaveError {
+  constructor(options?: ErrorOptions) {
+    super(
+      'Authentication is required to continue syncing',
+      401,
+      'AUTH_PERSISTENT',
+    )
+    this.name = 'SyncPersistentAuthError'
+    if (options?.cause !== undefined) this.cause = options.cause
+  }
+}
+
 export class SyncEnclaveClient {
   private constructor(private readonly secure: SecureClient) {}
 
@@ -76,26 +88,44 @@ export class SyncEnclaveClient {
     init: RequestInit & { skipAuth?: boolean } = {},
   ): Promise<T> {
     assertRelativeSyncEnclavePath(path)
-    const headers = new Headers(init.headers)
-    headers.set('Accept', 'application/json')
-
-    if (!init.skipAuth) {
-      const token = await authTokenManager.getValidToken()
-      headers.set('Authorization', `Bearer ${token}`)
-    }
-
-    if (init.body && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json')
-    }
-
     const { skipAuth: _skipAuth, ...fetchInit } = init
-    const resp = await this.secure.fetch(
-      new URL(path, SYNC_ENCLAVE_URL).toString(),
-      {
-        ...fetchInit,
-        headers,
-      },
-    )
+    const requestUrl = new URL(path, SYNC_ENCLAVE_URL).toString()
+    const baseHeaders = new Headers(init.headers)
+    baseHeaders.set('Accept', 'application/json')
+    if (
+      init.body &&
+      !baseHeaders.has('Content-Type') &&
+      shouldDefaultJsonContentType(init.body)
+    ) {
+      baseHeaders.set('Content-Type', 'application/json')
+    }
+    const replayBodies = await prepareReplayBodies(fetchInit.body, baseHeaders)
+
+    let token: string | null = null
+    if (!init.skipAuth) {
+      token = await authTokenManager.getValidToken()
+    }
+
+    let sendCount = 0
+    const send = (authToken: string | null) => {
+      const headers = new Headers(baseHeaders)
+      if (authToken) headers.set('Authorization', `Bearer ${authToken}`)
+      const body = replayBodies[Math.min(sendCount++, replayBodies.length - 1)]
+      return this.secure.fetch(requestUrl, { ...fetchInit, body, headers })
+    }
+
+    let resp = await send(token)
+    if (!init.skipAuth && resp.status === 401) {
+      try {
+        token = await authTokenManager.refreshToken(token as string)
+      } catch (error) {
+        throw new SyncPersistentAuthError({ cause: error })
+      }
+      resp = await send(token)
+      if (resp.status === 401) {
+        throw new SyncPersistentAuthError()
+      }
+    }
 
     if (!resp.ok) {
       let body: Record<string, unknown> = {}
@@ -107,7 +137,9 @@ export class SyncEnclaveClient {
       const message =
         typeof body.error === 'string'
           ? body.error
-          : `sync enclave request failed: ${resp.status} ${resp.statusText}`
+          : typeof body.message === 'string'
+            ? body.message
+            : `sync enclave request failed: ${resp.status} ${resp.statusText}`
       const code =
         typeof body.code === 'string' ? body.code : `HTTP_${resp.status}`
       logError(`sync enclave request failed`, undefined, {
@@ -169,6 +201,35 @@ export class SyncEnclaveClient {
   delete<T>(path: string, headers?: Record<string, string>) {
     return this.request<T>(path, { method: 'DELETE', headers })
   }
+}
+
+async function prepareReplayBodies(
+  body: BodyInit | null | undefined,
+  headers: Headers,
+): Promise<[BodyInit | null | undefined, BodyInit | null | undefined]> {
+  if (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream) {
+    const [first, replay] = body.tee()
+    return [first, replay]
+  }
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    const serialized = new Response(body)
+    const contentType = serialized.headers.get('Content-Type')
+    if (contentType && !headers.has('Content-Type')) {
+      headers.set('Content-Type', contentType)
+    }
+    const bytes = await serialized.arrayBuffer()
+    return [bytes, bytes]
+  }
+  return [body, body]
+}
+
+function shouldDefaultJsonContentType(body: BodyInit): boolean {
+  return !(
+    (typeof FormData !== 'undefined' && body instanceof FormData) ||
+    (typeof URLSearchParams !== 'undefined' &&
+      body instanceof URLSearchParams) ||
+    (typeof Blob !== 'undefined' && body instanceof Blob)
+  )
 }
 
 function assertSecureSyncEnclaveUrl(enclaveURL: string): void {

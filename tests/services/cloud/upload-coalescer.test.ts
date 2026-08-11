@@ -84,8 +84,8 @@ describe('UploadCoalescer', () => {
     it('reuses the same idempotency key and frozen payload across retries of one logical write', async () => {
       const attemptFn = vi
         .fn()
-        .mockRejectedValueOnce(new Error('flake'))
-        .mockRejectedValueOnce(new Error('flake'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockResolvedValueOnce(undefined)
       const prepareFn = prepareWith(attemptFn)
 
@@ -114,7 +114,7 @@ describe('UploadCoalescer', () => {
         const snapshot = source
         return async () => {
           seenPayloads.push(snapshot)
-          if (seenPayloads.length === 1) throw new Error('flake')
+          if (seenPayloads.length === 1) throw new TypeError('Failed to fetch')
         }
       })
 
@@ -139,7 +139,7 @@ describe('UploadCoalescer', () => {
       const attemptFn = vi.fn().mockResolvedValue(undefined)
       const prepareFn = vi
         .fn()
-        .mockRejectedValueOnce(new Error('flake'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockImplementation(
           async (chatId: string, idempotencyKey: string) => () =>
             attemptFn(chatId, idempotencyKey),
@@ -301,8 +301,8 @@ describe('UploadCoalescer', () => {
     it('retries failed uploads with exponential backoff', async () => {
       const attemptFn = vi
         .fn()
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
         .mockResolvedValueOnce(undefined)
       const prepareFn = prepareWith(attemptFn)
 
@@ -342,7 +342,7 @@ describe('UploadCoalescer', () => {
     it('gives up after max retries', async () => {
       const attemptFn = vi
         .fn()
-        .mockRejectedValue(new Error('Permanent failure'))
+        .mockRejectedValue(new TypeError('Failed to fetch'))
       const prepareFn = prepareWith(attemptFn)
 
       const coalescer = new UploadCoalescer(prepareFn, {
@@ -447,7 +447,9 @@ describe('UploadCoalescer', () => {
     })
 
     it('cancels waiters and retries when cleared during backoff', async () => {
-      const attemptFn = vi.fn().mockRejectedValue(new Error('Network error'))
+      const attemptFn = vi
+        .fn()
+        .mockRejectedValue(new TypeError('Failed to fetch'))
       const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
         baseDelayMs: 1000,
         maxRetries: 3,
@@ -489,7 +491,7 @@ describe('UploadCoalescer', () => {
           const payload = source
           return async () => {
             attempts.push({ payload, idempotencyKey })
-            if (attempts.length === 1) throw new Error('Fail')
+            if (attempts.length === 1) throw new TypeError('Failed to fetch')
           }
         },
       )
