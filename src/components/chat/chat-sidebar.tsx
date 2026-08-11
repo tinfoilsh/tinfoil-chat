@@ -624,13 +624,7 @@ export function ChatSidebar({
 
   useEffect(() => {
     setVisibleCloudChatCount(PAGINATION.CHATS_PER_PAGE)
-  }, [user?.id])
-
-  useEffect(() => {
-    if (!isInitialChatPageReady) {
-      setVisibleCloudChatCount(PAGINATION.CHATS_PER_PAGE)
-    }
-  }, [isInitialChatPageReady])
+  }, [user?.id, isInitialChatPageReady])
 
   const loadMoreChats = useCallback(async (): Promise<void> => {
     if (isLoadingMore || !isSignedIn) return
