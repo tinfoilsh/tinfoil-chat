@@ -3,6 +3,8 @@ import {
   SETTINGS_LOCAL_ONLY_MODE_ENABLED,
 } from '@/constants/storage-keys'
 
+export const CLOUD_SYNC_SETTING_CHANGED_EVENT = 'cloudSyncSettingChanged'
+
 export function isCloudSyncEnabled(): boolean {
   if (typeof window === 'undefined') return false
   try {
@@ -20,7 +22,7 @@ export function setCloudSyncEnabled(enabled: boolean): void {
   try {
     localStorage.setItem(SETTINGS_CLOUD_SYNC_ENABLED, enabled.toString())
     // Dispatch event to notify listeners of the change
-    window.dispatchEvent(new Event('cloudSyncSettingChanged'))
+    window.dispatchEvent(new Event(CLOUD_SYNC_SETTING_CHANGED_EVENT))
   } catch {
     // Storage unavailable (e.g., Safari private mode) - silently fail
   }

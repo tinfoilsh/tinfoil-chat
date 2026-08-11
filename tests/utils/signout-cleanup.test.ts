@@ -55,7 +55,10 @@ vi.mock('@/services/storage/deleted-chats-tracker', () => ({
 }))
 
 vi.mock('@/services/storage/indexed-db', () => ({
-  indexedDBStorage: { deleteAllChats: vi.fn().mockResolvedValue(0) },
+  indexedDBStorage: {
+    deleteAllChats: vi.fn().mockResolvedValue(0),
+    deleteAllProjects: vi.fn().mockResolvedValue(undefined),
+  },
 }))
 
 vi.mock('@/services/sync-enclave', () => ({
@@ -107,6 +110,7 @@ describe('performSignoutCleanup', () => {
     expect(resetEditClockCache).toHaveBeenCalled()
     expect(projectEvents.clear).toHaveBeenCalled()
     expect(indexedDBStorage.deleteAllChats).toHaveBeenCalled()
+    expect(indexedDBStorage.deleteAllProjects).toHaveBeenCalled()
   })
 
   it('keeps the encryption key when preserveEncryptionKey is set', async () => {

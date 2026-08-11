@@ -23,13 +23,7 @@ export function ProjectSelectorModal({
   onClose,
   isDarkMode,
 }: ProjectSelectorModalProps) {
-  const {
-    projects,
-    loading: loadingList,
-    hasMore,
-    loadMore,
-    refresh,
-  } = useProjects()
+  const { projects, loading: loadingList, refresh } = useProjects()
   const {
     createProject,
     enterProjectMode,
@@ -215,22 +209,6 @@ export function ProjectSelectorModal({
                             </div>
                           </button>
                         ))}
-
-                        {hasMore && (
-                          <button
-                            onClick={loadMore}
-                            disabled={loadingList}
-                            className={cn(
-                              'w-full rounded-md py-2 text-center font-aeonik-fono text-xs transition-colors',
-                              isDarkMode
-                                ? 'text-content-muted hover:text-content-secondary'
-                                : 'text-content-muted hover:text-content-secondary',
-                              loadingList && 'cursor-not-allowed opacity-50',
-                            )}
-                          >
-                            {loadingList ? 'Loading...' : 'Load more'}
-                          </button>
-                        )}
                       </div>
                     )}
                   </>

@@ -40,6 +40,7 @@ import {
   type PasskeyCredentialEntry,
 } from '@/services/passkey'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { attachmentGet } from '@/services/sync-enclave/sync-api'
 import { TINFOIL_COLORS } from '@/theme/colors'
@@ -50,6 +51,7 @@ import {
   parseClaudeProjects,
 } from '@/utils/chat-import-parsers'
 import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
   isLocalOnlyModeEnabled,
   setCloudSyncEnabled,
@@ -723,7 +725,10 @@ export function SettingsModal({
       PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
       handlePixelateSidebarChatTitlesUpdate as EventListener,
     )
-    window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      handleCloudSyncUpdate,
+    )
 
     return () => {
       window.removeEventListener('storage', loadSettingsFromStorage)
@@ -745,7 +750,7 @@ export function SettingsModal({
         handlePixelateSidebarChatTitlesUpdate as EventListener,
       )
       window.removeEventListener(
-        'cloudSyncSettingChanged',
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
         handleCloudSyncUpdate,
       )
     }
@@ -1175,7 +1180,7 @@ export function SettingsModal({
 
     if (isClient) {
       window.dispatchEvent(
-        new CustomEvent('cloudSyncSettingChanged', {
+        new CustomEvent(CLOUD_SYNC_SETTING_CHANGED_EVENT, {
           detail: { enabled },
         }),
       )
@@ -1606,6 +1611,7 @@ export function SettingsModal({
 
       let imported = 0
       const errors: string[] = []
+      const projectCacheGeneration = projectCache.captureGeneration()
 
       // Dynamically import project storage to avoid circular dependencies
       const { projectStorage } =
@@ -1645,6 +1651,12 @@ export function SettingsModal({
           type: 'projects',
         })
       }
+
+      if (imported > 0) {
+        projectCache.commitMutation(projectCacheGeneration)
+      }
+
+      await refreshProjects()
 
       setImportResult({
         success: errors.length === 0,
@@ -1888,6 +1900,14 @@ export function SettingsModal({
     setIsDeletingAllProjects(true)
     try {
       const result = await projectStorage.deleteAllProjects()
+      try {
+        await projectCache.clear()
+      } catch (cacheError) {
+        logError('Failed to clear cached projects', cacheError, {
+          component: 'SettingsModal',
+          action: 'handleDeleteAllProjects.clearCache',
+        })
+      }
       toast({
         title: 'All projects deleted',
         description: result.notificationSent
@@ -2360,17 +2380,17 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start justify-between">
                         <div className="mr-3 flex-1">
                           <div className="font-aeonik text-sm font-medium text-content-primary">
-                            Pixelate sidebar chat titles
+                            Redact sidebar chat titles
                           </div>
                           <div className="font-aeonik-fono text-xs text-content-muted">
-                            Pixelate inactive chat titles until you hover over
+                            Cover inactive chat titles until you hover over
                             them.
                           </div>
                         </div>
                         <label className="relative inline-flex cursor-pointer items-center">
                           <input
                             type="checkbox"
-                            aria-label="Pixelate sidebar chat titles"
+                            aria-label="Redact sidebar chat titles"
                             checked={pixelateSidebarChatTitles}
                             onChange={(e) => {
                               const newValue = e.target.checked

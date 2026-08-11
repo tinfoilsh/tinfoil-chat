@@ -71,14 +71,19 @@ import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
 
-import { cloudSync } from '@/services/cloud/cloud-sync'
+import { cloudSync, SyncInProgressError } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
 import { isPrfSupported, PrfNotSupportedError } from '@/services/passkey'
 import { chatStorage } from '@/services/storage/chat-storage'
-import { indexedDBStorage } from '@/services/storage/indexed-db'
+import {
+  INDEXED_DB_UPGRADE_BLOCKED_EVENT,
+  indexedDBStorage,
+  isIndexedDBUpgradeBlocked,
+} from '@/services/storage/indexed-db'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
@@ -286,7 +291,32 @@ export function ChatInterface({
   suppressIntroModals = false,
 }: ChatInterfaceProps) {
   const { toast } = useToast()
-  const { isSignedIn, isLoaded: isAuthLoaded } = useAuth()
+  const indexedDBBlockedToastShownRef = useRef(false)
+
+  useEffect(() => {
+    const showUpgradeBlockedToast = () => {
+      if (indexedDBBlockedToastShownRef.current) return
+      indexedDBBlockedToastShownRef.current = true
+      toast({
+        title: 'Local cache upgrade blocked',
+        description:
+          'Close other Tinfoil tabs, then reload this page to enable local project caching.',
+        variant: 'destructive',
+      })
+    }
+
+    if (isIndexedDBUpgradeBlocked()) showUpgradeBlockedToast()
+    window.addEventListener(
+      INDEXED_DB_UPGRADE_BLOCKED_EVENT,
+      showUpgradeBlockedToast,
+    )
+    return () =>
+      window.removeEventListener(
+        INDEXED_DB_UPGRADE_BLOCKED_EVENT,
+        showUpgradeBlockedToast,
+      )
+  }, [toast])
+  const { isSignedIn, isLoaded: isAuthLoaded, userId: authUserId } = useAuth()
   // TODO: unflip this
   const canUseCodeExecution = false
   const { user } = useUser()
@@ -371,7 +401,6 @@ export function ChatInterface({
     syncing,
     syncChats,
     smartSyncChats,
-    syncProjectChats,
     encryptionKey,
     initialized: cloudSyncInitialized,
     setEncryptionKey,
@@ -382,6 +411,32 @@ export function ChatInterface({
       void updatePasskeyBackupRef.current?.()
     },
   })
+  const [chatPagination, setChatPagination] = useState<{
+    isReady: boolean
+    userId?: string
+    nextToken?: string
+  }>({ isReady: false })
+  const [cloudSyncSettingEnabled, setCloudSyncSettingEnabled] =
+    useState(isCloudSyncEnabled)
+
+  useEffect(() => {
+    const handleCloudSyncSettingChange = () => {
+      setCloudSyncSettingEnabled(isCloudSyncEnabled())
+    }
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      handleCloudSyncSettingChange,
+    )
+    window.addEventListener('storage', handleCloudSyncSettingChange)
+    handleCloudSyncSettingChange()
+    return () => {
+      window.removeEventListener(
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
+        handleCloudSyncSettingChange,
+      )
+      window.removeEventListener('storage', handleCloudSyncSettingChange)
+    }
+  }, [])
 
   const {
     passkeyActive,
@@ -1553,25 +1608,68 @@ export function ChatInterface({
     toast,
   ])
 
+  const activeProjectIdForSync = activeProject?.id
+
   // Sync chats when user signs in and periodically
   // Profile sync is handled separately by useProfileSync hook
   // Context-aware: syncs personal chats when not in project mode, project chats when in project mode
   useEffect(() => {
-    if (!isAuthLoaded || !isSignedIn || !cloudSyncInitialized) return
+    if (
+      !isAuthLoaded ||
+      !isSignedIn ||
+      !cloudSyncInitialized ||
+      !cloudSyncSettingEnabled
+    ) {
+      setChatPagination({ isReady: false, userId: authUserId ?? undefined })
+      return
+    }
+
+    let cancelled = false
+    setChatPagination({ isReady: false, userId: authUserId ?? undefined })
 
     // Initial sync based on current mode
     const initialSync =
-      isProjectMode && activeProject
-        ? () => syncProjectChats(activeProject.id)
+      isProjectMode && activeProjectIdForSync
+        ? () => smartSyncChats(activeProjectIdForSync)
         : () => syncChats()
 
-    initialSync()
-      .then(() => reloadChats())
+    const runInitialSync = async () => {
+      while (!cancelled) {
+        try {
+          return await initialSync()
+        } catch (error) {
+          if (!(error instanceof SyncInProgressError)) throw error
+          await cloudSync.waitForCurrentSync()
+        }
+      }
+      return false
+    }
+
+    runInitialSync()
+      .then(async (result) => {
+        await reloadChats()
+        if (!cancelled && !isProjectMode) {
+          setChatPagination({
+            isReady: true,
+            userId: authUserId ?? undefined,
+            nextToken:
+              result && typeof result !== 'boolean'
+                ? result.nextToken
+                : undefined,
+          })
+        }
+      })
       .catch((error) => {
+        if (!cancelled && !isProjectMode) {
+          setChatPagination({
+            isReady: true,
+            userId: authUserId ?? undefined,
+          })
+        }
         logError('Failed to sync chats on page load', error, {
           component: 'ChatInterface',
           action: 'initialSync',
-          metadata: { isProjectMode, projectId: activeProject?.id },
+          metadata: { isProjectMode, projectId: activeProjectIdForSync },
         })
       })
 
@@ -1579,7 +1677,9 @@ export function ChatInterface({
     // Syncs project chats when in project mode, personal chats otherwise
     const interval = setInterval(() => {
       const projectId =
-        isProjectMode && activeProject ? activeProject.id : undefined
+        isProjectMode && activeProjectIdForSync
+          ? activeProjectIdForSync
+          : undefined
       smartSyncChats(projectId)
         .then((result) => {
           // Only reload chats if something was actually synced
@@ -1591,21 +1691,25 @@ export function ChatInterface({
           logError('Failed to sync chats (periodic)', error, {
             component: 'ChatInterface',
             action: 'periodicSync',
-            metadata: { isProjectMode, projectId: activeProject?.id },
+            metadata: { isProjectMode, projectId: activeProjectIdForSync },
           })
         })
     }, CLOUD_SYNC.CHAT_SYNC_INTERVAL)
 
-    return () => clearInterval(interval)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [
     isAuthLoaded,
     isSignedIn,
+    authUserId,
     cloudSyncInitialized,
+    cloudSyncSettingEnabled,
     isProjectMode,
-    activeProject,
+    activeProjectIdForSync,
     syncChats,
     smartSyncChats,
-    syncProjectChats,
     reloadChats,
   ])
 
@@ -3142,6 +3246,7 @@ export function ChatInterface({
                       title: c.title,
                       messageCount: c.messages.length,
                       createdAt: c.createdAt,
+                      updatedAt: c.updatedAt,
                       projectId: c.projectId,
                       isBlankChat: c.isBlankChat,
                     }))}
@@ -3176,8 +3281,22 @@ export function ChatInterface({
                   onExitProject={handleExitProject}
                   onExitProjectWhileDragging={handleExitProjectWhileDragging}
                   onNewChat={() => {}}
-                  onSelectChat={() => {}}
+                  onSelectChat={handleChatSelect}
+                  currentChatId={currentChat?.id}
                   isClient={isClient}
+                  chats={chats
+                    .filter((c) => c.projectId === loadingProject?.id)
+                    .map((c) => ({
+                      id: c.id,
+                      title: c.title,
+                      messageCount: c.messages.length,
+                      createdAt: c.createdAt,
+                      updatedAt: c.updatedAt,
+                      projectId: c.projectId,
+                      isBlankChat: c.isBlankChat,
+                    }))}
+                  deleteChat={deleteChat}
+                  updateChatTitle={updateChatTitle}
                   onSettingsClick={handleOpenSettingsModal}
                   windowWidth={windowWidth}
                 />
@@ -3230,6 +3349,14 @@ export function ChatInterface({
                 backupWarningNeedsRecovery={manualRecoveryNeeded}
                 onDismissBackupWarning={dismissBackupWarning}
                 onChatsUpdated={reloadChats}
+                initialChatPageToken={
+                  chatPagination.userId === authUserId
+                    ? chatPagination.nextToken
+                    : undefined
+                }
+                isInitialChatPageReady={
+                  chatPagination.userId === authUserId && chatPagination.isReady
+                }
                 onManualSync={handleManualSync}
                 isSyncing={syncing}
                 isProjectMode={isProjectMode}

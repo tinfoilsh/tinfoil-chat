@@ -1,6 +1,9 @@
 import { PAGINATION } from '@/config'
 import { cloudSync } from '@/services/cloud/cloud-sync'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
+  isCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -8,20 +11,15 @@ interface UseCloudPaginationOptions {
   isSignedIn: boolean
   userId?: string
   pageSize?: number
+  initialToken?: string
+  isInitialPageReady?: boolean
 }
 
 interface UseCloudPaginationReturn {
   hasMore: boolean
   isLoading: boolean
   hasAttempted: boolean
-  initialize: () => Promise<
-    | {
-        hasMore: boolean
-        nextToken?: string
-        deletedIds: string[]
-      }
-    | undefined
-  >
+  isInitialized: boolean
   loadMore: () => Promise<
     | {
         hasMore: boolean
@@ -30,26 +28,26 @@ interface UseCloudPaginationReturn {
       }
     | undefined
   >
-  reset: () => Promise<
-    | {
-        hasMore: boolean
-        nextToken?: string
-        deletedIds: string[]
-      }
-    | undefined
-  >
 }
 
 export function useCloudPagination(
   options: UseCloudPaginationOptions,
 ): UseCloudPaginationReturn {
-  const { isSignedIn, userId, pageSize = PAGINATION.CHATS_PER_PAGE } = options
+  const {
+    isSignedIn,
+    userId,
+    pageSize = PAGINATION.CHATS_PER_PAGE,
+    initialToken,
+    isInitialPageReady = false,
+  } = options
 
   const [nextToken, setNextToken] = useState<string | undefined>(undefined)
   const [hasMore, setHasMore] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [hasAttempted, setHasAttempted] = useState(false)
-  const initializedRef = useRef(false)
+  const [isInitialized, setIsInitialized] = useState(false)
+  const loadingGenerationRef = useRef<number | null>(null)
+  const requestGenerationRef = useRef(0)
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(isCloudSyncEnabled())
 
   useEffect(() => {
@@ -60,23 +58,29 @@ export function useCloudPagination(
     checkCloudSyncStatus()
 
     window.addEventListener('storage', checkCloudSyncStatus)
-    window.addEventListener('cloudSyncSettingChanged', checkCloudSyncStatus)
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      checkCloudSyncStatus,
+    )
 
     return () => {
       window.removeEventListener('storage', checkCloudSyncStatus)
       window.removeEventListener(
-        'cloudSyncSettingChanged',
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
         checkCloudSyncStatus,
       )
     }
   }, [])
 
   const initialize = useCallback(async () => {
-    if (!isSignedIn || !userId || !cloudSyncEnabled) {
+    requestGenerationRef.current += 1
+    loadingGenerationRef.current = null
+    setIsLoading(false)
+    if (!isSignedIn || !userId || !cloudSyncEnabled || !isInitialPageReady) {
       setNextToken(undefined)
       setHasMore(false)
       setHasAttempted(false)
-      initializedRef.current = false
+      setIsInitialized(false)
       return
     }
 
@@ -85,19 +89,30 @@ export function useCloudPagination(
     // locally provides better offline access. Users can fetch older chats
     // from the cloud on demand via loadMore().
 
-    // Don't set pagination state here - let loadMore() handle fetching page 1
-    // This ensures we don't skip page 1 when loadMore() is called
+    setNextToken(initialToken)
+    setHasMore(Boolean(initialToken))
     setHasAttempted(false)
+    setIsInitialized(true)
     return {
-      hasMore: false,
-      nextToken: undefined,
+      hasMore: Boolean(initialToken),
+      nextToken: initialToken,
       deletedIds: [], // Never delete local chats
     }
-  }, [isSignedIn, userId, cloudSyncEnabled])
+  }, [isSignedIn, userId, cloudSyncEnabled, isInitialPageReady, initialToken])
 
   const loadMore = useCallback(async () => {
-    if (!isSignedIn || !userId || isLoading || !cloudSyncEnabled) return
+    if (
+      !isSignedIn ||
+      !userId ||
+      isLoading ||
+      !cloudSyncEnabled ||
+      !isInitialized ||
+      loadingGenerationRef.current !== null
+    )
+      return
 
+    const requestGeneration = requestGenerationRef.current
+    loadingGenerationRef.current = requestGeneration
     // Save current state in case we need to rollback
     const previousToken = nextToken
     const previousHasMore = hasMore
@@ -106,59 +121,44 @@ export function useCloudPagination(
     setHasAttempted(true)
 
     try {
-      let tokenToUse = nextToken
-
-      // If we don't have a token yet, fetch the first page (newest chats) first
-      if (!tokenToUse && !initializedRef.current) {
-        // Fetch and store page 1 - don't just get the token and skip to page 2!
-        const firstPageResult = await cloudSync.fetchAndStorePage({
-          limit: pageSize,
-          // No continuation token = fetch first page
-        })
-
-        // Set up state for subsequent pages
-        setNextToken(firstPageResult.nextToken)
-        setHasMore(!!firstPageResult.nextToken)
-        initializedRef.current = true
-
-        return firstPageResult
-      }
-
-      if (!tokenToUse) {
-        setHasMore(false)
+      if (!nextToken) {
+        if (requestGeneration === requestGenerationRef.current) {
+          setHasMore(false)
+        }
         return
       }
 
       const result = await cloudSync.fetchAndStorePage({
         limit: pageSize,
-        continuationToken: tokenToUse,
+        continuationToken: nextToken,
       })
+      if (requestGeneration !== requestGenerationRef.current) return
 
       setNextToken(result.nextToken)
       setHasMore(!!result.nextToken)
       return result
     } catch (error) {
+      if (requestGeneration !== requestGenerationRef.current) return
       // Rollback state on error
       setNextToken(previousToken)
       setHasMore(previousHasMore)
-
-      // If this was the first attempt and we have no token,
-      // we should allow retry on next attempt
-      if (!previousToken && !initializedRef.current) {
-        setHasAttempted(false)
-      }
 
       logError('Failed to load more chats', error, {
         component: 'useCloudPagination',
         action: 'loadMore',
         metadata: {
           hadToken: !!previousToken,
-          wasInitialized: initializedRef.current,
+          wasInitialized: isInitialized,
         },
       })
       return undefined
     } finally {
-      setIsLoading(false)
+      if (loadingGenerationRef.current === requestGeneration) {
+        loadingGenerationRef.current = null
+        if (requestGeneration === requestGenerationRef.current) {
+          setIsLoading(false)
+        }
+      }
     }
   }, [
     isSignedIn,
@@ -168,13 +168,8 @@ export function useCloudPagination(
     pageSize,
     hasMore,
     cloudSyncEnabled,
+    isInitialized,
   ])
-
-  const reset = useCallback(async () => {
-    setHasAttempted(false)
-    initializedRef.current = false
-    return initialize()
-  }, [initialize])
 
   // Initialize when user changes (only if cloud sync is enabled)
   useEffect(() => {
@@ -184,9 +179,15 @@ export function useCloudPagination(
       setNextToken(undefined)
       setHasMore(false)
       setHasAttempted(false)
-      initializedRef.current = false
+      setIsInitialized(false)
     }
   }, [isSignedIn, userId, cloudSyncEnabled, initialize])
 
-  return { hasMore, isLoading, hasAttempted, initialize, loadMore, reset }
+  return {
+    hasMore,
+    isLoading,
+    hasAttempted,
+    isInitialized,
+    loadMore,
+  }
 }

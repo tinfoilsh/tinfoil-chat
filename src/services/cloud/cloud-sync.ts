@@ -60,6 +60,14 @@ export interface SyncResult {
   uploaded: number
   downloaded: number
   errors: string[]
+  nextToken?: string
+}
+
+export class SyncInProgressError extends Error {
+  constructor() {
+    super('Sync already in progress')
+    this.name = 'SyncInProgressError'
+  }
 }
 
 export interface PaginatedChatsResult {
@@ -175,7 +183,7 @@ export class CloudSyncService {
         component: 'CloudSync',
         action: 'withSyncLock',
       })
-      throw new Error('Sync already in progress')
+      throw new SyncInProgressError()
     }
 
     let resolve: () => void
@@ -256,22 +264,22 @@ export class CloudSyncService {
       // cache still believes are present and only a full pull can
       // bring them back.
       let localCount: number | null = null
-      if (!projectId) {
-        try {
-          localCount = await indexedDBStorage.getCloudChatCount()
-        } catch (countError) {
-          // Best-effort: if the count read fails we fall back to the
-          // pre-existing remote-only checks rather than turning every
-          // sync into an unbounded full pull.
-          logError(
-            'Failed to read local chat count during sync status check',
-            countError,
-            {
-              component: 'CloudSync',
-              action: 'checkSyncStatus.localCount',
-            },
-          )
-        }
+      try {
+        localCount = projectId
+          ? await indexedDBStorage.getProjectChatCount(projectId)
+          : await indexedDBStorage.getCloudChatCount()
+      } catch (countError) {
+        // Best-effort: if the count read fails we fall back to the
+        // pre-existing remote-only checks rather than turning every
+        // sync into an unbounded full pull.
+        logError(
+          'Failed to read local chat count during sync status check',
+          countError,
+          {
+            component: 'CloudSync',
+            action: 'checkSyncStatus.localCount',
+          },
+        )
       }
 
       logInfo('[CloudSync] checkSyncStatus comparing statuses', {
@@ -303,6 +311,15 @@ export class CloudSyncService {
         return {
           needsSync: true,
           reason: 'updated',
+          remoteCount: remoteStatus.count,
+          remoteLastUpdated: remoteStatus.lastUpdated,
+        }
+      }
+
+      if (projectId && localCount !== null && localCount < remoteStatus.count) {
+        return {
+          needsSync: true,
+          reason: 'count_changed',
           remoteCount: remoteStatus.count,
           remoteLastUpdated: remoteStatus.lastUpdated,
         }
@@ -1336,6 +1353,9 @@ export class CloudSyncService {
         limit: PAGINATION.CHATS_PER_PAGE,
       })
       if (!this.isCurrentGeneration(generation)) return result
+      if (!deep && remoteList.nextContinuationToken) {
+        result.nextToken = remoteList.nextContinuationToken
+      }
 
       const remoteConversations = [...(remoteList.conversations || [])]
       const remoteChatIds = new Set(
@@ -1672,7 +1692,7 @@ export class CloudSyncService {
     // Note: smartSync doesn't need its own lock because it delegates to
     // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
     if (this.syncLock) {
-      throw new Error('Sync already in progress')
+      throw new SyncInProgressError()
     }
     if (!projectId && needsRecoveryHistorySync()) {
       return this.syncAllChats({ deep: true })
@@ -1739,6 +1759,11 @@ export class CloudSyncService {
   // Check if currently syncing
   get syncing(): boolean {
     return this.syncLock !== null
+  }
+
+  async waitForCurrentSync(): Promise<void> {
+    const currentSync = this.syncLock
+    if (currentSync) await currentSync
   }
 
   // Delete a chat from cloud storage

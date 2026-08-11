@@ -1,5 +1,6 @@
 import type { Chat as ChatType } from '@/components/chat/types'
 import { nextClock } from '@/services/cloud/edit-clock'
+import type { Project } from '@/types/project'
 import { logError, logWarning } from '@/utils/error-handling'
 
 export interface Chat extends Omit<ChatType, 'createdAt'> {
@@ -29,6 +30,12 @@ export interface StoredChat extends Chat {
   clockVersion?: number
 }
 
+interface StoredProject {
+  cacheKey: string
+  userId: string
+  project: Project
+}
+
 /**
  * Rewrite emitted by the upload path when the enclave mints a fresh
  * attachment id + per-attachment key. `clientId` is what the local
@@ -44,8 +51,17 @@ export interface AttachmentRewrite {
 }
 
 const DB_NAME = 'tinfoil-chat'
-export const DB_VERSION = 1
+export const DB_VERSION = 3
+export const INDEXED_DB_UPGRADE_BLOCKED_EVENT = 'indexedDBUpgradeBlocked'
 const CHATS_STORE = 'chats'
+const CHATS_PROJECT_INDEX = 'projectId'
+const PROJECTS_STORE = 'projects'
+const PROJECTS_USER_INDEX = 'userId'
+let isUpgradeBlocked = false
+
+export function isIndexedDBUpgradeBlocked(): boolean {
+  return isUpgradeBlocked
+}
 
 function hashString(input: string): string {
   // Small, deterministic 32-bit hash for change detection
@@ -144,16 +160,21 @@ export function computeLocallyModified(opts: {
 
 export class IndexedDBStorage {
   private db: IDBDatabase | null = null
+  private initializationPromise: Promise<void> | null = null
   private saveQueue: Promise<unknown> = Promise.resolve()
 
   async initialize(): Promise<void> {
+    if (this.db) return
+    if (this.initializationPromise) return this.initializationPromise
+
     // Check if IndexedDB is available
     if (typeof window === 'undefined' || !window.indexedDB) {
       throw new Error('IndexedDB not available')
     }
 
-    return new Promise((resolve, reject) => {
+    this.initializationPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
+      let abandoned = false
 
       request.onerror = (event) => {
         const error = (event.target as IDBOpenDBRequest).error
@@ -168,7 +189,16 @@ export class IndexedDBStorage {
       }
 
       request.onsuccess = () => {
+        if (abandoned) {
+          request.result.close()
+          return
+        }
+        isUpgradeBlocked = false
         this.db = request.result
+        this.db.onversionchange = () => {
+          this.db?.close()
+          this.db = null
+        }
         resolve()
       }
 
@@ -187,6 +217,22 @@ export class IndexedDBStorage {
             store.createIndex('locallyModified', 'locallyModified', {
               unique: false,
             })
+            store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
+              unique: false,
+            })
+          } else {
+            const store = request.transaction?.objectStore(CHATS_STORE)
+            if (store && !store.indexNames.contains(CHATS_PROJECT_INDEX)) {
+              store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
+                unique: false,
+              })
+            }
+          }
+          if (!db.objectStoreNames.contains(PROJECTS_STORE)) {
+            const store = db.createObjectStore(PROJECTS_STORE, {
+              keyPath: 'cacheKey',
+            })
+            store.createIndex(PROJECTS_USER_INDEX, 'userId', { unique: false })
           }
         } catch (error) {
           logError('Failed to create object store', error, {
@@ -197,12 +243,21 @@ export class IndexedDBStorage {
       }
 
       request.onblocked = () => {
+        abandoned = true
+        isUpgradeBlocked = true
         logWarning('IndexedDB upgrade blocked - close other tabs', {
           component: 'IndexedDBStorage',
         })
+        window.dispatchEvent(new Event(INDEXED_DB_UPGRADE_BLOCKED_EVENT))
         reject(new Error('Database upgrade blocked'))
       }
     })
+
+    try {
+      await this.initializationPromise
+    } finally {
+      this.initializationPromise = null
+    }
   }
 
   private async ensureDB(): Promise<IDBDatabase> {
@@ -693,6 +748,35 @@ export class IndexedDBStorage {
     })
   }
 
+  async getProjectChatCount(projectId: string): Promise<number> {
+    await this.saveQueue.catch(() => {})
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([CHATS_STORE], 'readonly')
+      const store = transaction.objectStore(CHATS_STORE)
+      const request = store
+        .index(CHATS_PROJECT_INDEX)
+        .openCursor(IDBKeyRange.only(projectId))
+      let count = 0
+
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (!cursor) {
+          resolve(count)
+          return
+        }
+        const chat = cursor.value as StoredChat
+        if (!chat.isLocalOnly) {
+          count += 1
+        }
+        cursor.continue()
+      }
+      request.onerror = () =>
+        reject(new Error('Failed to count cached project chats'))
+    })
+  }
+
   async hasPendingChatRecoveries(): Promise<boolean> {
     await this.saveQueue.catch(() => {})
     const db = await this.ensureDB()
@@ -792,6 +876,107 @@ export class IndexedDBStorage {
       }
 
       request.onerror = () => reject(new Error('Failed to get all chats'))
+    })
+  }
+
+  async getProjectsForUser(userId: string): Promise<Project[]> {
+    await this.saveQueue.catch(() => {})
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([PROJECTS_STORE], 'readonly')
+      const store = transaction.objectStore(PROJECTS_STORE)
+      const request = store.index(PROJECTS_USER_INDEX).getAll(userId)
+
+      request.onsuccess = () => {
+        const projects = (request.result as StoredProject[])
+          .map((record) => record.project)
+          .sort(
+            (a, b) =>
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+          )
+        resolve(projects)
+      }
+      request.onerror = () => reject(new Error('Failed to get cached projects'))
+    })
+  }
+
+  async replaceProjectsForUser(
+    userId: string,
+    projects: Project[],
+  ): Promise<void> {
+    return this.enqueueSave('replaceProjectsForUser', async () => {
+      const db = await this.ensureDB()
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readwrite')
+        const store = transaction.objectStore(PROJECTS_STORE)
+        const cursorRequest = store
+          .index(PROJECTS_USER_INDEX)
+          .openKeyCursor(IDBKeyRange.only(userId))
+
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result
+          if (cursor) {
+            store.delete(cursor.primaryKey)
+            cursor.continue()
+            return
+          }
+
+          for (const project of projects) {
+            const record: StoredProject = {
+              cacheKey: `${userId}:${project.id}`,
+              userId,
+              project,
+            }
+            store.put(record)
+          }
+        }
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to replace cached projects'))
+      })
+    })
+  }
+
+  async saveProjectForUser(userId: string, project: Project): Promise<void> {
+    return this.enqueueSave('saveProjectForUser', async () => {
+      const db = await this.ensureDB()
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readwrite')
+        transaction.objectStore(PROJECTS_STORE).put({
+          cacheKey: `${userId}:${project.id}`,
+          userId,
+          project,
+        } satisfies StoredProject)
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(new Error('Failed to cache project'))
+      })
+    })
+  }
+
+  async deleteProjectForUser(userId: string, projectId: string): Promise<void> {
+    return this.enqueueSave('deleteProjectForUser', async () => {
+      const db = await this.ensureDB()
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readwrite')
+        transaction.objectStore(PROJECTS_STORE).delete(`${userId}:${projectId}`)
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to remove cached project'))
+      })
+    })
+  }
+
+  async deleteAllProjects(): Promise<void> {
+    return this.enqueueSave('deleteAllProjects', async () => {
+      const db = await this.ensureDB()
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readwrite')
+        transaction.objectStore(PROJECTS_STORE).clear()
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to clear cached projects'))
+      })
     })
   }
 

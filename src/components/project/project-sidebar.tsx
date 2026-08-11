@@ -80,6 +80,7 @@ interface ProjectChat {
   title: string
   messageCount: number
   createdAt: Date
+  updatedAt?: string
   projectId?: string
   isBlankChat?: boolean
 }
@@ -663,32 +664,24 @@ export function ProjectSidebar({
       (editedColor ?? '') !== (project.color ?? '')
     : false
 
-  const blankChat: ChatItemData = {
-    id: '',
-    title: 'New Chat',
-    messageCount: 0,
-    updatedAt: new Date().toISOString(),
-    isBlankChat: true,
-  }
-
-  // Convert chatsProp to ChatItemData format and sort by createdAt descending
+  // Convert chatsProp to ChatItemData format and sort by updatedAt descending
   const projectChats: ChatItemData[] = (chatsProp || [])
     .filter((c) => !c.isBlankChat)
     .map((c) => ({
       id: c.id,
       title: c.title,
       messageCount: c.messageCount,
+      createdAt: c.createdAt,
       updatedAt:
-        c.createdAt instanceof Date
+        c.updatedAt ??
+        (c.createdAt instanceof Date
           ? c.createdAt.toISOString()
-          : new Date(c.createdAt).toISOString(),
+          : new Date(c.createdAt).toISOString()),
     }))
     .sort(
       (a, b) =>
         new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime(),
     )
-
-  const chatsWithBlank: ChatItemData[] = [blankChat, ...projectChats]
 
   const isMobile = windowWidth < MOBILE_BREAKPOINT
 
@@ -1402,12 +1395,12 @@ export function ProjectSidebar({
             )}
           >
             <ChatList
-              chats={chatsWithBlank}
+              chats={projectChats}
               currentChatId={currentChatId}
               currentChatIsBlank={!currentChatId}
               isDarkMode={isDarkMode}
               pixelateSidebarChatTitles={pixelateSidebarChatTitles}
-              isLoading={isLoading}
+              isLoading={isLoading && projectChats.length === 0}
               enableTitleAnimation={true}
               animatedDeleteConfirmation={false}
               isDraggable={!!onRemoveChatFromProject}

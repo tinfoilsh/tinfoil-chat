@@ -3,7 +3,7 @@ import {
   type ChatItemData,
 } from '@/components/chat/chat-list-item'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const savedChat: ChatItemData = {
   id: 'chat-123',
@@ -18,6 +18,7 @@ function renderChatListItem({
   isSelected = false,
   pixelateSidebarChatTitles = true,
   enableTitleAnimation = false,
+  isStreaming = false,
 }: {
   href?: string
   onSelect?: () => void
@@ -25,6 +26,7 @@ function renderChatListItem({
   isSelected?: boolean
   pixelateSidebarChatTitles?: boolean
   enableTitleAnimation?: boolean
+  isStreaming?: boolean
 } = {}) {
   const renderItem = (item: ChatItemData) => (
     <ChatListItem
@@ -36,6 +38,7 @@ function renderChatListItem({
       isDarkMode={false}
       pixelateSidebarChatTitles={pixelateSidebarChatTitles}
       enableTitleAnimation={enableTitleAnimation}
+      isStreaming={isStreaming}
       onSelect={onSelect}
       onStartEdit={vi.fn()}
       onTitleChange={vi.fn()}
@@ -81,11 +84,11 @@ describe('ChatListItem navigation semantics', () => {
 })
 
 describe('ChatListItem title privacy', () => {
-  it('pixelates inactive saved chat titles by default', () => {
+  it('redacts inactive saved chat titles by default', () => {
     renderChatListItem()
 
     expect(screen.getByText('Trip planning').parentElement).toHaveClass(
-      'pixelated-text',
+      'redacted-text',
     )
   })
 
@@ -93,7 +96,7 @@ describe('ChatListItem title privacy', () => {
     renderChatListItem({ isSelected: true })
 
     expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
-      'pixelated-text',
+      'redacted-text',
     )
   })
 
@@ -108,7 +111,7 @@ describe('ChatListItem title privacy', () => {
     })
 
     expect(screen.getByText('New Chat').parentElement).not.toHaveClass(
-      'pixelated-text',
+      'redacted-text',
     )
   })
 
@@ -122,26 +125,82 @@ describe('ChatListItem title privacy', () => {
     })
 
     expect(screen.getByText('Empty saved chat').parentElement).not.toHaveClass(
-      'pixelated-text',
+      'redacted-text',
     )
   })
 
-  it('keeps saved chat titles clear when pixelation is disabled', () => {
+  it('keeps saved chat titles clear when title privacy is disabled', () => {
     renderChatListItem({ pixelateSidebarChatTitles: false })
 
     expect(screen.getByText('Trip planning').parentElement).not.toHaveClass(
-      'pixelated-text',
+      'redacted-text',
     )
   })
 
-  it('updates pixelated titles without hiding a stale animation', () => {
+  it('updates redacted titles without hiding a stale animation', () => {
     const { rerenderChat } = renderChatListItem({ enableTitleAnimation: true })
 
     rerenderChat({ ...savedChat, title: 'Updated trip' })
 
     expect(screen.queryByText('Trip planning')).not.toBeInTheDocument()
     expect(screen.getByText('Updated trip').parentElement).toHaveClass(
-      'pixelated-text',
+      'redacted-text',
     )
+  })
+})
+
+describe('ChatListItem timestamps', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-11T13:30:00.000Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const timestampedChat: ChatItemData = {
+    ...savedChat,
+    createdAt: '2026-08-11T12:00:00.000Z',
+    updatedAt: '2026-08-11T12:01:00.000Z',
+  }
+
+  it('hides the updated timestamp while a later response streams', () => {
+    renderChatListItem({
+      chat: {
+        ...timestampedChat,
+        messageCount: 4,
+        createdAt: '2026-08-11T10:00:00.000Z',
+      },
+      isStreaming: true,
+    })
+
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the initial turn labeled with only its creation time', () => {
+    renderChatListItem({ chat: timestampedChat })
+
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
+  })
+
+  it('shows the updated timestamp for later completed turns', () => {
+    renderChatListItem({
+      chat: {
+        ...timestampedChat,
+        messageCount: 4,
+        createdAt: '2026-08-11T10:00:00.000Z',
+      },
+    })
+
+    expect(screen.getByText(/Updated/)).toBeInTheDocument()
+  })
+
+  it('does not repeat equivalent relative timestamps', () => {
+    renderChatListItem({
+      chat: { ...timestampedChat, messageCount: 4 },
+    })
+
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
   })
 })
