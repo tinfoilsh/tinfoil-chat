@@ -29,9 +29,8 @@ export interface MessageRenderProps {
   onEditMessage?: (messageIndex: number, newContent: string) => void
   onRegenerateMessage?: (messageIndex: number) => void
   /**
-   * Retry a single failed GenUI tool call in place. Resolves true when the
-   * widget was repaired; false signals the caller may fall back to a full
-   * regeneration.
+   * Retry a single failed GenUI tool call in place. Resolves true when repaired
+   * and preserves typed failures for the retry card.
    */
   onRetryToolCall?: (
     messageIndex: number,

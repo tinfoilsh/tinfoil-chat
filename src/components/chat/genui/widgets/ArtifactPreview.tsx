@@ -35,11 +35,19 @@ const sourceSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('html'),
-    html: z.string().describe('Raw HTML markup rendered in a sandboxed iframe'),
+    html: z
+      .string()
+      .describe(
+        'Raw HTML rendered in a sandboxed iframe. Use exactly {"type":"html","html":"..."}.',
+      ),
   }),
   z.object({
     type: z.literal('markdown'),
-    markdown: z.string(),
+    markdown: z
+      .string()
+      .describe(
+        'Markdown source. Use exactly {"type":"markdown","markdown":"..."}.',
+      ),
   }),
 ])
 

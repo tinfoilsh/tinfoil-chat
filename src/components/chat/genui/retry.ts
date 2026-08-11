@@ -1,30 +1,51 @@
-/**
- * Widget-only retry.
- *
- * When a GenUI tool call fails validation (the model emitted arguments the
- * widget's schema rejects), the whole assistant answer is usually fine —
- * only the one widget is broken. This helper re-asks the model for just
- * that tool call's arguments via a structured (JSON-schema constrained)
- * completion, so the failed widget can be patched in place without
- * regenerating the entire response.
- */
+import type { ReasoningEffort } from '@/components/chat/hooks/use-reasoning-effort'
+import type { Chat, Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
-import { sendStructuredCompletion } from '@/services/inference/inference-client'
+import {
+  StructuredCompletionError,
+  sendStructuredCompletion,
+} from '@/services/inference/inference-client'
 import { logError } from '@/utils/error-handling'
+import {
+  estimateTokenCount,
+  findContextStartIndex,
+  getHistoryTokenBudget,
+  getSmallestContextWindow,
+} from '@/utils/token-estimation'
 import { zodToJsonSchema } from 'zod-to-json-schema'
-import type { Message } from '../types'
 import { GENUI_WIDGETS_BY_NAME, isGenUIToolName } from './registry'
 
-/** How many trailing conversation messages accompany the re-ask. */
-const RETRY_CONTEXT_MESSAGE_LIMIT = 8
+export type ArtifactRetryErrorCode =
+  | 'request_failed'
+  | 'incomplete_replacement'
+  | 'schema_invalid_replacement'
+  | 'stale_target'
+  | 'unavailable_target'
 
-/** Truncation cap for each context message sent with the re-ask. */
-const RETRY_CONTEXT_MESSAGE_MAX_CHARS = 4000
+export class ArtifactRetryError extends Error {
+  readonly code: ArtifactRetryErrorCode
+
+  constructor(code: ArtifactRetryErrorCode, options: { cause?: unknown } = {}) {
+    super(code, { cause: options.cause })
+    this.name = 'ArtifactRetryError'
+    this.code = code
+  }
+}
+
+export interface ToolCallPatchTarget {
+  messageTurnId?: string
+  messageTimestamp: number
+  timelineBlockId: string
+  toolCallId: string
+  toolName: string
+  originalArguments: string
+}
+
+export type ToolCallPatchResult =
+  { ok: true; chat: Chat } | { ok: false; error: ArtifactRetryError }
 
 function toPlainText(message: Message): string {
   if (message.content) return message.content
-  // Assistant messages built from a timeline may keep their text in
-  // content blocks rather than the top-level `content` field.
   if (message.timeline) {
     return message.timeline
       .filter((block) => block.type === 'content')
@@ -34,90 +55,214 @@ function toPlainText(message: Message): string {
   return ''
 }
 
-/**
- * Ask the model to regenerate the arguments for a single widget and
- * validate them against the widget's Zod schema.
- *
- * Returns the validated arguments serialized as a JSON string (the same
- * format tool-call blocks store), or `null` when the widget is unknown,
- * the request fails, or the regenerated arguments still don't validate.
- */
+export function selectArtifactRetryContext(
+  contextMessages: Message[],
+  contextWindow: string | undefined,
+  mandatoryPrompt: string,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const messages = contextMessages
+    .map((message) => ({
+      source: message,
+      role: message.role,
+      content: toPlainText(message),
+    }))
+    .filter((message) => message.content.trim().length > 0)
+  const projected = messages.map(({ source, content }) => ({
+    ...source,
+    content,
+    timeline: undefined,
+    toolCalls: undefined,
+    attachments: undefined,
+    documentContent: undefined,
+    imageData: undefined,
+  }))
+  const budget = getHistoryTokenBudget(
+    contextWindow,
+    estimateTokenCount(mandatoryPrompt),
+  )
+  const startIndex = findContextStartIndex(projected, budget, {
+    keepMostRecent: false,
+  })
+  return messages
+    .slice(startIndex)
+    .map(({ role, content }) => ({ role, content }))
+}
+
+function mapStructuredError(error: unknown): ArtifactRetryError {
+  if (
+    error instanceof StructuredCompletionError &&
+    error.code !== 'request_failed'
+  ) {
+    return new ArtifactRetryError('incomplete_replacement', { cause: error })
+  }
+  return new ArtifactRetryError('request_failed', { cause: error })
+}
+
 export async function regenerateToolCallArguments({
   toolName,
-  originalArguments,
+  originalArguments = '',
   contextMessages,
   model,
+  autoCandidates,
+  reasoningEffort,
+  thinkingEnabled,
 }: {
   toolName: string
-  /** The malformed argument JSON from the failed call, if any streamed. */
   originalArguments?: string
   contextMessages: Message[]
   model: BaseModel
-}): Promise<string | null> {
-  // Own-property check: the tool name comes from the model, and a name
-  // like "toString" would otherwise pass a plain truthiness lookup via
-  // the object prototype.
-  if (!isGenUIToolName(toolName)) return null
+  autoCandidates?: BaseModel[]
+  reasoningEffort?: ReasoningEffort
+  thinkingEnabled?: boolean
+}): Promise<string> {
+  if (!isGenUIToolName(toolName)) {
+    throw new ArtifactRetryError('unavailable_target')
+  }
   const widget = GENUI_WIDGETS_BY_NAME[toolName]
+  const jsonSchema = zodToJsonSchema(widget.schema, {
+    target: 'openApi3',
+    $refStrategy: 'none',
+  }) as Record<string, unknown>
+  const instruction =
+    `Repair only the JSON arguments for the "${toolName}" component. ` +
+    'Preserve the artifact intent and all valid data. Follow the supplied schema exactly, ' +
+    'including the matching fields for the selected variant. Do not generate or revise prose.'
+  const malformedArtifact = `Malformed arguments to repair:\n${originalArguments}`
+  const mandatoryPrompt = `${instruction}\n${JSON.stringify(jsonSchema)}\n${malformedArtifact}`
+  const contextWindow = getSmallestContextWindow(
+    (autoCandidates ?? [model]).map((candidate) => candidate.contextWindow),
+  )
+  const conversation = selectArtifactRetryContext(
+    contextMessages,
+    contextWindow,
+    mandatoryPrompt,
+  )
 
-  const conversation = contextMessages
-    .slice(-RETRY_CONTEXT_MESSAGE_LIMIT)
-    .map((message) => ({
-      role: message.role,
-      content: toPlainText(message).slice(0, RETRY_CONTEXT_MESSAGE_MAX_CHARS),
-    }))
-    .filter((message) => message.content.trim().length > 0)
-
+  let regenerated: unknown
   try {
-    const jsonSchema = zodToJsonSchema(widget.schema, {
-      target: 'openApi3',
-      $refStrategy: 'none',
-    }) as Record<string, unknown>
-
-    // The malformed arguments usually contain the intended data with a
-    // shape problem; giving them to the model preserves the widget's
-    // original content instead of asking it to reinvent the data from the
-    // conversation text alone.
-    const originalArgumentsHint = originalArguments?.trim()
-      ? ` The malformed arguments were: ${originalArguments.slice(
-          0,
-          RETRY_CONTEXT_MESSAGE_MAX_CHARS,
-        )}. Preserve their intent and data; fix only what is invalid.`
-      : ''
-
-    const regenerated = await sendStructuredCompletion<unknown>({
+    regenerated = await sendStructuredCompletion<unknown>({
       model,
+      autoCandidates,
       messages: [
-        {
-          role: 'system',
-          content:
-            `You previously tried to render a "${toolName}" UI component (${widget.description}) ` +
-            'in this conversation, but the arguments were malformed. Based on the conversation, ' +
-            'produce a valid set of arguments for that component. Respond with only the JSON arguments.' +
-            originalArgumentsHint,
-        },
+        { role: 'system', content: instruction },
         ...conversation,
+        { role: 'user', content: malformedArtifact },
       ],
       jsonSchema,
+      reasoningEffort,
+      thinkingEnabled,
     })
-
-    const parsed = widget.schema.safeParse(regenerated)
-    if (!parsed.success) {
-      logError('Regenerated widget arguments failed validation', parsed.error, {
-        component: 'genui-retry',
-        action: 'regenerateToolCallArguments',
-        metadata: { toolName },
-      })
-      return null
-    }
-
-    return JSON.stringify(parsed.data)
   } catch (error) {
-    logError('Widget argument regeneration failed', error, {
+    const retryError = mapStructuredError(error)
+    const structuredError =
+      error instanceof StructuredCompletionError ? error : undefined
+    logError('Artifact argument regeneration failed', retryError, {
       component: 'genui-retry',
       action: 'regenerateToolCallArguments',
-      metadata: { toolName },
+      metadata: {
+        toolName,
+        code: retryError.code,
+        status: structuredError?.status,
+        requestCode: structuredError?.requestCode,
+        finishReason: structuredError?.finishReason,
+      },
     })
-    return null
+    throw retryError
   }
+
+  const parsed = widget.schema.safeParse(regenerated)
+  if (!parsed.success) {
+    const retryError = new ArtifactRetryError('schema_invalid_replacement')
+    logError(
+      'Regenerated artifact arguments failed schema validation',
+      retryError,
+      {
+        component: 'genui-retry',
+        action: 'regenerateToolCallArguments',
+        metadata: {
+          toolName,
+          issues: parsed.error.issues.map(
+            (issue: { code: string; path: Array<string | number> }) => ({
+              code: issue.code,
+              path: issue.path,
+            }),
+          ),
+        },
+      },
+    )
+    throw retryError
+  }
+
+  return JSON.stringify(parsed.data)
+}
+
+export function patchToolCallArguments(
+  chat: Chat,
+  target: ToolCallPatchTarget,
+  newArguments: string,
+): ToolCallPatchResult {
+  const matchingMessageIndexes = chat.messages.flatMap((message, index) => {
+    const matchesIdentity = target.messageTurnId
+      ? message.turnId === target.messageTurnId
+      : message.timestamp.getTime() === target.messageTimestamp
+    const hasBlock = message.timeline?.some(
+      (block) =>
+        block.type === 'tool_call' &&
+        block.id === target.timelineBlockId &&
+        block.toolCallId === target.toolCallId,
+    )
+    return matchesIdentity && hasBlock ? [index] : []
+  })
+  if (matchingMessageIndexes.length !== 1) {
+    return {
+      ok: false,
+      error: new ArtifactRetryError('unavailable_target'),
+    }
+  }
+
+  const messageIndex = matchingMessageIndexes[0]
+  const message = chat.messages[messageIndex]
+  const blocks =
+    message.timeline?.filter(
+      (candidate) =>
+        candidate.type === 'tool_call' &&
+        candidate.id === target.timelineBlockId &&
+        candidate.toolCallId === target.toolCallId,
+    ) ?? []
+  const block = blocks[0]
+  const mirrors =
+    message.toolCalls?.filter(
+      (candidate) => candidate.id === target.toolCallId,
+    ) ?? []
+  if (
+    blocks.length !== 1 ||
+    !block ||
+    block.type !== 'tool_call' ||
+    block.name !== target.toolName ||
+    block.arguments !== target.originalArguments ||
+    mirrors.length !== 1 ||
+    mirrors[0].name !== target.toolName ||
+    mirrors[0].arguments !== target.originalArguments
+  ) {
+    return { ok: false, error: new ArtifactRetryError('stale_target') }
+  }
+
+  const patchedMessage: Message = {
+    ...message,
+    timeline: message.timeline?.map((candidate) =>
+      candidate.type === 'tool_call' &&
+      candidate.id === target.timelineBlockId &&
+      candidate.toolCallId === target.toolCallId
+        ? { ...candidate, arguments: newArguments }
+        : candidate,
+    ),
+    toolCalls: message.toolCalls?.map((candidate) =>
+      candidate.id === target.toolCallId
+        ? { ...candidate, arguments: newArguments }
+        : candidate,
+    ),
+  }
+  const messages = [...chat.messages]
+  messages[messageIndex] = patchedMessage
+  return { ok: true, chat: { ...chat, messages } }
 }

@@ -1,5 +1,7 @@
+import { ArtifactRetryError } from '@/components/chat/genui/retry'
 import { useChatMessaging } from '@/components/chat/hooks/use-chat-messaging'
 import type { Chat, Message } from '@/components/chat/types'
+import type { BaseModel } from '@/config/models'
 import { act, renderHook } from '@testing-library/react'
 import { type Dispatch, type SetStateAction } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +12,19 @@ const resetStatusMock = vi.fn()
 const moveStatusMock = vi.fn()
 const registerControllerMock = vi.fn()
 const clearControllerMock = vi.fn()
+const { regenerateToolCallArgumentsMock } = vi.hoisted(() => ({
+  regenerateToolCallArgumentsMock: vi.fn(),
+}))
+
+vi.mock('@/components/chat/genui/retry', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/components/chat/genui/retry')
+  >('@/components/chat/genui/retry')
+  return {
+    ...actual,
+    regenerateToolCallArguments: regenerateToolCallArgumentsMock,
+  }
+})
 
 vi.mock('@clerk/nextjs', () => ({
   useAuth: () => ({
@@ -163,6 +178,54 @@ describe('useChatMessaging retryLastMessage', () => {
       loadingState: 'loading',
       isWaitingForResponse: true,
       isStreaming: true,
+    })
+  })
+
+  it('preserves typed artifact retry failures for the renderer', async () => {
+    const chat = createChatWithUserMessage('chat-a')
+    const timestamp = new Date()
+    chat.messages.push({
+      role: 'assistant',
+      content: '',
+      timestamp,
+      timeline: [
+        {
+          type: 'tool_call',
+          id: 'block-1',
+          toolCallId: 'call-1',
+          name: 'render_chart',
+          arguments: '{"type":"bar"',
+        },
+      ],
+      toolCalls: [
+        {
+          id: 'call-1',
+          name: 'render_chart',
+          arguments: '{"type":"bar"',
+        },
+      ],
+    })
+    const retryError = new ArtifactRetryError('incomplete_replacement')
+    regenerateToolCallArgumentsMock.mockRejectedValueOnce(retryError)
+    const model = { modelName: 'gpt-oss-120b' } as BaseModel
+
+    const { result } = renderHook(() =>
+      useChatMessaging({
+        systemPrompt: '',
+        storeHistory: false,
+        models: [model],
+        selectedModel: model.modelName,
+        chats: [chat],
+        currentChat: chat,
+        setChats: noopSetChats,
+        setCurrentChat: noopSetCurrentChat,
+      }),
+    )
+
+    await act(async () => {
+      await expect(result.current.retryToolCall(1, 'call-1')).rejects.toBe(
+        retryError,
+      )
     })
   })
 })

@@ -17,6 +17,7 @@ import {
   APIUserAbortError,
   AuthenticationError,
 } from 'openai'
+import type { ChatCompletionCreateParamsNonStreaming } from 'openai/resources/chat/completions'
 import type { SessionRecoveryToken } from 'tinfoil'
 import { ChatQueryBuilder } from './chat-query-builder'
 import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
@@ -34,6 +35,19 @@ import {
 const CHAT_COMPLETIONS_ENDPOINT = '/v1/chat/completions'
 
 const EFFORT_PLACEHOLDER = '$EFFORT'
+const RESERVED_MODEL_BODY_PARAMS = new Set([
+  'model',
+  'messages',
+  'stream',
+  'signal',
+  'reasoning_effort',
+  'web_search_options',
+  'code_execution_options',
+  'pii_check_options',
+  'tools',
+  'tool_choice',
+  'response_format',
+])
 
 /**
  * Recursively clones an object, replacing any string equal to "$EFFORT" with
@@ -93,7 +107,12 @@ function buildModelBodyParams(
           unknown
         >
         for (const [key, value] of Object.entries(block)) {
-          out[key] = value
+          if (
+            key === 'reasoning_effort' ||
+            !RESERVED_MODEL_BODY_PARAMS.has(key)
+          ) {
+            out[key] = value
+          }
         }
       }
     }
@@ -102,20 +121,8 @@ function buildModelBodyParams(
   // Apply model-specific params, but never let them overwrite our explicit
   // or security-sensitive fields.
   if (model.requestParams) {
-    const reserved = new Set([
-      'model',
-      'messages',
-      'stream',
-      'signal',
-      'reasoning_effort',
-      'web_search_options',
-      'code_execution_options',
-      'pii_check_options',
-      'tools',
-      'tool_choice',
-    ])
     for (const [key, value] of Object.entries(model.requestParams)) {
-      if (!reserved.has(key)) {
+      if (!RESERVED_MODEL_BODY_PARAMS.has(key)) {
         out[key] = value
       }
     }
@@ -673,39 +680,126 @@ function toTerminalChatError(err: unknown, retries?: number): ChatError {
 
 export interface StructuredCompletionParams {
   model: BaseModel
+  autoCandidates?: BaseModel[]
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
   jsonSchema: Record<string, unknown>
   signal?: AbortSignal
+  reasoningEffort?: ReasoningEffort
+  thinkingEnabled?: boolean
+}
+
+export type StructuredCompletionErrorCode =
+  | 'request_failed'
+  | 'incomplete_response'
+  | 'refused_response'
+  | 'empty_response'
+  | 'invalid_json_response'
+
+export class StructuredCompletionError extends Error {
+  readonly code: StructuredCompletionErrorCode
+  readonly status?: number
+  readonly requestCode?: string
+  readonly finishReason?: string
+
+  constructor(
+    code: StructuredCompletionErrorCode,
+    options: {
+      cause?: unknown
+      status?: number
+      requestCode?: string
+      finishReason?: string
+    } = {},
+  ) {
+    super(code, { cause: options.cause })
+    this.name = 'StructuredCompletionError'
+    this.code = code
+    this.status = options.status
+    this.requestCode = options.requestCode
+    this.finishReason = options.finishReason
+  }
 }
 
 export async function sendStructuredCompletion<T>(
   params: StructuredCompletionParams,
 ): Promise<T> {
-  const { model, messages, jsonSchema, signal } = params
-
-  const client = await getTinfoilClient()
-  const response = await client.chat.completions.create(
-    {
-      model: model.modelName,
-      messages,
-      stream: false,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          schema: jsonSchema,
-        },
-      },
-    },
-    {
-      signal,
-    },
+  const {
+    model,
+    autoCandidates,
+    messages,
+    jsonSchema,
+    signal,
+    reasoningEffort,
+    thinkingEnabled,
+  } = params
+  const selectedCandidates = autoCandidates ?? [model]
+  const requestMessages = selectedCandidates.some(
+    (candidate) => !ChatQueryBuilder.shouldUseSystemRole(candidate.modelName),
   )
+    ? messages.map((message) =>
+        message.role === 'system'
+          ? { ...message, role: 'user' as const }
+          : message,
+      )
+    : messages
 
-  const content = response.choices[0]?.message?.content
-  if (!content) {
-    throw new Error('No content in structured completion response')
+  const requestBody: ChatCompletionCreateParamsNonStreaming &
+    Record<string, unknown> = {
+    model: model.modelName,
+    messages: requestMessages,
+    stream: false,
+  }
+  const modelParamOpts = { thinkingEnabled, reasoningEffort }
+  if (autoCandidates && autoCandidates.length > 0) {
+    requestBody.model = AUTO_REQUEST_MODEL
+    requestBody[AUTO_MODEL_OPTIONS_FIELD] = autoCandidates.map((candidate) => ({
+      model: candidate.modelName,
+      params: buildModelBodyParams(candidate, modelParamOpts),
+    }))
+  } else {
+    Object.assign(requestBody, buildModelBodyParams(model, modelParamOpts))
+  }
+  requestBody.response_format = {
+    type: 'json_schema',
+    json_schema: {
+      name: 'response',
+      schema: jsonSchema,
+    },
   }
 
-  return JSON.parse(content) as T
+  let response
+  try {
+    const client = await getTinfoilClient()
+    response = await client.chat.completions.create(requestBody, { signal })
+  } catch (error) {
+    const status = (error as { status?: unknown })?.status
+    const requestCode = (error as { code?: unknown })?.code
+    throw new StructuredCompletionError('request_failed', {
+      cause: error,
+      status: typeof status === 'number' ? status : undefined,
+      requestCode: typeof requestCode === 'string' ? requestCode : undefined,
+    })
+  }
+
+  const choice = response.choices[0]
+  const finishReason =
+    typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined
+  if (choice?.message?.refusal) {
+    throw new StructuredCompletionError('refused_response', { finishReason })
+  }
+  if (finishReason && finishReason !== 'stop') {
+    throw new StructuredCompletionError('incomplete_response', { finishReason })
+  }
+  const content = choice?.message?.content
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw new StructuredCompletionError('empty_response', { finishReason })
+  }
+
+  try {
+    return JSON.parse(content) as T
+  } catch (error) {
+    throw new StructuredCompletionError('invalid_json_response', {
+      cause: error,
+      finishReason,
+    })
+  }
 }

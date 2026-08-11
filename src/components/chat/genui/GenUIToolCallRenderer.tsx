@@ -10,11 +10,12 @@
  * via `GenUIInputAreaRenderer`.
  */
 import { logError } from '@/utils/error-handling'
-import { ChevronRight, RefreshCw, Sparkles } from 'lucide-react'
+import { RefreshCw, Sparkles } from 'lucide-react'
 import React, { memo, useEffect, useState } from 'react'
 import { PiSpinner } from 'react-icons/pi'
 import { tryParsePartialJson } from './partial-json'
 import { getGenUIWidget, renderGenUIInline } from './render'
+import { ArtifactRetryError, type ArtifactRetryErrorCode } from './retry'
 import type { GenUIToolCall } from './types'
 
 /**
@@ -61,24 +62,33 @@ interface GenUIToolCallRendererProps {
   onRetry?: () => void
   /**
    * Widget-only retry: re-request just this tool call's arguments and patch
-   * the block in place, leaving the rest of the answer intact. Resolves
-   * false when the repair failed, in which case the card falls back to
-   * offering `onRetry` (full regeneration).
+   * the block in place, leaving the rest of the answer intact. Rejects with a
+   * typed failure so the card can explain it and keep retry available.
    */
   onRetryToolCall?: (toolCallId: string) => Promise<boolean>
 }
 
-function resolveInput(tc: GenUIToolCall): Record<string, unknown> | null {
-  if (!tc.arguments) return null
+function parseInput(
+  tc: GenUIToolCall,
+): { ok: true; data: unknown } | { ok: false } {
+  if (!tc.arguments) return { ok: false }
   try {
-    const parsed = JSON.parse(tc.arguments)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
-    }
+    return { ok: true, data: JSON.parse(tc.arguments) }
   } catch {
-    // Arguments still streaming, JSON incomplete
+    return { ok: false }
   }
-  return null
+}
+
+function GenUIWidgetContent({
+  toolName,
+  input,
+  isDarkMode,
+}: {
+  toolName: string
+  input: unknown
+  isDarkMode?: boolean
+}) {
+  return renderGenUIInline(toolName, input, { isDarkMode })
 }
 
 export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
@@ -100,26 +110,8 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           return null
         }
 
-        const input = resolveInput(tc)
-        if (input) {
-          const rendered = renderGenUIInline(tc.name, input, { isDarkMode })
-          if (rendered) {
-            return (
-              <GenUIWidgetErrorBoundary key={tc.id} toolName={tc.name}>
-                <div className="my-4">{rendered}</div>
-              </GenUIWidgetErrorBoundary>
-            )
-          }
-        }
-
-        if (isStreaming) {
-          return <StreamingToolCallTracer key={tc.id} toolCall={tc} />
-        }
-
-        // The widget itself isn't registered on this client (e.g. a tool
-        // call recorded before the widget was added or after it was
-        // removed). Surface a soft, non-blocking notice — there's nothing
-        // to retry because the schema is unknown here.
+        // The schema is unavailable on this client, so waiting for more
+        // argument bytes cannot make this component renderable.
         if (!widget) {
           return (
             <div
@@ -143,13 +135,53 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
           )
         }
 
+        const input = parseInput(tc)
+        const parsedInput = input.ok
+          ? widget.schema.safeParse(input.data)
+          : null
+        if (parsedInput?.success && widget?.render) {
+          return (
+            <GenUIWidgetErrorBoundary
+              key={tc.id}
+              toolName={tc.name}
+              argumentsValue={tc.arguments}
+              onRetry={onRetry}
+              onRetryToolCall={
+                onRetryToolCall ? () => onRetryToolCall(tc.id) : undefined
+              }
+            >
+              <div className="my-4">
+                <GenUIWidgetContent
+                  toolName={tc.name}
+                  input={parsedInput.data}
+                  isDarkMode={isDarkMode}
+                />
+              </div>
+            </GenUIWidgetErrorBoundary>
+          )
+        }
+
+        if (isStreaming && !input.ok) {
+          return <StreamingToolCallTracer key={tc.id} toolCall={tc} />
+        }
+
         // Registered widget but schema validation failed. The model
         // produced something the widget couldn't accept — offer a retry.
         return (
           <ParseFailureCard
             key={tc.id}
             toolName={tc.name}
-            hasInput={!!input}
+            failure={
+              parsedInput && !parsedInput.success
+                ? {
+                    type: 'schema_invalid',
+                    issues: parsedInput.error.issues.map((issue) => ({
+                      code: issue.code,
+                      path: issue.path,
+                    })),
+                  }
+                : { type: 'invalid_json' }
+            }
             onRetry={onRetry}
             onRetryToolCall={
               onRetryToolCall ? () => onRetryToolCall(tc.id) : undefined
@@ -163,6 +195,9 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
 
 interface GenUIWidgetErrorBoundaryProps {
   toolName: string
+  argumentsValue: string
+  onRetry?: () => void
+  onRetryToolCall?: () => Promise<boolean>
   children: React.ReactNode
 }
 
@@ -183,32 +218,38 @@ class GenUIWidgetErrorBoundary extends React.Component<
     return { hasError: true }
   }
 
-  componentDidCatch(error: Error): void {
-    logError('GenUI widget crashed while rendering', error, {
-      component: 'GenUIWidgetErrorBoundary',
-      action: 'render',
-      metadata: { toolName: this.props.toolName },
-    })
+  componentDidCatch(): void {
+    logError(
+      'GenUI widget crashed while rendering',
+      new Error('render_exception'),
+      {
+        component: 'GenUIWidgetErrorBoundary',
+        action: 'render',
+        metadata: { toolName: this.props.toolName },
+      },
+    )
+  }
+
+  componentDidUpdate(previousProps: GenUIWidgetErrorBoundaryProps): void {
+    if (
+      this.state.hasError &&
+      previousProps.argumentsValue !== this.props.argumentsValue
+    ) {
+      this.setState({ hasError: false })
+    }
   }
 
   render(): React.ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="my-4 flex items-start gap-2.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2.5 text-sm">
-          <Sparkles
-            className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-500"
-            aria-hidden
-          />
-          <div className="flex flex-col">
-            <span className="font-medium text-content-primary">
-              Couldn&apos;t display this widget
-            </span>
-            <span className="text-xs text-content-muted">
-              The {prettyWidgetName(this.props.toolName)} component ran into a
-              problem while rendering.
-            </span>
-          </div>
-        </div>
+        <ParseFailureCard
+          toolName={this.props.toolName}
+          failure={{ type: 'render_exception' }}
+          onRetry={this.props.onRetry}
+          onRetryToolCall={this.props.onRetryToolCall}
+          onRepairSuccess={() => this.setState({ hasError: false })}
+          logFailure={false}
+        />
       )
     }
     return this.props.children
@@ -218,20 +259,12 @@ class GenUIWidgetErrorBoundary extends React.Component<
 /**
  * Live tracer shown while the model is streaming a GenUI tool call.
  *
- * Replaces a static spinner with a card that surfaces:
- *   - The widget name being generated (e.g. "artifact preview").
- *   - A short hint pulled from the partially-streamed JSON when one is
- *     available (the tool's `title` / `description` etc.).
- *   - A live byte counter so the user can tell the stream is still
- *     making progress even when no human-readable hint has streamed.
- *   - A collapsible raw JSON view for power users who want to see
- *     exactly what the model is sending.
+ * Replaces a static spinner with the widget name and a title when one has
+ * streamed far enough to parse safely.
  */
 function StreamingToolCallTracer({ toolCall }: { toolCall: GenUIToolCall }) {
-  const [showRaw, setShowRaw] = useState(false)
   const partial = tryParsePartialJson(toolCall.arguments)
   const hint = extractPartialHint(partial)
-  const charCount = toolCall.arguments.length
   const label = prettyWidgetName(toolCall.name)
 
   return (
@@ -245,131 +278,131 @@ function StreamingToolCallTracer({ toolCall }: { toolCall: GenUIToolCall }) {
           Generating {label}
           {hint ? `: ${hint}` : null}
         </span>
-        {charCount > 0 && (
-          <span className="ml-auto text-xs tabular-nums text-content-muted">
-            {charCount.toLocaleString()} chars
-          </span>
-        )}
       </div>
-      {charCount > 0 && (
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => setShowRaw((prev) => !prev)}
-            className="flex items-center gap-1 text-xs text-content-muted hover:text-content-primary"
-            aria-expanded={showRaw}
-          >
-            <ChevronRight
-              className={`h-3 w-3 transition-transform ${showRaw ? 'rotate-90' : ''}`}
-              aria-hidden
-            />
-            {showRaw ? 'Hide stream' : 'Show stream'}
-          </button>
-          {showRaw && (
-            <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-surface-chat-background p-2 text-xs text-content-muted">
-              <code>{toolCall.arguments}</code>
-            </pre>
-          )}
-        </div>
-      )}
     </div>
   )
 }
 
+type ParseFailure =
+  | { type: 'invalid_json' }
+  | { type: 'render_exception' }
+  | {
+      type: 'schema_invalid'
+      issues?: Array<{ code: string; path: Array<string | number> }>
+    }
+
 function ParseFailureCard({
   toolName,
-  hasInput,
+  failure,
   onRetry,
   onRetryToolCall,
+  onRepairSuccess,
+  logFailure = true,
 }: {
   toolName: string
-  hasInput: boolean
+  failure: ParseFailure
   onRetry?: () => void
   onRetryToolCall?: () => Promise<boolean>
+  onRepairSuccess?: () => void
+  logFailure?: boolean
 }) {
   const [isRetrying, setIsRetrying] = useState(false)
-  // Set when a widget-only retry failed. The card then falls back to the
-  // full-response regeneration — unless no regenerate handler was provided,
-  // in which case widget-only retry stays available rather than leaving the
-  // card with no action at all.
-  const [widgetRetryFailed, setWidgetRetryFailed] = useState(false)
+  const [retryFailure, setRetryFailure] =
+    useState<ArtifactRetryErrorCode | null>(null)
+  const primaryIssue =
+    failure.type === 'schema_invalid' ? failure.issues?.[0] : undefined
+  const issueSummary = primaryIssue
+    ? `${primaryIssue.path.join('.') || 'root'} (${primaryIssue.code})`
+    : undefined
 
   // Logging is a side effect — kept out of render so React's render-twice
   // strict mode and re-renders from parent state changes don't produce
   // duplicate log lines for the same failure.
   useEffect(() => {
-    logError(
-      'GenUI parse/render failed',
-      new Error(`Unable to produce a valid widget: ${toolName}`),
-      {
-        component: 'GenUIToolCallRenderer',
-        action: 'render',
-        metadata: { toolName, hasInput },
+    if (!logFailure) return
+    logError('GenUI arguments could not be rendered', new Error(failure.type), {
+      component: 'GenUIToolCallRenderer',
+      action: 'render',
+      metadata: {
+        toolName,
+        failure: failure.type,
+        issues: issueSummary,
       },
-    )
-  }, [toolName, hasInput])
+    })
+  }, [toolName, failure.type, issueSummary, logFailure])
 
-  const canRetryWidgetOnly =
-    !!onRetryToolCall && (!widgetRetryFailed || !onRetry)
-
-  const handleRetry = async () => {
+  const handleRetryToolCall = async () => {
     if (isRetrying) return
-    if (!canRetryWidgetOnly) {
-      onRetry?.()
-      return
-    }
+    if (!onRetryToolCall) return
     setIsRetrying(true)
     try {
-      // A thrown repair (network failure etc.) is the same outcome as a
-      // clean `false` for this card: fall back to full regeneration.
-      const repaired = await onRetryToolCall().catch(() => false)
-      if (!repaired) {
-        setWidgetRetryFailed(true)
-      }
+      const repaired = await onRetryToolCall()
+      setRetryFailure(repaired ? null : 'unavailable_target')
+      if (repaired) onRepairSuccess?.()
       // On success the patched arguments re-render the widget and this
       // card unmounts on its own.
+    } catch (error) {
+      setRetryFailure(
+        error instanceof ArtifactRetryError ? error.code : 'request_failed',
+      )
     } finally {
       setIsRetrying(false)
     }
   }
 
-  const showRetryButton = canRetryWidgetOnly || !!onRetry
-
-  let retryLabel: string
-  if (isRetrying) {
-    retryLabel = 'Fixing widget...'
-  } else if (canRetryWidgetOnly) {
-    retryLabel = 'Retry widget'
-  } else {
-    retryLabel = 'Regenerate response'
+  const retryFailureDescriptions: Record<ArtifactRetryErrorCode, string> = {
+    request_failed: 'Could not request a replacement. Try the widget again.',
+    incomplete_replacement:
+      'The replacement was incomplete or invalid JSON. Try the widget again.',
+    schema_invalid_replacement:
+      'The replacement did not match the component schema. Try again.',
+    stale_target:
+      'The component changed while retrying. Try its current version.',
+    unavailable_target: 'The component is no longer available to repair.',
   }
-
-  const description =
-    widgetRetryFailed && onRetry
-      ? 'Retrying the widget alone didn\u2019t work. Trying again will regenerate the whole response.'
-      : `The response didn't match the ${toolName} widget's expected shape.`
+  const description = retryFailure
+    ? retryFailureDescriptions[retryFailure]
+    : failure.type === 'invalid_json'
+      ? 'The component data is not valid JSON.'
+      : failure.type === 'render_exception'
+        ? `The ${prettyWidgetName(toolName)} component ran into a problem while rendering.`
+        : issueSummary
+          ? `The component data failed schema validation at ${issueSummary}.`
+          : `The response didn't match the ${toolName} widget's expected shape.`
 
   return (
     <div className="my-4 flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-surface-card px-4 py-3 text-sm">
       <div className="flex flex-col">
         <span className="font-medium text-content-primary">
-          Couldn&apos;t display this widget
+          Couldn&apos;t display {prettyWidgetName(toolName)}
         </span>
         <span className="text-xs text-content-muted">{description}</span>
       </div>
-      {showRetryButton && (
-        <button
-          type="button"
-          onClick={() => void handleRetry()}
-          disabled={isRetrying}
-          className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${isRetrying ? 'animate-spin' : ''}`}
-          />
-          {retryLabel}
-        </button>
-      )}
+      <div className="flex flex-shrink-0 items-center gap-2">
+        {onRetryToolCall && (
+          <button
+            type="button"
+            onClick={() => void handleRetryToolCall()}
+            disabled={isRetrying}
+            className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isRetrying ? 'animate-spin' : ''}`}
+            />
+            {isRetrying ? 'Fixing widget...' : 'Retry widget'}
+          </button>
+        )}
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={isRetrying}
+            className="inline-flex flex-shrink-0 items-center rounded-md border border-border-subtle bg-surface-chat-background px-3 py-1.5 text-sm font-medium text-content-primary transition-colors hover:bg-surface-card disabled:cursor-default disabled:opacity-60"
+          >
+            Regenerate response
+          </button>
+        )}
+      </div>
     </div>
   )
 }
