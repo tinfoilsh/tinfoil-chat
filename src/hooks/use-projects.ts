@@ -7,9 +7,10 @@ import {
 import type { Project, ProjectListResponse } from '@/types/project'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const PROJECT_PAGE_LIMIT = 20
+const PROJECT_CACHE_FRESHNESS_MS = 5 * 60 * 1000
 
 interface UseProjectsOptions {
   autoLoad?: boolean
@@ -19,9 +20,7 @@ interface UseProjectsReturn {
   projects: Project[]
   loading: boolean
   error: string | null
-  hasMore: boolean
   loadProjects: () => Promise<void>
-  loadMore: () => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -30,6 +29,10 @@ type ProjectListItem = ProjectListResponse['projects'][number]
 const refreshByUser = new Map<
   string,
   { generation: number; promise: Promise<Project[]> }
+>()
+const freshProjectsByUser = new Map<
+  string,
+  { generation: number; refreshedAt: number; projects: Project[] }
 >()
 
 function projectFromListItem(
@@ -88,9 +91,20 @@ async function fetchAllProjects(): Promise<Project[]> {
   return projects
 }
 
-function revalidateProjects(userId: string): Promise<Project[]> {
+function revalidateProjects(
+  userId: string,
+  forceRefresh: boolean,
+): Promise<Project[]> {
   const cacheGeneration = projectCache.captureGeneration()
   const refreshGeneration = projectCache.captureRefreshGeneration()
+  const freshProjects = freshProjectsByUser.get(userId)
+  if (
+    !forceRefresh &&
+    freshProjects?.generation === refreshGeneration &&
+    Date.now() - freshProjects.refreshedAt < PROJECT_CACHE_FRESHNESS_MS
+  ) {
+    return Promise.resolve(freshProjects.projects)
+  }
   const existing = refreshByUser.get(userId)
   if (existing?.generation === refreshGeneration) return existing.promise
 
@@ -107,6 +121,11 @@ function revalidateProjects(userId: string): Promise<Project[]> {
           action: 'cacheProjects',
         })
       }
+      freshProjectsByUser.set(userId, {
+        generation: refreshGeneration,
+        refreshedAt: Date.now(),
+        projects,
+      })
       return projects
     })
     .finally(() => {
@@ -124,69 +143,89 @@ export function useProjects(
   const { autoLoad = true } = options
   const { isSignedIn, userId } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [projectsUserId, setProjectsUserId] = useState<string>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const initializedUserRef = useRef<string | null>(null)
   const currentUserRef = useRef(userId)
+  const previousUserRef = useRef(userId)
+  currentUserRef.current = userId
+  const visibleProjects = useMemo(
+    () => (projectsUserId === userId ? projects : []),
+    [projectsUserId, userId, projects],
+  )
 
   useEffect(() => {
-    currentUserRef.current = userId
+    const previousUserId = previousUserRef.current
+    if (previousUserId && previousUserId !== userId) {
+      refreshByUser.delete(previousUserId)
+      freshProjectsByUser.delete(previousUserId)
+    }
+    previousUserRef.current = userId
   }, [userId])
 
-  const loadProjects = useCallback(async () => {
-    if (!isSignedIn || !userId) {
-      setProjects([])
-      return
-    }
+  const loadProjects = useCallback(
+    async (forceRefresh = false) => {
+      if (!isSignedIn || !userId) {
+        setProjects([])
+        setProjectsUserId(undefined)
+        return
+      }
 
-    const requestUserId = userId
-    setLoading(projects.length === 0)
-    setError(null)
-    let remoteApplied = false
+      const requestUserId = userId
+      setLoading(visibleProjects.length === 0)
+      setError(null)
+      let remoteApplied = false
 
-    void projectCache
-      .getProjects(requestUserId)
-      .then((cachedProjects) => {
-        if (currentUserRef.current !== requestUserId || remoteApplied) return
+      void projectCache
+        .getProjects(requestUserId)
+        .then((cachedProjects) => {
+          if (currentUserRef.current !== requestUserId || remoteApplied) return
 
-        setProjects(cachedProjects)
-        if (cachedProjects.length > 0) setLoading(false)
-      })
-      .catch((cacheError) => {
-        logError('Failed to load cached projects', cacheError, {
-          component: 'useProjects',
-          action: 'loadCachedProjects',
+          setProjectsUserId(requestUserId)
+          setProjects(cachedProjects)
+          if (cachedProjects.length > 0) setLoading(false)
         })
-      })
+        .catch((cacheError) => {
+          logError('Failed to load cached projects', cacheError, {
+            component: 'useProjects',
+            action: 'loadCachedProjects',
+          })
+        })
 
-    try {
-      const remoteProjects = await revalidateProjects(requestUserId)
-      if (currentUserRef.current !== requestUserId) return
+      try {
+        const remoteProjects = await revalidateProjects(
+          requestUserId,
+          forceRefresh,
+        )
+        if (currentUserRef.current !== requestUserId) return
 
-      remoteApplied = true
-      setProjects(remoteProjects)
-      logInfo('Loaded projects', {
-        component: 'useProjects',
-        action: 'loadProjects',
-        metadata: { count: remoteProjects.length },
-      })
-    } catch (err) {
-      if (currentUserRef.current !== requestUserId) return
+        remoteApplied = true
+        setProjectsUserId(requestUserId)
+        setProjects(remoteProjects)
+        logInfo('Loaded projects', {
+          component: 'useProjects',
+          action: 'loadProjects',
+          metadata: { count: remoteProjects.length },
+        })
+      } catch (err) {
+        if (currentUserRef.current !== requestUserId) return
 
-      const message =
-        err instanceof Error ? err.message : 'Failed to load projects'
-      setError(message)
-      logError('Failed to load projects', err, {
-        component: 'useProjects',
-        action: 'loadProjects',
-      })
-    } finally {
-      if (currentUserRef.current === requestUserId) setLoading(false)
-    }
-  }, [isSignedIn, userId, projects.length])
+        const message =
+          err instanceof Error ? err.message : 'Failed to load projects'
+        setError(message)
+        logError('Failed to load projects', err, {
+          component: 'useProjects',
+          action: 'loadProjects',
+        })
+      } finally {
+        if (currentUserRef.current === requestUserId) setLoading(false)
+      }
+    },
+    [isSignedIn, userId, visibleProjects.length],
+  )
 
-  const refresh = useCallback(() => loadProjects(), [loadProjects])
-  const loadMore = useCallback(async () => {}, [])
+  const refresh = useCallback(() => loadProjects(true), [loadProjects])
 
   useEffect(() => {
     if (
@@ -204,6 +243,7 @@ export function useProjects(
     if (!isSignedIn || !userId) {
       initializedUserRef.current = null
       setProjects([])
+      setProjectsUserId(undefined)
       setLoading(false)
       return
     }
@@ -212,11 +252,24 @@ export function useProjects(
       const updatedUserId = (event as CustomEvent<{ userId?: string }>).detail
         .userId
       if (updatedUserId && updatedUserId !== userId) return
-      if (!updatedUserId) setProjects([])
+      if (!updatedUserId) {
+        setProjects([])
+        setProjectsUserId(userId)
+      }
 
-      void projectCache.getProjects(userId).then((cachedProjects) => {
-        if (currentUserRef.current === userId) setProjects(cachedProjects)
-      })
+      void projectCache
+        .getProjects(userId)
+        .then((cachedProjects) => {
+          if (currentUserRef.current !== userId) return
+          setProjectsUserId(userId)
+          setProjects(cachedProjects)
+        })
+        .catch((cacheError) => {
+          logError('Failed to refresh cached projects', cacheError, {
+            component: 'useProjects',
+            action: 'handleCacheUpdate',
+          })
+        })
     }
 
     window.addEventListener(PROJECT_CACHE_UPDATED_EVENT, handleCacheUpdate)
@@ -226,7 +279,10 @@ export function useProjects(
 
   useEffect(() => {
     const handleKeyChange = () => {
-      if (projects.some((project) => project.decryptionFailed) && isSignedIn) {
+      if (
+        visibleProjects.some((project) => project.decryptionFailed) &&
+        isSignedIn
+      ) {
         logInfo('Encryption key changed, refreshing projects', {
           component: 'useProjects',
           action: 'encryptionKeyChanged',
@@ -239,15 +295,13 @@ export function useProjects(
     return () => {
       window.removeEventListener(ENCRYPTION_KEY_CHANGED_EVENT, handleKeyChange)
     }
-  }, [projects, isSignedIn, refresh])
+  }, [visibleProjects, isSignedIn, refresh])
 
   return {
-    projects,
+    projects: visibleProjects,
     loading,
     error,
-    hasMore: false,
     loadProjects,
-    loadMore,
     refresh,
   }
 }

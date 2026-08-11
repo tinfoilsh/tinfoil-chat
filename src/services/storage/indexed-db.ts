@@ -51,9 +51,10 @@ export interface AttachmentRewrite {
 }
 
 const DB_NAME = 'tinfoil-chat'
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 export const INDEXED_DB_UPGRADE_BLOCKED_EVENT = 'indexedDBUpgradeBlocked'
 const CHATS_STORE = 'chats'
+const CHATS_PROJECT_INDEX = 'projectId'
 const PROJECTS_STORE = 'projects'
 const PROJECTS_USER_INDEX = 'userId'
 let isUpgradeBlocked = false
@@ -173,6 +174,7 @@ export class IndexedDBStorage {
 
     this.initializationPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
+      let abandoned = false
 
       request.onerror = (event) => {
         const error = (event.target as IDBOpenDBRequest).error
@@ -187,6 +189,10 @@ export class IndexedDBStorage {
       }
 
       request.onsuccess = () => {
+        if (abandoned) {
+          request.result.close()
+          return
+        }
         isUpgradeBlocked = false
         this.db = request.result
         this.db.onversionchange = () => {
@@ -211,6 +217,16 @@ export class IndexedDBStorage {
             store.createIndex('locallyModified', 'locallyModified', {
               unique: false,
             })
+            store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
+              unique: false,
+            })
+          } else {
+            const store = request.transaction?.objectStore(CHATS_STORE)
+            if (store && !store.indexNames.contains(CHATS_PROJECT_INDEX)) {
+              store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
+                unique: false,
+              })
+            }
           }
           if (!db.objectStoreNames.contains(PROJECTS_STORE)) {
             const store = db.createObjectStore(PROJECTS_STORE, {
@@ -227,11 +243,13 @@ export class IndexedDBStorage {
       }
 
       request.onblocked = () => {
+        abandoned = true
         isUpgradeBlocked = true
         logWarning('IndexedDB upgrade blocked - close other tabs', {
           component: 'IndexedDBStorage',
         })
         window.dispatchEvent(new Event(INDEXED_DB_UPGRADE_BLOCKED_EVENT))
+        reject(new Error('Database upgrade blocked'))
       }
     })
 
@@ -737,7 +755,9 @@ export class IndexedDBStorage {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CHATS_STORE], 'readonly')
       const store = transaction.objectStore(CHATS_STORE)
-      const request = store.openCursor()
+      const request = store
+        .index(CHATS_PROJECT_INDEX)
+        .openCursor(IDBKeyRange.only(projectId))
       let count = 0
 
       request.onsuccess = () => {
@@ -747,11 +767,7 @@ export class IndexedDBStorage {
           return
         }
         const chat = cursor.value as StoredChat
-        if (
-          chat.projectId === projectId &&
-          !chat.decryptionFailed &&
-          !chat.dataCorrupted
-        ) {
+        if (!chat.isLocalOnly) {
           count += 1
         }
         cursor.continue()
@@ -864,6 +880,7 @@ export class IndexedDBStorage {
   }
 
   async getProjectsForUser(userId: string): Promise<Project[]> {
+    await this.saveQueue.catch(() => {})
     const db = await this.ensureDB()
 
     return new Promise((resolve, reject) => {

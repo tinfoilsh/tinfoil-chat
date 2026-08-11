@@ -130,13 +130,17 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 
   // Clear IndexedDB
   reportStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
-  try {
-    await Promise.all([indexedDBStorage.deleteAllChats(), projectCache.clear()])
-  } catch (error) {
-    logError('Failed to clear IndexedDB', error, {
-      component: context,
-      action: 'clearAllUserData',
-    })
+  const indexedDBCleanupResults = await Promise.allSettled([
+    indexedDBStorage.deleteAllChats(),
+    projectCache.clear(),
+  ])
+  for (const result of indexedDBCleanupResults) {
+    if (result.status === 'rejected') {
+      logError('Failed to clear IndexedDB', result.reason, {
+        component: context,
+        action: 'clearAllUserData',
+      })
+    }
   }
 
   // Clear service worker caches

@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  auth: { isSignedIn: true, userId: 'cached-project-user' },
   getCachedProjects: vi.fn(),
   replaceProjects: vi.fn(),
   listProjects: vi.fn(),
@@ -11,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@clerk/nextjs', () => ({
-  useAuth: () => ({ isSignedIn: true, userId: 'cached-project-user' }),
+  useAuth: () => mocks.auth,
 }))
 
 vi.mock('@/services/storage/project-cache', () => ({
@@ -45,6 +46,8 @@ const cachedProject: Project = {
 
 describe('useProjects', () => {
   beforeEach(() => {
+    mocks.auth.isSignedIn = true
+    mocks.auth.userId = 'cached-project-user'
     mocks.getCachedProjects.mockReset().mockResolvedValue([cachedProject])
     mocks.replaceProjects.mockReset().mockResolvedValue(undefined)
     mocks.listProjects.mockReset()
@@ -104,5 +107,29 @@ describe('useProjects', () => {
       [refreshedProject],
       0,
     )
+  })
+
+  it('hides the previous account projects immediately on user change', async () => {
+    let resolveRemotePage!: (value: {
+      projects: never[]
+      hasMore: boolean
+    }) => void
+    mocks.auth.userId = 'first-project-user'
+    mocks.listProjects.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRemotePage = resolve
+      }),
+    )
+    const { result, rerender } = renderHook(() => useProjects())
+    await waitFor(() =>
+      expect(result.current.projects).toEqual([cachedProject]),
+    )
+
+    mocks.auth.userId = 'second-project-user'
+    mocks.getCachedProjects.mockReturnValue(new Promise(() => {}))
+    rerender()
+
+    expect(result.current.projects).toEqual([])
+    resolveRemotePage({ projects: [], hasMore: false })
   })
 })

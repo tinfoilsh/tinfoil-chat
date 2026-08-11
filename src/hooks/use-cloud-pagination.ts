@@ -17,27 +17,11 @@ interface UseCloudPaginationReturn {
   isLoading: boolean
   hasAttempted: boolean
   isInitialized: boolean
-  initialize: () => Promise<
-    | {
-        hasMore: boolean
-        nextToken?: string
-        deletedIds: string[]
-      }
-    | undefined
-  >
   loadMore: () => Promise<
     | {
         hasMore: boolean
         nextToken?: string
         saved: number
-      }
-    | undefined
-  >
-  reset: () => Promise<
-    | {
-        hasMore: boolean
-        nextToken?: string
-        deletedIds: string[]
       }
     | undefined
   >
@@ -132,7 +116,9 @@ export function useCloudPagination(
 
     try {
       if (!nextToken) {
-        setHasMore(false)
+        if (requestGeneration === requestGenerationRef.current) {
+          setHasMore(false)
+        }
         return
       }
 
@@ -163,12 +149,9 @@ export function useCloudPagination(
     } finally {
       if (loadingGenerationRef.current === requestGeneration) {
         loadingGenerationRef.current = null
-      }
-      if (
-        requestGeneration === requestGenerationRef.current &&
-        loadingGenerationRef.current === null
-      ) {
-        setIsLoading(false)
+        if (requestGeneration === requestGenerationRef.current) {
+          setIsLoading(false)
+        }
       }
     }
   }, [
@@ -181,12 +164,6 @@ export function useCloudPagination(
     cloudSyncEnabled,
     isInitialized,
   ])
-
-  const reset = useCallback(async () => {
-    setHasAttempted(false)
-    setIsInitialized(false)
-    return initialize()
-  }, [initialize])
 
   // Initialize when user changes (only if cloud sync is enabled)
   useEffect(() => {
@@ -205,8 +182,6 @@ export function useCloudPagination(
     isLoading,
     hasAttempted,
     isInitialized,
-    initialize,
     loadMore,
-    reset,
   }
 }

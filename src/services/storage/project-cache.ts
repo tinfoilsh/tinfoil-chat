@@ -16,7 +16,8 @@ export const projectCache = {
     return cacheGeneration
   },
 
-  beginMutation(): number {
+  commitMutation(expectedGeneration: number): number | null {
+    if (expectedGeneration !== cacheGeneration) return null
     refreshGeneration += 1
     return cacheGeneration
   },

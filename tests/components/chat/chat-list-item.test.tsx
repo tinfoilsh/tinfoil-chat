@@ -156,8 +156,11 @@ describe('ChatListItem timestamps', () => {
     updatedAt: '2026-08-11T12:01:00.000Z',
   }
 
-  it('hides the updated timestamp while the first response streams', () => {
-    renderChatListItem({ chat: timestampedChat, isStreaming: true })
+  it('hides the updated timestamp while a later response streams', () => {
+    renderChatListItem({
+      chat: { ...timestampedChat, messageCount: 4 },
+      isStreaming: true,
+    })
 
     expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
   })
@@ -170,9 +173,21 @@ describe('ChatListItem timestamps', () => {
 
   it('shows the updated timestamp for later completed turns', () => {
     renderChatListItem({
-      chat: { ...timestampedChat, messageCount: 4 },
+      chat: {
+        ...timestampedChat,
+        messageCount: 4,
+        createdAt: '2026-08-11T10:00:00.000Z',
+      },
     })
 
     expect(screen.getByText(/Updated/)).toBeInTheDocument()
+  })
+
+  it('does not repeat equivalent relative timestamps', () => {
+    renderChatListItem({
+      chat: { ...timestampedChat, messageCount: 4 },
+    })
+
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
   })
 })

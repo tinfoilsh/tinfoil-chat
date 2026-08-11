@@ -327,7 +327,7 @@ export function ChatListItem({
     messageCount > INITIAL_TURN_MESSAGE_COUNT &&
     timestamp !== null &&
     createdAt !== null &&
-    timestamp.getTime() !== createdAt.getTime()
+    formatRelativeTime(timestamp) !== formatRelativeTime(createdAt)
 
   return (
     <div

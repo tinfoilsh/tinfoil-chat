@@ -86,17 +86,24 @@ export function ProjectProvider({
     () => ({
       onSave: async (memory: MemoryState) => {
         if (!activeProject) return
-        const cacheGeneration = projectCache.beginMutation()
-        const updatedProject = await projectStorage.updateProject(
+        const cacheSessionGeneration = projectCache.captureGeneration()
+        const updatedProjectFromStorage = await projectStorage.updateProject(
           activeProject.id,
           {
             memory: memory.facts,
           },
         )
+        const updatedProject = {
+          ...updatedProjectFromStorage,
+          createdAt: activeProject.createdAt,
+        }
         setActiveProject((prev) =>
           prev && prev.id === activeProject.id ? updatedProject : prev,
         )
-        if (userId) {
+        const cacheGeneration = projectCache.commitMutation(
+          cacheSessionGeneration,
+        )
+        if (userId && cacheGeneration !== null) {
           void projectCache
             .saveProject(userId, updatedProject, cacheGeneration)
             .catch((error) =>
@@ -166,10 +173,31 @@ export function ProjectProvider({
       setLoadingProject({ id: projectId, name: projectName || 'Loading...' })
 
       try {
-        const project = await projectStorage.getProject(projectId)
-        if (!project) {
+        const cachedProjectPromise = userId
+          ? projectCache
+              .getProjects(userId)
+              .then(
+                (cachedProjects) =>
+                  cachedProjects.find((project) => project.id === projectId) ??
+                  null,
+              )
+              .catch(() => null)
+          : Promise.resolve(null)
+        const remoteProject = await projectStorage.getProject(projectId)
+        if (!remoteProject) {
           throw new Error('Project not found')
         }
+        const cachedProject = await cachedProjectPromise
+        const project = cachedProject
+          ? {
+              ...remoteProject,
+              createdAt: cachedProject.createdAt,
+              updatedAt:
+                cachedProject.syncVersion === remoteProject.syncVersion
+                  ? cachedProject.updatedAt
+                  : remoteProject.updatedAt,
+            }
+          : remoteProject
         if (userId) {
           void projectCache
             .saveProject(userId, project, cacheGeneration)
@@ -266,11 +294,14 @@ export function ProjectProvider({
     async (data: CreateProjectData): Promise<Project> => {
       setLoading(true)
       setError(null)
-      const cacheGeneration = projectCache.beginMutation()
+      const cacheSessionGeneration = projectCache.captureGeneration()
 
       try {
         const project = await projectStorage.createProject(data)
-        if (userId) {
+        const cacheGeneration = projectCache.commitMutation(
+          cacheSessionGeneration,
+        )
+        if (userId && cacheGeneration !== null) {
           void projectCache
             .saveProject(userId, project, cacheGeneration)
             .catch((error) =>
@@ -304,15 +335,28 @@ export function ProjectProvider({
   const updateProject = useCallback(
     async (id: string, data: UpdateProjectData) => {
       setError(null)
-      const cacheGeneration = projectCache.beginMutation()
+      const cacheSessionGeneration = projectCache.captureGeneration()
 
       try {
-        const updatedProject = await projectStorage.updateProject(id, data)
+        const updatedProjectFromStorage = await projectStorage.updateProject(
+          id,
+          data,
+        )
+        const updatedProject =
+          activeProject?.id === id
+            ? {
+                ...updatedProjectFromStorage,
+                createdAt: activeProject.createdAt,
+              }
+            : updatedProjectFromStorage
 
         setActiveProject((prev) =>
           prev && prev.id === id ? updatedProject : prev,
         )
-        if (userId) {
+        const cacheGeneration = projectCache.commitMutation(
+          cacheSessionGeneration,
+        )
+        if (userId && cacheGeneration !== null) {
           void projectCache
             .saveProject(userId, updatedProject, cacheGeneration)
             .catch((error) =>
@@ -336,17 +380,20 @@ export function ProjectProvider({
         throw err
       }
     },
-    [userId],
+    [activeProject, userId],
   )
 
   const deleteProject = useCallback(
     async (id: string) => {
       setError(null)
-      const cacheGeneration = projectCache.beginMutation()
+      const cacheSessionGeneration = projectCache.captureGeneration()
 
       try {
         await projectStorage.deleteProject(id)
-        if (userId) {
+        const cacheGeneration = projectCache.commitMutation(
+          cacheSessionGeneration,
+        )
+        if (userId && cacheGeneration !== null) {
           void projectCache
             .deleteProject(userId, id, cacheGeneration)
             .catch((error) =>

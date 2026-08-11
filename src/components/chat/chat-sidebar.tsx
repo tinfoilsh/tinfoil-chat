@@ -320,8 +320,6 @@ export function ChatSidebar({
   const {
     projects,
     loading: projectsLoading,
-    hasMore: hasMoreProjects,
-    loadMore: loadMoreProjects,
     refresh: refreshProjects,
   } = useProjects({ autoLoad: isSignedIn && cloudSyncEnabled && isPremium })
 
@@ -352,14 +350,12 @@ export function ChatSidebar({
     hasAttempted: hasAttemptedLoadMore,
     isInitialized: isPaginationInitialized,
     loadMore: loadMorePage,
-    reset: resetPagination,
   } = useCloudPagination({
     isSignedIn: !!isSignedIn,
     userId: user?.id,
     initialToken: initialChatPageToken,
     isInitialPageReady: isInitialChatPageReady,
   })
-  const previousChatCount = useRef(chats.length)
   const [visibleCloudChatCount, setVisibleCloudChatCount] = useState<number>(
     PAGINATION.CHATS_PER_PAGE,
   )
@@ -512,45 +508,8 @@ export function ChatSidebar({
     }
   }, [isOpen, refreshProjects])
 
-  // Pagination initialization handled by hook/useEffect below
-
-  // Track if we just loaded more chats via pagination
-  const justLoadedMoreRef = useRef(false)
   // Track if we're waiting for newly loaded chats to render (prevents scroll jump)
   const [pendingChatsRender, setPendingChatsRender] = useState(false)
-
-  // Reset pagination when new chats are added (but not when loading more via pagination)
-  useEffect(() => {
-    // Detect if a new chat was added (chat count increased)
-    if (
-      isSignedIn &&
-      chats.length > previousChatCount.current &&
-      previousChatCount.current > 0 // Not the initial load
-    ) {
-      // Check if this was from pagination or a new chat
-      if (justLoadedMoreRef.current) {
-        // This was from pagination, don't reset
-        justLoadedMoreRef.current = false
-        setPendingChatsRender(false)
-      } else {
-        resetPagination()
-          .then((result) => {
-            if (result?.deletedIds.length && onChatsUpdated) {
-              return onChatsUpdated()
-            }
-          })
-          .catch((error) => {
-            logError('Failed to reset pagination after new chat', error, {
-              component: 'ChatSidebar',
-              action: 'resetPaginationAfterNewChat',
-            })
-          })
-      }
-    }
-
-    // Update the previous count for next comparison
-    previousChatCount.current = chats.length
-  }, [chats.length, isSignedIn, onChatsUpdated, resetPagination])
 
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
@@ -662,7 +621,7 @@ export function ChatSidebar({
 
   useEffect(() => {
     setVisibleCloudChatCount(PAGINATION.CHATS_PER_PAGE)
-  }, [user?.id])
+  }, [user?.id, isInitialChatPageReady])
 
   const loadMoreChats = useCallback(async (): Promise<void> => {
     if (isLoadingMore || !isSignedIn) return
@@ -676,21 +635,19 @@ export function ChatSidebar({
       const result = await loadMorePage()
       if (!result) return
 
-      justLoadedMoreRef.current = result.saved > 0
       setPendingChatsRender(true)
       try {
         await onChatsUpdated?.()
-        setVisibleCloudChatCount((count) => count + PAGINATION.CHATS_PER_PAGE)
       } catch (error) {
         logError('Failed to reload chats after pagination', error, {
           component: 'ChatSidebar',
           action: 'loadMoreChats',
         })
       } finally {
+        setVisibleCloudChatCount((count) => count + PAGINATION.CHATS_PER_PAGE)
         setPendingChatsRender(false)
       }
     } catch (error) {
-      justLoadedMoreRef.current = false
       setPendingChatsRender(false)
       logError('Failed to load more chats', error, {
         component: 'ChatSidebar',
@@ -1663,24 +1620,6 @@ export function ChatSidebar({
                                   </Link>
                                 )
                               })}
-
-                              {/* Load more button */}
-                              {hasMoreProjects && (
-                                <button
-                                  onClick={() => loadMoreProjects()}
-                                  disabled={projectsLoading}
-                                  className={cn(
-                                    'w-full rounded-lg border px-3 py-2 text-center text-xs transition-colors',
-                                    isDarkMode
-                                      ? 'border-border-strong text-content-muted hover:text-content-secondary'
-                                      : 'border-border-subtle text-content-muted hover:text-content-secondary',
-                                    projectsLoading &&
-                                      'cursor-not-allowed opacity-50',
-                                  )}
-                                >
-                                  {projectsLoading ? 'Loading...' : 'Load more'}
-                                </button>
-                              )}
                             </>
                           )}
                         </>

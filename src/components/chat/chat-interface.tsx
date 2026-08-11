@@ -83,6 +83,7 @@ import {
 } from '@/services/storage/indexed-db'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
   setCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
@@ -415,6 +416,26 @@ export function ChatInterface({
     userId?: string
     nextToken?: string
   }>({ isReady: false })
+  const [cloudSyncEnabledForPagination, setCloudSyncEnabledForPagination] =
+    useState(isCloudSyncEnabled)
+
+  useEffect(() => {
+    const handleCloudSyncSettingChange = () => {
+      setCloudSyncEnabledForPagination(isCloudSyncEnabled())
+    }
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      handleCloudSyncSettingChange,
+    )
+    window.addEventListener('storage', handleCloudSyncSettingChange)
+    return () => {
+      window.removeEventListener(
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
+        handleCloudSyncSettingChange,
+      )
+      window.removeEventListener('storage', handleCloudSyncSettingChange)
+    }
+  }, [])
 
   const {
     passkeyActive,
@@ -1593,7 +1614,12 @@ export function ChatInterface({
   // Profile sync is handled separately by useProfileSync hook
   // Context-aware: syncs personal chats when not in project mode, project chats when in project mode
   useEffect(() => {
-    if (!isAuthLoaded || !isSignedIn || !cloudSyncInitialized) {
+    if (
+      !isAuthLoaded ||
+      !isSignedIn ||
+      !cloudSyncInitialized ||
+      !cloudSyncEnabledForPagination
+    ) {
       setChatPagination({ isReady: false, userId: authUserId ?? undefined })
       return
     }
@@ -1667,6 +1693,7 @@ export function ChatInterface({
     isSignedIn,
     authUserId,
     cloudSyncInitialized,
+    cloudSyncEnabledForPagination,
     isProjectMode,
     activeProjectIdForSync,
     syncChats,

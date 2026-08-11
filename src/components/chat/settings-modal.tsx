@@ -1607,7 +1607,7 @@ export function SettingsModal({
 
       let imported = 0
       const errors: string[] = []
-      projectCache.beginMutation()
+      const projectCacheGeneration = projectCache.captureGeneration()
 
       // Dynamically import project storage to avoid circular dependencies
       const { projectStorage } =
@@ -1646,6 +1646,10 @@ export function SettingsModal({
           total: parsedProjects.length,
           type: 'projects',
         })
+      }
+
+      if (imported > 0) {
+        projectCache.commitMutation(projectCacheGeneration)
       }
 
       await refreshProjects()
@@ -1892,7 +1896,14 @@ export function SettingsModal({
     setIsDeletingAllProjects(true)
     try {
       const result = await projectStorage.deleteAllProjects()
-      await projectCache.clear()
+      try {
+        await projectCache.clear()
+      } catch (cacheError) {
+        logError('Failed to clear cached projects', cacheError, {
+          component: 'SettingsModal',
+          action: 'handleDeleteAllProjects.clearCache',
+        })
+      }
       toast({
         title: 'All projects deleted',
         description: result.notificationSent

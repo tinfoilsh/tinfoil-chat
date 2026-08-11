@@ -54,15 +54,19 @@ describe('projectCache', () => {
   })
 
   it('keeps concurrent point mutations in the same account session', async () => {
-    const firstGeneration = projectCache.beginMutation()
-    const secondGeneration = projectCache.beginMutation()
+    const sessionGeneration = projectCache.captureGeneration()
+    const firstGeneration = projectCache.commitMutation(sessionGeneration)
+    const secondGeneration = projectCache.commitMutation(sessionGeneration)
+
+    expect(firstGeneration).not.toBeNull()
+    expect(secondGeneration).not.toBeNull()
 
     await Promise.all([
-      projectCache.saveProject('user-1', project, firstGeneration),
+      projectCache.saveProject('user-1', project, firstGeneration!),
       projectCache.saveProject(
         'user-1',
         { ...project, id: 'project-2' },
-        secondGeneration,
+        secondGeneration!,
       ),
     ])
 
