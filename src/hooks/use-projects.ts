@@ -150,6 +150,7 @@ export function useProjects(
   const initializedUserRef = useRef<string | null>(null)
   const currentUserRef = useRef(userId)
   const previousUserRef = useRef(userId)
+  const loadGenerationRef = useRef(0)
   currentUserRef.current = userId
   const visibleProjects = useMemo(
     () => (projectsUserId === userId ? projects : []),
@@ -170,6 +171,8 @@ export function useProjects(
 
   const loadProjects = useCallback(
     async (forceRefresh = false) => {
+      const loadGeneration = loadGenerationRef.current + 1
+      loadGenerationRef.current = loadGeneration
       if (!isSignedIn || !userId) {
         setProjects([])
         setProjectsUserId(undefined)
@@ -180,12 +183,17 @@ export function useProjects(
       setLoading(visibleProjects.length === 0)
       setError(null)
       let remoteApplied = false
+      let cacheApplied = false
+      const isCurrentLoad = () =>
+        currentUserRef.current === requestUserId &&
+        loadGenerationRef.current === loadGeneration
 
       void projectCache
         .getProjects(requestUserId)
         .then((cachedProjects) => {
-          if (currentUserRef.current !== requestUserId || remoteApplied) return
+          if (!isCurrentLoad() || remoteApplied) return
 
+          cacheApplied = true
           setProjectsUserId(requestUserId)
           setProjects(cachedProjects)
           if (cachedProjects.length > 0) setLoading(false)
@@ -202,7 +210,7 @@ export function useProjects(
           requestUserId,
           forceRefresh,
         )
-        if (currentUserRef.current !== requestUserId) return
+        if (!isCurrentLoad()) return
 
         remoteApplied = true
         setProjectsUserId(requestUserId)
@@ -213,21 +221,22 @@ export function useProjects(
           metadata: { count: remoteProjects.length },
         })
       } catch (err) {
-        if (currentUserRef.current !== requestUserId) return
+        if (!isCurrentLoad()) return
 
         const message =
           err instanceof Error ? err.message : 'Failed to load projects'
         setProjectsUserId(requestUserId)
+        if (!cacheApplied && projectsUserId !== requestUserId) setProjects([])
         setError(message)
         logError('Failed to load projects', err, {
           component: 'useProjects',
           action: 'loadProjects',
         })
       } finally {
-        if (currentUserRef.current === requestUserId) setLoading(false)
+        if (isCurrentLoad()) setLoading(false)
       }
     },
-    [isSignedIn, userId, visibleProjects.length],
+    [isSignedIn, userId, visibleProjects.length, projectsUserId],
   )
 
   const refresh = useCallback(() => loadProjects(true), [loadProjects])

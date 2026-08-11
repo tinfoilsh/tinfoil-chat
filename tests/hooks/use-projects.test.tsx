@@ -168,4 +168,22 @@ describe('useProjects', () => {
     expect(result.current.loading).toBe(false)
     expect(result.current.projects).toEqual([])
   })
+
+  it('does not expose the previous account cache when the next load fails', async () => {
+    mocks.auth.userId = 'loaded-project-user'
+    mocks.listProjects.mockReturnValue(new Promise(() => {}))
+    const { result, rerender } = renderHook(() => useProjects())
+    await waitFor(() =>
+      expect(result.current.projects).toEqual([cachedProject]),
+    )
+
+    mocks.auth.userId = 'failed-next-project-user'
+    mocks.getCachedProjects.mockRejectedValue(new Error('Cache unavailable'))
+    mocks.listProjects.mockRejectedValue(new Error('Remote unavailable'))
+    rerender()
+
+    await waitFor(() => expect(result.current.error).toBe('Remote unavailable'))
+    expect(result.current.projects).toEqual([])
+    expect(result.current.loading).toBe(false)
+  })
 })
