@@ -318,6 +318,16 @@ export function snapshotAndDecrementRemaining(): void {
 }
 
 /**
+ * Drops the pending optimistic-decrement snapshot so the next
+ * refreshRateLimit treats the server's count as authoritative. Called when
+ * a request was rejected outright (e.g. a 429): the server never consumed
+ * it, so reconciling against the snapshot would undercount by one.
+ */
+export function discardRateLimitSnapshot(): void {
+  remainingBeforeRequest = null
+}
+
+/**
  * Forces a fresh fetch of the session token (and rate limit info) from
  * the server, bypassing the local cache.  Called after each stream
  * completes so the UI reflects the server's actual remaining count.
@@ -401,10 +411,6 @@ async function initClient(sessionToken: string): Promise<OpenAI> {
         apiKey: sessionToken,
         baseURL: `${window.location.origin}/api/local-router/v1`,
         dangerouslyAllowBrowser: true,
-        // The app runs its own retry loop (sendChatStream) with typed error
-        // classification; the SDK's internal retries would stack under it
-        // and delay terminal errors such as quota-exhausted 429s.
-        maxRetries: 0,
         defaultHeaders: {
           [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
         },
@@ -417,8 +423,6 @@ async function initClient(sessionToken: string): Promise<OpenAI> {
         apiKey: sessionToken,
         baseURL: secureClient.getBaseURL(),
         dangerouslyAllowBrowser: true,
-        // See the dev client above: app-level retries own this concern.
-        maxRetries: 0,
         // Opt into the router's inline progress-marker stream.
         defaultHeaders: {
           [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,

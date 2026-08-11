@@ -2,6 +2,7 @@ import type { BaseModel } from '@/config/models'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createCompletion = vi.fn()
+const discardRateLimitSnapshot = vi.fn()
 const getRateLimitInfo = vi.fn()
 const refreshRateLimit = vi.fn(async () => undefined)
 
@@ -22,6 +23,7 @@ vi.mock('@/components/chat/constants', async () => {
 vi.mock('@/services/inference/tinfoil-client', () => ({
   createRecoverableTinfoilTransport: vi.fn(),
   createRecoverableTinfoilClient: vi.fn(),
+  discardRateLimitSnapshot: () => discardRateLimitSnapshot(),
   getRateLimitInfo: () => getRateLimitInfo(),
   getTinfoilClient: vi.fn(async () => ({
     chat: {
@@ -90,6 +92,9 @@ describe('sendChatStream 429 quota classification', () => {
 
     expect(error).toBeInstanceOf(ChatError)
     expect((error as ChatError).code).toBe('RATE_LIMIT')
+    // The rejected request never consumed quota server-side, so the
+    // optimistic snapshot must be dropped before trusting the refresh.
+    expect(discardRateLimitSnapshot).toHaveBeenCalled()
     expect(refreshRateLimit).toHaveBeenCalled()
     expect(onRetry).not.toHaveBeenCalled()
     expect(createCompletion).toHaveBeenCalledTimes(1)

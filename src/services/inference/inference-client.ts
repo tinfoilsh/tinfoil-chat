@@ -23,6 +23,7 @@ import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
 import {
   createRecoverableTinfoilClient,
   createRecoverableTinfoilTransport,
+  discardRateLimitSnapshot,
   getRateLimitInfo,
   getTinfoilClient,
   refreshRateLimit,
@@ -169,6 +170,12 @@ function getHttpStatus(error: unknown): number | undefined {
 async function classifyQuotaExhausted429(
   error: unknown,
 ): Promise<ChatError | null> {
+  // The 429 means the server rejected the request without consuming quota,
+  // so its refreshed count is authoritative. Drop the optimistic-decrement
+  // snapshot first: reconciling against it would force `remaining` to 0 for
+  // a user whose last request was merely throttled, misclassifying a
+  // transient 429 as exhaustion.
+  discardRateLimitSnapshot()
   await refreshRateLimit()
   const limit = getRateLimitInfo()
   if (!limit || limit.remaining > 0) {
@@ -521,9 +528,12 @@ export async function sendChatStream(
         client = await getTinfoilClient()
       }
 
+      // This loop owns retry policy with typed error classification; the
+      // SDK's internal retries would stack under it and delay terminal
+      // errors such as quota-exhausted 429s.
       const stream = await (client.chat.completions.create as Function)(
         requestBody,
-        { signal },
+        { signal, maxRetries: 0 },
       )
       if (!waitForTokenCapture || !recoverySessionCleanup) {
         return stream as ChatChunkStream
