@@ -353,6 +353,8 @@ function ParseFailureCard({
 
   const retryFailureDescriptions: Record<ArtifactRetryErrorCode, string> = {
     request_failed: 'Could not request a replacement. Try the widget again.',
+    schema_conversion_failed:
+      'Could not prepare the component schema. Try again.',
     incomplete_replacement:
       'The replacement was incomplete or invalid JSON. Try the widget again.',
     schema_invalid_replacement:

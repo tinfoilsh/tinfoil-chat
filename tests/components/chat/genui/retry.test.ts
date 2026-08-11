@@ -259,14 +259,17 @@ describe('artifact retry', () => {
         model,
       }),
     ).rejects.toMatchObject({
-      code: 'request_failed',
+      code: 'schema_conversion_failed',
       cause: conversionError,
     })
     expect(logErrorMock).toHaveBeenCalledWith(
       'Artifact schema conversion failed',
       expect.any(ArtifactRetryError),
       expect.objectContaining({
-        metadata: { toolName: 'render_chart', code: 'request_failed' },
+        metadata: {
+          toolName: 'render_chart',
+          code: 'schema_conversion_failed',
+        },
       }),
     )
   })
@@ -350,6 +353,41 @@ describe('artifact retry', () => {
       arguments: '{"fixed":true}',
     })
     expect(result.chat.messages[1].toolCalls).toBeUndefined()
+  })
+
+  it.each([
+    ['an empty mirror array', []],
+    [
+      'a mirror array missing the current tool call',
+      [
+        {
+          id: 'call-2',
+          name: 'render_chart',
+          arguments: '{"type":"bar","data":[]}',
+        },
+      ],
+    ],
+  ] as const)('rejects %s', (_description, toolCalls) => {
+    const chat = artifactChat('{}')
+    chat.messages[1].toolCalls = [...toolCalls]
+
+    expect(
+      patchToolCallArguments(
+        chat,
+        {
+          messageTurnId: 'turn-1',
+          messageTimestamp: chat.messages[1].timestamp.getTime(),
+          timelineBlockId: 'block-1',
+          toolCallId: 'call-1',
+          toolName: 'render_artifact_preview',
+          originalArguments: '{}',
+        },
+        '{"fixed":true}',
+      ),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'stale_target' },
+    })
   })
 
   it('rejects a stale or duplicate tool-call mirror', () => {

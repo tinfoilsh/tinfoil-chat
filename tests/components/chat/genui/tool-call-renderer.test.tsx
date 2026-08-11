@@ -154,6 +154,7 @@ describe('GenUIToolCallRenderer', () => {
 
   it.each([
     ['request_failed', /Could not request a replacement/],
+    ['schema_conversion_failed', /Could not prepare the component schema/],
     [
       'schema_invalid_replacement',
       /replacement did not match the component schema/,

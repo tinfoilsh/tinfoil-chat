@@ -17,6 +17,7 @@ import { GENUI_WIDGETS_BY_NAME, isGenUIToolName } from './registry'
 
 export type ArtifactRetryErrorCode =
   | 'request_failed'
+  | 'schema_conversion_failed'
   | 'incomplete_replacement'
   | 'schema_invalid_replacement'
   | 'stale_target'
@@ -128,7 +129,7 @@ export async function regenerateToolCallArguments({
       $refStrategy: 'none',
     }) as Record<string, unknown>
   } catch (error) {
-    const retryError = new ArtifactRetryError('request_failed', {
+    const retryError = new ArtifactRetryError('schema_conversion_failed', {
       cause: error,
     })
     logError('Artifact schema conversion failed', retryError, {
@@ -255,7 +256,7 @@ export function patchToolCallArguments(
     block.type !== 'tool_call' ||
     block.name !== target.toolName ||
     block.arguments !== target.originalArguments ||
-    mirrors.length > 1 ||
+    (message.toolCalls !== undefined && mirrors.length !== 1) ||
     (mirrors.length === 1 &&
       (mirrors[0].name !== target.toolName ||
         mirrors[0].arguments !== target.originalArguments))
