@@ -264,7 +264,12 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
       const pendingDeepSync = activeSync
         .catch(() => undefined)
-        .then(() => runChatSync({ deep: true }))
+        .then(() => {
+          if (!isCloudSyncEnabled()) {
+            return { uploaded: 0, downloaded: 0, errors: [] }
+          }
+          return runChatSync({ deep: true })
+        })
         .finally(() => {
           if (pendingDeepSyncRef.current === pendingDeepSync) {
             pendingDeepSyncRef.current = null

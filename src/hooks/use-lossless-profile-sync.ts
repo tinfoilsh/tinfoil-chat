@@ -27,7 +27,10 @@ import {
   saveLocalProfileMetadata,
   saveProfileBaseline,
 } from '@/services/cloud/profile-sync-state'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
+  isCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -294,11 +297,14 @@ export function useProfileSync() {
     }
     checkCloudSyncStatus()
     window.addEventListener('storage', checkCloudSyncStatus)
-    window.addEventListener('cloudSyncSettingChanged', checkCloudSyncStatus)
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      checkCloudSyncStatus,
+    )
     return () => {
       window.removeEventListener('storage', checkCloudSyncStatus)
       window.removeEventListener(
-        'cloudSyncSettingChanged',
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
         checkCloudSyncStatus,
       )
     }

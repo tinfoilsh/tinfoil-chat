@@ -1,6 +1,9 @@
 import { PAGINATION } from '@/config'
 import { cloudSync } from '@/services/cloud/cloud-sync'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
+import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
+  isCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -55,12 +58,15 @@ export function useCloudPagination(
     checkCloudSyncStatus()
 
     window.addEventListener('storage', checkCloudSyncStatus)
-    window.addEventListener('cloudSyncSettingChanged', checkCloudSyncStatus)
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      checkCloudSyncStatus,
+    )
 
     return () => {
       window.removeEventListener('storage', checkCloudSyncStatus)
       window.removeEventListener(
-        'cloudSyncSettingChanged',
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
         checkCloudSyncStatus,
       )
     }

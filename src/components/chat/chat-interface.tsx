@@ -416,18 +416,19 @@ export function ChatInterface({
     userId?: string
     nextToken?: string
   }>({ isReady: false })
-  const [cloudSyncEnabledForPagination, setCloudSyncEnabledForPagination] =
+  const [cloudSyncSettingEnabled, setCloudSyncSettingEnabled] =
     useState(isCloudSyncEnabled)
 
   useEffect(() => {
     const handleCloudSyncSettingChange = () => {
-      setCloudSyncEnabledForPagination(isCloudSyncEnabled())
+      setCloudSyncSettingEnabled(isCloudSyncEnabled())
     }
     window.addEventListener(
       CLOUD_SYNC_SETTING_CHANGED_EVENT,
       handleCloudSyncSettingChange,
     )
     window.addEventListener('storage', handleCloudSyncSettingChange)
+    handleCloudSyncSettingChange()
     return () => {
       window.removeEventListener(
         CLOUD_SYNC_SETTING_CHANGED_EVENT,
@@ -1618,7 +1619,7 @@ export function ChatInterface({
       !isAuthLoaded ||
       !isSignedIn ||
       !cloudSyncInitialized ||
-      !cloudSyncEnabledForPagination
+      !cloudSyncSettingEnabled
     ) {
       setChatPagination({ isReady: false, userId: authUserId ?? undefined })
       return
@@ -1693,7 +1694,7 @@ export function ChatInterface({
     isSignedIn,
     authUserId,
     cloudSyncInitialized,
-    cloudSyncEnabledForPagination,
+    cloudSyncSettingEnabled,
     isProjectMode,
     activeProjectIdForSync,
     syncChats,

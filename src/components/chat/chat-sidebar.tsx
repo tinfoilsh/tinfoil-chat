@@ -15,6 +15,7 @@ import { useUpgradeToPro } from '@/hooks/use-upgrade-to-pro'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { chatStorage } from '@/services/storage/chat-storage'
 import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
   hasUserSetLocalOnlyPreference,
   isCloudSyncEnabled,
   isLocalOnlyModeEnabled,
@@ -395,12 +396,15 @@ export function ChatSidebar({
 
     // Listen for both storage events and custom events
     window.addEventListener('storage', handleCloudSyncChange)
-    window.addEventListener('cloudSyncSettingChanged', handleCloudSyncChange)
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      handleCloudSyncChange,
+    )
 
     return () => {
       window.removeEventListener('storage', handleCloudSyncChange)
       window.removeEventListener(
-        'cloudSyncSettingChanged',
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
         handleCloudSyncChange,
       )
     }
@@ -788,7 +792,7 @@ export function ChatSidebar({
 
     if (isClient) {
       window.dispatchEvent(
-        new CustomEvent('cloudSyncSettingChanged', {
+        new CustomEvent(CLOUD_SYNC_SETTING_CHANGED_EVENT, {
           detail: { enabled },
         }),
       )

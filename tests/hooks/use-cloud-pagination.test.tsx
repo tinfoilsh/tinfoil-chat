@@ -11,6 +11,7 @@ vi.mock('@/services/cloud/cloud-sync', () => ({
 }))
 
 vi.mock('@/utils/cloud-sync-settings', () => ({
+  CLOUD_SYNC_SETTING_CHANGED_EVENT: 'cloudSyncSettingChanged',
   isCloudSyncEnabled: () => true,
 }))
 

@@ -167,7 +167,11 @@ describe('ChatListItem timestamps', () => {
 
   it('hides the updated timestamp while a later response streams', () => {
     renderChatListItem({
-      chat: { ...timestampedChat, messageCount: 4 },
+      chat: {
+        ...timestampedChat,
+        messageCount: 4,
+        createdAt: '2026-08-11T10:00:00.000Z',
+      },
       isStreaming: true,
     })
 

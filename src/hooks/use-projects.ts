@@ -97,6 +97,7 @@ function revalidateProjects(
 ): Promise<Project[]> {
   const cacheGeneration = projectCache.captureGeneration()
   const refreshGeneration = projectCache.captureRefreshGeneration()
+  if (forceRefresh) freshProjectsByUser.delete(userId)
   const freshProjects = freshProjectsByUser.get(userId)
   if (
     !forceRefresh &&
@@ -154,6 +155,9 @@ export function useProjects(
     () => (projectsUserId === userId ? projects : []),
     [projectsUserId, userId, projects],
   )
+  const visibleLoading =
+    loading ||
+    Boolean(autoLoad && isSignedIn && userId && projectsUserId !== userId)
 
   useEffect(() => {
     const previousUserId = previousUserRef.current
@@ -299,7 +303,7 @@ export function useProjects(
 
   return {
     projects: visibleProjects,
-    loading,
+    loading: visibleLoading,
     error,
     loadProjects,
     refresh,

@@ -1,5 +1,5 @@
 import { useProjects } from '@/hooks/use-projects'
-import type { Project } from '@/types/project'
+import type { Project, ProjectListResponse } from '@/types/project'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -111,7 +111,7 @@ describe('useProjects', () => {
 
   it('hides the previous account projects immediately on user change', async () => {
     let resolveRemotePage!: (value: {
-      projects: never[]
+      projects: ProjectListResponse['projects']
       hasMore: boolean
     }) => void
     mocks.auth.userId = 'first-project-user'
@@ -127,9 +127,33 @@ describe('useProjects', () => {
 
     mocks.auth.userId = 'second-project-user'
     mocks.getCachedProjects.mockReturnValue(new Promise(() => {}))
+    mocks.listProjects.mockReturnValue(new Promise(() => {}))
     rerender()
 
     expect(result.current.projects).toEqual([])
-    resolveRemotePage({ projects: [], hasMore: false })
+    expect(result.current.loading).toBe(true)
+    const previousUserProject = {
+      ...cachedProject,
+      id: 'previous-user-project',
+    }
+    mocks.getRemoteProjects.mockResolvedValue(
+      new Map([[previousUserProject.id, previousUserProject]]),
+    )
+    await act(async () => {
+      resolveRemotePage({
+        projects: [
+          {
+            id: previousUserProject.id,
+            key: previousUserProject.id,
+            createdAt: previousUserProject.createdAt,
+            updatedAt: previousUserProject.updatedAt,
+            syncVersion: previousUserProject.syncVersion,
+            size: 0,
+          },
+        ],
+        hasMore: false,
+      })
+    })
+    await waitFor(() => expect(result.current.projects).toEqual([]))
   })
 })

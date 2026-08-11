@@ -51,6 +51,7 @@ import {
   parseClaudeProjects,
 } from '@/utils/chat-import-parsers'
 import {
+  CLOUD_SYNC_SETTING_CHANGED_EVENT,
   isCloudSyncEnabled,
   isLocalOnlyModeEnabled,
   setCloudSyncEnabled,
@@ -724,7 +725,10 @@ export function SettingsModal({
       PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT,
       handlePixelateSidebarChatTitlesUpdate as EventListener,
     )
-    window.addEventListener('cloudSyncSettingChanged', handleCloudSyncUpdate)
+    window.addEventListener(
+      CLOUD_SYNC_SETTING_CHANGED_EVENT,
+      handleCloudSyncUpdate,
+    )
 
     return () => {
       window.removeEventListener('storage', loadSettingsFromStorage)
@@ -746,7 +750,7 @@ export function SettingsModal({
         handlePixelateSidebarChatTitlesUpdate as EventListener,
       )
       window.removeEventListener(
-        'cloudSyncSettingChanged',
+        CLOUD_SYNC_SETTING_CHANGED_EVENT,
         handleCloudSyncUpdate,
       )
     }
@@ -1176,7 +1180,7 @@ export function SettingsModal({
 
     if (isClient) {
       window.dispatchEvent(
-        new CustomEvent('cloudSyncSettingChanged', {
+        new CustomEvent(CLOUD_SYNC_SETTING_CHANGED_EVENT, {
           detail: { enabled },
         }),
       )
