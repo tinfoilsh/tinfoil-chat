@@ -2,8 +2,9 @@ import { ArtifactRetryError } from '@/components/chat/genui/retry'
 import { useChatMessaging } from '@/components/chat/hooks/use-chat-messaging'
 import type { Chat, Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
-import { act, renderHook } from '@testing-library/react'
-import { type Dispatch, type SetStateAction } from 'react'
+import { chatStorage } from '@/services/storage/chat-storage'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { type Dispatch, type SetStateAction, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const abortMock = vi.fn()
@@ -227,5 +228,103 @@ describe('useChatMessaging retryLastMessage', () => {
         retryError,
       )
     })
+  })
+
+  it('persists concurrent widget repairs from the latest composed chat', async () => {
+    const chat = createChatWithUserMessage('chat-a')
+    chat.messages.push({
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      turnId: 'turn-1',
+      timeline: [
+        {
+          type: 'tool_call',
+          id: 'block-1',
+          toolCallId: 'call-1',
+          name: 'render_chart',
+          arguments: '{"type":"bar"',
+        },
+        {
+          type: 'tool_call',
+          id: 'block-2',
+          toolCallId: 'call-2',
+          name: 'render_stat_cards',
+          arguments: '{"stats":',
+        },
+      ],
+      toolCalls: [
+        {
+          id: 'call-1',
+          name: 'render_chart',
+          arguments: '{"type":"bar"',
+        },
+        {
+          id: 'call-2',
+          name: 'render_stat_cards',
+          arguments: '{"stats":',
+        },
+      ],
+    })
+    regenerateToolCallArgumentsMock.mockImplementation(
+      ({ toolName }: { toolName: string }) =>
+        Promise.resolve(
+          toolName === 'render_chart'
+            ? '{"type":"bar","data":[]}'
+            : '{"stats":[]}',
+        ),
+    )
+    let releaseFirstSave: (() => void) | undefined
+    vi.mocked(chatStorage.saveChatAndSync)
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirstSave = resolve
+          }),
+      )
+      .mockResolvedValue(undefined)
+    const model = { modelName: 'gpt-oss-120b' } as BaseModel
+
+    const { result } = renderHook(() => {
+      const [chats, setChats] = useState([chat])
+      const [currentChat, setCurrentChat] = useState(chat)
+      return useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [model],
+        selectedModel: model.modelName,
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+    })
+
+    let firstRetry!: Promise<boolean>
+    act(() => {
+      firstRetry = result.current.retryToolCall(1, 'call-1')
+    })
+    await waitFor(() =>
+      expect(chatStorage.saveChatAndSync).toHaveBeenCalledTimes(1),
+    )
+
+    let secondRetry!: Promise<boolean>
+    act(() => {
+      secondRetry = result.current.retryToolCall(1, 'call-2')
+    })
+    releaseFirstSave?.()
+    await act(async () => {
+      await Promise.all([firstRetry, secondRetry])
+    })
+
+    await waitFor(() =>
+      expect(chatStorage.saveChatAndSync).toHaveBeenCalledTimes(2),
+    )
+    const latestSavedChat = vi.mocked(chatStorage.saveChatAndSync).mock
+      .calls[1][0]
+    expect(latestSavedChat.messages[1].toolCalls).toEqual([
+      expect.objectContaining({ arguments: '{"type":"bar","data":[]}' }),
+      expect.objectContaining({ arguments: '{"stats":[]}' }),
+    ])
   })
 })

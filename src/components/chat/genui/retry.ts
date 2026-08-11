@@ -75,6 +75,8 @@ export function selectArtifactRetryContext(
     attachments: undefined,
     documentContent: undefined,
     imageData: undefined,
+    quote: undefined,
+    searchReasoning: undefined,
   }))
   const budget = getHistoryTokenBudget(
     contextWindow,
@@ -119,10 +121,23 @@ export async function regenerateToolCallArguments({
     throw new ArtifactRetryError('unavailable_target')
   }
   const widget = GENUI_WIDGETS_BY_NAME[toolName]
-  const jsonSchema = zodToJsonSchema(widget.schema, {
-    target: 'openApi3',
-    $refStrategy: 'none',
-  }) as Record<string, unknown>
+  let jsonSchema: Record<string, unknown>
+  try {
+    jsonSchema = zodToJsonSchema(widget.schema, {
+      target: 'openApi3',
+      $refStrategy: 'none',
+    }) as Record<string, unknown>
+  } catch (error) {
+    const retryError = new ArtifactRetryError('request_failed', {
+      cause: error,
+    })
+    logError('Artifact schema conversion failed', retryError, {
+      component: 'genui-retry',
+      action: 'regenerateToolCallArguments',
+      metadata: { toolName, code: retryError.code },
+    })
+    throw retryError
+  }
   const instruction =
     `Repair only the JSON arguments for the "${toolName}" component. ` +
     'Preserve the artifact intent and all valid data. Follow the supplied schema exactly, ' +
@@ -240,9 +255,10 @@ export function patchToolCallArguments(
     block.type !== 'tool_call' ||
     block.name !== target.toolName ||
     block.arguments !== target.originalArguments ||
-    mirrors.length !== 1 ||
-    mirrors[0].name !== target.toolName ||
-    mirrors[0].arguments !== target.originalArguments
+    mirrors.length > 1 ||
+    (mirrors.length === 1 &&
+      (mirrors[0].name !== target.toolName ||
+        mirrors[0].arguments !== target.originalArguments))
   ) {
     return { ok: false, error: new ArtifactRetryError('stale_target') }
   }

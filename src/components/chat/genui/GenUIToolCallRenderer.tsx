@@ -88,7 +88,9 @@ function GenUIWidgetContent({
   input: unknown
   isDarkMode?: boolean
 }) {
-  return renderGenUIInline(toolName, input, { isDarkMode })
+  const rendered = renderGenUIInline(toolName, input, { isDarkMode })
+  if (rendered === null) throw new Error('Widget render returned null')
+  return rendered
 }
 
 export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
@@ -139,7 +141,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
         const parsedInput = input.ok
           ? widget.schema.safeParse(input.data)
           : null
-        if (parsedInput?.success && widget?.render) {
+        if (parsedInput?.success && widget.render) {
           return (
             <GenUIWidgetErrorBoundary
               key={tc.id}
@@ -218,16 +220,15 @@ class GenUIWidgetErrorBoundary extends React.Component<
     return { hasError: true }
   }
 
-  componentDidCatch(): void {
-    logError(
-      'GenUI widget crashed while rendering',
-      new Error('render_exception'),
-      {
-        component: 'GenUIWidgetErrorBoundary',
-        action: 'render',
-        metadata: { toolName: this.props.toolName },
+  componentDidCatch(error: Error): void {
+    logError('GenUI widget crashed while rendering', error, {
+      component: 'GenUIWidgetErrorBoundary',
+      action: 'render',
+      metadata: {
+        toolName: this.props.toolName,
+        failure: 'render_exception',
       },
-    )
+    })
   }
 
   componentDidUpdate(previousProps: GenUIWidgetErrorBoundaryProps): void {

@@ -3,6 +3,7 @@ import {
   sendStructuredCompletion,
   StructuredCompletionError,
 } from '@/services/inference/inference-client'
+import { APIUserAbortError } from 'openai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }))
@@ -131,5 +132,20 @@ describe('sendStructuredCompletion', () => {
         requestCode: 'service_unavailable',
       }),
     )
+  })
+
+  it.each([
+    new APIUserAbortError(),
+    new DOMException('cancelled', 'AbortError'),
+  ])('preserves abort errors without wrapping', async (abortError) => {
+    createMock.mockRejectedValueOnce(abortError)
+
+    await expect(
+      sendStructuredCompletion({
+        model: { modelName: 'gpt-oss-120b' } as BaseModel,
+        messages: [{ role: 'user', content: 'repair' }],
+        jsonSchema: schema,
+      }),
+    ).rejects.toBe(abortError)
   })
 })

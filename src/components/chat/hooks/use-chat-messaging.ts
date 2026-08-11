@@ -328,6 +328,7 @@ export function useChatMessaging({
     new Map<string, ActiveLiveGeneration>(),
   )
   const cancellationPromisesRef = useRef(new Map<string, Promise<void>>())
+  const artifactRetryPersistenceRef = useRef(Promise.resolve())
 
   const dismissStreamError = useCallback(() => {
     patchStatus(viewedChatIdRef.current, { streamError: null })
@@ -1703,6 +1704,13 @@ export function useChatMessaging({
         throw patched.error
       }
 
+      chatsRef.current = chatsRef.current.map((chat) =>
+        chat.id === chatId ? patched.chat : chat,
+      )
+      if (currentChatRef.current.id === chatId) {
+        currentChatRef.current = patched.chat
+      }
+
       setChats((prevChats) =>
         prevChats.map((chat) => {
           if (chat.id !== chatId) return chat
@@ -1716,20 +1724,22 @@ export function useChatMessaging({
         return result.ok ? result.chat : prev
       })
 
-      const chatToSave = patched.chat
-      if (!chatToSave.isTemporary) {
+      const persistence = artifactRetryPersistenceRef.current.then(async () => {
+        const chatToSave = findLiveChat(chatId)
+        if (!chatToSave || chatToSave.isTemporary) return
         if (storeHistory) {
-          chatStorage.saveChatAndSync(chatToSave).catch((error) => {
-            logError('Failed to persist repaired widget', error, {
-              component: 'useChatMessaging',
-              action: 'retryToolCall',
-              metadata: { chatId, toolCallId },
-            })
-          })
+          await chatStorage.saveChatAndSync(chatToSave)
         } else {
           sessionChatStorage.saveChat(chatToSave)
         }
-      }
+      })
+      artifactRetryPersistenceRef.current = persistence.catch((error) => {
+        logError('Failed to persist repaired widget', error, {
+          component: 'useChatMessaging',
+          action: 'retryToolCall',
+          metadata: { chatId, toolCallId },
+        })
+      })
 
       return true
     },
@@ -1743,6 +1753,7 @@ export function useChatMessaging({
       storeHistory,
       setChats,
       setCurrentChat,
+      findLiveChat,
     ],
   )
 

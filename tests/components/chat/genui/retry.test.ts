@@ -9,9 +9,21 @@ import type { BaseModel } from '@/config/models'
 import { StructuredCompletionError } from '@/services/inference/inference-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { sendStructuredCompletionMock } = vi.hoisted(() => ({
-  sendStructuredCompletionMock: vi.fn(),
-}))
+const { logErrorMock, sendStructuredCompletionMock, zodToJsonSchemaMock } =
+  vi.hoisted(() => ({
+    logErrorMock: vi.fn(),
+    sendStructuredCompletionMock: vi.fn(),
+    zodToJsonSchemaMock: vi.fn(),
+  }))
+
+vi.mock('zod-to-json-schema', async () => {
+  const actual =
+    await vi.importActual<typeof import('zod-to-json-schema')>(
+      'zod-to-json-schema',
+    )
+  zodToJsonSchemaMock.mockImplementation(actual.zodToJsonSchema)
+  return { ...actual, zodToJsonSchema: zodToJsonSchemaMock }
+})
 
 vi.mock('@/services/inference/inference-client', async () => {
   const actual = await vi.importActual<
@@ -23,7 +35,7 @@ vi.mock('@/services/inference/inference-client', async () => {
   }
 })
 
-vi.mock('@/utils/error-handling', () => ({ logError: vi.fn() }))
+vi.mock('@/utils/error-handling', () => ({ logError: logErrorMock }))
 
 const model = {
   modelName: 'gpt-oss-120b',
@@ -84,6 +96,8 @@ function artifactChat(argumentsValue: string): Chat {
 describe('artifact retry', () => {
   beforeEach(() => {
     sendStructuredCompletionMock.mockReset()
+    zodToJsonSchemaMock.mockClear()
+    logErrorMock.mockReset()
   })
 
   it('always sends malformed arguments larger than 4000 characters in full', async () => {
@@ -115,6 +129,18 @@ describe('artifact retry', () => {
     )
 
     expect(selected).toEqual([{ role: 'assistant', content: recent }])
+  })
+
+  it('budgets only the role and content serialized for retry context', () => {
+    const contextualMessage = {
+      ...message('assistant', 'visible'),
+      quote: 'q'.repeat(2000),
+      searchReasoning: 'r'.repeat(2000),
+    }
+
+    expect(
+      selectArtifactRetryContext([contextualMessage], '1k', 'm'.repeat(3200)),
+    ).toEqual([{ role: 'assistant', content: 'visible' }])
   })
 
   it('preserves Auto candidates and current reasoning options', async () => {
@@ -220,6 +246,31 @@ describe('artifact retry', () => {
     ).rejects.toMatchObject({ code: 'unavailable_target' })
   })
 
+  it('classifies and safely logs schema conversion failures', async () => {
+    const conversionError = new Error('conversion failed')
+    zodToJsonSchemaMock.mockImplementationOnce(() => {
+      throw conversionError
+    })
+
+    await expect(
+      regenerateToolCallArguments({
+        toolName: 'render_chart',
+        contextMessages: [],
+        model,
+      }),
+    ).rejects.toMatchObject({
+      code: 'request_failed',
+      cause: conversionError,
+    })
+    expect(logErrorMock).toHaveBeenCalledWith(
+      'Artifact schema conversion failed',
+      expect.any(ArtifactRetryError),
+      expect.objectContaining({
+        metadata: { toolName: 'render_chart', code: 'request_failed' },
+      }),
+    )
+  })
+
   it('patches only the originating block and mirror while preserving changes', () => {
     const original = '{"source":{"type":"html"}'
     const chat = artifactChat(original)
@@ -274,5 +325,60 @@ describe('artifact retry', () => {
       error: expect.any(ArtifactRetryError),
     })
     if (!result.ok) expect(result.error.code).toBe('stale_target')
+  })
+
+  it('patches a timeline-only legacy message without adding a mirror', () => {
+    const chat = artifactChat('{}')
+    chat.messages[1].toolCalls = undefined
+
+    const result = patchToolCallArguments(
+      chat,
+      {
+        messageTurnId: 'turn-1',
+        messageTimestamp: chat.messages[1].timestamp.getTime(),
+        timelineBlockId: 'block-1',
+        toolCallId: 'call-1',
+        toolName: 'render_artifact_preview',
+        originalArguments: '{}',
+      },
+      '{"fixed":true}',
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.chat.messages[1].timeline?.[1]).toMatchObject({
+      arguments: '{"fixed":true}',
+    })
+    expect(result.chat.messages[1].toolCalls).toBeUndefined()
+  })
+
+  it('rejects a stale or duplicate tool-call mirror', () => {
+    const target = {
+      messageTurnId: 'turn-1',
+      messageTimestamp: artifactChat('{}').messages[1].timestamp.getTime(),
+      timelineBlockId: 'block-1',
+      toolCallId: 'call-1',
+      toolName: 'render_artifact_preview',
+      originalArguments: '{}',
+    }
+    const staleMirrorChat = artifactChat('{}')
+    staleMirrorChat.messages[1].toolCalls![0].arguments = '{"stale":true}'
+    const duplicateMirrorChat = artifactChat('{}')
+    duplicateMirrorChat.messages[1].toolCalls!.push({
+      ...duplicateMirrorChat.messages[1].toolCalls![0],
+    })
+
+    expect(
+      patchToolCallArguments(staleMirrorChat, target, '{"fixed":true}'),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'stale_target' },
+    })
+    expect(
+      patchToolCallArguments(duplicateMirrorChat, target, '{"fixed":true}'),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'stale_target' },
+    })
   })
 })

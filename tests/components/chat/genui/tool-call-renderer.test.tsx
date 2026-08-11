@@ -4,7 +4,7 @@ import { ArtifactRetryError } from '@/components/chat/genui/retry'
 import type { GenUIRenderContext } from '@/components/chat/genui/types'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { logErrorMock } = vi.hoisted(() => ({ logErrorMock: vi.fn() }))
 
@@ -19,6 +19,10 @@ const validMessageCompose = JSON.stringify({
 describe('GenUIToolCallRenderer', () => {
   beforeEach(() => {
     logErrorMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('renders completed widget arguments while the assistant stream continues', () => {
@@ -178,10 +182,12 @@ describe('GenUIToolCallRenderer', () => {
     const originalRender = widget.render
     const retryWidget = vi.fn()
     const regenerate = vi.fn()
-    widget.render = (args: { title?: string }, context: GenUIRenderContext) => {
-      if (args.title === 'Reply draft') throw new Error('render failed')
-      return originalRender?.(args, context) ?? null
-    }
+    vi.spyOn(widget, 'render').mockImplementation(
+      (args: { title?: string }, context: GenUIRenderContext) => {
+        if (args.title === 'Reply draft') throw new Error('render failed')
+        return originalRender!(args, context)
+      },
+    )
 
     function RenderExceptionHarness() {
       const [argumentsValue, setArgumentsValue] = useState(validMessageCompose)
@@ -214,70 +220,96 @@ describe('GenUIToolCallRenderer', () => {
       )
     }
 
-    try {
-      render(<RenderExceptionHarness />)
-      expect(
-        screen.getByText(/component ran into a problem while rendering/),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByRole('button', { name: 'Regenerate response' }),
-      ).toBeInTheDocument()
-      expect(logErrorMock).toHaveBeenCalledTimes(1)
-      expect(logErrorMock.mock.calls[0][1]).toMatchObject({
-        message: 'render_exception',
-      })
+    render(<RenderExceptionHarness />)
+    expect(
+      screen.getByText(/component ran into a problem while rendering/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Regenerate response' }),
+    ).toBeInTheDocument()
+    expect(logErrorMock).toHaveBeenCalledTimes(1)
+    expect(logErrorMock.mock.calls[0][1]).toMatchObject({
+      message: 'render failed',
+    })
 
-      fireEvent.click(screen.getByRole('button', { name: 'Retry widget' }))
-      expect(
-        await screen.findByText(/Could not request a replacement/),
-      ).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Retry widget' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry widget' }))
+    expect(
+      await screen.findByText(/Could not request a replacement/),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry widget' }))
 
-      expect(await screen.findByText('Recovered draft')).toBeInTheDocument()
-      expect(retryWidget).toHaveBeenCalledTimes(2)
-      expect(regenerate).not.toHaveBeenCalled()
-      expect(logErrorMock).toHaveBeenCalledTimes(1)
-      await waitFor(() =>
-        expect(
-          screen.queryByText(/component ran into a problem while rendering/),
-        ).not.toBeInTheDocument(),
-      )
-    } finally {
-      widget.render = originalRender
-    }
+    expect(await screen.findByText('Recovered draft')).toBeInTheDocument()
+    expect(retryWidget).toHaveBeenCalledTimes(2)
+    expect(regenerate).not.toHaveBeenCalled()
+    expect(logErrorMock).toHaveBeenCalledTimes(1)
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/component ran into a problem while rendering/),
+      ).not.toBeInTheDocument(),
+    )
   })
 
   it('retries rendering when repaired arguments are unchanged', async () => {
     const widget = GENUI_WIDGETS_BY_NAME.render_message_compose
     const originalRender = widget.render
     let shouldThrow = true
-    widget.render = (args: { title?: string }, context: GenUIRenderContext) => {
-      if (shouldThrow) throw new Error('render failed')
-      return originalRender?.(args, context) ?? null
-    }
+    vi.spyOn(widget, 'render').mockImplementation(
+      (args: { title?: string }, context: GenUIRenderContext) => {
+        if (shouldThrow) throw new Error('render failed')
+        return originalRender!(args, context)
+      },
+    )
 
-    try {
-      render(
-        <GenUIToolCallRenderer
-          isStreaming={false}
-          toolCalls={[
-            {
-              id: 'tool-call-1',
-              name: 'render_message_compose',
-              arguments: validMessageCompose,
-            },
-          ]}
-          onRetryToolCall={async () => {
-            shouldThrow = false
-            return true
-          }}
-        />,
-      )
+    render(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        toolCalls={[
+          {
+            id: 'tool-call-1',
+            name: 'render_message_compose',
+            arguments: validMessageCompose,
+          },
+        ]}
+        onRetryToolCall={async () => {
+          shouldThrow = false
+          return true
+        }}
+      />,
+    )
 
-      fireEvent.click(screen.getByRole('button', { name: 'Retry widget' }))
-      expect(await screen.findByText('Reply draft')).toBeInTheDocument()
-    } finally {
-      widget.render = originalRender
-    }
+    fireEvent.click(screen.getByRole('button', { name: 'Retry widget' }))
+    expect(await screen.findByText('Reply draft')).toBeInTheDocument()
+  })
+
+  it('classifies a null widget render as a retryable render failure', () => {
+    const widget = GENUI_WIDGETS_BY_NAME.render_message_compose
+    vi.spyOn(widget, 'render').mockReturnValue(null)
+
+    render(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        toolCalls={[
+          {
+            id: 'tool-call-1',
+            name: 'render_message_compose',
+            arguments: validMessageCompose,
+          },
+        ]}
+        onRetryToolCall={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText(/component ran into a problem while rendering/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Retry widget' }),
+    ).toBeInTheDocument()
+    expect(logErrorMock.mock.calls[0][1]).toMatchObject({
+      message: 'Widget render returned null',
+    })
+    expect(logErrorMock.mock.calls[0][2]).toMatchObject({
+      metadata: { failure: 'render_exception' },
+    })
   })
 })

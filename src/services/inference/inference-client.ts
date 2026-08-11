@@ -771,11 +771,18 @@ export async function sendStructuredCompletion<T>(
     const client = await getTinfoilClient()
     response = await client.chat.completions.create(requestBody, { signal })
   } catch (error) {
-    const status = (error as { status?: unknown })?.status
+    if (
+      error instanceof APIUserAbortError ||
+      (typeof DOMException !== 'undefined' &&
+        error instanceof DOMException &&
+        error.name === 'AbortError')
+    ) {
+      throw error
+    }
     const requestCode = (error as { code?: unknown })?.code
     throw new StructuredCompletionError('request_failed', {
       cause: error,
-      status: typeof status === 'number' ? status : undefined,
+      status: getHttpStatus(error),
       requestCode: typeof requestCode === 'string' ? requestCode : undefined,
     })
   }
