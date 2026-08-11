@@ -1874,8 +1874,8 @@ export class IndexedDBStorage {
               deletedIds.add(chat.id)
               if (
                 remoteIdSet.has(chat.id) ||
-                chat.syncedAt !== undefined ||
-                chat.syncVersion !== undefined
+                chat.syncedAt != null ||
+                (chat.syncVersion ?? 0) > 0
               ) {
                 stageDeleteIntent(chat.id)
               }

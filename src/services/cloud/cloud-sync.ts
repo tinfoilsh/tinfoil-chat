@@ -24,6 +24,7 @@ import {
   isCloudSyncEnabled,
 } from '@/utils/cloud-sync-settings'
 import { logError } from '@/utils/error-handling'
+import type { AccountOperationGuard } from './account-operation'
 import { hasPrimaryKey, primaryKeyIdHexOrNull } from './cek-encoding'
 import { processRemoteChat } from './chat-codec'
 import { drainChatRevisionSync } from './chat-revision-sync'
@@ -111,6 +112,10 @@ export class CloudSyncService {
   private lockAcquisitionController = new AbortController()
   private crossTabReloadFrame: number | null = null
   private cloudSyncEnabled = isCloudSyncEnabled()
+  private projectUploadBarriers = new Map<string, Promise<void>>()
+  private projectBarrierQueues = new Map<string, Promise<void>>()
+  private activeProjectUploads = new Map<string, number>()
+  private projectUploadDrainWaiters = new Map<string, Set<() => void>>()
 
   constructor() {
     this.uploadCoalescer = new UploadCoalescer(
@@ -190,6 +195,141 @@ export class CloudSyncService {
       return localStorage.getItem(AUTH_ACTIVE_USER_ID)
     } catch {
       return null
+    }
+  }
+
+  createAccountOperationGuard(): AccountOperationGuard {
+    const generation = this.accountGeneration
+    const userId = this.readActiveUserId()
+    const isCurrent = () =>
+      this.isCurrentGeneration(generation) && this.readActiveUserId() === userId
+    return {
+      userId,
+      isCurrent,
+      assertCurrent: () => {
+        if (!isCurrent()) {
+          throw new Error('Cloud account changed during synchronization')
+        }
+      },
+    }
+  }
+
+  private async acquireProjectUpload(
+    projectId: string | undefined,
+  ): Promise<{ release: () => void; waited: boolean }> {
+    if (!projectId) return { release: () => {}, waited: false }
+    let waited = false
+    while (true) {
+      const barrier = this.projectUploadBarriers.get(projectId)
+      if (barrier) {
+        waited = true
+        await barrier
+        continue
+      }
+      this.activeProjectUploads.set(
+        projectId,
+        (this.activeProjectUploads.get(projectId) ?? 0) + 1,
+      )
+      let released = false
+      return {
+        waited,
+        release: () => {
+          if (released) return
+          released = true
+          const remaining = (this.activeProjectUploads.get(projectId) ?? 1) - 1
+          if (remaining > 0) {
+            this.activeProjectUploads.set(projectId, remaining)
+            return
+          }
+          this.activeProjectUploads.delete(projectId)
+          const waiters = this.projectUploadDrainWaiters.get(projectId)
+          this.projectUploadDrainWaiters.delete(projectId)
+          for (const resolve of waiters ?? []) resolve()
+        },
+      }
+    }
+  }
+
+  private async waitForProjectUploads(projectId: string): Promise<void> {
+    if (!this.activeProjectUploads.has(projectId)) return
+    await new Promise<void>((resolve) => {
+      const waiters = this.projectUploadDrainWaiters.get(projectId) ?? new Set()
+      waiters.add(resolve)
+      this.projectUploadDrainWaiters.set(projectId, waiters)
+    })
+  }
+
+  async withProjectUploadBarrier<T>(
+    projectId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous =
+      this.projectBarrierQueues.get(projectId) ?? Promise.resolve()
+    let releaseQueue!: () => void
+    const queued = new Promise<void>((resolve) => {
+      releaseQueue = resolve
+    })
+    this.projectBarrierQueues.set(projectId, queued)
+    await previous
+
+    let releaseBarrier!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve
+    })
+    this.projectUploadBarriers.set(projectId, barrier)
+    try {
+      await this.waitForProjectUploads(projectId)
+      return await operation()
+    } finally {
+      this.projectUploadBarriers.delete(projectId)
+      releaseBarrier()
+      releaseQueue()
+      if (this.projectBarrierQueues.get(projectId) === queued) {
+        this.projectBarrierQueues.delete(projectId)
+      }
+    }
+  }
+
+  private async prepareChatForUpload(
+    chatId: string,
+    generation: number,
+    userId: string | null,
+  ): Promise<{ chat: StoredChat; release: () => void } | null> {
+    while (true) {
+      const chat = await indexedDBStorage.getChat(chatId)
+      this.ensureCurrentAccount(generation, userId)
+      if (
+        !chat ||
+        chat.syncUserId !== userId ||
+        !isUploadableChat(chat, isStreaming)
+      ) {
+        return null
+      }
+      const admission = await this.acquireProjectUpload(chat.projectId)
+      let retained = false
+      try {
+        this.ensureCurrentAccount(generation, userId)
+        if (!admission.waited) {
+          retained = true
+          return { chat, release: admission.release }
+        }
+
+        const latest = await indexedDBStorage.getChat(chatId)
+        this.ensureCurrentAccount(generation, userId)
+        if (
+          !latest ||
+          latest.syncUserId !== userId ||
+          !isUploadableChat(latest, isStreaming)
+        ) {
+          return null
+        }
+        if (latest.projectId === chat.projectId) {
+          retained = true
+          return { chat: latest, release: admission.release }
+        }
+      } finally {
+        if (!retained) admission.release()
+      }
     }
   }
 
@@ -437,34 +577,34 @@ export class CloudSyncService {
     if (streamingTracker.isStreaming(chatId)) {
       throw new Error('Cannot sync chat while it is streaming')
     }
-    const chat = await indexedDBStorage.getChat(chatId)
-    this.ensureCurrentAccount(generation, userId)
-    if (
-      !chat ||
-      chat.syncUserId !== userId ||
-      !isUploadableChat(chat, isStreaming)
-    ) {
+    const prepared = await this.prepareChatForUpload(chatId, generation, userId)
+    if (!prepared) {
       throw new Error('Chat is not eligible for cloud sync')
     }
-    const preUploadUpdatedAt = chat.updatedAt
-    const preUploadFingerprint = chatContentFingerprint(chat)
-    const preUploadVersion = chat.syncVersion ?? 0
-    const { syncVersion, rewrites, projectIntentIncluded } =
-      await cloudStorage.uploadChat(chat, {
-        ...options,
-        idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
+    const { chat, release } = prepared
+    try {
+      const preUploadUpdatedAt = chat.updatedAt
+      const preUploadFingerprint = chatContentFingerprint(chat)
+      const preUploadVersion = chat.syncVersion ?? 0
+      const { syncVersion, rewrites, projectIntentIncluded } =
+        await cloudStorage.uploadChat(chat, {
+          ...options,
+          idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
+        })
+      this.ensureCurrentAccount(generation, userId)
+      await indexedDBStorage.finalizeUpload({
+        chatId,
+        rewrites,
+        preUploadUpdatedAt,
+        preUploadFingerprint,
+        syncVersion: syncVersion ?? preUploadVersion + 1,
+        uploadedProjectId: chat.projectId,
+        projectIntentIncluded,
       })
-    this.ensureCurrentAccount(generation, userId)
-    await indexedDBStorage.finalizeUpload({
-      chatId,
-      rewrites,
-      preUploadUpdatedAt,
-      preUploadFingerprint,
-      syncVersion: syncVersion ?? preUploadVersion + 1,
-      uploadedProjectId: chat.projectId,
-      projectIntentIncluded,
-    })
-    this.ensureCurrentAccount(generation, userId)
+      this.ensureCurrentAccount(generation, userId)
+    } finally {
+      release()
+    }
   }
 
   private async doBackupChat(
@@ -486,19 +626,17 @@ export class CloudSyncService {
         })
         return null
       }
-      const chat = await indexedDBStorage.getChat(chatId)
-      this.ensureCurrentAccount(generation, userId)
-      if (
-        !chat ||
-        chat.syncUserId !== userId ||
-        !isUploadableChat(chat, isStreaming)
-      ) {
-        return null
-      }
+      const prepared = await this.prepareChatForUpload(
+        chatId,
+        generation,
+        userId,
+      )
+      if (!prepared) return null
+      const { chat, release } = prepared
       const preUploadUpdatedAt = chat.updatedAt
       const preUploadFingerprint = chatContentFingerprint(chat)
       const preUploadVersion = chat.syncVersion ?? 0
-      return async () => {
+      const attempt: UploadAttempt = async () => {
         try {
           this.ensureCurrentAccount(generation, userId)
           const { syncVersion, rewrites, projectIntentIncluded } =
@@ -524,6 +662,8 @@ export class CloudSyncService {
           await this.recoverFromChatUploadError(chatId, generation, error)
         }
       }
+      attempt.dispose = release
+      return attempt
     } catch (error) {
       if (this.readActiveUserId() !== userId) throw error
       await this.recoverFromChatUploadError(chatId, generation, error)

@@ -340,6 +340,30 @@ describe('IndexedDB sync protocol v2 migration', () => {
     await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
   })
 
+  it('does not stage project intents for zero-version local chats', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'zero-version-chat',
+      title: 'Creating',
+      projectId: 'project-1',
+      syncVersion: 0,
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+
+    await storage.deleteChatsByProject(
+      'project-1',
+      [],
+      'user-1',
+      () => 'unused-key',
+    )
+
+    await expect(storage.getChat('zero-version-chat')).resolves.toBeNull()
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
+  })
+
   it('leaves project rows owned by another account untouched', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()

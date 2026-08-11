@@ -14,20 +14,6 @@ export class ChatStorageService {
   private initialized = false
   private initializePromise: Promise<void> | null = null
 
-  private readActiveUserId(): string | null {
-    try {
-      return localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    } catch {
-      return null
-    }
-  }
-
-  private ensureActiveUser(userId: string): void {
-    if (this.readActiveUserId() !== userId) {
-      throw new Error('Cloud account changed during project deletion')
-    }
-  }
-
   async initialize(): Promise<void> {
     if (this.initialized) return
 
@@ -209,65 +195,64 @@ export class ChatStorageService {
   }
 
   async deleteChatsByProject(projectId: string): Promise<number> {
-    const userId = this.readActiveUserId()
+    const guard = cloudSync.createAccountOperationGuard()
+    const userId = guard.userId
     if (!userId) {
       throw new Error('Authenticated user ID is unavailable')
     }
     await this.initialize()
-    this.ensureActiveUser(userId)
+    guard.assertCurrent()
 
-    // Delete locally and tombstone the ids before touching the cloud. An
-    // in-flight backup re-reads the chat from local storage right before
-    // uploading, so removing the local row first stops a concurrent upload
-    // from resurrecting a chat in the cloud after the bulk delete. This
-    // mirrors the ordering used by the single-chat deleteChat path.
-    this.ensureActiveUser(userId)
-    const remoteIds = await cloudStorage.listChatIdsByProject(projectId)
-    this.ensureActiveUser(userId)
-    await cloudSync.waitForAllUploads()
-    this.ensureActiveUser(userId)
-
-    const deletedIds = await indexedDBStorage.deleteChatsByProject(
-      projectId,
-      remoteIds,
-      userId,
-      newIdempotencyKey,
-      () => this.readActiveUserId() === userId,
-    )
-    this.ensureActiveUser(userId)
-
-    for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
-
-    if (deletedIds.length > 0) {
-      chatEvents.emit({ reason: 'delete', ids: deletedIds })
-    }
-
-    try {
-      this.ensureActiveUser(userId)
-      await cloudStorage.deleteChatsByProject(projectId)
-      this.ensureActiveUser(userId)
-      await indexedDBStorage.acknowledgePendingDeletes(
-        deletedIds,
-        userId,
-        () => this.readActiveUserId() === userId,
+    return cloudSync.withProjectUploadBarrier(projectId, async () => {
+      guard.assertCurrent()
+      const remoteIds = await cloudStorage.listChatIdsByProject(
+        projectId,
+        guard,
       )
-      this.ensureActiveUser(userId)
-    } catch (error) {
-      logError('Failed to delete every remote project chat', error, {
+      guard.assertCurrent()
+
+      const deletedIds = await indexedDBStorage.deleteChatsByProject(
+        projectId,
+        remoteIds,
+        userId,
+        newIdempotencyKey,
+        guard.isCurrent,
+      )
+      guard.assertCurrent()
+
+      for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
+
+      if (deletedIds.length > 0) {
+        chatEvents.emit({ reason: 'delete', ids: deletedIds })
+      }
+
+      try {
+        guard.assertCurrent()
+        await cloudStorage.deleteChatsByProject(projectId, guard)
+        guard.assertCurrent()
+        await indexedDBStorage.acknowledgePendingDeletes(
+          deletedIds,
+          userId,
+          guard.isCurrent,
+        )
+        guard.assertCurrent()
+      } catch (error) {
+        logError('Failed to delete every remote project chat', error, {
+          component: 'ChatStorageService',
+          action: 'deleteChatsByProject.remoteDelete',
+          metadata: { projectId },
+        })
+        throw error
+      }
+
+      logInfo(`Deleted ${deletedIds.length} chats for project`, {
         component: 'ChatStorageService',
-        action: 'deleteChatsByProject.remoteDelete',
-        metadata: { projectId },
+        action: 'deleteChatsByProject',
+        metadata: { projectId, count: deletedIds.length },
       })
-      throw error
-    }
 
-    logInfo(`Deleted ${deletedIds.length} chats for project`, {
-      component: 'ChatStorageService',
-      action: 'deleteChatsByProject',
-      metadata: { projectId, count: deletedIds.length },
+      return deletedIds.length
     })
-
-    return deletedIds.length
   }
 
   async deleteAllNonLocalChats(): Promise<number> {

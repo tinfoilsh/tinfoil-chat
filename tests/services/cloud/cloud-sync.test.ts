@@ -141,6 +141,90 @@ describe('CloudSyncService revision coordinator routing', () => {
     expect(clearRevisionSyncState).toHaveBeenCalledTimes(1)
   })
 
+  it('expires an account operation across an A-to-B-to-A transition', () => {
+    const service = new CloudSyncService()
+    const guard = service.createAccountOperationGuard()
+
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+    service.resetForAccountChange()
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-1')
+    service.resetForAccountChange()
+
+    expect(guard.isCurrent()).toBe(false)
+    expect(guard.assertCurrent).toThrow('Cloud account changed')
+  })
+
+  it('holds project deletion until an existing direct upload finishes', async () => {
+    canWriteToCloud.mockResolvedValue(true)
+    const chat = {
+      id: 'chat-1',
+      projectId: 'project-1',
+      syncUserId: 'user-1',
+      locallyModified: true,
+      updatedAt: '2026-01-01T00:00:00Z',
+      messages: [{ role: 'user', content: 'hello' }],
+    }
+    getChat.mockResolvedValue(chat)
+    let finishUpload!: () => void
+    uploadChat.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = () =>
+            resolve({
+              syncVersion: 1,
+              rewrites: [],
+              projectIntentIncluded: true,
+            })
+        }),
+    )
+    const service = new CloudSyncService()
+    const upload = service.backupChatNow('chat-1')
+    await vi.waitFor(() => expect(uploadChat).toHaveBeenCalledOnce())
+
+    const deletion = vi.fn(async () => {})
+    const barrier = service.withProjectUploadBarrier('project-1', deletion)
+    await Promise.resolve()
+    expect(deletion).not.toHaveBeenCalled()
+
+    finishUpload()
+    await upload
+    await barrier
+    expect(deletion).toHaveBeenCalledOnce()
+  })
+
+  it('blocks queued project upload preparation during deletion', async () => {
+    canWriteToCloud.mockResolvedValue(true)
+    const chat = {
+      id: 'chat-1',
+      projectId: 'project-1',
+      syncUserId: 'user-1',
+      locallyModified: true,
+      updatedAt: '2026-01-01T00:00:00Z',
+      messages: [{ role: 'user', content: 'hello' }],
+    }
+    getChat.mockResolvedValue(chat)
+    let finishDeletion!: () => void
+    const service = new CloudSyncService()
+    const barrier = service.withProjectUploadBarrier(
+      'project-1',
+      () =>
+        new Promise<void>((resolve) => {
+          finishDeletion = resolve
+        }),
+    )
+    await vi.waitFor(() => expect(finishDeletion).toBeTypeOf('function'))
+
+    await service.backupChat('chat-1')
+    await Promise.resolve()
+    expect(uploadChat).not.toHaveBeenCalled()
+    getChat.mockResolvedValue(null)
+    finishDeletion()
+    await barrier
+    await service.waitForAllUploads()
+
+    expect(uploadChat).not.toHaveBeenCalled()
+  })
+
   it('waits for an old coordinator before clearing its checkpoint', async () => {
     let finishSync!: () => void
     drainChatRevisionSync.mockImplementationOnce(

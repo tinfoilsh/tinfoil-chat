@@ -21,6 +21,7 @@ import {
   revisionSnapshot,
 } from '../sync-enclave/sync-api'
 import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
+import type { AccountOperationGuard } from './account-operation'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import { processRemoteChat, type RemoteChatData } from './chat-codec'
 
@@ -703,38 +704,52 @@ export class CloudStorageService {
     return { deleted }
   }
 
-  async deleteChatsByProject(projectId: string): Promise<{
+  async deleteChatsByProject(
+    projectId: string,
+    guard?: AccountOperationGuard,
+  ): Promise<{
     deleted: number
     notificationSent?: boolean
   }> {
     // Single server-side bulk delete: the controlplane removes every chat
     // in the project and writes one tombstone per row, so other devices
     // converge on the next sync without a per-chat round trip from here.
+    guard?.assertCurrent()
+    const headers = await this.getHeaders()
+    guard?.assertCurrent()
     const response = await fetch(
       `${API_BASE_URL}/api/projects/${encodeURIComponent(projectId)}/chats`,
       {
         method: 'DELETE',
-        headers: await this.getHeaders(),
+        headers,
       },
     )
+    guard?.assertCurrent()
 
     if (!response.ok) {
       throw new Error(`Failed to delete project chats: ${response.statusText}`)
     }
 
-    return response.json()
+    const result = await response.json()
+    guard?.assertCurrent()
+    return result
   }
 
-  async listChatIdsByProject(projectId: string): Promise<string[]> {
+  async listChatIdsByProject(
+    projectId: string,
+    guard?: AccountOperationGuard,
+  ): Promise<string[]> {
     const ids = new Set<string>()
     let cursor: string | undefined
     do {
+      guard?.assertCurrent()
       const status = await enclaveListStatus({
         scope: 'chat',
         projectId,
         cursor,
         limit: PROJECT_CHAT_LIST_LIMIT,
       })
+      guard?.assertCurrent()
       for (const update of status.updates) {
         if (update.project_id === projectId) ids.add(update.id)
       }

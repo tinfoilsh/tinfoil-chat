@@ -176,6 +176,29 @@ describe('CloudStorageService auth readiness', () => {
     })
   })
 
+  it('stops project pagination when its account operation expires', async () => {
+    let current = true
+    mockListStatus.mockImplementationOnce(async () => {
+      current = false
+      return {
+        updates: [{ id: 'chat-1', project_id: 'project-1' }],
+        next_cursor: 'page-2',
+      }
+    })
+    const guard = {
+      userId: 'user-1',
+      isCurrent: () => current,
+      assertCurrent: () => {
+        if (!current) throw new Error('Cloud account changed')
+      },
+    }
+
+    await expect(
+      new CloudStorageService().listChatIdsByProject('project-1', guard),
+    ).rejects.toThrow('Cloud account changed')
+    expect(mockListStatus).toHaveBeenCalledTimes(1)
+  })
+
   it('waits for auth token manager initialization before checking auth state', async () => {
     mockIsInitialized.mockReturnValue(false)
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
