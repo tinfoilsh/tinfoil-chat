@@ -2,6 +2,13 @@ import { setGenUIConfig } from '@/components/chat/genui/config'
 import { API_BASE_URL, IS_DEV } from '@/config'
 import { DEV_SIMULATOR_MODEL } from '@/utils/dev-simulator'
 import { logError } from '@/utils/error-handling'
+import {
+  getStrongerReasoningHistoryPolicy,
+  normalizeReasoningHistoryPolicy,
+  REASONING_HISTORY_POLICIES,
+  type ReasoningHistoryPolicy,
+} from '@/utils/reasoning-history'
+import { getSmallestContextWindow } from '@/utils/token-estimation'
 
 const DEV_MODELS: BaseModel[] = [
   {
@@ -71,6 +78,8 @@ export type ReasoningEndpointParams = {
  * - `supportsToggle: true` — thinking mode can be turned on or off per request
  *   via `params[endpoint].enable` / `params[endpoint].disable`.
  * - `defaultEnabled` — initial state of the toggle when `supportsToggle` is true.
+ * - `reasoningHistoryPolicy` — controls whether prior assistant reasoning is
+ *   returned for every assistant message, tool-call messages only, or never.
  *
  * The presence of a `reasoningConfig` object is itself the capability flag
  * — there is no separate boolean.
@@ -88,6 +97,7 @@ export type ReasoningConfig = {
    */
   effortMap?: Record<string, string>
   params?: Record<string, ReasoningEndpointParams>
+  reasoningHistoryPolicy?: ReasoningHistoryPolicy
 }
 
 export type AutoTier = 'smart' | 'fast'
@@ -176,6 +186,9 @@ export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
       isAuto: true,
       tier,
       multimodal: members.some((m) => m.multimodal === true),
+      contextWindow: getSmallestContextWindow(
+        members.map((member) => member.contextWindow),
+      ),
     })
   }
   add('smart', AUTO_SMART_ID, 'Auto · Smart')
@@ -228,6 +241,36 @@ export type ResolvedModelSelection = {
    * first entry is the representative model.
    */
   autoCandidates?: BaseModel[]
+}
+
+const getResolvedCandidates = (
+  selection: ResolvedModelSelection,
+): BaseModel[] =>
+  selection.autoCandidates ?? (selection.model ? [selection.model] : [])
+
+export const getReasoningHistoryPolicy = (
+  selection: ResolvedModelSelection,
+): ReasoningHistoryPolicy => {
+  return getResolvedCandidates(selection).reduce<ReasoningHistoryPolicy>(
+    (strongest, candidate) =>
+      getStrongerReasoningHistoryPolicy(
+        strongest,
+        normalizeReasoningHistoryPolicy(
+          candidate.reasoningConfig?.reasoningHistoryPolicy,
+        ),
+      ),
+    REASONING_HISTORY_POLICIES.none,
+  )
+}
+
+export const getResolvedModelContextWindow = (
+  selection: ResolvedModelSelection,
+): string | undefined => {
+  return getSmallestContextWindow(
+    getResolvedCandidates(selection).map(
+      (candidate) => candidate.contextWindow,
+    ),
+  )
 }
 
 /**

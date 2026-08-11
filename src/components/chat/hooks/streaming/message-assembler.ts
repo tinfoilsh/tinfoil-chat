@@ -99,7 +99,7 @@ export class MessageAssembler {
       role: 'assistant',
       content,
       timestamp: this.timestamp,
-      thoughts: thoughts || undefined,
+      thoughts: firstThinkingIdx >= 0 ? thoughts : undefined,
       isThinking,
       thinkingDuration,
       webSearch,

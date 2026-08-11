@@ -2,8 +2,12 @@ import { GridTexture } from '@/components/ui/grid-texture'
 import { findSelectableModel, type BaseModel } from '@/config/models'
 import { useChatPrint } from '@/hooks/use-chat-print'
 import {
+  REASONING_HISTORY_POLICIES,
+  type ReasoningHistoryPolicy,
+} from '@/utils/reasoning-history'
+import {
   findContextStartIndex,
-  getContextTokenBudget,
+  getHistoryTokenBudget,
 } from '@/utils/token-estimation'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -23,6 +27,9 @@ type ChatMessagesProps = {
   pendingRecoveries?: PendingRecoveryEnvelope[]
   recoveryDrafts?: ReadonlyArray<{ turnId: string; message: Message }>
   activeRecoveryTurnIds?: readonly string[]
+  reasoningHistoryPolicy?: ReasoningHistoryPolicy
+  contextWindow?: string
+  pendingContextTokens?: number
   isDarkMode: boolean
   chatId: string
   isWaitingForResponse?: boolean
@@ -238,6 +245,9 @@ export function ChatMessages({
   pendingRecoveries = [],
   recoveryDrafts = [],
   activeRecoveryTurnIds = [],
+  reasoningHistoryPolicy = REASONING_HISTORY_POLICIES.none,
+  contextWindow,
+  pendingContextTokens = 0,
   isDarkMode,
   chatId,
   isWaitingForResponse = false,
@@ -334,13 +344,25 @@ export function ChatMessages({
 
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
-    const budget = getContextTokenBudget(currentModel?.contextWindow)
-    const startIndex = findContextStartIndex(messages, budget)
+    const budget = getHistoryTokenBudget(
+      contextWindow ?? currentModel?.contextWindow,
+      pendingContextTokens,
+    )
+    const startIndex = findContextStartIndex(messages, budget, {
+      reasoningHistoryPolicy,
+      keepMostRecent: pendingContextTokens === 0,
+    })
     return {
       archivedMessages: messages.slice(0, startIndex),
       liveMessages: messages.slice(startIndex),
     }
-  }, [messages, currentModel?.contextWindow])
+  }, [
+    messages,
+    contextWindow,
+    currentModel?.contextWindow,
+    reasoningHistoryPolicy,
+    pendingContextTokens,
+  ])
 
   useEffect(() => {
     setMounted(true)

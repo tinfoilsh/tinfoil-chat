@@ -33,16 +33,7 @@ function extractReasoningContent(json: SSEJson): string | null {
   const message =
     json.choices?.[0]?.message?.reasoning_content ??
     json.choices?.[0]?.message?.reasoning
-  const hasDelta = delta !== undefined && delta !== null
-  const hasMessage = message !== undefined && message !== null
-  if (!hasDelta && !hasMessage) return null
-  return (
-    json.choices?.[0]?.message?.reasoning_content ||
-    json.choices?.[0]?.message?.reasoning ||
-    json.choices?.[0]?.delta?.reasoning_content ||
-    json.choices?.[0]?.delta?.reasoning ||
-    ''
-  )
+  return delta ?? message ?? null
 }
 
 function extractAnnotations(json: SSEJson): NormalizedEvent[] {

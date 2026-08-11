@@ -25,14 +25,24 @@ describe('TimelineBuilder', () => {
       expect(block.duration).toBe(1.5)
     })
 
-    it('trims thinking content on end', () => {
+    it('preserves thinking whitespace on end', () => {
       const builder = new TimelineBuilder()
       builder.startThinking()
       builder.appendThinking('  spaced  ')
       builder.endThinking()
 
       const block = builder.snapshot()[0] as TimelineThinkingBlock
-      expect(block.content).toBe('spaced')
+      expect(block.content).toBe('  spaced  ')
+    })
+
+    it('preserves thinking whitespace at a tool boundary', () => {
+      const builder = new TimelineBuilder()
+      builder.startThinking()
+      builder.appendThinking('  spaced for tool  ')
+      builder.pushWebSearch({ status: 'searching' })
+
+      const block = builder.snapshot()[0] as TimelineThinkingBlock
+      expect(block.content).toBe('  spaced for tool  ')
     })
 
     it('tracks isThinkingOpen correctly', () => {

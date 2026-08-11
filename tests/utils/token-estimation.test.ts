@@ -1,10 +1,12 @@
 import type { Message } from '@/components/chat/types'
+import { REASONING_HISTORY_POLICIES } from '@/utils/reasoning-history'
 import {
   CONTEXT_WINDOW_USAGE_RATIO,
   estimateMessageTokens,
   estimateTokenCount,
   findContextStartIndex,
   getContextTokenBudget,
+  getHistoryTokenBudget,
   parseContextWindowTokens,
   selectMessagesWithinBudget,
 } from '@/utils/token-estimation'
@@ -49,10 +51,15 @@ describe('getContextTokenBudget', () => {
       Math.floor(100000 * CONTEXT_WINDOW_USAGE_RATIO),
     )
   })
+
+  it('reserves pending input tokens before budgeting persisted history', () => {
+    expect(getHistoryTokenBudget('1k tokens', 250)).toBe(650)
+    expect(getHistoryTokenBudget('1k tokens', 1000)).toBe(0)
+  })
 })
 
 describe('estimateMessageTokens', () => {
-  it('includes quote and attachment text but not thoughts', () => {
+  it('includes quote and attachment text but excludes user thoughts', () => {
     const msg: Message = {
       role: 'user',
       content: 'a'.repeat(40),
@@ -69,6 +76,11 @@ describe('estimateMessageTokens', () => {
       timestamp: new Date(),
     }
     expect(estimateMessageTokens(msg)).toBe(30)
+    expect(
+      estimateMessageTokens(msg, {
+        reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all,
+      }),
+    ).toBe(30)
   })
 
   it('counts assistant tool calls and search reasoning', () => {
@@ -113,6 +125,41 @@ describe('findContextStartIndex', () => {
   it('always keeps the most recent message even when over budget', () => {
     const messages = [makeMessage('user', 400), makeMessage('user', 4000)]
     expect(findContextStartIndex(messages, 10)).toBe(1)
+  })
+
+  it('can archive every persisted message when a pending draft is newest', () => {
+    const messages = [makeMessage('user', 400)]
+
+    expect(findContextStartIndex(messages, 0, { keepMostRecent: false })).toBe(
+      1,
+    )
+  })
+
+  it('archives more history when preserved reasoning consumes the budget', () => {
+    const assistant = makeMessage('assistant', 40)
+    assistant.thoughts = 'b'.repeat(800)
+    const messages = [assistant, makeMessage('user', 40)]
+
+    expect(findContextStartIndex(messages, 100)).toBe(0)
+    expect(
+      findContextStartIndex(messages, 100, {
+        reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all,
+      }),
+    ).toBe(1)
+  })
+
+  it('counts tool-call reasoning only for tool-call policy models', () => {
+    const ordinary = makeMessage('assistant', 40)
+    ordinary.thoughts = 'b'.repeat(40)
+    const toolCall = makeMessage('assistant', 40)
+    toolCall.thoughts = 'b'.repeat(40)
+    toolCall.toolCalls = [{ id: 'call_1', name: 'tool', arguments: '{}' }]
+    const options = {
+      reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.toolCallOnly,
+    } as const
+
+    expect(estimateMessageTokens(ordinary, options)).toBe(10)
+    expect(estimateMessageTokens(toolCall, options)).toBe(22)
   })
 })
 

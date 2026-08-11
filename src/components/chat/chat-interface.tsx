@@ -1,7 +1,10 @@
 import {
   findSelectableModel,
   getAIModels,
+  getReasoningHistoryPolicy,
+  getResolvedModelContextWindow,
   getSystemPromptAndRules,
+  resolveModelSelection,
   type BaseModel,
 } from '@/config/models'
 import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
@@ -46,6 +49,7 @@ import { GoSidebarCollapse } from 'react-icons/go'
 import { IoShareOutline } from 'react-icons/io5'
 import { PiFilePlusLight, PiNotePencilLight, PiSpinner } from 'react-icons/pi'
 import { SlGhost } from 'react-icons/sl'
+import { getMessageImages } from './attachment-helpers'
 
 import {
   RateLimitBanner,
@@ -90,6 +94,7 @@ import {
   estimateTokenCount,
   findContextStartIndex,
   getContextTokenBudget,
+  getHistoryTokenBudget,
 } from '@/utils/token-estimation'
 import { TfTinSad } from '@tinfoilsh/tinfoil-icons'
 import dynamic from 'next/dynamic'
@@ -239,6 +244,40 @@ function buildAttachment(opts: {
     }
   }
   return undefined
+}
+
+function buildCompletedAttachments(
+  documents: ProcessedDocument[],
+): Attachment[] {
+  return documents
+    .filter(
+      (document) =>
+        !document.isUploading &&
+        !document.isGeneratingDescription &&
+        !document.isUnsupported &&
+        (!document.isImageDescription ||
+          document.imageData ||
+          document.attachment),
+    )
+    .map((document) => {
+      if (document.attachment) return document.attachment
+      return (
+        buildAttachment({
+          id: document.id,
+          fileName: document.name,
+          imageData: document.imageData ?? undefined,
+          textContent: document.content ?? undefined,
+          description:
+            document.isImageDescription && document.content
+              ? document.content
+              : undefined,
+        }) ?? {
+          id: document.id,
+          type: 'document' as const,
+          fileName: document.name,
+        }
+      )
+    })
 }
 
 export function ChatInterface({
@@ -1401,6 +1440,34 @@ export function ChatInterface({
   // Get the selected model details
   const selectedModelDetails = findSelectableModel(selectedModel, models) as
     BaseModel | undefined
+  const prefersMultimodalContext = useMemo(
+    () =>
+      currentChat?.messages.some(
+        (message) => getMessageImages(message).length > 0,
+      ) ||
+      processedDocuments.some(
+        (document) =>
+          Boolean(document.imageData) || document.attachment?.type === 'image',
+      ),
+    [currentChat?.messages, processedDocuments],
+  )
+  const contextModelSelection = resolveModelSelection(selectedModel, models, {
+    preferMultimodal: prefersMultimodalContext,
+    preferToolCalling:
+      effectiveWebSearchEnabled || codeExecutionEnabled || genUIEnabled,
+  })
+  const reasoningHistoryPolicy = getReasoningHistoryPolicy(
+    contextModelSelection,
+  )
+  const contextWindow = getResolvedModelContextWindow(contextModelSelection)
+  const pendingAttachments = buildCompletedAttachments(processedDocuments)
+  const pendingContextTokens = estimateMessageTokens({
+    role: 'user',
+    content: input.trim(),
+    attachments: pendingAttachments,
+    quote: quote ?? undefined,
+    timestamp: new Date(),
+  })
 
   // Initialize document uploader hook
   const { handleDocumentUpload, describeImageWithMultimodal } =
@@ -2325,27 +2392,27 @@ export function ChatInterface({
 
   // Calculate context usage (memoized to prevent re-calculation during streaming)
   const contextUsage = useMemo(() => {
-    const limitTokens = getContextTokenBudget(
-      selectedModelDetails?.contextWindow,
-    )
+    const limitTokens = getContextTokenBudget(contextWindow)
 
-    let usedTokens = estimateTokenCount(input)
+    let usedTokens = pendingContextTokens
 
     // Count tokens from messages (including their attachments), skipping
     // archived messages that are excluded from the prompt
     if (currentChat?.messages) {
       const messages = currentChat.messages
-      const startIndex = findContextStartIndex(messages, limitTokens)
-      for (let i = startIndex; i < messages.length; i++) {
-        usedTokens += estimateMessageTokens(messages[i])
-      }
-    }
-
-    // Count tokens from pending documents not yet attached to a message
-    if (processedDocuments) {
-      processedDocuments.forEach((doc) => {
-        usedTokens += estimateTokenCount(doc.content)
+      const historyBudget = getHistoryTokenBudget(
+        contextWindow,
+        pendingContextTokens,
+      )
+      const startIndex = findContextStartIndex(messages, historyBudget, {
+        reasoningHistoryPolicy,
+        keepMostRecent: pendingContextTokens === 0,
       })
+      for (let i = startIndex; i < messages.length; i++) {
+        usedTokens += estimateMessageTokens(messages[i], {
+          reasoningHistoryPolicy,
+        })
+      }
     }
 
     return {
@@ -2354,10 +2421,10 @@ export function ChatInterface({
       limitTokens,
     }
   }, [
-    input,
     currentChat?.messages,
-    processedDocuments,
-    selectedModelDetails?.contextWindow,
+    contextWindow,
+    reasoningHistoryPolicy,
+    pendingContextTokens,
   ])
 
   // Tracks whether the user already saw and dismissed the rate-limit modal
@@ -2399,43 +2466,16 @@ export function ChatInterface({
       return
     }
 
-    // Filter out documents that are still uploading or generating descriptions
-    const completedDocuments = processedDocuments.filter(
-      (doc) =>
-        !doc.isUploading && !doc.isGeneratingDescription && !doc.isUnsupported,
-    )
-
     const messageText = input.trim()
+    const attachments = buildCompletedAttachments(processedDocuments)
 
     // Don't proceed if there's no input text, no quote, and no documents
-    if (!messageText && !quote && completedDocuments.length === 0) {
+    if (!messageText && !quote && attachments.length === 0) {
       return
     }
 
     // Don't auto-scroll here - let the message append handler do it
     // This prevents the dip when thoughts start streaming
-
-    // Build unified attachments array from completed documents
-    const attachments: Attachment[] = completedDocuments
-      .filter(
-        (doc) => !doc.isImageDescription || doc.imageData || doc.attachment,
-      )
-      .map((doc) => {
-        // Use pre-built attachment if available
-        if (doc.attachment) return doc.attachment
-
-        // Build attachment from legacy ProcessedDocument fields
-        return (
-          buildAttachment({
-            id: doc.id,
-            fileName: doc.name,
-            imageData: doc.imageData ?? undefined,
-            textContent: doc.content ?? undefined,
-            description:
-              doc.isImageDescription && doc.content ? doc.content : undefined,
-          }) ?? { id: doc.id, type: 'document' as const, fileName: doc.name }
-        )
-      })
 
     setInput('')
     submitMessage({
@@ -3450,6 +3490,9 @@ export function ChatInterface({
                     pendingRecoveries={currentChat?.pendingRecoveries}
                     recoveryDrafts={recoveryDrafts}
                     activeRecoveryTurnIds={activeRecoveryTurnIds}
+                    reasoningHistoryPolicy={reasoningHistoryPolicy}
+                    contextWindow={contextWindow}
+                    pendingContextTokens={pendingContextTokens}
                     isDarkMode={isDarkMode}
                     chatId={currentChat.id}
                     isWaitingForResponse={isWaitingForResponse}

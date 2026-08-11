@@ -118,7 +118,7 @@ describe('parseRichStreamingResponse', () => {
     )
 
     expect(message.content).toBe('Final answer.')
-    expect(message.thoughts).toBe('Check sources.')
+    expect(message.thoughts).toBe('Check sources. ')
     expect(message.thinkingDuration).toBeUndefined()
     expect(message.annotations).toEqual([
       {

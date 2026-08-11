@@ -97,6 +97,41 @@ describe('EventNormalizer', () => {
       ])
     })
 
+    it('preserves reasoning whitespace exactly', () => {
+      expect(
+        processAll([
+          {
+            choices: [
+              { delta: {}, message: { reasoning_content: '  thinking  ' } },
+            ],
+          },
+        ]),
+      ).toEqual([
+        { type: 'thinking_start' },
+        { type: 'thinking_delta', content: '  thinking  ' },
+        { type: 'thinking_end' },
+      ])
+    })
+
+    it('prefers a streaming delta over a cumulative message value', () => {
+      expect(
+        processAll([
+          {
+            choices: [
+              {
+                delta: { reasoning_content: ' delta' },
+                message: { reasoning_content: 'cumulative delta' },
+              },
+            ],
+          },
+        ]),
+      ).toEqual([
+        { type: 'thinking_start' },
+        { type: 'thinking_delta', content: ' delta' },
+        { type: 'thinking_end' },
+      ])
+    })
+
     it('detects reasoning format from first reasoning chunk', () => {
       const events = processAll([
         reasoningChunk('thinking...'),

@@ -4,7 +4,12 @@ import {
 } from '@/components/chat/attachment-helpers'
 import { buildGenUIPromptHint } from '@/components/chat/genui/system-prompt'
 import type { Message } from '@/components/chat/types'
-import type { BaseModel } from '@/config/models'
+import {
+  getReasoningHistoryPolicy,
+  getResolvedModelContextWindow,
+  type BaseModel,
+} from '@/config/models'
+import { shouldIncludeReasoning } from '@/utils/reasoning-history'
 import { formatCurrentTimeReminder } from '@/utils/time-reminder'
 import { selectMessagesWithinBudget } from '@/utils/token-estimation'
 import type {
@@ -32,6 +37,7 @@ export interface ChatQueryBuilderParams {
   systemPrompt: string
   rules?: string
   messages: Message[]
+  autoCandidates?: BaseModel[]
   /**
    * Append GenUI widget guidance to the system prompt. Defaults to `false`
    * so non-chat callers (title gen, memory) stay unaffected.
@@ -66,11 +72,20 @@ export class ChatQueryBuilder {
       systemPrompt,
       rules,
       messages: conversationMessages,
+      autoCandidates,
       includeGenUIHint,
       forcePrependSystemPrompt,
       includeTimeReminder,
     } = params
     const modelId = model.modelName
+    const reasoningHistoryPolicy = getReasoningHistoryPolicy({
+      model,
+      autoCandidates,
+    })
+    const contextWindow = getResolvedModelContextWindow({
+      model,
+      autoCandidates,
+    })
 
     const genUIHint = includeGenUIHint ? buildGenUIPromptHint() : null
 
@@ -107,12 +122,17 @@ export class ChatQueryBuilder {
     // Add conversation history that fits within the model's context budget
     const recentMessages = selectMessagesWithinBudget(
       conversationMessages,
-      model.contextWindow,
+      contextWindow,
+      { reasoningHistoryPolicy },
     )
     let addedSystemInstructions = useSystemRole
 
     for (let index = 0; index < recentMessages.length; index++) {
       const msg = recentMessages[index]
+      const includeReasoning = shouldIncludeReasoning(
+        reasoningHistoryPolicy,
+        Boolean(msg.toolCalls?.length),
+      )
 
       if (msg.role === 'user') {
         let userContent = this.buildUserContent(msg, model.multimodal)
@@ -138,11 +158,16 @@ export class ChatQueryBuilder {
           role: 'user',
           content: userContent,
         } as ChatCompletionUserMessageParam)
-      } else if (msg.content || (msg.toolCalls && msg.toolCalls.length > 0)) {
+      } else if (
+        msg.content ||
+        (msg.toolCalls && msg.toolCalls.length > 0) ||
+        (includeReasoning && msg.thoughts !== undefined)
+      ) {
         // Assistant messages - include annotations and searchReasoning for multi-turn context
         const assistantParam: ChatCompletionAssistantMessageParam & {
           annotations?: Message['annotations']
           search_reasoning?: string
+          reasoning_content?: string
         } = {
           role: 'assistant',
           content: msg.content || '',
@@ -152,6 +177,9 @@ export class ChatQueryBuilder {
         }
         if (msg.searchReasoning) {
           assistantParam.search_reasoning = msg.searchReasoning
+        }
+        if (includeReasoning && msg.thoughts !== undefined) {
+          assistantParam.reasoning_content = msg.thoughts
         }
         if (msg.toolCalls && msg.toolCalls.length > 0) {
           assistantParam.tool_calls = msg.toolCalls.map((tc) => ({
