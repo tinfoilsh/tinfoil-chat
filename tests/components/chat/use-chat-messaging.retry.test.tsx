@@ -70,6 +70,7 @@ vi.mock('@/services/inference/title', () => ({
 vi.mock('@/services/inference/tinfoil-client', () => ({
   getRateLimitInfo: vi.fn(() => null),
   refreshRateLimit: vi.fn(),
+  snapshotAndDecrementRemaining: vi.fn(),
 }))
 
 vi.mock('@/services/storage/chat-storage', () => ({

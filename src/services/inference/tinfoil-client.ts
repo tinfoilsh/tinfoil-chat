@@ -318,6 +318,16 @@ export function snapshotAndDecrementRemaining(): void {
 }
 
 /**
+ * Drops the pending optimistic-decrement snapshot so the next
+ * refreshRateLimit treats the server's count as authoritative. Called when
+ * a request was rejected outright (e.g. a 429): the server never consumed
+ * it, so reconciling against the snapshot would undercount by one.
+ */
+export function discardRateLimitSnapshot(): void {
+  remainingBeforeRequest = null
+}
+
+/**
  * Forces a fresh fetch of the session token (and rate limit info) from
  * the server, bypassing the local cache.  Called after each stream
  * completes so the UI reflects the server's actual remaining count.
@@ -523,6 +533,13 @@ export async function createRecoverableTinfoilClient(
       apiKey: sessionToken,
       baseURL: transport.baseURL,
       dangerouslyAllowBrowser: true,
+      // Suppressed at the factory level (unlike initClient's shared client,
+      // where callers scope it per-request): this client is single-use for
+      // one recovery attempt. recoverableFetch captures a recovery token
+      // bound to this client's X-Session-Id, so an SDK-internal silent
+      // retry would reuse the session id and fire onTokenCaptured twice
+      // for the same attempt. Retries happen in sendChatStream's loop,
+      // which builds a fresh client (and session id) per attempt.
       maxRetries: 0,
       defaultHeaders: {
         [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,

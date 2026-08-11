@@ -25,7 +25,10 @@ vi.mock('@/services/inference/tinfoil-client', () => ({
   createRecoverableTinfoilTransport: () => createRecoverableTransport(),
   createRecoverableTinfoilClient: (...args: unknown[]) =>
     createRecoverableClient(...args),
+  discardRateLimitSnapshot: vi.fn(),
+  getRateLimitInfo: vi.fn(() => null),
   getTinfoilClient: vi.fn(),
+  refreshRateLimit: vi.fn(async () => undefined),
   resetTinfoilClient: () => resetTinfoilClient(),
 }))
 

@@ -23,7 +23,6 @@ type UseMessageQueueArgs = {
   isRateLimited: () => boolean
   isDispatchBlocked?: () => boolean
   dispatchBlocked?: boolean
-  onBeforeDispatch?: () => void
   onRateLimited?: () => void
   cancelGeneration?: (chatId?: string) => void | Promise<void>
 }
@@ -120,7 +119,6 @@ export function useMessageQueue({
   isRateLimited,
   isDispatchBlocked,
   dispatchBlocked = false,
-  onBeforeDispatch,
   onRateLimited,
   cancelGeneration,
 }: UseMessageQueueArgs): UseMessageQueueReturn {
@@ -165,13 +163,11 @@ export function useMessageQueue({
   const handleQueryRef = useRef(handleQuery)
   const isRateLimitedRef = useRef(isRateLimited)
   const isDispatchBlockedRef = useRef(isDispatchBlocked)
-  const onBeforeDispatchRef = useRef(onBeforeDispatch)
   const onRateLimitedRef = useRef(onRateLimited)
   const cancelGenerationRef = useRef(cancelGeneration)
   handleQueryRef.current = handleQuery
   isRateLimitedRef.current = isRateLimited
   isDispatchBlockedRef.current = isDispatchBlocked
-  onBeforeDispatchRef.current = onBeforeDispatch
   onRateLimitedRef.current = onRateLimited
   cancelGenerationRef.current = cancelGeneration
 
@@ -277,7 +273,6 @@ export function useMessageQueue({
           const [next, ...rest] = getQueue(pump.id)
           if (!next) break
           setQueueFor(pump.id, rest)
-          onBeforeDispatchRef.current?.()
 
           try {
             const result = handleQueryRef.current(

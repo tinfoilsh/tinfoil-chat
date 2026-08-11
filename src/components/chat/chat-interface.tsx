@@ -8,6 +8,7 @@ import {
   type BaseModel,
 } from '@/config/models'
 import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
+import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SETTINGS_CODE_EXECUTION_ENABLED,
@@ -33,7 +34,6 @@ import {
   getRateLimitInfo,
   getSessionToken,
   invalidateSessionCache,
-  snapshotAndDecrementRemaining,
   type RateLimitInfo,
 } from '@/services/inference/tinfoil-client'
 import { generateTitle, getTitleContent } from '@/services/inference/title'
@@ -899,16 +899,16 @@ export function ChatInterface({
   // per-account hourly cap (subscribers) reuses the same indicator channel but
   // must not block the queue or prompt subscribing; those sends fail fast with
   // an in-chat rate-limit message and recover once the hourly window resets.
-  const isRateLimited = useCallback(
-    () =>
-      Boolean(
-        rateLimit && rateLimit.remaining <= 0 && rateLimit.kind !== 'hourly',
-      ),
-    [rateLimit],
-  )
-
-  const handleQueueDispatch = useCallback(() => {
-    if (rateLimit) snapshotAndDecrementRemaining()
+  //
+  // Reads the live cache rather than the mirrored `rateLimit` state so the
+  // queue pump's pre-dequeue check can never lag behind handleQuery's own
+  // quota gate (which reads the same cache): a stale mirror would let the
+  // pump dequeue a message the gate then drops. `rateLimit` stays a
+  // dependency so the queue-resume effect re-fires when the limit clears.
+  const isRateLimited = useCallback(() => {
+    void rateLimit
+    const limit = getRateLimitInfo()
+    return Boolean(limit && limit.remaining <= 0 && limit.kind !== 'hourly')
   }, [rateLimit])
 
   const handleQueueRateLimited = useCallback(() => {
@@ -933,7 +933,6 @@ export function ChatInterface({
       hasPendingRecoveryRef.current ||
       (currentChatId ? isChatRecoveryActive(currentChatId) : false),
     dispatchBlocked: hasPendingRecovery || activeRecoveryTurnIds.length > 0,
-    onBeforeDispatch: handleQueueDispatch,
     onRateLimited: handleQueueRateLimited,
     cancelGeneration,
   })
@@ -1131,14 +1130,14 @@ export function ChatInterface({
     })
   }, [isSignedIn, cloudSyncInitialized, chat_subscription_active])
 
-  // Handle upgrade requests from error CTA buttons
+  // Handle upgrade requests from error CTA buttons and quota-gated sends
   useEffect(() => {
     const handleRequestUpgrade = () => {
       setIsSubscribePromptOpen(true)
     }
-    window.addEventListener('requestUpgrade', handleRequestUpgrade)
+    window.addEventListener(REQUEST_UPGRADE_EVENT, handleRequestUpgrade)
     return () => {
-      window.removeEventListener('requestUpgrade', handleRequestUpgrade)
+      window.removeEventListener(REQUEST_UPGRADE_EVENT, handleRequestUpgrade)
     }
   }, [])
 

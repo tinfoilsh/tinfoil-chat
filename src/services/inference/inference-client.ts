@@ -23,7 +23,10 @@ import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
 import {
   createRecoverableTinfoilClient,
   createRecoverableTinfoilTransport,
+  discardRateLimitSnapshot,
+  getRateLimitInfo,
   getTinfoilClient,
+  refreshRateLimit,
   resetTinfoilClient,
   type RecoverableTinfoilTransport,
 } from './tinfoil-client'
@@ -150,6 +153,41 @@ export interface ChatRecoveryCallbacks {
     token: SessionRecoveryToken,
   ) => Promise<void>
   onAttemptAbandoned: (sessionId: string) => Promise<void>
+}
+
+function getHttpStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown })?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+/**
+ * A 429 can mean transient per-request throttling (worth retrying) or an
+ * exhausted usage quota (which cannot succeed until the window resets).
+ * Distinguishes the two by refreshing the quota from the server: returns a
+ * terminal ChatError when the quota is exhausted, or null when the 429 looks
+ * transient and the caller may retry.
+ */
+async function classifyQuotaExhausted429(
+  error: unknown,
+): Promise<ChatError | null> {
+  // The 429 means the server rejected the request without consuming quota,
+  // so its refreshed count is authoritative. Drop the optimistic-decrement
+  // snapshot first: reconciling against it would force `remaining` to 0 for
+  // a user whose last request was merely throttled, misclassifying a
+  // transient 429 as exhaustion.
+  discardRateLimitSnapshot()
+  await refreshRateLimit()
+  const limit = getRateLimitInfo()
+  if (!limit || limit.remaining > 0) {
+    return null
+  }
+  const message =
+    (error as { message?: string })?.message ?? 'Rate limit reached'
+  return new ChatError(
+    message,
+    limit.kind === 'hourly' ? 'HOURLY_LIMIT' : 'RATE_LIMIT',
+    { status: 429 },
+  )
 }
 
 // Typed classification only — never inspect error message strings, which
@@ -490,9 +528,12 @@ export async function sendChatStream(
         client = await getTinfoilClient()
       }
 
+      // This loop owns retry policy with typed error classification; the
+      // SDK's internal retries would stack under it and delay terminal
+      // errors such as quota-exhausted 429s.
       const stream = await (client.chat.completions.create as Function)(
         requestBody,
-        { signal },
+        { signal, maxRetries: 0 },
       )
       if (!waitForTokenCapture || !recoverySessionCleanup) {
         return stream as ChatChunkStream
@@ -551,6 +592,16 @@ export async function sendChatStream(
       if (refreshAuthentication) {
         resetTinfoilClient()
       }
+
+      // A 429 caused by an exhausted quota cannot succeed on retry; surface
+      // it immediately so the paywall/limit UI shows instead of a retry loop.
+      if (getHttpStatus(err) === 429) {
+        const quotaError = await classifyQuotaExhausted429(err)
+        if (quotaError) {
+          throw quotaError
+        }
+      }
+
       if (
         attempt < maxRetries &&
         (refreshAuthentication || isRetryableError(err))
