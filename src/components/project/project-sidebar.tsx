@@ -2,6 +2,7 @@
 
 import { ChatList, type ChatItemData } from '@/components/chat/chat-list'
 import { formatRelativeTime } from '@/components/chat/chat-list-utils'
+import { getDocumentTextContent } from '@/components/chat/document-content'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
 import { useDrag } from '@/components/chat/drag-context'
 import { TypingAnimation } from '@/components/chat/typing-animation'
@@ -561,14 +562,28 @@ export function ProjectSidebar({
           return new Promise<void>((resolve) => {
             processDocument(
               file,
-              async (content) => {
+              async (
+                content,
+                _documentId,
+                _imageData,
+                _hasDescription,
+                pages,
+              ) => {
                 try {
-                  await uploadDocument(file, content)
-                } catch {
+                  const projectContent = getDocumentTextContent(content, pages)
+                  if (!projectContent) {
+                    throw new Error(
+                      'No readable content was found in this document.',
+                    )
+                  }
+                  await uploadDocument(file, projectContent)
+                } catch (error) {
                   toast({
                     title: 'Upload failed',
                     description:
-                      'Failed to upload the document. Please try again.',
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to upload the document. Please try again.',
                     variant: 'destructive',
                   })
                 } finally {
@@ -585,6 +600,8 @@ export function ProjectSidebar({
                 removeUploadingFile(uploadIds[i])
                 resolve()
               },
+              undefined,
+              { requireTextContent: true },
             )
           })
         }),
@@ -1299,17 +1316,23 @@ export function ProjectSidebar({
                             )}
                             <div className="min-w-0 flex-1">
                               <div className="truncate font-aeonik-fono text-xs text-content-primary">
-                                {doc.filename}
+                                {doc.decryptionFailed
+                                  ? 'Unable to load document'
+                                  : doc.filename}
                               </div>
                               <div className="font-aeonik-fono text-[10px] text-content-muted">
-                                {formatFileSize(doc.sizeBytes)}
+                                {doc.decryptionFailed
+                                  ? 'Unavailable'
+                                  : !doc.content?.trim()
+                                    ? 'No readable content'
+                                    : formatFileSize(doc.sizeBytes)}
                               </div>
                             </div>
                             <button
                               type="button"
                               onClick={() => handleRemoveDocument(doc.id)}
                               disabled={contextLoading}
-                              aria-label={`Remove ${doc.filename}`}
+                              aria-label={`Remove ${doc.filename || 'unavailable document'}`}
                               className={cn(
                                 'rounded p-0.5 transition-colors',
                                 isDarkMode

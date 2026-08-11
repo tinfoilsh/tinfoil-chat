@@ -23,6 +23,7 @@ import {
   type ProjectContextValue,
   type UploadingFile,
 } from './project-context'
+import { hydrateProjectDocuments } from './project-document-hydration'
 
 interface ProjectProviderProps {
   children: React.ReactNode
@@ -46,8 +47,27 @@ export function ProjectProvider({
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
   const initializingRef = useRef(false)
   const initialProjectLoadedRef = useRef(false)
+  const pendingProjectIdRef = useRef<string | null>(null)
+  const committedProjectIdRef = useRef<string | null>(null)
+  const projectLoadGenerationRef = useRef(0)
+  const documentRefreshGenerationRef = useRef(0)
+  const documentMutationGenerationRef = useRef(0)
 
   const isProjectMode = activeProject !== null
+
+  const resetProjectSessionState = useCallback(() => {
+    projectLoadGenerationRef.current += 1
+    documentRefreshGenerationRef.current += 1
+    documentMutationGenerationRef.current += 1
+    pendingProjectIdRef.current = null
+    committedProjectIdRef.current = null
+    setActiveProject(null)
+    setProjectDocuments([])
+    setUploadingFiles([])
+    setError(null)
+    setLoading(false)
+    setLoadingProject(null)
+  }, [])
 
   useEffect(() => {
     if (isSignedIn && !initializingRef.current) {
@@ -56,13 +76,9 @@ export function ProjectProvider({
       initializingRef.current = false
       initialProjectLoadedRef.current = false
       // Clear all user-specific state on logout to prevent data leaking across sessions
-      setActiveProject(null)
-      setProjectDocuments([])
-      setError(null)
-      setLoading(false)
-      setLoadingProject(null)
+      resetProjectSessionState()
     }
-  }, [isSignedIn])
+  }, [isSignedIn, resetProjectSessionState])
 
   // Memory callbacks for useMemory hook
   const memoryCallbacks = useMemo(
@@ -129,6 +145,10 @@ export function ProjectProvider({
 
   const enterProjectMode = useCallback(
     async (projectId: string, projectName?: string): Promise<boolean> => {
+      const generation = projectLoadGenerationRef.current + 1
+      projectLoadGenerationRef.current = generation
+      documentRefreshGenerationRef.current += 1
+      pendingProjectIdRef.current = projectId
       setLoading(true)
       setError(null)
       setUploadingFiles([])
@@ -147,25 +167,19 @@ export function ProjectProvider({
           documentsResponse.documents.map((doc) => doc.id),
         )
 
-        const documents: ProjectDocument[] = documentsResponse.documents.map(
-          (doc) => {
-            const full = fullById.get(doc.id)
-            if (!full) {
-              return { ...doc, filename: '', contentType: '' }
-            }
-            return {
-              ...doc,
-              content: full.content,
-              filename: full.filename,
-              contentType: full.contentType,
-              // The list surface only carries metadata and stamps
-              // sizeBytes as 0; the real size comes from the decoded
-              // document content.
-              sizeBytes: full.sizeBytes,
-            }
-          },
+        const documents = hydrateProjectDocuments(
+          documentsResponse.documents,
+          fullById,
         )
 
+        if (
+          projectLoadGenerationRef.current !== generation ||
+          pendingProjectIdRef.current !== projectId
+        ) {
+          return false
+        }
+
+        committedProjectIdRef.current = projectId
         setActiveProject(project)
         setProjectDocuments(documents)
 
@@ -176,6 +190,8 @@ export function ProjectProvider({
         })
         return true
       } catch (err) {
+        if (projectLoadGenerationRef.current !== generation) return false
+        pendingProjectIdRef.current = committedProjectIdRef.current
         const message =
           err instanceof Error ? err.message : 'Failed to load project'
         setError(message)
@@ -186,8 +202,10 @@ export function ProjectProvider({
         })
         return false
       } finally {
-        setLoading(false)
-        setLoadingProject(null)
+        if (projectLoadGenerationRef.current === generation) {
+          setLoading(false)
+          setLoadingProject(null)
+        }
       }
     },
     [],
@@ -211,10 +229,7 @@ export function ProjectProvider({
   }, [initialProjectId, isSignedIn, activeProject, enterProjectMode])
 
   const exitProjectMode = useCallback(() => {
-    setActiveProject(null)
-    setProjectDocuments([])
-    setUploadingFiles([])
-    setError(null)
+    resetProjectSessionState()
 
     // Signal to ChatSidebar that projects should be expanded
     sessionStorage.setItem(UI_EXPAND_PROJECTS_ON_MOUNT, 'true')
@@ -223,7 +238,7 @@ export function ProjectProvider({
       component: 'ProjectProvider',
       action: 'exitProjectMode',
     })
-  }, [])
+  }, [resetProjectSessionState])
 
   const createProject = useCallback(
     async (data: CreateProjectData): Promise<Project> => {
@@ -321,23 +336,32 @@ export function ProjectProvider({
         throw new Error('No active project')
       }
 
+      const projectId = activeProject.id
+      documentRefreshGenerationRef.current += 1
       setError(null)
 
       try {
         const document = await projectStorage.uploadDocument(
-          activeProject.id,
+          projectId,
           file.name,
           file.type || 'text/plain',
           content,
+          file.size,
         )
 
-        setProjectDocuments((prev) => [...prev, document])
+        documentMutationGenerationRef.current += 1
+        if (committedProjectIdRef.current === projectId) {
+          setProjectDocuments((prev) => [
+            ...prev.filter((existing) => existing.id !== document.id),
+            document,
+          ])
+        }
 
         logInfo('Uploaded document', {
           component: 'ProjectProvider',
           action: 'uploadDocument',
           metadata: {
-            projectId: activeProject.id,
+            projectId,
             documentId: document.id,
             filename: file.name,
           },
@@ -360,6 +384,8 @@ export function ProjectProvider({
         throw new Error('No active project')
       }
 
+      const projectId = activeProject.id
+      documentRefreshGenerationRef.current += 1
       setError(null)
 
       const removedDoc = projectDocuments.find((doc) => doc.id === docId)
@@ -367,16 +393,27 @@ export function ProjectProvider({
       setProjectDocuments((prev) => prev.filter((doc) => doc.id !== docId))
 
       try {
-        await projectStorage.deleteDocument(activeProject.id, docId)
+        await projectStorage.deleteDocument(projectId, docId)
+        documentMutationGenerationRef.current += 1
+        if (committedProjectIdRef.current === projectId) {
+          setProjectDocuments((prev) =>
+            prev.filter((document) => document.id !== docId),
+          )
+        }
 
         logInfo('Removed document', {
           component: 'ProjectProvider',
           action: 'removeDocument',
-          metadata: { projectId: activeProject.id, documentId: docId },
+          metadata: { projectId, documentId: docId },
         })
       } catch (err) {
-        if (removedDoc) {
-          setProjectDocuments((prev) => [...prev, removedDoc])
+        documentMutationGenerationRef.current += 1
+        if (removedDoc && committedProjectIdRef.current === projectId) {
+          setProjectDocuments((prev) =>
+            prev.some((document) => document.id === removedDoc.id)
+              ? prev
+              : [...prev, removedDoc],
+          )
         }
 
         const message =
@@ -390,38 +427,40 @@ export function ProjectProvider({
 
   const refreshDocuments = useCallback(async () => {
     if (!activeProject) return
+    const projectId = activeProject.id
+    const generation = documentRefreshGenerationRef.current + 1
+    documentRefreshGenerationRef.current = generation
+    const mutationGeneration = documentMutationGenerationRef.current
 
     try {
-      const documentsResponse = await projectStorage.listDocuments(
-        activeProject.id,
-      )
+      const documentsResponse = await projectStorage.listDocuments(projectId)
 
       const fullById = await projectStorage.getDocuments(
-        activeProject.id,
+        projectId,
         documentsResponse.documents.map((doc) => doc.id),
       )
 
-      const documents: ProjectDocument[] = documentsResponse.documents.map(
-        (doc) => {
-          const full = fullById.get(doc.id)
-          if (!full) {
-            return { ...doc, filename: '', contentType: '' }
-          }
-          return {
-            ...doc,
-            content: full.content,
-            filename: full.filename,
-            contentType: full.contentType,
-          }
-        },
-      )
+      if (
+        documentRefreshGenerationRef.current !== generation ||
+        documentMutationGenerationRef.current !== mutationGeneration ||
+        committedProjectIdRef.current !== projectId
+      ) {
+        return
+      }
 
-      setProjectDocuments(documents)
+      setProjectDocuments((previous) =>
+        hydrateProjectDocuments(
+          documentsResponse.documents,
+          fullById,
+          previous,
+        ),
+      )
     } catch (err) {
+      if (documentRefreshGenerationRef.current !== generation) return
       logError('Failed to refresh documents', err, {
         component: 'ProjectProvider',
         action: 'refreshDocuments',
-        metadata: { projectId: activeProject.id },
+        metadata: { projectId },
       })
     }
   }, [activeProject])
