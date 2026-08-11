@@ -271,8 +271,8 @@ export function ProjectSettingsContent({
                 isHighUsage
                   ? 'bg-amber-500'
                   : isDarkMode
-                    ? 'bg-emerald-500'
-                    : 'bg-emerald-600',
+                    ? 'bg-brand-accent-light'
+                    : 'bg-brand-accent-dark',
               )}
               style={{ width: `${usagePercent}%` }}
             />
@@ -338,8 +338,8 @@ export function ProjectSettingsContent({
                   isHighUsage
                     ? 'text-amber-500'
                     : isDarkMode
-                      ? 'text-emerald-400'
-                      : 'text-emerald-600',
+                      ? 'text-brand-accent-light'
+                      : 'text-brand-accent-dark',
                 )}
               >
                 ~{formatTokenCount(contextUsage.availableForChat)} tokens
@@ -396,7 +396,8 @@ export function ProjectSettingsContent({
             className={cn(
               'font-aeonik-fono text-xs',
               saveStatus === 'saving' && 'text-content-muted',
-              saveStatus === 'saved' && 'text-emerald-500',
+              saveStatus === 'saved' &&
+                'text-brand-accent-dark dark:text-brand-accent-light',
               saveStatus === 'error' && 'text-red-500',
             )}
           >

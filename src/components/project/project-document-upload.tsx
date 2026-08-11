@@ -99,8 +99,8 @@ export function ProjectDocumentUpload({
         className={cn(
           'flex w-full items-center justify-center gap-2 rounded-md border border-dashed px-3 py-2 text-xs transition-colors',
           isDarkMode
-            ? 'border-border-strong text-content-muted hover:border-emerald-500/40 hover:text-emerald-400'
-            : 'border-border-subtle text-content-muted hover:border-emerald-500/40 hover:text-emerald-600',
+            ? 'border-border-strong text-content-muted hover:border-brand-accent-light/40 hover:text-brand-accent-light'
+            : 'border-border-subtle text-content-muted hover:border-brand-accent-dark/40 hover:text-brand-accent-dark',
           isUploading && 'cursor-not-allowed opacity-50',
         )}
       >

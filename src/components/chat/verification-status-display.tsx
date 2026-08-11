@@ -104,7 +104,9 @@ export const VerificationStatusDisplay = memo(
     const getStepIcon = (status: VerificationStep['status']) => {
       switch (status) {
         case 'success':
-          return <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+          return (
+            <CheckCircleIcon className="h-5 w-5 text-brand-accent-dark dark:text-brand-accent-light" />
+          )
         case 'error':
           return (
             <div className="relative h-5 w-5 rounded-full bg-red-500">
@@ -170,7 +172,7 @@ export const VerificationStatusDisplay = memo(
               {hasError ? (
                 <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.6)]" />
               ) : isComplete ? (
-                <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_1px_rgba(16,185,129,0.6)]" />
+                <div className="h-2 w-2 rounded-full bg-brand-accent-dark shadow-[0_0_4px_1px_hsl(var(--color-accent-dark)/0.6)] dark:bg-brand-accent-light dark:shadow-[0_0_4px_1px_hsl(var(--color-accent-light)/0.6)]" />
               ) : (
                 <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
               )}
@@ -180,7 +182,7 @@ export const VerificationStatusDisplay = memo(
                 className={`font-aeonik-fono ${
                   isComplete
                     ? isDarkMode
-                      ? 'text-emerald-500'
+                      ? 'text-brand-accent-light'
                       : 'text-brand-accent-dark'
                     : hasError
                       ? 'text-red-500'
@@ -269,7 +271,7 @@ export const VerificationStatusDisplay = memo(
             {hasError ? (
               <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_4px_1px_rgba(239,68,68,0.6)]" />
             ) : isComplete ? (
-              <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_1px_rgba(16,185,129,0.6)]" />
+              <div className="h-2 w-2 rounded-full bg-brand-accent-dark shadow-[0_0_4px_1px_hsl(var(--color-accent-dark)/0.6)] dark:bg-brand-accent-light dark:shadow-[0_0_4px_1px_hsl(var(--color-accent-light)/0.6)]" />
             ) : (
               <PiSpinner className="h-5 w-5 animate-spin text-content-secondary" />
             )}
@@ -278,7 +280,7 @@ export const VerificationStatusDisplay = memo(
               aria-live="polite"
               className={`text-xs font-medium ${
                 isComplete
-                  ? 'text-emerald-500'
+                  ? 'text-brand-accent-dark dark:text-brand-accent-light'
                   : hasError
                     ? 'text-red-500'
                     : isDarkMode
@@ -315,7 +317,7 @@ export const VerificationStatusDisplay = memo(
                   <span
                     className={`${
                       step.status === 'success'
-                        ? 'text-emerald-500'
+                        ? 'text-brand-accent-dark dark:text-brand-accent-light'
                         : step.status === 'error'
                           ? 'text-red-500'
                           : isDarkMode

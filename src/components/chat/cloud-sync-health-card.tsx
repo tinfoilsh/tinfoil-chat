@@ -127,7 +127,7 @@ export function CloudSyncHealthCard({
         <div className="flex min-w-0 items-start gap-2">
           {status.tone === 'ok' ? (
             <CheckCircleIcon
-              className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500"
+              className="mt-0.5 h-4 w-4 shrink-0 text-brand-accent-dark dark:text-brand-accent-light"
               aria-hidden="true"
             />
           ) : status.tone === 'warning' ? (

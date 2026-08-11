@@ -68,7 +68,7 @@ ${encryptionKey.replace('key_', '')}
               disabled={hasDownloadedKey}
               className={`flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
                 hasDownloadedKey
-                  ? 'cursor-not-allowed border-emerald-500/40 bg-emerald-500/10 text-emerald-600'
+                  ? 'cursor-not-allowed border-brand-accent-dark/40 bg-brand-accent-dark/10 text-brand-accent-dark dark:border-brand-accent-light/40 dark:bg-brand-accent-light/10 dark:text-brand-accent-light'
                   : 'border-brand-accent-dark/40 bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90'
               }`}
             >
