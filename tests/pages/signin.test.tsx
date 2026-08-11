@@ -1,6 +1,8 @@
 import SignInPage from '@/pages/signin'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const socialPopup = { close: vi.fn() } as unknown as Window
 
 const auth = vi.hoisted(() => {
   const signIn = {
@@ -51,6 +53,7 @@ vi.mock('next/router', () => ({
 describe('SignInPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(window, 'open').mockReturnValue(socialPopup)
     auth.signIn.status = 'needs_identifier'
     auth.signIn.supportedSecondFactors = []
     auth.signUp.status = 'missing_requirements'
@@ -64,6 +67,10 @@ describe('SignInPage', () => {
     auth.signIn.sso.mockResolvedValue({ error: null })
     auth.signUp.create.mockResolvedValue({ error: null })
     auth.signUp.update.mockResolvedValue({ error: null })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('uses the branded layout with social and email options', () => {
@@ -268,20 +275,47 @@ describe('SignInPage', () => {
     })
   })
 
-  it('starts social sign-in through Clerk custom flow APIs', async () => {
+  it.each([
+    ['Google', 'oauth_google'],
+    ['Apple', 'oauth_apple'],
+  ] as const)(
+    'starts %s sign-in in a dedicated popup',
+    async (provider, strategy) => {
+      render(<SignInPage />)
+
+      fireEvent.click(
+        screen.getByRole('button', { name: `Continue with ${provider}` }),
+      )
+
+      await waitFor(() => {
+        expect(window.open).toHaveBeenCalledWith(
+          'about:blank',
+          '_blank',
+          expect.any(String),
+        )
+        expect(auth.signIn.sso).toHaveBeenCalledWith({
+          strategy,
+          popup: socialPopup,
+          redirectCallbackUrl: new URL('/sso-callback', window.location.origin)
+            .href,
+          redirectUrl: new URL('/', window.location.origin).href,
+        })
+      })
+    },
+  )
+
+  it('explains how to continue when the social popup is blocked', async () => {
+    vi.mocked(window.open).mockReturnValue(null)
     render(<SignInPage />)
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Continue with Google' }),
     )
 
-    await waitFor(() => {
-      expect(auth.signIn.sso).toHaveBeenCalledWith({
-        strategy: 'oauth_google',
-        redirectCallbackUrl: '/sso-callback',
-        redirectUrl: '/',
-      })
-    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Allow pop-ups for this site to continue with Google or Apple.',
+    )
+    expect(auth.signIn.sso).not.toHaveBeenCalled()
   })
 
   it('shows the Clerk error when social sign-in cannot start', async () => {
