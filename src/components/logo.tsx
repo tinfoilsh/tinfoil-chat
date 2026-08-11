@@ -15,7 +15,6 @@ export function Logo({
       width={194}
       height={50}
       className={clsx(className)}
-      priority
     />
   )
 }

@@ -39,6 +39,7 @@ const aeonikFono = localFont({
   ],
   variable: '--font-aeonik-fono',
   display: 'swap',
+  preload: false,
 })
 
 const aeonik = localFont({
@@ -76,6 +77,7 @@ const aeonik = localFont({
   ],
   variable: '--font-aeonik',
   display: 'swap',
+  preload: false,
   declarations: [{ prop: 'ascent-override', value: '90%' }],
 })
 
@@ -92,6 +94,7 @@ const lora = localFont({
   ],
   variable: '--font-lora',
   display: 'swap',
+  preload: false,
 })
 
 const openDyslexic = localFont({
@@ -119,6 +122,7 @@ const openDyslexic = localFont({
   ],
   variable: '--font-opendyslexic',
   display: 'swap',
+  preload: false,
 })
 
 migrateStorageKeys()
