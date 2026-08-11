@@ -617,15 +617,20 @@ export function ChatSidebar({
     [filteredChats, paginatesCloudChats, visibleCloudChatCount],
   )
   const hasMoreLoadedChats = filteredChats.length > visibleCloudChatCount
+  const canLoadRemoteChats =
+    isInitialChatPageReady && isPaginationInitialized && hasMoreRemote
   const shouldShowLoadMore =
-    isInitialChatPageReady &&
-    isPaginationInitialized &&
-    paginatesCloudChats &&
-    (hasMoreRemote || hasMoreLoadedChats)
+    paginatesCloudChats && (hasMoreLoadedChats || canLoadRemoteChats)
 
   useEffect(() => {
     setVisibleCloudChatCount(PAGINATION.CHATS_PER_PAGE)
-  }, [user?.id, isInitialChatPageReady])
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!isInitialChatPageReady) {
+      setVisibleCloudChatCount(PAGINATION.CHATS_PER_PAGE)
+    }
+  }, [isInitialChatPageReady])
 
   const loadMoreChats = useCallback(async (): Promise<void> => {
     if (isLoadingMore || !isSignedIn) return
