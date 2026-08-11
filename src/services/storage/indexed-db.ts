@@ -847,6 +847,7 @@ export class IndexedDBStorage {
     const saveGeneration = this.saveGeneration
     const initializationPromise = new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
+      let abandoned = false
 
       request.onerror = (event) => {
         const error = (event.target as IDBOpenDBRequest).error
@@ -861,6 +862,10 @@ export class IndexedDBStorage {
       }
 
       request.onsuccess = () => {
+        if (abandoned) {
+          request.result.close()
+          return
+        }
         isUpgradeBlocked = false
         const db = request.result
         db.onversionchange = () => {
@@ -1004,11 +1009,13 @@ export class IndexedDBStorage {
       }
 
       request.onblocked = () => {
+        abandoned = true
         isUpgradeBlocked = true
         logWarning('IndexedDB upgrade blocked - close other tabs', {
           component: 'IndexedDBStorage',
         })
         window.dispatchEvent(new Event(INDEXED_DB_UPGRADE_BLOCKED_EVENT))
+        reject(new Error('Database upgrade blocked'))
       }
     })
 
@@ -2036,6 +2043,33 @@ export class IndexedDBStorage {
     )
   }
 
+  async getProjectChatCount(projectId: string): Promise<number> {
+    await this.saveQueue.catch(() => {})
+    const db = await this.ensureDB()
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([CHATS_STORE], 'readonly')
+      const request = transaction
+        .objectStore(CHATS_STORE)
+        .index(CHATS_PROJECT_INDEX)
+        .openCursor(IDBKeyRange.only(projectId))
+      let count = 0
+
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (!cursor) {
+          resolve(count)
+          return
+        }
+        const chat = cursor.value as StoredChat
+        if (!chat.isLocalOnly) count++
+        cursor.continue()
+      }
+      request.onerror = () =>
+        reject(new Error('Failed to count cached project chats'))
+    })
+  }
+
   async hasPendingChatRecoveries(): Promise<boolean> {
     await this.ensureChatSummaries()
     await this.waitForSaveQueue()
@@ -2905,19 +2939,22 @@ export class IndexedDBStorage {
             reject(error)
             return
           }
-          const normalizedAttachments = normalizeAttachmentPayloadsInTransaction(
-            inheritedChat,
-            transaction,
-            reject,
-          )
+          const normalizedAttachments =
+            normalizeAttachmentPayloadsInTransaction(
+              inheritedChat,
+              transaction,
+              reject,
+            )
           if (!normalizedAttachments) return
-          const messagesForStorage = normalizedAttachments.messages.map((msg) => ({
-            ...msg,
-            timestamp:
-              msg.timestamp instanceof Date
-                ? msg.timestamp.toISOString()
-                : msg.timestamp,
-          }))
+          const messagesForStorage = normalizedAttachments.messages.map(
+            (msg) => ({
+              ...msg,
+              timestamp:
+                msg.timestamp instanceof Date
+                  ? msg.timestamp.toISOString()
+                  : msg.timestamp,
+            }),
+          )
           const storedChat: StoredChat = {
             ...opts.chat,
             messages: messagesForStorage as any,

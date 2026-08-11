@@ -13,7 +13,7 @@ import {
   CloudKeySetupError,
   validateCurrentPrimaryKey,
 } from '@/services/cloud/cloud-key-preflight'
-import { cloudSync } from '@/services/cloud/cloud-sync'
+import { cloudSync, type SyncResult } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import {
@@ -55,6 +55,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     decryptionProgress: null,
   })
   const syncingRef = useRef(false)
+  const syncPromiseRef = useRef<Promise<SyncResult> | null>(null)
   const initializingRef = useRef(false)
   const isMountedRef = useRef(true)
   // Ref avoids putting `options` in useCallback dep arrays, which would
@@ -178,6 +179,52 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     initializeSync()
   }, [isSignedIn, getToken])
 
+  const runChatSync = useCallback((projectId?: string) => {
+    syncingRef.current = true
+    if (isMountedRef.current) {
+      setState((prev) => ({ ...prev, syncing: true }))
+    }
+
+    const syncPromise = (async () => {
+      try {
+        const result = await cloudSync.smartSync(projectId)
+
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            syncing: false,
+            lastSyncTime: Date.now(),
+          }))
+        }
+
+        logInfo(
+          `Sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
+          {
+            component: 'useCloudSync',
+            action: 'syncChats',
+            metadata: { projectId, result },
+          },
+        )
+        return result
+      } catch (error) {
+        if (isMountedRef.current) {
+          setState((prev) => ({ ...prev, syncing: false }))
+        }
+        throw error
+      } finally {
+        syncingRef.current = false
+        syncPromiseRef.current = null
+      }
+    })()
+    syncPromiseRef.current = syncPromise
+    return syncPromise
+  }, [])
+
+  const getOrRunChatSync = useCallback(
+    (projectId?: string) => syncPromiseRef.current ?? runChatSync(projectId),
+    [runChatSync],
+  )
+
   const syncChats = useCallback(async () => {
     if (!isCloudSyncEnabled()) {
       logInfo('Cloud sync is disabled, skipping sync', {
@@ -186,171 +233,48 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
       })
       return false
     }
-
-    if (syncingRef.current) {
-      logInfo('Sync request blocked - sync already in progress', {
-        component: 'useCloudSync',
-        action: 'syncChats',
-      })
-      return false
-    }
-
-    syncingRef.current = true
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, syncing: true }))
-    }
-
-    try {
-      const result = await cloudSync.smartSync()
-
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          syncing: false,
-          lastSyncTime: Date.now(),
-        }))
-      }
-
-      logInfo(
-        `Sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
-        {
-          component: 'useCloudSync',
-          action: 'syncChats',
-          metadata: { result },
-        },
-      )
-
-      return result
-    } catch (error) {
-      if (isMountedRef.current) {
-        setState((prev) => ({ ...prev, syncing: false }))
-      }
-      throw error
-    } finally {
-      syncingRef.current = false
-    }
-  }, [])
+    return getOrRunChatSync()
+  }, [getOrRunChatSync])
 
   /**
    * Smart sync: checks sync status first and only syncs if changes detected.
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
-  const smartSyncChats = useCallback(async (projectId?: string) => {
-    if (!isCloudSyncEnabled()) {
-      logInfo('Cloud sync is disabled, skipping smart sync', {
-        component: 'useCloudSync',
-        action: 'smartSyncChats',
-        metadata: { projectId },
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    if (syncingRef.current) {
-      logInfo('Smart sync request blocked - sync already in progress', {
-        component: 'useCloudSync',
-        action: 'smartSyncChats',
-        metadata: { projectId },
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    syncingRef.current = true
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, syncing: true }))
-    }
-
-    try {
-      const result = await cloudSync.smartSync(projectId)
-
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          syncing: false,
-          lastSyncTime: Date.now(),
-        }))
+  const smartSyncChats = useCallback(
+    async (projectId?: string) => {
+      if (!isCloudSyncEnabled()) {
+        logInfo('Cloud sync is disabled, skipping smart sync', {
+          component: 'useCloudSync',
+          action: 'smartSyncChats',
+          metadata: { projectId },
+        })
+        return { uploaded: 0, downloaded: 0, errors: [] }
       }
 
-      if (result.uploaded > 0 || result.downloaded > 0) {
-        logInfo(
-          `Smart sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
-          {
-            component: 'useCloudSync',
-            action: 'smartSyncChats',
-            metadata: { projectId, result },
-          },
-        )
-      }
-
-      return result
-    } catch (error) {
-      if (isMountedRef.current) {
-        setState((prev) => ({ ...prev, syncing: false }))
-      }
-      throw error
-    } finally {
-      syncingRef.current = false
-    }
-  }, [])
+      return getOrRunChatSync(projectId)
+    },
+    [getOrRunChatSync],
+  )
 
   const backupChat = useCallback(async (chatId: string) => {
     await cloudSync.backupChat(chatId)
   }, [])
 
   // Sync chats for a specific project (full sync)
-  const syncProjectChats = useCallback(async (projectId: string) => {
-    if (!isCloudSyncEnabled()) {
-      logInfo('Cloud sync is disabled, skipping project chat sync', {
-        component: 'useCloudSync',
-        action: 'syncProjectChats',
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    if (syncingRef.current) {
-      logInfo('Sync request blocked - sync already in progress', {
-        component: 'useCloudSync',
-        action: 'syncProjectChats',
-      })
-      return { uploaded: 0, downloaded: 0, errors: [] }
-    }
-
-    syncingRef.current = true
-    if (isMountedRef.current) {
-      setState((prev) => ({ ...prev, syncing: true }))
-    }
-
-    try {
-      const result = await cloudSync.smartSync(projectId)
-
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          syncing: false,
-          lastSyncTime: Date.now(),
-        }))
+  const syncProjectChats = useCallback(
+    async (projectId: string) => {
+      if (!isCloudSyncEnabled()) {
+        logInfo('Cloud sync is disabled, skipping project chat sync', {
+          component: 'useCloudSync',
+          action: 'syncProjectChats',
+        })
+        return { uploaded: 0, downloaded: 0, errors: [] }
       }
 
-      if (result.downloaded > 0) {
-        logInfo(
-          `Project chat sync completed: downloaded=${result.downloaded}`,
-          {
-            component: 'useCloudSync',
-            action: 'syncProjectChats',
-            metadata: { projectId, result },
-          },
-        )
-      }
-
-      return result
-    } catch (error) {
-      if (isMountedRef.current) {
-        setState((prev) => ({ ...prev, syncing: false }))
-      }
-      throw error
-    } finally {
-      syncingRef.current = false
-    }
-  }, [])
+      return getOrRunChatSync(projectId)
+    },
+    [getOrRunChatSync],
+  )
 
   const retryDecryptionWithNewKey = useCallback(
     (opts?: { runInBackground?: boolean }) => {

@@ -54,6 +54,14 @@ export interface SyncResult {
   uploaded: number
   downloaded: number
   errors: string[]
+  nextToken?: string
+}
+
+export class SyncInProgressError extends Error {
+  constructor() {
+    super('Sync already in progress')
+    this.name = 'SyncInProgressError'
+  }
 }
 
 export class CloudSyncDisabledError extends Error {
@@ -387,7 +395,7 @@ export class CloudSyncService {
   }
 
   private async withSyncLock<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.syncLock) throw new Error('Sync already in progress')
+    if (this.syncLock) throw new SyncInProgressError()
     const generation = this.accountGeneration
     const lockSignal = this.lockAcquisitionController.signal
     const runIfCurrent = () => {
@@ -499,6 +507,11 @@ export class CloudSyncService {
 
   get syncing(): boolean {
     return this.syncLock !== null
+  }
+
+  async waitForCurrentSync(): Promise<void> {
+    const currentSync = this.syncLock
+    if (currentSync) await currentSync
   }
 
   async backupChat(chatId: string): Promise<void> {
