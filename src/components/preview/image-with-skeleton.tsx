@@ -8,16 +8,20 @@
 import { ImageOff } from 'lucide-react'
 import { useRef, useState, type ImgHTMLAttributes } from 'react'
 
-interface ImageWithSkeletonProps
-  extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'onLoad' | 'onError'> {
+interface ImageWithSkeletonProps extends Omit<
+  ImgHTMLAttributes<HTMLImageElement>,
+  'onLoad' | 'onError'
+> {
   wrapperClassName?: string
   className?: string
+  onError?: ImgHTMLAttributes<HTMLImageElement>['onError']
 }
 
 export function ImageWithSkeleton({
   wrapperClassName,
   className,
   alt,
+  onError,
   ...imgProps
 }: ImageWithSkeletonProps) {
   const [loaded, setLoaded] = useState(false)
@@ -53,7 +57,10 @@ export function ImageWithSkeleton({
           alt={alt ?? ''}
           className={`${className ?? ''} ${loaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
           onLoad={() => setLoaded(true)}
-          onError={() => setErrored(true)}
+          onError={(event) => {
+            setErrored(true)
+            onError?.(event)
+          }}
         />
       )}
     </div>
