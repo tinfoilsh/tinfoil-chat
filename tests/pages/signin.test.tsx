@@ -278,6 +278,22 @@ describe('SignInPage', () => {
     await waitFor(() => {
       expect(auth.signIn.sso).toHaveBeenCalledWith({
         strategy: 'oauth_google',
+        popup: window,
+        redirectCallbackUrl: '/sso-callback',
+        redirectUrl: '/',
+      })
+    })
+  })
+
+  it('starts Apple sign-in in the current browser window', async () => {
+    render(<SignInPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Apple' }))
+
+    await waitFor(() => {
+      expect(auth.signIn.sso).toHaveBeenCalledWith({
+        strategy: 'oauth_apple',
+        popup: window,
         redirectCallbackUrl: '/sso-callback',
         redirectUrl: '/',
       })

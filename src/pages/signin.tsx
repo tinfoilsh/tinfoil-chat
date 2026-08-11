@@ -243,6 +243,7 @@ export default function SignInPage() {
             : `${SSO_CALLBACK_URL}?redirect_url=${encodeURIComponent(postAuthRedirectUrl)}`
         const { error } = await signIn.sso({
           strategy,
+          popup: window,
           redirectCallbackUrl,
           redirectUrl: postAuthRedirectUrl,
         })
