@@ -6,7 +6,10 @@ import {
   decideRecovery,
   type RecoveryAction,
 } from '@/services/sync-enclave/enclave-error-recovery'
-import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
+import {
+  SyncEnclaveError,
+  SyncNetworkError,
+} from '@/services/sync-enclave/sync-enclave-client'
 
 function err(code: EnclaveErrorCode, status?: number) {
   return new SyncEnclaveError(code, status, code)
@@ -55,8 +58,8 @@ describe('decideRecovery', () => {
     expect(decision.classification.code).toBe(code)
   })
 
-  it('maps a generic TypeError network failure to retry', () => {
-    const decision = decideRecovery(new TypeError('Failed to fetch'))
+  it('maps a typed network failure to retry', () => {
+    const decision = decideRecovery(new SyncNetworkError())
     expect(decision.action.type).toBe('retry')
     if (decision.action.type === 'retry') {
       expect(decision.action.reason).toBe('NETWORK')

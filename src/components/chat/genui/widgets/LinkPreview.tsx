@@ -8,20 +8,9 @@ import { z } from 'zod'
 import { defineGenUIWidget } from '../types'
 
 const schema = z.object({
-  url: z
-    .string()
-    .trim()
-    .min(1)
-    .url()
-    .refine((value) => {
-      const protocol = new URL(value).protocol
-      return protocol === 'http:' || protocol === 'https:'
-    }, 'URL must use HTTP or HTTPS')
-    .describe('Full HTTP(S) URL of the resource'),
+  url: z.string().describe('Full URL of the resource'),
   title: z
     .string()
-    .trim()
-    .min(1)
     .describe(
       'Best guess at the page or resource title. Used as a fallback if the metadata fetch fails.',
     ),
@@ -80,10 +69,10 @@ function useEnclaveMetadata(url: string): ResolvedMetadata | null {
 function LinkPreview({ url, title }: Props) {
   const metadata = useEnclaveMetadata(url)
 
-  const resolvedTitle = metadata?.title?.trim() || title.trim()
-  const resolvedDescription = metadata?.description?.trim() || null
+  const resolvedTitle = metadata?.title ?? title
+  const resolvedDescription = metadata?.description
   const resolvedImage = metadata?.image
-  const resolvedSiteName = metadata?.siteName?.trim() || null
+  const resolvedSiteName = metadata?.siteName
   const displayName = resolvedSiteName || getDomain(url)
   const safeHref = sanitizeUrl(url)
 
@@ -95,7 +84,13 @@ function LinkPreview({ url, title }: Props) {
       className="hover:border-border-primary my-3 flex w-full overflow-hidden rounded-lg border border-border-subtle bg-surface-card transition-colors hover:bg-surface-chat-background"
     >
       {resolvedImage && (
-        <LinkPreviewImage key={resolvedImage} src={resolvedImage} />
+        <ImageWithSkeleton
+          src={resolvedImage}
+          alt=""
+          wrapperClassName="relative h-32 w-32 shrink-0 overflow-hidden bg-surface-card sm:h-40 sm:w-40"
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
       )}
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-1 p-4">
         <div>
@@ -123,21 +118,6 @@ function LinkPreview({ url, title }: Props) {
         </div>
       </div>
     </a>
-  )
-}
-
-function LinkPreviewImage({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false)
-  if (failed) return null
-  return (
-    <ImageWithSkeleton
-      src={src}
-      alt=""
-      wrapperClassName="relative h-32 w-32 shrink-0 overflow-hidden bg-surface-card sm:h-40 sm:w-40"
-      className="h-full w-full object-cover"
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
   )
 }
 

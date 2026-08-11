@@ -16,7 +16,7 @@
  */
 
 import { AttestationError } from 'tinfoil'
-import { SyncEnclaveError } from './sync-enclave-client'
+import { SyncEnclaveError, SyncNetworkError } from './sync-enclave-client'
 
 /**
  * Four buckets the rest of the client recovers against.
@@ -215,7 +215,7 @@ function classifySyncEnclaveError(
 }
 
 function isNetworkError(err: unknown): boolean {
-  return err instanceof TypeError
+  return err instanceof SyncNetworkError
 }
 
 function isAttestationError(err: unknown): boolean {

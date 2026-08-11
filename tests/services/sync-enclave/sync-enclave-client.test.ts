@@ -14,6 +14,7 @@ const {
   mockGetVerificationDocument,
   mockGetValidToken,
   mockRefreshToken,
+  mockHandlePersistentAuthFailure,
 } = vi.hoisted(() => ({
   mockSecureClientConstructor: vi.fn(),
   mockReady: vi.fn(),
@@ -25,9 +26,11 @@ const {
   }),
   mockGetValidToken: vi.fn().mockResolvedValue('test-jwt'),
   mockRefreshToken: vi.fn().mockResolvedValue('fresh-jwt'),
+  mockHandlePersistentAuthFailure: vi.fn(),
 }))
 
 vi.mock('tinfoil', () => ({
+  AttestationError: class extends Error {},
   SecureClient: class {
     constructor(args?: unknown) {
       mockSecureClientConstructor(args)
@@ -43,6 +46,7 @@ vi.mock('@/services/auth', () => ({
   authTokenManager: {
     getValidToken: mockGetValidToken,
     refreshToken: mockRefreshToken,
+    handlePersistentAuthFailure: mockHandlePersistentAuthFailure,
   },
 }))
 
@@ -62,6 +66,7 @@ describe('SyncEnclaveClient', () => {
     mockFetch.mockReset()
     mockGetValidToken.mockReset().mockResolvedValue('test-jwt')
     mockRefreshToken.mockReset().mockResolvedValue('fresh-jwt')
+    mockHandlePersistentAuthFailure.mockReset()
   })
 
   afterEach(() => {
@@ -185,32 +190,6 @@ describe('SyncEnclaveClient', () => {
     )
   })
 
-  it('tees a streaming body so a 401 replay receives identical bytes', async () => {
-    const { getSyncEnclaveClient } =
-      await import('@/services/sync-enclave/sync-enclave-client')
-    const receivedBodies: string[] = []
-    mockFetch
-      .mockImplementationOnce(async (_input, init) => {
-        receivedBodies.push(await new Response(init?.body).text())
-        return jsonResponse({ code: 'AUTH' }, { status: 401 })
-      })
-      .mockImplementationOnce(async (_input, init) => {
-        receivedBodies.push(await new Response(init?.body).text())
-        return jsonResponse({ ok: true })
-      })
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode('same-stream-body'))
-        controller.close()
-      },
-    })
-
-    const client = await getSyncEnclaveClient()
-    await client.request('/v1/blobs/push', { method: 'POST', body: stream })
-
-    expect(receivedBodies).toEqual(['same-stream-body', 'same-stream-body'])
-  })
-
   it('throws persistent authentication after a replayed 401', async () => {
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')
@@ -223,6 +202,7 @@ describe('SyncEnclaveClient', () => {
       status: 401,
     })
     expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockHandlePersistentAuthFailure).toHaveBeenCalledOnce()
   })
 
   it('throws persistent authentication when forced refresh fails', async () => {
@@ -239,6 +219,7 @@ describe('SyncEnclaveClient', () => {
       code: 'AUTH_PERSISTENT',
     })
     expect(mockFetch).toHaveBeenCalledOnce()
+    expect(mockHandlePersistentAuthFailure).toHaveBeenCalledOnce()
   })
 
   it('parses non-2xx responses into SyncEnclaveError with code + details', async () => {

@@ -8,7 +8,7 @@ import {
 } from '@/utils/latex-processing'
 import { preprocessMarkdown } from '@/utils/markdown-preprocessing'
 import { sanitizeUrl } from '@braintree/sanitize-url'
-import { memo, useEffect, useId, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useMathPlugins } from './use-math-plugins'
 
@@ -18,20 +18,6 @@ interface ThoughtProcessProps {
   isThinking?: boolean
   shouldDiscard?: boolean
   thinkingDuration?: number
-}
-
-const THOUGHT_SUMMARY_MIN_WORDS = 20
-const THOUGHT_SUMMARY_TAIL_WORDS = 200
-const THOUGHT_SUMMARY_MIN_INTERVAL_MS = 3000
-
-function summaryTail(thoughts: string): string | null {
-  const currentThoughts = thoughts.trim()
-  if (!currentThoughts) return null
-  const words = currentThoughts.split(/\s+/).filter(Boolean)
-  if (words.length < THOUGHT_SUMMARY_MIN_WORDS) return null
-  return words.length > THOUGHT_SUMMARY_TAIL_WORDS
-    ? words.slice(-THOUGHT_SUMMARY_TAIL_WORDS).join(' ')
-    : currentThoughts
 }
 
 export const ThoughtProcess = memo(function ThoughtProcess({
@@ -50,84 +36,102 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const lastScrollPositionRef = useRef<number>(0)
   const isUserScrollingRef = useRef<boolean>(false)
   const [thoughtSummary, setThoughtSummary] = useState<string>('')
-  const latestThoughtsRef = useRef(thoughts)
-  const lastRequestedTailRef = useRef('')
-  const summaryControllerRef = useRef<AbortController | null>(null)
-  const summaryGenerationRef = useRef(0)
-  const summaryRequestInFlightRef = useRef(false)
+  const summaryGenerationRef = useRef<Promise<void> | null>(null)
+  const lastSummaryTimeRef = useRef<number>(0)
+  const isMountedRef = useRef<boolean>(true)
   const wasExpandedRef = useRef<boolean>(isExpanded)
-
-  latestThoughtsRef.current = thoughts
 
   const handleToggle = () => {
     setIsExpanded((prev) => !prev)
   }
 
+  const generateSummary = useCallback(
+    async (
+      thoughtText: string,
+      isMountedRef: React.MutableRefObject<boolean>,
+    ) => {
+      if (!thoughtText.trim()) {
+        if (isMountedRef.current) {
+          setThoughtSummary('')
+        }
+        return
+      }
+
+      try {
+        const generatedSummary = await summarize({
+          content: thoughtText,
+          style: 'thoughts_summary',
+        })
+
+        if (isMountedRef.current && generatedSummary.trim()) {
+          setThoughtSummary(generatedSummary.trim())
+        }
+      } catch (error) {
+        logError('Failed to generate thought summary', error, {
+          component: 'ThoughtProcess',
+          action: 'generateSummary',
+        })
+        if (isMountedRef.current) {
+          setThoughtSummary('')
+        }
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
     if (!isThinking) {
-      summaryGenerationRef.current++
-      summaryControllerRef.current?.abort()
-      summaryControllerRef.current = null
-      summaryRequestInFlightRef.current = false
-      lastRequestedTailRef.current = ''
       setThoughtSummary('')
       return
     }
 
-    const generation = ++summaryGenerationRef.current
-    const generateLatestSummary = () => {
-      if (summaryRequestInFlightRef.current) return
-      const tailText = summaryTail(latestThoughtsRef.current)
-      if (!tailText) return
-      if (tailText === lastRequestedTailRef.current) return
+    if (!thoughts.trim()) return
 
-      lastRequestedTailRef.current = tailText
-      summaryRequestInFlightRef.current = true
-      const controller = new AbortController()
-      summaryControllerRef.current = controller
-      summarize({
-        content: tailText,
-        style: 'thoughts_summary',
-        signal: controller.signal,
-      })
-        .then((generatedSummary) => {
-          if (
-            summaryGenerationRef.current === generation &&
-            summaryTail(latestThoughtsRef.current) === tailText &&
-            generatedSummary.trim()
-          ) {
-            setThoughtSummary(generatedSummary.trim())
-          }
+    const MIN_CONTENT_WORDS = 20
+    const totalWords = thoughts.split(/\s+/).filter(Boolean).length
+    if (totalWords < MIN_CONTENT_WORDS) return
+
+    if (summaryGenerationRef.current) return
+
+    const TAIL_WORD_COUNT = 200
+    const words = thoughts.split(/\s+/).filter(Boolean)
+    const tailText =
+      words.length > TAIL_WORD_COUNT
+        ? words.slice(-TAIL_WORD_COUNT).join(' ')
+        : thoughts
+
+    const MIN_SUMMARY_INTERVAL_MS = 3000
+    const timeSinceLastSummary = Date.now() - lastSummaryTimeRef.current
+    if (timeSinceLastSummary < MIN_SUMMARY_INTERVAL_MS) {
+      const delay = MIN_SUMMARY_INTERVAL_MS - timeSinceLastSummary
+      const timeoutId = setTimeout(() => {
+        if (!isMountedRef.current || !isThinking) return
+        if (summaryGenerationRef.current) return
+        lastSummaryTimeRef.current = Date.now()
+        summaryGenerationRef.current = generateSummary(
+          tailText,
+          isMountedRef,
+        ).finally(() => {
+          summaryGenerationRef.current = null
         })
-        .catch((error) => {
-          if (controller.signal.aborted) return
-          logError('Failed to generate thought summary', error, {
-            component: 'ThoughtProcess',
-            action: 'generateSummary',
-          })
-        })
-        .finally(() => {
-          if (summaryGenerationRef.current === generation) {
-            summaryRequestInFlightRef.current = false
-            summaryControllerRef.current = null
-          }
-        })
+      }, delay)
+      return () => clearTimeout(timeoutId)
     }
 
-    generateLatestSummary()
-    const intervalId = setInterval(
-      generateLatestSummary,
-      THOUGHT_SUMMARY_MIN_INTERVAL_MS,
-    )
+    lastSummaryTimeRef.current = Date.now()
+    summaryGenerationRef.current = generateSummary(
+      tailText,
+      isMountedRef,
+    ).finally(() => {
+      summaryGenerationRef.current = null
+    })
+  }, [thoughts, isThinking, generateSummary])
 
+  useEffect(() => {
     return () => {
-      clearInterval(intervalId)
-      summaryGenerationRef.current = generation + 1
-      summaryControllerRef.current?.abort()
-      summaryControllerRef.current = null
-      summaryRequestInFlightRef.current = false
+      isMountedRef.current = false
     }
-  }, [isThinking])
+  }, [])
 
   // Fix main scroll container when thoughts collapse
   useEffect(() => {

@@ -13,8 +13,6 @@ import { invalidateProfileSyncGeneration } from '@/services/cloud/profile-sync-c
 import { resetSyncHealth } from '@/services/cloud/sync-health'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { resetChatRecoveryState } from '@/services/inference/chat-recovery'
-import { resetMetadataClient } from '@/services/inference/metadata-client'
-import { resetSummaryClient } from '@/services/inference/summary-client'
 import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
@@ -58,6 +56,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 
   invalidateProfileSyncGeneration(true)
   cloudSync.resetForAccountChange()
+  authTokenManager.reset()
 
   // Clear encryption key immediately (in-memory + localStorage) before any
   // async work, so concurrent code cannot re-persist a stale key.
@@ -74,13 +73,10 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Reset tinfoil client to clear cached API key
   resetTinfoilClient()
   resetChatRecoveryState()
-  resetMetadataClient()
-  resetSummaryClient()
 
   // Drop the verified sync-enclave SecureClient so the next signed-in
   // user re-runs attestation from scratch.
   resetSyncEnclaveClient()
-  authTokenManager.reset()
 
   // Clear profile sync cache
   profileSync.clearCache()

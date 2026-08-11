@@ -4,7 +4,10 @@ import {
 } from '@/constants/storage-keys'
 import { CloudSyncService } from '@/services/cloud/cloud-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
-import { SyncEnclaveError } from '@/services/sync-enclave/sync-enclave-client'
+import {
+  SyncEnclaveError,
+  SyncNetworkError,
+} from '@/services/sync-enclave/sync-enclave-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAllChats = vi.fn()
@@ -593,9 +596,9 @@ describe('CloudSyncService', () => {
       expect(result.errors).toEqual([])
     })
 
-    it('does not count a terminal upload failure as uploaded', async () => {
+    it('preserves the specific not-found failure during periodic backup', async () => {
       const chat = {
-        id: 'terminal-failure',
+        id: 'missing-chat',
         title: 'Unsynced',
         messages: [{ role: 'user', content: 'hi' }],
         createdAt: '2024-01-01T00:00:00.000Z',
@@ -608,14 +611,16 @@ describe('CloudSyncService', () => {
       mockGetUnsyncedChats.mockResolvedValue([chat])
       mockGetChat.mockResolvedValue(chat)
       mockUploadChat.mockRejectedValue(
-        new SyncEnclaveError('forbidden', 403, 'FORBIDDEN'),
+        new SyncEnclaveError('missing', 404, 'NOT_FOUND'),
       )
 
-      const result = await new CloudSyncService().backupUnsyncedChats()
+      await new CloudSyncService().backupUnsyncedChats()
 
-      expect(result.uploaded).toBe(0)
-      expect(result.errors).toHaveLength(1)
-      expect(mockFinalizeUpload).not.toHaveBeenCalled()
+      expect(mockReportChatSyncFailed).toHaveBeenCalledOnce()
+      expect(mockReportChatSyncFailed).toHaveBeenCalledWith(
+        chat.id,
+        'This chat no longer exists in the cloud',
+      )
     })
   })
 
@@ -956,7 +961,7 @@ describe('CloudSyncService', () => {
       mockGetUnsyncedChats.mockResolvedValue([])
       mockGetAllChats.mockResolvedValue([])
       mockListChats
-        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new SyncNetworkError())
         .mockResolvedValue({
           conversations: [],
           hasMore: false,
@@ -971,11 +976,13 @@ describe('CloudSyncService', () => {
 
     it('throws when remote chat listing still fails after retry', async () => {
       mockGetUnsyncedChats.mockResolvedValue([])
-      mockListChats.mockRejectedValue(new TypeError('Failed to fetch'))
+      mockListChats.mockRejectedValue(new SyncNetworkError())
 
       const service = new CloudSyncService()
 
-      await expect(service.syncAllChats()).rejects.toThrow('Failed to fetch')
+      await expect(service.syncAllChats()).rejects.toBeInstanceOf(
+        SyncNetworkError,
+      )
       expect(mockListChats).toHaveBeenCalledTimes(2)
     })
 
@@ -1393,7 +1400,7 @@ describe('CloudSyncService', () => {
       mockNeedsRecoveryHistorySync.mockReturnValue(true)
       mockGetAllChats.mockResolvedValue([])
       mockListProjectChats
-        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(new SyncNetworkError())
         .mockResolvedValue({
           chats: [],
           hasMore: false,

@@ -5,21 +5,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { defineGenUIWidget } from '../types'
 
-const httpUrlSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .url()
-  .refine((value) => {
-    const protocol = new URL(value).protocol
-    return protocol === 'http:' || protocol === 'https:'
-  }, 'URL must use HTTP or HTTPS')
-
 const imageSchema = z.object({
-  url: httpUrlSchema.describe('Image URL'),
+  url: z.string().describe('Image URL'),
   alt: z.string().optional().describe('Accessible alt text'),
   caption: z.string().optional(),
-  link: httpUrlSchema.optional().describe('Optional destination when clicked'),
+  link: z.string().optional().describe('Optional destination when clicked'),
 })
 
 const schema = z.object({

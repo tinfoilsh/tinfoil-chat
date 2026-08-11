@@ -5,7 +5,6 @@ import type {
   SyncActionReason,
   SyncHealthSnapshot,
 } from '@/services/cloud/sync-health'
-import { useClerk } from '@clerk/nextjs'
 import {
   CheckCircleIcon,
   ExclamationCircleIcon,
@@ -37,10 +36,6 @@ const ACTION_REASON_COPY: Record<
     message:
       'Sync is unavailable for this account. Please contact support if this persists.',
     cta: null,
-  },
-  authentication: {
-    message: 'Your session expired. Sign in again to resume cloud sync.',
-    cta: 'Sign in again',
   },
 }
 
@@ -112,7 +107,6 @@ export function CloudSyncHealthCard({
   chats = [],
 }: CloudSyncHealthCardProps) {
   const health = useSyncHealth()
-  const { openSignIn } = useClerk()
   const status = describeStatus(health)
   const failedEntries = Object.entries(health.failedChats)
   const failedCount = failedEntries.length
@@ -180,25 +174,15 @@ export function CloudSyncHealthCard({
             )}
           </div>
         </div>
-        {status.cta &&
-          (health.gate.kind === 'action-required' &&
-          health.gate.reason === 'authentication' ? (
-            <button
-              type="button"
-              onClick={() => openSignIn()}
-              className="shrink-0 rounded-md bg-orange-500/90 px-2.5 py-1.5 font-aeonik text-xs font-medium text-white transition-colors hover:bg-orange-500"
-            >
-              {status.cta}
-            </button>
-          ) : onRecoverClick ? (
-            <button
-              type="button"
-              onClick={onRecoverClick}
-              className="shrink-0 rounded-md bg-orange-500/90 px-2.5 py-1.5 font-aeonik text-xs font-medium text-white transition-colors hover:bg-orange-500"
-            >
-              {status.cta}
-            </button>
-          ) : null)}
+        {status.cta && onRecoverClick && (
+          <button
+            type="button"
+            onClick={onRecoverClick}
+            className="shrink-0 rounded-md bg-orange-500/90 px-2.5 py-1.5 font-aeonik text-xs font-medium text-white transition-colors hover:bg-orange-500"
+          >
+            {status.cta}
+          </button>
+        )}
       </div>
     </div>
   )

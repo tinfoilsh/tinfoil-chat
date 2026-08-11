@@ -8,17 +8,13 @@ import {
   newIdempotencyKey,
   pullItemPlaintext,
 } from '../sync-enclave/sync-api'
-import {
-  SyncEnclaveError,
-  SyncPersistentAuthError,
-} from '../sync-enclave/sync-enclave-client'
+import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
 import { WIRE_CODES } from '../sync-enclave/wire-contract'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
 import type { ProfileSyncStatus } from './cloud-storage'
 import { observe } from './edit-clock'
 import { mergeProfilesThreeWay } from './profile-merge'
 import { ProfileDataSchema } from './schemas'
-import { reportKeyActionRequired } from './sync-health'
 
 const PROFILE_SCOPE = 'profile'
 const PROFILE_ROW_ID = 'profile'
@@ -239,10 +235,6 @@ export class ProfileSyncService {
         return null
       }
 
-      if (error instanceof SyncPersistentAuthError) {
-        reportKeyActionRequired('authentication')
-      }
-
       logError('Failed to fetch profile', error, {
         component: 'ProfileSync',
         action: 'fetchProfile',
@@ -405,10 +397,6 @@ export class ProfileSyncService {
         return { success: false }
       }
 
-      if (error instanceof SyncPersistentAuthError) {
-        reportKeyActionRequired('authentication')
-      }
-
       logError('Failed to save profile', error, {
         component: 'ProfileSync',
         action: 'saveProfile',
@@ -481,10 +469,6 @@ export class ProfileSyncService {
     } catch (error) {
       if (error instanceof AuthTokenUnavailableError) {
         return null
-      }
-
-      if (error instanceof SyncPersistentAuthError) {
-        reportKeyActionRequired('authentication')
       }
 
       logError('Failed to get profile sync status', error, {

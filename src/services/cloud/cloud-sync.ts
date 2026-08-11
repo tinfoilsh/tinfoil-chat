@@ -14,6 +14,7 @@ import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { decideRecovery } from '../sync-enclave/enclave-error-recovery'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import { keyCurrent, newIdempotencyKey } from '../sync-enclave/sync-api'
+import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
 import {
   hasPrimaryKey,
   migrationKeySetFingerprint,
@@ -922,9 +923,9 @@ export class CloudSyncService {
   /**
    * Shared error dispatch for both phases of a coalesced chat upload
    * (prepare and the frozen attempt). Handles the codes that have a
-   * defined client-side recovery and propagates failed writes so callers
-   * cannot report them as successful. Transient failures reach the
-   * coalescer, which retries them under the same idempotency key.
+   * defined client-side recovery. Transient failures reach the coalescer,
+   * which retries them under the same idempotency key, while failed
+   * conflict recovery propagates to its caller.
    */
   private async recoverFromChatUploadError(
     chatId: string,
@@ -961,38 +962,39 @@ export class CloudSyncService {
     }
     if (decision.action.type === 'refresh-current-key-and-retry') {
       reportKeyActionRequired('key-mismatch')
-      throw error
+      return
     }
     if (decision.action.type === 'trigger-recovery-wizard') {
       reportKeyActionRequired('key-recovery')
-      throw error
+      return
     }
     if (decision.action.type === 'block-all-sync') {
       reportSyncPaused('attestation')
-      throw error
+      return
     }
     if (decision.action.type === 'surface-existing-data-under-other-key') {
       reportKeyActionRequired('key-conflict')
-      throw error
+      return
     }
     if (decision.action.type === 'surface-not-found') {
       reportChatSyncFailed(chatId, 'This chat no longer exists in the cloud')
-      throw error
+      return
     }
     if (decision.action.type === 'migrate-legacy-and-retry') {
       // Handled out-of-band by the migration kick on the next sync
       // pass; nothing for the user to act on.
-      throw error
+      return
     }
     if (decision.action.type === 'abort') {
       if (decision.action.reason === 'AUTH_PERSISTENT') {
-        reportKeyActionRequired('authentication')
-      } else if (decision.action.reason === 'FORBIDDEN') {
+        throw error
+      }
+      if (decision.action.reason === 'FORBIDDEN') {
         reportKeyActionRequired('account-blocked')
       } else {
         reportChatSyncFailed(chatId, "This chat couldn't be synced")
       }
-      throw error
+      return
     }
     throw error
   }
@@ -1128,7 +1130,11 @@ export class CloudSyncService {
         action: 'resolveConflictByPullingRemote',
         metadata: { chatId },
       })
-      throw err
+      const propagatedError = new SyncEnclaveError(
+        err instanceof Error ? err.message : String(err),
+      )
+      propagatedError.cause = err
+      throw propagatedError
     }
   }
 
@@ -1179,7 +1185,9 @@ export class CloudSyncService {
           result.uploaded++
         } catch (error) {
           if (!this.isCurrentGeneration(generation)) return
-          reportChatSyncFailed(chat.id, "This chat couldn't be synced")
+          if (decideRecovery(error).action.type !== 'surface-not-found') {
+            reportChatSyncFailed(chat.id, "This chat couldn't be synced")
+          }
           result.errors.push(
             `Failed to backup chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
           )
@@ -1215,12 +1223,6 @@ export class CloudSyncService {
         lastError = error
 
         const decision = decideRecovery(error)
-        if (
-          decision.action.type === 'abort' &&
-          decision.action.reason === 'AUTH_PERSISTENT'
-        ) {
-          reportKeyActionRequired('authentication')
-        }
         const retryable = decision.action.type === 'retry'
         if (!retryable) throw error
         if (attempt < REMOTE_LIST_MAX_ATTEMPTS) {
@@ -1253,12 +1255,6 @@ export class CloudSyncService {
         lastError = error
 
         const decision = decideRecovery(error)
-        if (
-          decision.action.type === 'abort' &&
-          decision.action.reason === 'AUTH_PERSISTENT'
-        ) {
-          reportKeyActionRequired('authentication')
-        }
         const retryable = decision.action.type === 'retry'
         if (!retryable) throw error
         if (attempt < REMOTE_LIST_MAX_ATTEMPTS) {

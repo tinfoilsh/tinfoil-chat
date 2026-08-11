@@ -1,11 +1,62 @@
 import { fetchFavicon } from '@/services/inference/metadata-client'
 import { useEffect, useState } from 'react'
 
+// Module-level cache of resolved favicon data URLs keyed by hostname.
+// Keeps remounts — for example, when react-markdown re-parses a
+// streaming message and recreates citation pills — from flashing back
+// through the loading placeholder once the icon has already been
+// fetched.
+const RESOLVED_FAVICON_DATA_URLS = new Map<string, string>()
+
+// Hostnames whose favicon lookup recently failed, with the time the failure
+// expires. Streaming remounts would otherwise re-request a failing host on
+// every re-render; the TTL still allows retries after transient outages.
+const FAILED_FAVICON_EXPIRY = new Map<string, number>()
+const FAILED_FAVICON_TTL_MS = 60_000
+const FAVICON_CACHE_MAX_ENTRIES = 200
+
+function setBoundedCacheEntry<Value>(
+  cache: Map<string, Value>,
+  key: string,
+  value: Value,
+): void {
+  if (!cache.has(key) && cache.size >= FAVICON_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey !== undefined) cache.delete(oldestKey)
+  }
+  cache.set(key, value)
+}
+
+function isFailureCached(key: string): boolean {
+  const expiry = FAILED_FAVICON_EXPIRY.get(key)
+  if (expiry === undefined) return false
+  if (Date.now() > expiry) {
+    FAILED_FAVICON_EXPIRY.delete(key)
+    return false
+  }
+  return true
+}
+
+function cacheFailure(key: string): void {
+  setBoundedCacheEntry(
+    FAILED_FAVICON_EXPIRY,
+    key,
+    Date.now() + FAILED_FAVICON_TTL_MS,
+  )
+}
+
 type FaviconState = 'loading' | 'ready' | 'error'
 
 interface ResolvedFavicon {
   src: string
   state: FaviconState
+}
+
+function initialResolved(key: string): ResolvedFavicon {
+  const existing = RESOLVED_FAVICON_DATA_URLS.get(key)
+  if (existing) return { src: existing, state: 'ready' }
+  if (isFailureCached(key)) return { src: '', state: 'error' }
+  return { src: '', state: 'loading' }
 }
 
 function faviconCacheKey(url: string): string {
@@ -59,26 +110,41 @@ function FaviconForHost({
   className,
   ...imgProps
 }: FaviconProps & { cacheKey: string }) {
-  const [resolved, setResolved] = useState<ResolvedFavicon>({
-    src: '',
-    state: 'loading',
-  })
+  const [resolved, setResolved] = useState<ResolvedFavicon>(() =>
+    initialResolved(cacheKey),
+  )
 
   useEffect(() => {
     let cancelled = false
 
-    fetchFavicon(url)
-      .then((faviconDataUrl) => {
-        if (cancelled) return
-        setResolved(
-          faviconDataUrl
-            ? { src: faviconDataUrl, state: 'ready' }
-            : { src: '', state: 'error' },
-        )
-      })
-      .catch(() => {
-        if (!cancelled) setResolved({ src: '', state: 'error' })
-      })
+    const cached = RESOLVED_FAVICON_DATA_URLS.get(cacheKey)
+    if (cached) {
+      setResolved({ src: cached, state: 'ready' })
+    } else if (isFailureCached(cacheKey)) {
+      setResolved({ src: '', state: 'error' })
+    } else {
+      fetchFavicon(url)
+        .then((faviconDataUrl) => {
+          if (!faviconDataUrl) {
+            cacheFailure(cacheKey)
+            if (!cancelled) setResolved({ src: '', state: 'error' })
+            return
+          }
+          FAILED_FAVICON_EXPIRY.delete(cacheKey)
+          setBoundedCacheEntry(
+            RESOLVED_FAVICON_DATA_URLS,
+            cacheKey,
+            faviconDataUrl,
+          )
+          if (!cancelled) {
+            setResolved({ src: faviconDataUrl, state: 'ready' })
+          }
+        })
+        .catch(() => {
+          cacheFailure(cacheKey)
+          if (!cancelled) setResolved({ src: '', state: 'error' })
+        })
+    }
 
     return () => {
       cancelled = true
@@ -98,6 +164,10 @@ function FaviconForHost({
         onResolve?.()
       }}
       onError={() => {
+        if (RESOLVED_FAVICON_DATA_URLS.get(cacheKey) === resolved.src) {
+          RESOLVED_FAVICON_DATA_URLS.delete(cacheKey)
+          cacheFailure(cacheKey)
+        }
         setResolved({ src: '', state: 'error' })
         onResolveError?.()
       }}

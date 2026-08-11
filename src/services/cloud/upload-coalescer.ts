@@ -16,6 +16,7 @@ import {
   type RetryScheduler,
 } from '../sync-enclave/retry-policy'
 import { newIdempotencyKey } from '../sync-enclave/sync-api'
+import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
 
 const DEFAULT_BASE_DELAY_MS = 1000
 const DEFAULT_MAX_DELAY_MS = 8000
@@ -405,7 +406,19 @@ export class UploadCoalescer {
 
 function shouldRetryUploadError(error: Error): boolean {
   const decision = decideRecovery(error)
-  return decision.action.type === 'retry'
+  if (decision.action.type === 'retry') {
+    return true
+  }
+  if (decision.classification.code || error instanceof SyncEnclaveError) {
+    return false
+  }
+  // Deliberately retry codeless non-enclave unknowns even though
+  // decideRecovery defaults them to abort: the transport layer throws
+  // plain Errors for genuine network flakes that isNetworkError's
+  // narrow TypeError check cannot recognize. The same idempotency key
+  // covers every attempt, so the extra tries are safe and only delay
+  // terminal failure by a few seconds.
+  return true
 }
 
 /**

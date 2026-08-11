@@ -81,9 +81,8 @@ export type RecoveryAction =
    */
   | { type: 'block-all-sync'; reason: 'ATTESTATION_FAILED' }
   /**
-   * Caller bug. Log + surface a generic "something went wrong" to
-   * the user, then drop the operation. Retrying under the same key
-   * would 409 again.
+   * Terminal failure that requires a new user action or request state
+   * before the operation can succeed.
    */
   | {
       type: 'abort'

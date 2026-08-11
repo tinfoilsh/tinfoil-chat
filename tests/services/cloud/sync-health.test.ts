@@ -47,14 +47,6 @@ describe('sync-health store', () => {
     })
   })
 
-  it('surfaces persistent authentication as action required', () => {
-    reportKeyActionRequired('authentication')
-    expect(getSyncHealthSnapshot().gate).toMatchObject({
-      kind: 'action-required',
-      reason: 'authentication',
-    })
-  })
-
   it('a completed sync pass clears paused but not action-required', () => {
     reportSyncPaused('network')
     reportSyncSuccess()

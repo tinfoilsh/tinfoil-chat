@@ -855,6 +855,7 @@ export function useChatMessaging({
       activeLiveGenerationsRef.current.set(startingChatId, activeGeneration)
 
       // Fire title generation in parallel with streaming (based on user's message).
+      // The promise is awaited after streaming completes, before the final save.
       if (isFirstMessage && userMessage) {
         // When the user pastes long text it is captured as a document
         // attachment rather than message text, leaving content empty. Fall
@@ -1097,11 +1098,44 @@ export function useChatMessaging({
           // which has been updated to the server ID if one was generated
           const finalMessages = [...updatedMessages, assistantMessage]
 
-          // Preserve a title that resolved while the response was streaming.
-          const liveChat = findLiveChat(chatId)
-          const resolvedTitle = liveChat?.title ?? updatedChat.title
-          const resolvedTitleState =
+          // Resolve title: await the in-flight title gen promise if one exists
+          let liveChat = findLiveChat(chatId)
+          let resolvedTitle = liveChat?.title ?? updatedChat.title
+          let resolvedTitleState =
             liveChat?.titleState ?? updatedChat.titleState
+          let generatedTitle = false
+          if (
+            isFirstMessage &&
+            resolvedTitle === DEFAULT_CHAT_TITLE &&
+            earlyTitlePromise
+          ) {
+            try {
+              const generated = await earlyTitlePromise
+              liveChat = findLiveChat(chatId) ?? liveChat
+              resolvedTitle = liveChat?.title ?? resolvedTitle
+              resolvedTitleState = liveChat?.titleState ?? resolvedTitleState
+              if (
+                generated &&
+                generated !== DEFAULT_CHAT_TITLE &&
+                resolvedTitle === DEFAULT_CHAT_TITLE &&
+                resolvedTitleState === 'placeholder'
+              ) {
+                resolvedTitle = generated
+                resolvedTitleState = 'generated'
+                generatedTitle = true
+                logInfo('[handleQuery] Title resolved from parallel gen', {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.titleResolved',
+                  metadata: { chatId, title: resolvedTitle },
+                })
+              }
+            } catch (error) {
+              logError('Title generation failed', error, {
+                component: 'useChatMessaging',
+                action: 'handleQuery.titleGen',
+              })
+            }
+          }
 
           const isTemporary = liveChat?.isTemporary ?? updatedChat.isTemporary
           const chatToSave = {
@@ -1120,6 +1154,14 @@ export function useChatMessaging({
             // would never clear for them.
             pendingSave: !isTemporary,
           }
+          const generatedTitlePatch = (): Partial<Chat> => {
+            const latestChat = findLiveChat(chatId)
+            return generatedTitle &&
+              latestChat?.title === DEFAULT_CHAT_TITLE &&
+              latestChat.titleState === 'placeholder'
+              ? { title: resolvedTitle, titleState: resolvedTitleState }
+              : {}
+          }
           const persistFinalChat = (allowCloudSyncWhileStreaming = false) =>
             updateChatWithHistoryCheck(
               setChats,
@@ -1131,6 +1173,7 @@ export function useChatMessaging({
                 allowCloudSyncWhileStreaming,
                 metadataPatch: {
                   pendingSave: chatToSave.pendingSave,
+                  ...generatedTitlePatch(),
                 },
               },
             )
@@ -1147,7 +1190,6 @@ export function useChatMessaging({
             },
           })
 
-          let finalPersistence = Promise.resolve()
           if (recoveryEnabled && turnId) {
             try {
               await waitForRecoveryReady(response, controller.signal)
@@ -1156,7 +1198,15 @@ export function useChatMessaging({
                 chatId,
                 turnId,
                 assistantMessage,
-                chatPatch: {},
+                chatPatch: {
+                  ...(generatedTitle
+                    ? {
+                        title: resolvedTitle,
+                        titleState: resolvedTitleState,
+                        expectedTitleState: 'placeholder' as const,
+                      }
+                    : {}),
+                },
               })
               const latestChat = findLiveChat(chatId)
               const titleChangedDuringRecovery =
@@ -1190,87 +1240,10 @@ export function useChatMessaging({
                 action: 'handleQuery.recoveryComplete',
                 metadata: { chatId },
               })
-              finalPersistence = persistFinalChat(true)
+              persistFinalChat(true)
             }
           } else {
-            finalPersistence = persistFinalChat()
-          }
-
-          if (isFirstMessage && earlyTitlePromise) {
-            void earlyTitlePromise
-              .then(async (generated) => {
-                if (!generated || generated === DEFAULT_CHAT_TITLE) return
-                const latest = findLiveChat(chatId)
-                if (
-                  !latest ||
-                  latest.title !== DEFAULT_CHAT_TITLE ||
-                  latest.titleState !== 'placeholder'
-                ) {
-                  return
-                }
-                setChats((previous) =>
-                  previous.map((chat) =>
-                    chat.id === chatId &&
-                    chat.title === DEFAULT_CHAT_TITLE &&
-                    chat.titleState === 'placeholder'
-                      ? {
-                          ...chat,
-                          title: generated,
-                          titleState: 'generated',
-                        }
-                      : chat,
-                  ),
-                )
-                setCurrentChat((previous) =>
-                  previous.id === chatId &&
-                  previous.title === DEFAULT_CHAT_TITLE &&
-                  previous.titleState === 'placeholder'
-                    ? {
-                        ...previous,
-                        title: generated,
-                        titleState: 'generated',
-                      }
-                    : previous,
-                )
-                if (latest.isTemporary) return
-                if (storeHistory) {
-                  try {
-                    await finalPersistence
-                    const stored = await chatStorage.getChat(chatId)
-                    if (
-                      !stored ||
-                      stored.title !== DEFAULT_CHAT_TITLE ||
-                      stored.titleState !== 'placeholder'
-                    ) {
-                      return
-                    }
-                    await chatStorage.saveChatAndSync({
-                      ...stored,
-                      title: generated,
-                      titleState: 'generated',
-                    })
-                  } catch (error) {
-                    logError('Failed to persist generated title', error, {
-                      component: 'useChatMessaging',
-                      action: 'handleQuery.titleGen',
-                      metadata: { chatId },
-                    })
-                  }
-                } else {
-                  sessionChatStorage.saveChat({
-                    ...latest,
-                    title: generated,
-                    titleState: 'generated',
-                  })
-                }
-              })
-              .catch((error) => {
-                logError('Title generation failed', error, {
-                  component: 'useChatMessaging',
-                  action: 'handleQuery.titleGen',
-                  metadata: { chatId },
-                })
-              })
+            persistFinalChat()
           }
         } else {
           if (recoveryEnabled) {

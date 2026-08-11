@@ -160,7 +160,6 @@ vi.mock('@/services/inference/title', () => ({
 
 vi.mock('@/services/storage/chat-storage', () => ({
   chatStorage: {
-    getChat: vi.fn().mockResolvedValue(null),
     saveChat: saveChatMock,
     saveChatAndSync: initialSaveMock,
     saveChatAndWaitForSync: vi.fn(async (chat) => chat),
@@ -634,14 +633,11 @@ describe('useChatMessaging stopped streams', () => {
     )
   })
 
-  it('applies a generated title without blocking recovery completion', async () => {
+  it('applies a generated title after recovery completes', async () => {
     authState.isSignedIn = true
     authState.userId = 'user-1'
     recoveryAvailableState.available = true
-    let resolveTitle!: (title: string) => void
-    generateTitleMock.mockImplementationOnce(
-      () => new Promise<string>((resolve) => (resolveTitle = resolve)),
-    )
+    generateTitleMock.mockResolvedValue('Generated title')
     const remotelyMergedMessage: Chat['messages'][number] = {
       role: 'user',
       content: 'Merged on another device',
@@ -655,8 +651,8 @@ describe('useChatMessaging stopped streams', () => {
         }
         return {
           id: input.chatId,
-          title: 'Untitled',
-          titleState: 'placeholder',
+          title: 'Generated title',
+          titleState: 'generated',
           createdAt: new Date(),
           messages: [remotelyMergedMessage, input.assistantMessage],
           isBlankChat: false,
@@ -709,13 +705,9 @@ describe('useChatMessaging stopped streams', () => {
 
     expect(completeLiveChatRecoveryMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        chatPatch: {},
+        chatPatch: expect.objectContaining({ title: 'Generated title' }),
       }),
     )
-    await act(async () => {
-      resolveTitle('Generated title')
-      await Promise.resolve()
-    })
     expect(result.current.currentChat).toMatchObject({
       title: 'Generated title',
       titleState: 'generated',
