@@ -43,7 +43,7 @@ export function createUpdateChatWithHistoryCheck({
     chatId: string,
     newMessages: Message[],
     options: UpdateChatOptions = {},
-  ) {
+  ): Promise<void> {
     const {
       skipCloudSync = false,
       skipIndexedDBSave = false,
@@ -97,7 +97,7 @@ export function createUpdateChatWithHistoryCheck({
     )
 
     if (updatedChat.isTemporary) {
-      return
+      return Promise.resolve()
     }
 
     if (storeHistory) {
@@ -108,7 +108,7 @@ export function createUpdateChatWithHistoryCheck({
 
       // Skip IndexedDB save if explicitly requested (during streaming chunks)
       if (skipIndexedDBSave) {
-        return
+        return Promise.resolve()
       }
 
       logInfo('[persistence] Saving chat to storage', {
@@ -124,7 +124,7 @@ export function createUpdateChatWithHistoryCheck({
         },
       })
 
-      chatStorage
+      return chatStorage
         .saveChat(updatedChat, shouldSkipCloudSync)
         .then((savedChat) => {
           logInfo('[persistence] Chat saved successfully', {
@@ -178,6 +178,7 @@ export function createUpdateChatWithHistoryCheck({
         })
     } else {
       sessionChatStorage.saveChat(updatedChat)
+      return Promise.resolve()
     }
   }
 }
