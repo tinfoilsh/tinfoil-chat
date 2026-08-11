@@ -2,8 +2,6 @@ import SignInPage from '@/pages/signin'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const socialPopup = { close: vi.fn() } as unknown as Window
-
 const auth = vi.hoisted(() => {
   const signIn = {
     status: 'needs_identifier',
@@ -53,7 +51,6 @@ vi.mock('next/router', () => ({
 describe('SignInPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.spyOn(window, 'open').mockReturnValue(socialPopup)
     auth.signIn.status = 'needs_identifier'
     auth.signIn.supportedSecondFactors = []
     auth.signUp.status = 'missing_requirements'
@@ -279,8 +276,9 @@ describe('SignInPage', () => {
     ['Google', 'oauth_google'],
     ['Apple', 'oauth_apple'],
   ] as const)(
-    'starts %s sign-in in a dedicated popup',
+    'starts %s sign-in in the current tab',
     async (provider, strategy) => {
+      const openSpy = vi.spyOn(window, 'open')
       render(<SignInPage />)
 
       fireEvent.click(
@@ -288,35 +286,15 @@ describe('SignInPage', () => {
       )
 
       await waitFor(() => {
-        expect(window.open).toHaveBeenCalledWith(
-          'about:blank',
-          '_blank',
-          expect.any(String),
-        )
+        expect(openSpy).not.toHaveBeenCalled()
         expect(auth.signIn.sso).toHaveBeenCalledWith({
           strategy,
-          popup: socialPopup,
-          redirectCallbackUrl: new URL('/sso-callback', window.location.origin)
-            .href,
-          redirectUrl: new URL('/', window.location.origin).href,
+          redirectCallbackUrl: '/sso-callback',
+          redirectUrl: '/',
         })
       })
     },
   )
-
-  it('explains how to continue when the social popup is blocked', async () => {
-    vi.mocked(window.open).mockReturnValue(null)
-    render(<SignInPage />)
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Continue with Google' }),
-    )
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Allow pop-ups for this site to continue with Google or Apple.',
-    )
-    expect(auth.signIn.sso).not.toHaveBeenCalled()
-  })
 
   it('shows the Clerk error when social sign-in cannot start', async () => {
     auth.signIn.sso.mockResolvedValue({
