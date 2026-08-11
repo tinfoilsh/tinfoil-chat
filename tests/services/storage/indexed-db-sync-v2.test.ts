@@ -246,6 +246,34 @@ describe('IndexedDB sync protocol v2 migration', () => {
     await expect(storage.getChat(chat.id)).resolves.toBeNull()
   })
 
+  it('aborts a remote apply when its account expires after the put', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const isCurrent = vi
+      .fn<() => boolean>()
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false)
+
+    await expect(
+      storage.applyRemoteChatIfFresh({
+        chat: {
+          id: 'stale-account-chat',
+          title: 'Stale',
+          messages: [{ role: 'user', content: 'hello' } as any],
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+        syncVersion: 1,
+        expectedLocalUpdatedAt: null,
+        isCurrent,
+      }),
+    ).resolves.toEqual({ applied: false })
+    await expect(storage.getChat('stale-account-chat')).resolves.toBeNull()
+  })
+
   it('stages remote-only and locally discovered project deletes idempotently', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
@@ -256,6 +284,7 @@ describe('IndexedDB sync protocol v2 migration', () => {
       messages: [{ role: 'user', content: 'hello' } as any],
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
+      syncedAt: 1,
     })
 
     const keys = ['remote-key', 'local-key']
@@ -287,7 +316,7 @@ describe('IndexedDB sync protocol v2 migration', () => {
     )
   })
 
-  it('removes an in-flight local create and stages its remote delete', async () => {
+  it('removes an in-flight local create without staging an absent-row intent', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
     const save = storage.saveChat({
@@ -308,12 +337,7 @@ describe('IndexedDB sync protocol v2 migration', () => {
     await Promise.all([save, deletion])
 
     await expect(storage.getChat('creating-chat')).resolves.toBeNull()
-    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([
-      expect.objectContaining({
-        id: 'creating-chat',
-        idempotencyKey: 'create-delete-key',
-      }),
-    ])
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
   })
 
   it('leaves project rows owned by another account untouched', async () => {

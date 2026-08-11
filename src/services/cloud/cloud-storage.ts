@@ -29,6 +29,7 @@ const API_BASE_URL =
 const AUTH_INIT_WAIT_MS = 3000
 const RESTORE_DELETED_CHAT_HEADER = RESTORE_DELETED_HEADERS.Chat
 const ENCLAVE_CHAT_LIST_LIMIT = 100
+const PROJECT_CHAT_LIST_LIMIT = 500
 const LEGACY_ATTACHMENT_GONE_STATUS = 410
 const ATTACHMENT_IDEMPOTENCY_KEY_BYTES = 16
 
@@ -722,6 +723,24 @@ export class CloudStorageService {
     }
 
     return response.json()
+  }
+
+  async listChatIdsByProject(projectId: string): Promise<string[]> {
+    const ids = new Set<string>()
+    let cursor: string | undefined
+    do {
+      const status = await enclaveListStatus({
+        scope: 'chat',
+        projectId,
+        cursor,
+        limit: PROJECT_CHAT_LIST_LIMIT,
+      })
+      for (const update of status.updates) {
+        if (update.project_id === projectId) ids.add(update.id)
+      }
+      cursor = status.next_cursor
+    } while (cursor)
+    return [...ids]
   }
 
   /**

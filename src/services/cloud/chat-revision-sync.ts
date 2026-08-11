@@ -189,7 +189,10 @@ async function bootstrapFromSnapshot(
     const local = await indexedDBStorage.getChat(item.id)
     ensureCurrent(isCurrent)
     if (pendingDeleteIds.has(item.id) || local?.locallyModified) continue
-    if (local && String(local.syncVersion ?? 0) !== item.etag) {
+    if (
+      local &&
+      (local.decryptionFailed || String(local.syncVersion ?? 0) !== item.etag)
+    ) {
       staleExisting.push(item)
     } else if (
       !local &&

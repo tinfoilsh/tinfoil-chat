@@ -84,6 +84,16 @@ export interface PaginatedChatsResult {
   nextToken?: string
 }
 
+class RemoteChatPageIncompleteError extends Error {
+  constructor(chatId: string, cause: unknown) {
+    super(
+      `Remote chat page is incomplete because ${chatId} could not be decoded`,
+    )
+    this.name = 'RemoteChatPageIncompleteError'
+    this.cause = cause
+  }
+}
+
 const UPLOAD_BASE_DELAY_MS = 1000
 const UPLOAD_MAX_DELAY_MS = 8000
 const UPLOAD_MAX_RETRIES = 3
@@ -188,6 +198,18 @@ export class CloudSyncService {
     return userId !== null && chat.syncUserId === userId
   }
 
+  private async assertUploadFinalized(
+    chatId: string,
+    generation: number,
+    userId: string,
+  ): Promise<void> {
+    const latest = await indexedDBStorage.getChat(chatId)
+    this.ensureCurrentAccount(generation, userId)
+    if (!latest || latest.syncUserId !== userId || latest.pendingUpload !== 0) {
+      throw new Error('Chat upload did not finalize')
+    }
+  }
+
   resetForAccountChange(): void {
     this.accountGeneration++
     this.cancelSyncLifecycle('account-reset')
@@ -284,15 +306,7 @@ export class CloudSyncService {
         isStreaming,
         upload: async (chat) => {
           await this.uploadCoalescer.enqueueAndWait(chat.id)
-          const latest = await indexedDBStorage.getChat(chat.id)
-          this.ensureCurrentAccount(generation, userId)
-          if (
-            !latest ||
-            latest.syncUserId !== userId ||
-            latest.pendingUpload !== 0
-          ) {
-            throw new Error('Pending chat upload did not complete')
-          }
+          await this.assertUploadFinalized(chat.id, generation, userId)
         },
       },
       userId,
@@ -500,11 +514,10 @@ export class CloudSyncService {
             projectIntentIncluded,
           })
           this.ensureCurrentAccount(generation, userId)
-          const latest = await indexedDBStorage.getChat(chatId)
-          this.ensureCurrentAccount(generation, userId)
-          if (!latest || latest.pendingUpload !== 0) {
-            throw new Error('Chat upload did not finalize')
+          if (!userId) {
+            throw new Error('Authenticated user ID is unavailable')
           }
+          await this.assertUploadFinalized(chatId, generation, userId)
           reportChatSynced(chatId)
         } catch (error) {
           if (this.readActiveUserId() !== userId) throw error
@@ -632,16 +645,7 @@ export class CloudSyncService {
       if (!isUploadableChat(chat, isStreaming)) continue
       try {
         await this.uploadCoalescer.enqueueAndWait(chat.id)
-        this.ensureCurrentAccount(generation, userId)
-        const latest = await indexedDBStorage.getChat(chat.id)
-        this.ensureCurrentAccount(generation, userId)
-        if (
-          !latest ||
-          latest.syncUserId !== userId ||
-          latest.pendingUpload !== 0
-        ) {
-          throw new Error('Chat upload did not finalize')
-        }
+        await this.assertUploadFinalized(chat.id, generation, userId)
         result.uploaded++
       } catch (error) {
         if (
@@ -740,6 +744,7 @@ export class CloudSyncService {
             action: 'loadChatsWithPagination',
             metadata: { chatId: entry.id },
           })
+          throw new RemoteChatPageIncompleteError(entry.id, error)
         }
       }
       return {
@@ -748,6 +753,7 @@ export class CloudSyncService {
         nextToken: remote.nextContinuationToken,
       }
     } catch (error) {
+      if (error instanceof RemoteChatPageIncompleteError) throw error
       logError('Failed to load remote chats with pagination', error, {
         component: 'CloudSync',
         action: 'loadChatsWithPagination',

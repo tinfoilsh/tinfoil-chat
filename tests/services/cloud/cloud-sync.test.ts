@@ -288,6 +288,22 @@ describe('CloudSyncService revision coordinator routing', () => {
     expect(applyRemoteChatIfFresh).not.toHaveBeenCalled()
   })
 
+  it('rejects an incomplete export page instead of falling back locally', async () => {
+    listChats.mockResolvedValue({
+      conversations: [{ id: 'corrupt-chat', content: '{}', syncVersion: 1 }],
+      hasMore: false,
+    })
+    processRemoteChat.mockRejectedValueOnce(new Error('invalid ciphertext'))
+
+    await expect(
+      new CloudSyncService().loadChatsWithPagination({
+        limit: 10,
+        loadLocal: true,
+      }),
+    ).rejects.toThrow('Remote chat page is incomplete')
+    expect(getAllChats).not.toHaveBeenCalled()
+  })
+
   it('continues decryption recovery after an individual eviction fails', async () => {
     getAllChats
       .mockResolvedValueOnce([

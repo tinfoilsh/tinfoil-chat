@@ -5,15 +5,10 @@ import { logError, logInfo } from '@/utils/error-handling'
 import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
-import {
-  listStatus as enclaveListStatus,
-  newIdempotencyKey,
-} from '../sync-enclave/sync-api'
+import { newIdempotencyKey } from '../sync-enclave/sync-api'
 import { chatEvents } from './chat-events'
 import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
-
-const PROJECT_CHAT_LIST_LIMIT = 500
 
 export class ChatStorageService {
   private initialized = false
@@ -226,26 +221,15 @@ export class ChatStorageService {
     // uploading, so removing the local row first stops a concurrent upload
     // from resurrecting a chat in the cloud after the bulk delete. This
     // mirrors the ordering used by the single-chat deleteChat path.
-    const remoteIds = new Set<string>()
-    let cursor: string | undefined
-    do {
-      this.ensureActiveUser(userId)
-      const status = await enclaveListStatus({
-        scope: 'chat',
-        projectId,
-        cursor,
-        limit: PROJECT_CHAT_LIST_LIMIT,
-      })
-      this.ensureActiveUser(userId)
-      for (const update of status.updates) {
-        if (update.project_id === projectId) remoteIds.add(update.id)
-      }
-      cursor = status.next_cursor
-    } while (cursor)
+    this.ensureActiveUser(userId)
+    const remoteIds = await cloudStorage.listChatIdsByProject(projectId)
+    this.ensureActiveUser(userId)
+    await cloudSync.waitForAllUploads()
+    this.ensureActiveUser(userId)
 
     const deletedIds = await indexedDBStorage.deleteChatsByProject(
       projectId,
-      [...remoteIds],
+      remoteIds,
       userId,
       newIdempotencyKey,
       () => this.readActiveUserId() === userId,

@@ -297,6 +297,41 @@ describe('chat revision synchronization', () => {
     expect(pulledIds.filter((id) => id.startsWith('missing-'))).toHaveLength(50)
   })
 
+  it('re-pulls failed-decryption rows whose snapshot ETag still matches', async () => {
+    getSyncState.mockResolvedValue(null)
+    revisionSummary.mockResolvedValue({
+      current_revision: '10',
+      oldest_replayable_revision: '1',
+    })
+    revisionSnapshot.mockResolvedValue({
+      snapshot_revision: '10',
+      items: [
+        {
+          id: 'failed-chat',
+          etag: '4',
+          key_id: 'key-1',
+          project_id: null,
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+    getChat.mockResolvedValue({
+      id: 'failed-chat',
+      syncVersion: 4,
+      decryptionFailed: true,
+      locallyModified: false,
+    })
+    downloadChats.mockResolvedValue([
+      { id: 'failed-chat', content: '{}', syncVersion: 4, updatedAt: '' },
+    ])
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(downloadChats).toHaveBeenCalledWith(['failed-chat'], {
+      tolerateNotFound: true,
+    })
+  })
+
   it('does not pull or overwrite metadata for a dirty event row', async () => {
     revisionSummary.mockResolvedValue({
       current_revision: '8',

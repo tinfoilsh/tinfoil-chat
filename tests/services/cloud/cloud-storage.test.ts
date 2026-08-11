@@ -152,6 +152,30 @@ describe('CloudStorageService auth readiness', () => {
     })
   })
 
+  it('enumerates every remote chat ID for a project', async () => {
+    mockListStatus
+      .mockResolvedValueOnce({
+        updates: [
+          { id: 'chat-1', project_id: 'project-1' },
+          { id: 'other-chat', project_id: 'project-2' },
+        ],
+        next_cursor: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        updates: [{ id: 'chat-2', project_id: 'project-1' }],
+      })
+
+    await expect(
+      new CloudStorageService().listChatIdsByProject('project-1'),
+    ).resolves.toEqual(['chat-1', 'chat-2'])
+    expect(mockListStatus).toHaveBeenNthCalledWith(2, {
+      scope: 'chat',
+      projectId: 'project-1',
+      cursor: 'page-2',
+      limit: 500,
+    })
+  })
+
   it('waits for auth token manager initialization before checking auth state', async () => {
     mockIsInitialized.mockReturnValue(false)
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')

@@ -11,10 +11,15 @@ import {
   IF_MATCH_SENTINELS,
   RESTORE_DELETED_HEADERS,
   SYNC_HEADERS,
+  SYNC_PROTOCOL_VERSION,
   WIRE_CODES,
 } from '@/services/sync-enclave/wire-contract'
 
 describe('wire-contract', () => {
+  it('pins the sync protocol version', () => {
+    expect(SYNC_PROTOCOL_VERSION).toBe('2')
+  })
+
   it('headers match controlplane/pkg/contract/headers.go', () => {
     expect(SYNC_HEADERS).toEqual({
       SyncProtocol: 'X-Sync-Protocol',

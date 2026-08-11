@@ -1793,6 +1793,10 @@ export class IndexedDBStorage {
     })
   }
 
+  /**
+   * Returns every known project chat ID, including authenticated remote IDs
+   * and matching local rows, not only the rows removed from local storage.
+   */
   async deleteChatsByProject(
     projectId: string,
     remoteIds: string[],
@@ -1868,7 +1872,13 @@ export class IndexedDBStorage {
               (chat.projectId === projectId || remoteIdSet.has(chat.id))
             ) {
               deletedIds.add(chat.id)
-              if (!chat.isLocalOnly) stageDeleteIntent(chat.id)
+              if (
+                remoteIdSet.has(chat.id) ||
+                chat.syncedAt !== undefined ||
+                chat.syncVersion !== undefined
+              ) {
+                stageDeleteIntent(chat.id)
+              }
               const deleteRequest = cursor.delete()
               deleteRequest.onsuccess = () => {
                 abortIfStale()
@@ -2839,6 +2849,7 @@ export class IndexedDBStorage {
       if (!isCurrent()) return { applied: false }
       const db = await this.ensureDB()
       if (!isCurrent()) return { applied: false }
+
       return new Promise<{ applied: boolean }>((resolve, reject) => {
         const transaction = db.transaction(
           [
@@ -2853,137 +2864,140 @@ export class IndexedDBStorage {
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
         const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
         const outboxStore = transaction.objectStore(SYNC_OUTBOX_STORE)
-        const chatRequest = store.get(opts.chat.id)
+        const userId = opts.userId ?? chatOwnerId(opts.chat) ?? activeUserId()
+        let existing: StoredChat | undefined
+        let hasPendingDelete = false
+        let readsRemaining = userId ? 2 : 1
         let applied = false
-        let cancelled = false
-        transaction.oncomplete = () => resolve({ applied })
-        transaction.onerror = () => {
-          if (!cancelled) reject(new Error('Failed to apply remote chat'))
-        }
-        transaction.onabort = () => {
-          if (cancelled) resolve({ applied: false })
-          else reject(new Error('Remote chat transaction aborted'))
-        }
-        chatRequest.onerror = () =>
-          reject(new Error('Failed to read local chat before remote apply'))
-        chatRequest.onsuccess = () => {
-          if (!isCurrent()) return
-          const existing = chatRequest.result as StoredChat | undefined
-          const applyRemoteChat = () => {
-            if (opts.expectedLocalUpdatedAt !== undefined) {
-              if (opts.expectedLocalUpdatedAt === null) {
-                if (existing) return
-              } else if (
-                !existing ||
-                existing.updatedAt !== opts.expectedLocalUpdatedAt ||
-                (existing.locallyModified === true &&
-                  !opts.allowLocallyModified)
-              ) {
-                return
-              }
-            }
+        let accountChanged = false
 
-            let inheritedChat: Chat
-            try {
-              inheritedChat = inheritAttachmentPayloadReferences(
-                opts.chat,
-                existing,
-              )
-            } catch (error) {
-              transaction.abort()
-              reject(error)
+        const abortIfStale = (): boolean => {
+          if (isCurrent()) return false
+          accountChanged = true
+          try {
+            transaction.abort()
+          } catch {}
+          return true
+        }
+        const maybeApply = () => {
+          readsRemaining--
+          if (readsRemaining > 0 || abortIfStale() || hasPendingDelete) return
+          if (opts.expectedLocalUpdatedAt !== undefined) {
+            if (opts.expectedLocalUpdatedAt === null) {
+              if (existing) return
+            } else if (
+              !existing ||
+              existing.updatedAt !== opts.expectedLocalUpdatedAt ||
+              (existing.locallyModified === true && !opts.allowLocallyModified)
+            ) {
               return
             }
-            const normalizedAttachments =
-              normalizeAttachmentPayloadsInTransaction(
-                inheritedChat,
-                transaction,
-                reject,
-              )
-            if (!normalizedAttachments) return
-            const messagesForStorage = normalizedAttachments.messages.map(
-              (msg) => ({
-                ...msg,
-                timestamp:
-                  msg.timestamp instanceof Date
-                    ? msg.timestamp.toISOString()
-                    : msg.timestamp,
-              }),
-            )
-            const storedChat: StoredChat = {
-              ...opts.chat,
-              messages: messagesForStorage as any,
-              lastAccessedAt: Date.now(),
-              syncedAt: Date.now(),
-              locallyModified: false,
-              syncPending: 0,
-              pendingUpload: 0,
-              syncVersion: opts.syncVersion,
-              version: 1,
-              loadedAt: opts.setLoadedAt
-                ? Date.now()
-                : ((opts.chat as StoredChat).loadedAt ?? existing?.loadedAt),
-              isLocalOnly: (opts.chat as any).isLocalOnly ?? false,
-              syncUserId:
-                opts.userId ?? chatOwnerId(opts.chat) ?? activeUserId(),
-              projectLocallyModified: false,
-            }
-            if (!isCurrent()) return
-
-            const writeChatAndPayloads = () => {
-              for (const payload of normalizedAttachments.payloads) {
-                const payloadRequest = payloadStore.put(payload)
-                payloadRequest.onerror = () =>
-                  reject(
-                    payloadRequest.error ??
-                      new Error('Failed to save remote attachment payload'),
-                  )
-              }
-              const request = putStoredChat(store, summaryStore, storedChat)
-              request.onerror = () =>
-                reject(new Error('Failed to apply remote chat'))
-              applied = true
-            }
-            const payloadCursor = payloadStore
-              .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
-              .openCursor(IDBKeyRange.only(opts.chat.id))
-            payloadCursor.onerror = () =>
-              reject(
-                new Error('Failed to reconcile remote attachment payloads'),
-              )
-            payloadCursor.onsuccess = () => {
-              if (!isCurrent()) {
-                cancelled = true
-                transaction.abort()
-                return
-              }
-              const cursor = payloadCursor.result
-              if (cursor) {
-                if (
-                  !normalizedAttachments.referencedPayloadIds.has(
-                    String(cursor.primaryKey),
-                  )
-                ) {
-                  cursor.delete()
-                }
-                cursor.continue()
-                return
-              }
-              writeChatAndPayloads()
-            }
           }
 
-          const userId = opts.userId ?? chatOwnerId(opts.chat) ?? activeUserId()
-          if (!userId) {
-            applyRemoteChat()
+          let inheritedChat: Chat
+          try {
+            inheritedChat = inheritAttachmentPayloadReferences(
+              opts.chat,
+              existing,
+            )
+          } catch (error) {
+            transaction.abort()
+            reject(error)
             return
           }
+          const normalizedAttachments = normalizeAttachmentPayloadsInTransaction(
+            inheritedChat,
+            transaction,
+            reject,
+          )
+          if (!normalizedAttachments) return
+          const messagesForStorage = normalizedAttachments.messages.map((msg) => ({
+            ...msg,
+            timestamp:
+              msg.timestamp instanceof Date
+                ? msg.timestamp.toISOString()
+                : msg.timestamp,
+          }))
+          const storedChat: StoredChat = {
+            ...opts.chat,
+            messages: messagesForStorage as any,
+            lastAccessedAt: Date.now(),
+            syncedAt: Date.now(),
+            locallyModified: false,
+            syncPending: 0,
+            pendingUpload: 0,
+            syncVersion: opts.syncVersion,
+            version: 1,
+            loadedAt: opts.setLoadedAt
+              ? Date.now()
+              : ((opts.chat as StoredChat).loadedAt ?? existing?.loadedAt),
+            isLocalOnly: (opts.chat as StoredChat).isLocalOnly ?? false,
+            syncUserId: userId,
+            projectLocallyModified: false,
+          }
+
+          const writeChatAndPayloads = () => {
+            if (abortIfStale()) return
+            for (const payload of normalizedAttachments.payloads) {
+              const payloadRequest = payloadStore.put(payload)
+              payloadRequest.onerror = () =>
+                reject(
+                  payloadRequest.error ??
+                    new Error('Failed to save remote attachment payload'),
+                )
+            }
+            const putRequest = putStoredChat(store, summaryStore, storedChat)
+            putRequest.onerror = () =>
+              reject(new Error('Failed to apply remote chat'))
+            putRequest.onsuccess = () => {
+              if (!abortIfStale()) applied = true
+            }
+          }
+          const payloadCursor = payloadStore
+            .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+            .openCursor(IDBKeyRange.only(opts.chat.id))
+          payloadCursor.onerror = () =>
+            reject(new Error('Failed to reconcile remote attachment payloads'))
+          payloadCursor.onsuccess = () => {
+            if (abortIfStale()) return
+            const cursor = payloadCursor.result
+            if (cursor) {
+              if (
+                !normalizedAttachments.referencedPayloadIds.has(
+                  String(cursor.primaryKey),
+                )
+              ) {
+                cursor.delete()
+              }
+              cursor.continue()
+              return
+            }
+            writeChatAndPayloads()
+          }
+        }
+
+        const chatRequest = store.get(opts.chat.id)
+        chatRequest.onsuccess = () => {
+          existing = chatRequest.result as StoredChat | undefined
+          maybeApply()
+        }
+        chatRequest.onerror = () => reject(new Error('Failed to read chat'))
+        if (userId) {
           const deleteRequest = outboxStore.get([userId, opts.chat.id])
+          deleteRequest.onsuccess = () => {
+            hasPendingDelete = deleteRequest.result !== undefined
+            maybeApply()
+          }
           deleteRequest.onerror = () =>
             reject(new Error('Failed to inspect pending delete'))
-          deleteRequest.onsuccess = () => {
-            if (deleteRequest.result === undefined) applyRemoteChat()
-          }
+        }
+        transaction.oncomplete = () =>
+          resolve({ applied: isCurrent() ? applied : false })
+        transaction.onerror = () =>
+          reject(new Error('Failed to apply remote chat'))
+        transaction.onabort = () => {
+          if (accountChanged) resolve({ applied: false })
+          else reject(new Error('Remote chat transaction aborted'))
         }
       })
     })

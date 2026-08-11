@@ -13,7 +13,8 @@ const {
   deleteChatsByProjectSpy,
   acknowledgePendingDeletesSpy,
   deleteRemoteProjectChatsSpy,
-  listStatusSpy,
+  listChatIdsByProjectSpy,
+  waitForAllUploadsSpy,
   newIdempotencyKeySpy,
   resetChatTimestampsSpy,
   updateChatLocalOnlySpy,
@@ -31,7 +32,8 @@ const {
   deleteChatsByProjectSpy: vi.fn(async () => [] as string[]),
   acknowledgePendingDeletesSpy: vi.fn(async () => {}),
   deleteRemoteProjectChatsSpy: vi.fn(async () => ({ deleted: 0 })),
-  listStatusSpy: vi.fn(),
+  listChatIdsByProjectSpy: vi.fn(async () => [] as string[]),
+  waitForAllUploadsSpy: vi.fn(async () => {}),
   newIdempotencyKeySpy: vi.fn(() => 'delete-key'),
   resetChatTimestampsSpy: vi.fn(async () => {}),
   updateChatLocalOnlySpy: vi.fn(async () => {}),
@@ -57,13 +59,16 @@ vi.mock('@/services/cloud/cloud-sync', () => ({
   cloudSync: {
     backupChat: backupChatSpy,
     deleteFromCloud: deleteFromCloudSpy,
+    waitForAllUploads: waitForAllUploadsSpy,
   },
 }))
 vi.mock('@/services/cloud/cloud-storage', () => ({
-  cloudStorage: { deleteChatsByProject: deleteRemoteProjectChatsSpy },
+  cloudStorage: {
+    deleteChatsByProject: deleteRemoteProjectChatsSpy,
+    listChatIdsByProject: listChatIdsByProjectSpy,
+  },
 }))
 vi.mock('@/services/sync-enclave/sync-api', () => ({
-  listStatus: listStatusSpy,
   newIdempotencyKey: newIdempotencyKeySpy,
 }))
 vi.mock('@/services/cloud/streaming-tracker', () => ({
@@ -101,6 +106,8 @@ describe('chatStorage pendingSave is not persisted', () => {
     deleteChatsByProjectSpy.mockResolvedValue([])
     deleteRemoteProjectChatsSpy.mockResolvedValue({ deleted: 0 })
     acknowledgePendingDeletesSpy.mockResolvedValue(undefined)
+    listChatIdsByProjectSpy.mockResolvedValue([])
+    waitForAllUploadsSpy.mockResolvedValue(undefined)
   })
 
   it('strips pendingSave before writing a chat to storage', async () => {
@@ -197,28 +204,15 @@ describe('chatStorage pendingSave is not persisted', () => {
   })
 
   it('enumerates every remote project chat before durable local cleanup', async () => {
-    listStatusSpy
-      .mockResolvedValueOnce({
-        updates: [
-          { id: 'remote-1', project_id: 'project-1' },
-          { id: 'wrong-project', project_id: 'project-2' },
-        ],
-        next_cursor: 'page-2',
-      })
-      .mockResolvedValueOnce({
-        updates: [{ id: 'remote-2', project_id: 'project-1' }],
-      })
+    listChatIdsByProjectSpy.mockResolvedValueOnce(['remote-1', 'remote-2'])
     deleteChatsByProjectSpy.mockResolvedValue(['remote-1', 'remote-2'])
 
     await expect(chatStorage.deleteChatsByProject('project-1')).resolves.toBe(2)
 
-    expect(listStatusSpy).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        scope: 'chat',
-        projectId: 'project-1',
-        cursor: 'page-2',
-      }),
+    expect(listChatIdsByProjectSpy).toHaveBeenCalledWith('project-1')
+    expect(waitForAllUploadsSpy).toHaveBeenCalledOnce()
+    expect(waitForAllUploadsSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteChatsByProjectSpy.mock.invocationCallOrder[0],
     )
     expect(deleteChatsByProjectSpy).toHaveBeenCalledWith(
       'project-1',
@@ -236,9 +230,9 @@ describe('chatStorage pendingSave is not persisted', () => {
   })
 
   it('stops before local staging when the account changes during listing', async () => {
-    listStatusSpy.mockImplementationOnce(async () => {
+    listChatIdsByProjectSpy.mockImplementationOnce(async () => {
       localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
-      return { updates: [] }
+      return []
     })
 
     await expect(chatStorage.deleteChatsByProject('project-1')).rejects.toThrow(
@@ -249,7 +243,6 @@ describe('chatStorage pendingSave is not persisted', () => {
   })
 
   it('stops before remote deletion when the account changes after staging', async () => {
-    listStatusSpy.mockResolvedValueOnce({ updates: [] })
     deleteChatsByProjectSpy.mockImplementationOnce(async () => {
       localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
       return ['local-chat']
@@ -263,7 +256,6 @@ describe('chatStorage pendingSave is not persisted', () => {
   })
 
   it('retains staged intents when the controlplane bulk delete fails', async () => {
-    listStatusSpy.mockResolvedValueOnce({ updates: [] })
     deleteChatsByProjectSpy.mockResolvedValueOnce(['local-chat'])
     deleteRemoteProjectChatsSpy.mockRejectedValueOnce(
       new Error('bulk delete unavailable'),
