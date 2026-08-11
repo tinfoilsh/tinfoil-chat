@@ -47,7 +47,8 @@ export function ProjectProvider({
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
   const initializingRef = useRef(false)
   const initialProjectLoadedRef = useRef(false)
-  const activeProjectIdRef = useRef<string | null>(null)
+  const pendingProjectIdRef = useRef<string | null>(null)
+  const committedProjectIdRef = useRef<string | null>(null)
   const projectLoadGenerationRef = useRef(0)
   const documentRefreshGenerationRef = useRef(0)
   const documentMutationGenerationRef = useRef(0)
@@ -61,7 +62,8 @@ export function ProjectProvider({
       projectLoadGenerationRef.current += 1
       documentRefreshGenerationRef.current += 1
       documentMutationGenerationRef.current += 1
-      activeProjectIdRef.current = null
+      pendingProjectIdRef.current = null
+      committedProjectIdRef.current = null
       initializingRef.current = false
       initialProjectLoadedRef.current = false
       // Clear all user-specific state on logout to prevent data leaking across sessions
@@ -138,11 +140,10 @@ export function ProjectProvider({
 
   const enterProjectMode = useCallback(
     async (projectId: string, projectName?: string): Promise<boolean> => {
-      const previousProjectId = activeProjectIdRef.current
       const generation = projectLoadGenerationRef.current + 1
       projectLoadGenerationRef.current = generation
       documentRefreshGenerationRef.current += 1
-      activeProjectIdRef.current = projectId
+      pendingProjectIdRef.current = projectId
       setLoading(true)
       setError(null)
       setUploadingFiles([])
@@ -168,11 +169,12 @@ export function ProjectProvider({
 
         if (
           projectLoadGenerationRef.current !== generation ||
-          activeProjectIdRef.current !== projectId
+          pendingProjectIdRef.current !== projectId
         ) {
           return false
         }
 
+        committedProjectIdRef.current = projectId
         setActiveProject(project)
         setProjectDocuments(documents)
 
@@ -184,7 +186,7 @@ export function ProjectProvider({
         return true
       } catch (err) {
         if (projectLoadGenerationRef.current !== generation) return false
-        activeProjectIdRef.current = previousProjectId
+        pendingProjectIdRef.current = committedProjectIdRef.current
         const message =
           err instanceof Error ? err.message : 'Failed to load project'
         setError(message)
@@ -225,7 +227,8 @@ export function ProjectProvider({
     projectLoadGenerationRef.current += 1
     documentRefreshGenerationRef.current += 1
     documentMutationGenerationRef.current += 1
-    activeProjectIdRef.current = null
+    pendingProjectIdRef.current = null
+    committedProjectIdRef.current = null
     setActiveProject(null)
     setProjectDocuments([])
     setUploadingFiles([])
@@ -350,7 +353,7 @@ export function ProjectProvider({
         )
 
         documentMutationGenerationRef.current += 1
-        if (activeProjectIdRef.current === projectId) {
+        if (committedProjectIdRef.current === projectId) {
           setProjectDocuments((prev) => [
             ...prev.filter((existing) => existing.id !== document.id),
             document,
@@ -395,7 +398,7 @@ export function ProjectProvider({
       try {
         await projectStorage.deleteDocument(projectId, docId)
         documentMutationGenerationRef.current += 1
-        if (activeProjectIdRef.current === projectId) {
+        if (committedProjectIdRef.current === projectId) {
           setProjectDocuments((prev) =>
             prev.filter((document) => document.id !== docId),
           )
@@ -408,7 +411,7 @@ export function ProjectProvider({
         })
       } catch (err) {
         documentMutationGenerationRef.current += 1
-        if (removedDoc && activeProjectIdRef.current === projectId) {
+        if (removedDoc && committedProjectIdRef.current === projectId) {
           setProjectDocuments((prev) =>
             prev.some((document) => document.id === removedDoc.id)
               ? prev
@@ -443,7 +446,7 @@ export function ProjectProvider({
       if (
         documentRefreshGenerationRef.current !== generation ||
         documentMutationGenerationRef.current !== mutationGeneration ||
-        activeProjectIdRef.current !== projectId
+        committedProjectIdRef.current !== projectId
       ) {
         return
       }

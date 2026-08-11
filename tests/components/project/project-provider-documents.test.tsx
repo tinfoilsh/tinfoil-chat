@@ -73,8 +73,20 @@ const persistedDocument: ProjectDocument = {
   content: 'Project notes',
 }
 
+const testFile = new File(['Project notes'], 'notes.pdf', {
+  type: 'application/pdf',
+})
+
 function wrapper({ children }: PropsWithChildren) {
   return <ProjectProvider>{children}</ProjectProvider>
+}
+
+async function renderInProject() {
+  const rendered = renderHook(() => useProject(), { wrapper })
+  await act(async () => {
+    await rendered.result.current.enterProjectMode(project.id)
+  })
+  return rendered
 }
 
 describe('ProjectProvider documents', () => {
@@ -88,11 +100,7 @@ describe('ProjectProvider documents', () => {
   })
 
   it('keeps decoded document sizes after a refresh', async () => {
-    const { result } = renderHook(() => useProject(), { wrapper })
-
-    await act(async () => {
-      await result.current.enterProjectMode(project.id)
-    })
+    const { result } = await renderInProject()
     await act(async () => {
       await result.current.refreshDocuments()
     })
@@ -103,11 +111,7 @@ describe('ProjectProvider documents', () => {
   it('does not let a stale refresh remove a completed upload', async () => {
     mocks.listDocuments.mockResolvedValueOnce({ documents: [] })
     mocks.getDocuments.mockResolvedValueOnce(new Map())
-    const { result } = renderHook(() => useProject(), { wrapper })
-
-    await act(async () => {
-      await result.current.enterProjectMode(project.id)
-    })
+    const { result } = await renderInProject()
 
     let resolveRefresh!: (documents: Map<string, ProjectDocument>) => void
     mocks.listDocuments.mockResolvedValueOnce({ documents: [] })
@@ -129,12 +133,7 @@ describe('ProjectProvider documents', () => {
     }
     mocks.uploadDocument.mockResolvedValue(uploadedDocument)
     await act(async () => {
-      await result.current.uploadDocument(
-        new File(['Project notes'], 'notes.pdf', {
-          type: 'application/pdf',
-        }),
-        'Project notes',
-      )
+      await result.current.uploadDocument(testFile, 'Project notes')
     })
 
     await act(async () => {
@@ -148,11 +147,7 @@ describe('ProjectProvider documents', () => {
   it('discards a refresh that snapshots while an upload is pending', async () => {
     mocks.listDocuments.mockResolvedValueOnce({ documents: [] })
     mocks.getDocuments.mockResolvedValueOnce(new Map())
-    const { result } = renderHook(() => useProject(), { wrapper })
-
-    await act(async () => {
-      await result.current.enterProjectMode(project.id)
-    })
+    const { result } = await renderInProject()
 
     let resolveUpload!: (document: ProjectDocument) => void
     mocks.uploadDocument.mockReturnValueOnce(
@@ -162,12 +157,7 @@ describe('ProjectProvider documents', () => {
     )
     let uploadPromise!: Promise<ProjectDocument>
     act(() => {
-      uploadPromise = result.current.uploadDocument(
-        new File(['Project notes'], 'notes.pdf', {
-          type: 'application/pdf',
-        }),
-        'Project notes',
-      )
+      uploadPromise = result.current.uploadDocument(testFile, 'Project notes')
     })
 
     let resolveRefresh!: (documents: Map<string, ProjectDocument>) => void
@@ -200,10 +190,7 @@ describe('ProjectProvider documents', () => {
   })
 
   it('does not let a stale refresh restore a deleted document', async () => {
-    const { result } = renderHook(() => useProject(), { wrapper })
-    await act(async () => {
-      await result.current.enterProjectMode(project.id)
-    })
+    const { result } = await renderInProject()
 
     let resolveDelete!: () => void
     mocks.deleteDocument.mockReturnValueOnce(
@@ -242,10 +229,7 @@ describe('ProjectProvider documents', () => {
   })
 
   it('does not duplicate a document when deletion rollback follows a refresh', async () => {
-    const { result } = renderHook(() => useProject(), { wrapper })
-    await act(async () => {
-      await result.current.enterProjectMode(project.id)
-    })
+    const { result } = await renderInProject()
 
     let rejectDelete!: (error: Error) => void
     mocks.deleteDocument.mockReturnValueOnce(
@@ -268,5 +252,44 @@ describe('ProjectProvider documents', () => {
 
     expect(result.current.projectDocuments).toHaveLength(1)
     expect(result.current.projectDocuments[0]).toMatchObject(persistedDocument)
+  })
+
+  it('restores the committed project after a superseding switch fails', async () => {
+    const { result } = await renderInProject()
+    let resolvePendingSwitch!: (project: Project) => void
+    mocks.getProject
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePendingSwitch = resolve
+        }),
+      )
+      .mockResolvedValueOnce(null)
+
+    let pendingSwitch!: Promise<boolean>
+    act(() => {
+      pendingSwitch = result.current.enterProjectMode('project-b')
+    })
+    await act(async () => {
+      await expect(result.current.enterProjectMode('project-d')).resolves.toBe(
+        false,
+      )
+    })
+
+    const uploadedDocument = {
+      ...persistedDocument,
+      id: 'doc-after-failed-switch',
+    }
+    mocks.uploadDocument.mockResolvedValue(uploadedDocument)
+    await act(async () => {
+      await result.current.uploadDocument(testFile, 'Project notes')
+    })
+
+    await act(async () => {
+      resolvePendingSwitch({ ...project, id: 'project-b' })
+      await expect(pendingSwitch).resolves.toBe(false)
+    })
+
+    expect(result.current.activeProject?.id).toBe(project.id)
+    expect(result.current.projectDocuments).toContainEqual(uploadedDocument)
   })
 })

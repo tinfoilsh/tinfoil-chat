@@ -230,11 +230,7 @@ function buildAttachment(opts: {
   // images mode and md_content is missing, so consumers that filter on
   // textContent (share, preview) still see the document.
   const textContent =
-    opts.textContent ||
-    opts.pages
-      ?.map((p) => p.text)
-      .filter(Boolean)
-      .join('\n\n---\n\n')
+    getDocumentTextContent(opts.textContent ?? '', opts.pages) ?? undefined
   if (textContent || opts.pages?.length) {
     return {
       id: opts.id,

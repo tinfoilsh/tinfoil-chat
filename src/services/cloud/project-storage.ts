@@ -56,6 +56,13 @@ function unavailableProjectDocument(
   }
 }
 
+function resolveDocumentSizeBytes(
+  content: string,
+  persistedSizeBytes?: number,
+): number {
+  return persistedSizeBytes ?? new TextEncoder().encode(content).length
+}
+
 // The legacy controlplane row exposed a numeric `syncVersion` to the
 // client. The enclave protocol carries the same monotonic counter as a
 // string ETag (§7 of the sync spec). The Project type still requires a
@@ -527,8 +534,7 @@ export class ProjectStorageService {
 
     const { documentId } = await this.generateDocumentId(projectId)
 
-    const persistedSizeBytes =
-      sizeBytes ?? new TextEncoder().encode(content).length
+    const persistedSizeBytes = resolveDocumentSizeBytes(content, sizeBytes)
     const docPayload = {
       content,
       filename,
@@ -603,8 +609,7 @@ export class ProjectStorageService {
         projectId,
         filename: decoded.filename || '',
         contentType: decoded.contentType || '',
-        sizeBytes:
-          decoded.sizeBytes ?? new TextEncoder().encode(decoded.content).length,
+        sizeBytes: resolveDocumentSizeBytes(decoded.content, decoded.sizeBytes),
         syncVersion: etagToSyncVersion(item.etag),
         createdAt: now,
         updatedAt: now,
@@ -702,9 +707,10 @@ export class ProjectStorageService {
             projectId,
             filename: decoded.filename || '',
             contentType: decoded.contentType || '',
-            sizeBytes:
-              decoded.sizeBytes ??
-              new TextEncoder().encode(decoded.content).length,
+            sizeBytes: resolveDocumentSizeBytes(
+              decoded.content,
+              decoded.sizeBytes,
+            ),
             syncVersion: etagToSyncVersion(item.etag),
             createdAt: now,
             updatedAt: now,
