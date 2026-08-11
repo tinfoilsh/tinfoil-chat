@@ -71,7 +71,7 @@ import { usePasskeyBackup } from '@/hooks/use-passkey-backup'
 import { useProfileSync } from '@/hooks/use-profile-sync'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
 
-import { cloudSync } from '@/services/cloud/cloud-sync'
+import { cloudSync, SyncInProgressError } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { generateCodeExecutionAccessToken } from '@/services/exec-snapshot/access-token'
 import { isPrfSupported, PrfNotSupportedError } from '@/services/passkey'
@@ -1634,7 +1634,19 @@ export function ChatInterface({
         ? () => smartSyncChats(activeProjectIdForSync)
         : () => syncChats()
 
-    initialSync()
+    const runInitialSync = async () => {
+      while (!cancelled) {
+        try {
+          return await initialSync()
+        } catch (error) {
+          if (!(error instanceof SyncInProgressError)) throw error
+          await cloudSync.waitForCurrentSync()
+        }
+      }
+      return false
+    }
+
+    runInitialSync()
       .then(async (result) => {
         await reloadChats()
         if (!cancelled && !isProjectMode) {

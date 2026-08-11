@@ -63,6 +63,13 @@ export interface SyncResult {
   nextToken?: string
 }
 
+export class SyncInProgressError extends Error {
+  constructor() {
+    super('Sync already in progress')
+    this.name = 'SyncInProgressError'
+  }
+}
+
 export interface PaginatedChatsResult {
   chats: StoredChat[]
   hasMore: boolean
@@ -176,7 +183,7 @@ export class CloudSyncService {
         component: 'CloudSync',
         action: 'withSyncLock',
       })
-      throw new Error('Sync already in progress')
+      throw new SyncInProgressError()
     }
 
     let resolve: () => void
@@ -1685,7 +1692,7 @@ export class CloudSyncService {
     // Note: smartSync doesn't need its own lock because it delegates to
     // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
     if (this.syncLock) {
-      throw new Error('Sync already in progress')
+      throw new SyncInProgressError()
     }
     if (!projectId && needsRecoveryHistorySync()) {
       return this.syncAllChats({ deep: true })
@@ -1752,6 +1759,11 @@ export class CloudSyncService {
   // Check if currently syncing
   get syncing(): boolean {
     return this.syncLock !== null
+  }
+
+  async waitForCurrentSync(): Promise<void> {
+    const currentSync = this.syncLock
+    if (currentSync) await currentSync
   }
 
   // Delete a chat from cloud storage
