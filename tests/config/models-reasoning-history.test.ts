@@ -1,13 +1,17 @@
 import {
+  getReasoningHistoryPolicy,
   getResolvedModelContextWindow,
-  requiresCompleteReasoningHistory,
   type BaseModel,
 } from '@/config/models'
+import {
+  REASONING_HISTORY_POLICIES,
+  type ReasoningHistoryPolicy,
+} from '@/utils/reasoning-history'
 import { describe, expect, it } from 'vitest'
 
 const model = (
   modelName: string,
-  requiresHistory = false,
+  policy?: ReasoningHistoryPolicy,
   contextWindow?: string,
 ): BaseModel => ({
   modelName,
@@ -18,37 +22,52 @@ const model = (
   type: 'chat',
   chat: true,
   contextWindow,
-  reasoningConfig: requiresHistory
-    ? { requiresCompleteReasoningHistory: true }
-    : undefined,
+  reasoningConfig: policy ? { reasoningHistoryPolicy: policy } : undefined,
 })
 
-describe('requiresCompleteReasoningHistory', () => {
-  it('uses the direct model capability', () => {
-    expect(requiresCompleteReasoningHistory({ model: model('standard') })).toBe(
-      false,
+describe('getReasoningHistoryPolicy', () => {
+  it('uses the direct model policy with a safe default', () => {
+    expect(getReasoningHistoryPolicy({ model: model('standard') })).toBe(
+      REASONING_HISTORY_POLICIES.none,
     )
     expect(
-      requiresCompleteReasoningHistory({ model: model('kimi-k3', true) }),
-    ).toBe(true)
+      getReasoningHistoryPolicy({
+        model: model('kimi-k3', REASONING_HISTORY_POLICIES.all),
+      }),
+    ).toBe(REASONING_HISTORY_POLICIES.all)
   })
 
-  it('requires history when any Auto candidate requires it', () => {
+  it('uses the strongest Auto candidate policy', () => {
     expect(
-      requiresCompleteReasoningHistory({
+      getReasoningHistoryPolicy({
         model: model('standard'),
-        autoCandidates: [model('standard'), model('kimi-k3', true)],
+        autoCandidates: [
+          model('standard'),
+          model('glm', REASONING_HISTORY_POLICIES.toolCallOnly),
+          model('kimi-k3', REASONING_HISTORY_POLICIES.all),
+        ],
       }),
-    ).toBe(true)
+    ).toBe(REASONING_HISTORY_POLICIES.all)
+  })
+
+  it('falls back safely for unknown future policies', () => {
+    const futureModel = model('future')
+    futureModel.reasoningConfig = {
+      reasoningHistoryPolicy: 'future-policy' as never,
+    }
+
+    expect(getReasoningHistoryPolicy({ model: futureModel })).toBe(
+      REASONING_HISTORY_POLICIES.none,
+    )
   })
 
   it('uses the smallest Auto candidate context window', () => {
     expect(
       getResolvedModelContextWindow({
-        model: model('large', false, '256k tokens'),
+        model: model('large', undefined, '256k tokens'),
         autoCandidates: [
-          model('large', false, '256k tokens'),
-          model('small', false, '128k tokens'),
+          model('large', undefined, '256k tokens'),
+          model('small', undefined, '128k tokens'),
         ],
       }),
     ).toBe('128k tokens')

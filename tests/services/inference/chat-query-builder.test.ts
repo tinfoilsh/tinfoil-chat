@@ -1,6 +1,7 @@
 import type { Message } from '@/components/chat/types'
 import type { BaseModel } from '@/config/models'
 import { ChatQueryBuilder } from '@/services/inference/chat-query-builder'
+import { REASONING_HISTORY_POLICIES } from '@/utils/reasoning-history'
 import { describe, expect, it, vi } from 'vitest'
 
 const model: BaseModel = {
@@ -23,7 +24,16 @@ const preservedHistoryModel: BaseModel = {
   ...model,
   modelName: 'kimi-k3',
   name: 'Kimi K3',
-  reasoningConfig: { requiresCompleteReasoningHistory: true },
+  reasoningConfig: { reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all },
+}
+
+const toolCallHistoryModel: BaseModel = {
+  ...model,
+  modelName: 'gemma4-31b',
+  name: 'Gemma 4',
+  reasoningConfig: {
+    reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.toolCallOnly,
+  },
 }
 
 describe('ChatQueryBuilder', () => {
@@ -219,6 +229,39 @@ describe('ChatQueryBuilder', () => {
     })
 
     expect(messages[0]).toEqual({ role: 'assistant', content: 'answer' })
+  })
+
+  it('preserves reasoning only on tool-call messages for tool-call policy models', () => {
+    const messages = ChatQueryBuilder.buildMessages({
+      model: toolCallHistoryModel,
+      systemPrompt: '',
+      messages: [
+        {
+          role: 'assistant',
+          content: 'ordinary answer',
+          thoughts: 'omit this',
+          timestamp: new Date(),
+        },
+        {
+          role: 'assistant',
+          content: '',
+          thoughts: 'keep this',
+          toolCalls: [{ id: 'call_1', name: 'render_chart', arguments: '{}' }],
+          timestamp: new Date(),
+        },
+      ],
+      includeGenUIHint: false,
+    })
+
+    expect(messages[0]).toEqual({
+      role: 'assistant',
+      content: 'ordinary answer',
+    })
+    expect(messages[1]).toMatchObject({
+      role: 'assistant',
+      reasoning_content: 'keep this',
+      tool_calls: [{ id: 'call_1' }],
+    })
   })
 
   it('preserves reasoning when any Auto candidate requires it', () => {

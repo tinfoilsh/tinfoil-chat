@@ -1,4 +1,9 @@
 import type { Message } from '@/components/chat/types'
+import {
+  REASONING_HISTORY_POLICIES,
+  shouldIncludeReasoning,
+  type ReasoningHistoryPolicy,
+} from '@/utils/reasoning-history'
 
 // Fraction of the model's context window reserved for conversation history;
 // the remainder is headroom for the system prompt and the model's response.
@@ -41,7 +46,7 @@ export function getSmallestContextWindow(
 }
 
 export type TokenEstimationOptions = {
-  includeReasoning?: boolean
+  reasoningHistoryPolicy?: ReasoningHistoryPolicy
   keepMostRecent?: boolean
 }
 
@@ -53,7 +58,12 @@ export function estimateMessageTokens(
   options: TokenEstimationOptions = {},
 ): number {
   let tokens = estimateTokenCount(msg.content)
-  if (options.includeReasoning) {
+  if (
+    shouldIncludeReasoning(
+      options.reasoningHistoryPolicy ?? REASONING_HISTORY_POLICIES.none,
+      Boolean(msg.toolCalls?.length),
+    )
+  ) {
     tokens += estimateTokenCount(msg.thoughts)
   }
   if (msg.searchReasoning) {

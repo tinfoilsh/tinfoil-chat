@@ -5,10 +5,11 @@ import {
 import { buildGenUIPromptHint } from '@/components/chat/genui/system-prompt'
 import type { Message } from '@/components/chat/types'
 import {
+  getReasoningHistoryPolicy,
   getResolvedModelContextWindow,
-  requiresCompleteReasoningHistory,
   type BaseModel,
 } from '@/config/models'
+import { shouldIncludeReasoning } from '@/utils/reasoning-history'
 import { formatCurrentTimeReminder } from '@/utils/time-reminder'
 import { selectMessagesWithinBudget } from '@/utils/token-estimation'
 import type {
@@ -77,7 +78,7 @@ export class ChatQueryBuilder {
       includeTimeReminder,
     } = params
     const modelId = model.modelName
-    const includeReasoningHistory = requiresCompleteReasoningHistory({
+    const reasoningHistoryPolicy = getReasoningHistoryPolicy({
       model,
       autoCandidates,
     })
@@ -122,12 +123,16 @@ export class ChatQueryBuilder {
     const recentMessages = selectMessagesWithinBudget(
       conversationMessages,
       contextWindow,
-      { includeReasoning: includeReasoningHistory },
+      { reasoningHistoryPolicy },
     )
     let addedSystemInstructions = useSystemRole
 
     for (let index = 0; index < recentMessages.length; index++) {
       const msg = recentMessages[index]
+      const includeReasoning = shouldIncludeReasoning(
+        reasoningHistoryPolicy,
+        Boolean(msg.toolCalls?.length),
+      )
 
       if (msg.role === 'user') {
         let userContent = this.buildUserContent(msg, model.multimodal)
@@ -156,7 +161,7 @@ export class ChatQueryBuilder {
       } else if (
         msg.content ||
         (msg.toolCalls && msg.toolCalls.length > 0) ||
-        (includeReasoningHistory && msg.thoughts !== undefined)
+        (includeReasoning && msg.thoughts !== undefined)
       ) {
         // Assistant messages - include annotations and searchReasoning for multi-turn context
         const assistantParam: ChatCompletionAssistantMessageParam & {
@@ -173,7 +178,7 @@ export class ChatQueryBuilder {
         if (msg.searchReasoning) {
           assistantParam.search_reasoning = msg.searchReasoning
         }
-        if (includeReasoningHistory && msg.thoughts !== undefined) {
+        if (includeReasoning && msg.thoughts !== undefined) {
           assistantParam.reasoning_content = msg.thoughts
         }
         if (msg.toolCalls && msg.toolCalls.length > 0) {

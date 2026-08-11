@@ -1,4 +1,5 @@
 import type { Message } from '@/components/chat/types'
+import { REASONING_HISTORY_POLICIES } from '@/utils/reasoning-history'
 import {
   CONTEXT_WINDOW_USAGE_RATIO,
   estimateMessageTokens,
@@ -75,7 +76,11 @@ describe('estimateMessageTokens', () => {
       timestamp: new Date(),
     }
     expect(estimateMessageTokens(msg)).toBe(30)
-    expect(estimateMessageTokens(msg, { includeReasoning: true })).toBe(40)
+    expect(
+      estimateMessageTokens(msg, {
+        reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all,
+      }),
+    ).toBe(40)
   })
 
   it('counts assistant tool calls and search reasoning', () => {
@@ -137,8 +142,24 @@ describe('findContextStartIndex', () => {
 
     expect(findContextStartIndex(messages, 100)).toBe(0)
     expect(
-      findContextStartIndex(messages, 100, { includeReasoning: true }),
+      findContextStartIndex(messages, 100, {
+        reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all,
+      }),
     ).toBe(1)
+  })
+
+  it('counts tool-call reasoning only for tool-call policy models', () => {
+    const ordinary = makeMessage('assistant', 40)
+    ordinary.thoughts = 'b'.repeat(40)
+    const toolCall = makeMessage('assistant', 40)
+    toolCall.thoughts = 'b'.repeat(40)
+    toolCall.toolCalls = [{ id: 'call_1', name: 'tool', arguments: '{}' }]
+    const options = {
+      reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.toolCallOnly,
+    } as const
+
+    expect(estimateMessageTokens(ordinary, options)).toBe(10)
+    expect(estimateMessageTokens(toolCall, options)).toBe(22)
   })
 })
 

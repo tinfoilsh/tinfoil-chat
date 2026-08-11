@@ -2,6 +2,10 @@ import { GridTexture } from '@/components/ui/grid-texture'
 import { findSelectableModel, type BaseModel } from '@/config/models'
 import { useChatPrint } from '@/hooks/use-chat-print'
 import {
+  REASONING_HISTORY_POLICIES,
+  type ReasoningHistoryPolicy,
+} from '@/utils/reasoning-history'
+import {
   findContextStartIndex,
   getHistoryTokenBudget,
 } from '@/utils/token-estimation'
@@ -23,7 +27,7 @@ type ChatMessagesProps = {
   pendingRecoveries?: PendingRecoveryEnvelope[]
   recoveryDrafts?: ReadonlyArray<{ turnId: string; message: Message }>
   activeRecoveryTurnIds?: readonly string[]
-  includeReasoningInContext?: boolean
+  reasoningHistoryPolicy?: ReasoningHistoryPolicy
   contextWindow?: string
   pendingContextTokens?: number
   isDarkMode: boolean
@@ -241,7 +245,7 @@ export function ChatMessages({
   pendingRecoveries = [],
   recoveryDrafts = [],
   activeRecoveryTurnIds = [],
-  includeReasoningInContext = false,
+  reasoningHistoryPolicy = REASONING_HISTORY_POLICIES.none,
   contextWindow,
   pendingContextTokens = 0,
   isDarkMode,
@@ -345,7 +349,7 @@ export function ChatMessages({
       pendingContextTokens,
     )
     const startIndex = findContextStartIndex(messages, budget, {
-      includeReasoning: includeReasoningInContext,
+      reasoningHistoryPolicy,
       keepMostRecent: pendingContextTokens === 0,
     })
     return {
@@ -356,7 +360,7 @@ export function ChatMessages({
     messages,
     contextWindow,
     currentModel?.contextWindow,
-    includeReasoningInContext,
+    reasoningHistoryPolicy,
     pendingContextTokens,
   ])
 

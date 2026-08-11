@@ -1,9 +1,9 @@
 import {
   findSelectableModel,
   getAIModels,
+  getReasoningHistoryPolicy,
   getResolvedModelContextWindow,
   getSystemPromptAndRules,
-  requiresCompleteReasoningHistory,
   resolveModelSelection,
   type BaseModel,
 } from '@/config/models'
@@ -1452,7 +1452,7 @@ export function ChatInterface({
     preferToolCalling:
       effectiveWebSearchEnabled || codeExecutionEnabled || genUIEnabled,
   })
-  const includeReasoningInContext = requiresCompleteReasoningHistory(
+  const reasoningHistoryPolicy = getReasoningHistoryPolicy(
     contextModelSelection,
   )
   const contextWindow = getResolvedModelContextWindow(contextModelSelection)
@@ -2401,12 +2401,12 @@ export function ChatInterface({
         pendingContextTokens,
       )
       const startIndex = findContextStartIndex(messages, historyBudget, {
-        includeReasoning: includeReasoningInContext,
+        reasoningHistoryPolicy,
         keepMostRecent: pendingContextTokens === 0,
       })
       for (let i = startIndex; i < messages.length; i++) {
         usedTokens += estimateMessageTokens(messages[i], {
-          includeReasoning: includeReasoningInContext,
+          reasoningHistoryPolicy,
         })
       }
     }
@@ -2419,7 +2419,7 @@ export function ChatInterface({
   }, [
     currentChat?.messages,
     contextWindow,
-    includeReasoningInContext,
+    reasoningHistoryPolicy,
     pendingContextTokens,
   ])
 
@@ -3493,7 +3493,7 @@ export function ChatInterface({
                     pendingRecoveries={currentChat?.pendingRecoveries}
                     recoveryDrafts={recoveryDrafts}
                     activeRecoveryTurnIds={activeRecoveryTurnIds}
-                    includeReasoningInContext={includeReasoningInContext}
+                    reasoningHistoryPolicy={reasoningHistoryPolicy}
                     contextWindow={contextWindow}
                     pendingContextTokens={pendingContextTokens}
                     isDarkMode={isDarkMode}
