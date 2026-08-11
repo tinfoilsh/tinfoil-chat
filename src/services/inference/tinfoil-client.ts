@@ -401,6 +401,10 @@ async function initClient(sessionToken: string): Promise<OpenAI> {
         apiKey: sessionToken,
         baseURL: `${window.location.origin}/api/local-router/v1`,
         dangerouslyAllowBrowser: true,
+        // The app runs its own retry loop (sendChatStream) with typed error
+        // classification; the SDK's internal retries would stack under it
+        // and delay terminal errors such as quota-exhausted 429s.
+        maxRetries: 0,
         defaultHeaders: {
           [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,
         },
@@ -413,6 +417,8 @@ async function initClient(sessionToken: string): Promise<OpenAI> {
         apiKey: sessionToken,
         baseURL: secureClient.getBaseURL(),
         dangerouslyAllowBrowser: true,
+        // See the dev client above: app-level retries own this concern.
+        maxRetries: 0,
         // Opt into the router's inline progress-marker stream.
         defaultHeaders: {
           [TINFOIL_EVENTS_HEADER]: `${TINFOIL_EVENTS_VALUE_WEB_SEARCH},${TINFOIL_EVENTS_VALUE_CODE_EXECUTION}`,

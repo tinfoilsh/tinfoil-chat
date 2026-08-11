@@ -23,7 +23,9 @@ import { chatChunkStreamFromSSE, type ChatChunkStream } from './chat-stream'
 import {
   createRecoverableTinfoilClient,
   createRecoverableTinfoilTransport,
+  getRateLimitInfo,
   getTinfoilClient,
+  refreshRateLimit,
   resetTinfoilClient,
   type RecoverableTinfoilTransport,
 } from './tinfoil-client'
@@ -150,6 +152,35 @@ export interface ChatRecoveryCallbacks {
     token: SessionRecoveryToken,
   ) => Promise<void>
   onAttemptAbandoned: (sessionId: string) => Promise<void>
+}
+
+function getHttpStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown })?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+/**
+ * A 429 can mean transient per-request throttling (worth retrying) or an
+ * exhausted usage quota (which cannot succeed until the window resets).
+ * Distinguishes the two by refreshing the quota from the server: returns a
+ * terminal ChatError when the quota is exhausted, or null when the 429 looks
+ * transient and the caller may retry.
+ */
+async function classifyQuotaExhausted429(
+  error: unknown,
+): Promise<ChatError | null> {
+  await refreshRateLimit()
+  const limit = getRateLimitInfo()
+  if (!limit || limit.remaining > 0) {
+    return null
+  }
+  const message =
+    (error as { message?: string })?.message ?? 'Rate limit reached'
+  return new ChatError(
+    message,
+    limit.kind === 'hourly' ? 'HOURLY_LIMIT' : 'RATE_LIMIT',
+    { status: 429 },
+  )
 }
 
 // Typed classification only — never inspect error message strings, which
@@ -551,6 +582,16 @@ export async function sendChatStream(
       if (refreshAuthentication) {
         resetTinfoilClient()
       }
+
+      // A 429 caused by an exhausted quota cannot succeed on retry; surface
+      // it immediately so the paywall/limit UI shows instead of a retry loop.
+      if (getHttpStatus(err) === 429) {
+        const quotaError = await classifyQuotaExhausted429(err)
+        if (quotaError) {
+          throw quotaError
+        }
+      }
+
       if (
         attempt < maxRetries &&
         (refreshAuthentication || isRetryableError(err))
