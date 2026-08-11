@@ -1440,8 +1440,8 @@ export function ChatInterface({
   // Get the selected model details
   const selectedModelDetails = findSelectableModel(selectedModel, models) as
     BaseModel | undefined
-  const contextModelSelection = resolveModelSelection(selectedModel, models, {
-    preferMultimodal:
+  const prefersMultimodalContext = useMemo(
+    () =>
       currentChat?.messages.some(
         (message) => getMessageImages(message).length > 0,
       ) ||
@@ -1449,6 +1449,10 @@ export function ChatInterface({
         (document) =>
           Boolean(document.imageData) || document.attachment?.type === 'image',
       ),
+    [currentChat?.messages, processedDocuments],
+  )
+  const contextModelSelection = resolveModelSelection(selectedModel, models, {
+    preferMultimodal: prefersMultimodalContext,
     preferToolCalling:
       effectiveWebSearchEnabled || codeExecutionEnabled || genUIEnabled,
   })
@@ -2462,23 +2466,16 @@ export function ChatInterface({
       return
     }
 
-    // Filter out documents that are still uploading or generating descriptions
-    const completedDocuments = processedDocuments.filter(
-      (doc) =>
-        !doc.isUploading && !doc.isGeneratingDescription && !doc.isUnsupported,
-    )
-
     const messageText = input.trim()
+    const attachments = buildCompletedAttachments(processedDocuments)
 
     // Don't proceed if there's no input text, no quote, and no documents
-    if (!messageText && !quote && completedDocuments.length === 0) {
+    if (!messageText && !quote && attachments.length === 0) {
       return
     }
 
     // Don't auto-scroll here - let the message append handler do it
     // This prevents the dip when thoughts start streaming
-
-    const attachments = buildCompletedAttachments(completedDocuments)
 
     setInput('')
     submitMessage({

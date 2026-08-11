@@ -125,7 +125,11 @@ describe('EventNormalizer', () => {
             ],
           },
         ]),
-      ).toContainEqual({ type: 'thinking_delta', content: ' delta' })
+      ).toEqual([
+        { type: 'thinking_start' },
+        { type: 'thinking_delta', content: ' delta' },
+        { type: 'thinking_end' },
+      ])
     })
 
     it('detects reasoning format from first reasoning chunk', () => {

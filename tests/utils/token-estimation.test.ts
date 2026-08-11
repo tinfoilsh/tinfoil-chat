@@ -59,7 +59,7 @@ describe('getContextTokenBudget', () => {
 })
 
 describe('estimateMessageTokens', () => {
-  it('includes quote and attachment text but excludes thoughts by default', () => {
+  it('includes quote and attachment text but excludes user thoughts', () => {
     const msg: Message = {
       role: 'user',
       content: 'a'.repeat(40),
@@ -80,7 +80,7 @@ describe('estimateMessageTokens', () => {
       estimateMessageTokens(msg, {
         reasoningHistoryPolicy: REASONING_HISTORY_POLICIES.all,
       }),
-    ).toBe(40)
+    ).toBe(30)
   })
 
   it('counts assistant tool calls and search reasoning', () => {

@@ -243,12 +243,15 @@ export type ResolvedModelSelection = {
   autoCandidates?: BaseModel[]
 }
 
+const getResolvedCandidates = (
+  selection: ResolvedModelSelection,
+): BaseModel[] =>
+  selection.autoCandidates ?? (selection.model ? [selection.model] : [])
+
 export const getReasoningHistoryPolicy = (
   selection: ResolvedModelSelection,
 ): ReasoningHistoryPolicy => {
-  const candidates =
-    selection.autoCandidates ?? (selection.model ? [selection.model] : [])
-  return candidates.reduce<ReasoningHistoryPolicy>(
+  return getResolvedCandidates(selection).reduce<ReasoningHistoryPolicy>(
     (strongest, candidate) =>
       getStrongerReasoningHistoryPolicy(
         strongest,
@@ -263,10 +266,10 @@ export const getReasoningHistoryPolicy = (
 export const getResolvedModelContextWindow = (
   selection: ResolvedModelSelection,
 ): string | undefined => {
-  const candidates =
-    selection.autoCandidates ?? (selection.model ? [selection.model] : [])
   return getSmallestContextWindow(
-    candidates.map((candidate) => candidate.contextWindow),
+    getResolvedCandidates(selection).map(
+      (candidate) => candidate.contextWindow,
+    ),
   )
 }
 

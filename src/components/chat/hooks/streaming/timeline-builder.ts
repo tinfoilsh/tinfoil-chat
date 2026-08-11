@@ -69,7 +69,6 @@ export class TimelineBuilder {
     const block = this.blocks[this.currentThinkingIdx] as TimelineThinkingBlock
     this.blocks[this.currentThinkingIdx] = {
       ...block,
-      content: block.content,
       isThinking: false,
       duration,
     }
@@ -304,7 +303,6 @@ export class TimelineBuilder {
       ] as TimelineThinkingBlock
       this.blocks[this.currentThinkingIdx] = {
         ...block,
-        content: block.content,
         isThinking: false,
       }
       this.currentThinkingIdx = -1

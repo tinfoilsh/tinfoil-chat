@@ -59,6 +59,7 @@ export function estimateMessageTokens(
 ): number {
   let tokens = estimateTokenCount(msg.content)
   if (
+    msg.role === 'assistant' &&
     shouldIncludeReasoning(
       options.reasoningHistoryPolicy ?? REASONING_HISTORY_POLICIES.none,
       Boolean(msg.toolCalls?.length),
