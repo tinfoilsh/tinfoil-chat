@@ -103,8 +103,9 @@ function message(
   role: Message['role'],
   content: string,
   turnId?: string,
+  timestamp: Date | string = new Date(),
 ): Message {
-  return { role, content, turnId, timestamp: new Date().toISOString() }
+  return { role, content, turnId, timestamp: timestamp as Date }
 }
 
 function envelope(turnId: string): PendingRecoveryEnvelope {
@@ -306,6 +307,102 @@ describe('chat recovery sync mutations', () => {
     ])
     expect(uploaded.pendingRecoveries).toEqual([
       expect.objectContaining({ turnId: 'turn-2' }),
+    ])
+  })
+
+  it('completes a local recovery turn before a newer remote turn', async () => {
+    const originalQuestion = message(
+      'user',
+      'Question',
+      'turn-1',
+      '2026-01-01T00:00:00.000Z',
+    )
+    const recoveryQuestion = message(
+      'user',
+      'Recovery question',
+      'turn-2',
+      new Date('2026-01-01T00:01:00.000Z'),
+    )
+    remoteChat = {
+      ...remoteChat,
+      messages: [
+        originalQuestion,
+        message('user', 'Newer question', 'turn-3', '2026-01-01T00:02:00.000Z'),
+        message(
+          'assistant',
+          'Newer answer',
+          'turn-3',
+          '2026-01-01T00:03:00.000Z',
+        ),
+      ],
+      updatedAt: '2026-01-01T00:04:00.000Z',
+    }
+    localChat = {
+      ...structuredClone(remoteChat),
+      messages: [originalQuestion, recoveryQuestion],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+    await completePendingRecovery(
+      remoteChat.id,
+      currentEnvelope('turn-2'),
+      message(
+        'assistant',
+        'Recovered answer',
+        'turn-2',
+        new Date('2026-01-01T00:01:30.000Z'),
+      ),
+    )
+
+    expect(remoteChat.messages.map((item) => item.content)).toEqual([
+      'Question',
+      'Recovery question',
+      'Recovered answer',
+      'Newer question',
+      'Newer answer',
+    ])
+  })
+
+  it('appends a local recovery turn when a remote timestamp is invalid', async () => {
+    const originalQuestion = message(
+      'user',
+      'Question',
+      'turn-1',
+      '2026-01-01T00:00:00.000Z',
+    )
+    remoteChat = {
+      ...remoteChat,
+      messages: [
+        originalQuestion,
+        message('assistant', 'Invalid timestamp', 'turn-1', 'invalid'),
+        message('user', 'Newer question', 'turn-3', '2026-01-01T00:02:00.000Z'),
+      ],
+      updatedAt: '2026-01-01T00:03:00.000Z',
+    }
+    localChat = {
+      ...structuredClone(remoteChat),
+      messages: [
+        originalQuestion,
+        message(
+          'user',
+          'Recovery question',
+          'turn-2',
+          new Date('2026-01-01T00:01:00.000Z'),
+        ),
+      ],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+
+    expect(remoteChat.messages.map((item) => item.content)).toEqual([
+      'Question',
+      'Invalid timestamp',
+      'Newer question',
+      'Recovery question',
     ])
   })
 

@@ -999,10 +999,7 @@ export function useChatMessaging({
 
         if (recoveryEnabled) {
           try {
-            if (!recoveryLocalSavePromise) {
-              throw new Error('Chat recovery local save did not start')
-            }
-            updatedChat = await recoveryLocalSavePromise
+            updatedChat = await recoveryLocalSavePromise!
           } catch (error) {
             recoveryEnabled = false
             logError(

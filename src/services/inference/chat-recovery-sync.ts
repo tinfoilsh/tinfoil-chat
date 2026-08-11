@@ -21,6 +21,12 @@ import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 
 const RECOVERY_MUTATION_MAX_ATTEMPTS = 3
 
+function messageTimestampMs(timestamp: Date | string): number | null {
+  const milliseconds =
+    timestamp instanceof Date ? timestamp.getTime() : Date.parse(timestamp)
+  return Number.isFinite(milliseconds) ? milliseconds : null
+}
+
 type ChatMutation = (
   chat: StoredChat,
   local?: StoredChat | null,
@@ -264,12 +270,35 @@ export function addPendingRecovery(
       : (local?.messages.filter(
           (message) => message.turnId === envelope.turnId,
         ) ?? [])
+    const localTurnTimestamp = localTurn[0]
+      ? messageTimestampMs(localTurn[0].timestamp)
+      : null
+    const remoteMessageTimestamps = chat.messages.map((message) =>
+      messageTimestampMs(message.timestamp),
+    )
+    const hasInvalidRemoteTimestamp = remoteMessageTimestamps.some(
+      (timestamp) => timestamp === null,
+    )
+    const firstNewerMessageIndex =
+      localTurnTimestamp !== null && !hasInvalidRemoteTimestamp
+        ? remoteMessageTimestamps.findIndex(
+            (timestamp) => timestamp !== null && timestamp > localTurnTimestamp,
+          )
+        : -1
+    const insertAt =
+      firstNewerMessageIndex >= 0
+        ? firstNewerMessageIndex
+        : chat.messages.length
     return {
       chat: {
         ...chat,
         messages:
           localTurn.length > 0
-            ? [...chat.messages, ...localTurn]
+            ? [
+                ...chat.messages.slice(0, insertAt),
+                ...localTurn,
+                ...chat.messages.slice(insertAt),
+              ]
             : chat.messages,
         pendingRecoveries: pending,
       },
