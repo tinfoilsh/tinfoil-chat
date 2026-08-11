@@ -55,25 +55,30 @@ export function ProjectProvider({
 
   const isProjectMode = activeProject !== null
 
+  const resetProjectSessionState = useCallback(() => {
+    projectLoadGenerationRef.current += 1
+    documentRefreshGenerationRef.current += 1
+    documentMutationGenerationRef.current += 1
+    pendingProjectIdRef.current = null
+    committedProjectIdRef.current = null
+    setActiveProject(null)
+    setProjectDocuments([])
+    setUploadingFiles([])
+    setError(null)
+    setLoading(false)
+    setLoadingProject(null)
+  }, [])
+
   useEffect(() => {
     if (isSignedIn && !initializingRef.current) {
       initializingRef.current = true
     } else if (!isSignedIn) {
-      projectLoadGenerationRef.current += 1
-      documentRefreshGenerationRef.current += 1
-      documentMutationGenerationRef.current += 1
-      pendingProjectIdRef.current = null
-      committedProjectIdRef.current = null
       initializingRef.current = false
       initialProjectLoadedRef.current = false
       // Clear all user-specific state on logout to prevent data leaking across sessions
-      setActiveProject(null)
-      setProjectDocuments([])
-      setError(null)
-      setLoading(false)
-      setLoadingProject(null)
+      resetProjectSessionState()
     }
-  }, [isSignedIn])
+  }, [isSignedIn, resetProjectSessionState])
 
   // Memory callbacks for useMemory hook
   const memoryCallbacks = useMemo(
@@ -224,15 +229,7 @@ export function ProjectProvider({
   }, [initialProjectId, isSignedIn, activeProject, enterProjectMode])
 
   const exitProjectMode = useCallback(() => {
-    projectLoadGenerationRef.current += 1
-    documentRefreshGenerationRef.current += 1
-    documentMutationGenerationRef.current += 1
-    pendingProjectIdRef.current = null
-    committedProjectIdRef.current = null
-    setActiveProject(null)
-    setProjectDocuments([])
-    setUploadingFiles([])
-    setError(null)
+    resetProjectSessionState()
 
     // Signal to ChatSidebar that projects should be expanded
     sessionStorage.setItem(UI_EXPAND_PROJECTS_ON_MOUNT, 'true')
@@ -241,7 +238,7 @@ export function ProjectProvider({
       component: 'ProjectProvider',
       action: 'exitProjectMode',
     })
-  }, [])
+  }, [resetProjectSessionState])
 
   const createProject = useCallback(
     async (data: CreateProjectData): Promise<Project> => {
