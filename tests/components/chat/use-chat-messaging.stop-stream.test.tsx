@@ -17,6 +17,7 @@ const {
   initialSaveMock,
   persistInterruptedAssistantMock,
   saveChatMock,
+  patchStatusMock,
   sendChatStreamMock,
   sessionGetAllChatsMock,
   sessionSaveMock,
@@ -54,6 +55,7 @@ const {
   persistInterruptedAssistantMock: vi.fn(
     async (..._args: unknown[]) => undefined,
   ),
+  patchStatusMock: vi.fn(),
   saveChatMock: vi.fn(async (chat: unknown) => chat),
   sendChatStreamMock: vi.fn(),
   sessionGetAllChatsMock: vi.fn(() => [] as Chat[]),
@@ -98,7 +100,7 @@ vi.mock('@/components/chat/hooks/use-chat-streams', async (importOriginal) => ({
   >()),
   useChatStreams: () => ({
     statusByChat: {},
-    patchStatus: vi.fn(),
+    patchStatus: patchStatusMock,
     resetStatus: vi.fn(),
     moveStatus: (fromId: string, toId: string) => {
       const controller = streamControllers.get(fromId)
@@ -134,6 +136,7 @@ vi.mock('@/services/inference/chat-recovery', () => ({
   completeLiveChatRecovery: (...args: unknown[]) =>
     completeLiveChatRecoveryMock(...args),
   markChatRecoveryTurnCancelled: vi.fn(),
+  markChatRecoveryTurnSettled: vi.fn(),
   persistChatRecoveryToken: vi.fn(),
   releaseActiveChatRecovery: vi.fn(),
   scanPendingChatRecoveries: vi.fn(),
@@ -1083,6 +1086,91 @@ describe('useChatMessaging stopped streams', () => {
       await query
     })
     expect(completeLiveChatRecoveryMock).toHaveBeenCalledOnce()
+  })
+
+  it('settles the streaming flags before recovery finalization completes', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    let finishRecoveryCompletion!: () => void
+    const idleWhileFinalizing: boolean[] = []
+    completeLiveChatRecoveryMock.mockImplementationOnce(
+      (...args: unknown[]) => {
+        idleWhileFinalizing.push(
+          patchStatusMock.mock.calls.some(
+            ([chatId, patch]) =>
+              chatId === 'chat-1' &&
+              (patch as { isStreaming?: boolean }).isStreaming === false &&
+              (patch as { loadingState?: string }).loadingState === 'idle',
+          ),
+        )
+        const input = args[0] as {
+          chatId: string
+          assistantMessage: Chat['messages'][number]
+        }
+        return new Promise<Chat>((resolve) => {
+          finishRecoveryCompletion = () =>
+            resolve({
+              id: input.chatId,
+              title: 'Untitled',
+              createdAt: new Date(),
+              messages: [input.assistantMessage],
+              isBlankChat: false,
+            })
+        })
+      },
+    )
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [],
+    }
+    const stream = createOpenStream()
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    stream.send({ choices: [{ delta: { content: 'Complete answer' } }] })
+    stream.send({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    })
+    stream.close()
+
+    await vi.waitFor(() =>
+      expect(completeLiveChatRecoveryMock).toHaveBeenCalled(),
+    )
+    // The stop button/spinner must revert as soon as the stream ends, not
+    // after the recovery finalization round-trips settle.
+    expect(idleWhileFinalizing).toEqual([true])
+
+    await act(async () => {
+      finishRecoveryCompletion()
+      await query
+    })
+    expect(result.current.currentChat.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'Complete answer',
+    })
   })
 
   it('stops without waiting for pending recovery token persistence', async () => {

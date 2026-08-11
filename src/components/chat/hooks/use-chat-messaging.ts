@@ -30,6 +30,7 @@ import {
   cancelChatRecovery,
   completeLiveChatRecovery,
   markChatRecoveryTurnCancelled,
+  markChatRecoveryTurnSettled,
   persistChatRecoveryToken,
   releaseActiveChatRecovery,
   scanPendingChatRecoveries,
@@ -939,7 +940,12 @@ export function useChatMessaging({
               },
             )
           } finally {
-            releaseActiveChatRecovery(chatId)
+            // Release only this stream's turn: the chat may already be
+            // interactive again (flags settle at stream end) with a
+            // successor stream's recovery attempt registered on it.
+            if (turnId) {
+              releaseActiveChatRecovery(chatId, turnId)
+            }
           }
         })()
         recoveryCleanupByChat.set(chatId, cleanup)
@@ -1110,6 +1116,49 @@ export function useChatMessaging({
           // navigated to a different conversation while it streamed.
           const chatId = streamChatIdRef.current
 
+          // The full response is on screen once the stream loop and its
+          // final publication settle, so settle the UI flags now instead of
+          // after title resolution and recovery finalization (which cost
+          // cloud round-trips). The streaming tracker intentionally stays
+          // active until the final save lands so storage reloads can't
+          // adopt a stale stored copy of this chat (see deferStreamCleanup).
+          if (
+            !controller.signal.aborted &&
+            ownsController(chatId, controller)
+          ) {
+            patchStatus(chatId, {
+              loadingState: 'idle',
+              retryInfo: null,
+              isWaitingForResponse: false,
+              isStreaming: false,
+              isThinking: false,
+            })
+            if (recoveryEnabled && turnId) {
+              // Strip this turn's envelope from view state so the recovery
+              // indicator can't flash for a turn that just completed on
+              // screen; the envelope itself is removed from storage by
+              // completeLiveChatRecovery below. The settled mark keeps
+              // storage reloads in that window from re-adopting it.
+              markChatRecoveryTurnSettled(chatId, turnId)
+              const stripCompletedEnvelope = (chat: Chat): Chat => ({
+                ...chat,
+                pendingRecoveries: chat.pendingRecoveries?.filter(
+                  (recovery) => recovery.turnId !== turnId,
+                ),
+              })
+              setChats((previous) =>
+                previous.map((chat) =>
+                  chat.id === chatId ? stripCompletedEnvelope(chat) : chat,
+                ),
+              )
+              setCurrentChat((previous) =>
+                previous.id === chatId
+                  ? stripCompletedEnvelope(previous)
+                  : previous,
+              )
+            }
+          }
+
           logInfo('[handleQuery] Streaming completed, processing response', {
             component: 'useChatMessaging',
             action: 'handleQuery.streamingComplete',
@@ -1238,26 +1287,33 @@ export function useChatMessaging({
                     : {}),
                 },
               })
-              const latestChat = findLiveChat(chatId)
-              const titleChangedDuringRecovery =
-                latestChat !== undefined &&
-                (latestChat.title !== titleBeforeRecovery?.title ||
-                  latestChat.titleState !== titleBeforeRecovery?.titleState)
-              const visibleChat = titleChangedDuringRecovery
-                ? {
-                    ...completedChat,
-                    title: latestChat.title,
-                    titleState: latestChat.titleState,
-                  }
-                : completedChat
-              setChats((previous) =>
-                previous.map((chat) =>
-                  chat.id === chatId ? visibleChat : chat,
-                ),
-              )
-              setCurrentChat((previous) =>
-                previous.id === chatId ? visibleChat : previous,
-              )
+              // The UI settled to idle before this finalization, so a newer
+              // stream may have started on this chat meanwhile. Its
+              // controller registration marks ownership; replacing the
+              // visible chat then would stomp the successor's optimistic
+              // messages with this stream's storage snapshot.
+              if (ownsController(chatId, controller)) {
+                const latestChat = findLiveChat(chatId)
+                const titleChangedDuringRecovery =
+                  latestChat !== undefined &&
+                  (latestChat.title !== titleBeforeRecovery?.title ||
+                    latestChat.titleState !== titleBeforeRecovery?.titleState)
+                const visibleChat = titleChangedDuringRecovery
+                  ? {
+                      ...completedChat,
+                      title: latestChat.title,
+                      titleState: latestChat.titleState,
+                    }
+                  : completedChat
+                setChats((previous) =>
+                  previous.map((chat) =>
+                    chat.id === chatId ? visibleChat : chat,
+                  ),
+                )
+                setCurrentChat((previous) =>
+                  previous.id === chatId ? visibleChat : previous,
+                )
+              }
             } catch (error) {
               if (!controller.signal.aborted) {
                 await abandonAndReleaseRecovery(chatId)
@@ -1270,7 +1326,13 @@ export function useChatMessaging({
                 action: 'handleQuery.recoveryComplete',
                 metadata: { chatId },
               })
-              persistFinalChat(true)
+              // Same ownership rule as above: a successor stream's save
+              // already persists this response (it reads the on-screen
+              // messages), so only fall back to a direct save while this
+              // stream still owns the chat.
+              if (ownsController(chatId, controller)) {
+                persistFinalChat(true)
+              }
             }
           } else {
             persistFinalChat()
