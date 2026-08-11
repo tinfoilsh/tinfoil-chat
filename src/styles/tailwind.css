@@ -36,8 +36,7 @@
     --surface-thinking: 40 15% 92%;
     --surface-message-user: 40 15% 92%;
     --surface-message-assistant: 40 20% 97%;
-    --redaction-block: 220 8% 72%;
-    --redaction-border: 220 8% 62%;
+    --redaction-block: 0 0% 6%;
 
     /* Borders */
     --border-subtle: 220 13% 91%;
@@ -110,8 +109,7 @@
     --surface-thinking: 240 2.2% 17.6%;
     --surface-message-user: 240 2.2% 17.6%;
     --surface-message-assistant: 0 0% 7.1%;
-    --redaction-block: 220 4% 32%;
-    --redaction-border: 220 4% 42%;
+    --redaction-block: 0 0% 4%;
 
     --border-subtle: 240 3.7% 26%;
     --border-strong: 240 3.7% 40%;
@@ -177,20 +175,43 @@
     }
 
     .redacted-text .redacted-text-source {
-      filter: blur(2px);
-      opacity: 0.7;
+      opacity: 0;
     }
 
     .redacted-text .redacted-text-block {
       display: block;
       top: 0.15em;
       bottom: 0.1em;
-      border-radius: 4px;
+      border-radius: 3px 2px 4px 2px / 2px 4px 2px 3px;
       z-index: 1;
-      background-color: hsl(var(--redaction-block) / 35%);
-      backdrop-filter: blur(2px);
-      -webkit-backdrop-filter: blur(2px);
-      box-shadow: inset 0 0 0 1px hsl(var(--redaction-border));
+      background-color: hsl(var(--redaction-block));
+      background-image:
+        linear-gradient(178deg, rgb(255 255 255 / 3%), transparent 45%),
+        repeating-linear-gradient(
+          2deg,
+          transparent 0,
+          transparent 2px,
+          rgb(255 255 255 / 2%) 3px
+        );
+      clip-path: polygon(
+        0.3% 8%,
+        9% 3%,
+        21% 7%,
+        34% 2%,
+        48% 6%,
+        61% 3%,
+        74% 7%,
+        88% 3%,
+        99.7% 8%,
+        99.2% 91%,
+        87% 96%,
+        73% 92%,
+        59% 97%,
+        45% 93%,
+        31% 96%,
+        17% 92%,
+        0.5% 96%
+      );
       opacity: 1;
     }
 
@@ -206,7 +227,6 @@
       :focus-visible
       .redacted-text
       .redacted-text-source {
-      filter: none;
       opacity: 1;
     }
 
