@@ -125,6 +125,7 @@ async function applyPulledUpserts(
   ) {
     const pulled = await cloudStorage.downloadChats(
       idsToPull.slice(offset, offset + CONTENT_BATCH_SIZE),
+      { tolerateNotFound: true },
     )
     ensureCurrent(isCurrent)
     const eventById = new Map(latest.map((event) => [event.id, event]))
@@ -208,6 +209,7 @@ async function bootstrapFromSnapshot(
     const batch = candidates.slice(offset, offset + CONTENT_BATCH_SIZE)
     const pulled = await cloudStorage.downloadChats(
       batch.map((item) => item.id),
+      { tolerateNotFound: true },
     )
     ensureCurrent(isCurrent)
     const metadata = new Map(batch.map((item) => [item.id, item]))
@@ -280,6 +282,7 @@ async function applyEvents(
       const deleted = await indexedDBStorage.applyRemoteDeletion(
         event.id,
         userId,
+        isCurrent,
       )
       committedStates.push(toRemoteState(event, event.revision, 'delete'))
       if (deleted) chatEvents.emit({ reason: 'sync', ids: [event.id] })

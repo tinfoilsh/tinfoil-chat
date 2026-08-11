@@ -1,42 +1,71 @@
 import type { Chat } from '@/components/chat/types'
+import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
 import { chatStorage } from '@/services/storage/chat-storage'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { setCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const saveChatSpy = vi.fn(async (chat: unknown) => ({
-  saved: true,
-  isLocalOnly: (chat as { isLocalOnly?: boolean }).isLocalOnly === true,
+const {
+  saveChatSpy,
+  getChatSpy,
+  getAllChatsSpy,
+  backupChatSpy,
+  deleteChatsByProjectSpy,
+  acknowledgePendingDeletesSpy,
+  deleteRemoteProjectChatsSpy,
+  listStatusSpy,
+  newIdempotencyKeySpy,
+  resetChatTimestampsSpy,
+  updateChatLocalOnlySpy,
+  updateChatProjectSpy,
+  deleteFromCloudSpy,
+  isDeletedSpy,
+} = vi.hoisted(() => ({
+  saveChatSpy: vi.fn(async (chat: unknown) => ({
+    saved: true,
+    isLocalOnly: (chat as { isLocalOnly?: boolean }).isLocalOnly === true,
+  })),
+  getChatSpy: vi.fn(async () => null as unknown),
+  getAllChatsSpy: vi.fn(async () => [] as unknown[]),
+  backupChatSpy: vi.fn(async () => {}),
+  deleteChatsByProjectSpy: vi.fn(async () => [] as string[]),
+  acknowledgePendingDeletesSpy: vi.fn(async () => {}),
+  deleteRemoteProjectChatsSpy: vi.fn(async () => ({ deleted: 0 })),
+  listStatusSpy: vi.fn(),
+  newIdempotencyKeySpy: vi.fn(() => 'delete-key'),
+  resetChatTimestampsSpy: vi.fn(async () => {}),
+  updateChatLocalOnlySpy: vi.fn(async () => {}),
+  updateChatProjectSpy: vi.fn(async () => {}),
+  deleteFromCloudSpy: vi.fn(async () => {}),
+  isDeletedSpy: vi.fn((_id: unknown) => false),
 }))
-const getChatSpy = vi.fn(async () => null as unknown)
-const getAllChatsSpy = vi.fn(async () => [] as unknown[])
-const resetChatTimestampsSpy = vi.fn(async () => {})
-const updateChatLocalOnlySpy = vi.fn(async () => {})
-const updateChatProjectSpy = vi.fn(async () => {})
-const backupChatSpy = vi.fn(async () => {})
-const deleteFromCloudSpy = vi.fn(async () => {})
-const isDeletedSpy = vi.fn((_id: unknown) => false)
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
     initialize: vi.fn(async () => {}),
-    getChat: (...args: unknown[]) => getChatSpy(...args),
-    saveChat: (...args: unknown[]) => saveChatSpy(...args),
-    getAllChats: (...args: unknown[]) => getAllChatsSpy(...args),
-    resetChatTimestamps: (...args: unknown[]) =>
-      resetChatTimestampsSpy(...args),
-    updateChatLocalOnly: (...args: unknown[]) =>
-      updateChatLocalOnlySpy(...args),
-    updateChatProject: (...args: unknown[]) => updateChatProjectSpy(...args),
+    getChat: getChatSpy,
+    saveChat: saveChatSpy,
+    getAllChats: getAllChatsSpy,
+    resetChatTimestamps: resetChatTimestampsSpy,
+    updateChatLocalOnly: updateChatLocalOnlySpy,
+    updateChatProject: updateChatProjectSpy,
+    deleteChatsByProject: deleteChatsByProjectSpy,
+    acknowledgePendingDeletes: acknowledgePendingDeletesSpy,
   },
 }))
 vi.mock('@/services/cloud/cloud-sync', () => ({
   cloudSync: {
-    backupChat: (...args: unknown[]) => backupChatSpy(...args),
-    deleteFromCloud: (...args: unknown[]) => deleteFromCloudSpy(...args),
+    backupChat: backupChatSpy,
+    deleteFromCloud: deleteFromCloudSpy,
   },
 }))
-vi.mock('@/services/cloud/cloud-storage', () => ({ cloudStorage: {} }))
+vi.mock('@/services/cloud/cloud-storage', () => ({
+  cloudStorage: { deleteChatsByProject: deleteRemoteProjectChatsSpy },
+}))
+vi.mock('@/services/sync-enclave/sync-api', () => ({
+  listStatus: listStatusSpy,
+  newIdempotencyKey: newIdempotencyKeySpy,
+}))
 vi.mock('@/services/cloud/streaming-tracker', () => ({
   streamingTracker: { isStreaming: vi.fn(() => false) },
 }))
@@ -46,7 +75,7 @@ vi.mock('@/services/storage/chat-events', () => ({
 vi.mock('@/services/storage/deleted-chats-tracker', () => ({
   deletedChatsTracker: {
     markAsDeleted: vi.fn(),
-    isDeleted: (...args: unknown[]) => isDeletedSpy(...args),
+    isDeleted: isDeletedSpy,
   },
 }))
 
@@ -68,6 +97,10 @@ describe('chatStorage pendingSave is not persisted', () => {
     vi.clearAllMocks()
     sessionStorage.clear()
     isDeletedSpy.mockReturnValue(false)
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-1')
+    deleteChatsByProjectSpy.mockResolvedValue([])
+    deleteRemoteProjectChatsSpy.mockResolvedValue({ deleted: 0 })
+    acknowledgePendingDeletesSpy.mockResolvedValue(undefined)
   })
 
   it('strips pendingSave before writing a chat to storage', async () => {
@@ -161,6 +194,85 @@ describe('chatStorage pendingSave is not persisted', () => {
     const chats = await chatStorage.getAllChatsWithSyncStatus()
 
     expect('pendingSave' in chats[0]).toBe(false)
+  })
+
+  it('enumerates every remote project chat before durable local cleanup', async () => {
+    listStatusSpy
+      .mockResolvedValueOnce({
+        updates: [
+          { id: 'remote-1', project_id: 'project-1' },
+          { id: 'wrong-project', project_id: 'project-2' },
+        ],
+        next_cursor: 'page-2',
+      })
+      .mockResolvedValueOnce({
+        updates: [{ id: 'remote-2', project_id: 'project-1' }],
+      })
+    deleteChatsByProjectSpy.mockResolvedValue(['remote-1', 'remote-2'])
+
+    await expect(chatStorage.deleteChatsByProject('project-1')).resolves.toBe(2)
+
+    expect(listStatusSpy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        scope: 'chat',
+        projectId: 'project-1',
+        cursor: 'page-2',
+      }),
+    )
+    expect(deleteChatsByProjectSpy).toHaveBeenCalledWith(
+      'project-1',
+      ['remote-1', 'remote-2'],
+      'user-1',
+      newIdempotencyKeySpy,
+      expect.any(Function),
+    )
+    expect(deleteRemoteProjectChatsSpy).toHaveBeenCalledWith('project-1')
+    expect(acknowledgePendingDeletesSpy).toHaveBeenCalledWith(
+      ['remote-1', 'remote-2'],
+      'user-1',
+      expect.any(Function),
+    )
+  })
+
+  it('stops before local staging when the account changes during listing', async () => {
+    listStatusSpy.mockImplementationOnce(async () => {
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+      return { updates: [] }
+    })
+
+    await expect(chatStorage.deleteChatsByProject('project-1')).rejects.toThrow(
+      'Cloud account changed',
+    )
+    expect(deleteChatsByProjectSpy).not.toHaveBeenCalled()
+    expect(deleteRemoteProjectChatsSpy).not.toHaveBeenCalled()
+  })
+
+  it('stops before remote deletion when the account changes after staging', async () => {
+    listStatusSpy.mockResolvedValueOnce({ updates: [] })
+    deleteChatsByProjectSpy.mockImplementationOnce(async () => {
+      localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+      return ['local-chat']
+    })
+
+    await expect(chatStorage.deleteChatsByProject('project-1')).rejects.toThrow(
+      'Cloud account changed',
+    )
+    expect(deleteRemoteProjectChatsSpy).not.toHaveBeenCalled()
+    expect(acknowledgePendingDeletesSpy).not.toHaveBeenCalled()
+  })
+
+  it('retains staged intents when the controlplane bulk delete fails', async () => {
+    listStatusSpy.mockResolvedValueOnce({ updates: [] })
+    deleteChatsByProjectSpy.mockResolvedValueOnce(['local-chat'])
+    deleteRemoteProjectChatsSpy.mockRejectedValueOnce(
+      new Error('bulk delete unavailable'),
+    )
+
+    await expect(chatStorage.deleteChatsByProject('project-1')).rejects.toThrow(
+      'bulk delete unavailable',
+    )
+    expect(acknowledgePendingDeletesSpy).not.toHaveBeenCalled()
   })
 })
 

@@ -4,7 +4,7 @@ import {
   IndexedDBStorage,
 } from '@/services/storage/indexed-db'
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const DB_NAME = 'tinfoil-chat'
 const LEGACY_DB_VERSION = 1
@@ -47,6 +47,21 @@ function createLegacyDatabase(): Promise<void> {
   })
 }
 
+function readIndexNames(storeName: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME)
+    request.onsuccess = () => {
+      const db = request.result
+      const names = Array.from(
+        db.transaction(storeName, 'readonly').objectStore(storeName).indexNames,
+      )
+      db.close()
+      resolve(names)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
 describe('IndexedDB sync protocol v2 migration', () => {
   beforeEach(async () => {
     Object.defineProperty(window, 'indexedDB', {
@@ -67,6 +82,9 @@ describe('IndexedDB sync protocol v2 migration', () => {
       expect.objectContaining({ id: 'dirty-chat', pendingUpload: 1 }),
     ])
     await expect(storage.getSyncState('user-1')).resolves.toBeNull()
+    expect(await readIndexNames('chats')).toContain('pendingUploadByUser')
+    expect(await readIndexNames('chats')).not.toContain('pendingUpload')
+    expect(await readIndexNames('remote_chat_state')).not.toContain('updatedAt')
   })
 
   it('fails closed when an upgraded pending row has no active account', async () => {
@@ -174,6 +192,195 @@ describe('IndexedDB sync protocol v2 migration', () => {
     await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
   })
 
+  it('does not apply a stale or wrong-owner remote deletion', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+    await storage.saveChat({
+      id: 'user-2-chat',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('user-2-chat', 1)
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-1')
+
+    await expect(
+      storage.applyRemoteDeletion('user-2-chat', 'user-1'),
+    ).resolves.toBe(false)
+    await expect(storage.getChat('user-2-chat')).resolves.not.toBeNull()
+
+    await expect(
+      storage.applyRemoteDeletion('user-2-chat', 'user-2', () => false),
+    ).resolves.toBe(false)
+    await expect(storage.getChat('user-2-chat')).resolves.not.toBeNull()
+  })
+
+  it('blocks a remote apply while an account-scoped delete is pending', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const chat = {
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    await storage.saveChat(chat)
+    await storage.markAsSynced(chat.id, 1)
+    await storage.deleteChatWithPendingIntent(
+      chat.id,
+      'stable-delete-key',
+      'user-1',
+    )
+
+    await expect(
+      storage.applyRemoteChatIfFresh({
+        chat,
+        syncVersion: 2,
+        expectedLocalUpdatedAt: null,
+        userId: 'user-1',
+      }),
+    ).resolves.toEqual({ applied: false })
+    await expect(storage.getChat(chat.id)).resolves.toBeNull()
+  })
+
+  it('stages remote-only and locally discovered project deletes idempotently', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'local-chat',
+      title: 'Local',
+      projectId: 'project-1',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+
+    const keys = ['remote-key', 'local-key']
+    await storage.deleteChatsByProject(
+      'project-1',
+      ['remote-only'],
+      'user-1',
+      () => keys.shift()!,
+    )
+    await storage.deleteChatsByProject(
+      'project-1',
+      ['remote-only'],
+      'user-1',
+      () => 'replacement-key',
+    )
+
+    await expect(storage.getChat('local-chat')).resolves.toBeNull()
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'local-chat',
+          idempotencyKey: 'local-key',
+        }),
+        expect.objectContaining({
+          id: 'remote-only',
+          idempotencyKey: 'remote-key',
+        }),
+      ]),
+    )
+  })
+
+  it('removes an in-flight local create and stages its remote delete', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const save = storage.saveChat({
+      id: 'creating-chat',
+      title: 'Creating',
+      projectId: 'project-1',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    const deletion = storage.deleteChatsByProject(
+      'project-1',
+      [],
+      'user-1',
+      () => 'create-delete-key',
+    )
+
+    await Promise.all([save, deletion])
+
+    await expect(storage.getChat('creating-chat')).resolves.toBeNull()
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([
+      expect.objectContaining({
+        id: 'creating-chat',
+        idempotencyKey: 'create-delete-key',
+      }),
+    ])
+  })
+
+  it('leaves project rows owned by another account untouched', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'user-1-chat',
+      title: 'One',
+      projectId: 'project-1',
+      messages: [{ role: 'user', content: 'one' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+    await storage.saveChat({
+      id: 'user-2-chat',
+      title: 'Two',
+      projectId: 'project-1',
+      messages: [{ role: 'user', content: 'two' } as any],
+      createdAt: '2026-01-02T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+    })
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-1')
+
+    await storage.deleteChatsByProject(
+      'project-1',
+      [],
+      'user-1',
+      () => 'user-1-delete-key',
+    )
+
+    await expect(storage.getChat('user-1-chat')).resolves.toBeNull()
+    await expect(storage.getChat('user-2-chat')).resolves.toEqual(
+      expect.objectContaining({ syncUserId: 'user-2' }),
+    )
+    await expect(storage.getPendingDeletes('user-2')).resolves.toEqual([])
+  })
+
+  it('does not stage project deletion after its account guard expires', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      projectId: 'project-1',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    const isCurrent = vi
+      .fn<() => boolean>()
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false)
+
+    await expect(
+      storage.deleteChatsByProject(
+        'project-1',
+        [],
+        'user-1',
+        () => 'unused-key',
+        isCurrent,
+      ),
+    ).resolves.toEqual([])
+    await expect(storage.getChat('chat-1')).resolves.not.toBeNull()
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
+  })
+
   it('repairs state and outbox when the account changes', async () => {
     const storage = new IndexedDBStorage()
     await storage.initialize()
@@ -183,6 +390,29 @@ describe('IndexedDB sync protocol v2 migration', () => {
       expect.objectContaining({ userId: 'user-1', appliedRevision: '7' }),
     )
     await expect(storage.getSyncState('user-2')).resolves.toBeNull()
+  })
+
+  it('preserves other-account delete intents across checkpoint resets', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('chat-1', 1)
+    await storage.deleteChatWithPendingIntent('chat-1', 'delete-key', 'user-1')
+
+    await storage.getSyncState('user-2')
+    await storage.clearRevisionSyncState()
+
+    await expect(storage.getPendingDeletes('user-1')).resolves.toHaveLength(1)
+    await storage.clearRevisionSyncStateAfterServerWipe('user-2')
+    await expect(storage.getPendingDeletes('user-1')).resolves.toHaveLength(1)
+    await storage.clearRevisionSyncStateAfterServerWipe('user-1')
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
   })
 
   it('preserves dirty project membership and ETag during metadata commits', async () => {

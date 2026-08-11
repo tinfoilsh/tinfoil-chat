@@ -11,6 +11,7 @@ const mockGetAllKeys = vi.fn()
 const mockGetKeyBytesOrThrow = vi.fn()
 const mockGetAlternativeKeyBytes = vi.fn()
 const mockEnclavePush = vi.fn()
+const mockEnclavePull = vi.fn()
 const mockRevisionSnapshot = vi.fn()
 const mockListStatus = vi.fn()
 const mockAttachmentPut = vi.fn()
@@ -40,6 +41,7 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
   return {
     ...actual,
     push: (...args: any[]) => mockEnclavePush(...args),
+    pull: (...args: any[]) => mockEnclavePull(...args),
     revisionSnapshot: (...args: any[]) => mockRevisionSnapshot(...args),
     listStatus: (...args: any[]) => mockListStatus(...args),
     attachmentPut: (...args: any[]) => mockAttachmentPut(...args),
@@ -69,6 +71,7 @@ describe('CloudStorageService auth readiness', () => {
     mockGetKeyBytesOrThrow.mockReturnValue(TEST_BYTES)
     mockGetAlternativeKeyBytes.mockReturnValue(TEST_BYTES)
     mockEnclavePush.mockResolvedValue({ ok: true, etag: '1', keyId: 'kid' })
+    mockEnclavePull.mockResolvedValue({ items: [] })
     mockRevisionSnapshot.mockResolvedValue({
       items: [],
       snapshot_revision: '0',
@@ -94,6 +97,43 @@ describe('CloudStorageService auth readiness', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('tolerates only structured not-found items in revision content batches', async () => {
+    mockEnclavePull.mockResolvedValue({
+      items: [
+        { id: 'gone', ok: false, code: 'NOT_FOUND' },
+        {
+          id: 'present',
+          ok: true,
+          etag: '2',
+          plaintext: btoa('{"title":"Present"}'),
+        },
+      ],
+    })
+
+    await expect(
+      new CloudStorageService().downloadChats(['gone', 'present'], {
+        tolerateNotFound: true,
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: 'present', syncVersion: 2 }),
+    ])
+  })
+
+  it('rejects non-not-found and incomplete revision content batches', async () => {
+    const storage = new CloudStorageService()
+    mockEnclavePull.mockResolvedValueOnce({
+      items: [{ id: 'chat-1', ok: false, code: 'NEEDS_REWRAP' }],
+    })
+    await expect(
+      storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
+    ).rejects.toThrow('NEEDS_REWRAP')
+
+    mockEnclavePull.mockResolvedValueOnce({ items: [] })
+    await expect(
+      storage.downloadChats(['chat-1'], { tolerateNotFound: true }),
+    ).rejects.toThrow('incomplete chat batch')
   })
 
   it('waits for auth token manager initialization before listing chats', async () => {

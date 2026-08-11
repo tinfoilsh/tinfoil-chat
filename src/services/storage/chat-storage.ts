@@ -5,14 +5,33 @@ import { logError, logInfo } from '@/utils/error-handling'
 import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
 import { streamingTracker } from '../cloud/streaming-tracker'
-import { newIdempotencyKey } from '../sync-enclave/sync-api'
+import {
+  listStatus as enclaveListStatus,
+  newIdempotencyKey,
+} from '../sync-enclave/sync-api'
 import { chatEvents } from './chat-events'
 import { deletedChatsTracker } from './deleted-chats-tracker'
 import { indexedDBStorage, type Chat as StorageChat } from './indexed-db'
 
+const PROJECT_CHAT_LIST_LIMIT = 500
+
 export class ChatStorageService {
   private initialized = false
   private initializePromise: Promise<void> | null = null
+
+  private readActiveUserId(): string | null {
+    try {
+      return localStorage.getItem(AUTH_ACTIVE_USER_ID)
+    } catch {
+      return null
+    }
+  }
+
+  private ensureActiveUser(userId: string): void {
+    if (this.readActiveUserId() !== userId) {
+      throw new Error('Cloud account changed during project deletion')
+    }
+  }
 
   async initialize(): Promise<void> {
     if (this.initialized) return
@@ -195,38 +214,67 @@ export class ChatStorageService {
   }
 
   async deleteChatsByProject(projectId: string): Promise<number> {
+    const userId = this.readActiveUserId()
+    if (!userId) {
+      throw new Error('Authenticated user ID is unavailable')
+    }
     await this.initialize()
+    this.ensureActiveUser(userId)
 
     // Delete locally and tombstone the ids before touching the cloud. An
     // in-flight backup re-reads the chat from local storage right before
     // uploading, so removing the local row first stops a concurrent upload
     // from resurrecting a chat in the cloud after the bulk delete. This
     // mirrors the ordering used by the single-chat deleteChat path.
-    const projectChats = (await indexedDBStorage.getAllChats()).filter(
-      (chat) => chat.projectId === projectId,
-    )
-    const deletedIds = projectChats.map((chat) => chat.id)
-    const userId = localStorage.getItem(AUTH_ACTIVE_USER_ID)
-    for (const chat of projectChats) {
-      if (chat.isLocalOnly) {
-        await indexedDBStorage.deleteChat(chat.id)
-      } else if (userId) {
-        await indexedDBStorage.deleteChatWithPendingIntent(
-          chat.id,
-          newIdempotencyKey(),
-          userId,
-        )
-      } else {
-        await indexedDBStorage.deleteChat(chat.id)
+    const remoteIds = new Set<string>()
+    let cursor: string | undefined
+    do {
+      this.ensureActiveUser(userId)
+      const status = await enclaveListStatus({
+        scope: 'chat',
+        projectId,
+        cursor,
+        limit: PROJECT_CHAT_LIST_LIMIT,
+      })
+      this.ensureActiveUser(userId)
+      for (const update of status.updates) {
+        if (update.project_id === projectId) remoteIds.add(update.id)
       }
-    }
+      cursor = status.next_cursor
+    } while (cursor)
 
-    for (const id of deletedIds) {
-      deletedChatsTracker.markAsDeleted(id)
-    }
+    const deletedIds = await indexedDBStorage.deleteChatsByProject(
+      projectId,
+      [...remoteIds],
+      userId,
+      newIdempotencyKey,
+      () => this.readActiveUserId() === userId,
+    )
+    this.ensureActiveUser(userId)
+
+    for (const id of deletedIds) deletedChatsTracker.markAsDeleted(id)
 
     if (deletedIds.length > 0) {
       chatEvents.emit({ reason: 'delete', ids: deletedIds })
+    }
+
+    try {
+      this.ensureActiveUser(userId)
+      await cloudStorage.deleteChatsByProject(projectId)
+      this.ensureActiveUser(userId)
+      await indexedDBStorage.acknowledgePendingDeletes(
+        deletedIds,
+        userId,
+        () => this.readActiveUserId() === userId,
+      )
+      this.ensureActiveUser(userId)
+    } catch (error) {
+      logError('Failed to delete every remote project chat', error, {
+        component: 'ChatStorageService',
+        action: 'deleteChatsByProject.remoteDelete',
+        metadata: { projectId },
+      })
+      throw error
     }
 
     logInfo(`Deleted ${deletedIds.length} chats for project`, {

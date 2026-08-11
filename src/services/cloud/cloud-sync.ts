@@ -162,6 +162,18 @@ export class CloudSyncService {
     return generation === this.accountGeneration
   }
 
+  private ensureCurrentAccount(
+    generation: number,
+    userId: string | null,
+  ): void {
+    if (
+      !this.isCurrentGeneration(generation) ||
+      this.readActiveUserId() !== userId
+    ) {
+      throw new Error('Cloud account changed during synchronization')
+    }
+  }
+
   private readActiveUserId(): string | null {
     if (typeof window === 'undefined') return null
     try {
@@ -201,6 +213,15 @@ export class CloudSyncService {
     this.uploadCoalescer.clear()
     if (this.syncLock) await this.syncLock
     await indexedDBStorage.clearRevisionSyncState()
+  }
+
+  async clearSyncStatusAfterServerWipe(): Promise<void> {
+    const userId = this.readActiveUserId()
+    if (!userId) return this.clearSyncStatus()
+    this.accountGeneration++
+    this.uploadCoalescer.clear()
+    if (this.syncLock) await this.syncLock
+    await indexedDBStorage.clearRevisionSyncStateAfterServerWipe(userId)
   }
 
   private async withSyncLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -264,7 +285,12 @@ export class CloudSyncService {
         upload: async (chat) => {
           await this.uploadCoalescer.enqueueAndWait(chat.id)
           const latest = await indexedDBStorage.getChat(chat.id)
-          if (latest?.pendingUpload === 1) {
+          this.ensureCurrentAccount(generation, userId)
+          if (
+            !latest ||
+            latest.syncUserId !== userId ||
+            latest.pendingUpload !== 0
+          ) {
             throw new Error('Pending chat upload did not complete')
           }
         },
@@ -314,22 +340,6 @@ export class CloudSyncService {
   }
 
   async smartSync(_projectId?: string): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doRevisionSync())
-  }
-
-  async syncAllChats(): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doRevisionSync())
-  }
-
-  async syncChangedChats(): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doRevisionSync())
-  }
-
-  async syncProjectChats(_projectId: string): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doRevisionSync())
-  }
-
-  async syncProjectChatsChanged(_projectId: string): Promise<SyncResult> {
     return this.withSyncLock(() => this.doRevisionSync())
   }
 
@@ -401,20 +411,23 @@ export class CloudSyncService {
     options: UploadChatOptions = {},
   ): Promise<void> {
     const generation = this.accountGeneration
+    const userId = this.readActiveUserId()
     if (!(await cloudStorage.isAuthenticated())) {
       throw new Error('Authentication required for cloud sync')
     }
+    this.ensureCurrentAccount(generation, userId)
     if (!(await canWriteToCloud())) {
       throw new Error('Cloud sync key is not authorized')
     }
+    this.ensureCurrentAccount(generation, userId)
     if (streamingTracker.isStreaming(chatId)) {
       throw new Error('Cannot sync chat while it is streaming')
     }
     const chat = await indexedDBStorage.getChat(chatId)
-    if (!this.isCurrentGeneration(generation)) return
+    this.ensureCurrentAccount(generation, userId)
     if (
       !chat ||
-      !this.isOwnedByActiveAccount(chat) ||
+      chat.syncUserId !== userId ||
       !isUploadableChat(chat, isStreaming)
     ) {
       throw new Error('Chat is not eligible for cloud sync')
@@ -422,13 +435,12 @@ export class CloudSyncService {
     const preUploadUpdatedAt = chat.updatedAt
     const preUploadFingerprint = chatContentFingerprint(chat)
     const preUploadVersion = chat.syncVersion ?? 0
-    if (!this.isOwnedByActiveAccount(chat)) return
     const { syncVersion, rewrites, projectIntentIncluded } =
       await cloudStorage.uploadChat(chat, {
         ...options,
         idempotencyKey: options.idempotencyKey ?? newIdempotencyKey(),
       })
-    if (!this.isCurrentGeneration(generation)) return
+    this.ensureCurrentAccount(generation, userId)
     await indexedDBStorage.finalizeUpload({
       chatId,
       rewrites,
@@ -438,6 +450,7 @@ export class CloudSyncService {
       uploadedProjectId: chat.projectId,
       projectIntentIncluded,
     })
+    this.ensureCurrentAccount(generation, userId)
   }
 
   private async doBackupChat(
@@ -445,9 +458,10 @@ export class CloudSyncService {
     idempotencyKey: string,
   ): Promise<UploadAttempt | null> {
     const generation = this.accountGeneration
+    const userId = this.readActiveUserId()
     try {
       if (!(await canWriteToCloud())) return null
-      if (!this.isCurrentGeneration(generation)) return null
+      this.ensureCurrentAccount(generation, userId)
       if (streamingTracker.isStreaming(chatId)) {
         if (this.streamingCallbacks.has(chatId)) return null
         this.streamingCallbacks.add(chatId)
@@ -459,10 +473,10 @@ export class CloudSyncService {
         return null
       }
       const chat = await indexedDBStorage.getChat(chatId)
-      if (!this.isCurrentGeneration(generation)) return null
+      this.ensureCurrentAccount(generation, userId)
       if (
         !chat ||
-        !this.isOwnedByActiveAccount(chat) ||
+        chat.syncUserId !== userId ||
         !isUploadableChat(chat, isStreaming)
       ) {
         return null
@@ -472,10 +486,10 @@ export class CloudSyncService {
       const preUploadVersion = chat.syncVersion ?? 0
       return async () => {
         try {
-          if (!this.isOwnedByActiveAccount(chat)) return
+          this.ensureCurrentAccount(generation, userId)
           const { syncVersion, rewrites, projectIntentIncluded } =
             await cloudStorage.uploadChat(chat, { idempotencyKey })
-          if (!this.isCurrentGeneration(generation)) return
+          this.ensureCurrentAccount(generation, userId)
           await indexedDBStorage.finalizeUpload({
             chatId,
             rewrites,
@@ -485,12 +499,20 @@ export class CloudSyncService {
             uploadedProjectId: chat.projectId,
             projectIntentIncluded,
           })
+          this.ensureCurrentAccount(generation, userId)
+          const latest = await indexedDBStorage.getChat(chatId)
+          this.ensureCurrentAccount(generation, userId)
+          if (!latest || latest.pendingUpload !== 0) {
+            throw new Error('Chat upload did not finalize')
+          }
           reportChatSynced(chatId)
         } catch (error) {
+          if (this.readActiveUserId() !== userId) throw error
           await this.recoverFromChatUploadError(chatId, generation, error)
         }
       }
     } catch (error) {
+      if (this.readActiveUserId() !== userId) throw error
       await this.recoverFromChatUploadError(chatId, generation, error)
       return null
     }
@@ -501,7 +523,7 @@ export class CloudSyncService {
     generation: number,
     error: unknown,
   ): Promise<void> {
-    if (!this.isCurrentGeneration(generation)) return
+    if (!this.isCurrentGeneration(generation)) throw error
     if (error instanceof AuthTokenUnavailableError) return
     const decision = decideRecovery(error)
     if (decision.action.type === 'surface-conflict') {
@@ -534,19 +556,23 @@ export class CloudSyncService {
     chatId: string,
     generation: number,
   ): Promise<void> {
+    const userId = this.readActiveUserId()
     try {
       const [localChat, remoteChat] = await Promise.all([
         indexedDBStorage.getChat(chatId),
         cloudStorage.downloadChat(chatId),
       ])
-      if (!this.isCurrentGeneration(generation)) return
+      this.ensureCurrentAccount(generation, userId)
       if (!remoteChat) {
-        const userId = this.readActiveUserId()
         if (!userId) throw new Error('Authenticated user ID is unavailable')
         const deleted = await indexedDBStorage.applyRemoteDeletion(
           chatId,
           userId,
+          () =>
+            this.isCurrentGeneration(generation) &&
+            this.readActiveUserId() === userId,
         )
+        this.ensureCurrentAccount(generation, userId)
         if (deleted) chatEvents.emit({ reason: 'sync', ids: [chatId] })
         return
       }
@@ -561,6 +587,7 @@ export class CloudSyncService {
           chatId,
           remoteChat.syncVersion ?? 0,
         )
+        this.ensureCurrentAccount(generation, userId)
         void this.backupChat(chatId)
         return
       }
@@ -569,8 +596,12 @@ export class CloudSyncService {
         syncVersion: remoteChat.syncVersion ?? 0,
         expectedLocalUpdatedAt: localChat ? localChat.updatedAt : null,
         allowLocallyModified: true,
-        isCurrent: () => this.isCurrentGeneration(generation),
+        isCurrent: () =>
+          this.isCurrentGeneration(generation) &&
+          this.readActiveUserId() === userId,
+        userId: userId ?? undefined,
       })
+      this.ensureCurrentAccount(generation, userId)
       if (applied.applied) {
         chatEvents.emit({ reason: 'sync', ids: [chatId] })
         reportChatSynced(chatId)
@@ -592,15 +623,33 @@ export class CloudSyncService {
 
   async backupUnsyncedChats(): Promise<SyncResult> {
     const result: SyncResult = { uploaded: 0, downloaded: 0, errors: [] }
+    const generation = this.accountGeneration
     const userId = this.readActiveUserId()
     if (!userId) return result
     const chats = await indexedDBStorage.getPendingUploadChats(userId)
+    this.ensureCurrentAccount(generation, userId)
     for (const chat of chats) {
       if (!isUploadableChat(chat, isStreaming)) continue
       try {
         await this.uploadCoalescer.enqueueAndWait(chat.id)
+        this.ensureCurrentAccount(generation, userId)
+        const latest = await indexedDBStorage.getChat(chat.id)
+        this.ensureCurrentAccount(generation, userId)
+        if (
+          !latest ||
+          latest.syncUserId !== userId ||
+          latest.pendingUpload !== 0
+        ) {
+          throw new Error('Chat upload did not finalize')
+        }
         result.uploaded++
       } catch (error) {
+        if (
+          !this.isCurrentGeneration(generation) ||
+          this.readActiveUserId() !== userId
+        ) {
+          throw error
+        }
         result.errors.push(
           `Failed to backup chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
         )
@@ -674,20 +723,25 @@ export class CloudSyncService {
         continuationToken,
         includeContent: true,
       })
-      const chats = (
-        await Promise.all(
-          remote.conversations.map(async (entry) => {
-            if (!entry.content) return null
-            const decoded = await processRemoteChat({
-              id: entry.id,
-              plaintext: entry.content,
-              syncVersion: entry.syncVersion,
-              formatVersion: 2,
-            })
-            return decoded.chat
-          }),
-        )
-      ).filter((chat): chat is StoredChat => chat !== null)
+      const chats: StoredChat[] = []
+      for (const entry of remote.conversations) {
+        if (!entry.content || deletedChatsTracker.isDeleted(entry.id)) continue
+        try {
+          const decoded = await processRemoteChat({
+            id: entry.id,
+            plaintext: entry.content,
+            syncVersion: entry.syncVersion,
+            formatVersion: 2,
+          })
+          chats.push(decoded.chat)
+        } catch (error) {
+          logError('Failed to decode paginated remote chat', error, {
+            component: 'CloudSync',
+            action: 'loadChatsWithPagination',
+            metadata: { chatId: entry.id },
+          })
+        }
+      }
       return {
         chats,
         hasMore: remote.hasMore,
@@ -707,31 +761,53 @@ export class CloudSyncService {
     limit: number
     continuationToken?: string
   }): Promise<{ hasMore: boolean; nextToken?: string; saved: number }> {
+    const generation = this.accountGeneration
+    const userId = this.readActiveUserId()
     if (!(await cloudStorage.isAuthenticated())) {
+      this.ensureCurrentAccount(generation, userId)
       return { hasMore: false, saved: 0 }
     }
+    this.ensureCurrentAccount(generation, userId)
+    if (!userId) throw new Error('Authenticated user ID is unavailable')
     const remote = await cloudStorage.listChats({
       limit: options.limit,
       continuationToken: options.continuationToken,
       includeContent: true,
     })
+    this.ensureCurrentAccount(generation, userId)
     let saved = 0
     for (const entry of remote.conversations) {
-      if (!entry.content) continue
-      const decoded = await processRemoteChat({
-        id: entry.id,
-        plaintext: entry.content,
-        syncVersion: entry.syncVersion,
-        formatVersion: 2,
-      })
-      const local = await indexedDBStorage.getChat(entry.id)
-      const applied = await indexedDBStorage.applyRemoteChatIfFresh({
-        chat: decoded.chat,
-        syncVersion: entry.syncVersion,
-        expectedLocalUpdatedAt: local?.updatedAt ?? null,
-        setLoadedAt: true,
-      })
-      if (applied.applied) saved++
+      if (!entry.content || deletedChatsTracker.isDeleted(entry.id)) continue
+      try {
+        const decoded = await processRemoteChat({
+          id: entry.id,
+          plaintext: entry.content,
+          syncVersion: entry.syncVersion,
+          formatVersion: 2,
+        })
+        this.ensureCurrentAccount(generation, userId)
+        const local = await indexedDBStorage.getChat(entry.id)
+        this.ensureCurrentAccount(generation, userId)
+        const applied = await indexedDBStorage.applyRemoteChatIfFresh({
+          chat: decoded.chat,
+          syncVersion: entry.syncVersion,
+          expectedLocalUpdatedAt: local?.updatedAt ?? null,
+          setLoadedAt: true,
+          isCurrent: () =>
+            this.isCurrentGeneration(generation) &&
+            this.readActiveUserId() === userId,
+          userId,
+        })
+        this.ensureCurrentAccount(generation, userId)
+        if (applied.applied) saved++
+      } catch (error) {
+        this.ensureCurrentAccount(generation, userId)
+        logError('Failed to store paginated remote chat', error, {
+          component: 'CloudSync',
+          action: 'fetchAndStorePage',
+          metadata: { chatId: entry.id },
+        })
+      }
     }
     if (saved > 0) chatEvents.emit({ reason: 'pagination', ids: [] })
     return {
@@ -755,7 +831,15 @@ export class CloudSyncService {
       (chat) => chat.decryptionFailed,
     )
     for (let index = 0; index < failed.length; index++) {
-      await indexedDBStorage.deleteChat(failed[index].id)
+      try {
+        await indexedDBStorage.deleteChat(failed[index].id)
+      } catch (error) {
+        logError('Failed to evict chat before decryption retry', error, {
+          component: 'CloudSync',
+          action: 'retryDecryptionWithNewKey',
+          metadata: { chatId: failed[index].id },
+        })
+      }
       if ((index + 1) % batchSize === 0 || index === failed.length - 1) {
         options.onProgress?.(index + 1, failed.length)
       }

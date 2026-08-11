@@ -466,6 +466,7 @@ export class CloudStorageService {
 
   async downloadChats(
     chatIds: string[],
+    options: { tolerateNotFound?: boolean } = {},
   ): Promise<ChatListResponse['conversations']> {
     if (chatIds.length === 0) return []
     const keys = pullKey()
@@ -474,8 +475,15 @@ export class CloudStorageService {
     }
     const response = await enclavePull({ scope: 'chat', ids: chatIds, keys })
     const conversations: ChatListResponse['conversations'] = []
+    const requestedIds = new Set(chatIds)
+    const returnedIds = new Set<string>()
     for (const item of response.items) {
+      if (!requestedIds.has(item.id) || returnedIds.has(item.id)) {
+        throw new Error('Sync enclave returned an unexpected chat batch item')
+      }
+      returnedIds.add(item.id)
       if (!item.ok) {
+        if (options.tolerateNotFound && item.code === 'NOT_FOUND') continue
         throw new Error(item.code ?? 'Failed to batch-pull chat content')
       }
       const plaintext = pullItemPlaintext(item)
@@ -489,7 +497,7 @@ export class CloudStorageService {
         content: new TextDecoder().decode(plaintext),
       })
     }
-    if (conversations.length !== chatIds.length) {
+    if (returnedIds.size !== requestedIds.size) {
       throw new Error('Sync enclave returned an incomplete chat batch')
     }
     return conversations

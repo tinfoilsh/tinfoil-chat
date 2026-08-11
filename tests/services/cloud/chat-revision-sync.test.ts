@@ -64,12 +64,18 @@ vi.mock('@/services/storage/chat-events', () => ({
   chatEvents: { emit: vi.fn() },
 }))
 vi.mock('@/services/cloud/sync-predicates', () => ({
-  isUploadableChat: () => true,
+  isUploadableChat: (
+    chat: { id: string },
+    isStreaming: (id: string) => boolean,
+  ) => !isStreaming(chat.id),
 }))
 
 describe('chat revision synchronization', () => {
   const userId = 'user-1'
-  const adapter = { upload: vi.fn(), isStreaming: vi.fn(() => false) }
+  const adapter = {
+    upload: vi.fn(),
+    isStreaming: vi.fn<(id: string) => boolean>(() => false),
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -324,5 +330,103 @@ describe('chat revision synchronization', () => {
       '8',
       userId,
     )
+  })
+
+  it('advances through a missing upsert when a later delete confirms absence', async () => {
+    revisionSummary.mockResolvedValue({
+      current_revision: '9',
+      oldest_replayable_revision: '1',
+    })
+    revisionEvents.mockResolvedValue({
+      events: [
+        {
+          revision: '8',
+          kind: 'upsert',
+          id: 'gone-chat',
+          etag: '2',
+          key_id: 'key-1',
+          project_id: null,
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          revision: '9',
+          kind: 'delete',
+          id: 'gone-chat',
+          project_id: null,
+          updated_at: '2026-01-02T00:00:00Z',
+        },
+      ],
+    })
+    getChat.mockResolvedValue(null)
+    downloadChats.mockResolvedValue([])
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(downloadChats).toHaveBeenCalledWith(['gone-chat'], {
+      tolerateNotFound: true,
+    })
+    expect(applyRemoteDeletion).toHaveBeenCalledWith(
+      'gone-chat',
+      userId,
+      expect.any(Function),
+    )
+    expect(commitRevisionBatch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'gone-chat', kind: 'delete' }),
+      ]),
+      '9',
+      userId,
+    )
+  })
+
+  it('retries a durable delete with its original idempotency key', async () => {
+    hasPendingSyncWork.mockResolvedValue(true)
+    getPendingDeletes.mockResolvedValue([
+      {
+        id: 'deleted-chat',
+        userId,
+        idempotencyKey: 'stable-delete-key',
+      },
+    ])
+    deleteChat
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce(undefined)
+
+    await expect(drainChatRevisionSync(adapter, userId)).rejects.toThrow(
+      'temporary failure',
+    )
+    expect(acknowledgePendingDelete).not.toHaveBeenCalled()
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(deleteChat).toHaveBeenNthCalledWith(
+      1,
+      'deleted-chat',
+      'stable-delete-key',
+    )
+    expect(deleteChat).toHaveBeenNthCalledWith(
+      2,
+      'deleted-chat',
+      'stable-delete-key',
+    )
+    expect(acknowledgePendingDelete).toHaveBeenCalledWith(
+      'deleted-chat',
+      userId,
+    )
+  })
+
+  it('skips streaming chats and counts only completed uploads', async () => {
+    hasPendingSyncWork.mockResolvedValue(true)
+    getPendingUploadChats.mockResolvedValue([
+      { id: 'streaming-chat' },
+      { id: 'ready-chat' },
+    ])
+    adapter.isStreaming.mockImplementation((id) => id === 'streaming-chat')
+
+    const result = await drainChatRevisionSync(adapter, userId)
+
+    expect(adapter.upload).toHaveBeenCalledTimes(1)
+    expect(adapter.upload).toHaveBeenCalledWith({ id: 'ready-chat' })
+    expect(result.uploaded).toBe(1)
   })
 })

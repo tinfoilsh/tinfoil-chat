@@ -482,7 +482,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
           // 409 loop.
           try {
             await indexedDBStorage.resetSyncMetadataForAllChats()
-            await cloudSync.clearSyncStatus()
+            await cloudSync.clearSyncStatusAfterServerWipe()
           } catch (resetError) {
             logError(
               'Failed to reset local sync metadata after start_fresh',

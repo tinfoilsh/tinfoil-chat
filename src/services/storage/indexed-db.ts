@@ -898,9 +898,6 @@ export class IndexedDBStorage {
             store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
               unique: false,
             })
-            store.createIndex('pendingUpload', 'pendingUpload', {
-              unique: false,
-            })
             store.createIndex(
               'pendingUploadByUser',
               ['pendingUpload', 'syncUserId'],
@@ -921,10 +918,8 @@ export class IndexedDBStorage {
                 unique: false,
               })
             }
-            if (!store.indexNames.contains('pendingUpload')) {
-              store.createIndex('pendingUpload', 'pendingUpload', {
-                unique: false,
-              })
+            if (store.indexNames.contains('pendingUpload')) {
+              store.deleteIndex('pendingUpload')
             }
             if (!store.indexNames.contains('pendingUploadByUser')) {
               store.createIndex(
@@ -955,10 +950,16 @@ export class IndexedDBStorage {
             db.createObjectStore(SYNC_STATE_STORE, { keyPath: 'id' })
           }
           if (!db.objectStoreNames.contains(REMOTE_CHAT_STATE_STORE)) {
-            const store = db.createObjectStore(REMOTE_CHAT_STATE_STORE, {
+            db.createObjectStore(REMOTE_CHAT_STATE_STORE, {
               keyPath: 'id',
             })
-            store.createIndex('updatedAt', 'updatedAt', { unique: false })
+          } else {
+            const store = request.transaction!.objectStore(
+              REMOTE_CHAT_STATE_STORE,
+            )
+            if (store.indexNames.contains('updatedAt')) {
+              store.deleteIndex('updatedAt')
+            }
           }
           if (!db.objectStoreNames.contains(SYNC_OUTBOX_STORE)) {
             const store = db.createObjectStore(SYNC_OUTBOX_STORE, {
@@ -1692,7 +1693,12 @@ export class IndexedDBStorage {
       const db = await this.ensureDB()
       return new Promise<void>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
+          [
+            CHATS_STORE,
+            ATTACHMENT_PAYLOADS_STORE,
+            CHAT_SUMMARIES_STORE,
+            SYNC_OUTBOX_STORE,
+          ],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
@@ -1787,27 +1793,86 @@ export class IndexedDBStorage {
     })
   }
 
-  async deleteChatsByProject(projectId: string): Promise<string[]> {
+  async deleteChatsByProject(
+    projectId: string,
+    remoteIds: string[],
+    userId: string,
+    createIdempotencyKey: () => string,
+    isCurrent: () => boolean = () => true,
+  ): Promise<string[]> {
     // Serialize through saveQueue so deletions can't race with an in-flight
     // saveChatInternal that would resurrect a row after the delete.
     return this.enqueueSave('deleteChatsByProject', async () => {
+      if (!isCurrent()) return []
       const db = await this.ensureDB()
+      if (!isCurrent()) return []
       return new Promise<string[]>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
+          [
+            CHATS_STORE,
+            ATTACHMENT_PAYLOADS_STORE,
+            CHAT_SUMMARIES_STORE,
+            SYNC_OUTBOX_STORE,
+          ],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
+        const outbox = transaction.objectStore(SYNC_OUTBOX_STORE)
+        const remoteIdSet = new Set(remoteIds)
+        const stagedIds = new Set<string>()
+        const deletedIds = new Set(remoteIdSet)
+        let accountChanged = false
+        const abortIfStale = (): boolean => {
+          if (isCurrent()) return false
+          accountChanged = true
+          try {
+            transaction.abort()
+          } catch {}
+          return true
+        }
+        const stageDeleteIntent = (id: string) => {
+          if (stagedIds.has(id) || abortIfStale()) return
+          stagedIds.add(id)
+          const existingIntent = outbox.get([userId, id])
+          existingIntent.onsuccess = () => {
+            if (abortIfStale() || existingIntent.result) return
+            try {
+              const putRequest = outbox.put({
+                id,
+                userId,
+                idempotencyKey: createIdempotencyKey(),
+                createdAt: Date.now(),
+              } satisfies SyncDeleteOutboxEntry)
+              putRequest.onsuccess = () => {
+                abortIfStale()
+              }
+            } catch (error) {
+              try {
+                transaction.abort()
+              } catch {}
+              reject(error)
+            }
+          }
+        }
+        for (const id of remoteIdSet) stageDeleteIntent(id)
         const request = store.openCursor()
-        const deletedIds: string[] = []
 
         request.onsuccess = (event) => {
+          if (abortIfStale()) return
           const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
           if (cursor) {
             const chat = cursor.value as StoredChat
-            if (chat.projectId === projectId) {
-              deletedIds.push(chat.id)
-              cursor.delete()
+            const ownedByUser = chat.syncUserId === userId
+            if (
+              ownedByUser &&
+              (chat.projectId === projectId || remoteIdSet.has(chat.id))
+            ) {
+              deletedIds.add(chat.id)
+              if (!chat.isLocalOnly) stageDeleteIntent(chat.id)
+              const deleteRequest = cursor.delete()
+              deleteRequest.onsuccess = () => {
+                abortIfStale()
+              }
               transaction.objectStore(CHAT_SUMMARIES_STORE).delete(chat.id)
               deleteAttachmentPayloadsForChat(
                 transaction.objectStore(ATTACHMENT_PAYLOADS_STORE),
@@ -1818,9 +1883,17 @@ export class IndexedDBStorage {
           }
         }
 
-        transaction.oncomplete = () => resolve(deletedIds)
+        transaction.oncomplete = () => resolve([...deletedIds])
         transaction.onerror = () =>
           reject(new Error('Failed to delete project chats'))
+        transaction.onabort = () =>
+          reject(
+            new Error(
+              accountChanged
+                ? 'Cloud account changed during project deletion'
+                : 'Project chat deletion transaction aborted',
+            ),
+          )
         request.onerror = () =>
           reject(new Error('Failed to delete project chats'))
       })
@@ -2768,12 +2841,18 @@ export class IndexedDBStorage {
       if (!isCurrent()) return { applied: false }
       return new Promise<{ applied: boolean }>((resolve, reject) => {
         const transaction = db.transaction(
-          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE, CHAT_SUMMARIES_STORE],
+          [
+            CHATS_STORE,
+            ATTACHMENT_PAYLOADS_STORE,
+            CHAT_SUMMARIES_STORE,
+            SYNC_OUTBOX_STORE,
+          ],
           'readwrite',
         )
         const store = transaction.objectStore(CHATS_STORE)
         const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
         const summaryStore = transaction.objectStore(CHAT_SUMMARIES_STORE)
+        const outboxStore = transaction.objectStore(SYNC_OUTBOX_STORE)
         const chatRequest = store.get(opts.chat.id)
         let applied = false
         let cancelled = false
@@ -2790,103 +2869,120 @@ export class IndexedDBStorage {
         chatRequest.onsuccess = () => {
           if (!isCurrent()) return
           const existing = chatRequest.result as StoredChat | undefined
+          const applyRemoteChat = () => {
+            if (opts.expectedLocalUpdatedAt !== undefined) {
+              if (opts.expectedLocalUpdatedAt === null) {
+                if (existing) return
+              } else if (
+                !existing ||
+                existing.updatedAt !== opts.expectedLocalUpdatedAt ||
+                (existing.locallyModified === true &&
+                  !opts.allowLocallyModified)
+              ) {
+                return
+              }
+            }
 
-          if (opts.expectedLocalUpdatedAt !== undefined) {
-            if (opts.expectedLocalUpdatedAt === null) {
-              if (existing) return
-            } else if (
-              !existing ||
-              existing.updatedAt !== opts.expectedLocalUpdatedAt ||
-              (existing.locallyModified === true && !opts.allowLocallyModified)
-            ) {
+            let inheritedChat: Chat
+            try {
+              inheritedChat = inheritAttachmentPayloadReferences(
+                opts.chat,
+                existing,
+              )
+            } catch (error) {
+              transaction.abort()
+              reject(error)
               return
+            }
+            const normalizedAttachments =
+              normalizeAttachmentPayloadsInTransaction(
+                inheritedChat,
+                transaction,
+                reject,
+              )
+            if (!normalizedAttachments) return
+            const messagesForStorage = normalizedAttachments.messages.map(
+              (msg) => ({
+                ...msg,
+                timestamp:
+                  msg.timestamp instanceof Date
+                    ? msg.timestamp.toISOString()
+                    : msg.timestamp,
+              }),
+            )
+            const storedChat: StoredChat = {
+              ...opts.chat,
+              messages: messagesForStorage as any,
+              lastAccessedAt: Date.now(),
+              syncedAt: Date.now(),
+              locallyModified: false,
+              syncPending: 0,
+              pendingUpload: 0,
+              syncVersion: opts.syncVersion,
+              version: 1,
+              loadedAt: opts.setLoadedAt
+                ? Date.now()
+                : ((opts.chat as StoredChat).loadedAt ?? existing?.loadedAt),
+              isLocalOnly: (opts.chat as any).isLocalOnly ?? false,
+              syncUserId:
+                opts.userId ?? chatOwnerId(opts.chat) ?? activeUserId(),
+              projectLocallyModified: false,
+            }
+            if (!isCurrent()) return
+
+            const writeChatAndPayloads = () => {
+              for (const payload of normalizedAttachments.payloads) {
+                const payloadRequest = payloadStore.put(payload)
+                payloadRequest.onerror = () =>
+                  reject(
+                    payloadRequest.error ??
+                      new Error('Failed to save remote attachment payload'),
+                  )
+              }
+              const request = putStoredChat(store, summaryStore, storedChat)
+              request.onerror = () =>
+                reject(new Error('Failed to apply remote chat'))
+              applied = true
+            }
+            const payloadCursor = payloadStore
+              .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+              .openCursor(IDBKeyRange.only(opts.chat.id))
+            payloadCursor.onerror = () =>
+              reject(
+                new Error('Failed to reconcile remote attachment payloads'),
+              )
+            payloadCursor.onsuccess = () => {
+              if (!isCurrent()) {
+                cancelled = true
+                transaction.abort()
+                return
+              }
+              const cursor = payloadCursor.result
+              if (cursor) {
+                if (
+                  !normalizedAttachments.referencedPayloadIds.has(
+                    String(cursor.primaryKey),
+                  )
+                ) {
+                  cursor.delete()
+                }
+                cursor.continue()
+                return
+              }
+              writeChatAndPayloads()
             }
           }
 
-          let inheritedChat: Chat
-          try {
-            inheritedChat = inheritAttachmentPayloadReferences(
-              opts.chat,
-              existing,
-            )
-          } catch (error) {
-            transaction.abort()
-            reject(error)
+          const userId = opts.userId ?? chatOwnerId(opts.chat) ?? activeUserId()
+          if (!userId) {
+            applyRemoteChat()
             return
           }
-          const normalizedAttachments =
-            normalizeAttachmentPayloadsInTransaction(
-              inheritedChat,
-              transaction,
-              reject,
-            )
-          if (!normalizedAttachments) return
-          const messagesForStorage = normalizedAttachments.messages.map(
-            (msg) => ({
-              ...msg,
-              timestamp:
-                msg.timestamp instanceof Date
-                  ? msg.timestamp.toISOString()
-                  : msg.timestamp,
-            }),
-          )
-          const storedChat: StoredChat = {
-            ...opts.chat,
-            messages: messagesForStorage as any,
-            lastAccessedAt: Date.now(),
-            syncedAt: Date.now(),
-            locallyModified: false,
-            syncPending: 0,
-            pendingUpload: 0,
-            syncVersion: opts.syncVersion,
-            version: 1,
-            loadedAt: opts.setLoadedAt
-              ? Date.now()
-              : ((opts.chat as StoredChat).loadedAt ?? existing?.loadedAt),
-            isLocalOnly: (opts.chat as any).isLocalOnly ?? false,
-            syncUserId: opts.userId ?? chatOwnerId(opts.chat) ?? activeUserId(),
-            projectLocallyModified: false,
-          }
-          if (!isCurrent()) return
-
-          const writeChatAndPayloads = () => {
-            for (const payload of normalizedAttachments.payloads) {
-              const payloadRequest = payloadStore.put(payload)
-              payloadRequest.onerror = () =>
-                reject(
-                  payloadRequest.error ??
-                    new Error('Failed to save remote attachment payload'),
-                )
-            }
-            const request = putStoredChat(store, summaryStore, storedChat)
-            request.onerror = () =>
-              reject(new Error('Failed to apply remote chat'))
-            applied = true
-          }
-          const payloadCursor = payloadStore
-            .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
-            .openCursor(IDBKeyRange.only(opts.chat.id))
-          payloadCursor.onerror = () =>
-            reject(new Error('Failed to reconcile remote attachment payloads'))
-          payloadCursor.onsuccess = () => {
-            if (!isCurrent()) {
-              cancelled = true
-              transaction.abort()
-              return
-            }
-            const cursor = payloadCursor.result
-            if (cursor) {
-              if (
-                !normalizedAttachments.referencedPayloadIds.has(
-                  String(cursor.primaryKey),
-                )
-              ) {
-                cursor.delete()
-              }
-              cursor.continue()
-              return
-            }
-            writeChatAndPayloads()
+          const deleteRequest = outboxStore.get([userId, opts.chat.id])
+          deleteRequest.onerror = () =>
+            reject(new Error('Failed to inspect pending delete'))
+          deleteRequest.onsuccess = () => {
+            if (deleteRequest.result === undefined) applyRemoteChat()
           }
         }
       })
@@ -3025,20 +3121,9 @@ export class IndexedDBStorage {
     await this.saveQueue.catch(() => {})
     const db = await this.ensureDB()
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(
-        [SYNC_STATE_STORE, REMOTE_CHAT_STATE_STORE, SYNC_OUTBOX_STORE],
-        'readwrite',
-      )
+      const transaction = db.transaction(SYNC_STATE_STORE, 'readonly')
       const syncState = transaction.objectStore(SYNC_STATE_STORE)
       const request = syncState.get(ACCOUNT_SYNC_STATE_ID)
-      request.onsuccess = () => {
-        const state = request.result as SyncState | undefined
-        if (state && state.userId !== userId) {
-          syncState.clear()
-          transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
-          transaction.objectStore(SYNC_OUTBOX_STORE).clear()
-        }
-      }
       transaction.oncomplete = () => {
         const state = request.result as SyncState | undefined
         resolve(state?.userId === userId ? state : null)
@@ -3164,34 +3249,36 @@ export class IndexedDBStorage {
     idempotencyKey: string,
     userId: string,
   ): Promise<boolean> {
-    const db = await this.ensureDB()
-    return new Promise<boolean>((resolve, reject) => {
-      const transaction = db.transaction(
-        [CHATS_STORE, SYNC_OUTBOX_STORE],
-        'readwrite',
-      )
-      let queued = false
-      const request = transaction.objectStore(CHATS_STORE).get(id)
-      request.onsuccess = () => {
-        const chat = request.result as StoredChat | undefined
-        if (
-          !chat ||
-          chat.syncUserId !== userId ||
-          (chat.syncedAt == null && (chat.syncVersion ?? 0) === 0)
-        ) {
-          return
+    return this.enqueueSave('enqueuePendingDelete', async () => {
+      const db = await this.ensureDB()
+      return new Promise<boolean>((resolve, reject) => {
+        const transaction = db.transaction(
+          [CHATS_STORE, SYNC_OUTBOX_STORE],
+          'readwrite',
+        )
+        let queued = false
+        const request = transaction.objectStore(CHATS_STORE).get(id)
+        request.onsuccess = () => {
+          const chat = request.result as StoredChat | undefined
+          if (
+            !chat ||
+            chat.syncUserId !== userId ||
+            (chat.syncedAt == null && (chat.syncVersion ?? 0) === 0)
+          ) {
+            return
+          }
+          transaction.objectStore(SYNC_OUTBOX_STORE).put({
+            id,
+            userId,
+            idempotencyKey,
+            createdAt: Date.now(),
+          } satisfies SyncDeleteOutboxEntry)
+          queued = true
         }
-        transaction.objectStore(SYNC_OUTBOX_STORE).put({
-          id,
-          userId,
-          idempotencyKey,
-          createdAt: Date.now(),
-        } satisfies SyncDeleteOutboxEntry)
-        queued = true
-      }
-      transaction.oncomplete = () => resolve(queued)
-      transaction.onerror = () =>
-        reject(new Error('Failed to enqueue pending chat deletion'))
+        transaction.oncomplete = () => resolve(queued)
+        transaction.onerror = () =>
+          reject(new Error('Failed to enqueue pending chat deletion'))
+      })
     })
   }
 
@@ -3211,9 +3298,61 @@ export class IndexedDBStorage {
     })
   }
 
-  async applyRemoteDeletion(id: string, userId: string): Promise<boolean> {
-    return this.enqueueSave('applyRemoteDeletion', async () => {
+  async acknowledgePendingDeletes(
+    ids: string[],
+    userId: string,
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
+    return this.enqueueSave('acknowledgePendingDeletes', async () => {
+      if (!isCurrent()) return
       const db = await this.ensureDB()
+      if (!isCurrent()) return
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(SYNC_OUTBOX_STORE, 'readwrite')
+        const store = transaction.objectStore(SYNC_OUTBOX_STORE)
+        let accountChanged = false
+        for (const id of new Set(ids)) {
+          if (!isCurrent()) {
+            accountChanged = true
+            try {
+              transaction.abort()
+            } catch {}
+            break
+          }
+          const request = store.delete([userId, id])
+          request.onsuccess = () => {
+            if (!isCurrent()) {
+              accountChanged = true
+              try {
+                transaction.abort()
+              } catch {}
+            }
+          }
+        }
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to acknowledge pending deletes'))
+        transaction.onabort = () =>
+          reject(
+            new Error(
+              accountChanged
+                ? 'Cloud account changed while acknowledging project deletion'
+                : 'Pending delete acknowledgement transaction aborted',
+            ),
+          )
+      })
+    })
+  }
+
+  async applyRemoteDeletion(
+    id: string,
+    userId: string,
+    isCurrent: () => boolean = () => true,
+  ): Promise<boolean> {
+    return this.enqueueSave('applyRemoteDeletion', async () => {
+      if (!isCurrent()) return false
+      const db = await this.ensureDB()
+      if (!isCurrent()) return false
       return new Promise<boolean>((resolve, reject) => {
         const transaction = db.transaction(
           [
@@ -3227,11 +3366,24 @@ export class IndexedDBStorage {
         const store = transaction.objectStore(CHATS_STORE)
         const outbox = transaction.objectStore(SYNC_OUTBOX_STORE)
         let deleted = false
+        let accountChanged = false
+        const abortIfStale = (): boolean => {
+          if (isCurrent()) return false
+          accountChanged = true
+          try {
+            transaction.abort()
+          } catch {}
+          return true
+        }
         const request = store.get(id)
         request.onsuccess = () => {
+          if (abortIfStale()) return
           const chat = request.result as StoredChat | undefined
-          if (!chat || chat.isLocalOnly) return
-          store.delete(id)
+          if (!chat || chat.isLocalOnly || chat.syncUserId !== userId) return
+          const deleteRequest = store.delete(id)
+          deleteRequest.onsuccess = () => {
+            abortIfStale()
+          }
           transaction.objectStore(CHAT_SUMMARIES_STORE).delete(id)
           deleteAttachmentPayloadsForChat(
             transaction.objectStore(ATTACHMENT_PAYLOADS_STORE),
@@ -3242,11 +3394,25 @@ export class IndexedDBStorage {
         const outboxKey: [string, string] = [userId, id]
         const outboxRequest = outbox.get(outboxKey)
         outboxRequest.onsuccess = () => {
-          if (outboxRequest.result) outbox.delete(outboxKey)
+          if (abortIfStale()) return
+          if (outboxRequest.result) {
+            const deleteRequest = outbox.delete(outboxKey)
+            deleteRequest.onsuccess = () => {
+              abortIfStale()
+            }
+          }
         }
         transaction.oncomplete = () => resolve(deleted)
         transaction.onerror = () =>
           reject(new Error('Failed to apply remote deletion'))
+        transaction.onabort = () =>
+          reject(
+            new Error(
+              accountChanged
+                ? 'Cloud account changed during remote deletion'
+                : 'Remote deletion transaction aborted',
+            ),
+          )
       })
     })
   }
@@ -3376,33 +3542,53 @@ export class IndexedDBStorage {
   }
 
   async clearRevisionSyncState(): Promise<void> {
-    const db = await this.ensureDB()
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(
-        [SYNC_STATE_STORE, REMOTE_CHAT_STATE_STORE, SYNC_OUTBOX_STORE],
-        'readwrite',
-      )
-      transaction.objectStore(SYNC_STATE_STORE).clear()
-      transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
-      transaction.objectStore(SYNC_OUTBOX_STORE).clear()
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () =>
-        reject(new Error('Failed to clear sync state'))
-    })
+    return this.clearRevisionCheckpoint()
+  }
+
+  async clearRevisionSyncStateAfterServerWipe(userId: string): Promise<void> {
+    return this.enqueueSave(
+      'clearRevisionSyncStateAfterServerWipe',
+      async () => {
+        const db = await this.ensureDB()
+        await new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction(
+            [SYNC_STATE_STORE, REMOTE_CHAT_STATE_STORE, SYNC_OUTBOX_STORE],
+            'readwrite',
+          )
+          transaction.objectStore(SYNC_STATE_STORE).clear()
+          transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
+          const outbox = transaction.objectStore(SYNC_OUTBOX_STORE)
+          const request = outbox
+            .index('userId')
+            .openKeyCursor(IDBKeyRange.only(userId))
+          request.onsuccess = () => {
+            const cursor = request.result
+            if (!cursor) return
+            outbox.delete(cursor.primaryKey)
+            cursor.continue()
+          }
+          transaction.oncomplete = () => resolve()
+          transaction.onerror = () =>
+            reject(new Error('Failed to clear sync state after server wipe'))
+        })
+      },
+    )
   }
 
   async clearRevisionCheckpoint(): Promise<void> {
-    const db = await this.ensureDB()
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(
-        [SYNC_STATE_STORE, REMOTE_CHAT_STATE_STORE],
-        'readwrite',
-      )
-      transaction.objectStore(SYNC_STATE_STORE).clear()
-      transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () =>
-        reject(new Error('Failed to clear revision checkpoint'))
+    return this.enqueueSave('clearRevisionCheckpoint', async () => {
+      const db = await this.ensureDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(
+          [SYNC_STATE_STORE, REMOTE_CHAT_STATE_STORE],
+          'readwrite',
+        )
+        transaction.objectStore(SYNC_STATE_STORE).clear()
+        transaction.objectStore(REMOTE_CHAT_STATE_STORE).clear()
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to clear revision checkpoint'))
+      })
     })
   }
 }

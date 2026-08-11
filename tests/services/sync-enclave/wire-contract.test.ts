@@ -17,6 +17,7 @@ import {
 describe('wire-contract', () => {
   it('headers match controlplane/pkg/contract/headers.go', () => {
     expect(SYNC_HEADERS).toEqual({
+      SyncProtocol: 'X-Sync-Protocol',
       Idempotency: 'X-Idempotency-Key',
       KeyID: 'X-Key-Id',
       IfMatch: 'If-Match',
