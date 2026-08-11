@@ -103,8 +103,9 @@ function message(
   role: Message['role'],
   content: string,
   turnId?: string,
+  timestamp: Date | string = new Date(),
 ): Message {
-  return { role, content, turnId, timestamp: new Date().toISOString() }
+  return { role, content, turnId, timestamp: timestamp as Date }
 }
 
 function envelope(turnId: string): PendingRecoveryEnvelope {
@@ -247,6 +248,162 @@ describe('chat recovery sync mutations', () => {
 
     expect(remoteChat.title).toBe('Locally renamed')
     expect(remoteChat.pendingRecoveries).toHaveLength(1)
+  })
+
+  it('uploads a dirty local user turn with its recovery envelope', async () => {
+    remoteChat.updatedAt = '2026-01-01T00:00:00.000Z'
+    localChat = {
+      ...structuredClone(remoteChat),
+      messages: [
+        ...remoteChat.messages,
+        message('user', 'Unsynced question', 'turn-2'),
+      ],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+
+    expect(uploadChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: 'Unsynced question',
+            turnId: 'turn-2',
+          }),
+        ]),
+        pendingRecoveries: [expect.objectContaining({ turnId: 'turn-2' })],
+      }),
+    )
+  })
+
+  it('preserves only the recovery turn when a newer remote chat wins', async () => {
+    remoteChat = {
+      ...remoteChat,
+      title: 'Newer remote title',
+      updatedAt: '2026-01-01T00:02:00.000Z',
+    }
+    localChat = {
+      ...structuredClone(remoteChat),
+      title: 'Stale local title',
+      messages: [
+        ...remoteChat.messages,
+        message('user', 'Unrelated stale edit', 'stale-turn'),
+        message('user', 'Unsynced question', 'turn-2'),
+      ],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+
+    expect(uploadChat).toHaveBeenCalledOnce()
+    const uploaded = uploadChat.mock.calls[0][0]
+    expect(uploaded.title).toBe('Newer remote title')
+    expect(uploaded.messages.map((item) => item.content)).toEqual([
+      'Question',
+      'Unsynced question',
+    ])
+    expect(uploaded.pendingRecoveries).toEqual([
+      expect.objectContaining({ turnId: 'turn-2' }),
+    ])
+  })
+
+  it('completes a local recovery turn before a newer remote turn', async () => {
+    const originalQuestion = message(
+      'user',
+      'Question',
+      'turn-1',
+      '2026-01-01T00:00:00.000Z',
+    )
+    const recoveryQuestion = message(
+      'user',
+      'Recovery question',
+      'turn-2',
+      new Date('2026-01-01T00:01:00.000Z'),
+    )
+    remoteChat = {
+      ...remoteChat,
+      messages: [
+        originalQuestion,
+        message('user', 'Newer question', 'turn-3', '2026-01-01T00:02:00.000Z'),
+        message(
+          'assistant',
+          'Newer answer',
+          'turn-3',
+          '2026-01-01T00:03:00.000Z',
+        ),
+      ],
+      updatedAt: '2026-01-01T00:04:00.000Z',
+    }
+    localChat = {
+      ...structuredClone(remoteChat),
+      messages: [originalQuestion, recoveryQuestion],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+    await completePendingRecovery(
+      remoteChat.id,
+      currentEnvelope('turn-2'),
+      message(
+        'assistant',
+        'Recovered answer',
+        'turn-2',
+        new Date('2026-01-01T00:01:30.000Z'),
+      ),
+    )
+
+    expect(remoteChat.messages.map((item) => item.content)).toEqual([
+      'Question',
+      'Recovery question',
+      'Recovered answer',
+      'Newer question',
+      'Newer answer',
+    ])
+  })
+
+  it('appends a local recovery turn when a remote timestamp is invalid', async () => {
+    const originalQuestion = message(
+      'user',
+      'Question',
+      'turn-1',
+      '2026-01-01T00:00:00.000Z',
+    )
+    remoteChat = {
+      ...remoteChat,
+      messages: [
+        originalQuestion,
+        message('assistant', 'Invalid timestamp', 'turn-1', 'invalid'),
+        message('user', 'Newer question', 'turn-3', '2026-01-01T00:02:00.000Z'),
+      ],
+      updatedAt: '2026-01-01T00:03:00.000Z',
+    }
+    localChat = {
+      ...structuredClone(remoteChat),
+      messages: [
+        originalQuestion,
+        message(
+          'user',
+          'Recovery question',
+          'turn-2',
+          new Date('2026-01-01T00:01:00.000Z'),
+        ),
+      ],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+
+    expect(remoteChat.messages.map((item) => item.content)).toEqual([
+      'Question',
+      'Invalid timestamp',
+      'Newer question',
+      'Recovery question',
+    ])
   })
 
   it('merges a recovered response once after its user turn', async () => {

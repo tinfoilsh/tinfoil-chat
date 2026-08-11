@@ -24,6 +24,7 @@ const {
   streamControllers,
   streamingChats,
   recoveryAvailableState,
+  cloudSyncState,
 } = vi.hoisted(() => ({
   authState: {
     isSignedIn: false,
@@ -61,6 +62,7 @@ const {
   streamControllers: new Map<string, AbortController>(),
   streamingChats: new Set<string>(),
   recoveryAvailableState: { available: false },
+  cloudSyncState: { enabled: false },
 }))
 
 vi.mock('@clerk/nextjs', () => ({
@@ -162,7 +164,6 @@ vi.mock('@/services/storage/chat-storage', () => ({
   chatStorage: {
     saveChat: saveChatMock,
     saveChatAndSync: initialSaveMock,
-    saveChatAndWaitForSync: vi.fn(async (chat) => chat),
   },
 }))
 
@@ -183,7 +184,7 @@ vi.mock('@/services/exec-snapshot/use-exec-snapshot', () => ({
 }))
 
 vi.mock('@/utils/cloud-sync-settings', () => ({
-  isCloudSyncEnabled: () => false,
+  isCloudSyncEnabled: () => cloudSyncState.enabled,
 }))
 
 vi.mock('@/utils/error-handling', () => ({
@@ -232,6 +233,8 @@ describe('useChatMessaging stopped streams', () => {
     authState.isSignedIn = false
     authState.userId = undefined
     recoveryAvailableState.available = false
+    cloudSyncState.enabled = false
+    saveChatMock.mockImplementation(async (chat: unknown) => chat)
     streamControllers.clear()
     streamingChats.clear()
     pendingStreams.clear()
@@ -715,6 +718,307 @@ describe('useChatMessaging stopped streams', () => {
     expect(result.current.currentChat.messages[0]).toEqual(
       remotelyMergedMessage,
     )
+  })
+
+  it('uses only local saves before recoverable inference for an existing cloud chat', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    cloudSyncState.enabled = true
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [],
+    }
+    const stream = createOpenStream()
+    let finishLocalSave!: () => void
+    saveChatMock.mockImplementationOnce(
+      (chat: unknown) =>
+        new Promise((resolve) => {
+          finishLocalSave = () => resolve(chat)
+        }),
+    )
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(saveChatMock).toHaveBeenCalled())
+
+    expect(initialSaveMock).not.toHaveBeenCalled()
+    expect(saveChatMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({ role: 'user', content: 'Prompt' }),
+        ],
+      }),
+      true,
+    )
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishLocalSave()
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+    expect(initialSaveMock).not.toHaveBeenCalled()
+    expect(saveChatMock).toHaveBeenCalledOnce()
+    expect(saveChatMock.mock.calls.every((call) => call[1] === true)).toBe(true)
+    expect(sendChatStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({ recovery: expect.any(Object) }),
+    )
+
+    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.close()
+    await act(async () => {
+      await query
+    })
+  })
+
+  it('uses only local saves before recoverable inference for a new cloud chat', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    cloudSyncState.enabled = true
+    const initialChat: Chat = {
+      id: '',
+      title: 'Untitled',
+      titleState: 'placeholder',
+      createdAt: new Date(),
+      messages: [],
+      isBlankChat: true,
+    }
+    const stream = createOpenStream()
+    let finishLocalSave!: () => void
+    saveChatMock.mockImplementationOnce(
+      (chat: unknown) =>
+        new Promise((resolve) => {
+          finishLocalSave = () => resolve(chat)
+        }),
+    )
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'First prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(saveChatMock).toHaveBeenCalled())
+
+    expect(initialSaveMock).not.toHaveBeenCalled()
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishLocalSave()
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+
+    expect(initialSaveMock).not.toHaveBeenCalled()
+    expect(saveChatMock).toHaveBeenCalledOnce()
+    expect(saveChatMock.mock.calls.every((call) => call[1] === true)).toBe(true)
+    expect(saveChatMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/\S/),
+        isBlankChat: false,
+        messages: [
+          expect.objectContaining({ role: 'user', content: 'First prompt' }),
+        ],
+      }),
+      true,
+    )
+
+    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.close()
+    await act(async () => {
+      await query
+    })
+  })
+
+  it('disables recovery when a new chat local save fails', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    cloudSyncState.enabled = true
+    const initialChat: Chat = {
+      id: '',
+      title: 'Untitled',
+      titleState: 'placeholder',
+      createdAt: new Date(),
+      messages: [],
+      isBlankChat: true,
+    }
+    const stream = createOpenStream()
+    saveChatMock.mockRejectedValueOnce(new Error('IndexedDB unavailable'))
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery(
+        'First prompt',
+      ) as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+
+    expect(initialSaveMock).not.toHaveBeenCalled()
+    expect(saveChatMock).toHaveBeenCalledOnce()
+    expect(saveChatMock).toHaveBeenCalledWith(expect.any(Object), true)
+    expect(sendChatStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({ recovery: undefined }),
+    )
+
+    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.close()
+    await act(async () => {
+      await query
+    })
+  })
+
+  it('retains ordinary cloud persistence for non-recoverable sends', async () => {
+    cloudSyncState.enabled = true
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [],
+    }
+    const stream = createOpenStream()
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+
+    expect(initialSaveMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({ role: 'user', content: 'Prompt' }),
+        ],
+      }),
+    )
+    expect(saveChatMock).not.toHaveBeenCalled()
+
+    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.close()
+    await act(async () => {
+      await query
+    })
+  })
+
+  it('streams without recovery when the required local save fails', async () => {
+    authState.isSignedIn = true
+    authState.userId = 'user-1'
+    recoveryAvailableState.available = true
+    cloudSyncState.enabled = true
+    const initialChat: Chat = {
+      id: 'chat-1',
+      title: 'Existing chat',
+      createdAt: new Date(),
+      messages: [],
+    }
+    const stream = createOpenStream()
+    saveChatMock.mockRejectedValueOnce(new Error('IndexedDB unavailable'))
+    sendChatStreamMock.mockResolvedValue(stream.stream)
+
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [{} as never],
+        selectedModel: 'test-model',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { messaging }
+    })
+
+    let query!: Promise<unknown>
+    act(() => {
+      query = result.current.messaging.handleQuery('Prompt') as Promise<unknown>
+    })
+    await vi.waitFor(() => expect(sendChatStreamMock).toHaveBeenCalled())
+
+    expect(saveChatMock).toHaveBeenCalledWith(expect.any(Object), true)
+    expect(sendChatStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({ recovery: undefined }),
+    )
+
+    stream.send({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })
+    stream.close()
+    await act(async () => {
+      await query
+    })
   })
 
   it('renders response chunks while recovery token persistence is pending', async () => {

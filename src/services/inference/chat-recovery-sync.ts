@@ -21,7 +21,16 @@ import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 
 const RECOVERY_MUTATION_MAX_ATTEMPTS = 3
 
-type ChatMutation = (chat: StoredChat) => { chat: StoredChat; changed: boolean }
+function messageTimestampMs(timestamp: Date | string): number | null {
+  const milliseconds =
+    timestamp instanceof Date ? timestamp.getTime() : Date.parse(timestamp)
+  return Number.isFinite(milliseconds) ? milliseconds : null
+}
+
+type ChatMutation = (
+  chat: StoredChat,
+  local?: StoredChat | null,
+) => { chat: StoredChat; changed: boolean }
 
 const mutationTails = new Map<string, Promise<void>>()
 let mutationGeneration = 0
@@ -110,7 +119,7 @@ async function mutateSyncedChat(
         if (!mutationIsCurrent()) {
           throw new DOMException('Aborted', 'AbortError')
         }
-        const result = mutation(chat)
+        const result = mutation(chat, chat)
         changed = result.changed
         return result.changed
           ? {
@@ -165,7 +174,7 @@ async function mutateSyncedChat(
         }
       }
 
-      const result = mutation(base)
+      const result = mutation(base, local)
       if (!result.changed) {
         if (remote && base === remote && local !== remote) {
           const syncVersion = remote.syncVersion ?? 0
@@ -244,7 +253,7 @@ export function addPendingRecovery(
   chatId: string,
   envelope: PendingRecoveryEnvelope,
 ): Promise<StoredChat> {
-  return mutateSyncedChat(chatId, (chat) => {
+  return mutateSyncedChat(chatId, (chat, local) => {
     const existing = chat.pendingRecoveries ?? []
     const pending = existing.filter(
       (candidate) => candidate.turnId !== envelope.turnId,
@@ -253,8 +262,46 @@ export function addPendingRecovery(
       throw new Error('Chat has too many pending recovery sessions')
     }
     pending.push(envelope)
+    const baseHasTurn = chat.messages.some(
+      (message) => message.turnId === envelope.turnId,
+    )
+    const localTurn = baseHasTurn
+      ? []
+      : (local?.messages.filter(
+          (message) => message.turnId === envelope.turnId,
+        ) ?? [])
+    const localTurnTimestamp = localTurn[0]
+      ? messageTimestampMs(localTurn[0].timestamp)
+      : null
+    const remoteMessageTimestamps = chat.messages.map((message) =>
+      messageTimestampMs(message.timestamp),
+    )
+    const hasInvalidRemoteTimestamp = remoteMessageTimestamps.some(
+      (timestamp) => timestamp === null,
+    )
+    const firstNewerMessageIndex =
+      localTurnTimestamp !== null && !hasInvalidRemoteTimestamp
+        ? remoteMessageTimestamps.findIndex(
+            (timestamp) => timestamp !== null && timestamp > localTurnTimestamp,
+          )
+        : -1
+    const insertAt =
+      firstNewerMessageIndex >= 0
+        ? firstNewerMessageIndex
+        : chat.messages.length
     return {
-      chat: { ...chat, pendingRecoveries: pending },
+      chat: {
+        ...chat,
+        messages:
+          localTurn.length > 0
+            ? [
+                ...chat.messages.slice(0, insertAt),
+                ...localTurn,
+                ...chat.messages.slice(insertAt),
+              ]
+            : chat.messages,
+        pendingRecoveries: pending,
+      },
       changed: true,
     }
   })
