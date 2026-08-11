@@ -73,6 +73,7 @@ const activeRecoveries = new Map<string, ActiveRecovery>()
 const scannedRecoveries = new Map<string, ScannedRecovery>()
 const cancelledTurns = new Set<string>()
 const settledTurns = new Set<string>()
+const MAX_SETTLED_TURNS = 200
 const RECOVERY_SCAN_CONCURRENCY = 4
 const RECOVERY_RETRY_BASE_DELAY_MS = 100
 const RECOVERY_RETRY_MAX_DELAY_MS = 10_000
@@ -491,17 +492,31 @@ export function isChatRecoveryTurnCancelled(
  * indicator under an already-complete response. Kept separate from the
  * cancelled-turn registry: a settled turn's in-flight token persistence
  * and finalization must keep running, only envelope adoption stops.
+ *
+ * The guard is only needed until the turn's envelope removal settles, so
+ * the registry is bounded by evicting the oldest marks; every turn ever
+ * completed in a long-lived tab need not be retained.
  */
 export function markChatRecoveryTurnSettled(
   chatId: string,
   turnId: string,
 ): void {
   settledTurns.add(turnKey(chatId, turnId))
+  for (const oldest of settledTurns) {
+    if (settledTurns.size <= MAX_SETTLED_TURNS) break
+    settledTurns.delete(oldest)
+  }
 }
 
-export function releaseActiveChatRecovery(chatId: string): void {
+export function releaseActiveChatRecovery(
+  chatId: string,
+  turnId: string,
+): void {
+  // Scoped to a single turn: the chat stays interactive while a stream's
+  // finalization settles, so a chat-wide release could destroy a successor
+  // stream's just-registered recovery attempt.
   for (const recovery of activeRecoveries.values()) {
-    if (recovery.chatId === chatId) {
+    if (recovery.chatId === chatId && recovery.turnId === turnId) {
       activeRecoveries.delete(recovery.sessionId)
     }
   }
@@ -518,7 +533,8 @@ async function processEnvelope(
   const isCurrent = () =>
     generation === recoveryScanGeneration &&
     !signal.aborted &&
-    !cancelledTurns.has(key)
+    !cancelledTurns.has(key) &&
+    !settledTurns.has(key)
   if (!isCurrent()) return
   if (
     [...activeRecoveries.values()].some(

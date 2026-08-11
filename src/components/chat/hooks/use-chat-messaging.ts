@@ -902,7 +902,12 @@ export function useChatMessaging({
               },
             )
           } finally {
-            releaseActiveChatRecovery(chatId)
+            // Release only this stream's turn: the chat may already be
+            // interactive again (flags settle at stream end) with a
+            // successor stream's recovery attempt registered on it.
+            if (turnId) {
+              releaseActiveChatRecovery(chatId, turnId)
+            }
           }
         })()
         recoveryCleanupByChat.set(chatId, cleanup)
