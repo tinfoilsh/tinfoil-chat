@@ -39,9 +39,19 @@ describe('parseContextWindowTokens', () => {
     expect(parseContextWindowTokens('32000')).toBe(32000)
   })
 
+  it('parses "1M tokens" style values', () => {
+    expect(parseContextWindowTokens('1M tokens')).toBe(1000000)
+    expect(parseContextWindowTokens('1.5m tokens')).toBe(1500000)
+  })
+
   it('falls back to a default for missing or malformed values', () => {
     expect(parseContextWindowTokens(undefined)).toBe(64000)
     expect(parseContextWindowTokens('unknown')).toBe(64000)
+  })
+
+  it('falls back to a default for implausibly small windows', () => {
+    expect(parseContextWindowTokens('1 tokens')).toBe(64000)
+    expect(parseContextWindowTokens('512')).toBe(64000)
   })
 })
 
