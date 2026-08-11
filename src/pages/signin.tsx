@@ -258,8 +258,12 @@ export default function SignInPage() {
           const { error } = await signIn.sso({
             strategy,
             popup,
-            redirectCallbackUrl,
-            redirectUrl: postAuthRedirectUrl,
+            redirectCallbackUrl: new URL(
+              redirectCallbackUrl,
+              window.location.origin,
+            ).href,
+            redirectUrl: new URL(postAuthRedirectUrl, window.location.origin)
+              .href,
           })
           if (error) {
             popup.close()

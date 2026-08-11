@@ -296,8 +296,9 @@ describe('SignInPage', () => {
         expect(auth.signIn.sso).toHaveBeenCalledWith({
           strategy,
           popup: socialPopup,
-          redirectCallbackUrl: '/sso-callback',
-          redirectUrl: '/',
+          redirectCallbackUrl: new URL('/sso-callback', window.location.origin)
+            .href,
+          redirectUrl: new URL('/', window.location.origin).href,
         })
       })
     },
