@@ -190,6 +190,37 @@ describe('ProfileSyncService', () => {
     expect(pushed.nickname).toBe('Sacha')
   })
 
+  it('drops retired fields while preserving other unknown profile fields', async () => {
+    mockPull.mockResolvedValue({
+      items: [
+        {
+          ok: true,
+          etag: '7',
+          plaintext: btoa(
+            JSON.stringify({
+              nickname: 'Remote',
+              projectUploadPreference: 'project',
+              experimentalSetting: { foo: 1 },
+            }),
+          ),
+        },
+      ],
+    })
+
+    const service = new ProfileSyncService()
+    await service.fetchProfile()
+    await service.saveProfile(
+      { nickname: 'Sacha', version: 7 },
+      { nickname: 'Remote', version: 7 },
+    )
+
+    const pushed = JSON.parse(
+      new TextDecoder().decode(mockPush.mock.calls[0][0].plaintext),
+    )
+    expect(pushed).not.toHaveProperty('projectUploadPreference')
+    expect(pushed.experimentalSetting).toEqual({ foo: 1 })
+  })
+
   it('preserves unknown profile fields after a service restart', async () => {
     mockPull.mockResolvedValue({
       items: [

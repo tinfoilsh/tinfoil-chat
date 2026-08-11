@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 interface AddToProjectContextModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (addToProject: boolean, rememberChoice: boolean) => void
+  onConfirm: (addToProject: boolean) => void
   fileName: string
   projectName: string
   isDarkMode: boolean
@@ -21,12 +21,10 @@ export function AddToProjectContextModal({
 }: AddToProjectContextModalProps) {
   void isDarkMode
   const [isVisible, setIsVisible] = useState(false)
-  const [rememberChoice, setRememberChoice] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       setIsVisible(true)
-      setRememberChoice(false)
     } else {
       const timer = setTimeout(() => setIsVisible(false), 300)
       return () => clearTimeout(timer)
@@ -36,11 +34,11 @@ export function AddToProjectContextModal({
   if (!isVisible) return null
 
   const handleAddToProject = () => {
-    onConfirm(true, rememberChoice)
+    onConfirm(true)
   }
 
   const handleAddToChat = () => {
-    onConfirm(false, rememberChoice)
+    onConfirm(false)
   }
 
   return (
@@ -74,7 +72,7 @@ export function AddToProjectContextModal({
           Add to project context?
         </h2>
 
-        <div className="mb-4 space-y-3 sm:mb-6">
+        <div className="mb-4 sm:mb-6">
           <p className="text-center text-xs text-content-secondary sm:text-sm">
             Would you like to add{' '}
             <span className="font-medium text-content-primary">{fileName}</span>{' '}
@@ -84,19 +82,6 @@ export function AddToProjectContextModal({
             </span>
             ?
           </p>
-
-          {/* Remember choice checkbox */}
-          <label className="flex cursor-pointer items-center justify-center gap-2">
-            <input
-              type="checkbox"
-              checked={rememberChoice}
-              onChange={(e) => setRememberChoice(e.target.checked)}
-              className="h-4 w-4 rounded border-border-subtle bg-surface-chat text-emerald-500 focus:ring-0 focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:ring-offset-0"
-            />
-            <span className="text-xs text-content-secondary sm:text-sm">
-              Remember my decision for future uploads
-            </span>
-          </label>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">

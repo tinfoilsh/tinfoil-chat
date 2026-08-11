@@ -86,10 +86,6 @@ import { logError } from '@/utils/error-handling'
 import { isProbablyTextFile, isSupportedFile } from '@/utils/file-types'
 import { getNewChatPath, isPlainPrimaryClick } from '@/utils/navigation'
 import {
-  getProjectUploadPreference,
-  setProjectUploadPreference,
-} from '@/utils/project-upload-preference'
-import {
   estimateMessageTokens,
   estimateTokenCount,
   findContextStartIndex,
@@ -115,6 +111,7 @@ import { CONSTANTS } from './constants'
 import { getDocumentTextContent } from './document-content'
 import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
+import { routeChatFileUpload } from './file-upload-routing'
 import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
 import { selectPendingInputToolCallFromChat } from './genui/pending-input-tool-call'
 import {
@@ -2295,11 +2292,7 @@ export function ChatInterface({
 
   // Handler for modal confirmation
   const handleAddToProjectConfirm = useCallback(
-    async (addToProject: boolean, rememberChoice: boolean) => {
-      if (rememberChoice) {
-        setProjectUploadPreference(addToProject ? 'project' : 'chat')
-      }
-
+    async (addToProject: boolean) => {
       // Capture files and close modal immediately
       const filesToUpload = pendingUploadFiles
       setPendingUploadFiles([])
@@ -2320,28 +2313,17 @@ export function ChatInterface({
   // Document upload handler wrapper
   const handleFileUpload = useCallback(
     async (file: File) => {
-      // Check if in project mode
-      if (isProjectMode && activeProject) {
-        const preference = getProjectUploadPreference()
-
-        if (preference === 'project') {
-          await addFileToProjectContext(file)
-          return
-        } else if (preference === 'chat') {
-          await processFileForChat(file)
-          return
-        } else {
-          // No preference saved - queue file and show dialog
-          setPendingUploadFiles((prev) => [...prev, file])
+      await routeChatFileUpload(file, {
+        isProjectMode,
+        hasActiveProject: !!activeProject,
+        requestDestination: (pendingFile) => {
+          setPendingUploadFiles((prev) => [...prev, pendingFile])
           setShowAddToProjectModal(true)
-          return
-        }
-      }
-
-      // Not in project mode - use normal chat flow
-      await processFileForChat(file)
+        },
+        processFileForChat,
+      })
     },
-    [isProjectMode, activeProject, addFileToProjectContext, processFileForChat],
+    [isProjectMode, activeProject, processFileForChat],
   )
 
   // Global drag and drop handlers

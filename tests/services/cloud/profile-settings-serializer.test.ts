@@ -15,7 +15,6 @@ import {
   USER_PREFS_NICKNAME,
   USER_PREFS_PERSONALIZATION_ENABLED,
   USER_PREFS_PROFESSION,
-  USER_PREFS_PROJECT_UPLOAD,
   USER_PREFS_TRAITS,
 } from '@/constants/storage-keys'
 import {
@@ -108,7 +107,6 @@ describe('profile-settings-serializer', () => {
     localStorage.setItem(SETTINGS_PIXELATE_SIDEBAR_CHAT_TITLES_ENABLED, 'false')
     localStorage.setItem(SETTINGS_PII_CHECK_ENABLED, 'false')
     localStorage.setItem(SETTINGS_CHAT_FONT, 'mono')
-    localStorage.setItem(USER_PREFS_PROJECT_UPLOAD, 'project')
 
     const loaded = loadLocalSettings()
     expect('selectedModel' in loaded).toBe(false)
@@ -123,7 +121,6 @@ describe('profile-settings-serializer', () => {
       pixelateSidebarChatTitlesEnabled: false,
       piiCheckEnabled: false,
       chatFont: 'mono',
-      projectUploadPreference: 'project',
     })
   })
 
@@ -177,7 +174,6 @@ describe('profile-settings-serializer', () => {
       pixelateSidebarChatTitlesEnabled: true,
       piiCheckEnabled: true,
       chatFont: 'serif',
-      projectUploadPreference: 'chat',
     })
 
     expect(localStorage.getItem(USER_PREFS_CUSTOM_PROMPT_PRESETS)).toBe(
@@ -197,7 +193,6 @@ describe('profile-settings-serializer', () => {
     ).toBe('true')
     expect(localStorage.getItem(SETTINGS_PII_CHECK_ENABLED)).toBe('true')
     expect(localStorage.getItem(SETTINGS_CHAT_FONT)).toBe('serif')
-    expect(localStorage.getItem(USER_PREFS_PROJECT_UPLOAD)).toBe('chat')
   })
 
   it('defaults web search availability to on', () => {

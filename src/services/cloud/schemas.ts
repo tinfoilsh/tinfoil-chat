@@ -151,7 +151,6 @@ export const ProfileDataSchema = z
     piiCheckEnabled: z.boolean().optional(),
     genUIEnabled: z.boolean().optional(),
     chatFont: z.enum(['system', 'serif', 'mono', 'dyslexic']).optional(),
-    projectUploadPreference: z.enum(['project', 'chat']).optional(),
     version: z.number().optional(),
     updatedAt: z.string().optional(),
     // Per-field edit clocks and the row version they were last

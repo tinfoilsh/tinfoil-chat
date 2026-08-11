@@ -38,13 +38,14 @@ function isStaleBlobConflict(error: unknown): boolean {
 // iOS-only setting) and must survive our next push rather than being
 // dropped when we re-serialize only the keys we know about.
 const KNOWN_PROFILE_KEYS = new Set<string>(Object.keys(ProfileDataSchema.shape))
+const RETIRED_PROFILE_KEYS = new Set<string>(['projectUploadPreference'])
 
 function extractUnknownProfileFields(
   source: Record<string, unknown>,
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = {}
   for (const key of Object.keys(source)) {
-    if (!KNOWN_PROFILE_KEYS.has(key)) {
+    if (!KNOWN_PROFILE_KEYS.has(key) && !RETIRED_PROFILE_KEYS.has(key)) {
       extra[key] = source[key]
     }
   }
@@ -83,7 +84,6 @@ export interface ProfileData {
   piiCheckEnabled?: boolean
   genUIEnabled?: boolean
   chatFont?: 'system' | 'serif' | 'mono' | 'dyslexic'
-  projectUploadPreference?: 'project' | 'chat'
 
   // Metadata
   version?: number
@@ -122,7 +122,10 @@ export class ProfileSyncService {
       if (stored) {
         const parsed = JSON.parse(stored)
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          this.unknownRemoteFields = parsed as Record<string, unknown>
+          this.unknownRemoteFields = extractUnknownProfileFields(
+            parsed as Record<string, unknown>,
+          )
+          this.persistUnknownRemoteFields()
         }
       }
     } catch {
