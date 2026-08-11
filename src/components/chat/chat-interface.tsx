@@ -8,6 +8,7 @@ import {
   type BaseModel,
 } from '@/config/models'
 import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
+import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import { PIXELATE_SIDEBAR_CHAT_TITLES_CHANGED_EVENT } from '@/constants/settings-events'
 import {
   SETTINGS_CODE_EXECUTION_ENABLED,
@@ -33,7 +34,6 @@ import {
   getRateLimitInfo,
   getSessionToken,
   invalidateSessionCache,
-  snapshotAndDecrementRemaining,
   type RateLimitInfo,
 } from '@/services/inference/tinfoil-client'
 import { generateTitle, getTitleContent } from '@/services/inference/title'
@@ -907,10 +907,6 @@ export function ChatInterface({
     [rateLimit],
   )
 
-  const handleQueueDispatch = useCallback(() => {
-    if (rateLimit) snapshotAndDecrementRemaining()
-  }, [rateLimit])
-
   const handleQueueRateLimited = useCallback(() => {
     setIsSubscribePromptOpen(true)
   }, [])
@@ -933,7 +929,6 @@ export function ChatInterface({
       hasPendingRecoveryRef.current ||
       (currentChatId ? isChatRecoveryActive(currentChatId) : false),
     dispatchBlocked: hasPendingRecovery || activeRecoveryTurnIds.length > 0,
-    onBeforeDispatch: handleQueueDispatch,
     onRateLimited: handleQueueRateLimited,
     cancelGeneration,
   })
@@ -1131,14 +1126,14 @@ export function ChatInterface({
     })
   }, [isSignedIn, cloudSyncInitialized, chat_subscription_active])
 
-  // Handle upgrade requests from error CTA buttons
+  // Handle upgrade requests from error CTA buttons and quota-gated sends
   useEffect(() => {
     const handleRequestUpgrade = () => {
       setIsSubscribePromptOpen(true)
     }
-    window.addEventListener('requestUpgrade', handleRequestUpgrade)
+    window.addEventListener(REQUEST_UPGRADE_EVENT, handleRequestUpgrade)
     return () => {
-      window.removeEventListener('requestUpgrade', handleRequestUpgrade)
+      window.removeEventListener(REQUEST_UPGRADE_EVENT, handleRequestUpgrade)
     }
   }, [])
 

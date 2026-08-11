@@ -1,6 +1,7 @@
 import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { renderGenUIResolved } from '@/components/chat/genui/render'
 import { cn } from '@/components/ui/utils'
+import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import {
   ArrowPathIcon,
   ArrowUturnLeftIcon,
@@ -476,7 +477,7 @@ const DefaultMessageComponent = ({
                         className="w-fit rounded-md bg-brand-accent-dark px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90"
                         onClick={() => {
                           window.dispatchEvent(
-                            new CustomEvent('requestUpgrade'),
+                            new CustomEvent(REQUEST_UPGRADE_EVENT),
                           )
                         }}
                       >

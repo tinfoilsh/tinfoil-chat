@@ -153,6 +153,7 @@ vi.mock('@/services/inference/tinfoil-client', () => ({
   getRateLimitInfo: () => null,
   isChatRecoveryAvailable: () => recoveryAvailableState.available,
   refreshRateLimit: vi.fn(),
+  snapshotAndDecrementRemaining: vi.fn(),
 }))
 
 vi.mock('@/services/inference/title', () => ({

@@ -20,6 +20,7 @@
 import { useProject } from '@/components/project'
 import { resolveModelSelection, type BaseModel } from '@/config/models'
 import { DEFAULT_CHAT_TITLE, TEMPORARY_CHAT_TITLE } from '@/constants/chat'
+import { REQUEST_UPGRADE_EVENT } from '@/constants/chat-events'
 import { useChatRecoveryActive } from '@/hooks/use-chat-recovery-drafts'
 import { streamingTracker } from '@/services/cloud/streaming-tracker'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
@@ -46,6 +47,7 @@ import {
   getRateLimitInfo,
   isChatRecoveryAvailable,
   refreshRateLimit,
+  snapshotAndDecrementRemaining,
 } from '@/services/inference/tinfoil-client'
 import { generateTitle, getTitleContent } from '@/services/inference/title'
 import { chatEvents } from '@/services/storage/chat-events'
@@ -551,6 +553,20 @@ export function useChatMessaging({
         })
         return
       }
+
+      // Free-tier daily quota gate. Every send path funnels through here
+      // (queue dispatches, regenerate/edit, URL-hash sends), so an exhausted
+      // quota never fires a request the server is guaranteed to reject. The
+      // hourly cap intentionally passes: those sends fail fast with an
+      // in-chat message instead of the subscribe prompt.
+      const quota = getRateLimitInfo()
+      if (quota && quota.remaining <= 0 && quota.kind !== 'hourly') {
+        window.dispatchEvent(new CustomEvent(REQUEST_UPGRADE_EVENT))
+        return
+      }
+      // Optimistically consume one request so the banner updates immediately
+      // and refreshRateLimit can detect stale server counts.
+      snapshotAndDecrementRemaining()
 
       // Clear input immediately when send button is pressed
       setInput('')
