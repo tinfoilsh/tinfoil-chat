@@ -31,6 +31,23 @@ describe('GenUI registry', () => {
     }
   })
 
+  it('documents exact artifact HTML and Markdown source shapes', () => {
+    const artifact = buildGenUIToolSchemas().find(
+      (entry) => entry.function.name === 'render_artifact_preview',
+    )
+    const schemaText = JSON.stringify(artifact?.function.parameters)
+
+    expect(schemaText).toContain('{\\"type\\":\\"html\\",\\"html\\":\\"...\\"}')
+    expect(schemaText).toContain(
+      '{\\"type\\":\\"markdown\\",\\"markdown\\":\\"...\\"}',
+    )
+    expect(
+      GENUI_WIDGETS_BY_NAME.render_artifact_preview.schema.safeParse({
+        source: { type: 'markdown', markdown: 123 },
+      }).success,
+    ).toBe(false)
+  })
+
   it('opts every GenUI tool into router-side auto-continuation', () => {
     const schemas = buildGenUIToolSchemas()
     for (const entry of schemas) {

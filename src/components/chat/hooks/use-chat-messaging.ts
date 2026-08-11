@@ -62,7 +62,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getMessageAttachments, getMessageImages } from '../attachment-helpers'
 import { ChatError } from '../chat-utils'
 import { CONSTANTS } from '../constants'
-import { regenerateToolCallArguments } from '../genui/retry'
+import {
+  ArtifactRetryError,
+  patchToolCallArguments,
+  regenerateToolCallArguments,
+  type ToolCallPatchTarget,
+} from '../genui/retry'
 import type { Chat, LoadingState, Message } from '../types'
 import {
   createBlankChat,
@@ -323,6 +328,7 @@ export function useChatMessaging({
     new Map<string, ActiveLiveGeneration>(),
   )
   const cancellationPromisesRef = useRef(new Map<string, Promise<void>>())
+  const artifactRetryPersistenceRef = useRef(Promise.resolve())
 
   const dismissStreamError = useCallback(() => {
     patchStatus(viewedChatIdRef.current, { streamError: null })
@@ -1614,86 +1620,126 @@ export function useChatMessaging({
    * via a structured completion, validates them against the widget schema,
    * and patches the failed block (and its `toolCalls` mirror) in place.
    *
-   * Returns true when the widget was repaired; false lets the caller fall
-   * back to a full regeneration.
+   * Returns true when the widget was repaired. Typed failures are preserved so
+   * the card can explain what happened and keep retry available.
    */
   const retryToolCall = useCallback(
     async (messageIndex: number, toolCallId: string): Promise<boolean> => {
-      if (loadingState !== 'idle' || !currentChat) return false
+      if (loadingState !== 'idle' || !currentChat) {
+        throw new ArtifactRetryError('unavailable_target')
+      }
 
       const chatId = currentChat.id
       const message = currentChat.messages[messageIndex]
-      if (!message || message.role !== 'assistant') return false
+      if (!message || message.role !== 'assistant') {
+        throw new ArtifactRetryError('unavailable_target')
+      }
       const block = message.timeline?.find(
         (candidate) =>
           candidate.type === 'tool_call' && candidate.toolCallId === toolCallId,
       )
-      if (!block || block.type !== 'tool_call') return false
+      if (!block || block.type !== 'tool_call') {
+        throw new ArtifactRetryError('unavailable_target')
+      }
 
-      const { model } = resolveModelSelection(selectedModel, models, {})
-      if (!model) return false
+      const { model, autoCandidates } = resolveModelSelection(
+        selectedModel,
+        models,
+        { preferToolCalling: true },
+      )
+      if (!model) throw new ArtifactRetryError('unavailable_target')
 
-      const newArguments = await regenerateToolCallArguments({
+      const target: ToolCallPatchTarget = {
+        messageTurnId: message.turnId,
+        messageTimestamp: message.timestamp.getTime(),
+        timelineBlockId: block.id,
+        toolCallId,
         toolName: block.name,
         originalArguments: block.arguments,
-        contextMessages: currentChat.messages.slice(0, messageIndex + 1),
-        model,
-      })
-      if (newArguments === null) return false
-
-      const patchMessage = (msg: Message): Message => ({
-        ...msg,
-        timeline: msg.timeline?.map((candidate) =>
-          candidate.type === 'tool_call' && candidate.toolCallId === toolCallId
-            ? { ...candidate, arguments: newArguments }
-            : candidate,
-        ),
-        toolCalls: msg.toolCalls?.map((tc) =>
-          tc.id === toolCallId ? { ...tc, arguments: newArguments } : tc,
-        ),
-      })
+      }
+      let newArguments: string
+      try {
+        newArguments = await regenerateToolCallArguments({
+          toolName: block.name,
+          originalArguments: block.arguments,
+          contextMessages: currentChat.messages.slice(0, messageIndex + 1),
+          model,
+          autoCandidates,
+          reasoningEffort,
+          thinkingEnabled,
+        })
+      } catch (error) {
+        const retryError =
+          error instanceof ArtifactRetryError
+            ? error
+            : new ArtifactRetryError('request_failed', { cause: error })
+        logError('Failed to retry artifact arguments', retryError, {
+          component: 'useChatMessaging',
+          action: 'retryToolCall',
+          metadata: { chatId, toolCallId, code: retryError.code },
+        })
+        throw retryError
+      }
 
       // The model call above can take seconds; the chat may have gained
       // messages (or the user may have switched away) since the closure
       // captured `currentChat`. Patch the tool-call block by id against
       // the *live* state instead of writing the snapshot back, so the
       // repair can never roll back newer chat content.
-      const patchChat = (chat: Chat): Chat => ({
-        ...chat,
-        messages: chat.messages.map((msg) =>
-          msg.role === 'assistant' &&
-          msg.timeline?.some(
-            (candidate) =>
-              candidate.type === 'tool_call' &&
-              candidate.toolCallId === toolCallId,
-          )
-            ? patchMessage(msg)
-            : msg,
-        ),
-      })
+      const liveChat = chatsRef.current.find(
+        (candidate) => candidate.id === chatId,
+      )
+      if (!liveChat) throw new ArtifactRetryError('unavailable_target')
+      const patched = patchToolCallArguments(liveChat, target, newArguments)
+      if (!patched.ok) {
+        logError(
+          'Artifact retry target is stale or unavailable',
+          patched.error,
+          {
+            component: 'useChatMessaging',
+            action: 'retryToolCall',
+            metadata: { chatId, toolCallId, code: patched.error.code },
+          },
+        )
+        throw patched.error
+      }
+
+      chatsRef.current = chatsRef.current.map((chat) =>
+        chat.id === chatId ? patched.chat : chat,
+      )
+      if (currentChatRef.current.id === chatId) {
+        currentChatRef.current = patched.chat
+      }
 
       setChats((prevChats) =>
-        prevChats.map((c) => (c.id === chatId ? patchChat(c) : c)),
+        prevChats.map((chat) => {
+          if (chat.id !== chatId) return chat
+          const result = patchToolCallArguments(chat, target, newArguments)
+          return result.ok ? result.chat : chat
+        }),
       )
-      setCurrentChat((prev) => (prev.id === chatId ? patchChat(prev) : prev))
+      setCurrentChat((prev) => {
+        if (prev.id !== chatId) return prev
+        const result = patchToolCallArguments(prev, target, newArguments)
+        return result.ok ? result.chat : prev
+      })
 
-      const liveChat =
-        chatsRef.current.find((c) => c.id === chatId) ??
-        (currentChat.id === chatId ? currentChat : null)
-      const chatToSave = liveChat ? patchChat(liveChat) : null
-      if (chatToSave && !chatToSave.isTemporary) {
+      const persistence = artifactRetryPersistenceRef.current.then(async () => {
+        const chatToSave = findLiveChat(chatId)
+        if (!chatToSave || chatToSave.isTemporary) return
         if (storeHistory) {
-          chatStorage.saveChatAndSync(chatToSave).catch((error) => {
-            logError('Failed to persist repaired widget', error, {
-              component: 'useChatMessaging',
-              action: 'retryToolCall',
-              metadata: { chatId, toolCallId },
-            })
-          })
+          await chatStorage.saveChatAndSync(chatToSave)
         } else {
           sessionChatStorage.saveChat(chatToSave)
         }
-      }
+      })
+      artifactRetryPersistenceRef.current = persistence.catch((error) => {
+        logError('Failed to persist repaired widget', error, {
+          component: 'useChatMessaging',
+          action: 'retryToolCall',
+          metadata: { chatId, toolCallId },
+        })
+      })
 
       return true
     },
@@ -1702,9 +1748,12 @@ export function useChatMessaging({
       currentChat,
       selectedModel,
       models,
+      reasoningEffort,
+      thinkingEnabled,
       storeHistory,
       setChats,
       setCurrentChat,
+      findLiveChat,
     ],
   )
 
