@@ -21,7 +21,10 @@ import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 
 const RECOVERY_MUTATION_MAX_ATTEMPTS = 3
 
-type ChatMutation = (chat: StoredChat) => { chat: StoredChat; changed: boolean }
+type ChatMutation = (
+  chat: StoredChat,
+  local?: StoredChat | null,
+) => { chat: StoredChat; changed: boolean }
 
 const mutationTails = new Map<string, Promise<void>>()
 let mutationGeneration = 0
@@ -110,7 +113,7 @@ async function mutateSyncedChat(
         if (!mutationIsCurrent()) {
           throw new DOMException('Aborted', 'AbortError')
         }
-        const result = mutation(chat)
+        const result = mutation(chat, chat)
         changed = result.changed
         return result.changed
           ? {
@@ -165,7 +168,7 @@ async function mutateSyncedChat(
         }
       }
 
-      const result = mutation(base)
+      const result = mutation(base, local)
       if (!result.changed) {
         if (remote && base === remote && local !== remote) {
           const syncVersion = remote.syncVersion ?? 0
@@ -244,7 +247,7 @@ export function addPendingRecovery(
   chatId: string,
   envelope: PendingRecoveryEnvelope,
 ): Promise<StoredChat> {
-  return mutateSyncedChat(chatId, (chat) => {
+  return mutateSyncedChat(chatId, (chat, local) => {
     const existing = chat.pendingRecoveries ?? []
     const pending = existing.filter(
       (candidate) => candidate.turnId !== envelope.turnId,
@@ -253,8 +256,23 @@ export function addPendingRecovery(
       throw new Error('Chat has too many pending recovery sessions')
     }
     pending.push(envelope)
+    const baseHasTurn = chat.messages.some(
+      (message) => message.turnId === envelope.turnId,
+    )
+    const localTurn = baseHasTurn
+      ? []
+      : (local?.messages.filter(
+          (message) => message.turnId === envelope.turnId,
+        ) ?? [])
     return {
-      chat: { ...chat, pendingRecoveries: pending },
+      chat: {
+        ...chat,
+        messages:
+          localTurn.length > 0
+            ? [...chat.messages, ...localTurn]
+            : chat.messages,
+        pendingRecoveries: pending,
+      },
       changed: true,
     }
   })

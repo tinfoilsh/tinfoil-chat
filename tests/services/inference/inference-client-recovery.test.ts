@@ -131,13 +131,13 @@ describe('recoverable inference retries', () => {
     expect(createRecoverableClient).toHaveBeenCalledTimes(2)
   })
 
-  it('returns the stream before recovery token persistence completes', async () => {
-    let finishTokenCapture!: () => void
-    const tokenCapture = new Promise<void>((resolve) => {
-      finishTokenCapture = resolve
+  it('returns the stream before the pending recovery cloud upload completes', async () => {
+    let finishCloudUpload!: () => void
+    const pendingCloudUpload = new Promise<void>((resolve) => {
+      finishCloudUpload = resolve
     })
     createRecoverableClient.mockResolvedValueOnce({
-      waitForTokenCapture: () => tokenCapture,
+      waitForTokenCapture: () => pendingCloudUpload,
       client: {
         chat: {
           completions: {
@@ -155,9 +155,14 @@ describe('recoverable inference retries', () => {
     })
 
     expect(recoveryReady).toBe(false)
-    expect(typeof stream[Symbol.asyncIterator]).toBe('function')
+    const chunks = []
+    for await (const chunk of stream) {
+      chunks.push(chunk)
+    }
+    expect(chunks).toEqual([{ choices: [{ delta: { content: 'answer' } }] }])
+    expect(recoveryReady).toBe(false)
 
-    finishTokenCapture()
+    finishCloudUpload()
     await stream.recoveryReady
     expect(recoveryReady).toBe(true)
   })

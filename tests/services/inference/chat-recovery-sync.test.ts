@@ -249,6 +249,66 @@ describe('chat recovery sync mutations', () => {
     expect(remoteChat.pendingRecoveries).toHaveLength(1)
   })
 
+  it('uploads a dirty local user turn with its recovery envelope', async () => {
+    remoteChat.updatedAt = '2026-01-01T00:00:00.000Z'
+    localChat = {
+      ...structuredClone(remoteChat),
+      messages: [
+        ...remoteChat.messages,
+        message('user', 'Unsynced question', 'turn-2'),
+      ],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+
+    expect(uploadChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: 'Unsynced question',
+            turnId: 'turn-2',
+          }),
+        ]),
+        pendingRecoveries: [expect.objectContaining({ turnId: 'turn-2' })],
+      }),
+    )
+  })
+
+  it('preserves only the recovery turn when a newer remote chat wins', async () => {
+    remoteChat = {
+      ...remoteChat,
+      title: 'Newer remote title',
+      updatedAt: '2026-01-01T00:02:00.000Z',
+    }
+    localChat = {
+      ...structuredClone(remoteChat),
+      title: 'Stale local title',
+      messages: [
+        ...remoteChat.messages,
+        message('user', 'Unrelated stale edit', 'stale-turn'),
+        message('user', 'Unsynced question', 'turn-2'),
+      ],
+      updatedAt: '2026-01-01T00:01:00.000Z',
+      locallyModified: true,
+    }
+
+    await addPendingRecovery(remoteChat.id, envelope('turn-2'))
+
+    expect(uploadChat).toHaveBeenCalledOnce()
+    const uploaded = uploadChat.mock.calls[0][0]
+    expect(uploaded.title).toBe('Newer remote title')
+    expect(uploaded.messages.map((item) => item.content)).toEqual([
+      'Question',
+      'Unsynced question',
+    ])
+    expect(uploaded.pendingRecoveries).toEqual([
+      expect.objectContaining({ turnId: 'turn-2' }),
+    ])
+  })
+
   it('merges a recovered response once after its user turn', async () => {
     remoteChat.messages.push(message('user', 'Later question', 'turn-2'))
     remoteChat.pendingRecoveries = [envelope('turn-1')]

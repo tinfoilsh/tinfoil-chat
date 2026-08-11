@@ -566,6 +566,7 @@ export function useChatMessaging({
       const streamChatIdRef = { current: currentChat.id }
       let earlyTitlePromise: Promise<string> | null = null
       let initialSavePromise: Promise<void> | undefined
+      let recoveryLocalSavePromise: Promise<Chat> | undefined
 
       const setLoadingStateFor = (s: LoadingState) =>
         patchStatus(streamChatIdRef.current, { loadingState: s })
@@ -609,6 +610,17 @@ export function useChatMessaging({
         (attachments && attachments.length > 0) ||
         Boolean(quote)
       const turnId = hasUserContent ? crypto.randomUUID() : null
+      const recoveryUserId = typeof userId === 'string' ? userId : null
+      const canRecoverTurn = (chat: Chat) =>
+        recoveryUserId !== null &&
+        turnId !== null &&
+        canUseChatRecovery({
+          isSignedIn,
+          userId: recoveryUserId,
+          storeHistory,
+          chat,
+        })
+      let recoveryEligible = false
 
       const userMessage: Message | null = hasUserContent
         ? {
@@ -688,6 +700,7 @@ export function useChatMessaging({
           projectId:
             isProjectMode && activeProject ? activeProject.id : undefined,
         }
+        recoveryEligible = canRecoverTurn(updatedChat)
 
         // Update state immediately for instant UI feedback
         moveStatus(streamChatIdRef.current, chatId)
@@ -720,9 +733,15 @@ export function useChatMessaging({
           setTimeout(() => scrollToBottom(), 50)
         }
 
-        // Save immediately (and sync if applicable). ID is already server-valid.
-        initialSavePromise = chatStorage
-          .saveChatAndSync(updatedChat)
+        // Save immediately. Recoverable turns stay local until their envelope
+        // mutation; other chats retain the ordinary background sync path.
+        const initialSave = recoveryEligible
+          ? chatStorage.saveChat(updatedChat, true)
+          : chatStorage.saveChatAndSync(updatedChat)
+        if (recoveryEligible) {
+          recoveryLocalSavePromise = initialSave
+        }
+        initialSavePromise = initialSave
           .then(() => {
             setChats((prevChats) =>
               prevChats.map((c) =>
@@ -812,6 +831,7 @@ export function useChatMessaging({
             updatedChat.codeExecutionAccessToken ??
             generateCodeExecutionAccessToken(),
         }
+        recoveryEligible = canRecoverTurn(updatedChat)
 
         setCurrentChat(updatedChat)
         setChats((prevChats) =>
@@ -829,7 +849,25 @@ export function useChatMessaging({
         if (updatedChat.isTemporary) {
           // Temporary chats are never persisted
         } else if (storeHistory) {
-          await chatStorage.saveChatAndSync(updatedChat)
+          if (recoveryEligible) {
+            recoveryLocalSavePromise = chatStorage.saveChat(updatedChat, true)
+            try {
+              updatedChat = await recoveryLocalSavePromise
+            } catch (error) {
+              recoveryEligible = false
+              logError(
+                'Chat persistence for recovery failed; streaming without recovery',
+                error,
+                {
+                  component: 'useChatMessaging',
+                  action: 'handleQuery.recoveryPreUpload',
+                  metadata: { chatId: updatedChat.id },
+                },
+              )
+            }
+          } else {
+            updatedChat = await chatStorage.saveChatAndSync(updatedChat)
+          }
         } else {
           sessionChatStorage.saveChat(updatedChat)
         }
@@ -953,26 +991,18 @@ export function useChatMessaging({
             )) ?? undefined)
           : undefined
 
-        const recoveryUserId = typeof userId === 'string' ? userId : null
-        const recoveryEligible =
-          recoveryUserId !== null &&
-          turnId !== null &&
-          canUseChatRecovery({
-            isSignedIn,
-            userId: recoveryUserId,
-            storeHistory,
-            chat: updatedChat,
-          })
-        // Recovery is best-effort: the user turn must be durable before the
-        // recovery token is captured, locally or across devices.
+        // Recovery is best-effort: the user turn must be durable locally
+        // before the recoverable inference request starts. This required wait
+        // has no cloud network work; ordinary backup remains non-blocking, and
+        // the recovery mutation can publish the turn with its envelope later.
         let recoveryEnabled = recoveryEligible
 
         if (recoveryEnabled) {
           try {
-            updatedChat =
-              updatedChat.isLocalOnly || !isCloudSyncEnabled()
-                ? await chatStorage.saveChat(updatedChat, true)
-                : await chatStorage.saveChatAndWaitForSync(updatedChat)
+            if (!recoveryLocalSavePromise) {
+              throw new Error('Chat recovery local save did not start')
+            }
+            updatedChat = await recoveryLocalSavePromise
           } catch (error) {
             recoveryEnabled = false
             logError(
@@ -1018,7 +1048,10 @@ export function useChatMessaging({
           codeExecutionEncryptionKey: codeExecutionEncryptionKey ?? undefined,
           codeExecutionContainerAuthToken,
           recovery:
-            recoveryEligible && recoveryEnabled
+            recoveryEligible &&
+            recoveryEnabled &&
+            recoveryUserId !== null &&
+            turnId !== null
               ? {
                   onAttemptStarted: (sessionId) => {
                     startChatRecoveryAttempt(
@@ -1029,7 +1062,7 @@ export function useChatMessaging({
                   },
                   onTokenCaptured: (sessionId, token) =>
                     persistChatRecoveryToken({
-                      userId: recoveryUserId as string,
+                      userId: recoveryUserId,
                       chatId: streamChatIdRef.current,
                       turnId,
                       sessionId,
