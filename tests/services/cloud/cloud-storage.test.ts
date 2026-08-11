@@ -11,6 +11,7 @@ const mockGetAllKeys = vi.fn()
 const mockGetKeyBytesOrThrow = vi.fn()
 const mockGetAlternativeKeyBytes = vi.fn()
 const mockEnclavePush = vi.fn()
+const mockRevisionSnapshot = vi.fn()
 const mockListStatus = vi.fn()
 const mockAttachmentPut = vi.fn()
 const mockAttachmentGet = vi.fn()
@@ -39,6 +40,7 @@ vi.mock('@/services/sync-enclave/sync-api', async () => {
   return {
     ...actual,
     push: (...args: any[]) => mockEnclavePush(...args),
+    revisionSnapshot: (...args: any[]) => mockRevisionSnapshot(...args),
     listStatus: (...args: any[]) => mockListStatus(...args),
     attachmentPut: (...args: any[]) => mockAttachmentPut(...args),
     attachmentGet: (...args: any[]) => mockAttachmentGet(...args),
@@ -67,6 +69,10 @@ describe('CloudStorageService auth readiness', () => {
     mockGetKeyBytesOrThrow.mockReturnValue(TEST_BYTES)
     mockGetAlternativeKeyBytes.mockReturnValue(TEST_BYTES)
     mockEnclavePush.mockResolvedValue({ ok: true, etag: '1', keyId: 'kid' })
+    mockRevisionSnapshot.mockResolvedValue({
+      items: [],
+      snapshot_revision: '0',
+    })
     mockListStatus.mockResolvedValue({ updates: [], deletes: [] })
     mockAttachmentPut.mockResolvedValue({
       ok: true,
@@ -137,6 +143,46 @@ describe('CloudStorageService auth readiness', () => {
     expect(pushArg.scope).toBe('chat')
     expect(pushArg.id).toBe('chat-1')
     expect(pushArg.metadata).toMatchObject({ restoreDeleted: true })
+  })
+
+  it('omits stale project metadata from dirty content-only uploads', async () => {
+    const service = new CloudStorageService()
+    await service.uploadChat({
+      id: 'chat-1',
+      title: 'Dirty content',
+      messages: [{ role: 'user', content: 'edited' }],
+      projectId: 'stale-project',
+      projectLocallyModified: false,
+      syncVersion: 2,
+      locallyModified: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      lastAccessedAt: 0,
+    } as any)
+
+    expect(mockEnclavePush.mock.calls[0][0].metadata).not.toHaveProperty(
+      'projectId',
+    )
+  })
+
+  it('includes project metadata for an intentional local move', async () => {
+    const service = new CloudStorageService()
+    await service.uploadChat({
+      id: 'chat-1',
+      title: 'Moved chat',
+      messages: [{ role: 'user', content: 'edited' }],
+      projectId: 'local-project',
+      projectLocallyModified: true,
+      syncVersion: 2,
+      locallyModified: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      lastAccessedAt: 0,
+    } as any)
+
+    expect(mockEnclavePush.mock.calls[0][0].metadata).toMatchObject({
+      projectId: 'local-project',
+    })
   })
 
   it('never uploads device-local recovery tokens', async () => {

@@ -2,7 +2,6 @@ import type {
   CreateProjectData,
   Project,
   ProjectChatListResponse,
-  ProjectChatSyncStatus,
   ProjectData,
   ProjectDocument,
   ProjectDocumentListResponse,
@@ -833,95 +832,20 @@ export class ProjectStorageService {
     projectId: string,
     options?: { continuationToken?: string },
   ): Promise<ProjectChatListResponse> {
-    const chats: ProjectChatListResponse['chats'] = []
-    let cursor = options?.continuationToken
-    let nextContinuationToken: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: CHAT_SCOPE,
-        projectId,
-        cursor,
-        limit: ENCLAVE_PROJECT_CHAT_LIST_LIMIT,
-      })
-      chats.push(
-        ...status.updates
-          .filter((update) => update.project_id === projectId)
-          .map(projectChatFromStatus),
-      )
-      cursor = status.next_cursor
-      nextContinuationToken = status.next_cursor
-    } while (
-      chats.length < ENCLAVE_PROJECT_CHAT_LIST_LIMIT &&
-      hasNextCursor(cursor)
-    )
+    const status = await enclaveListStatus({
+      scope: CHAT_SCOPE,
+      projectId,
+      cursor: options?.continuationToken,
+      limit: ENCLAVE_PROJECT_CHAT_LIST_LIMIT,
+    })
+    const chats = status.updates
+      .filter((update) => update.project_id === projectId)
+      .map(projectChatFromStatus)
 
     return {
       chats,
-      nextContinuationToken,
-      hasMore: hasNextCursor(nextContinuationToken),
-    }
-  }
-
-  async getProjectChatsSyncStatus(
-    projectId: string,
-  ): Promise<ProjectChatSyncStatus> {
-    let count = 0
-    let lastUpdated: string | null = null
-    let cursor: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: CHAT_SCOPE,
-        projectId,
-        cursor,
-        limit: 500,
-      })
-      for (const update of status.updates) {
-        if (update.project_id !== projectId) continue
-        count++
-        if (!lastUpdated || update.updated_at > lastUpdated) {
-          lastUpdated = update.updated_at
-        }
-      }
-      cursor = status.next_cursor
-    } while (cursor)
-
-    return { count, lastUpdated }
-  }
-
-  async getProjectChatsUpdatedSince(
-    projectId: string,
-    options: { since: string; cursorId?: string },
-  ): Promise<ProjectChatListResponse> {
-    const chats: ProjectChatListResponse['chats'] = []
-    let cursor: string | undefined = options.cursorId ?? options.since
-    let nextContinuationToken: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: CHAT_SCOPE,
-        projectId,
-        cursor,
-        limit: ENCLAVE_PROJECT_CHAT_LIST_LIMIT,
-      })
-      chats.push(
-        ...status.updates
-          .filter(
-            (update) =>
-              update.project_id === projectId &&
-              update.updated_at > options.since,
-          )
-          .map(projectChatFromStatus),
-      )
-      cursor = status.next_cursor
-      nextContinuationToken = status.next_cursor
-    } while (
-      chats.length < ENCLAVE_PROJECT_CHAT_LIST_LIMIT &&
-      hasNextCursor(cursor)
-    )
-
-    return {
-      chats,
-      nextContinuationToken,
-      hasMore: hasNextCursor(nextContinuationToken),
+      nextContinuationToken: status.next_cursor,
+      hasMore: hasNextCursor(status.next_cursor),
     }
   }
 }

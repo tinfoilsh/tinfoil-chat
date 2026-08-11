@@ -1,0 +1,373 @@
+import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
+import {
+  derivePendingUpload,
+  IndexedDBStorage,
+} from '@/services/storage/indexed-db'
+import 'fake-indexeddb/auto'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+const DB_NAME = 'tinfoil-chat'
+const LEGACY_DB_VERSION = 1
+
+function deleteDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error)
+    request.onblocked = () =>
+      reject(new Error('Test database deletion blocked'))
+  })
+}
+
+function createLegacyDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, LEGACY_DB_VERSION)
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('chats', { keyPath: 'id' })
+      store.createIndex('lastAccessedAt', 'lastAccessedAt')
+      store.createIndex('createdAt', 'createdAt')
+      store.createIndex('syncedAt', 'syncedAt')
+      store.createIndex('locallyModified', 'locallyModified')
+      store.put({
+        id: 'dirty-chat',
+        title: 'Dirty',
+        messages: [{ role: 'user', content: 'hello' }],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+        lastAccessedAt: 0,
+        locallyModified: true,
+        isLocalOnly: false,
+      })
+    }
+    request.onsuccess = () => {
+      request.result.close()
+      resolve()
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+describe('IndexedDB sync protocol v2 migration', () => {
+  beforeEach(async () => {
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      value: indexedDB,
+    })
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-1')
+    await deleteDatabase()
+  })
+
+  it('adds global state, remote metadata, outbox, and pending index', async () => {
+    await createLegacyDatabase()
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+
+    expect(await storage.hasPendingSyncWork('user-1')).toBe(true)
+    await expect(storage.getPendingUploadChats('user-1')).resolves.toEqual([
+      expect.objectContaining({ id: 'dirty-chat', pendingUpload: 1 }),
+    ])
+    await expect(storage.getSyncState('user-1')).resolves.toBeNull()
+  })
+
+  it('fails closed when an upgraded pending row has no active account', async () => {
+    localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+    await createLegacyDatabase()
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+
+    expect(await storage.hasPendingSyncWork('user-1')).toBe(false)
+    await expect(storage.getPendingUploadChats('user-1')).resolves.toEqual([])
+  })
+
+  it('lists pending uploads only for their owning account', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'user-1-chat',
+      title: 'One',
+      messages: [{ role: 'user', content: 'one' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user-2')
+    await storage.saveChat({
+      id: 'user-2-chat',
+      title: 'Two',
+      messages: [{ role: 'user', content: 'two' } as any],
+      createdAt: '2026-01-02T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+    })
+
+    await expect(storage.getPendingUploadChats('user-1')).resolves.toEqual([
+      expect.objectContaining({ id: 'user-1-chat' }),
+    ])
+    await expect(storage.getPendingUploadChats('user-2')).resolves.toEqual([
+      expect.objectContaining({ id: 'user-2-chat' }),
+    ])
+  })
+
+  it('persists a local delete intent atomically with row removal', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+
+    await storage.markAsSynced('chat-1', 1)
+    await storage.deleteChatWithPendingIntent(
+      'chat-1',
+      'stable-delete-key',
+      'user-1',
+    )
+
+    await expect(storage.getChat('chat-1')).resolves.toBeNull()
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([
+      expect.objectContaining({
+        id: 'chat-1',
+        userId: 'user-1',
+        idempotencyKey: 'stable-delete-key',
+      }),
+    ])
+    expect(await storage.hasPendingSyncWork('user-1')).toBe(true)
+  })
+
+  it('does not create a remote delete for a never-synced local chat', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'local-create',
+      title: 'Local create',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+
+    const queued = await storage.deleteChatWithPendingIntent(
+      'local-create',
+      'unused-key',
+      'user-1',
+    )
+
+    expect(queued).toBe(false)
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
+  })
+
+  it('removes a matching delete intent with a remote deletion', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('chat-1', 1)
+    await storage.deleteChatWithPendingIntent('chat-1', 'delete-key', 'user-1')
+
+    await storage.applyRemoteDeletion('chat-1', 'user-1')
+
+    await expect(storage.getPendingDeletes('user-1')).resolves.toEqual([])
+  })
+
+  it('repairs state and outbox when the account changes', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.commitRevisionBatch([], '7', 'user-1')
+
+    await expect(storage.getSyncState('user-1')).resolves.toEqual(
+      expect.objectContaining({ userId: 'user-1', appliedRevision: '7' }),
+    )
+    await expect(storage.getSyncState('user-2')).resolves.toBeNull()
+  })
+
+  it('preserves dirty project membership and ETag during metadata commits', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'dirty-chat',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('dirty-chat', 2)
+    await storage.updateChatProject('dirty-chat', 'local-project')
+
+    await storage.commitRevisionBatch(
+      [
+        {
+          id: 'dirty-chat',
+          revision: '3',
+          kind: 'upsert',
+          etag: '3',
+          projectId: 'remote-project',
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+      ],
+      '3',
+      'user-1',
+    )
+
+    await expect(storage.getChat('dirty-chat')).resolves.toEqual(
+      expect.objectContaining({
+        projectId: 'local-project',
+        syncVersion: 2,
+        locallyModified: true,
+        projectLocallyModified: true,
+      }),
+    )
+  })
+
+  it('preserves dirty metadata during snapshot reconciliation', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'dirty-chat',
+      title: 'Chat',
+      projectId: 'local-project',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('dirty-chat', 2)
+    await storage.updateChatProject('dirty-chat', 'local-project-2')
+
+    await storage.reconcileRevisionSnapshot(
+      [
+        {
+          id: 'dirty-chat',
+          revision: '4',
+          kind: 'upsert',
+          etag: '4',
+          projectId: 'remote-project',
+          updatedAt: '2026-01-02T00:00:00Z',
+        },
+      ],
+      '4',
+      'user-1',
+    )
+
+    await expect(storage.getChat('dirty-chat')).resolves.toEqual(
+      expect.objectContaining({
+        projectId: 'local-project-2',
+        syncVersion: 2,
+        locallyModified: true,
+        projectLocallyModified: true,
+      }),
+    )
+  })
+
+  it('recomputes pending state for local-only and project toggles', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await expect(storage.getChat('chat-1')).resolves.toEqual(
+      expect.objectContaining({ pendingUpload: 1 }),
+    )
+
+    await storage.updateChatLocalOnly('chat-1', true)
+    await expect(storage.getChat('chat-1')).resolves.toEqual(
+      expect.objectContaining({ pendingUpload: 0 }),
+    )
+
+    await storage.updateChatLocalOnly('chat-1', false)
+    await storage.updateChatProject('chat-1', 'project-1')
+    await expect(storage.getChat('chat-1')).resolves.toEqual(
+      expect.objectContaining({ pendingUpload: 1 }),
+    )
+  })
+
+  it('clears only the uploaded project intent during finalization', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'chat-1',
+      title: 'Chat',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('chat-1', 1)
+    await storage.updateChatProject('chat-1', 'project-a')
+    const uploaded = await storage.getChat('chat-1')
+    await storage.finalizeUpload({
+      chatId: 'chat-1',
+      rewrites: [],
+      preUploadUpdatedAt: uploaded!.updatedAt,
+      syncVersion: 2,
+      uploadedProjectId: 'project-a',
+      projectIntentIncluded: true,
+    })
+    await expect(storage.getChat('chat-1')).resolves.toEqual(
+      expect.objectContaining({ projectLocallyModified: false }),
+    )
+
+    await storage.updateChatProject('chat-1', 'project-b')
+    await storage.finalizeUpload({
+      chatId: 'chat-1',
+      rewrites: [],
+      preUploadUpdatedAt: uploaded!.updatedAt,
+      syncVersion: 3,
+      uploadedProjectId: 'project-a',
+      projectIntentIncluded: true,
+    })
+    await expect(storage.getChat('chat-1')).resolves.toEqual(
+      expect.objectContaining({
+        projectId: 'project-b',
+        projectLocallyModified: true,
+      }),
+    )
+  })
+
+  it('preserves reset rows when an empty wipe snapshot is reconciled', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    await storage.saveChat({
+      id: 'reset-chat',
+      title: 'Reset',
+      messages: [{ role: 'user', content: 'hello' } as any],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    await storage.markAsSynced('reset-chat', 3)
+    await storage.commitRevisionBatch([], '9', 'user-1')
+
+    await storage.resetSyncMetadataForAllChats()
+    await storage.clearRevisionSyncState()
+    await storage.reconcileRevisionSnapshot([], '10', 'user-1')
+
+    await expect(storage.getChat('reset-chat')).resolves.toEqual(
+      expect.objectContaining({
+        syncVersion: 0,
+        syncedAt: undefined,
+        locallyModified: true,
+      }),
+    )
+  })
+
+  it('derives pending uploads only for valid dirty content', () => {
+    const valid = {
+      locallyModified: true,
+      syncUserId: 'user-1',
+      messages: [{}] as any[],
+    }
+    expect(derivePendingUpload(valid)).toBe(1)
+    expect(derivePendingUpload({ ...valid, isLocalOnly: true })).toBe(0)
+    expect(derivePendingUpload({ ...valid, decryptionFailed: true })).toBe(0)
+    expect(derivePendingUpload({ ...valid, dataCorrupted: true })).toBe(0)
+    expect(derivePendingUpload({ ...valid, isBlankChat: true })).toBe(0)
+    expect(derivePendingUpload({ ...valid, messages: [] })).toBe(0)
+    expect(derivePendingUpload({ ...valid, locallyModified: false })).toBe(0)
+  })
+})

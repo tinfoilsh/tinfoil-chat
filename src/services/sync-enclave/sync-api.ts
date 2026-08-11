@@ -134,6 +134,40 @@ export interface ListStatusResponse {
   next_cursor?: string
 }
 
+export interface RevisionSummaryResponse {
+  current_revision: string
+  oldest_replayable_revision: string
+}
+
+export interface RevisionEvent {
+  revision: string
+  kind: 'upsert' | 'delete'
+  id: string
+  etag?: string
+  key_id?: string
+  project_id: string | null
+  updated_at: string
+}
+
+export interface RevisionEventsResponse {
+  events: RevisionEvent[]
+  next_cursor?: string
+}
+
+export interface RevisionSnapshotItem {
+  id: string
+  etag: string
+  key_id: string
+  project_id: string | null
+  updated_at: string
+}
+
+export interface RevisionSnapshotResponse {
+  items: RevisionSnapshotItem[]
+  snapshot_revision: string
+  next_cursor?: string
+}
+
 export interface DeleteRequest {
   scope: Scope
   id: string
@@ -559,6 +593,44 @@ export async function listStatus(
     updates: resp.updates ?? [],
     deletes: resp.deletes ?? [],
   }
+}
+
+export async function revisionSummary(): Promise<RevisionSummaryResponse> {
+  const client = await getSyncEnclaveClient()
+  return client.post<RevisionSummaryResponse>('/v1/sync/revision-summary', {})
+}
+
+export async function revisionEvents(req: {
+  afterRevision: string
+  throughRevision: string
+  cursor?: string
+  limit?: number
+}): Promise<RevisionEventsResponse> {
+  const client = await getSyncEnclaveClient()
+  const response = await client.post<RevisionEventsResponse>(
+    '/v1/sync/revision-events',
+    {
+      after_revision: req.afterRevision,
+      through_revision: req.throughRevision,
+      cursor: req.cursor,
+      limit: req.limit,
+    },
+  )
+  return { ...response, events: response.events ?? [] }
+}
+
+export async function revisionSnapshot(
+  req: {
+    cursor?: string
+    limit?: number
+  } = {},
+): Promise<RevisionSnapshotResponse> {
+  const client = await getSyncEnclaveClient()
+  const response = await client.post<RevisionSnapshotResponse>(
+    '/v1/sync/revision-snapshot',
+    { cursor: req.cursor, limit: req.limit },
+  )
+  return { ...response, items: response.items ?? [] }
 }
 
 export async function deleteRow(req: DeleteRequest): Promise<OKResponse> {

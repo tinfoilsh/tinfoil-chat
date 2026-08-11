@@ -18,7 +18,7 @@ import {
   push as enclavePush,
   newIdempotencyKey,
   pullItemPlaintext,
-  type ListStatusUpdate,
+  revisionSnapshot,
 } from '../sync-enclave/sync-api'
 import { RESTORE_DELETED_HEADERS } from '../sync-enclave/wire-contract'
 import { pullKey, requirePrimaryKeyB64 } from './cek-encoding'
@@ -51,19 +51,6 @@ export interface ChatListResponse {
   }>
   nextContinuationToken?: string
   hasMore: boolean
-}
-
-export interface ChatSyncStatus {
-  count: number
-  lastUpdated: string | null
-  // Snapshot of how many cloud chats were actually persisted to
-  // IndexedDB at the time this status was cached. smartSync uses
-  // it to detect post-eviction drift: if the live local count
-  // dropped below this value, the disk lost rows the cache still
-  // thinks are present, and a full pull is required. Optional for
-  // backwards compatibility with snapshots written before the
-  // field was introduced.
-  localCount?: number
 }
 
 export interface ProfileSyncStatus {
@@ -110,6 +97,7 @@ export interface UploadChatOptions {
 export interface UploadChatResult {
   syncVersion: number | null
   rewrites: AttachmentRewrite[]
+  projectIntentIncluded: boolean
 }
 
 /**
@@ -130,9 +118,12 @@ function etagToSyncVersion(etag: string | undefined): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
-function chatUpdateToMeta(
-  update: ListStatusUpdate,
-): ChatListResponse['conversations'][number] {
+function chatUpdateToMeta(update: {
+  id: string
+  etag?: string
+  project_id?: string | null
+  updated_at: string
+}): ChatListResponse['conversations'][number] {
   return {
     id: update.id,
     updatedAt: update.updated_at,
@@ -267,8 +258,14 @@ export class CloudStorageService {
     const syncedRecoveries = chat.pendingRecoveries?.filter(
       (recovery) => !isLocalRecoveryEnvelope(recovery),
     )
+    const {
+      pendingUpload: _pendingUpload,
+      syncUserId: _syncUserId,
+      projectLocallyModified: _projectLocallyModified,
+      ...chatContent
+    } = chat
     const strippedChat = {
-      ...chat,
+      ...chatContent,
       messages: stripBase64FromMessages(messages),
       pendingRecoveries:
         syncedRecoveries && syncedRecoveries.length > 0
@@ -278,14 +275,12 @@ export class CloudStorageService {
     }
     const plaintext = new TextEncoder().encode(JSON.stringify(strippedChat))
 
-    const metadata: Record<string, unknown> = {
-      messageCount: messages.length,
-      // Always emit projectId so the enclave→controlplane path
-      // mirrors what the local chat row says. A `null` clears the
-      // server's project_id column; omitting the field would leave
-      // a stale assignment behind on cross-project moves.
-      projectId: chat.projectId ?? null,
-    }
+    const metadata: Record<string, unknown> = { messageCount: messages.length }
+    const projectIntentIncluded =
+      options.restoreDeleted ||
+      (chat.syncVersion ?? 0) === 0 ||
+      chat.projectLocallyModified === true
+    if (projectIntentIncluded) metadata.projectId = chat.projectId ?? null
     if (options.restoreDeleted) {
       metadata.restoreDeleted = true
     }
@@ -314,6 +309,7 @@ export class CloudStorageService {
     return {
       syncVersion: etagToSyncVersion(pushResp.etag) ?? null,
       rewrites,
+      projectIntentIncluded,
     }
   }
 
@@ -466,6 +462,37 @@ export class CloudStorageService {
       })
       throw error
     }
+  }
+
+  async downloadChats(
+    chatIds: string[],
+  ): Promise<ChatListResponse['conversations']> {
+    if (chatIds.length === 0) return []
+    const keys = pullKey()
+    if (keys.length === 0) {
+      throw new Error('Cloud sync key is unavailable')
+    }
+    const response = await enclavePull({ scope: 'chat', ids: chatIds, keys })
+    const conversations: ChatListResponse['conversations'] = []
+    for (const item of response.items) {
+      if (!item.ok) {
+        throw new Error(item.code ?? 'Failed to batch-pull chat content')
+      }
+      const plaintext = pullItemPlaintext(item)
+      if (!plaintext) {
+        throw new Error('Sync enclave returned empty chat content')
+      }
+      conversations.push({
+        id: item.id,
+        updatedAt: '',
+        syncVersion: etagToSyncVersion(item.etag) ?? 1,
+        content: new TextDecoder().decode(plaintext),
+      })
+    }
+    if (conversations.length !== chatIds.length) {
+      throw new Error('Sync enclave returned an incomplete chat batch')
+    }
+    return conversations
   }
 
   /**
@@ -623,12 +650,15 @@ export class CloudStorageService {
     }
   }
 
-  async deleteChat(chatId: string): Promise<void> {
+  async deleteChat(
+    chatId: string,
+    idempotencyKey = newIdempotencyKey(),
+  ): Promise<void> {
     await enclaveDeleteRow({
       scope: 'chat',
       id: chatId,
       ifMatch: null,
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey,
       keyB64: requirePrimaryKeyB64(),
     })
   }
@@ -639,33 +669,28 @@ export class CloudStorageService {
   }> {
     let deleted = 0
     let cursor: string | undefined
+    const ids: string[] = []
     do {
-      const status = await enclaveListStatus({
-        scope: 'chat',
-        cursor,
-        limit: 500,
-      })
-      for (const update of status.updates) {
-        // Unconditional delete (ifMatch: null) matches single-chat
-        // `deleteChat` and the "nuke everything" semantic of this
-        // entry point. A CAS-guarded delete would 412 on any chat
-        // that was concurrently written between the listStatus page
-        // and the delete, aborting the whole loop and leaving the
-        // tail of pending pages un-deleted.
-        await enclaveDeleteRow({
-          scope: 'chat',
-          id: update.id,
-          ifMatch: null,
-          idempotencyKey: newIdempotencyKey(),
-          keyB64: requirePrimaryKeyB64(),
-        })
-        deleted++
-      }
-      // Loop until the server stops advertising a next cursor — the
-      // freshly-deleted rows fall out of the result set so each page
-      // is fresh work, never a re-pass of what we just deleted.
+      const status = await revisionSnapshot({ cursor, limit: 500 })
+      ids.push(...status.items.map((item) => item.id))
       cursor = status.next_cursor
     } while (cursor)
+    for (const id of ids) {
+      // Unconditional delete (ifMatch: null) matches single-chat
+      // `deleteChat` and the "nuke everything" semantic of this
+      // entry point. A CAS-guarded delete would 412 on any chat
+      // that was concurrently written between the listStatus page
+      // and the delete, aborting the whole loop and leaving the
+      // tail of pending pages un-deleted.
+      await enclaveDeleteRow({
+        scope: 'chat',
+        id,
+        ifMatch: null,
+        idempotencyKey: newIdempotencyKey(),
+        keyB64: requirePrimaryKeyB64(),
+      })
+      deleted++
+    }
     return { deleted }
   }
 
@@ -691,27 +716,6 @@ export class CloudStorageService {
     return response.json()
   }
 
-  async getChatSyncStatus(): Promise<ChatSyncStatus> {
-    let count = 0
-    let lastUpdated: string | null = null
-    let cursor: string | undefined
-    do {
-      const status = await enclaveListStatus({
-        scope: 'chat',
-        cursor,
-        limit: 500,
-      })
-      count += status.updates.length
-      for (const update of status.updates) {
-        if (!lastUpdated || update.updated_at > lastUpdated) {
-          lastUpdated = update.updated_at
-        }
-      }
-      cursor = status.next_cursor
-    } while (cursor)
-    return { count, lastUpdated }
-  }
-
   /**
    * Intentionally a no-op. Project membership rides on the next
    * `uploadChat` (via `metadata.projectId`) and the controlplane
@@ -723,86 +727,6 @@ export class CloudStorageService {
     _projectId: string | null,
   ): Promise<void> {
     return
-  }
-
-  /**
-   * Walk the list-status pages once and return both event streams since
-   * `since`: row updates and delete tombstones. The deletion reconciliation
-   * pass needs both from the same walk so it can arbitrate a tombstone
-   * against a later re-create of the same row.
-   */
-  async listChatEventsSince(since: string): Promise<{
-    updates: Array<{ id: string; updatedAt: string }>
-    deletes: Array<{ id: string; deletedAt: string }>
-  }> {
-    const updates: Array<{ id: string; updatedAt: string }> = []
-    const deletes: Array<{ id: string; deletedAt: string }> = []
-    let cursor: string | undefined = since
-    do {
-      const status = await enclaveListStatus({
-        scope: 'chat',
-        cursor,
-        limit: 500,
-      })
-      for (const u of status.updates) {
-        updates.push({ id: u.id, updatedAt: u.updated_at })
-      }
-      for (const d of status.deletes) {
-        deletes.push({ id: d.id, deletedAt: d.deleted_at })
-      }
-      cursor = status.next_cursor
-    } while (cursor)
-    return { updates, deletes }
-  }
-
-  async getChatsUpdatedSince(options: {
-    since: string
-    includeContent?: boolean
-    continuationToken?: string
-  }): Promise<ChatListResponse> {
-    // Keep paging while a window contains only deletes: a page with
-    // zero updates but a next cursor must not look like "nothing
-    // changed" to the caller, or updates past it are never fetched.
-    // Mirrors getProjectsUpdatedSince in project-storage.
-    let cursor: string | undefined = options.continuationToken ?? options.since
-    let nextContinuationToken: string | undefined
-    const conversations: ChatListResponse['conversations'] = []
-    do {
-      const status = await enclaveListStatus({
-        scope: 'chat',
-        cursor,
-        limit: ENCLAVE_CHAT_LIST_LIMIT,
-      })
-      conversations.push(...status.updates.map(chatUpdateToMeta))
-      cursor = status.next_cursor
-      nextContinuationToken = status.next_cursor
-    } while (
-      conversations.length < ENCLAVE_CHAT_LIST_LIMIT &&
-      hasNextCursor(cursor)
-    )
-    if (options.includeContent && conversations.length > 0) {
-      await this.attachInlineContent(conversations)
-    }
-    return {
-      conversations,
-      nextContinuationToken,
-      hasMore: hasNextCursor(nextContinuationToken),
-    }
-  }
-
-  async getAllChatsSyncStatus(): Promise<ChatSyncStatus> {
-    return this.getChatSyncStatus()
-  }
-
-  async getAllChatsUpdatedSince(options: {
-    since: string
-    continuationToken?: string
-  }): Promise<ChatListResponse> {
-    return this.getChatsUpdatedSince({
-      since: options.since,
-      continuationToken: options.continuationToken,
-      includeContent: true,
-    })
   }
 }
 

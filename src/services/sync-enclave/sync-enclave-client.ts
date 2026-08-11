@@ -155,6 +155,7 @@ export class SyncEnclaveClient {
     const requestUrl = new URL(path, SYNC_ENCLAVE_URL).toString()
     const baseHeaders = new Headers(init.headers)
     baseHeaders.set('Accept', 'application/json')
+    baseHeaders.set('X-Sync-Protocol', '2')
     if (init.body && !baseHeaders.has('Content-Type')) {
       baseHeaders.set('Content-Type', 'application/json')
     }

@@ -120,11 +120,8 @@ export const USER_PREFS_NATIVE_APP_DISMISSED =
 
 // --- localStorage: Sync/data state -----------------------------------------
 export const SYNC_CHATS = 'tinfoil-sync-chats'
+// Legacy chat sync keys removed during revision-v2 bootstrap.
 export const SYNC_CHAT_STATUS = 'tinfoil-sync-chat-status'
-// Server timestamp up to which chat delete tombstones have been fetched AND
-// applied locally. Kept separate from SYNC_CHAT_STATUS: the status cache is
-// a disposable freshness snapshot, while this watermark encodes durable
-// reconciliation progress and must never advance past an unapplied tombstone.
 export const SYNC_CHAT_DELETES_WATERMARK = 'tinfoil-sync-chat-deletes-watermark'
 export const SYNC_CHAT_DELETION_REVISION = 'tinfoil-sync-chat-deletion-revision'
 export const SYNC_ALL_CHATS_STATUS = 'tinfoil-sync-all-chats-status'
