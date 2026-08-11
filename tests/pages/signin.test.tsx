@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const auth = vi.hoisted(() => {
   const signIn = {
+    id: undefined as string | undefined,
     status: 'needs_identifier',
     supportedSecondFactors: [] as Array<{ strategy: string }>,
     create: vi.fn(),
@@ -28,10 +29,16 @@ const auth = vi.hoisted(() => {
     finalize: vi.fn(),
   }
 
-  return { signIn, signUp, routerPush: vi.fn() }
+  const router = {
+    isReady: true,
+    query: {} as Record<string, string | undefined>,
+  }
+
+  return { clerkLoaded: true, signIn, signUp, router, routerPush: vi.fn() }
 })
 
 vi.mock('@clerk/nextjs', () => ({
+  useClerk: () => ({ loaded: auth.clerkLoaded }),
   useSignIn: () => ({
     signIn: auth.signIn,
     errors: { fields: {} },
@@ -45,12 +52,16 @@ vi.mock('@clerk/nextjs', () => ({
 }))
 
 vi.mock('next/router', () => ({
-  useRouter: () => ({ push: auth.routerPush, query: {}, isReady: true }),
+  useRouter: () => ({ push: auth.routerPush, ...auth.router }),
 }))
 
 describe('SignInPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.clerkLoaded = true
+    auth.router.isReady = true
+    auth.router.query = {}
+    auth.signIn.id = undefined
     auth.signIn.status = 'needs_identifier'
     auth.signIn.supportedSecondFactors = []
     auth.signUp.status = 'missing_requirements'
@@ -62,6 +73,7 @@ describe('SignInPage', () => {
     auth.signIn.mfa.verifyEmailCode.mockResolvedValue({ error: null })
     auth.signIn.mfa.verifyTOTP.mockResolvedValue({ error: null })
     auth.signIn.sso.mockResolvedValue({ error: null })
+    auth.signIn.reset.mockResolvedValue({ error: null })
     auth.signUp.create.mockResolvedValue({ error: null })
     auth.signUp.update.mockResolvedValue({ error: null })
   })
@@ -95,6 +107,34 @@ describe('SignInPage', () => {
       'text-balance',
       'text-center',
     )
+  })
+
+  it('clears an abandoned sign-in attempt on a fresh landing', async () => {
+    auth.signIn.id = 'stale_sign_in'
+
+    render(<SignInPage />)
+
+    await waitFor(() => {
+      expect(auth.signIn.reset).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('preserves a sign-in attempt resumed from the OAuth callback', () => {
+    auth.router.query = { resume: '1' }
+    auth.signIn.id = 'resumed_sign_in'
+
+    render(<SignInPage />)
+
+    expect(auth.signIn.reset).not.toHaveBeenCalled()
+  })
+
+  it('does not reset a sign-in attempt started after landing', () => {
+    const { rerender } = render(<SignInPage />)
+
+    auth.signIn.id = 'new_sign_in'
+    rerender(<SignInPage />)
+
+    expect(auth.signIn.reset).not.toHaveBeenCalled()
   })
 
   it('sends a privacy-preserving email code for sign-in or sign-up', async () => {
