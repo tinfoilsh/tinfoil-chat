@@ -17,6 +17,7 @@ import { resetTinfoilClient } from '@/services/inference/tinfoil-client'
 import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
+import { projectCache } from '@/services/storage/project-cache'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
@@ -55,6 +56,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   }
 
   invalidateProfileSyncGeneration(true)
+  projectCache.invalidate()
   cloudSync.resetForAccountChange()
   authTokenManager.reset()
 
@@ -129,7 +131,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear IndexedDB
   reportStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
   try {
-    await indexedDBStorage.deleteAllChats()
+    await Promise.all([indexedDBStorage.deleteAllChats(), projectCache.clear()])
   } catch (error) {
     logError('Failed to clear IndexedDB', error, {
       component: context,

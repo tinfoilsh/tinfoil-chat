@@ -191,7 +191,7 @@ export class ProjectStorageService {
   async updateProject(
     projectId: string,
     data: UpdateProjectData,
-  ): Promise<void> {
+  ): Promise<Project> {
     if (!(await canWriteToCloud())) {
       throw new Error(
         'Cloud writes are blocked until your encryption key is verified',
@@ -214,7 +214,7 @@ export class ProjectStorageService {
 
     const plaintext = new TextEncoder().encode(JSON.stringify(projectData))
 
-    await enclavePush({
+    const pushResp = await enclavePush({
       scope: PROJECT_SCOPE,
       id: projectId,
       keyB64: requirePrimaryKeyB64(),
@@ -223,6 +223,14 @@ export class ProjectStorageService {
       idempotencyKey: newIdempotencyKey(),
       metadata: {},
     })
+
+    return {
+      id: projectId,
+      ...projectData,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString(),
+      syncVersion: etagToSyncVersion(pushResp.etag),
+    }
   }
 
   async getProject(projectId: string): Promise<Project | null> {

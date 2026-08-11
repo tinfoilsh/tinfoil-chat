@@ -1,6 +1,7 @@
 import {
   fetchFavicon,
   fetchLinkMetadata,
+  MetadataClientError,
 } from '@/services/inference/metadata-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -133,8 +134,66 @@ describe('fetchLinkMetadata', () => {
       new Response('unavailable', { status: 502 }),
     )
 
-    await expect(fetchLinkMetadata('https://failure.example/')).rejects.toThrow(
-      'Metadata fetch failed: 502',
+    await expect(
+      fetchLinkMetadata('https://failure.example/'),
+    ).rejects.toMatchObject({
+      name: 'MetadataClientError',
+      code: 'HTTP_ERROR',
+      status: 502,
+    } satisfies Partial<MetadataClientError>)
+  })
+
+  it('drops empty and invalid preview image URLs', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://example.com/',
+            title: ' Example ',
+            description: null,
+            site_name: null,
+            image: '   ',
+            cached: false,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://example.org/',
+            title: 'Example',
+            description: null,
+            site_name: null,
+            image: 'javascript:alert(1)',
+            cached: false,
+          }),
+          { status: 200 },
+        ),
+      )
+
+    await expect(
+      fetchLinkMetadata('https://example.com/'),
+    ).resolves.toMatchObject({ title: 'Example', image: null })
+    await expect(
+      fetchLinkMetadata('https://example.org/'),
+    ).resolves.toMatchObject({ image: null })
+  })
+
+  it('classifies malformed metadata responses', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response('not-json', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
     )
+
+    await expect(
+      fetchLinkMetadata('https://invalid-response.example/'),
+    ).rejects.toMatchObject({
+      name: 'MetadataClientError',
+      code: 'INVALID_RESPONSE',
+      status: 200,
+    })
   })
 })

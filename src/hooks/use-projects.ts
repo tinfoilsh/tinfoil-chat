@@ -1,5 +1,9 @@
 import { projectStorage } from '@/services/cloud/project-storage'
 import { ENCRYPTION_KEY_CHANGED_EVENT } from '@/services/encryption/encryption-service'
+import {
+  PROJECT_CACHE_UPDATED_EVENT,
+  projectCache,
+} from '@/services/storage/project-cache'
 import type { Project, ProjectListResponse } from '@/types/project'
 import { logError, logInfo } from '@/utils/error-handling'
 import { useAuth } from '@clerk/nextjs'
@@ -22,6 +26,11 @@ interface UseProjectsReturn {
 }
 
 type ProjectListItem = ProjectListResponse['projects'][number]
+
+const refreshByUser = new Map<
+  string,
+  { generation: number; promise: Promise<Project[]> }
+>()
 
 function projectFromListItem(
   item: ProjectListItem,
@@ -66,59 +75,104 @@ async function loadProjectPage(
   }
 }
 
+async function fetchAllProjects(): Promise<Project[]> {
+  const projects: Project[] = []
+  let continuationToken: string | undefined
+
+  do {
+    const page = await loadProjectPage(continuationToken)
+    projects.push(...page.projects)
+    continuationToken = page.response.nextContinuationToken
+  } while (continuationToken)
+
+  return projects
+}
+
+function revalidateProjects(userId: string): Promise<Project[]> {
+  const cacheGeneration = projectCache.captureGeneration()
+  const refreshGeneration = projectCache.captureRefreshGeneration()
+  const existing = refreshByUser.get(userId)
+  if (existing?.generation === refreshGeneration) return existing.promise
+
+  const refresh = fetchAllProjects()
+    .then(async (projects) => {
+      if (!projectCache.isCurrentRefreshGeneration(refreshGeneration)) {
+        return projectCache.getProjects(userId)
+      }
+      try {
+        await projectCache.replaceProjects(userId, projects, cacheGeneration)
+      } catch (error) {
+        logError('Failed to cache projects', error, {
+          component: 'useProjects',
+          action: 'cacheProjects',
+        })
+      }
+      return projects
+    })
+    .finally(() => {
+      if (refreshByUser.get(userId)?.promise === refresh) {
+        refreshByUser.delete(userId)
+      }
+    })
+  refreshByUser.set(userId, { generation: refreshGeneration, promise: refresh })
+  return refresh
+}
+
 export function useProjects(
   options: UseProjectsOptions = {},
 ): UseProjectsReturn {
   const { autoLoad = true } = options
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, userId } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [continuationToken, setContinuationToken] = useState<
-    string | undefined
-  >()
-  const initializedRef = useRef(false)
-  const isSignedInRef = useRef(isSignedIn)
+  const initializedUserRef = useRef<string | null>(null)
+  const currentUserRef = useRef(userId)
 
   useEffect(() => {
-    isSignedInRef.current = isSignedIn
-  }, [isSignedIn])
+    currentUserRef.current = userId
+  }, [userId])
 
   const loadProjects = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !userId) {
       setProjects([])
       return
     }
 
-    setLoading(true)
+    const requestUserId = userId
+    setLoading(projects.length === 0)
     setError(null)
+    let remoteApplied = false
+
+    void projectCache
+      .getProjects(requestUserId)
+      .then((cachedProjects) => {
+        if (currentUserRef.current !== requestUserId || remoteApplied) return
+
+        setProjects(cachedProjects)
+        if (cachedProjects.length > 0) setLoading(false)
+      })
+      .catch((cacheError) => {
+        logError('Failed to load cached projects', cacheError, {
+          component: 'useProjects',
+          action: 'loadCachedProjects',
+        })
+      })
 
     try {
-      const { response, projects: decryptedProjects } = await loadProjectPage()
+      const remoteProjects = await revalidateProjects(requestUserId)
+      if (currentUserRef.current !== requestUserId) return
 
-      // Re-check auth state after async operations - user may have logged out
-      if (!isSignedInRef.current) {
-        return
-      }
-
-      setProjects(decryptedProjects)
-      setHasMore(response.hasMore)
-      setContinuationToken(response.nextContinuationToken)
-
+      remoteApplied = true
+      setProjects(remoteProjects)
       logInfo('Loaded projects', {
         component: 'useProjects',
         action: 'loadProjects',
-        metadata: {
-          count: decryptedProjects.length,
-          hasMore: response.hasMore,
-        },
+        metadata: { count: remoteProjects.length },
       })
     } catch (err) {
-      // Don't set error state if user logged out during the request
-      if (!isSignedInRef.current) {
-        return
-      }
+      if (currentUserRef.current !== requestUserId) return
+
       const message =
         err instanceof Error ? err.message : 'Failed to load projects'
       setError(message)
@@ -127,77 +181,57 @@ export function useProjects(
         action: 'loadProjects',
       })
     } finally {
-      setLoading(false)
+      if (currentUserRef.current === requestUserId) setLoading(false)
     }
-  }, [isSignedIn])
+  }, [isSignedIn, userId, projects.length])
 
-  const loadMore = useCallback(async () => {
-    if (!isSignedIn || !hasMore || loading || !continuationToken) return
-
-    setLoading(true)
-    setError(null)
-
-    try {
-      const { response, projects: decryptedProjects } =
-        await loadProjectPage(continuationToken)
-
-      // Re-check auth state after async operations - user may have logged out
-      if (!isSignedInRef.current) {
-        return
-      }
-
-      setProjects((prev) => [...prev, ...decryptedProjects])
-      setHasMore(response.hasMore)
-      setContinuationToken(response.nextContinuationToken)
-    } catch (err) {
-      // Don't set error state if user logged out during the request
-      if (!isSignedInRef.current) {
-        return
-      }
-      const message =
-        err instanceof Error ? err.message : 'Failed to load more projects'
-      setError(message)
-      logError('Failed to load more projects', err, {
-        component: 'useProjects',
-        action: 'loadMore',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [isSignedIn, hasMore, loading, continuationToken])
-
-  const refresh = useCallback(async () => {
-    setContinuationToken(undefined)
-    await loadProjects()
-  }, [loadProjects])
+  const refresh = useCallback(() => loadProjects(), [loadProjects])
+  const loadMore = useCallback(async () => {}, [])
 
   useEffect(() => {
-    if (autoLoad && isSignedIn && !initializedRef.current) {
-      initializedRef.current = true
-      loadProjects()
+    if (
+      autoLoad &&
+      isSignedIn &&
+      userId &&
+      initializedUserRef.current !== userId
+    ) {
+      initializedUserRef.current = userId
+      void loadProjects()
     }
-  }, [autoLoad, isSignedIn, loadProjects])
+  }, [autoLoad, isSignedIn, userId, loadProjects])
 
   useEffect(() => {
-    if (!isSignedIn) {
-      initializedRef.current = false
+    if (!isSignedIn || !userId) {
+      initializedUserRef.current = null
       setProjects([])
-      setContinuationToken(undefined)
-      setHasMore(false)
+      setLoading(false)
+      return
     }
-  }, [isSignedIn])
 
-  // Listen for encryption key changes to retry decryption
+    const handleCacheUpdate = (event: Event) => {
+      const updatedUserId = (event as CustomEvent<{ userId?: string }>).detail
+        .userId
+      if (updatedUserId && updatedUserId !== userId) return
+      if (!updatedUserId) setProjects([])
+
+      void projectCache.getProjects(userId).then((cachedProjects) => {
+        if (currentUserRef.current === userId) setProjects(cachedProjects)
+      })
+    }
+
+    window.addEventListener(PROJECT_CACHE_UPDATED_EVENT, handleCacheUpdate)
+    return () =>
+      window.removeEventListener(PROJECT_CACHE_UPDATED_EVENT, handleCacheUpdate)
+  }, [isSignedIn, userId])
+
   useEffect(() => {
     const handleKeyChange = () => {
-      // Only refresh if we have projects that failed decryption
-      const hasFailedDecryption = projects.some((p) => p.decryptionFailed)
-      if (hasFailedDecryption && isSignedIn) {
+      if (projects.some((project) => project.decryptionFailed) && isSignedIn) {
         logInfo('Encryption key changed, refreshing projects', {
           component: 'useProjects',
           action: 'encryptionKeyChanged',
         })
-        refresh()
+        void refresh()
       }
     }
 
@@ -211,7 +245,7 @@ export function useProjects(
     projects,
     loading,
     error,
-    hasMore,
+    hasMore: false,
     loadProjects,
     loadMore,
     refresh,

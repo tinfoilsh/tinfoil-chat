@@ -1,5 +1,6 @@
 import { logError } from '@/utils/error-handling'
 import { SecureClient } from 'tinfoil'
+import { z } from 'zod'
 
 /**
  * Opengraph-metadata client.
@@ -12,6 +13,15 @@ import { SecureClient } from 'tinfoil'
 
 const METADATA_ENCLAVE = 'https://opengraph-metadata.tinfoil.sh'
 const METADATA_CONFIG_REPO = 'tinfoilsh/confidential-website-metadata-fetcher'
+const nullableString = z.string().nullable()
+const metadataResponseSchema = z.object({
+  url: z.string(),
+  title: nullableString,
+  description: nullableString,
+  site_name: nullableString,
+  image: nullableString,
+  cached: z.boolean(),
+})
 
 let cachedClient: SecureClient | null = null
 
@@ -34,13 +44,16 @@ export interface LinkMetadata {
   cached: boolean
 }
 
-interface MetadataResponse {
-  url: string
-  title: string | null
-  description: string | null
-  site_name: string | null
-  image: string | null
-  cached: boolean
+export class MetadataClientError extends Error {
+  constructor(
+    message: string,
+    public readonly code: 'HTTP_ERROR' | 'INVALID_RESPONSE',
+    public readonly status?: number,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
+    this.name = 'MetadataClientError'
+  }
 }
 
 interface FaviconResponse {
@@ -120,16 +133,54 @@ async function doFetchLinkMetadata(url: string): Promise<LinkMetadata> {
         },
       },
     )
-    throw new Error(`Metadata fetch failed: ${response.status}`)
+    throw new MetadataClientError(
+      'Metadata service request failed',
+      'HTTP_ERROR',
+      response.status,
+    )
   }
 
-  const data: MetadataResponse = await response.json()
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch (cause) {
+    const error = new MetadataClientError(
+      'Metadata response failed validation',
+      'INVALID_RESPONSE',
+      response.status,
+      { cause },
+    )
+    logError('Metadata response failed validation', error, {
+      component: 'metadata-client',
+      action: 'fetchLinkMetadata',
+      metadata: { status: response.status },
+    })
+    throw error
+  }
+
+  const parsed = metadataResponseSchema.safeParse(body)
+  if (!parsed.success) {
+    const error = new MetadataClientError(
+      'Metadata response failed validation',
+      'INVALID_RESPONSE',
+      response.status,
+      { cause: parsed.error },
+    )
+    logError('Metadata response failed validation', error, {
+      component: 'metadata-client',
+      action: 'fetchLinkMetadata',
+      metadata: { status: response.status },
+    })
+    throw error
+  }
+
+  const data = parsed.data
   return {
     url: data.url,
-    title: data.title,
-    description: data.description,
-    siteName: data.site_name,
-    image: data.image,
+    title: trimmedOrNull(data.title),
+    description: trimmedOrNull(data.description),
+    siteName: trimmedOrNull(data.site_name),
+    image: validHttpUrlOrNull(data.image),
     cached: data.cached,
   }
 }
@@ -182,6 +233,25 @@ function faviconRequestKey(url: string): string {
     return new URL(url).hostname.toLowerCase()
   } catch {
     return url
+  }
+}
+
+function trimmedOrNull(value: string | null): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+function validHttpUrlOrNull(value: string | null): string | null {
+  const trimmed = trimmedOrNull(value)
+  if (!trimmed) return null
+
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed.toString()
+      : null
+  } catch {
+    return null
   }
 }
 

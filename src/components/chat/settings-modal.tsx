@@ -40,6 +40,7 @@ import {
   type PasskeyCredentialEntry,
 } from '@/services/passkey'
 import { chatStorage } from '@/services/storage/chat-storage'
+import { projectCache } from '@/services/storage/project-cache'
 import { sessionChatStorage } from '@/services/storage/session-storage'
 import { attachmentGet } from '@/services/sync-enclave/sync-api'
 import { TINFOIL_COLORS } from '@/theme/colors'
@@ -1606,6 +1607,7 @@ export function SettingsModal({
 
       let imported = 0
       const errors: string[] = []
+      projectCache.beginMutation()
 
       // Dynamically import project storage to avoid circular dependencies
       const { projectStorage } =
@@ -1645,6 +1647,8 @@ export function SettingsModal({
           type: 'projects',
         })
       }
+
+      await refreshProjects()
 
       setImportResult({
         success: errors.length === 0,
@@ -1888,6 +1892,7 @@ export function SettingsModal({
     setIsDeletingAllProjects(true)
     try {
       const result = await projectStorage.deleteAllProjects()
+      await projectCache.clear()
       toast({
         title: 'All projects deleted',
         description: result.notificationSent
@@ -2360,17 +2365,17 @@ ${encryptionKey.replace('key_', '')}
                       <div className="flex items-start justify-between">
                         <div className="mr-3 flex-1">
                           <div className="font-aeonik text-sm font-medium text-content-primary">
-                            Pixelate sidebar chat titles
+                            Redact sidebar chat titles
                           </div>
                           <div className="font-aeonik-fono text-xs text-content-muted">
-                            Pixelate inactive chat titles until you hover over
+                            Cover inactive chat titles until you hover over
                             them.
                           </div>
                         </div>
                         <label className="relative inline-flex cursor-pointer items-center">
                           <input
                             type="checkbox"
-                            aria-label="Pixelate sidebar chat titles"
+                            aria-label="Redact sidebar chat titles"
                             checked={pixelateSidebarChatTitles}
                             onChange={(e) => {
                               const newValue = e.target.checked

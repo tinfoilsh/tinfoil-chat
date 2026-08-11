@@ -4,6 +4,7 @@ import { UI_EXPAND_PROJECTS_ON_MOUNT } from '@/constants/storage-keys'
 import { useMemory } from '@/hooks/use-memory'
 import { projectStorage } from '@/services/cloud/project-storage'
 import { projectEvents } from '@/services/project/project-events'
+import { projectCache } from '@/services/storage/project-cache'
 import type { Fact, MemoryState } from '@/types/memory'
 import type {
   CreateProjectData,
@@ -34,7 +35,7 @@ export function ProjectProvider({
   children,
   initialProjectId,
 }: ProjectProviderProps) {
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, userId } = useAuth()
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>(
     [],
@@ -85,18 +86,27 @@ export function ProjectProvider({
     () => ({
       onSave: async (memory: MemoryState) => {
         if (!activeProject) return
-        await projectStorage.updateProject(activeProject.id, {
-          memory: memory.facts,
-        })
-        setActiveProject((prev) =>
-          prev && prev.id === activeProject.id
-            ? {
-                ...prev,
-                memory: memory.facts,
-                updatedAt: new Date().toISOString(),
-              }
-            : prev,
+        const cacheGeneration = projectCache.beginMutation()
+        const updatedProject = await projectStorage.updateProject(
+          activeProject.id,
+          {
+            memory: memory.facts,
+          },
         )
+        setActiveProject((prev) =>
+          prev && prev.id === activeProject.id ? updatedProject : prev,
+        )
+        if (userId) {
+          void projectCache
+            .saveProject(userId, updatedProject, cacheGeneration)
+            .catch((error) =>
+              logError('Failed to cache updated project', error, {
+                component: 'ProjectProvider',
+                action: 'cacheProjectMemory',
+                metadata: { projectId: activeProject.id },
+              }),
+            )
+        }
       },
       onLoad: async (): Promise<MemoryState> => {
         return {
@@ -105,7 +115,7 @@ export function ProjectProvider({
         }
       },
     }),
-    [activeProject],
+    [activeProject, userId],
   )
 
   const { processMessages, loadMemory } = useMemory({
@@ -146,6 +156,7 @@ export function ProjectProvider({
   const enterProjectMode = useCallback(
     async (projectId: string, projectName?: string): Promise<boolean> => {
       const generation = projectLoadGenerationRef.current + 1
+      const cacheGeneration = projectCache.captureGeneration()
       projectLoadGenerationRef.current = generation
       documentRefreshGenerationRef.current += 1
       pendingProjectIdRef.current = projectId
@@ -158,6 +169,17 @@ export function ProjectProvider({
         const project = await projectStorage.getProject(projectId)
         if (!project) {
           throw new Error('Project not found')
+        }
+        if (userId) {
+          void projectCache
+            .saveProject(userId, project, cacheGeneration)
+            .catch((error) =>
+              logError('Failed to cache opened project', error, {
+                component: 'ProjectProvider',
+                action: 'cacheOpenedProject',
+                metadata: { projectId },
+              }),
+            )
         }
 
         const documentsResponse = await projectStorage.listDocuments(projectId)
@@ -208,7 +230,7 @@ export function ProjectProvider({
         }
       }
     },
-    [],
+    [userId],
   )
 
   // Load initial project from URL if provided
@@ -244,9 +266,21 @@ export function ProjectProvider({
     async (data: CreateProjectData): Promise<Project> => {
       setLoading(true)
       setError(null)
+      const cacheGeneration = projectCache.beginMutation()
 
       try {
         const project = await projectStorage.createProject(data)
+        if (userId) {
+          void projectCache
+            .saveProject(userId, project, cacheGeneration)
+            .catch((error) =>
+              logError('Failed to cache created project', error, {
+                component: 'ProjectProvider',
+                action: 'cacheCreatedProject',
+                metadata: { projectId: project.id },
+              }),
+            )
+        }
 
         logInfo('Created project', {
           component: 'ProjectProvider',
@@ -264,30 +298,31 @@ export function ProjectProvider({
         setLoading(false)
       }
     },
-    [],
+    [userId],
   )
 
   const updateProject = useCallback(
     async (id: string, data: UpdateProjectData) => {
       setError(null)
+      const cacheGeneration = projectCache.beginMutation()
 
       try {
-        await projectStorage.updateProject(id, data)
+        const updatedProject = await projectStorage.updateProject(id, data)
 
         setActiveProject((prev) =>
-          prev && prev.id === id
-            ? {
-                ...prev,
-                name: data.name ?? prev.name,
-                description: data.description ?? prev.description,
-                systemInstructions:
-                  data.systemInstructions ?? prev.systemInstructions,
-                color: data.color ?? prev.color,
-                memory: data.memory ?? prev.memory,
-                updatedAt: new Date().toISOString(),
-              }
-            : prev,
+          prev && prev.id === id ? updatedProject : prev,
         )
+        if (userId) {
+          void projectCache
+            .saveProject(userId, updatedProject, cacheGeneration)
+            .catch((error) =>
+              logError('Failed to cache updated project', error, {
+                component: 'ProjectProvider',
+                action: 'cacheUpdatedProject',
+                metadata: { projectId: id },
+              }),
+            )
+        }
 
         logInfo('Updated project', {
           component: 'ProjectProvider',
@@ -301,15 +336,27 @@ export function ProjectProvider({
         throw err
       }
     },
-    [],
+    [userId],
   )
 
   const deleteProject = useCallback(
     async (id: string) => {
       setError(null)
+      const cacheGeneration = projectCache.beginMutation()
 
       try {
         await projectStorage.deleteProject(id)
+        if (userId) {
+          void projectCache
+            .deleteProject(userId, id, cacheGeneration)
+            .catch((error) =>
+              logError('Failed to remove cached project', error, {
+                component: 'ProjectProvider',
+                action: 'removeCachedProject',
+                metadata: { projectId: id },
+              }),
+            )
+        }
 
         if (activeProject && activeProject.id === id) {
           exitProjectMode()
@@ -327,7 +374,7 @@ export function ProjectProvider({
         throw err
       }
     },
-    [activeProject, exitProjectMode],
+    [activeProject, exitProjectMode, userId],
   )
 
   const uploadDocument = useCallback(

@@ -18,10 +18,12 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CiFloppyDisk } from 'react-icons/ci'
 import { FaLock } from '../icons/lazy-icons'
-import { PixelatedText } from '../ui/pixelated-text'
+import { RedactedText } from '../ui/redacted-text'
 import { cn } from '../ui/utils'
 import { formatRelativeTime } from './chat-list-utils'
 import { TypingAnimation } from './typing-animation'
+
+const INITIAL_TURN_MESSAGE_COUNT = 2
 
 export interface ChatItemData {
   id: string
@@ -192,11 +194,11 @@ export function ChatListItem({
   const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
   const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
-  const shouldPixelateTitle =
+  const shouldRedactTitle =
     pixelateSidebarChatTitles && hasRealTitle && !isNewChat && !isSelected
 
   useEffect(() => {
-    if (shouldPixelateTitle) {
+    if (shouldRedactTitle) {
       setDisplayTitle(chat.title)
       setIsAnimating(false)
       prevTitleRef.current = chat.title
@@ -216,7 +218,7 @@ export function ChatListItem({
       setDisplayTitle(chat.title)
       prevTitleRef.current = chat.title
     }
-  }, [chat.title, enableTitleAnimation, shouldPixelateTitle])
+  }, [chat.title, enableTitleAnimation, shouldRedactTitle])
 
   const handleAnimationComplete = () => {
     setDisplayTitle(chat.title)
@@ -289,7 +291,7 @@ export function ChatListItem({
     }
     // The mousedown that initiates a drag focuses the row's link, and since
     // the drag suppresses the click, focus would stay parked inside the
-    // privacy region and keep pixelated titles revealed after the drop.
+    // privacy region and keep protected titles revealed after the drop.
     // Scoped to this row so dragging never steals focus from unrelated
     // controls (e.g. a rename input on another row or the search field).
     if (
@@ -317,15 +319,15 @@ export function ChatListItem({
 
   const createdAt = toDate(chat.createdAt)
   const timestamp = toDate(chat.updatedAt) ?? createdAt
-  // Skip the updated time when it would read the same as the created
-  // time, so rows don't repeat "9h ago · Updated 9h ago". Without a
-  // createdAt there is nothing to compare against and the timestamp
-  // may itself be the creation time, so show it unlabeled instead of
-  // claiming "Updated".
+  // The first user/assistant turn creates the chat, so its persistence
+  // updates are not meaningful history updates. Later turns can show the
+  // updated time once streaming has settled.
   const showUpdatedTime =
+    !isStreaming &&
+    messageCount > INITIAL_TURN_MESSAGE_COUNT &&
     timestamp !== null &&
     createdAt !== null &&
-    formatRelativeTime(timestamp) !== formatRelativeTime(createdAt)
+    timestamp.getTime() !== createdAt.getTime()
 
   return (
     <div
@@ -400,10 +402,8 @@ export function ChatListItem({
                   aria-hidden="true"
                 />
               )}
-              <PixelatedText
-                text={displayTitle}
-                active={shouldPixelateTitle}
-                renderKey={isDarkMode}
+              <RedactedText
+                active={shouldRedactTitle}
                 className={cn(
                   'truncate font-aeonik-fono text-sm font-medium',
                   chat.decryptionFailed
@@ -422,7 +422,7 @@ export function ChatListItem({
                 ) : (
                   displayTitle
                 )}
-              </PixelatedText>
+              </RedactedText>
               {isStreaming ? (
                 <span
                   className="mx-2 flex w-[18px] flex-shrink-0 items-center justify-center"

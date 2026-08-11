@@ -114,6 +114,8 @@ type ChatSidebarProps = {
   backupWarningNeedsRecovery?: boolean
   onDismissBackupWarning?: () => void
   onChatsUpdated?: () => void | Promise<void>
+  initialChatPageToken?: string
+  isInitialChatPageReady?: boolean
   /** Triggers a deep (all-pages) cloud sync from the sidebar "Sync" button. */
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
@@ -188,6 +190,8 @@ export function ChatSidebar({
   backupWarningNeedsRecovery = false,
   onDismissBackupWarning,
   onChatsUpdated,
+  initialChatPageToken,
+  isInitialChatPageReady = false,
   onManualSync,
   isSyncing = false,
   isProjectMode,
@@ -346,14 +350,19 @@ export function ChatSidebar({
     hasMore: hasMoreRemote,
     isLoading: isLoadingMore,
     hasAttempted: hasAttemptedLoadMore,
-    initialize: initPagination,
+    isInitialized: isPaginationInitialized,
     loadMore: loadMorePage,
     reset: resetPagination,
   } = useCloudPagination({
     isSignedIn: !!isSignedIn,
     userId: user?.id,
+    initialToken: initialChatPageToken,
+    isInitialPageReady: isInitialChatPageReady,
   })
   const previousChatCount = useRef(chats.length)
+  const [visibleCloudChatCount, setVisibleCloudChatCount] = useState<number>(
+    PAGINATION.CHATS_PER_PAGE,
+  )
 
   // Token getter should be set by parent component that has access to getApiKey
   // The parent (ChatInterface) already sets this up through useCloudSync
@@ -468,18 +477,6 @@ export function ChatSidebar({
     currentChat?.isTemporary,
   ])
 
-  // Calculate if we should show the Load More button
-  const syncedChatsCount = chats.filter((chat) => chat.syncedAt).length
-  // Show load more if:
-  // 1. User is signed in
-  // 2. On cloud tab
-  // 3. Either: we have more remote chats, OR we haven't tried loading yet and have enough chats to suggest pagination
-  const shouldShowLoadMore =
-    isSignedIn &&
-    activeTab === 'cloud' &&
-    (hasMoreRemote ||
-      (!hasAttemptedLoadMore && syncedChatsCount >= PAGINATION.CHATS_PER_PAGE))
-
   // Detect iOS device
   useEffect(() => {
     if (isClient) {
@@ -555,69 +552,6 @@ export function ChatSidebar({
     previousChatCount.current = chats.length
   }, [chats.length, isSignedIn, onChatsUpdated, resetPagination])
 
-  // Initialize pagination state on page refresh
-  useEffect(() => {
-    const cleanupAndInitialize = async () => {
-      if (!isSignedIn || !user?.id) return
-
-      try {
-        const result = await initPagination()
-        if (result?.deletedIds.length && onChatsUpdated) {
-          await onChatsUpdated()
-        }
-      } catch (error) {
-        logError('Failed to cleanup and initialize pagination', error, {
-          component: 'ChatSidebar',
-          action: 'cleanupAndInitialize',
-        })
-      }
-    }
-
-    cleanupAndInitialize()
-  }, [isSignedIn, user?.id, onChatsUpdated, initPagination])
-
-  // Load more chats from backend (delegated to CloudSync via hook).
-  // Returns the number of chats the page added, or null on failure, so the
-  // auto-top-up path can latch itself off when a request stops making
-  // progress instead of looping.
-  const loadMoreChats = useCallback(async (): Promise<number | null> => {
-    try {
-      if (isLoadingMore || !isSignedIn) return null
-      const result = await loadMorePage()
-      const savedCount = result?.saved ?? 0
-      justLoadedMoreRef.current = savedCount > 0
-      if (savedCount > 0) {
-        setPendingChatsRender(true)
-        try {
-          // Await the reload so the render-pending flag is cleared even
-          // when the page's chats were all already present locally (the
-          // count-increase effect never fires in that case, and a stuck
-          // flag would permanently gate future pagination).
-          await onChatsUpdated?.()
-        } catch (error) {
-          // The page fetch itself succeeded — don't let a reload failure
-          // fall through to the outer catch and read as a failed page
-          // (which would trip the caller's auto-top-up latch).
-          logError('Failed to reload chats after pagination', error, {
-            component: 'ChatSidebar',
-            action: 'loadMoreChats',
-          })
-        } finally {
-          setPendingChatsRender(false)
-        }
-      }
-      return savedCount
-    } catch (error) {
-      justLoadedMoreRef.current = false
-      setPendingChatsRender(false)
-      logError('Failed to load more chats', error, {
-        component: 'ChatSidebar',
-        action: 'loadMoreChats',
-      })
-      return null
-    }
-  }, [isLoadingMore, isSignedIn, loadMorePage, onChatsUpdated])
-
   // Instead of trying to detect Safari, let's use CSS custom properties
   // that will apply the padding only when needed
   useEffect(() => {
@@ -687,19 +621,83 @@ export function ChatSidebar({
     sidebarScrollRef.current?.scrollTo({ top: 0 })
   }, [hideScrollbarWhileSectionsAnimate])
 
-  const sortedChats = useMemo(() => {
+  const filteredChats = useMemo(() => {
     // The incoming `chats` array is already sorted by `sortChats`
     // (blank-first, then most-recently-updated). We only filter
     // here; the display order matches the server's pagination so
     // newly-loaded pages slot in at the bottom without reshuffling.
     if (isSignedIn && cloudSyncEnabled) {
       if (localOnlyModeEnabled && activeTab === 'local') {
-        return chats.filter((chat) => chat.isLocalOnly && !chat.projectId)
+        return chats.filter(
+          (chat) => chat.isLocalOnly && !chat.projectId && !chat.isBlankChat,
+        )
       }
-      return chats.filter((chat) => !chat.isLocalOnly && !chat.projectId)
+      return chats.filter(
+        (chat) => !chat.isLocalOnly && !chat.projectId && !chat.isBlankChat,
+      )
     }
-    return chats.filter((chat) => (chat as any).isLocalOnly && !chat.projectId)
+    return chats.filter(
+      (chat) =>
+        (chat as any).isLocalOnly && !chat.projectId && !chat.isBlankChat,
+    )
   }, [chats, activeTab, isSignedIn, cloudSyncEnabled, localOnlyModeEnabled])
+
+  const paginatesCloudChats =
+    isSignedIn &&
+    cloudSyncEnabled &&
+    (!localOnlyModeEnabled || activeTab === 'cloud')
+  const sortedChats = useMemo(
+    () =>
+      paginatesCloudChats
+        ? filteredChats.slice(0, visibleCloudChatCount)
+        : filteredChats,
+    [filteredChats, paginatesCloudChats, visibleCloudChatCount],
+  )
+  const hasMoreLoadedChats = filteredChats.length > visibleCloudChatCount
+  const shouldShowLoadMore =
+    isInitialChatPageReady &&
+    isPaginationInitialized &&
+    paginatesCloudChats &&
+    (hasMoreRemote || hasMoreLoadedChats)
+
+  useEffect(() => {
+    setVisibleCloudChatCount(PAGINATION.CHATS_PER_PAGE)
+  }, [user?.id])
+
+  const loadMoreChats = useCallback(async (): Promise<void> => {
+    if (isLoadingMore || !isSignedIn) return
+
+    if (!hasMoreRemote) {
+      setVisibleCloudChatCount((count) => count + PAGINATION.CHATS_PER_PAGE)
+      return
+    }
+
+    try {
+      const result = await loadMorePage()
+      if (!result) return
+
+      justLoadedMoreRef.current = result.saved > 0
+      setPendingChatsRender(true)
+      try {
+        await onChatsUpdated?.()
+        setVisibleCloudChatCount((count) => count + PAGINATION.CHATS_PER_PAGE)
+      } catch (error) {
+        logError('Failed to reload chats after pagination', error, {
+          component: 'ChatSidebar',
+          action: 'loadMoreChats',
+        })
+      } finally {
+        setPendingChatsRender(false)
+      }
+    } catch (error) {
+      justLoadedMoreRef.current = false
+      setPendingChatsRender(false)
+      logError('Failed to load more chats', error, {
+        component: 'ChatSidebar',
+        action: 'loadMoreChats',
+      })
+    }
+  }, [hasMoreRemote, isLoadingMore, isSignedIn, loadMorePage, onChatsUpdated])
 
   // Prefer backing up the existing key with a passkey (PRF-capable devices
   // must stay in the passkey-only flow); fall back to the manual cloud-sync
@@ -734,76 +732,6 @@ export function ChatSidebar({
     !(localOnlyModeEnabled && activeTab === 'local')
   const chatSearch = useChatSearch(chatSearchTerm, searchEnabled)
   const isSearchActive = searchEnabled && chatSearchTerm.trim().length > 0
-
-  // Latch that disables the automatic under-filled-viewport top-up after a
-  // page request fails or adds nothing new. Without it, an error (retried
-  // instantly by the effect re-run) or a run of zero-new-chat pages would
-  // loop through requests with no user interaction. Any scroll event
-  // re-arms it (including programmatic ones from the accordion's
-  // scrollTo — acceptable, since those only follow deliberate clicks and
-  // re-arming costs at most one request).
-  const autoTopUpDisabledRef = useRef(false)
-
-  // Auto-load more chats when the user scrolls near the bottom of the
-  // sidebar. Deliberately scroll-event driven rather than an
-  // IntersectionObserver: recreating an observer (this effect re-runs every
-  // time isLoadingMore flips after a page) re-fires its initial callback,
-  // and with the sentinel sitting inside the unified scroller that cascaded
-  // into fetching every remaining page. Scroll events only fire on real
-  // user scrolling, so each near-bottom scroll loads at most one page.
-  useEffect(() => {
-    const scroller = sidebarScrollRef.current
-    if (!scroller) return
-
-    const maybeLoadMore = (fromUserScroll: boolean) => {
-      if (
-        !shouldShowLoadMore ||
-        isLoadingMore ||
-        pendingChatsRender ||
-        !isSignedIn ||
-        !isChatHistoryExpanded ||
-        isSearchActive
-      ) {
-        return
-      }
-      if (fromUserScroll) {
-        autoTopUpDisabledRef.current = false
-      } else if (autoTopUpDisabledRef.current) {
-        return
-      }
-      const distanceFromBottom =
-        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-      if (
-        distanceFromBottom <= CONSTANTS.SIDEBAR_AUTOLOAD_BOTTOM_THRESHOLD_PX
-      ) {
-        void loadMoreChats().then((savedCount) => {
-          if (savedCount === null || savedCount === 0) {
-            autoTopUpDisabledRef.current = true
-          }
-        })
-      }
-    }
-
-    // Under-filled viewport: without a scrollbar the scroll listener can
-    // never fire, so top up one page at a time (each render round-trips
-    // through pendingChatsRender before the next check) until the list
-    // overflows, the last page is reached, or the latch trips.
-    if (scroller.scrollHeight <= scroller.clientHeight) {
-      maybeLoadMore(false)
-    }
-
-    const onScroll = () => maybeLoadMore(true)
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', onScroll)
-  }, [
-    shouldShowLoadMore,
-    isLoadingMore,
-    pendingChatsRender,
-    isSignedIn,
-    loadMoreChats,
-    isChatHistoryExpanded,
-    isSearchActive,
-  ])
 
   const searchResultChats = useMemo((): ChatItemData[] => {
     if (!isSearchActive) return []
@@ -2339,6 +2267,25 @@ export function ChatSidebar({
                                       />
                                     </div>
                                   ))}
+                                </div>
+                              )}
+                              {shouldShowLoadMore && (
+                                <div className="px-3 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void loadMoreChats()}
+                                    disabled={
+                                      isLoadingMore || pendingChatsRender
+                                    }
+                                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-surface-sidebar px-3 py-2 text-xs font-medium text-content-secondary transition-colors hover:border-border-strong hover:text-content-primary disabled:cursor-wait disabled:opacity-60"
+                                  >
+                                    {(isLoadingMore || pendingChatsRender) && (
+                                      <PiSpinner className="h-3.5 w-3.5 animate-spin" />
+                                    )}
+                                    {isLoadingMore || pendingChatsRender
+                                      ? 'Loading chats...'
+                                      : 'Load more chats'}
+                                  </button>
                                 </div>
                               )}
                               {isSignedIn &&

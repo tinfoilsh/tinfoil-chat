@@ -1,6 +1,7 @@
 import {
   SYNC_CHAT_DELETES_WATERMARK,
   SYNC_CHAT_STATUS,
+  SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
 import { CloudSyncService } from '@/services/cloud/cloud-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
@@ -12,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAllChats = vi.fn()
 const mockGetCloudChatCount = vi.fn()
+const mockGetProjectChatCount = vi.fn()
 const mockIsChatHistoryAuthoritative = vi.fn()
 const mockGetUnsyncedChats = vi.fn()
 const mockGetChat = vi.fn()
@@ -78,6 +80,7 @@ vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
     getAllChats: (...args: any[]) => mockGetAllChats(...args),
     getCloudChatCount: (...args: any[]) => mockGetCloudChatCount(...args),
+    getProjectChatCount: (...args: any[]) => mockGetProjectChatCount(...args),
     isChatHistoryAuthoritative: (...args: any[]) =>
       mockIsChatHistoryAuthoritative(...args),
     getUnsyncedChats: (...args: any[]) => mockGetUnsyncedChats(...args),
@@ -252,6 +255,8 @@ describe('CloudSyncService', () => {
     mockUploadChat.mockResolvedValue({ syncVersion: null, rewrites: [] })
     mockDownloadChat.mockResolvedValue(null)
     mockGetChatSyncStatus.mockResolvedValue({ count: 0, lastUpdated: null })
+    mockGetCloudChatCount.mockResolvedValue(0)
+    mockGetProjectChatCount.mockResolvedValue(0)
     mockGetAllChatsSyncStatus.mockResolvedValue({
       count: 0,
       lastUpdated: null,
@@ -791,6 +796,33 @@ describe('CloudSyncService', () => {
       expect(status.reason).toBe('no_changes')
     })
 
+    it('restores missing cached project chats when remote status is unchanged', async () => {
+      const projectId = 'project-with-missing-chat'
+      mockGetUnsyncedChats.mockResolvedValue([])
+      mockGetProjectChatsSyncStatus.mockResolvedValue({
+        count: 3,
+        lastUpdated: '2026-08-11T12:00:00.000Z',
+      })
+      mockGetProjectChatCount.mockResolvedValue(0)
+      localStorage.setItem(
+        `${SYNC_PROJECT_CHAT_STATUS_PREFIX}${projectId}`,
+        JSON.stringify({
+          count: 3,
+          lastUpdated: '2026-08-11T12:00:00.000Z',
+        }),
+      )
+
+      const service = new CloudSyncService()
+      const status = await service.checkSyncStatus(projectId)
+
+      expect(status).toMatchObject({
+        needsSync: true,
+        reason: 'count_changed',
+        remoteCount: 3,
+      })
+      expect(mockGetProjectChatCount).toHaveBeenCalledWith(projectId)
+    })
+
     it('filters out project chats when checking non-project sync status', async () => {
       mockGetUnsyncedChats.mockResolvedValue([
         {
@@ -1025,9 +1057,10 @@ describe('CloudSyncService', () => {
       })
 
       const service = new CloudSyncService()
-      await service.syncAllChats()
+      const result = await service.syncAllChats()
 
       expect(mockListChats).toHaveBeenCalledTimes(1)
+      expect(result.nextToken).toBe('tok1')
       expect(
         mockListChats.mock.calls[0]?.[0]?.continuationToken,
       ).toBeUndefined()

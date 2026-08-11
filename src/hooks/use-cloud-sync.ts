@@ -13,7 +13,7 @@ import {
   CloudKeySetupError,
   validateCurrentPrimaryKey,
 } from '@/services/cloud/cloud-key-preflight'
-import { cloudSync } from '@/services/cloud/cloud-sync'
+import { cloudSync, type SyncResult } from '@/services/cloud/cloud-sync'
 import { encryptionService } from '@/services/encryption/encryption-service'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import {
@@ -56,6 +56,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     decryptionProgress: null,
   })
   const syncingRef = useRef(false)
+  const syncPromiseRef = useRef<Promise<SyncResult> | null>(null)
   const initializingRef = useRef(false)
   const isMountedRef = useRef(true)
   // Ref avoids putting `options` in useCallback dep arrays, which would
@@ -201,7 +202,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
         component: 'useCloudSync',
         action: 'syncChats',
       })
-      return false
+      return syncPromiseRef.current ?? false
     }
 
     syncingRef.current = true
@@ -210,7 +211,9 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     }
 
     try {
-      const result = await cloudSync.syncAllChats(options)
+      const syncPromise = cloudSync.syncAllChats(options)
+      syncPromiseRef.current = syncPromise
+      const result = await syncPromise
 
       if (isMountedRef.current) {
         setState((prev) => ({
@@ -237,6 +240,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
       throw error
     } finally {
       syncingRef.current = false
+      syncPromiseRef.current = null
     }
   }, [])
 
