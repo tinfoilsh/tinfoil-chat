@@ -217,6 +217,7 @@ export function useProjects(
 
         const message =
           err instanceof Error ? err.message : 'Failed to load projects'
+        setProjectsUserId(requestUserId)
         setError(message)
         logError('Failed to load projects', err, {
           component: 'useProjects',

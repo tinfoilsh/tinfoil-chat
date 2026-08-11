@@ -156,4 +156,16 @@ describe('useProjects', () => {
     })
     await waitFor(() => expect(result.current.projects).toEqual([]))
   })
+
+  it('settles loading when cache and remote reads fail', async () => {
+    mocks.auth.userId = 'failed-project-user'
+    mocks.getCachedProjects.mockRejectedValue(new Error('Cache unavailable'))
+    mocks.listProjects.mockRejectedValue(new Error('Remote unavailable'))
+
+    const { result } = renderHook(() => useProjects())
+
+    await waitFor(() => expect(result.current.error).toBe('Remote unavailable'))
+    expect(result.current.loading).toBe(false)
+    expect(result.current.projects).toEqual([])
+  })
 })

@@ -58,7 +58,7 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
   const syncingRef = useRef(false)
   const syncPromiseRef = useRef<Promise<SyncResult> | null>(null)
   const syncModeRef = useRef<'shallow' | 'deep' | null>(null)
-  const pendingDeepSyncRef = useRef<Promise<SyncResult> | null>(null)
+  const pendingDeepSyncRef = useRef<Promise<SyncResult | false> | null>(null)
   const initializingRef = useRef(false)
   const isMountedRef = useRef(true)
   // Ref avoids putting `options` in useCallback dep arrays, which would
@@ -264,9 +264,9 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
 
       const pendingDeepSync = activeSync
         .catch(() => undefined)
-        .then(() => {
+        .then<SyncResult | false>(() => {
           if (!isCloudSyncEnabled()) {
-            return { uploaded: 0, downloaded: 0, errors: [] }
+            return false
           }
           return runChatSync({ deep: true })
         })
