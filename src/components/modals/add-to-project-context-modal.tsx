@@ -63,8 +63,8 @@ export function AddToProjectContextModal({
         )}
       >
         <div className="mb-3 flex items-center justify-center sm:mb-4">
-          <div className="rounded-full bg-emerald-500/20 p-2 sm:p-3">
-            <FolderIcon className="h-6 w-6 text-emerald-500 sm:h-8 sm:w-8" />
+          <div className="rounded-full bg-brand-accent-dark/10 p-2 dark:bg-brand-accent-light/10 sm:p-3">
+            <FolderIcon className="h-6 w-6 text-brand-accent-dark dark:text-brand-accent-light sm:h-8 sm:w-8" />
           </div>
         </div>
 
@@ -93,7 +93,7 @@ export function AddToProjectContextModal({
           </button>
           <button
             onClick={handleAddToProject}
-            className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 sm:text-base"
+            className="flex-1 rounded-lg bg-brand-accent-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-accent-dark/90 sm:text-base"
           >
             Yes, add to project
           </button>

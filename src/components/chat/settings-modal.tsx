@@ -3165,8 +3165,8 @@ ${encryptionKey.replace('key_', '')}
                                       className={cn(
                                         'font-aeonik font-medium',
                                         isDarkMode
-                                          ? 'text-emerald-400'
-                                          : 'text-emerald-600',
+                                          ? 'text-brand-accent-light'
+                                          : 'text-brand-accent-dark',
                                       )}
                                     >
                                       Tip:
@@ -3863,13 +3863,13 @@ ${encryptionKey.replace('key_', '')}
                         className={cn(
                           'rounded-lg border p-4',
                           importResult.success
-                            ? 'border-emerald-500/30 bg-emerald-500/10'
+                            ? 'border-brand-accent-dark/30 bg-brand-accent-dark/10 dark:border-brand-accent-light/30 dark:bg-brand-accent-light/10'
                             : 'border-red-500/30 bg-red-500/10',
                         )}
                       >
                         <div className="flex items-start gap-3">
                           {importResult.success ? (
-                            <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+                            <CheckCircleIcon className="h-5 w-5 text-brand-accent-dark dark:text-brand-accent-light" />
                           ) : (
                             <XMarkIcon className="h-5 w-5 text-red-500" />
                           )}
@@ -3878,7 +3878,7 @@ ${encryptionKey.replace('key_', '')}
                               className={cn(
                                 'font-aeonik text-sm font-medium',
                                 importResult.success
-                                  ? 'text-emerald-500'
+                                  ? 'text-brand-accent-dark dark:text-brand-accent-light'
                                   : 'text-red-500',
                               )}
                             >
@@ -4445,7 +4445,7 @@ ${encryptionKey.replace('key_', '')}
                               className={cn(
                                 'shrink-0 rounded-full px-3 py-1 text-xs font-medium',
                                 isPremium
-                                  ? 'bg-emerald-500/20 text-emerald-500'
+                                  ? 'bg-brand-accent-dark/20 text-brand-accent-dark dark:bg-brand-accent-light/20 dark:text-brand-accent-light'
                                   : 'bg-content-muted/20 text-content-muted',
                               )}
                             >

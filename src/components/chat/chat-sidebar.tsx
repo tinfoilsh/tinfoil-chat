@@ -1387,8 +1387,8 @@ export function ChatSidebar({
                       : 'border border-gray-400 bg-gray-200/30'
                     : isProjectMode
                       ? isDarkMode
-                        ? 'text-emerald-400'
-                        : 'text-emerald-600'
+                        ? 'text-brand-accent-light'
+                        : 'text-brand-accent-dark'
                       : 'text-content-secondary',
                 )}
               >

@@ -1104,7 +1104,7 @@ export function ProjectSidebar({
                           disabled={isSaving}
                           className={cn(
                             'w-full rounded-lg px-3 py-2 font-aeonik text-sm font-medium transition-colors',
-                            'bg-emerald-600 text-white hover:bg-emerald-700',
+                            'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90',
                             isSaving && 'cursor-not-allowed opacity-50',
                           )}
                         >
@@ -1233,8 +1233,8 @@ export function ProjectSidebar({
                           ? 'mb-2 py-3'
                           : 'py-6',
                         isDarkMode
-                          ? 'border-border-strong hover:border-emerald-500/50 hover:bg-surface-chat'
-                          : 'border-border-subtle hover:border-emerald-500/50 hover:bg-surface-sidebar',
+                          ? 'border-border-strong hover:border-brand-accent-light/50 hover:bg-surface-chat'
+                          : 'border-border-subtle hover:border-brand-accent-dark/50 hover:bg-surface-sidebar',
                       )}
                     >
                       <DocumentPlusIcon
@@ -1280,8 +1280,8 @@ export function ProjectSidebar({
                               className={cn(
                                 'h-4 w-4 flex-shrink-0 animate-spin',
                                 isDarkMode
-                                  ? 'text-emerald-400'
-                                  : 'text-emerald-600',
+                                  ? 'text-brand-accent-light'
+                                  : 'text-brand-accent-dark',
                               )}
                             />
                             <div className="min-w-0 flex-1">
@@ -1310,8 +1310,8 @@ export function ProjectSidebar({
                               cn(
                                 'h-4 w-4 flex-shrink-0',
                                 isDarkMode
-                                  ? 'text-emerald-400'
-                                  : 'text-emerald-600',
+                                  ? 'text-brand-accent-light'
+                                  : 'text-brand-accent-dark',
                               ),
                             )}
                             <div className="min-w-0 flex-1">

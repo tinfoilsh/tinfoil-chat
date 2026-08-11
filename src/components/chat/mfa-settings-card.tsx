@@ -230,7 +230,7 @@ export function MfaSettingsCard({ isDarkMode }: MfaSettingsCardProps) {
                 className={cn(
                   'shrink-0 rounded-full px-2.5 py-1 text-xs font-medium',
                   totpEnabled
-                    ? 'bg-emerald-500/20 text-emerald-500'
+                    ? 'bg-brand-accent-dark/20 text-brand-accent-dark dark:bg-brand-accent-light/20 dark:text-brand-accent-light'
                     : 'bg-content-muted/20 text-content-muted',
                 )}
               >
@@ -307,7 +307,7 @@ export function MfaSettingsCard({ isDarkMode }: MfaSettingsCardProps) {
                     className="shrink-0 text-content-muted transition-colors hover:text-content-primary"
                   >
                     {copiedTarget === 'setup-key' ? (
-                      <CheckCircleIcon className="h-4 w-4 text-emerald-500" />
+                      <CheckCircleIcon className="h-4 w-4 text-brand-accent-dark dark:text-brand-accent-light" />
                     ) : (
                       <ClipboardDocumentIcon className="h-4 w-4" />
                     )}
@@ -397,7 +397,7 @@ export function MfaSettingsCard({ isDarkMode }: MfaSettingsCardProps) {
             )}
           >
             <div className="flex items-start gap-3">
-              <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+              <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-accent-dark dark:text-brand-accent-light" />
               <div>
                 <DialogPrimitive.Title className="font-aeonik text-base font-medium text-content-primary">
                   Authenticator app enabled

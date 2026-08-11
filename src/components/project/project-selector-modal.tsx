@@ -159,7 +159,7 @@ export function ProjectSelectorModal({
                     {/* Projects list */}
                     {loadingList && projects.length === 0 ? (
                       <div className="py-8 text-center">
-                        <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                        <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-brand-accent-dark border-t-transparent dark:border-brand-accent-light dark:border-t-transparent" />
                         <p className="font-aeonik-fono text-sm text-content-muted">
                           Loading projects...
                         </p>
@@ -193,8 +193,8 @@ export function ProjectSelectorModal({
                               className={cn(
                                 'mt-0.5 h-5 w-5 flex-shrink-0',
                                 isDarkMode
-                                  ? 'text-emerald-400'
-                                  : 'text-emerald-600',
+                                  ? 'text-brand-accent-light'
+                                  : 'text-brand-accent-dark',
                               )}
                             />
                             <div className="min-w-0 flex-1">
@@ -317,9 +317,7 @@ export function ProjectSelectorModal({
                       disabled={loadingAction || !newProjectName.trim()}
                       className={cn(
                         'rounded-md px-4 py-2 font-aeonik text-sm font-medium transition-colors',
-                        isDarkMode
-                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-700',
+                        'bg-brand-accent-dark text-white hover:bg-brand-accent-dark/90',
                         (loadingAction || !newProjectName.trim()) &&
                           'cursor-not-allowed opacity-50',
                       )}

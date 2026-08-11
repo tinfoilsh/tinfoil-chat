@@ -26,8 +26,8 @@ export function ProjectHeader({
       className={cn(
         'flex h-12 flex-none items-center justify-between border-b px-4',
         isDarkMode
-          ? 'border-emerald-500/30 bg-emerald-950/20'
-          : 'border-emerald-500/30 bg-emerald-50/50',
+          ? 'border-brand-accent-light/30 bg-brand-accent-dark/20'
+          : 'border-brand-accent-dark/30 bg-brand-accent-light/10',
       )}
     >
       <div className="flex items-center gap-3">
@@ -51,13 +51,13 @@ export function ProjectHeader({
           <FolderIcon
             className={cn(
               'h-5 w-5',
-              isDarkMode ? 'text-emerald-400' : 'text-emerald-600',
+              isDarkMode ? 'text-brand-accent-light' : 'text-brand-accent-dark',
             )}
           />
           <span
             className={cn(
               'font-aeonik text-sm font-medium',
-              isDarkMode ? 'text-emerald-400' : 'text-emerald-700',
+              isDarkMode ? 'text-brand-accent-light' : 'text-brand-accent-dark',
             )}
           >
             {activeProject.name}

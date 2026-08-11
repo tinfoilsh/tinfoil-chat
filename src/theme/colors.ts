@@ -59,10 +59,6 @@ export const TINFOIL_ACCENT_LIGHT = colors['tinfoil-accent-light'].DEFAULT
 export const TINFOIL_ACCENT_LIGHT_HOVER = colors['tinfoil-accent-light'].hover
 export const TINFOIL_ACCENT_LIGHT_DARKER = colors['tinfoil-accent-light'].darker
 
-// Legacy exports for backward compatibility (will be phased out)
-export const EMERALD_500 = colors['tinfoil-accent-light'].DEFAULT
-export const EMERALD_600 = colors['tinfoil-accent-light'].darker
-
 // Tailwind class names for when inline styles aren't suitable
 export const colorClasses = {
   'tinfoil-dark': {
@@ -109,14 +105,6 @@ export const colorClasses = {
     border: 'border-brand-accent-dark',
     borderHover: 'hover:border-brand-accent-dark/90',
     ring: 'ring-brand-accent-dark',
-  },
-  emerald: {
-    text500: 'text-brand-accent-light',
-    text600: 'text-brand-accent-light-darker',
-    bg500: 'bg-brand-accent-light',
-    bg600: 'bg-brand-accent-light-darker',
-    border500: 'border-brand-accent-light',
-    border600: 'border-brand-accent-light-darker',
   },
 } as const
 
