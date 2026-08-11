@@ -899,13 +899,17 @@ export function ChatInterface({
   // per-account hourly cap (subscribers) reuses the same indicator channel but
   // must not block the queue or prompt subscribing; those sends fail fast with
   // an in-chat rate-limit message and recover once the hourly window resets.
-  const isRateLimited = useCallback(
-    () =>
-      Boolean(
-        rateLimit && rateLimit.remaining <= 0 && rateLimit.kind !== 'hourly',
-      ),
-    [rateLimit],
-  )
+  //
+  // Reads the live cache rather than the mirrored `rateLimit` state so the
+  // queue pump's pre-dequeue check can never lag behind handleQuery's own
+  // quota gate (which reads the same cache): a stale mirror would let the
+  // pump dequeue a message the gate then drops. `rateLimit` stays a
+  // dependency so the queue-resume effect re-fires when the limit clears.
+  const isRateLimited = useCallback(() => {
+    void rateLimit
+    const limit = getRateLimitInfo()
+    return Boolean(limit && limit.remaining <= 0 && limit.kind !== 'hourly')
+  }, [rateLimit])
 
   const handleQueueRateLimited = useCallback(() => {
     setIsSubscribePromptOpen(true)

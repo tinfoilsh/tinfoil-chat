@@ -564,9 +564,6 @@ export function useChatMessaging({
         window.dispatchEvent(new CustomEvent(REQUEST_UPGRADE_EVENT))
         return
       }
-      // Optimistically consume one request so the banner updates immediately
-      // and refreshRateLimit can detect stale server counts.
-      snapshotAndDecrementRemaining()
 
       // Clear input immediately when send button is pressed
       setInput('')
@@ -1039,6 +1036,12 @@ export function useChatMessaging({
         // the whole request, including the wait for the first token. The
         // stream processor's own startStreaming call is idempotent.
         streamingTracker.startStreaming(streamChatIdRef.current)
+
+        // Optimistically consume one request so the banner updates
+        // immediately and refreshRateLimit can detect stale server counts.
+        // Done here, past all preflight steps, so an aborted or failed
+        // preflight never eats a request locally.
+        snapshotAndDecrementRemaining()
 
         response = await sendChatStream({
           model,
