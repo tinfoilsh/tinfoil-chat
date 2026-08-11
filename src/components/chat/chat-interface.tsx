@@ -112,6 +112,7 @@ import { ChatMessages } from './chat-messages'
 import { ChatSidebar } from './chat-sidebar'
 import { PromptPresetSuggestions } from './components/prompt-preset-suggestions'
 import { CONSTANTS } from './constants'
+import { getDocumentTextContent } from './document-content'
 import { useDocumentUploader } from './document-uploader'
 import { DragProvider } from './drag-context'
 import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
@@ -2252,13 +2253,20 @@ export function ChatInterface({
 
       await handleDocumentUpload(
         file,
-        async (content) => {
+        async (content, _documentId, _imageData, _hasDescription, pages) => {
           try {
-            await uploadProjectDocument(file, content)
-          } catch {
+            const projectContent = getDocumentTextContent(content, pages)
+            if (!projectContent) {
+              throw new Error('No readable content was found in this document.')
+            }
+            await uploadProjectDocument(file, projectContent)
+          } catch (error) {
             toast({
               title: 'Upload failed',
-              description: 'Failed to add document to project context.',
+              description:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to add document to project context.',
               variant: 'destructive',
               position: 'top-right',
             })
@@ -2275,6 +2283,8 @@ export function ChatInterface({
           })
           removeUploadingFile(uploadId)
         },
+        undefined,
+        { requireTextContent: true },
       )
     },
     [

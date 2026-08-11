@@ -1,5 +1,6 @@
 'use client'
 
+import { getDocumentTextContent } from '@/components/chat/document-content'
 import { useDocumentUploader } from '@/components/chat/document-uploader'
 import { cn } from '@/components/ui/utils'
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline'
@@ -42,10 +43,14 @@ export function ProjectDocumentUpload({
 
       handleDocumentUpload(
         file,
-        async (content, _documentId, _imageData) => {
+        async (content, _documentId, _imageData, _hasDescription, pages) => {
           try {
+            const projectContent = getDocumentTextContent(content, pages)
+            if (!projectContent) {
+              throw new Error('No readable content was found in this document.')
+            }
             setUploadStatus('Uploading...')
-            await uploadDocument(file, content)
+            await uploadDocument(file, projectContent)
             setUploadStatus(null)
           } catch (err) {
             setError(
@@ -58,6 +63,8 @@ export function ProjectDocumentUpload({
           setError(err.message)
           setUploadStatus(null)
         },
+        undefined,
+        { requireTextContent: true },
       )
 
       if (fileInputRef.current) {

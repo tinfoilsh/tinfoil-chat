@@ -38,6 +38,24 @@ function projectDocumentId(projectId: string, documentId: string): string {
   return `${projectId}/${documentId}`
 }
 
+function unavailableProjectDocument(
+  projectId: string,
+  documentId: string,
+): ProjectDocument {
+  const now = new Date().toISOString()
+  return {
+    id: documentId,
+    projectId,
+    filename: '',
+    contentType: '',
+    sizeBytes: 0,
+    syncVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+    decryptionFailed: true,
+  }
+}
+
 // The legacy controlplane row exposed a numeric `syncVersion` to the
 // client. The enclave protocol carries the same monotonic counter as a
 // string ETag (§7 of the sync spec). The Project type still requires a
@@ -499,6 +517,7 @@ export class ProjectStorageService {
     filename: string,
     contentType: string,
     content: string,
+    sizeBytes?: number,
   ): Promise<ProjectDocument> {
     if (!(await canWriteToCloud())) {
       throw new Error(
@@ -508,7 +527,14 @@ export class ProjectStorageService {
 
     const { documentId } = await this.generateDocumentId(projectId)
 
-    const docPayload = { content, filename, contentType }
+    const persistedSizeBytes =
+      sizeBytes ?? new TextEncoder().encode(content).length
+    const docPayload = {
+      content,
+      filename,
+      contentType,
+      sizeBytes: persistedSizeBytes,
+    }
     const plaintext = new TextEncoder().encode(JSON.stringify(docPayload))
 
     const pushResp = await enclavePush({
@@ -527,7 +553,7 @@ export class ProjectStorageService {
       projectId,
       filename,
       contentType,
-      sizeBytes: new TextEncoder().encode(content).length,
+      sizeBytes: persistedSizeBytes,
       syncVersion: etagToSyncVersion(pushResp.etag),
       createdAt: now,
       updatedAt: now,
@@ -577,7 +603,8 @@ export class ProjectStorageService {
         projectId,
         filename: decoded.filename || '',
         contentType: decoded.contentType || '',
-        sizeBytes: new TextEncoder().encode(decoded.content).length,
+        sizeBytes:
+          decoded.sizeBytes ?? new TextEncoder().encode(decoded.content).length,
         syncVersion: etagToSyncVersion(item.etag),
         createdAt: now,
         updatedAt: now,
@@ -595,8 +622,8 @@ export class ProjectStorageService {
 
   // Batch variant of getDocument: pulls every requested document for a
   // project in a single enclave round-trip and returns the decoded
-  // ProjectDocument objects keyed by id. Missing ids are simply absent
-  // from the result Map.
+  // ProjectDocument objects keyed by id. Unavailable rows are represented
+  // explicitly so callers never mistake a pull failure for an empty file.
   async getDocuments(
     projectId: string,
     documentIds: string[],
@@ -623,11 +650,32 @@ export class ProjectStorageService {
       })
 
       for (const item of resp.items) {
-        if (!item.ok) continue
         const originalId = compositeToOriginal.get(item.id)
         if (!originalId) continue
+        if (!item.ok) {
+          result.set(
+            originalId,
+            unavailableProjectDocument(projectId, originalId),
+          )
+          logError('Failed to pull project document', undefined, {
+            component: 'ProjectStorage',
+            action: 'getDocuments',
+            metadata: {
+              projectId,
+              documentId: originalId,
+              code: item.code,
+            },
+          })
+          continue
+        }
         const plaintextBytes = pullItemPlaintext(item)
-        if (!plaintextBytes) continue
+        if (!plaintextBytes) {
+          result.set(
+            originalId,
+            unavailableProjectDocument(projectId, originalId),
+          )
+          continue
+        }
         try {
           const documentValidation = ProjectDocumentPlaintextSchema.safeParse(
             JSON.parse(new TextDecoder().decode(plaintextBytes)),
@@ -641,6 +689,10 @@ export class ProjectStorageService {
                 issues: documentValidation.error.message,
               },
             })
+            result.set(
+              originalId,
+              unavailableProjectDocument(projectId, originalId),
+            )
             continue
           }
           const decoded = documentValidation.data
@@ -650,7 +702,9 @@ export class ProjectStorageService {
             projectId,
             filename: decoded.filename || '',
             contentType: decoded.contentType || '',
-            sizeBytes: new TextEncoder().encode(decoded.content).length,
+            sizeBytes:
+              decoded.sizeBytes ??
+              new TextEncoder().encode(decoded.content).length,
             syncVersion: etagToSyncVersion(item.etag),
             createdAt: now,
             updatedAt: now,
@@ -662,6 +716,18 @@ export class ProjectStorageService {
             action: 'getDocuments',
             metadata: { projectId, documentId: originalId },
           })
+          result.set(
+            originalId,
+            unavailableProjectDocument(projectId, originalId),
+          )
+        }
+      }
+      for (const documentId of documentIds) {
+        if (!result.has(documentId)) {
+          result.set(
+            documentId,
+            unavailableProjectDocument(projectId, documentId),
+          )
         }
       }
       return result

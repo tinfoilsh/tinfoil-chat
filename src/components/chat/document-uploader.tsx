@@ -150,7 +150,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
       },
       hasDescription?: boolean,
       pages?: DocumentPage[],
-    ) => void,
+    ) => void | Promise<void>,
     onError: (error: Error, documentId: string) => void,
     onGeneratingDescription?: (
       documentId: string,
@@ -160,6 +160,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
         thumbnailBase64?: string
       },
     ) => void,
+    options?: { requireTextContent?: boolean },
   ) => {
     const documentId = getDocumentId()
 
@@ -187,7 +188,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
           return
         }
         const formattedContent = await handleTextFile(file)
-        onSuccess(formattedContent, documentId)
+        await onSuccess(formattedContent, documentId)
         return
       }
 
@@ -222,10 +223,10 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
 
           const imageData = { ...scaled, thumbnailBase64 }
 
-          // If current model is multimodal, skip description generation
-          // The image will be sent directly to the model
-          if (isCurrentModelMultimodal) {
-            onSuccess('', documentId, imageData, false)
+          // Chat attachments can be sent directly to multimodal models, but
+          // persistent project documents require reusable text content.
+          if (isCurrentModelMultimodal && !options?.requireTextContent) {
+            await onSuccess('', documentId, imageData, false)
             return
           }
 
@@ -237,7 +238,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
             imageData.base64,
             imageData.mimeType,
           )
-          onSuccess(description, documentId, imageData, true)
+          await onSuccess(description, documentId, imageData, true)
           return
         } catch (error) {
           logError('Image description failed', error, {
@@ -284,7 +285,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
           return
         }
 
-        onSuccess(text.trim(), documentId)
+        await onSuccess(text.trim(), documentId)
         return
       }
 
@@ -296,12 +297,14 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
 
       const { endpoint } = await getDocUploadModel()
       // Decided at upload time based on the current model: vision-capable
-      // models get per-page images, text-only models skip the bandwidth.
+      // chat attachments get per-page images, while persistent project
+      // documents always request reusable text.
       // If the user later switches to a vision model they'll need to
       // re-upload to get image rendering for an existing attachment.
-      const fetchEndpoint = isCurrentModelMultimodal
-        ? `${endpoint}?mode=images`
-        : endpoint
+      const fetchEndpoint =
+        isCurrentModelMultimodal && !options?.requireTextContent
+          ? `${endpoint}?mode=images`
+          : endpoint
 
       const apiKey = await getSessionToken()
       const secureFetch = await getSecureFetch()
@@ -322,7 +325,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
 
       // Handle 204 No Content response
       if (response.status === 204) {
-        onSuccess('', documentId)
+        await onSuccess('', documentId)
         return
       }
 
@@ -350,7 +353,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
 
       const doc = processingResult.document
       if (doc?.md_content || doc?.pages?.length) {
-        onSuccess(
+        await onSuccess(
           doc.md_content ?? '',
           documentId,
           undefined,
@@ -358,7 +361,7 @@ export const useDocumentUploader = (isCurrentModelMultimodal?: boolean) => {
           doc.pages,
         )
       } else {
-        onSuccess('', documentId)
+        await onSuccess('', documentId)
       }
     } catch (error) {
       logError('Document processing failed', error, {

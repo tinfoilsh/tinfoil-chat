@@ -28,6 +28,7 @@ export interface ProjectDocument {
   createdAt: string
   updatedAt: string
   content?: string
+  decryptionFailed?: boolean
 }
 
 export interface ProjectChat {
