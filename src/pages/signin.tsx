@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { getClerkErrorMessage } from '@/utils/clerk-errors'
 import { logError } from '@/utils/error-handling'
 import { sanitizeRelativeRedirect } from '@/utils/redirect-url'
-import { useSignIn, useSignUp } from '@clerk/nextjs'
+import { useClerk, useSignIn, useSignUp } from '@clerk/nextjs'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useRef, useState } from 'react'
@@ -57,6 +57,7 @@ function clerkErrorCode(error: unknown): string | undefined {
 
 export default function SignInPage() {
   const router = useRouter()
+  const clerk = useClerk()
   const { signIn, errors: signInErrors } = useSignIn()
   const { signUp } = useSignUp()
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -380,6 +381,18 @@ export default function SignInPage() {
       },
     )
   }
+
+  const landingAttemptCheckedRef = useRef(false)
+  useEffect(() => {
+    if (!router.isReady || !clerk.loaded || landingAttemptCheckedRef.current) {
+      return
+    }
+
+    landingAttemptCheckedRef.current = true
+    if (router.query.resume === '1' || !signIn.id) return
+
+    void signIn.reset()
+  }, [clerk.loaded, router.isReady, router.query.resume, signIn, signIn.id])
 
   // Social sign-ins that still need MFA, client trust, or sign-up details
   // come back from the SSO callback with ?resume=1 — pick the flow back up
