@@ -3,7 +3,7 @@ import {
   type ChatItemData,
 } from '@/components/chat/chat-list-item'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const savedChat: ChatItemData = {
   id: 'chat-123',
@@ -150,6 +150,15 @@ describe('ChatListItem title privacy', () => {
 })
 
 describe('ChatListItem timestamps', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-11T13:30:00.000Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   const timestampedChat: ChatItemData = {
     ...savedChat,
     createdAt: '2026-08-11T12:00:00.000Z',
