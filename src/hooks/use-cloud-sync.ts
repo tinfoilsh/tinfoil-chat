@@ -57,6 +57,8 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
   })
   const syncingRef = useRef(false)
   const syncPromiseRef = useRef<Promise<SyncResult> | null>(null)
+  const syncModeRef = useRef<'shallow' | 'deep' | null>(null)
+  const pendingDeepSyncRef = useRef<Promise<SyncResult> | null>(null)
   const initializingRef = useRef(false)
   const isMountedRef = useRef(true)
   // Ref avoids putting `options` in useCallback dep arrays, which would
@@ -185,64 +187,94 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
     initializeSync()
   }, [isSignedIn, getToken])
 
-  // Full sync chats. By default only the first page is fetched; pass
-  // `{ deep: true }` (manual "Sync" action) to page through the entire
-  // remote history so older chats land locally.
-  const syncChats = useCallback(async (options?: { deep?: boolean }) => {
-    if (!isCloudSyncEnabled()) {
-      logInfo('Cloud sync is disabled, skipping sync', {
-        component: 'useCloudSync',
-        action: 'syncChats',
-      })
-      return false
-    }
-
-    if (syncingRef.current) {
-      logInfo('Sync request blocked - sync already in progress', {
-        component: 'useCloudSync',
-        action: 'syncChats',
-      })
-      return syncPromiseRef.current ?? false
-    }
-
+  const runChatSync = useCallback((options?: { deep?: boolean }) => {
     syncingRef.current = true
+    syncModeRef.current = options?.deep ? 'deep' : 'shallow'
     if (isMountedRef.current) {
       setState((prev) => ({ ...prev, syncing: true }))
     }
 
-    try {
-      const syncPromise = cloudSync.syncAllChats(options)
-      syncPromiseRef.current = syncPromise
-      const result = await syncPromise
+    const syncPromise = (async () => {
+      try {
+        const result = await cloudSync.syncAllChats(options)
 
-      if (isMountedRef.current) {
-        setState((prev) => ({
-          ...prev,
-          syncing: false,
-          lastSyncTime: Date.now(),
-        }))
+        if (isMountedRef.current) {
+          setState((prev) => ({
+            ...prev,
+            syncing: false,
+            lastSyncTime: Date.now(),
+          }))
+        }
+
+        logInfo(
+          `Sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
+          {
+            component: 'useCloudSync',
+            action: 'syncChats',
+            metadata: { result },
+          },
+        )
+
+        return result
+      } catch (error) {
+        if (isMountedRef.current) {
+          setState((prev) => ({ ...prev, syncing: false }))
+        }
+        throw error
+      } finally {
+        syncingRef.current = false
+        syncPromiseRef.current = null
+        syncModeRef.current = null
       }
+    })()
+    syncPromiseRef.current = syncPromise
+    return syncPromise
+  }, [])
 
-      logInfo(
-        `Sync completed: uploaded=${result.uploaded}, downloaded=${result.downloaded}`,
-        {
+  // Full sync chats. By default only the first page is fetched; pass
+  // `{ deep: true }` (manual "Sync" action) to page through the entire
+  // remote history so older chats land locally.
+  const syncChats = useCallback(
+    async (options?: { deep?: boolean }) => {
+      if (!isCloudSyncEnabled()) {
+        logInfo('Cloud sync is disabled, skipping sync', {
           component: 'useCloudSync',
           action: 'syncChats',
-          metadata: { result },
-        },
-      )
-
-      return result
-    } catch (error) {
-      if (isMountedRef.current) {
-        setState((prev) => ({ ...prev, syncing: false }))
+        })
+        return false
       }
-      throw error
-    } finally {
-      syncingRef.current = false
-      syncPromiseRef.current = null
-    }
-  }, [])
+
+      const activeSync = syncPromiseRef.current
+      if (syncingRef.current && !activeSync) {
+        logInfo('Sync request blocked by another sync operation', {
+          component: 'useCloudSync',
+          action: 'syncChats',
+        })
+        return false
+      }
+      if (!activeSync) return runChatSync(options)
+
+      logInfo('Sync request coalesced with sync already in progress', {
+        component: 'useCloudSync',
+        action: 'syncChats',
+      })
+
+      if (!options?.deep || syncModeRef.current === 'deep') return activeSync
+      if (pendingDeepSyncRef.current) return pendingDeepSyncRef.current
+
+      const pendingDeepSync = activeSync
+        .catch(() => undefined)
+        .then(() => runChatSync({ deep: true }))
+        .finally(() => {
+          if (pendingDeepSyncRef.current === pendingDeepSync) {
+            pendingDeepSyncRef.current = null
+          }
+        })
+      pendingDeepSyncRef.current = pendingDeepSync
+      return pendingDeepSync
+    },
+    [runChatSync],
+  )
 
   /**
    * Smart sync: checks sync status first and only syncs if changes detected.
