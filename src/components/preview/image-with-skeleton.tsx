@@ -8,8 +8,10 @@
 import { ImageOff } from 'lucide-react'
 import { useRef, useState, type ImgHTMLAttributes } from 'react'
 
-interface ImageWithSkeletonProps
-  extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'onLoad' | 'onError'> {
+interface ImageWithSkeletonProps extends Omit<
+  ImgHTMLAttributes<HTMLImageElement>,
+  'onLoad' | 'onError'
+> {
   wrapperClassName?: string
   className?: string
 }

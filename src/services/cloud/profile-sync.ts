@@ -1,6 +1,6 @@
 import { SYNC_PROFILE_UNKNOWN_FIELDS } from '@/constants/storage-keys'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
-import { authTokenManager } from '../auth'
+import { AuthTokenUnavailableError, authTokenManager } from '../auth'
 import {
   listStatus as enclaveListStatus,
   pull as enclavePull,
@@ -230,10 +230,7 @@ export class ProfileSyncService {
       return decoded
     } catch (error) {
       // Silently fail if no auth token
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         logInfo('Profile fetch skipped - no auth token', {
           component: 'ProfileSync',
           action: 'fetchProfile',
@@ -395,10 +392,7 @@ export class ProfileSyncService {
       }
     } catch (error) {
       // Silently fail if no auth token
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         logInfo('Profile save skipped - no auth token', {
           component: 'ProfileSync',
           action: 'saveProfile',
@@ -476,10 +470,7 @@ export class ProfileSyncService {
         lastUpdated: current.updated_at,
       }
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         return null
       }
 

@@ -12,6 +12,9 @@ const {
   mockReady,
   mockFetch,
   mockGetVerificationDocument,
+  mockGetValidToken,
+  mockRefreshToken,
+  mockHandlePersistentAuthFailure,
 } = vi.hoisted(() => ({
   mockSecureClientConstructor: vi.fn(),
   mockReady: vi.fn(),
@@ -21,9 +24,13 @@ const {
     enclaveHost: 'sync.tinfoil.sh',
     securityVerified: true,
   }),
+  mockGetValidToken: vi.fn().mockResolvedValue('test-jwt'),
+  mockRefreshToken: vi.fn().mockResolvedValue('fresh-jwt'),
+  mockHandlePersistentAuthFailure: vi.fn(),
 }))
 
 vi.mock('tinfoil', () => ({
+  AttestationError: class extends Error {},
   SecureClient: class {
     constructor(args?: unknown) {
       mockSecureClientConstructor(args)
@@ -37,7 +44,9 @@ vi.mock('tinfoil', () => ({
 
 vi.mock('@/services/auth', () => ({
   authTokenManager: {
-    getValidToken: vi.fn().mockResolvedValue('test-jwt'),
+    getValidToken: mockGetValidToken,
+    refreshToken: mockRefreshToken,
+    handlePersistentAuthFailure: mockHandlePersistentAuthFailure,
   },
 }))
 
@@ -55,6 +64,9 @@ describe('SyncEnclaveClient', () => {
     mockSecureClientConstructor.mockReset()
     mockReady.mockReset().mockResolvedValue(undefined)
     mockFetch.mockReset()
+    mockGetValidToken.mockReset().mockResolvedValue('test-jwt')
+    mockRefreshToken.mockReset().mockResolvedValue('fresh-jwt')
+    mockHandlePersistentAuthFailure.mockReset()
   })
 
   afterEach(() => {
@@ -133,6 +145,80 @@ describe('SyncEnclaveClient', () => {
     const headers = mockFetch.mock.calls[0][1]?.headers as Headers
     expect(headers.has('Authorization')).toBe(false)
     expect(headers.get('Accept')).toBe('application/json')
+    expect(mockRefreshToken).not.toHaveBeenCalled()
+  })
+
+  it('does not refresh authentication for public 401 responses', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ code: 'AUTH' }, { status: 401 }),
+    )
+    const client = await getSyncEnclaveClient()
+
+    await expect(
+      client.postPublic('/v1/share/open', { ciphertext: 'abc' }),
+    ).rejects.toMatchObject({ status: 401 })
+    expect(mockRefreshToken).not.toHaveBeenCalled()
+    expect(mockFetch).toHaveBeenCalledOnce()
+  })
+
+  it('force-refreshes after one 401 and replays the identical request once', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ code: 'AUTH' }, { status: 401 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+    const client = await getSyncEnclaveClient()
+    const body = JSON.stringify({ ciphertext: 'same-body' })
+    await client.request('/v1/blobs/push', {
+      method: 'POST',
+      body,
+      headers: { 'Idempotency-Key': 'same-key' },
+    })
+
+    expect(mockRefreshToken).toHaveBeenCalledWith('test-jwt')
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    const firstInit = mockFetch.mock.calls[0][1]
+    const secondInit = mockFetch.mock.calls[1][1]
+    expect(secondInit?.body).toBe(firstInit?.body)
+    expect((secondInit?.headers as Headers).get('Idempotency-Key')).toBe(
+      'same-key',
+    )
+    expect((secondInit?.headers as Headers).get('Authorization')).toBe(
+      'Bearer fresh-jwt',
+    )
+  })
+
+  it('throws persistent authentication after a replayed 401', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValue(jsonResponse({ code: 'AUTH' }, { status: 401 }))
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get('/api/keys/current')).rejects.toMatchObject({
+      name: 'SyncPersistentAuthError',
+      code: 'AUTH_PERSISTENT',
+      status: 401,
+    })
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockHandlePersistentAuthFailure).toHaveBeenCalledOnce()
+  })
+
+  it('does not sign out when forced refresh fails before replay', async () => {
+    const { getSyncEnclaveClient } =
+      await import('@/services/sync-enclave/sync-enclave-client')
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ code: 'AUTH' }, { status: 401 }),
+    )
+    mockRefreshToken.mockRejectedValueOnce(new Error('refresh failed'))
+    const client = await getSyncEnclaveClient()
+
+    await expect(client.get('/api/keys/current')).rejects.toThrow(
+      'refresh failed',
+    )
+    expect(mockFetch).toHaveBeenCalledOnce()
+    expect(mockHandlePersistentAuthFailure).not.toHaveBeenCalled()
   })
 
   it('parses non-2xx responses into SyncEnclaveError with code + details', async () => {

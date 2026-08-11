@@ -44,6 +44,7 @@ interface MetadataResponse {
 }
 
 interface FaviconResponse {
+  status: 'found' | 'missing'
   favicon_bytes: string
   favicon_content_type: string
 }
@@ -154,8 +155,26 @@ async function doFetchFavicon(url: string): Promise<string | null> {
     throw new Error(`Favicon fetch failed: ${response.status}`)
   }
 
-  const data: FaviconResponse = await response.json()
+  const data: unknown = await response.json()
+  if (!isFaviconResponse(data)) {
+    throw new Error('Invalid favicon response')
+  }
+  if (data.status === 'missing') return null
+
   return buildFaviconDataUrl(data.favicon_bytes, data.favicon_content_type)
+}
+
+function isFaviconResponse(value: unknown): value is FaviconResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'status' in value &&
+    (value.status === 'found' || value.status === 'missing') &&
+    'favicon_bytes' in value &&
+    typeof value.favicon_bytes === 'string' &&
+    'favicon_content_type' in value &&
+    typeof value.favicon_content_type === 'string'
+  )
 }
 
 function faviconRequestKey(url: string): string {
@@ -166,11 +185,11 @@ function faviconRequestKey(url: string): string {
   }
 }
 
-function buildFaviconDataUrl(
-  base64: string | null | undefined,
-  contentType: string | null | undefined,
-): string | null {
-  if (!base64) return null
-  const type = contentType ?? 'image/x-icon'
-  return `data:${type};base64,${base64}`
+function buildFaviconDataUrl(base64: string, contentType: string): string {
+  const bytes = base64.trim()
+  const type = contentType.trim()
+  if (!bytes || !type.toLowerCase().startsWith('image/')) {
+    throw new Error('Invalid found favicon response')
+  }
+  return `data:${type};base64,${bytes}`
 }

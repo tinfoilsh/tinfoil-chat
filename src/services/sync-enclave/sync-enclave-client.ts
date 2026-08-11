@@ -30,6 +30,35 @@ export class SyncEnclaveError extends Error {
   }
 }
 
+export class SyncPersistentAuthError extends SyncEnclaveError {
+  constructor(options?: ErrorOptions) {
+    super(
+      'Authentication is required to continue syncing',
+      401,
+      'AUTH_PERSISTENT',
+    )
+    this.name = 'SyncPersistentAuthError'
+    if (options?.cause !== undefined) this.cause = options.cause
+  }
+}
+
+export class SyncNetworkError extends SyncEnclaveError {
+  constructor(options?: ErrorOptions) {
+    super(
+      'Sync enclave request failed due to a network error',
+      undefined,
+      'NETWORK',
+    )
+    this.name = 'SyncNetworkError'
+    if (options?.cause !== undefined) this.cause = options.cause
+  }
+}
+
+type SyncRequestInit = Omit<RequestInit, 'body'> & {
+  body?: string
+  skipAuth?: boolean
+}
+
 export class SyncEnclaveClient {
   private constructor(private readonly secure: SecureClient) {}
 
@@ -68,34 +97,51 @@ export class SyncEnclaveClient {
   /**
    * Makes an attested HTTP request to the sync enclave. Automatically
    * injects the user's Clerk JWT and JSON Content-Type when a body is
-   * present. Throws SyncEnclaveError on non-2xx responses with the
-   * parsed `{error, code, ...details}` envelope.
+   * present. Request bodies are reusable strings so a 401 can replay
+   * the same options once after refreshing authentication. Throws
+   * SyncEnclaveError on non-2xx responses with the parsed
+   * `{error, code, ...details}` envelope.
    */
   async request<T = unknown>(
     path: string,
-    init: RequestInit & { skipAuth?: boolean } = {},
+    init: SyncRequestInit = {},
   ): Promise<T> {
     assertRelativeSyncEnclavePath(path)
-    const headers = new Headers(init.headers)
-    headers.set('Accept', 'application/json')
-
-    if (!init.skipAuth) {
-      const token = await authTokenManager.getValidToken()
-      headers.set('Authorization', `Bearer ${token}`)
-    }
-
-    if (init.body && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json')
-    }
-
     const { skipAuth: _skipAuth, ...fetchInit } = init
-    const resp = await this.secure.fetch(
-      new URL(path, SYNC_ENCLAVE_URL).toString(),
-      {
-        ...fetchInit,
-        headers,
-      },
-    )
+    const requestUrl = new URL(path, SYNC_ENCLAVE_URL).toString()
+    const baseHeaders = new Headers(init.headers)
+    baseHeaders.set('Accept', 'application/json')
+    if (init.body && !baseHeaders.has('Content-Type')) {
+      baseHeaders.set('Content-Type', 'application/json')
+    }
+
+    let token: string | null = null
+    if (!init.skipAuth) {
+      token = await authTokenManager.getValidToken()
+    }
+
+    const send = async (authToken: string | null) => {
+      const headers = new Headers(baseHeaders)
+      if (authToken) headers.set('Authorization', `Bearer ${authToken}`)
+      try {
+        return await this.secure.fetch(requestUrl, { ...fetchInit, headers })
+      } catch (error) {
+        if (error instanceof TypeError) {
+          throw new SyncNetworkError({ cause: error })
+        }
+        throw error
+      }
+    }
+
+    let resp = await send(token)
+    if (!init.skipAuth && resp.status === 401) {
+      token = await authTokenManager.refreshToken(token as string)
+      resp = await send(token)
+      if (resp.status === 401) {
+        authTokenManager.handlePersistentAuthFailure()
+        throw new SyncPersistentAuthError()
+      }
+    }
 
     if (!resp.ok) {
       let body: Record<string, unknown> = {}
@@ -107,7 +153,9 @@ export class SyncEnclaveClient {
       const message =
         typeof body.error === 'string'
           ? body.error
-          : `sync enclave request failed: ${resp.status} ${resp.statusText}`
+          : typeof body.message === 'string'
+            ? body.message
+            : `sync enclave request failed: ${resp.status} ${resp.statusText}`
       const code =
         typeof body.code === 'string' ? body.code : `HTTP_${resp.status}`
       logError(`sync enclave request failed`, undefined, {

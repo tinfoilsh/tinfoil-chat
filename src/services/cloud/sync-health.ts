@@ -26,10 +26,7 @@
 export type SyncPausedReason = 'attestation' | 'network'
 
 export type SyncActionReason =
-  | 'key-recovery'
-  | 'key-mismatch'
-  | 'key-conflict'
-  | 'account-blocked'
+  'key-recovery' | 'key-mismatch' | 'key-conflict' | 'account-blocked'
 
 export type SyncGate =
   | { kind: 'ok' }

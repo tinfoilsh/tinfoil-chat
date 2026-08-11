@@ -8,7 +8,8 @@ const mockPush = vi.fn()
 const mockPull = vi.fn()
 const mockGetKeyBytesOrThrow = vi.fn()
 
-vi.mock('@/services/auth', () => ({
+vi.mock('@/services/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/auth')>()),
   authTokenManager: {
     isAuthenticated: (...args: any[]) => mockIsAuthenticated(...args),
   },

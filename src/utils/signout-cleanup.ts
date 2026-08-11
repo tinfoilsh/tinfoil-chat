@@ -5,6 +5,7 @@ import {
   SETTINGS_HAS_SEEN_ONBOARDING,
   USER_ENCRYPTION_KEY,
 } from '@/constants/storage-keys'
+import { authTokenManager } from '@/services/auth'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
 import { profileSync } from '@/services/cloud/profile-sync'
@@ -55,6 +56,7 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 
   invalidateProfileSyncGeneration(true)
   cloudSync.resetForAccountChange()
+  authTokenManager.reset()
 
   // Clear encryption key immediately (in-memory + localStorage) before any
   // async work, so concurrent code cannot re-persist a stale key.

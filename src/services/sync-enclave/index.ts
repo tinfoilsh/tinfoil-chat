@@ -1,6 +1,8 @@
 export {
   SyncEnclaveClient,
   SyncEnclaveError,
+  SyncNetworkError,
+  SyncPersistentAuthError,
   getSyncEnclaveClient,
   resetSyncEnclaveClient,
 } from './sync-enclave-client'

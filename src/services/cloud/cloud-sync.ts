@@ -6,6 +6,7 @@ import {
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
+import { AuthTokenUnavailableError } from '@/services/auth'
 import { logError, logInfo, logWarning } from '@/utils/error-handling'
 import { chatEvents } from '../storage/chat-events'
 import { deletedChatsTracker } from '../storage/deleted-chats-tracker'
@@ -13,6 +14,7 @@ import { indexedDBStorage, type StoredChat } from '../storage/indexed-db'
 import { decideRecovery } from '../sync-enclave/enclave-error-recovery'
 import { passkeyEvents } from '../sync-enclave/passkey-events'
 import { keyCurrent, newIdempotencyKey } from '../sync-enclave/sync-api'
+import { SyncEnclaveError } from '../sync-enclave/sync-enclave-client'
 import {
   hasPrimaryKey,
   migrationKeySetFingerprint,
@@ -921,8 +923,9 @@ export class CloudSyncService {
   /**
    * Shared error dispatch for both phases of a coalesced chat upload
    * (prepare and the frozen attempt). Handles the codes that have a
-   * defined client-side recovery and swallows them; rethrows anything
-   * the recovery table marks transient so the coalescer retries it.
+   * defined client-side recovery. Transient failures reach the coalescer,
+   * which retries them under the same idempotency key, while failed
+   * conflict recovery propagates to its caller.
    */
   private async recoverFromChatUploadError(
     chatId: string,
@@ -931,10 +934,7 @@ export class CloudSyncService {
   ): Promise<void> {
     if (!this.isCurrentGeneration(generation)) return
     // Silently fail if no auth token set
-    if (
-      error instanceof Error &&
-      error.message.includes('Authentication token not set')
-    ) {
+    if (error instanceof AuthTokenUnavailableError) {
       return
     }
     // §9.6 R4 — surface the typed decision and ACT on the codes
@@ -962,36 +962,39 @@ export class CloudSyncService {
     }
     if (decision.action.type === 'refresh-current-key-and-retry') {
       reportKeyActionRequired('key-mismatch')
-      return
+      throw error
     }
     if (decision.action.type === 'trigger-recovery-wizard') {
       reportKeyActionRequired('key-recovery')
-      return
+      throw error
     }
     if (decision.action.type === 'block-all-sync') {
       reportSyncPaused('attestation')
-      return
+      throw error
     }
     if (decision.action.type === 'surface-existing-data-under-other-key') {
       reportKeyActionRequired('key-conflict')
-      return
+      throw error
     }
     if (decision.action.type === 'surface-not-found') {
       reportChatSyncFailed(chatId, 'This chat no longer exists in the cloud')
-      return
+      throw error
     }
     if (decision.action.type === 'migrate-legacy-and-retry') {
       // Handled out-of-band by the migration kick on the next sync
       // pass; nothing for the user to act on.
-      return
+      throw error
     }
     if (decision.action.type === 'abort') {
+      if (decision.action.reason === 'AUTH_PERSISTENT') {
+        throw error
+      }
       if (decision.action.reason === 'FORBIDDEN') {
         reportKeyActionRequired('account-blocked')
       } else {
         reportChatSyncFailed(chatId, "This chat couldn't be synced")
       }
-      return
+      throw error
     }
     throw error
   }
@@ -1052,6 +1055,9 @@ export class CloudSyncService {
           )
           if (!this.isCurrentGeneration(generation)) return
           if (deletions.failed || deletedChatsTracker.isDeleted(chatId)) {
+            if (deletions.failed) {
+              throw new Error(UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR)
+            }
             return
           }
           await this.backupChatNow(chatId, { restoreDeleted: true })
@@ -1124,6 +1130,12 @@ export class CloudSyncService {
         action: 'resolveConflictByPullingRemote',
         metadata: { chatId },
       })
+      if (err instanceof SyncEnclaveError) throw err
+      const propagatedError = new SyncEnclaveError(
+        err instanceof Error ? err.message : String(err),
+      )
+      propagatedError.cause = err
+      throw propagatedError
     }
   }
 
@@ -1174,7 +1186,9 @@ export class CloudSyncService {
           result.uploaded++
         } catch (error) {
           if (!this.isCurrentGeneration(generation)) return
-          reportChatSyncFailed(chat.id, "This chat couldn't be synced")
+          if (decideRecovery(error).action.type !== 'surface-not-found') {
+            reportChatSyncFailed(chat.id, "This chat couldn't be synced")
+          }
           result.errors.push(
             `Failed to backup chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
           )
@@ -1209,6 +1223,9 @@ export class CloudSyncService {
       } catch (error) {
         lastError = error
 
+        const decision = decideRecovery(error)
+        const retryable = decision.action.type === 'retry'
+        if (!retryable) throw error
         if (attempt < REMOTE_LIST_MAX_ATTEMPTS) {
           logWarning('Failed to list remote chats, retrying', {
             component: 'CloudSync',
@@ -1238,6 +1255,9 @@ export class CloudSyncService {
       } catch (error) {
         lastError = error
 
+        const decision = decideRecovery(error)
+        const retryable = decision.action.type === 'retry'
+        if (!retryable) throw error
         if (attempt < REMOTE_LIST_MAX_ATTEMPTS) {
           logWarning('Failed to list project chats, retrying', {
             component: 'CloudSync',
@@ -1743,10 +1763,7 @@ export class CloudSyncService {
       })
     } catch (error) {
       // Silently fail if no auth token set
-      if (
-        error instanceof Error &&
-        error.message.includes('Authentication token not set')
-      ) {
+      if (error instanceof AuthTokenUnavailableError) {
         return
       }
       throw error

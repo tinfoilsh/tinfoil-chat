@@ -15,6 +15,7 @@
  * cannot leak into the client.
  */
 
+import { AttestationError } from 'tinfoil'
 import { SyncEnclaveError } from './sync-enclave-client'
 
 /**
@@ -42,10 +43,7 @@ import { SyncEnclaveError } from './sync-enclave-client'
  *                         error to the user.
  */
 export type EnclaveErrorKind =
-  | 'RETRYABLE_TRANSIENT'
-  | 'RETRYABLE_REFRESH'
-  | 'USER_DECISION'
-  | 'TERMINAL'
+  'RETRYABLE_TRANSIENT' | 'RETRYABLE_REFRESH' | 'USER_DECISION' | 'TERMINAL'
 
 /**
  * The Appendix B code strings the enclave returns. A small string
@@ -62,6 +60,7 @@ export type EnclaveErrorCode =
   | 'LEGACY_BLOB_NOT_MIGRATED'
   | 'ATTESTATION_FAILED'
   | 'AUTH'
+  | 'AUTH_PERSISTENT'
   | 'FORBIDDEN'
   | 'NETWORK'
   | 'NOT_FOUND'
@@ -86,15 +85,6 @@ export interface EnclaveErrorClassification {
 export function classifyEnclaveError(err: unknown): EnclaveErrorClassification {
   if (err instanceof SyncEnclaveError) {
     return classifySyncEnclaveError(err)
-  }
-
-  if (isNetworkError(err)) {
-    return {
-      kind: 'RETRYABLE_TRANSIENT',
-      code: 'NETWORK',
-      message: errorMessage(err),
-      cause: err,
-    }
   }
 
   if (isAttestationError(err)) {
@@ -139,6 +129,7 @@ function classifySyncEnclaveError(
       case 'UNKNOWN_KEY':
       case 'FORBIDDEN':
       case 'ATTESTATION_FAILED':
+      case 'AUTH_PERSISTENT':
         return { kind: 'TERMINAL', code, status, message, cause: err }
       case 'LEGACY_BLOB_NOT_MIGRATED':
         // The recovery table runs targeted /v1/blobs/migrate and
@@ -214,30 +205,8 @@ function classifySyncEnclaveError(
   return { kind: 'TERMINAL', status, message, cause: err }
 }
 
-function isNetworkError(err: unknown): boolean {
-  if (err instanceof TypeError) {
-    // The browser's fetch surface throws TypeError on transport
-    // failures (DNS, TLS, ECONNREFUSED, offline). Match only the
-    // phrases browsers actually emit — a bare "fetch" token would
-    // misclassify generic TypeErrors like "x.fetch is not a function".
-    return /network error|networkerror|failed to fetch|load failed/i.test(
-      err.message,
-    )
-  }
-  return false
-}
-
 function isAttestationError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false
-  // The bare token `verify` was too broad — it matched generic
-  // strings like "failed to verify token". Match only phrases the
-  // attestation layer actually emits: anything containing
-  // "attestation", or the specific "enclave verification" /
-  // "verification document" / "verifier" phrases that the
-  // SecureClient surface uses.
-  return /attestation|enclave verification|verification document|verifier/i.test(
-    err.message,
-  )
+  return err instanceof AttestationError
 }
 
 function errorMessage(err: unknown): string {
