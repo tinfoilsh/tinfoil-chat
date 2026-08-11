@@ -24,9 +24,6 @@ const SUPPORTED_MISSING_FIELDS = new Set([
 const AUTH_ERROR_MESSAGE = 'Something went wrong. Please try again.'
 const UNSUPPORTED_REQUIREMENTS_MESSAGE =
   'Your account needs additional setup. Please contact support.'
-const SOCIAL_SIGN_IN_POPUP_FEATURES = 'popup,width=600,height=800'
-const POPUP_BLOCKED_MESSAGE =
-  'Allow pop-ups for this site to continue with Google or Apple.'
 
 type AuthStep = 'email' | 'code' | 'details'
 type VerificationKind = 'primary' | 'mfa' | 'totp'
@@ -244,34 +241,13 @@ export default function SignInPage() {
           postAuthRedirectUrl === POST_AUTH_REDIRECT_URL
             ? SSO_CALLBACK_URL
             : `${SSO_CALLBACK_URL}?redirect_url=${encodeURIComponent(postAuthRedirectUrl)}`
-        const popup = window.open(
-          'about:blank',
-          '_blank',
-          SOCIAL_SIGN_IN_POPUP_FEATURES,
-        )
-        if (!popup) {
-          setErrorMessage(POPUP_BLOCKED_MESSAGE)
-          return
-        }
-
-        try {
-          const { error } = await signIn.sso({
-            strategy,
-            popup,
-            redirectCallbackUrl: new URL(
-              redirectCallbackUrl,
-              window.location.origin,
-            ).href,
-            redirectUrl: new URL(postAuthRedirectUrl, window.location.origin)
-              .href,
-          })
-          if (error) {
-            popup.close()
-            setErrorMessage(getClerkErrorMessage(error, AUTH_ERROR_MESSAGE))
-          }
-        } catch (error) {
-          popup.close()
-          throw error
+        const { error } = await signIn.sso({
+          strategy,
+          redirectCallbackUrl,
+          redirectUrl: postAuthRedirectUrl,
+        })
+        if (error) {
+          setErrorMessage(getClerkErrorMessage(error, AUTH_ERROR_MESSAGE))
         }
       },
     )
