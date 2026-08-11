@@ -348,7 +348,6 @@ export function useProfileSync() {
       'piiCheckEnabledChanged',
       'genUIEnabledChanged',
       'chatFontChanged',
-      'projectUploadPreferenceChanged',
     ]
     events.forEach((event) =>
       window.addEventListener(event, handleSettingsChange),

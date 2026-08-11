@@ -29,7 +29,6 @@ export const PROFILE_MERGE_FIELDS = [
   'piiCheckEnabled',
   'genUIEnabled',
   'chatFont',
-  'projectUploadPreference',
 ] as const
 
 // Older clients omit this field, while the setting itself has no unset state.

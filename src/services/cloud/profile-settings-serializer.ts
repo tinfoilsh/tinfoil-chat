@@ -20,7 +20,6 @@ import {
   USER_PREFS_NICKNAME,
   USER_PREFS_PERSONALIZATION_ENABLED,
   USER_PREFS_PROFESSION,
-  USER_PREFS_PROJECT_UPLOAD,
   USER_PREFS_TRAITS,
 } from '@/constants/storage-keys'
 import type {
@@ -97,8 +96,7 @@ export function hasProfileChanged(
       profile2.pixelateSidebarChatTitlesEnabled ||
     profile1.piiCheckEnabled !== profile2.piiCheckEnabled ||
     profile1.genUIEnabled !== profile2.genUIEnabled ||
-    profile1.chatFont !== profile2.chatFont ||
-    profile1.projectUploadPreference !== profile2.projectUploadPreference
+    profile1.chatFont !== profile2.chatFont
   )
 }
 
@@ -240,16 +238,6 @@ export function loadLocalSettings(): ProfileData {
     chatFont === 'dyslexic'
   ) {
     settings.chatFont = chatFont
-  }
-
-  const projectUploadPreference = localStorage.getItem(
-    USER_PREFS_PROJECT_UPLOAD,
-  )
-  if (
-    projectUploadPreference === 'project' ||
-    projectUploadPreference === 'chat'
-  ) {
-    settings.projectUploadPreference = projectUploadPreference
   }
 
   return settings
@@ -509,18 +497,6 @@ export function applySettingsToLocal(settings: ProfileData): void {
     window.dispatchEvent(
       new CustomEvent('chatFontChanged', {
         detail: settings.chatFont,
-      }),
-    )
-  }
-
-  if (settings.projectUploadPreference !== undefined) {
-    localStorage.setItem(
-      USER_PREFS_PROJECT_UPLOAD,
-      settings.projectUploadPreference,
-    )
-    window.dispatchEvent(
-      new CustomEvent('projectUploadPreferenceChanged', {
-        detail: settings.projectUploadPreference,
       }),
     )
   }

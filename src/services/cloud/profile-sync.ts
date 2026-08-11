@@ -83,7 +83,6 @@ export interface ProfileData {
   piiCheckEnabled?: boolean
   genUIEnabled?: boolean
   chatFont?: 'system' | 'serif' | 'mono' | 'dyslexic'
-  projectUploadPreference?: 'project' | 'chat'
 
   // Metadata
   version?: number

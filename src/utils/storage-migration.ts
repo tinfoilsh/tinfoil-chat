@@ -41,7 +41,6 @@ const LOCAL_STORAGE_KEY_MAP: Record<string, string> = {
   isUsingPersonalization: 'tinfoil-user-prefs-personalization-enabled',
   isUsingCustomPrompt: 'tinfoil-user-prefs-custom-prompt-enabled',
   customSystemPrompt: 'tinfoil-user-prefs-custom-system-prompt',
-  projectUploadPreference: 'tinfoil-user-prefs-project-upload',
 
   // Sync/data
   chats: 'tinfoil-sync-chats',
