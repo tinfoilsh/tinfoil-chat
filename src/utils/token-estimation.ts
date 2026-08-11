@@ -17,14 +17,23 @@ export function estimateTokenCount(text: string | undefined): number {
   return Math.ceil(text.length / 4)
 }
 
-// Parse values like "64k tokens" → 64000
+// Any parsed window below this is treated as an unrecognized format (e.g. a
+// suffix this parser predates) rather than a real limit; zeroing the budget
+// would silently archive the whole conversation.
+const MIN_PLAUSIBLE_CONTEXT_WINDOW_TOKENS = 1000
+
+// Parse values like "64k tokens" → 64000 or "1M tokens" → 1000000
 export function parseContextWindowTokens(contextWindow?: string): number {
   if (!contextWindow) return DEFAULT_CONTEXT_WINDOW_TOKENS
-  const match = contextWindow.match(/(\d+)(k)?/i)
+  const match = contextWindow.match(/(\d+(?:\.\d+)?)\s*([km])?/i)
   if (!match) return DEFAULT_CONTEXT_WINDOW_TOKENS
-  let tokens = parseInt(match[1], 10)
-  if (match[2]) {
-    tokens *= 1000
+  let tokens = parseFloat(match[1])
+  const suffix = match[2]?.toLowerCase()
+  if (suffix === 'k') tokens *= 1_000
+  if (suffix === 'm') tokens *= 1_000_000
+  tokens = Math.round(tokens)
+  if (tokens < MIN_PLAUSIBLE_CONTEXT_WINDOW_TOKENS) {
+    return DEFAULT_CONTEXT_WINDOW_TOKENS
   }
   return tokens
 }
