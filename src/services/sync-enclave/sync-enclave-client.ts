@@ -42,10 +42,15 @@ export class SyncPersistentAuthError extends SyncEnclaveError {
   }
 }
 
-export class SyncNetworkError extends Error {
+export class SyncNetworkError extends SyncEnclaveError {
   constructor(options?: ErrorOptions) {
-    super('Sync enclave request failed due to a network error', options)
+    super(
+      'Sync enclave request failed due to a network error',
+      undefined,
+      'NETWORK',
+    )
     this.name = 'SyncNetworkError'
+    if (options?.cause !== undefined) this.cause = options.cause
   }
 }
 

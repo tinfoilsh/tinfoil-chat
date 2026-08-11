@@ -978,7 +978,7 @@ export class CloudSyncService {
     }
     if (decision.action.type === 'surface-not-found') {
       reportChatSyncFailed(chatId, 'This chat no longer exists in the cloud')
-      return
+      throw error
     }
     if (decision.action.type === 'migrate-legacy-and-retry') {
       // Handled out-of-band by the migration kick on the next sync
@@ -1130,6 +1130,7 @@ export class CloudSyncService {
         action: 'resolveConflictByPullingRemote',
         metadata: { chatId },
       })
+      if (err instanceof SyncEnclaveError) throw err
       const propagatedError = new SyncEnclaveError(
         err instanceof Error ? err.message : String(err),
       )

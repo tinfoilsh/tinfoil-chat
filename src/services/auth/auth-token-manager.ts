@@ -137,9 +137,7 @@ export class AuthTokenManager {
         )
       })
       .finally(() => {
-        if (this.persistentAuthHandlerPromise === promise) {
-          this.persistentAuthHandlerPromise = null
-        }
+        this.persistentAuthHandlerPromise = null
       })
     this.persistentAuthHandlerPromise = promise
   }

@@ -1,6 +1,7 @@
 export {
   SyncEnclaveClient,
   SyncEnclaveError,
+  SyncNetworkError,
   SyncPersistentAuthError,
   getSyncEnclaveClient,
   resetSyncEnclaveClient,

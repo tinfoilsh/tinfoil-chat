@@ -614,13 +614,16 @@ describe('CloudSyncService', () => {
         new SyncEnclaveError('missing', 404, 'NOT_FOUND'),
       )
 
-      await new CloudSyncService().backupUnsyncedChats()
+      const result = await new CloudSyncService().backupUnsyncedChats()
 
       expect(mockReportChatSyncFailed).toHaveBeenCalledOnce()
       expect(mockReportChatSyncFailed).toHaveBeenCalledWith(
         chat.id,
         'This chat no longer exists in the cloud',
       )
+      expect(result.uploaded).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(mockFinalizeUpload).not.toHaveBeenCalled()
     })
   })
 

@@ -16,7 +16,7 @@
  */
 
 import { AttestationError } from 'tinfoil'
-import { SyncEnclaveError, SyncNetworkError } from './sync-enclave-client'
+import { SyncEnclaveError } from './sync-enclave-client'
 
 /**
  * Four buckets the rest of the client recovers against.
@@ -85,15 +85,6 @@ export interface EnclaveErrorClassification {
 export function classifyEnclaveError(err: unknown): EnclaveErrorClassification {
   if (err instanceof SyncEnclaveError) {
     return classifySyncEnclaveError(err)
-  }
-
-  if (isNetworkError(err)) {
-    return {
-      kind: 'RETRYABLE_TRANSIENT',
-      code: 'NETWORK',
-      message: errorMessage(err),
-      cause: err,
-    }
   }
 
   if (isAttestationError(err)) {
@@ -212,10 +203,6 @@ function classifySyncEnclaveError(
   }
 
   return { kind: 'TERMINAL', status, message, cause: err }
-}
-
-function isNetworkError(err: unknown): boolean {
-  return err instanceof SyncNetworkError
 }
 
 function isAttestationError(err: unknown): boolean {
