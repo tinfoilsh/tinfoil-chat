@@ -72,6 +72,7 @@ type ScannedRecovery = {
 const activeRecoveries = new Map<string, ActiveRecovery>()
 const scannedRecoveries = new Map<string, ScannedRecovery>()
 const cancelledTurns = new Set<string>()
+const settledTurns = new Set<string>()
 const RECOVERY_SCAN_CONCURRENCY = 4
 const RECOVERY_RETRY_BASE_DELAY_MS = 100
 const RECOVERY_RETRY_MAX_DELAY_MS = 10_000
@@ -479,7 +480,23 @@ export function isChatRecoveryTurnCancelled(
   chatId: string,
   turnId: string,
 ): boolean {
-  return cancelledTurns.has(turnKey(chatId, turnId))
+  const key = turnKey(chatId, turnId)
+  return cancelledTurns.has(key) || settledTurns.has(key)
+}
+
+/**
+ * Mark a turn whose live stream completed on screen. The UI settles to
+ * idle before the envelope removal round-trips, so a storage reload in
+ * that window must not re-adopt the turn's envelope and flash a recovery
+ * indicator under an already-complete response. Kept separate from the
+ * cancelled-turn registry: a settled turn's in-flight token persistence
+ * and finalization must keep running, only envelope adoption stops.
+ */
+export function markChatRecoveryTurnSettled(
+  chatId: string,
+  turnId: string,
+): void {
+  settledTurns.add(turnKey(chatId, turnId))
 }
 
 export function releaseActiveChatRecovery(chatId: string): void {
@@ -970,6 +987,7 @@ export function resetChatRecoveryState(): void {
   activeRecoveries.clear()
   scannedRecoveries.clear()
   cancelledTurns.clear()
+  settledTurns.clear()
   clearChatRecoveryDrafts()
   clearActiveChatRecoveries()
   scanInFlight = null
