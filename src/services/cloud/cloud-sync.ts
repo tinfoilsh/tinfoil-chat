@@ -93,8 +93,16 @@ const UPLOAD_MAX_RETRIES = 3
 const REMOTE_LIST_MAX_ATTEMPTS = 2
 const UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR =
   'Skipped uploading local changes: remote deletions could not be reconciled'
-const CROSS_TAB_SYNC_LOCK = 'tinfoil-cloud-sync'
+export const CROSS_TAB_SYNC_LOCK = 'tinfoil-cloud-sync'
+export const CROSS_TAB_SYNC_LOCK_OPTIONS = {
+  ifAvailable: true,
+  mode: 'exclusive',
+} as const
 const isStreaming = (id: string) => streamingTracker.isStreaming(id)
+
+function emptySyncResult(): SyncResult {
+  return { uploaded: 0, downloaded: 0, errors: [] }
+}
 
 export class CloudSyncService {
   private syncLock: Promise<void> | null = null
@@ -102,7 +110,7 @@ export class CloudSyncService {
   private uploadCoalescer: UploadCoalescer
   private streamingCallbacks: Set<string> = new Set()
   private accountGeneration = 0
-  private crossTabReloadQueued = false
+  private crossTabReloadFrame: number | null = null
   /**
    * Set once per session after the first successful syncAllChats so
    * the enclave-driven legacy-blob migration (§8.7.2 trigger 1) runs
@@ -162,10 +170,9 @@ export class CloudSyncService {
   }
 
   private queueCrossTabReload(): void {
-    if (this.crossTabReloadQueued) return
-    this.crossTabReloadQueued = true
-    queueMicrotask(() => {
-      this.crossTabReloadQueued = false
+    if (this.crossTabReloadFrame !== null) return
+    this.crossTabReloadFrame = requestAnimationFrame(() => {
+      this.crossTabReloadFrame = null
       chatEvents.emit({ reason: 'sync', ids: [] })
     })
   }
@@ -178,6 +185,10 @@ export class CloudSyncService {
     this.accountGeneration++
     this.uploadCoalescer.clear()
     this.streamingCallbacks.clear()
+    if (this.crossTabReloadFrame !== null) {
+      cancelAnimationFrame(this.crossTabReloadFrame)
+      this.crossTabReloadFrame = null
+    }
     resetAlternativesFinalizationState()
     this.clearSyncStatus()
     // The deletes watermark is scoped to the account's tombstone history,
@@ -195,20 +206,20 @@ export class CloudSyncService {
    * Only one sync operation can run at a time.
    * Throws if a sync is already in progress.
    */
-  private async withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+  private async withSyncLock<T>(fn: () => Promise<T>): Promise<T | undefined> {
     if (typeof navigator !== 'undefined' && navigator.locks) {
       return navigator.locks.request(
         CROSS_TAB_SYNC_LOCK,
-        { ifAvailable: true, mode: 'exclusive' },
+        CROSS_TAB_SYNC_LOCK_OPTIONS,
         async (lock) => {
           if (!lock) {
             logInfo('[CloudSync] Sync active in another tab, skipping', {
               component: 'CloudSync',
               action: 'withSyncLock',
             })
-            throw new SyncInProgressError()
+            return undefined
           }
-          return this.withInstanceSyncLock(fn)
+          return this.trackSync(fn)
         },
       )
     }
@@ -225,6 +236,10 @@ export class CloudSyncService {
       throw new SyncInProgressError()
     }
 
+    return this.trackSync(fn)
+  }
+
+  private async trackSync<T>(fn: () => Promise<T>): Promise<T> {
     let resolve: () => void
     this.syncLock = new Promise<void>((r) => {
       resolve = r
@@ -506,7 +521,10 @@ export class CloudSyncService {
 
   // Perform a delta sync - only fetch chats that changed since last sync
   async syncChangedChats(): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doSyncChangedChats())
+    return (
+      (await this.withSyncLock(() => this.doSyncChangedChats())) ??
+      emptySyncResult()
+    )
   }
 
   private async doSyncChangedChats(): Promise<SyncResult> {
@@ -1267,7 +1285,10 @@ export class CloudSyncService {
 
   // Sync all chats (upload local changes, download remote changes)
   async syncAllChats(options?: { deep?: boolean }): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doSyncAllChats(options))
+    return (
+      (await this.withSyncLock(() => this.doSyncAllChats(options))) ??
+      emptySyncResult()
+    )
   }
 
   private async listChatsWithRetry(options: {
@@ -1722,6 +1743,13 @@ export class CloudSyncService {
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
   async smartSync(projectId?: string): Promise<SyncResult> {
+    return (
+      (await this.withSyncLock(() => this.doSmartSync(projectId))) ??
+      emptySyncResult()
+    )
+  }
+
+  private async doSmartSync(projectId?: string): Promise<SyncResult> {
     const generation = this.accountGeneration
     // Kick the legacy-blob migration before any sync work runs.
     // Previously this only fired at the end of a successful
@@ -1732,13 +1760,8 @@ export class CloudSyncService {
     // every smartSync entry is safe.
     void this.kickLegacyBlobMigration()
 
-    // Note: smartSync doesn't need its own lock because it delegates to
-    // syncChangedChats/syncAllChats/syncProjectChats which have their own locks
-    if (this.syncLock) {
-      throw new SyncInProgressError()
-    }
     if (!projectId && needsRecoveryHistorySync()) {
-      return this.syncAllChats({ deep: true })
+      return this.doSyncAllChats({ deep: true })
     }
 
     const status = await this.checkSyncStatus(projectId)
@@ -1792,11 +1815,13 @@ export class CloudSyncService {
 
     if (cachedStatus?.lastUpdated && status.reason !== 'count_changed') {
       return projectId
-        ? this.syncProjectChatsChanged(projectId)
-        : this.syncChangedChats()
+        ? this.doSyncProjectChatsChanged(projectId)
+        : this.doSyncChangedChats()
     }
 
-    return projectId ? this.syncProjectChats(projectId) : this.syncAllChats()
+    return projectId
+      ? this.doSyncProjectChats(projectId)
+      : this.doSyncAllChats()
   }
 
   // Check if currently syncing
@@ -2079,7 +2104,10 @@ export class CloudSyncService {
   }
 
   async syncProjectChats(projectId: string): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doSyncProjectChats(projectId))
+    return (
+      (await this.withSyncLock(() => this.doSyncProjectChats(projectId))) ??
+      emptySyncResult()
+    )
   }
 
   private async doSyncProjectChats(
@@ -2197,7 +2225,11 @@ export class CloudSyncService {
    * Perform a delta sync for project chats - only fetch chats that changed since last sync.
    */
   async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
-    return this.withSyncLock(() => this.doSyncProjectChatsChanged(projectId))
+    return (
+      (await this.withSyncLock(() =>
+        this.doSyncProjectChatsChanged(projectId),
+      )) ?? emptySyncResult()
+    )
   }
 
   private async doSyncProjectChatsChanged(

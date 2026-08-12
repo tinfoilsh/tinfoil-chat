@@ -5,7 +5,8 @@ import {
 } from '@/constants/storage-keys'
 import {
   CloudSyncService,
-  SyncInProgressError,
+  CROSS_TAB_SYNC_LOCK,
+  CROSS_TAB_SYNC_LOCK_OPTIONS,
 } from '@/services/cloud/cloud-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import {
@@ -311,7 +312,7 @@ describe('CloudSyncService', () => {
         _name: string,
         _options: LockOptions,
         callback: (lock: Lock | null) => Promise<string>,
-      ) => callback({ name: 'tinfoil-cloud-sync', mode: 'exclusive' }),
+      ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
     )
     vi.stubGlobal('navigator', { locks: { request } })
     const service = new CloudSyncService()
@@ -320,8 +321,8 @@ describe('CloudSyncService', () => {
       (service as any).withSyncLock(async () => 'synced'),
     ).resolves.toBe('synced')
     expect(request).toHaveBeenCalledWith(
-      'tinfoil-cloud-sync',
-      { ifAvailable: true, mode: 'exclusive' },
+      CROSS_TAB_SYNC_LOCK,
+      CROSS_TAB_SYNC_LOCK_OPTIONS,
       expect.any(Function),
     )
   })
@@ -339,15 +340,43 @@ describe('CloudSyncService', () => {
 
     await expect(
       (service as any).withSyncLock(async () => 'synced'),
-    ).rejects.toBeInstanceOf(SyncInProgressError)
+    ).resolves.toBeUndefined()
+  })
+
+  it('skips smart sync before network checks when another tab owns the lock', async () => {
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock | null) => Promise<unknown>,
+      ) => callback(null),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    await expect(service.smartSync()).resolves.toEqual({
+      uploaded: 0,
+      downloaded: 0,
+      errors: [],
+    })
+    expect(mockIsAuthenticated).not.toHaveBeenCalled()
   })
 
   it('coalesces cross-tab storage updates into one chat refresh', async () => {
+    let publishFrame!: FrameRequestCallback
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        publishFrame = callback
+        return 1
+      }),
+    )
     const service = new CloudSyncService()
 
     ;(service as any).queueCrossTabReload()
     ;(service as any).queueCrossTabReload()
-    await Promise.resolve()
+    expect(mockChatEventsEmit).not.toHaveBeenCalled()
+    publishFrame(performance.now())
 
     expect(mockChatEventsEmit).toHaveBeenCalledTimes(1)
     expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
