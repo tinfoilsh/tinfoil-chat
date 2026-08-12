@@ -126,6 +126,7 @@ import {
   artifactDetailsEqual,
   OPEN_ARTIFACT_PREVIEW_EVENT,
   type ArtifactPreviewSidebarDetail,
+  type ArtifactPreviewSidebarEventDetail,
 } from './genui/widgets/ArtifactPreview'
 import {
   canToggleTemporaryChat,
@@ -1441,17 +1442,18 @@ export function ChatInterface({
   // slide-over and closes any other right-side panel so only one is visible.
   useEffect(() => {
     const handleOpenArtifactPreview = (
-      event: CustomEvent<ArtifactPreviewSidebarDetail>,
+      event: CustomEvent<ArtifactPreviewSidebarEventDetail>,
     ) => {
       if (!event.detail) return
+      const { action, artifact } = event.detail
       // Toggle: clicking the inline card while its artifact is already open
       // closes the sidebar instead of re-opening it.
       setArtifactPreview((prev) => {
         const sameArtifact =
           prev !== null &&
           isArtifactSidebarOpen &&
-          artifactDetailsEqual(prev, event.detail)
-        if (sameArtifact) {
+          artifactDetailsEqual(prev, artifact)
+        if (action === 'toggle' && sameArtifact) {
           setIsArtifactSidebarOpen(false)
           return prev
         }
@@ -1462,7 +1464,7 @@ export function ChatInterface({
         if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
           setIsSidebarOpen(false)
         }
-        return event.detail
+        return artifact
       })
     }
     window.addEventListener(

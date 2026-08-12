@@ -1,7 +1,12 @@
+import { CONSTANTS } from '@/components/chat/constants'
 import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { GENUI_WIDGETS_BY_NAME } from '@/components/chat/genui/registry'
 import { ArtifactRetryError } from '@/components/chat/genui/retry'
 import type { GenUIRenderContext } from '@/components/chat/genui/types'
+import {
+  OPEN_ARTIFACT_PREVIEW_EVENT,
+  type ArtifactPreviewSidebarEventDetail,
+} from '@/components/chat/genui/widgets/ArtifactPreview'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,9 +21,25 @@ const validMessageCompose = JSON.stringify({
   variants: [{ label: 'Concise', body: 'Thanks, I will confirm.' }],
 })
 
+const artifact = {
+  title: 'Snake game',
+  description: 'An interactive game',
+  source: { type: 'html' as const, html: '<main>Snake</main>' },
+}
+
+const validArtifactPreview = JSON.stringify(artifact)
+
+function setWindowWidth(width: number): void {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: width,
+  })
+}
+
 describe('GenUIToolCallRenderer', () => {
   beforeEach(() => {
     logErrorMock.mockReset()
+    setWindowWidth(CONSTANTS.MOBILE_BREAKPOINT)
   })
 
   afterEach(() => {
@@ -43,6 +64,98 @@ describe('GenUIToolCallRenderer', () => {
     expect(
       screen.queryByText(/Generating message compose/),
     ).not.toBeInTheDocument()
+  })
+
+  it('opens a generated artifact automatically on desktop', () => {
+    const listener = vi.fn()
+    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+
+    render(
+      <GenUIToolCallRenderer
+        isStreaming
+        toolCalls={[
+          {
+            id: 'artifact-1',
+            name: 'render_artifact_preview',
+            arguments: validArtifactPreview,
+          },
+        ]}
+      />,
+    )
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    const event = listener.mock
+      .calls[0][0] as CustomEvent<ArtifactPreviewSidebarEventDetail>
+    expect(event.detail).toEqual({ action: 'open', artifact })
+    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+  })
+
+  it('does not auto-open generated artifacts on mobile', () => {
+    setWindowWidth(CONSTANTS.MOBILE_BREAKPOINT - 1)
+    const listener = vi.fn()
+    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+
+    render(
+      <GenUIToolCallRenderer
+        isStreaming
+        toolCalls={[
+          {
+            id: 'artifact-1',
+            name: 'render_artifact_preview',
+            arguments: validArtifactPreview,
+          },
+        ]}
+      />,
+    )
+
+    expect(listener).not.toHaveBeenCalled()
+    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+  })
+
+  it('does not auto-open artifacts from chat history', () => {
+    const listener = vi.fn()
+    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+
+    render(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        toolCalls={[
+          {
+            id: 'artifact-1',
+            name: 'render_artifact_preview',
+            arguments: validArtifactPreview,
+          },
+        ]}
+      />,
+    )
+
+    expect(listener).not.toHaveBeenCalled()
+    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+  })
+
+  it('keeps artifact card clicks as sidebar toggles', () => {
+    const listener = vi.fn()
+    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+
+    render(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        toolCalls={[
+          {
+            id: 'artifact-1',
+            name: 'render_artifact_preview',
+            arguments: validArtifactPreview,
+          },
+        ]}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Snake game/ }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    const event = listener.mock
+      .calls[0][0] as CustomEvent<ArtifactPreviewSidebarEventDetail>
+    expect(event.detail).toEqual({ action: 'toggle', artifact })
+    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
   })
 
   it('shows a simple generating state without raw data or a character count', () => {

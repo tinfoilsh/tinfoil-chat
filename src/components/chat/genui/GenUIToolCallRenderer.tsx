@@ -83,12 +83,17 @@ function GenUIWidgetContent({
   toolName,
   input,
   isDarkMode,
+  isStreaming,
 }: {
   toolName: string
   input: unknown
   isDarkMode?: boolean
+  isStreaming: boolean
 }) {
-  const rendered = renderGenUIInline(toolName, input, { isDarkMode })
+  const rendered = renderGenUIInline(toolName, input, {
+    isDarkMode,
+    isStreaming,
+  })
   if (rendered === null) throw new Error('Widget render returned null')
   return rendered
 }
@@ -157,6 +162,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
                   toolName={tc.name}
                   input={parsedInput.data}
                   isDarkMode={isDarkMode}
+                  isStreaming={isStreaming}
                 />
               </div>
             </GenUIWidgetErrorBoundary>

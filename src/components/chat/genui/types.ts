@@ -39,6 +39,7 @@ export function defineGenUIWidget<Schema extends ZodTypeAny>(
  */
 export interface GenUIRenderContext {
   isDarkMode?: boolean
+  isStreaming?: boolean
 }
 
 /**

@@ -9,6 +9,7 @@
  *
  * Supported source types: `url`, `html`, `markdown`, `svg`, `mermaid`.
  */
+import { CONSTANTS } from '@/components/chat/constants'
 import CopyButton from '@/components/copy-button'
 import {
   Card,
@@ -20,7 +21,7 @@ import {
 import { cn } from '@/components/ui/utils'
 import { sanitizeUrl } from '@braintree/sanitize-url'
 import { Code2, Download, ExternalLink, Eye, FileText } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { z } from 'zod'
 import { defineGenUIWidget } from '../types'
@@ -74,14 +75,23 @@ export interface ArtifactPreviewSidebarDetail {
   footer?: string
 }
 
+export interface ArtifactPreviewSidebarEventDetail {
+  artifact: ArtifactPreviewSidebarDetail
+  action: 'open' | 'toggle'
+}
+
 export function openArtifactPreviewSidebar(
   detail: ArtifactPreviewSidebarDetail,
+  action: ArtifactPreviewSidebarEventDetail['action'] = 'toggle',
 ): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(
-    new CustomEvent<ArtifactPreviewSidebarDetail>(OPEN_ARTIFACT_PREVIEW_EVENT, {
-      detail,
-    }),
+    new CustomEvent<ArtifactPreviewSidebarEventDetail>(
+      OPEN_ARTIFACT_PREVIEW_EVENT,
+      {
+        detail: { artifact: detail, action },
+      },
+    ),
   )
 }
 
@@ -405,15 +415,28 @@ function ArtifactPreviewInlineCard({
   description,
   source,
   footer,
-}: z.infer<typeof schema>) {
-  const detail: ArtifactPreviewSidebarDetail = {
-    title,
-    description,
-    source,
-    footer,
-  }
+  shouldAutoOpen,
+}: z.infer<typeof schema> & { shouldAutoOpen?: boolean }) {
+  const hasAutoOpenedRef = useRef(false)
+  const detail = useMemo<ArtifactPreviewSidebarDetail>(
+    () => ({ title, description, source, footer }),
+    [description, footer, source, title],
+  )
   const displayTitle = title ?? getSourceLabel(source)
   const subtitle = description ?? getSourceLabel(source)
+
+  useEffect(() => {
+    if (
+      !shouldAutoOpen ||
+      hasAutoOpenedRef.current ||
+      window.innerWidth < CONSTANTS.MOBILE_BREAKPOINT
+    ) {
+      return
+    }
+    hasAutoOpenedRef.current = true
+    openArtifactPreviewSidebar(detail, 'open')
+  }, [detail, shouldAutoOpen])
+
   return (
     <div className="my-3 flex w-full items-center rounded-lg border border-border-subtle bg-surface-card text-left transition-colors hover:bg-surface-chat-background">
       <button
@@ -453,5 +476,7 @@ export const widget = defineGenUIWidget({
     'Display a visual artifact in a side panel: a hosted URL, a self-contained HTML snippet, or Markdown. Use for content worth inspecting at full size — interactive demos, long-form documents, or rich HTML mockups. For SVG illustrations and Mermaid diagrams, emit a fenced `svg` or `mermaid` code block in the regular assistant message instead. The chat shows a compact summary card; clicking it opens the full artifact in the right sidebar.',
   schema,
   promptHint: 'large artifacts (markdown/html/url) opened in a side panel',
-  render: (args) => <ArtifactPreviewInlineCard {...args} />,
+  render: (args, { isStreaming }) => (
+    <ArtifactPreviewInlineCard {...args} shouldAutoOpen={isStreaming} />
+  ),
 })
