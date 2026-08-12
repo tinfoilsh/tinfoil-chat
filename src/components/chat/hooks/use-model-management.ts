@@ -47,10 +47,6 @@ interface UseModelManagementReturn {
   hasValidatedModel: boolean
   expandedLabel: LabelType
   setExpandedLabel: (label: LabelType) => void
-  setVerificationComplete: (complete: boolean) => void
-  setVerificationSuccess: (success: boolean) => void
-  verificationComplete: boolean
-  verificationSuccess: boolean
   handleModelSelect: (modelName: AIModel) => void
   handleLabelClick: (
     label: Exclude<LabelType, null>,
@@ -79,10 +75,6 @@ export function useModelManagement({
 
   // Add state for expanded label
   const [expandedLabel, setExpandedLabel] = useState<LabelType>(null)
-
-  // Verification state
-  const [verificationComplete, setVerificationComplete] = useState(false)
-  const [verificationSuccess, setVerificationSuccess] = useState(false)
 
   const persistSelectedModel = useCallback((modelName: AIModel) => {
     localStorage.setItem(SETTINGS_SELECTED_MODEL, modelName)
@@ -187,10 +179,6 @@ export function useModelManagement({
     hasValidatedModel: hasValidated,
     expandedLabel,
     setExpandedLabel,
-    setVerificationComplete,
-    setVerificationSuccess,
-    verificationComplete,
-    verificationSuccess,
     handleModelSelect,
     handleLabelClick,
   }

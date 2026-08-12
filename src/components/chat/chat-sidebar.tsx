@@ -121,10 +121,6 @@ type ChatSidebarProps = {
   onManualSync?: () => Promise<void>
   /** True while a cloud sync is in progress; drives the Sync button spinner. */
   isSyncing?: boolean
-  verificationComplete?: boolean
-  verificationSuccess?: boolean
-  onVerificationComplete?: (success: boolean) => void
-  onVerificationUpdate?: (state: any) => void
   isProjectMode?: boolean
   activeProjectName?: string
   onEnterProject?: (projectId: string, projectName?: string) => Promise<void>

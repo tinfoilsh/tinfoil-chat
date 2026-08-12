@@ -1,4 +1,5 @@
 import { cn } from '@/components/ui/utils'
+import { acquireInteractionLock } from '@/utils/interaction-lock'
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -85,12 +86,7 @@ export function PromptLibraryModal({
     if (!isOpen) return
     const appRoot = document.getElementById('__next')
     if (!appRoot) return
-    appRoot.setAttribute('inert', '')
-    appRoot.setAttribute('aria-hidden', 'true')
-    return () => {
-      appRoot.removeAttribute('inert')
-      appRoot.removeAttribute('aria-hidden')
-    }
+    return acquireInteractionLock([appRoot], { ariaHidden: true })
   }, [isOpen])
 
   const selectedPreset = useMemo<PromptPreset | null>(() => {

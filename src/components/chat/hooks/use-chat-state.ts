@@ -25,8 +25,6 @@ interface UseChatStateReturn {
   themeMode: ThemeMode
   isInitialLoad: boolean
   isThinking: boolean
-  verificationComplete: boolean
-  verificationSuccess: boolean
   isWaitingForResponse: boolean
   isStreaming: boolean
   streamError: StreamErrorInfo | null
@@ -41,8 +39,6 @@ interface UseChatStateReturn {
   setInput: (input: string) => void
   setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>
   setIsInitialLoad: (isLoading: boolean) => void
-  setVerificationComplete: (complete: boolean) => void
-  setVerificationSuccess: (success: boolean) => void
   setChats: React.Dispatch<React.SetStateAction<Chat[]>>
   setCurrentChat: React.Dispatch<React.SetStateAction<Chat>>
 
@@ -179,10 +175,6 @@ export function useChatState({
     hasValidatedModel,
     expandedLabel,
     setExpandedLabel,
-    setVerificationComplete,
-    setVerificationSuccess,
-    verificationComplete,
-    verificationSuccess,
     handleModelSelect: persistModelSelection,
     handleLabelClick,
   } = useModelManagement({
@@ -341,8 +333,6 @@ export function useChatState({
     themeMode,
     isInitialLoad,
     isThinking,
-    verificationComplete,
-    verificationSuccess,
     isWaitingForResponse,
     isStreaming,
     streamError,
@@ -357,8 +347,6 @@ export function useChatState({
     setInput,
     setIsSidebarOpen,
     setIsInitialLoad,
-    setVerificationComplete,
-    setVerificationSuccess,
     setChats,
     setCurrentChat,
 
