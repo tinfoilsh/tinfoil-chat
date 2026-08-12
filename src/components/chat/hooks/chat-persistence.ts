@@ -60,6 +60,10 @@ export function createUpdateChatWithHistoryCheck({
       ...metadataPatch,
       id: chatId,
       messages: newMessages,
+      // newMessages is the authoritative full history for this chat, so
+      // the result is never a metadata-only summary even if the live
+      // state entry was demoted to one by a concurrent reload.
+      isMetadataOnly: false,
       isBlankChat: newMessages.length === 0,
       // Same rationale as title: the web search toggle can flip while this
       // chat is streaming, so the live value wins over the snapshot.
@@ -77,6 +81,7 @@ export function createUpdateChatWithHistoryCheck({
             ...c,
             ...metadataPatch,
             messages: newMessages,
+            isMetadataOnly: false,
             isBlankChat: newMessages.length === 0,
           }
         }
@@ -91,6 +96,7 @@ export function createUpdateChatWithHistoryCheck({
             ...prev,
             ...metadataPatch,
             messages: newMessages,
+            isMetadataOnly: false,
             isBlankChat: newMessages.length === 0,
           }
         : prev,

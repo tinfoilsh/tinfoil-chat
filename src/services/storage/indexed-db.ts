@@ -147,8 +147,13 @@ function deserializeStoredChat(chat: StoredChat): StoredChat {
     throw new Error('Stored chat has invalid messages')
   }
 
+  // Full rows always carry their real messages; drop summary markers that
+  // an earlier write may have leaked so readers never mistake a hydrated
+  // chat for a summary.
+  const { isMetadataOnly, messageCount, ...fullChat } = chat
+
   return {
-    ...chat,
+    ...fullChat,
     messages: chat.messages.map((message) => ({
       ...message,
       timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
@@ -305,7 +310,10 @@ function putStoredChat(
 ): IDBRequest<IDBValidKey> {
   const prepared = updateSyncPending(chat)
   summaryStore.put(toStoredChatSummary(prepared))
-  return chatStore.put(prepared)
+  // isMetadataOnly/messageCount describe summary rows only; persisting
+  // them on the full row would make hydrated reads look like summaries.
+  const { isMetadataOnly, messageCount, ...fullRow } = prepared
+  return chatStore.put(fullRow)
 }
 
 /**
@@ -1211,6 +1219,23 @@ export class IndexedDBStorage {
         if (options.requireExisting && !existingChat) {
           resolve()
           return
+        }
+
+        // Metadata-only copies carry an empty messages array as a
+        // lightweight stand-in; the stored row stays the source of truth
+        // for content until hydration. Apply the metadata over the stored
+        // messages instead of overwriting them, and never materialize a
+        // row from a summary whose full chat no longer exists.
+        if ((chat as StoredChat).isMetadataOnly === true) {
+          if (!existingChat) {
+            resolve()
+            return
+          }
+          chat = {
+            ...chat,
+            messages: existingChat.messages,
+            pendingRecoveries: existingChat.pendingRecoveries,
+          }
         }
 
         const normalizedAttachments = normalizeAttachmentPayloadsInTransaction(
