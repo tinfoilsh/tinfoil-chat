@@ -63,6 +63,9 @@ const CHATS_PROJECT_INDEX = 'projectId'
 const PROJECTS_STORE = 'projects'
 const PROJECTS_USER_INDEX = 'userId'
 const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
+const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
+const ACCOUNT_CHANGE_WRITE_ERROR =
+  'IndexedDB write superseded by account change'
 let isUpgradeBlocked = false
 
 export function isIndexedDBUpgradeBlocked(): boolean {
@@ -321,11 +324,14 @@ export class IndexedDBStorage {
 
   private async waitForSaveQueue(): Promise<void> {
     if (this.accountResetStarted) {
-      throw new Error('IndexedDB read superseded by account change')
+      throw new Error(ACCOUNT_CHANGE_READ_ERROR)
     }
-    await this.saveQueue.catch(() => {})
+    await Promise.race([
+      this.saveQueue.catch(() => {}),
+      this.accountResetSignal,
+    ])
     if (this.accountResetStarted) {
-      throw new Error('IndexedDB read superseded by account change')
+      throw new Error(ACCOUNT_CHANGE_READ_ERROR)
     }
   }
 
@@ -338,7 +344,7 @@ export class IndexedDBStorage {
       this.accountResetStarted ||
       this.activeSaveGeneration !== this.saveGeneration
     ) {
-      throw new Error('IndexedDB write superseded by account change')
+      throw new Error(ACCOUNT_CHANGE_WRITE_ERROR)
     }
   }
 
@@ -354,9 +360,7 @@ export class IndexedDBStorage {
     operation: () => Promise<T>,
   ): Promise<T> {
     if (this.accountResetStarted) {
-      return Promise.reject(
-        new Error('IndexedDB write superseded by account change'),
-      )
+      return Promise.reject(new Error(ACCOUNT_CHANGE_WRITE_ERROR))
     }
 
     const saveGeneration = this.saveGeneration
@@ -369,7 +373,7 @@ export class IndexedDBStorage {
       })
       .then(async () => {
         if (saveGeneration !== this.saveGeneration) {
-          throw new Error('IndexedDB write superseded by account change')
+          throw new Error(ACCOUNT_CHANGE_WRITE_ERROR)
         }
         this.activeSaveGeneration = saveGeneration
         try {
@@ -397,9 +401,7 @@ export class IndexedDBStorage {
     }
 
     this.accountResetStarted = true
-    this.rejectAccountReads(
-      new Error('IndexedDB read superseded by account change'),
-    )
+    this.rejectAccountReads(new Error(ACCOUNT_CHANGE_READ_ERROR))
     this.saveGeneration += 1
     this.saveQueue = Promise.resolve()
     this.initializationPromise = null

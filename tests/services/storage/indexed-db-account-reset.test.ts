@@ -210,6 +210,21 @@ describe('IndexedDBStorage account reset', () => {
     await reset
   })
 
+  it('rejects reads waiting behind a stalled save queue when reset starts', async () => {
+    const storage = new IndexedDBStorage()
+    Object.assign(storage as any, { saveQueue: new Promise(() => {}) })
+    const read = storage.getAllChats()
+    const { transaction } = prepareReset(storage)
+
+    const reset = storage.resetForAccountChange()
+
+    await expect(read).rejects.toThrow(
+      'IndexedDB read superseded by account change',
+    )
+    await completeReset(transaction)
+    await reset
+  })
+
   it('rejects reads that were already in flight when reset started', async () => {
     const storage = new IndexedDBStorage()
     let finishRead!: (value: string) => void
