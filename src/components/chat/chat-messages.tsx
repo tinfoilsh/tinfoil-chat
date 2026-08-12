@@ -337,7 +337,7 @@ export function ChatMessages({
   }, [])
 
   useLayoutEffect(() => {
-    if (!printRequested || !printRef.current) return
+    if (!printRequested) return
     printReadyResolverRef.current?.()
     printReadyResolverRef.current = null
   }, [printRequested])
