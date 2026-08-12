@@ -18,6 +18,7 @@ export interface StoredChat extends Chat {
   lastAccessedAt: number
   syncedAt?: number
   locallyModified?: boolean
+  syncPending?: 0 | 1
   syncVersion?: number
   formatVersion?: number
   decryptionFailed?: boolean
@@ -55,13 +56,16 @@ export interface AttachmentRewrite {
   encryptionKey: string
 }
 
-const DB_NAME = 'tinfoil-chat'
-export const DB_VERSION = 3
+export const DB_NAME = 'tinfoil-chat'
+export const DB_VERSION = 4
 export const INDEXED_DB_UPGRADE_BLOCKED_EVENT = 'indexedDBUpgradeBlocked'
 const CHATS_STORE = 'chats'
 const CHATS_PROJECT_INDEX = 'projectId'
+const CHATS_SYNC_PENDING_INDEX = 'syncPending'
 const PROJECTS_STORE = 'projects'
 const PROJECTS_USER_INDEX = 'userId'
+const MIGRATIONS_STORE = 'migrations'
+const SYNC_PENDING_MIGRATION_ID = 'sync-pending-v4'
 const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 const ACCOUNT_CHANGE_READ_ERROR = 'IndexedDB read superseded by account change'
 const ACCOUNT_CHANGE_WRITE_ERROR =
@@ -181,10 +185,67 @@ export function computeLocallyModified(opts: {
   return opts.callerValue ?? true
 }
 
+export function chatNeedsSync(
+  chat: Pick<
+    StoredChat,
+    'locallyModified' | 'syncedAt' | 'isLocalOnly' | 'decryptionFailed'
+  >,
+): 0 | 1 {
+  if (chat.isLocalOnly || chat.decryptionFailed) return 0
+  return chat.locallyModified === true || chat.syncedAt == null ? 1 : 0
+}
+
+export function resolveStoredLocalOnly(
+  incoming: boolean | undefined,
+  existing: boolean | undefined,
+): boolean {
+  return incoming === true || existing === true
+}
+
+function updateSyncPending(chat: StoredChat): StoredChat {
+  chat.syncPending = chatNeedsSync(chat)
+  return chat
+}
+
+export function snapshotChatForStorage(chat: Chat): Chat {
+  return {
+    ...chat,
+    pendingRecoveries: chat.pendingRecoveries?.map((recovery) => ({
+      ...recovery,
+    })),
+    messages: chat.messages.map((message) => ({
+      ...message,
+      attachments: message.attachments?.map((attachment) => ({
+        ...attachment,
+        pages: attachment.pages?.map((page) => ({ ...page })),
+      })),
+      annotations: message.annotations?.map((annotation) => ({
+        ...annotation,
+        url_citation: { ...annotation.url_citation },
+      })),
+      codeExecCalls: message.codeExecCalls?.map((call) => ({ ...call })),
+      documents: message.documents?.map((document) => ({ ...document })),
+      imageData: message.imageData?.map((image) => ({ ...image })),
+      timeline: message.timeline?.map((block) => ({ ...block })),
+      toolCalls: message.toolCalls?.map((call) => ({ ...call })),
+      urlFetches: message.urlFetches?.map((urlFetch) => ({ ...urlFetch })),
+      webSearch: message.webSearch
+        ? {
+            ...message.webSearch,
+            sources: message.webSearch.sources?.map((source) => ({
+              ...source,
+            })),
+          }
+        : undefined,
+    })),
+  }
+}
+
 export class IndexedDBStorage {
   private db: IDBDatabase | null = null
   private initializationPromise: Promise<void> | null = null
   private saveQueue: Promise<unknown> = Promise.resolve()
+  private syncPendingIndexReady = false
   private saveGeneration = 0
   // Account cleanup always reloads; keep this instance fail-closed until then.
   private accountResetStarted = false
@@ -262,7 +323,7 @@ export class IndexedDBStorage {
             store.createIndex('createdAt', 'createdAt', { unique: false })
             // Add sync-related indexes
             store.createIndex('syncedAt', 'syncedAt', { unique: false })
-            store.createIndex('locallyModified', 'locallyModified', {
+            store.createIndex(CHATS_SYNC_PENDING_INDEX, 'syncPending', {
               unique: false,
             })
             store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
@@ -270,8 +331,16 @@ export class IndexedDBStorage {
             })
           } else {
             const store = request.transaction?.objectStore(CHATS_STORE)
+            if (store?.indexNames.contains('locallyModified')) {
+              store.deleteIndex('locallyModified')
+            }
             if (store && !store.indexNames.contains(CHATS_PROJECT_INDEX)) {
               store.createIndex(CHATS_PROJECT_INDEX, 'projectId', {
+                unique: false,
+              })
+            }
+            if (store && !store.indexNames.contains(CHATS_SYNC_PENDING_INDEX)) {
+              store.createIndex(CHATS_SYNC_PENDING_INDEX, 'syncPending', {
                 unique: false,
               })
             }
@@ -281,6 +350,15 @@ export class IndexedDBStorage {
               keyPath: 'cacheKey',
             })
             store.createIndex(PROJECTS_USER_INDEX, 'userId', { unique: false })
+          }
+          if (!db.objectStoreNames.contains(MIGRATIONS_STORE)) {
+            db.createObjectStore(MIGRATIONS_STORE, { keyPath: 'id' })
+          }
+          if ((event as IDBVersionChangeEvent).oldVersion === 0) {
+            request.transaction?.objectStore(MIGRATIONS_STORE).put({
+              id: SYNC_PENDING_MIGRATION_ID,
+              completedAt: Date.now(),
+            })
           }
         } catch (error) {
           logError('Failed to create object store', error, {
@@ -474,14 +552,14 @@ export class IndexedDBStorage {
   }
 
   async saveChat(chat: Chat): Promise<void> {
-    const chatSnapshot = JSON.parse(JSON.stringify(chat))
+    const chatSnapshot = snapshotChatForStorage(chat)
     return this.enqueueSave('saveChat', () =>
       this.saveChatInternal(chatSnapshot),
     )
   }
 
   async saveExistingChat(chat: Chat): Promise<void> {
-    const chatSnapshot = JSON.parse(JSON.stringify(chat))
+    const chatSnapshot = snapshotChatForStorage(chat)
     return this.enqueueSave('saveExistingChat', () =>
       this.saveChatInternal(chatSnapshot, { requireExisting: true }),
     )
@@ -539,7 +617,7 @@ export class IndexedDBStorage {
             }),
             version: 1,
           }
-          store.put(output)
+          store.put(updateSyncPending(output))
         }
       })
     })
@@ -651,6 +729,19 @@ export class IndexedDBStorage {
           ? nextClock(existingChat?.clock ?? (chat as StoredChat).clock)
           : null
 
+        const locallyModified = computeLocallyModified({
+          isFailedDecryption,
+          existingChat,
+          hasContentChanges:
+            options.markContentChangesAsLocal === false
+              ? false
+              : hasContentChanges,
+          callerValue: (chat as StoredChat).locallyModified,
+        })
+        const isLocalOnly = resolveStoredLocalOnly(
+          (chat as StoredChat).isLocalOnly,
+          existingChat?.isLocalOnly,
+        )
         const storedChat: StoredChat = {
           ...chat,
           messages: messagesForStorage as any,
@@ -669,14 +760,12 @@ export class IndexedDBStorage {
           // loaded with locallyModified: false from a previous sync
           // For new chats: use provided value or default to true
           // IMPORTANT: Never mark failed-to-decrypt chats as modified - they are placeholders
-          locallyModified: computeLocallyModified({
-            isFailedDecryption,
-            existingChat,
-            hasContentChanges:
-              options.markContentChangesAsLocal === false
-                ? false
-                : hasContentChanges,
-            callerValue: (chat as StoredChat).locallyModified,
+          locallyModified,
+          syncPending: chatNeedsSync({
+            locallyModified,
+            syncedAt: existingChat?.syncedAt ?? (chat as StoredChat).syncedAt,
+            isLocalOnly,
+            decryptionFailed: isFailedDecryption,
           }),
           syncVersion:
             existingChat?.syncVersion ?? (chat as StoredChat).syncVersion,
@@ -687,7 +776,7 @@ export class IndexedDBStorage {
             (chat as StoredChat).loadedAt ??
             existingChat?.loadedAt ??
             undefined,
-          isLocalOnly: (chat as any).isLocalOnly ?? false,
+          isLocalOnly,
         }
 
         const putRequest = store.put(storedChat)
@@ -1207,7 +1296,7 @@ export class IndexedDBStorage {
             reject(new Error('Failed to update last accessed'))
 
           chat.lastAccessedAt = Date.now()
-          const request = store.put(chat)
+          const request = store.put(updateSyncPending(chat))
 
           request.onerror = () =>
             reject(new Error('Failed to update last accessed'))
@@ -1217,18 +1306,78 @@ export class IndexedDBStorage {
   }
 
   async getUnsyncedChats(): Promise<StoredChat[]> {
-    // Get all chats and filter for those that need syncing
-    const allChats = await this.getAllChats()
+    await this.ensureSyncPendingIndex()
+    const db = await this.ensureDB()
 
-    // Return chats that are either:
-    // 1. Marked as locally modified
-    // 2. Never synced (syncedAt is undefined/null)
-    return allChats.filter(
-      (chat) =>
-        chat.locallyModified === true ||
-        chat.syncedAt === undefined ||
-        chat.syncedAt === null,
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.index(CHATS_SYNC_PENDING_INDEX).getAll(1)
+
+        request.onsuccess = () => {
+          try {
+            resolve((request.result as StoredChat[]).map(deserializeStoredChat))
+          } catch (error) {
+            reject(error)
+          }
+        }
+        request.onerror = () =>
+          reject(new Error('Failed to get unsynced chats'))
+      }),
     )
+  }
+
+  private async ensureSyncPendingIndex(): Promise<void> {
+    if (this.syncPendingIndexReady) return
+    return this.enqueueSave('ensureSyncPendingIndex', async () => {
+      if (this.syncPendingIndexReady) return
+      const db = await this.ensureDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(
+          [CHATS_STORE, MIGRATIONS_STORE],
+          'readwrite',
+        )
+        const chatsStore = transaction.objectStore(CHATS_STORE)
+        const migrationsStore = transaction.objectStore(MIGRATIONS_STORE)
+
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to prepare the pending sync index'))
+        transaction.onabort = () =>
+          reject(new Error('Pending sync index migration was aborted'))
+
+        const markerRequest = migrationsStore.get(SYNC_PENDING_MIGRATION_ID)
+        markerRequest.onerror = () =>
+          reject(new Error('Failed to read the pending sync migration'))
+        markerRequest.onsuccess = () => {
+          if (markerRequest.result) return
+
+          const cursorRequest = chatsStore.openCursor()
+          cursorRequest.onerror = () =>
+            reject(new Error('Failed to migrate pending sync records'))
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result
+            if (!cursor) {
+              migrationsStore.put({
+                id: SYNC_PENDING_MIGRATION_ID,
+                completedAt: Date.now(),
+              })
+              return
+            }
+
+            const chat = cursor.value as StoredChat
+            const syncPending = chatNeedsSync(chat)
+            if (chat.syncPending !== syncPending) {
+              chat.syncPending = syncPending
+              cursor.update(chat)
+            }
+            cursor.continue()
+          }
+        }
+      })
+      this.syncPendingIndexReady = true
+    })
   }
 
   async markAsSynced(id: string, syncVersion: number): Promise<void> {
@@ -1252,7 +1401,7 @@ export class IndexedDBStorage {
           // later reader trusts it for arbitration.
           chat.clockVersion = syncVersion
 
-          const request = store.put(chat)
+          const request = store.put(updateSyncPending(chat))
 
           request.onerror = () => reject(new Error('Failed to mark as synced'))
         })
@@ -1286,7 +1435,7 @@ export class IndexedDBStorage {
         transaction.oncomplete = () => resolve()
         transaction.onerror = () =>
           reject(new Error('Failed to rebase sync version'))
-        const request = store.put(chat)
+        const request = store.put(updateSyncPending(chat))
         request.onerror = () =>
           reject(new Error('Failed to rebase sync version'))
       })
@@ -1354,7 +1503,7 @@ export class IndexedDBStorage {
         transaction.onerror = () =>
           reject(new Error('Failed to finalize upload'))
 
-        const request = store.put(chat)
+        const request = store.put(updateSyncPending(chat))
         request.onerror = () => reject(new Error('Failed to finalize upload'))
       })
     })
@@ -1420,6 +1569,7 @@ export class IndexedDBStorage {
         lastAccessedAt: Date.now(),
         syncedAt: Date.now(),
         locallyModified: false,
+        syncPending: 0,
         syncVersion: opts.syncVersion,
         version: 1,
         loadedAt: opts.setLoadedAt
@@ -1465,7 +1615,7 @@ export class IndexedDBStorage {
           chat.syncVersion = 0
           chat.syncedAt = undefined
           chat.locallyModified = true
-          cursor.update(chat)
+          cursor.update(updateSyncPending(chat))
           cursor.continue()
         }
         request.onerror = () =>
@@ -1494,7 +1644,7 @@ export class IndexedDBStorage {
           chat.locallyModified = true
           chat.syncedAt = undefined
 
-          const request = store.put(chat)
+          const request = store.put(updateSyncPending(chat))
 
           request.onerror = () =>
             reject(new Error('Failed to reset chat timestamps'))

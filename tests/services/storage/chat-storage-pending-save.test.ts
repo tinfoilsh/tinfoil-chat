@@ -1,4 +1,5 @@
 import type { Chat } from '@/components/chat/types'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const saveChatSpy = vi.fn(async (chat: unknown) => chat)
@@ -32,11 +33,6 @@ vi.mock('@/services/storage/deleted-chats-tracker', () => ({
     isDeleted: vi.fn(() => false),
   },
 }))
-vi.mock('@/utils/cloud-sync-settings', () => ({
-  isCloudSyncEnabled: vi.fn(() => true),
-}))
-
-import { chatStorage } from '@/services/storage/chat-storage'
 
 function makeChat(overrides: Partial<Chat> = {}): Chat {
   return {
@@ -63,6 +59,7 @@ describe('chatStorage pendingSave is not persisted', () => {
     const persisted = saveChatSpy.mock.calls[0][0] as Record<string, unknown>
     expect('pendingSave' in persisted).toBe(false)
     expect(persisted.id).toBe('rev_123_abc')
+    expect(getChatSpy).not.toHaveBeenCalled()
   })
 
   it('drops a stale persisted pendingSave when listing chats', async () => {
