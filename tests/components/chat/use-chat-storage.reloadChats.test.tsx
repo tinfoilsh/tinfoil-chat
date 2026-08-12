@@ -1,8 +1,9 @@
 import { useChatStorage } from '@/components/chat/hooks/use-chat-storage'
 import type { PendingRecoveryEnvelope } from '@/components/chat/types'
 import { chatEvents } from '@/services/storage/chat-events'
+import { chatStorage } from '@/services/storage/chat-storage'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   mockLoadChats,
@@ -78,6 +79,51 @@ describe('useChatStorage.reloadChats', () => {
     mockIsStreaming.mockReturnValue(false)
     mockLoadChatImages.mockResolvedValue(new Map())
     mockApplyRemoteChat.mockResolvedValue({ applied: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('loads summaries first and hydrates a chat when selected', async () => {
+    const summary = {
+      id: 'chat-summary',
+      title: 'Summary',
+      messages: [],
+      messageCount: 1,
+      isMetadataOnly: true,
+      createdAt: new Date('2026-08-12T00:00:00.000Z'),
+      isBlankChat: false,
+      isLocalOnly: false,
+    }
+    const hydrated = {
+      ...summary,
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'Loaded message',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+        },
+      ],
+      isMetadataOnly: false,
+    }
+    mockLoadChats.mockResolvedValueOnce([summary])
+    const getChat = vi.spyOn(chatStorage, 'getChat').mockResolvedValue(hydrated)
+
+    const { result } = renderHook(() => useChatStorage({ storeHistory: true }))
+    await waitFor(() => expect(result.current.isInitialLoad).toBe(false))
+
+    expect(mockLoadChats).toHaveBeenCalledWith(true, true)
+    expect(result.current.chats.find((chat) => chat.id === summary.id)).toEqual(
+      summary,
+    )
+
+    act(() => result.current.handleChatSelect(summary.id))
+    await waitFor(() =>
+      expect(result.current.currentChat.messages).toHaveLength(1),
+    )
+
+    expect(getChat).toHaveBeenCalledWith(summary.id)
   })
 
   it('keeps a routed local new chat selected after loading storage', async () => {

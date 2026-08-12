@@ -56,10 +56,15 @@ export function resolveWebSearchEnabled(
 /**
  * Loads all chats from storage
  */
-export async function loadChats(isSignedIn: boolean): Promise<Chat[]> {
+export async function loadChats(
+  isSignedIn: boolean,
+  summariesOnly = false,
+): Promise<Chat[]> {
   try {
     const chats = isSignedIn
-      ? await chatStorage.getAllChatsWithSyncStatus()
+      ? summariesOnly
+        ? await chatStorage.getChatSummariesWithSyncStatus()
+        : await chatStorage.getAllChatsWithSyncStatus()
       : sessionChatStorage.getAllChats()
 
     return chats

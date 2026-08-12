@@ -1879,6 +1879,44 @@ export class IndexedDBStorage {
     )
   }
 
+  async getChatSummaries(): Promise<StoredChat[]> {
+    await this.waitForSaveQueue()
+    const db = await this.ensureDB()
+
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.openCursor(null, 'next')
+        const chats: StoredChat[] = []
+
+        request.onsuccess = () => {
+          const cursor = request.result
+          if (!cursor) {
+            resolve(chats)
+            return
+          }
+
+          const chat = cursor.value as StoredChat
+          if (!Array.isArray(chat.messages)) {
+            reject(new Error('Stored chat has invalid messages'))
+            return
+          }
+          const { messages, ...metadata } = chat
+          chats.push({
+            ...metadata,
+            messages: [],
+            messageCount: messages.length,
+            isMetadataOnly: true,
+          })
+          cursor.continue()
+        }
+        request.onerror = () =>
+          reject(new Error('Failed to get chat summaries'))
+      }),
+    )
+  }
+
   async getProjectsForUser(userId: string): Promise<Project[]> {
     await this.waitForSaveQueue()
     const db = await this.ensureDB()

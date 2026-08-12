@@ -271,6 +271,15 @@ describe('IndexedDB pending sync index', () => {
       'Document text',
     )
 
+    const summaries = await storage.getChatSummaries()
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0]).toMatchObject({
+      id: 'with-attachment',
+      isMetadataOnly: true,
+      messageCount: 1,
+      messages: [],
+    })
+
     await storage.applyRemoteChatIfFresh({
       chat: {
         ...storedChat('with-attachment'),
@@ -312,7 +321,6 @@ describe('IndexedDB pending sync index', () => {
       },
     )
     expect(payloadCountAfterRemoval).toBe(0)
-
     await storage.deleteChat('with-attachment')
     const payloadCount = await new Promise<number>((resolve, reject) => {
       const request = db
