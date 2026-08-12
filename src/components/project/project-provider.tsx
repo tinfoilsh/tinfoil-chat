@@ -35,14 +35,14 @@ export function ProjectProvider({
   children,
   initialProjectId,
 }: ProjectProviderProps) {
-  const { isSignedIn, userId } = useAuth()
+  const { isSignedIn, isLoaded, userId } = useAuth()
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [projectDocuments, setProjectDocuments] = useState<ProjectDocument[]>(
     [],
   )
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(Boolean(initialProjectId))
   const [loadingProject, setLoadingProject] = useState<LoadingProject | null>(
-    null,
+    initialProjectId ? { id: initialProjectId, name: 'Loading...' } : null,
   )
   const [error, setError] = useState<string | null>(null)
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
@@ -73,13 +73,13 @@ export function ProjectProvider({
   useEffect(() => {
     if (isSignedIn && !initializingRef.current) {
       initializingRef.current = true
-    } else if (!isSignedIn) {
+    } else if (isLoaded && !isSignedIn) {
       initializingRef.current = false
       initialProjectLoadedRef.current = false
       // Clear all user-specific state on logout to prevent data leaking across sessions
       resetProjectSessionState()
     }
-  }, [isSignedIn, resetProjectSessionState])
+  }, [isLoaded, isSignedIn, resetProjectSessionState])
 
   // Memory callbacks for useMemory hook
   const memoryCallbacks = useMemo(

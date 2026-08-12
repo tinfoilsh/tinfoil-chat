@@ -1,5 +1,9 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
-import { SETTINGS_HAS_SEEN_ONBOARDING } from '@/constants/storage-keys'
+import {
+  AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACTIVE_USER_ID,
+  SETTINGS_HAS_SEEN_ONBOARDING,
+} from '@/constants/storage-keys'
 import { cloudSync } from '@/services/cloud/cloud-sync'
 import { resetEditClockCache } from '@/services/cloud/edit-clock'
 import { profileSync } from '@/services/cloud/profile-sync'
@@ -11,7 +15,11 @@ import { projectEvents } from '@/services/project/project-events'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import { indexedDBStorage } from '@/services/storage/indexed-db'
 import { resetSyncEnclaveClient } from '@/services/sync-enclave'
-import { performSignoutCleanup } from '@/utils/signout-cleanup'
+import {
+  performSignoutCleanup,
+  performUserSwitchCleanup,
+  retryFailedStorageCleanup,
+} from '@/utils/signout-cleanup'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/chat/renderers', () => ({
@@ -56,8 +64,7 @@ vi.mock('@/services/storage/deleted-chats-tracker', () => ({
 
 vi.mock('@/services/storage/indexed-db', () => ({
   indexedDBStorage: {
-    deleteAllChats: vi.fn().mockResolvedValue(0),
-    deleteAllProjects: vi.fn().mockResolvedValue(undefined),
+    resetForAccountChange: vi.fn().mockResolvedValue(undefined),
   },
 }))
 
@@ -109,14 +116,68 @@ describe('performSignoutCleanup', () => {
     expect(resetSyncHealth).toHaveBeenCalled()
     expect(resetEditClockCache).toHaveBeenCalled()
     expect(projectEvents.clear).toHaveBeenCalled()
-    expect(indexedDBStorage.deleteAllChats).toHaveBeenCalled()
-    expect(indexedDBStorage.deleteAllProjects).toHaveBeenCalled()
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
   })
 
   it('keeps the encryption key when preserveEncryptionKey is set', async () => {
     await performSignoutCleanup({ preserveEncryptionKey: true })
 
     expect(encryptionService.clearKey).not.toHaveBeenCalled()
-    expect(indexedDBStorage.deleteAllChats).toHaveBeenCalled()
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalled()
+  })
+
+  it('keeps the active-user marker until browser data is cleared', async () => {
+    let finishReset!: () => void
+    vi.mocked(indexedDBStorage.resetForAccountChange).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishReset = resolve
+      }),
+    )
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    const clearLocalStorage = vi.spyOn(localStorage, 'clear')
+
+    const cleanup = performSignoutCleanup()
+    await Promise.resolve()
+
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
+    expect(clearLocalStorage).not.toHaveBeenCalled()
+
+    finishReset()
+    await cleanup
+
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBeNull()
+  })
+
+  it('keeps the active-user marker when browser data cannot be cleared', async () => {
+    vi.mocked(indexedDBStorage.resetForAccountChange).mockRejectedValueOnce(
+      new Error('reset failed'),
+    )
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+
+    await expect(performSignoutCleanup()).rejects.toThrow('reset failed')
+
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
+  })
+
+  it('surfaces user-switch cleanup failures without replacing the marker', async () => {
+    vi.mocked(indexedDBStorage.resetForAccountChange).mockRejectedValueOnce(
+      new Error('reset failed'),
+    )
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
+
+    await expect(performUserSwitchCleanup('user_new')).rejects.toThrow(
+      'reset failed',
+    )
+
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_old')
+  })
+
+  it('retries a failed cross-tab reset without notifying other tabs', async () => {
+    sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+
+    await retryFailedStorageCleanup()
+
+    expect(indexedDBStorage.resetForAccountChange).toHaveBeenCalledWith(false)
+    expect(sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED)).toBeNull()
   })
 })

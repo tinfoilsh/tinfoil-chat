@@ -24,6 +24,7 @@ export const SECRET_CLOUD_KEY_AUTHORIZATION_PREFIX =
 
 // --- localStorage: Auth ----------------------------------------------------
 export const AUTH_ACTIVE_USER_ID = 'tinfoil-auth-active-user-id'
+export const AUTH_ACCOUNT_RESET_SIGNAL = 'tinfoil-auth-account-reset-signal'
 
 // --- localStorage: App settings --------------------------------------------
 export const SETTINGS_CLOUD_SYNC_ENABLED = 'tinfoil-settings-cloud-sync-enabled'
@@ -87,6 +88,9 @@ export const SETTINGS_MANUAL_RECOVERY_DISMISSED =
 // for genuinely new warning conditions later.
 export const SETTINGS_BACKUP_WARNING_DISMISSED =
   'tinfoil-settings-backup-warning-dismissed'
+
+// --- sessionStorage: Auth ---------------------------------------------------
+export const AUTH_ACCOUNT_RESET_FAILED = 'tinfoil-auth-account-reset-failed'
 
 // --- sessionStorage: Passkey setup failure ---------------------------------
 // Tracks whether the user has dismissed the "passkey backup failed" warning
