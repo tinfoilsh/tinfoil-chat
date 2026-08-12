@@ -706,77 +706,109 @@ export function ProjectSidebar({
   return (
     <>
       {/* Collapsed sidebar rail - always visible on desktop when sidebar is closed */}
-      {!isMobile && !isOpen && (
-        <div
-          className="fixed left-0 top-0 z-40 flex h-dvh flex-col bg-surface-sidebar text-content-primary"
-          style={{
-            width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
-            ...sidebarTintStyle,
-          }}
-        >
-          <SidebarPatternEdge isDarkMode={isDarkMode} />
-          {/* Folder icon - shows expand icon on hover */}
-          <div className="flex h-16 flex-none items-center justify-center">
-            <button
-              onClick={() => setIsOpen(true)}
-              className="group/logo relative rounded p-2"
-              aria-label="Expand sidebar"
-            >
-              <FolderIcon className="h-6 w-6 text-content-secondary transition-opacity group-hover/logo:opacity-0" />
-              <GoSidebarCollapse className="absolute inset-0 m-auto h-5 w-5 text-content-secondary opacity-0 transition-opacity group-hover/logo:opacity-100" />
-            </button>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-col items-center gap-1 px-2">
-            {/* New chat button */}
-            <div className="group relative">
-              <Link
-                href={newChatHref}
-                onClick={(e) => {
-                  if (!isPlainPrimaryClick(e)) return
-                  e.preventDefault()
-                  onNewChat()
-                }}
-                className={cn(
-                  'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-                  'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
-                )}
-                aria-label="New chat"
+      <AnimatePresence initial={false}>
+        {!isMobile && !isOpen && (
+          <motion.div
+            key="project-collapsed-rail"
+            initial={{ opacity: 0 }}
+            animate={{
+              opacity: 1,
+              transition: {
+                duration: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_IN_DURATION_S,
+                delay: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_IN_DELAY_S,
+              },
+            }}
+            exit={{
+              opacity: 0,
+              transition: {
+                duration: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_OUT_DURATION_S,
+              },
+            }}
+            className="fixed left-0 top-0 z-50 flex h-dvh flex-col text-content-primary"
+            style={{
+              width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
+            }}
+          >
+            {/* Folder icon - shows expand icon on hover */}
+            <div className="flex h-16 flex-none items-center justify-center">
+              <button
+                onClick={() => setIsOpen(true)}
+                className="group/logo relative rounded p-2"
+                aria-label="Expand sidebar"
               >
-                <PiNotePencilLight className="h-5 w-5" />
-              </Link>
-              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                New chat{' '}
-                <span className="text-content-muted">
-                  {modKey}
-                  {isMac ? '⇧' : 'Shift+'}O
-                </span>
-              </span>
+                <FolderIcon className="h-6 w-6 text-content-secondary transition-opacity group-hover/logo:opacity-0" />
+                <GoSidebarCollapse className="absolute inset-0 m-auto h-5 w-5 text-content-secondary opacity-0 transition-opacity group-hover/logo:opacity-100" />
+              </button>
             </div>
-          </div>
-        </div>
-      )}
+
+            {/* Action buttons */}
+            <div className="flex flex-col items-center gap-1 px-2">
+              {/* New chat button */}
+              <div className="group relative">
+                <Link
+                  href={newChatHref}
+                  onClick={(e) => {
+                    if (!isPlainPrimaryClick(e)) return
+                    e.preventDefault()
+                    onNewChat()
+                  }}
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                    'text-content-secondary hover:bg-surface-chat hover:text-content-primary',
+                  )}
+                  aria-label="New chat"
+                >
+                  <PiNotePencilLight className="h-5 w-5" />
+                </Link>
+                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded border border-border-subtle bg-surface-chat-background px-2 py-1 text-xs text-content-primary opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  New chat{' '}
+                  <span className="text-content-muted">
+                    {modKey}
+                    {isMac ? '⇧' : 'Shift+'}O
+                  </span>
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div
         inert={!isOpen}
         className={cn(
-          'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'fixed left-0 z-40 flex h-dvh flex-col items-start overflow-hidden [&>*:not(:first-child)]:w-[var(--sidebar-content-width)] [&>*:not(:first-child)]:transition-opacity [&>*:not(:first-child)]:duration-100',
+          isMobile
+            ? isOpen
+              ? 'translate-x-0'
+              : '-translate-x-full'
+            : 'translate-x-0',
+          isMobile || isOpen
+            ? '[&>*:not(:first-child)]:opacity-100'
+            : '[&>*:not(:first-child)]:opacity-0',
           'bg-surface-sidebar text-content-primary',
           'transition-all duration-200 ease-in-out',
         )}
-        style={{
-          maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
-          paddingRight: `${SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
-          ...sidebarTintStyle,
-        }}
+        style={
+          {
+            width: isMobile
+              ? '85vw'
+              : isOpen
+                ? `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
+                : `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
+            maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
+            paddingRight: `${SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
+            '--sidebar-content-width': isMobile
+              ? '100%'
+              : `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX - SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
+            ...sidebarTintStyle,
+          } as React.CSSProperties
+        }
       >
         <SidebarPatternEdge isDarkMode={isDarkMode} />
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-3">
-            <Link href="/" title="Home" className="flex items-center">
+            <Link href="/" title="Home" className="ml-1 flex items-center">
               <Logo className="h-6 w-auto" dark={isDarkMode} />
             </Link>
             {/* Settings button */}
