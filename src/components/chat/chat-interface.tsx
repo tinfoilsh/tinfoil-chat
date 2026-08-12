@@ -3374,7 +3374,9 @@ export function ChatInterface({
                     .map((c) => ({
                       id: c.id,
                       title: c.title,
-                      messageCount: c.messages.length,
+                      messageCount: c.isMetadataOnly
+                        ? (c.messageCount ?? 0)
+                        : c.messages.length,
                       createdAt: c.createdAt,
                       updatedAt: c.updatedAt,
                       projectId: c.projectId,
@@ -3419,7 +3421,9 @@ export function ChatInterface({
                     .map((c) => ({
                       id: c.id,
                       title: c.title,
-                      messageCount: c.messages.length,
+                      messageCount: c.isMetadataOnly
+                        ? (c.messageCount ?? 0)
+                        : c.messages.length,
                       createdAt: c.createdAt,
                       updatedAt: c.updatedAt,
                       projectId: c.projectId,

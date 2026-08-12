@@ -203,4 +203,32 @@ describe('ChatListItem timestamps', () => {
 
     expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
   })
+
+  it('trusts the stored count over the placeholder messages of a summary', () => {
+    renderChatListItem({
+      chat: {
+        ...timestampedChat,
+        messages: [],
+        messageCount: 2,
+        isMetadataOnly: true,
+      },
+    })
+
+    // A summary is not a "New chat" and still shows its timestamp.
+    expect(screen.queryByTitle('New chat')).not.toBeInTheDocument()
+    expect(screen.getByText(/1h ago/)).toBeInTheDocument()
+  })
+
+  it('treats hydrated chats by their real messages', () => {
+    renderChatListItem({
+      chat: {
+        ...timestampedChat,
+        messages: { length: 0 },
+        messageCount: 2,
+        isMetadataOnly: false,
+      },
+    })
+
+    expect(screen.getByTitle('New chat')).toBeInTheDocument()
+  })
 })

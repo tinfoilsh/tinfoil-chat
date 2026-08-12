@@ -33,6 +33,7 @@ export interface ChatItemData {
   updatedAt?: string
   messageCount?: number
   messages?: { length: number }
+  isMetadataOnly?: boolean
   decryptionFailed?: boolean
   dataCorrupted?: boolean
   isLocalOnly?: boolean
@@ -191,7 +192,11 @@ export function ChatListItem({
   const mobileMenuPortalRef = useRef<HTMLDivElement>(null)
   const prevTitleRef = useRef(chat.title)
 
-  const messageCount = chat.messages?.length ?? chat.messageCount ?? 0
+  // Metadata-only summaries carry an empty messages array as a
+  // placeholder, so the stored count is the truthful one for them.
+  const messageCount = chat.isMetadataOnly
+    ? (chat.messageCount ?? 0)
+    : (chat.messages?.length ?? chat.messageCount ?? 0)
   const isNewChat = messageCount === 0 && !chat.decryptionFailed
   const hasRealTitle = !chat.isBlankChat && !chat.decryptionFailed
   const shouldRedactTitle =
