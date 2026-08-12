@@ -347,6 +347,12 @@ export class ChatStorageService {
     try {
       await cloudSync.deleteFromCloud(chatId)
     } catch (error) {
+      // Plain saves treat local-only as sticky, so restore the original
+      // classification explicitly before rewriting the pre-conversion row.
+      await indexedDBStorage.updateChatLocalOnly(
+        chatId,
+        existingChat.isLocalOnly === true,
+      )
       await indexedDBStorage.saveChat(existingChat)
       logError(
         'Failed to delete chat from cloud during local conversion',
