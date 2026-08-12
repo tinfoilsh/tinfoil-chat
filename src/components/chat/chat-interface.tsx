@@ -2872,9 +2872,10 @@ export function ChatInterface({
     }
   }, [currentChat?.messages])
 
-  // Show loading while auth or config is still loading
+  // Deep links require auth classification before rendering their access state.
+  // Model configuration loads behind the interactive shell.
   const needsAuthLoading = (initialChatId || initialProjectId) && !isAuthLoaded
-  const needsLoading = needsAuthLoading || isLoadingConfig
+  const needsLoading = needsAuthLoading
   if (needsLoading || !logoAnimDone) {
     return (
       <LogoLoading

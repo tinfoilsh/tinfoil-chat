@@ -311,6 +311,25 @@ export class ChatStorageService {
     )
   }
 
+  async getChatSummariesWithSyncStatus(): Promise<Chat[]> {
+    await this.initialize()
+
+    const storedChats = await indexedDBStorage.getChatSummaries()
+    return storedChats.map(
+      ({
+        lastAccessedAt,
+        syncPending,
+        syncVersion,
+        version,
+        pendingSave,
+        ...chatWithSyncData
+      }) => ({
+        ...chatWithSyncData,
+        createdAt: new Date(chatWithSyncData.createdAt),
+      }),
+    )
+  }
+
   async convertChatToCloud(chatId: string): Promise<void> {
     await this.initialize()
 

@@ -172,6 +172,8 @@ export type Chat = {
   title: string
   titleState?: TitleState
   messages: Message[]
+  messageCount?: number
+  isMetadataOnly?: boolean
   pendingRecoveries?: PendingRecoveryEnvelope[]
   createdAt: Date
   // Latest server-bumped write time, used as the canonical sort

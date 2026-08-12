@@ -139,7 +139,10 @@ export function useChatStorage({
       recoveryIds?.forEach((id) => pendingRecoveryReloadIdsRef.current.add(id))
       const reloadGeneration = ++reloadGenerationRef.current
       try {
-        const loadedChats = await loadChats(storeHistory && !!isSignedIn)
+        const loadedChats = await loadChats(
+          storeHistory && !!isSignedIn,
+          !recoveryIds?.length,
+        )
         if (reloadGeneration !== reloadGenerationRef.current) {
           return
         }
@@ -161,21 +164,32 @@ export function useChatStorage({
           // Cancelled recoveries are stripped here too, not just on
           // currentChat: switching to a chat adopts its entry from this
           // list, which must not reintroduce a stopped turn's envelope.
+          const previousById = new Map(prevChats.map((chat) => [chat.id, chat]))
           const nonBlankChats = loadedChats
             .filter(
               (c) => !c.isBlankChat && !deletedChatsTracker.isDeleted(c.id),
             )
-            .map((c) =>
-              c.pendingRecoveries?.length
+            .map((c) => {
+              const existing = previousById.get(c.id)
+              const chat =
+                c.isMetadataOnly && existing && !existing.isMetadataOnly
+                  ? {
+                      ...existing,
+                      ...c,
+                      messages: existing.messages,
+                      isMetadataOnly: false,
+                    }
+                  : c
+              return chat.pendingRecoveries?.length
                 ? {
-                    ...c,
+                    ...chat,
                     pendingRecoveries: withoutCancelledRecoveries(
-                      c.id,
-                      c.pendingRecoveries,
+                      chat.id,
+                      chat.pendingRecoveries,
                     ),
                   }
-                : c,
-            )
+                : chat
+            })
 
           // Combine blank chats with loaded chats and sort
           const finalChats = sortChats([
@@ -191,7 +205,7 @@ export function useChatStorage({
           let nextCurrent = prev
           if (!prev.isBlankChat) {
             // Only update metadata (syncedAt, title) if the same chat exists in storage
-            const existingChat = loadedChats.find((c) => c.id === prev.id)
+            const existingChat = nonBlankChats.find((c) => c.id === prev.id)
             if (existingChat) {
               const storedRecoveries = withoutCancelledRecoveries(
                 prev.id,
@@ -322,7 +336,10 @@ export function useChatStorage({
       if (typeof window === 'undefined') return
 
       try {
-        const loadedChats = await loadChats(storeHistory && !!isSignedIn)
+        const loadedChats = await loadChats(
+          storeHistory && !!isSignedIn,
+          storeHistory && !!isSignedIn,
+        )
 
         if (!mounted) return
 
@@ -506,6 +523,32 @@ export function useChatStorage({
     [setCurrentChat],
   )
 
+  const selectChat = useCallback(
+    async (chat: Chat) => {
+      switchChat(chat)
+      if (!chat.isMetadataOnly) return
+
+      try {
+        const hydratedChat = await chatStorage.getChat(chat.id)
+        if (!hydratedChat) return
+        setChats((previous) =>
+          previous.map((candidate) =>
+            candidate.id === hydratedChat.id ? hydratedChat : candidate,
+          ),
+        )
+        setCurrentChat((current) =>
+          current.id === hydratedChat.id ? hydratedChat : current,
+        )
+      } catch (error) {
+        logError('Failed to load selected chat', error, {
+          component: 'useChatStorage',
+          metadata: { chatId: chat.id },
+        })
+      }
+    },
+    [setChats, setCurrentChat, switchChat],
+  )
+
   // Handle chat selection
   const handleChatSelect = useCallback(
     (chatId: string) => {
@@ -516,7 +559,7 @@ export function useChatStorage({
           (chat) => chat.isBlankChat && chat.isLocalOnly === isLocal,
         )
         if (selectedChat) {
-          switchChat(selectedChat)
+          void selectChat(selectedChat)
         }
         return
       }
@@ -524,10 +567,10 @@ export function useChatStorage({
       // For regular chats, find by ID
       const selectedChat = chats.find((chat) => chat.id === chatId)
       if (selectedChat) {
-        switchChat(selectedChat)
+        void selectChat(selectedChat)
       }
     },
-    [chats, switchChat],
+    [chats, selectChat],
   )
 
   // Load a specific chat by ID from URL
@@ -541,7 +584,7 @@ export function useChatStorage({
       // First check if chat already exists in local state
       const existingChat = chats.find((c) => c.id === chatId)
       if (existingChat) {
-        switchChat(existingChat)
+        await selectChat(existingChat)
         return
       }
 
@@ -647,7 +690,7 @@ export function useChatStorage({
         setIsInitialLoad(false)
       }
     },
-    [chats, isSignedIn, storeHistory, switchChat, setChats, setCurrentChat],
+    [chats, isSignedIn, storeHistory, selectChat, setChats, setCurrentChat],
   )
 
   // Load initial chat from URL if provided
