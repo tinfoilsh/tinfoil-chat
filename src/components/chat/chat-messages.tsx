@@ -518,6 +518,11 @@ export function ChatMessages({
       message.turnId !== undefined &&
       pendingRecoveryTurnIds.has(message.turnId),
   )
+  // Latch the archive open while a recovery streams into it, so the recovered
+  // turn stays visible after its envelope clears instead of collapsing away.
+  if (archiveHasActiveRecovery && expandedArchiveChatId !== chatId) {
+    setExpandedArchiveChatId(chatId)
+  }
   const showArchivedMessages =
     expandedArchiveChatId === chatId || archiveHasActiveRecovery
   const hasActiveRecovery =
