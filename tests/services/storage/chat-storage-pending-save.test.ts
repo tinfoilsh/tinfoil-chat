@@ -137,3 +137,35 @@ describe('chatStorage local-only classification', () => {
     expect(backupChatSpy).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('chatStorage convertChatToLocal rollback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('restores cloud classification when the cloud delete fails', async () => {
+    setCloudSyncEnabled(true)
+    getChatSpy.mockResolvedValueOnce(
+      makeChat({ isLocalOnly: false }) as unknown,
+    )
+    deleteFromCloudSpy.mockRejectedValueOnce(new Error('network down'))
+
+    await expect(chatStorage.convertChatToLocal('rev_123_abc')).rejects.toThrow(
+      'network down',
+    )
+
+    // Conversion marked the chat local, then the rollback restored it.
+    expect(updateChatLocalOnlySpy).toHaveBeenNthCalledWith(
+      1,
+      'rev_123_abc',
+      true,
+    )
+    expect(updateChatLocalOnlySpy).toHaveBeenNthCalledWith(
+      2,
+      'rev_123_abc',
+      false,
+    )
+    const restored = saveChatSpy.mock.calls[0][0] as Record<string, unknown>
+    expect(restored.isLocalOnly).toBe(false)
+  })
+})
