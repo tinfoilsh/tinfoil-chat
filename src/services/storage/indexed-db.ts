@@ -198,7 +198,9 @@ export function chatNeedsSync(
 export function resolveStoredLocalOnly(
   incoming: boolean | undefined,
   existing: boolean | undefined,
+  allowExplicitChange = false,
 ): boolean {
+  if (allowExplicitChange) return incoming === true
   return incoming === true || existing === true
 }
 
@@ -207,6 +209,10 @@ function updateSyncPending(chat: StoredChat): StoredChat {
   return chat
 }
 
+/**
+ * Copies mutable chat containers without duplicating immutable attachment
+ * payload strings. New nested message fields must be snapshotted here.
+ */
 export function snapshotChatForStorage(chat: Chat): Chat {
   return {
     ...chat,
@@ -226,7 +232,9 @@ export function snapshotChatForStorage(chat: Chat): Chat {
       codeExecCalls: message.codeExecCalls?.map((call) => ({ ...call })),
       documents: message.documents?.map((document) => ({ ...document })),
       imageData: message.imageData?.map((image) => ({ ...image })),
-      timeline: message.timeline?.map((block) => ({ ...block })),
+      timeline: message.timeline
+        ? structuredClone(message.timeline)
+        : undefined,
       toolCalls: message.toolCalls?.map((call) => ({ ...call })),
       urlFetches: message.urlFetches?.map((urlFetch) => ({ ...urlFetch })),
       webSearch: message.webSearch
@@ -628,6 +636,7 @@ export class IndexedDBStorage {
     options: {
       requireExisting?: boolean
       markContentChangesAsLocal?: boolean
+      allowLocalOnlyChange?: boolean
     } = {},
   ): Promise<void> {
     this.assertActiveSaveGeneration()
@@ -741,6 +750,7 @@ export class IndexedDBStorage {
         const isLocalOnly = resolveStoredLocalOnly(
           (chat as StoredChat).isLocalOnly,
           existingChat?.isLocalOnly,
+          options.allowLocalOnlyChange,
         )
         const storedChat: StoredChat = {
           ...chat,
@@ -1307,6 +1317,7 @@ export class IndexedDBStorage {
 
   async getUnsyncedChats(): Promise<StoredChat[]> {
     await this.ensureSyncPendingIndex()
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
     return this.protectRead(
@@ -1700,7 +1711,7 @@ export class IndexedDBStorage {
         chat.isLocalOnly = isLocalOnly
         chat.locallyModified = true
         chat.updatedAt = new Date().toISOString()
-        await this.saveChatInternal(chat)
+        await this.saveChatInternal(chat, { allowLocalOnlyChange: true })
       }
     })
   }
