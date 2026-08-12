@@ -1,6 +1,10 @@
 import { AuthCleanupHandler } from '@/components/auth-cleanup-handler'
-import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
-import { act, render } from '@testing-library/react'
+import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
+import {
+  AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACTIVE_USER_ID,
+} from '@/constants/storage-keys'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,6 +12,7 @@ const mockPerformSignoutCleanup = vi.fn()
 const mockPerformUserSwitchCleanup = vi.fn()
 const mockGetEncryptionKey = vi.fn()
 const mockHasPasskeyBackup = vi.fn()
+const mockRetryFailedStorageCleanup = vi.fn()
 
 let authState: { isSignedIn: boolean; isLoaded: boolean } = {
   isSignedIn: false,
@@ -38,6 +43,8 @@ vi.mock('@/utils/signout-cleanup', () => ({
   performSignoutCleanup: (...args: any[]) => mockPerformSignoutCleanup(...args),
   performUserSwitchCleanup: (...args: any[]) =>
     mockPerformUserSwitchCleanup(...args),
+  retryFailedStorageCleanup: (...args: any[]) =>
+    mockRetryFailedStorageCleanup(...args),
 }))
 
 describe('AuthCleanupHandler', () => {
@@ -45,6 +52,7 @@ describe('AuthCleanupHandler', () => {
     vi.clearAllMocks()
     vi.useFakeTimers()
     localStorage.clear()
+    sessionStorage.clear()
 
     authState = {
       isSignedIn: false,
@@ -55,7 +63,8 @@ describe('AuthCleanupHandler', () => {
     }
 
     mockPerformSignoutCleanup.mockResolvedValue(undefined)
-    mockPerformUserSwitchCleanup.mockImplementation(() => {})
+    mockPerformUserSwitchCleanup.mockResolvedValue(undefined)
+    mockRetryFailedStorageCleanup.mockResolvedValue(undefined)
     mockGetEncryptionKey.mockReturnValue(null)
     mockHasPasskeyBackup.mockReturnValue(true)
     vi.spyOn(window.location, 'reload').mockImplementation(() => {})
@@ -109,6 +118,38 @@ describe('AuthCleanupHandler', () => {
     expect(window.location.reload).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps cleanup retryable while browser data is still being cleared', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    mockPerformSignoutCleanup.mockReturnValueOnce(new Promise(() => {}))
+
+    render(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+    })
+
+    expect(mockPerformSignoutCleanup).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
+    expect(window.location.reload).not.toHaveBeenCalled()
+  })
+
+  it('does not reload-loop when browser data cleanup fails', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    mockPerformSignoutCleanup.mockRejectedValueOnce(new Error('reset failed'))
+
+    render(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_123')
+    expect(window.location.reload).not.toHaveBeenCalled()
+  })
+
   it('still clears data immediately on user switch', () => {
     localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
     authState = {
@@ -123,5 +164,65 @@ describe('AuthCleanupHandler', () => {
 
     expect(mockPerformUserSwitchCleanup).toHaveBeenCalledWith('user_new')
     expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
+  })
+
+  it('blocks the new account without reload-looping when cleanup fails', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_old')
+    mockPerformUserSwitchCleanup.mockRejectedValueOnce(
+      new Error('reset failed'),
+    )
+    authState = {
+      isSignedIn: true,
+      isLoaded: true,
+    }
+    userState = {
+      user: { id: 'user_new' },
+    }
+
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to clear local data',
+      }),
+    ).toBeTruthy()
+    expect(mockPerformUserSwitchCleanup).toHaveBeenCalledTimes(1)
+    expect(window.location.reload).not.toHaveBeenCalled()
+    expect(localStorage.getItem(AUTH_ACTIVE_USER_ID)).toBe('user_old')
+  })
+
+  it('retries a failed reset signaled by another tab', async () => {
+    render(createElement(AuthCleanupHandler))
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockRetryFailedStorageCleanup).toHaveBeenCalledTimes(1)
+    expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores a cross-tab reset failure reported before mount', async () => {
+    sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+
+    render(createElement(AuthCleanupHandler))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to clear local data',
+      }),
+    ).toBeTruthy()
   })
 })

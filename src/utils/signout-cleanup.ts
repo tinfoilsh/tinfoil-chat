@@ -1,5 +1,6 @@
 import { resetRendererRegistry } from '@/components/chat/renderers'
 import {
+  AUTH_ACCOUNT_RESET_FAILED,
   AUTH_ACTIVE_USER_ID,
   SECRET_PASSKEY_BACKED_UP,
   SETTINGS_HAS_SEEN_ONBOARDING,
@@ -102,19 +103,18 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
   // Clear localStorage, preserving only non-user-specific keys
   reportStep(SIGNOUT_STEPS.CLEAR_STORAGE)
   try {
-    const encryptionKey = preserveEncryptionKey
-      ? localStorage.getItem(USER_ENCRYPTION_KEY)
-      : null
-    const hasSeenOnboarding = localStorage.getItem(SETTINGS_HAS_SEEN_ONBOARDING)
-    localStorage.clear()
-    if (hasSeenOnboarding !== null) {
-      localStorage.setItem(SETTINGS_HAS_SEEN_ONBOARDING, hasSeenOnboarding)
-    }
-    if (preserveUserId) {
-      localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
-    }
-    if (encryptionKey) {
-      localStorage.setItem(USER_ENCRYPTION_KEY, encryptionKey)
+    const preservedKeys = new Set([
+      AUTH_ACTIVE_USER_ID,
+      SETTINGS_HAS_SEEN_ONBOARDING,
+      ...(preserveEncryptionKey ? [USER_ENCRYPTION_KEY] : []),
+    ])
+    const keys = Array.from({ length: localStorage.length }, (_, index) =>
+      localStorage.key(index),
+    )
+    for (const key of keys) {
+      if (key && !preservedKeys.has(key)) {
+        localStorage.removeItem(key)
+      }
     }
   } catch {
     // best-effort — don't let localStorage failures skip remaining cleanup
@@ -130,17 +130,15 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
 
   // Clear IndexedDB
   reportStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
-  const indexedDBCleanupResults = await Promise.allSettled([
-    indexedDBStorage.deleteAllChats(),
-    projectCache.clear(),
-  ])
-  for (const result of indexedDBCleanupResults) {
-    if (result.status === 'rejected') {
-      logError('Failed to clear IndexedDB', result.reason, {
-        component: context,
-        action: 'clearAllUserData',
-      })
-    }
+  projectCache.invalidate()
+  try {
+    await indexedDBStorage.resetForAccountChange()
+  } catch (error) {
+    logError('Failed to clear IndexedDB', error, {
+      component: context,
+      action: 'clearAllUserData',
+    })
+    throw error
   }
 
   // Clear service worker caches
@@ -153,6 +151,12 @@ async function clearAllUserData(options: ClearUserDataOptions): Promise<void> {
     }
   }
   completeStep(SIGNOUT_STEPS.CLEAR_BROWSING_DATA)
+
+  if (preserveUserId) {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, preserveUserId)
+  } else {
+    localStorage.removeItem(AUTH_ACTIVE_USER_ID)
+  }
 }
 
 export async function performSignoutCleanup(opts?: {
@@ -201,27 +205,28 @@ export function deleteEncryptionKey(): void {
   encryptionService.clearKey({ persist: true })
 }
 
-export function performUserSwitchCleanup(newUserId: string): void {
+export async function performUserSwitchCleanup(
+  newUserId: string,
+): Promise<void> {
   logInfo('User switch detected, clearing all data', {
     component: 'AuthCleanupHandler',
     action: 'performUserSwitchCleanup',
     metadata: { newUserId },
   })
 
-  clearAllUserData({
-    context: 'AuthCleanupHandler',
-    preserveUserId: newUserId,
-    skipProgressReporting: true,
-  })
-    .catch((error) => {
-      logError('Failed to clear user data during switch', error, {
-        component: 'AuthCleanupHandler',
-        action: 'performUserSwitchCleanup',
-      })
+  try {
+    await clearAllUserData({
+      context: 'AuthCleanupHandler',
+      preserveUserId: newUserId,
+      skipProgressReporting: true,
     })
-    .finally(() => {
-      window.location.reload()
+  } catch (error) {
+    logError('Failed to clear user data during switch', error, {
+      component: 'AuthCleanupHandler',
+      action: 'performUserSwitchCleanup',
     })
+    throw error
+  }
 }
 
 export function getEncryptionKey(): string | null {
@@ -232,4 +237,9 @@ export function getEncryptionKey(): string | null {
 export function hasPasskeyBackup(): boolean {
   if (typeof window === 'undefined') return false
   return localStorage.getItem(SECRET_PASSKEY_BACKED_UP) === 'true'
+}
+
+export async function retryFailedStorageCleanup(): Promise<void> {
+  await indexedDBStorage.resetForAccountChange(false)
+  sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
 }

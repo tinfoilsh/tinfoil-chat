@@ -1,5 +1,9 @@
 import { SignoutConfirmationModal } from '@/components/modals/signout-confirmation-modal'
-import { AUTH_ACTIVE_USER_ID } from '@/constants/storage-keys'
+import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
+import {
+  AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACTIVE_USER_ID,
+} from '@/constants/storage-keys'
 import { logError, logInfo } from '@/utils/error-handling'
 import {
   deleteEncryptionKey,
@@ -7,6 +11,7 @@ import {
   hasPasskeyBackup,
   performSignoutCleanup,
   performUserSwitchCleanup,
+  retryFailedStorageCleanup,
 } from '@/utils/signout-cleanup'
 import {
   completeSignoutStep,
@@ -24,8 +29,13 @@ export function AuthCleanupHandler() {
   const { user } = useUser()
   const [showModal, setShowModal] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const [cleanupError, setCleanupError] = useState<{
+    message: string
+    retryStorage: boolean
+  } | null>(null)
   const hasCheckedRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
+  const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
   const latestAuthStateRef = useRef({
     isLoaded,
     isSignedIn,
@@ -39,6 +49,28 @@ export function AuthCleanupHandler() {
       userId: user?.id,
     }
   }, [isLoaded, isSignedIn, user?.id])
+
+  useEffect(() => {
+    const handleCrossTabResetFailure = () => {
+      setCleanupError({
+        message:
+          'Local data could not be cleared after another tab changed accounts.',
+        retryStorage: true,
+      })
+    }
+    if (sessionStorage.getItem(AUTH_ACCOUNT_RESET_FAILED) === 'true') {
+      handleCrossTabResetFailure()
+    }
+    window.addEventListener(
+      ACCOUNT_RESET_FAILED_EVENT,
+      handleCrossTabResetFailure,
+    )
+    return () =>
+      window.removeEventListener(
+        ACCOUNT_RESET_FAILED_EVENT,
+        handleCrossTabResetFailure,
+      )
+  }, [])
 
   const clearPendingSignoutCleanup = useCallback(() => {
     if (pendingSignoutCleanupRef.current !== null) {
@@ -59,19 +91,21 @@ export function AuthCleanupHandler() {
         component: 'AuthCleanupHandler',
         action,
       })
-      // Remove the active user ID first so that if cleanup throws before
-      // localStorage.clear(), the reload won't re-enter this branch and loop.
-      localStorage.removeItem(AUTH_ACTIVE_USER_ID)
       performSignoutCleanup()
+        .then(() => {
+          reportSignoutStep(SIGNOUT_STEPS.RELOAD)
+          window.location.reload()
+        })
         .catch((error) => {
           logError('Failed to cleanup on signout', error, {
             component: 'AuthCleanupHandler',
             action,
           })
-        })
-        .finally(() => {
-          reportSignoutStep(SIGNOUT_STEPS.RELOAD)
-          window.location.reload()
+          hideSignoutProgress()
+          setCleanupError({
+            message: 'Local data could not be cleared after signing out.',
+            retryStorage: false,
+          })
         })
       return
     }
@@ -81,18 +115,23 @@ export function AuthCleanupHandler() {
       action: 'signoutWithoutPasskey',
     })
     performSignoutCleanup({ preserveEncryptionKey: true })
-      .catch((error) => {
-        logError('Failed to cleanup on signout (preserving key)', error, {
-          component: 'AuthCleanupHandler',
-          action: 'signoutWithoutPasskey',
-        })
-      })
-      .finally(() => {
+      .then(() => {
         hideSignoutProgress()
         // Check theme from data-theme attribute (source of truth)
         const dataTheme = document.documentElement.getAttribute('data-theme')
         setIsDarkMode(dataTheme === 'dark')
         setShowModal(true)
+      })
+      .catch((error) => {
+        logError('Failed to cleanup on signout (preserving key)', error, {
+          component: 'AuthCleanupHandler',
+          action: 'signoutWithoutPasskey',
+        })
+        hideSignoutProgress()
+        setCleanupError({
+          message: 'Local data could not be cleared after signing out.',
+          retryStorage: false,
+        })
       })
   }, [])
 
@@ -105,7 +144,26 @@ export function AuthCleanupHandler() {
 
       if (storedUserId && storedUserId !== user.id) {
         // Different user signed in — clear all previous user data + reload
-        performUserSwitchCleanup(user.id)
+        if (!pendingUserSwitchCleanupRef.current && !cleanupError) {
+          const cleanup = performUserSwitchCleanup(user.id)
+          pendingUserSwitchCleanupRef.current = cleanup
+          void cleanup
+            .then(() => {
+              window.location.reload()
+            })
+            .catch(() => {
+              setCleanupError({
+                message:
+                  'Local data from the previous account could not be cleared.',
+                retryStorage: false,
+              })
+            })
+            .finally(() => {
+              if (pendingUserSwitchCleanupRef.current === cleanup) {
+                pendingUserSwitchCleanupRef.current = null
+              }
+            })
+        }
         return
       }
 
@@ -152,6 +210,7 @@ export function AuthCleanupHandler() {
     isLoaded,
     user?.id,
     clearPendingSignoutCleanup,
+    cleanupError,
     runSignoutCleanup,
   ])
 
@@ -161,6 +220,53 @@ export function AuthCleanupHandler() {
     deleteEncryptionKey()
     setShowModal(false)
     window.location.reload()
+  }
+
+  if (cleanupError) {
+    return (
+      <div
+        className="fixed inset-0 z-[110] flex items-center justify-center bg-surface-chat-background px-4"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="cleanup-error-title"
+      >
+        <div className="w-full max-w-md rounded-site-lg border border-border-subtle bg-surface-card p-6 text-center shadow-xl">
+          <h2
+            id="cleanup-error-title"
+            className="text-lg font-semibold text-content-primary"
+          >
+            Unable to clear local data
+          </h2>
+          <p className="mt-3 text-sm text-content-secondary">
+            {cleanupError.message} Close any other Tinfoil tabs, then retry
+            before continuing.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (!cleanupError.retryStorage) {
+                window.location.reload()
+                return
+              }
+
+              setCleanupError(null)
+              void retryFailedStorageCleanup()
+                .then(() => window.location.reload())
+                .catch(() => {
+                  setCleanupError({
+                    message:
+                      'Local data still could not be cleared after another tab changed accounts.',
+                    retryStorage: true,
+                  })
+                })
+            }}
+            className="mt-6 rounded-lg bg-brand-accent-dark px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark/90"
+          >
+            Retry cleanup
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!showModal) {

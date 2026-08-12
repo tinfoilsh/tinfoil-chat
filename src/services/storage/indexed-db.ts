@@ -1,4 +1,9 @@
 import type { Chat as ChatType } from '@/components/chat/types'
+import { ACCOUNT_RESET_FAILED_EVENT } from '@/constants/auth-events'
+import {
+  AUTH_ACCOUNT_RESET_FAILED,
+  AUTH_ACCOUNT_RESET_SIGNAL,
+} from '@/constants/storage-keys'
 import { nextClock } from '@/services/cloud/edit-clock'
 import type { Project } from '@/types/project'
 import { logError, logWarning } from '@/utils/error-handling'
@@ -57,6 +62,7 @@ const CHATS_STORE = 'chats'
 const CHATS_PROJECT_INDEX = 'projectId'
 const PROJECTS_STORE = 'projects'
 const PROJECTS_USER_INDEX = 'userId'
+const ACCOUNT_CHANGE_RESET_TIMEOUT_MS = 10_000
 let isUpgradeBlocked = false
 
 export function isIndexedDBUpgradeBlocked(): boolean {
@@ -71,6 +77,20 @@ function hashString(input: string): string {
   }
   // Unsigned hex string
   return (hash >>> 0).toString(16)
+}
+
+function deserializeStoredChat(chat: StoredChat): StoredChat {
+  if (!Array.isArray(chat.messages)) {
+    throw new Error('Stored chat has invalid messages')
+  }
+
+  return {
+    ...chat,
+    messages: chat.messages.map((message) => ({
+      ...message,
+      timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
+    })),
+  } as StoredChat
 }
 
 /**
@@ -162,6 +182,9 @@ export class IndexedDBStorage {
   private db: IDBDatabase | null = null
   private initializationPromise: Promise<void> | null = null
   private saveQueue: Promise<unknown> = Promise.resolve()
+  private saveGeneration = 0
+  private accountResetStarted = false
+  private accountResetPromise: Promise<void> | null = null
 
   async initialize(): Promise<void> {
     if (this.db) return
@@ -172,7 +195,8 @@ export class IndexedDBStorage {
       throw new Error('IndexedDB not available')
     }
 
-    this.initializationPromise = new Promise((resolve, reject) => {
+    const saveGeneration = this.saveGeneration
+    const initializationPromise = new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
       let abandoned = false
 
@@ -194,11 +218,21 @@ export class IndexedDBStorage {
           return
         }
         isUpgradeBlocked = false
-        this.db = request.result
-        this.db.onversionchange = () => {
-          this.db?.close()
-          this.db = null
+        const db = request.result
+        db.onversionchange = () => {
+          db.close()
+          if (this.db === db) {
+            this.db = null
+          }
         }
+
+        if (saveGeneration !== this.saveGeneration) {
+          db.close()
+          reject(new Error('Database open superseded by account change'))
+          return
+        }
+
+        this.db = db
         resolve()
       }
 
@@ -253,10 +287,14 @@ export class IndexedDBStorage {
       }
     })
 
+    this.initializationPromise = initializationPromise
+
     try {
-      await this.initializationPromise
+      await initializationPromise
     } finally {
-      this.initializationPromise = null
+      if (this.initializationPromise === initializationPromise) {
+        this.initializationPromise = null
+      }
     }
   }
 
@@ -281,6 +319,13 @@ export class IndexedDBStorage {
     action: string,
     operation: () => Promise<T>,
   ): Promise<T> {
+    if (this.accountResetStarted) {
+      return Promise.reject(
+        new Error('IndexedDB write superseded by account change'),
+      )
+    }
+
+    const saveGeneration = this.saveGeneration
     const result = this.saveQueue
       .catch((error) => {
         logError('Previous save operation failed, recovering queue', error, {
@@ -288,9 +333,98 @@ export class IndexedDBStorage {
           action: `${action}.queueRecovery`,
         })
       })
-      .then(operation)
+      .then(() => {
+        if (saveGeneration !== this.saveGeneration) {
+          throw new Error('IndexedDB write superseded by account change')
+        }
+        return operation()
+      })
     this.saveQueue = result
     return result
+  }
+
+  async resetForAccountChange(notifyOtherTabs = true): Promise<void> {
+    if (this.accountResetPromise) return this.accountResetPromise
+
+    if (notifyOtherTabs && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(AUTH_ACCOUNT_RESET_SIGNAL, crypto.randomUUID())
+        localStorage.removeItem(AUTH_ACCOUNT_RESET_SIGNAL)
+      } catch {
+        // best-effort — this tab still clears and blocks its own storage
+      }
+    }
+
+    this.accountResetStarted = true
+    this.saveGeneration += 1
+    this.saveQueue = Promise.resolve()
+    this.initializationPromise = null
+
+    const db = this.db
+    this.db = null
+    db?.close()
+
+    const reset = this.ensureDB().then(
+      (resetDb) =>
+        new Promise<void>((resolve, reject) => {
+          const transaction = resetDb.transaction(
+            [CHATS_STORE, PROJECTS_STORE],
+            'readwrite',
+          )
+          const timeout = window.setTimeout(() => {
+            try {
+              transaction.abort()
+            } finally {
+              reject(
+                new Error('Timed out resetting IndexedDB for account change'),
+              )
+            }
+          }, ACCOUNT_CHANGE_RESET_TIMEOUT_MS)
+
+          transaction.oncomplete = () => {
+            clearTimeout(timeout)
+            resolve()
+          }
+          transaction.onerror = () => {
+            clearTimeout(timeout)
+            reject(new Error('Failed to reset IndexedDB for account change'))
+          }
+          transaction.onabort = () => {
+            clearTimeout(timeout)
+            reject(new Error('IndexedDB account reset was aborted'))
+          }
+
+          const chatsRequest = transaction.objectStore(CHATS_STORE).clear()
+          chatsRequest.onerror = () => {
+            clearTimeout(timeout)
+            reject(new Error('Failed to clear chats for account change'))
+          }
+          const projectsRequest = transaction
+            .objectStore(PROJECTS_STORE)
+            .clear()
+          projectsRequest.onerror = () => {
+            clearTimeout(timeout)
+            reject(new Error('Failed to clear projects for account change'))
+          }
+        }),
+    )
+
+    const trackedReset = reset
+    this.accountResetPromise = trackedReset
+    this.saveQueue = trackedReset
+    void trackedReset.then(
+      () => {
+        if (this.accountResetPromise === trackedReset) {
+          this.accountResetPromise = null
+        }
+      },
+      () => {
+        if (this.accountResetPromise === trackedReset) {
+          this.accountResetPromise = null
+        }
+      },
+    )
+    return trackedReset
   }
 
   async saveChat(chat: Chat): Promise<void> {
@@ -529,15 +663,12 @@ export class IndexedDBStorage {
       const request = store.get(id)
 
       request.onsuccess = () => {
-        const chat = request.result
-        if (chat) {
-          // Convert string timestamps back to Date objects
-          chat.messages = chat.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          }))
+        try {
+          const chat = request.result as StoredChat | undefined
+          resolve(chat ? deserializeStoredChat(chat) : null)
+        } catch (error) {
+          reject(error)
         }
-        resolve(chat || null)
       }
       request.onerror = () => reject(new Error('Failed to get chat'))
     })
@@ -862,14 +993,12 @@ export class IndexedDBStorage {
       request.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result
         if (cursor) {
-          const chat = cursor.value
-          // Convert string timestamps back to Date objects
-          chat.messages = chat.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          }))
-          chats.push(chat)
-          cursor.continue()
+          try {
+            chats.push(deserializeStoredChat(cursor.value as StoredChat))
+            cursor.continue()
+          } catch (error) {
+            reject(error)
+          }
         } else {
           resolve(chats)
         }
@@ -1358,3 +1487,34 @@ export class IndexedDBStorage {
 }
 
 export const indexedDBStorage = new IndexedDBStorage()
+
+export function handleIndexedDBAccountResetStorageEvent(
+  storage: IndexedDBStorage,
+  event: StorageEvent,
+): void {
+  if (event.key !== AUTH_ACCOUNT_RESET_SIGNAL || !event.newValue) return
+  void storage
+    .resetForAccountChange(false)
+    .then(() => {
+      sessionStorage.removeItem(AUTH_ACCOUNT_RESET_FAILED)
+      window.location.reload()
+    })
+    .catch((error) => {
+      logError(
+        'Failed to reset IndexedDB after cross-tab account change',
+        error,
+        {
+          component: 'IndexedDBStorage',
+          action: 'crossTabAccountReset',
+        },
+      )
+      sessionStorage.setItem(AUTH_ACCOUNT_RESET_FAILED, 'true')
+      window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
+    })
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    handleIndexedDBAccountResetStorageEvent(indexedDBStorage, event)
+  })
+}
