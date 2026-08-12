@@ -747,8 +747,12 @@ export class IndexedDBStorage {
     return this.enqueueSave('mutateChat', async () => {
       const db = await this.ensureDB()
       return new Promise<StoredChat | null>((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const transaction = db.transaction(
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          'readwrite',
+        )
         const store = transaction.objectStore(CHATS_STORE)
+        const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
         let output: StoredChat | null = null
 
         transaction.oncomplete = () => resolve(output)
@@ -758,10 +762,24 @@ export class IndexedDBStorage {
 
         const request = store.get(chatId)
         request.onerror = () => reject(new Error('Failed to read chat'))
-        request.onsuccess = () => {
-          const current = request.result as StoredChat | undefined
-          if (!current) return
+        const payloadRequest = payloadStore
+          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+          .getAll(IDBKeyRange.only(chatId))
+        payloadRequest.onerror = () =>
+          reject(new Error('Failed to read attachment payloads'))
+        // Requests fire in issue order within a transaction, so the chat
+        // read has settled by the time the payload read succeeds.
+        payloadRequest.onsuccess = () => {
+          const stored = request.result as StoredChat | undefined
+          if (!stored) return
 
+          // The mutation sees (and callers receive) the hydrated chat so
+          // attachment content survives the round trip; the write below
+          // re-normalizes payloads back out of the chat record.
+          const current = hydrateAttachmentPayloads(
+            stored,
+            payloadRequest.result as StoredAttachmentPayload[],
+          )
           const result = mutation(current)
           if (!result.changed) {
             output = result.chat
@@ -789,7 +807,42 @@ export class IndexedDBStorage {
             }),
             version: 1,
           }
-          store.put(updateSyncPending(output))
+          const mutated = updateSyncPending(output)
+          const normalizedAttachments = normalizeAttachmentPayloads(mutated)
+          const writeChatAndPayloads = () => {
+            for (const payload of normalizedAttachments.payloads) {
+              const putRequest = payloadStore.put(payload)
+              putRequest.onerror = () =>
+                reject(
+                  putRequest.error ??
+                    new Error('Failed to save attachment payload'),
+                )
+            }
+            store.put({
+              ...mutated,
+              messages: normalizedAttachments.messages as any,
+            })
+          }
+          const payloadCursor = payloadStore
+            .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+            .openCursor(IDBKeyRange.only(chatId))
+          payloadCursor.onerror = () =>
+            reject(new Error('Failed to reconcile attachment payloads'))
+          payloadCursor.onsuccess = () => {
+            const cursor = payloadCursor.result
+            if (cursor) {
+              if (
+                !normalizedAttachments.referencedPayloadIds.has(
+                  String(cursor.primaryKey),
+                )
+              ) {
+                cursor.delete()
+              }
+              cursor.continue()
+              return
+            }
+            writeChatAndPayloads()
+          }
         }
       })
     })
