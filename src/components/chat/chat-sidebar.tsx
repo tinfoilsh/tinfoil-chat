@@ -54,6 +54,10 @@ import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
 
 import { useProject } from '@/components/project/project-context'
+import {
+  SIDEBAR_PATTERN_EDGE_WIDTH_PX,
+  SidebarPatternEdge,
+} from '@/components/ui/sidebar-pattern-edge'
 import { cn } from '@/components/ui/utils'
 import {
   getProjectColor,
@@ -803,10 +807,8 @@ export function ChatSidebar({
 
   return (
     <>
-      {/* Collapsed sidebar rail - shown on desktop when sidebar is closed.
-          Fades in only after the expanded sidebar has slid away so the two
-          appear to swap rather than the rail sitting statically underneath. */}
-      <AnimatePresence>
+      {/* Collapsed sidebar rail - shown on desktop when sidebar is closed. */}
+      <AnimatePresence initial={false}>
         {!isMobile && !isOpen && (
           <motion.nav
             key="collapsed-rail"
@@ -816,7 +818,7 @@ export function ChatSidebar({
               opacity: 1,
               transition: {
                 duration: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_IN_DURATION_S,
-                delay: CONSTANTS.CHAT_SIDEBAR_SLIDE_DURATION_S,
+                delay: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_IN_DELAY_S,
               },
             }}
             exit={{
@@ -825,13 +827,9 @@ export function ChatSidebar({
                 duration: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_OUT_DURATION_S,
               },
             }}
-            className={cn(
-              'fixed left-0 top-0 z-40 flex h-dvh flex-col border-r',
-              'border-border-subtle bg-surface-sidebar text-content-primary',
-            )}
+            className="fixed left-0 top-0 z-50 flex h-dvh flex-col text-content-primary"
             style={{
               width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
-              ...sidebarTintStyle,
             }}
           >
             {/* Logo icon - shows expand icon on hover */}
@@ -960,31 +958,41 @@ export function ChatSidebar({
         aria-label="Chat history"
         inert={!isOpen}
         className={cn(
-          'fixed z-40 flex h-dvh flex-col overflow-hidden border-r',
+          'fixed z-40 flex h-dvh flex-col items-start overflow-hidden [&>*:not(:first-child)]:w-[var(--sidebar-content-width)] [&>*:not(:first-child)]:transition-opacity [&>*:not(:first-child)]:duration-100',
           // On mobile: slide in/out. On desktop: always positioned, just toggle width
           isMobile
             ? isOpen
               ? 'translate-x-0'
               : '-translate-x-full'
             : 'translate-x-0',
-          'border-border-subtle bg-surface-sidebar text-content-primary',
+          isMobile || isOpen
+            ? '[&>*:not(:first-child)]:opacity-100'
+            : '[&>*:not(:first-child)]:opacity-0',
+          'bg-surface-sidebar text-content-primary',
           isInitialLoad ? '' : 'transition-all duration-200 ease-in-out',
         )}
-        style={{
-          width: isMobile ? '85vw' : `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
-          maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
-          // On desktop when closed, hide behind the collapsed rail
-          left:
-            !isMobile && !isOpen
-              ? `-${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
-              : '0',
-          ...sidebarTintStyle,
-        }}
+        style={
+          {
+            width: isMobile
+              ? '85vw'
+              : isOpen
+                ? `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`
+                : `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
+            maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
+            paddingRight: `${SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
+            left: '0',
+            '--sidebar-content-width': isMobile
+              ? '100%'
+              : `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX - SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
+            ...sidebarTintStyle,
+          } as React.CSSProperties
+        }
       >
+        <SidebarPatternEdge isDarkMode={isDarkMode} />
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <Link href="/" title="Home" className="flex items-center">
+            <Link href="/" title="Home" className="-ml-1 flex items-center">
               <Logo className="h-6 w-auto" dark={isDarkMode} />
             </Link>
             {/* Settings button */}

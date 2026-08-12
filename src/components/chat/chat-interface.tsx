@@ -63,6 +63,7 @@ import {
   useProject,
   useProjectSystemPrompt,
 } from '@/components/project'
+import { GridTexture } from '@/components/ui/grid-texture'
 import { LogoLoading } from '@/components/ui/logo-loading'
 import { cn } from '@/components/ui/utils'
 import { CLOUD_SYNC } from '@/config'
@@ -3095,6 +3096,9 @@ export function ChatInterface({
     )
   }
 
+  const showEmptyChatGrid =
+    (currentChat?.messages.length ?? 0) === 0 && !isWaitingForResponse
+
   return (
     <div
       className="flex overflow-hidden bg-surface-chat-background"
@@ -3663,6 +3667,7 @@ export function ChatInterface({
                 : '',
             )}
           >
+            {showEmptyChatGrid && <GridTexture />}
             {/* Rate Limit Banner (desktop) — on mobile this renders as a
                 floating pill above the chat input instead. */}
             {shouldShowRateLimitBanner(rateLimit) && (
@@ -3710,7 +3715,12 @@ export function ChatInterface({
                 data-scroll-container="main"
                 role="main"
                 aria-label="Conversation"
-                className="relative z-0 flex-1 overflow-y-auto bg-surface-chat-background"
+                className={cn(
+                  'relative z-0 flex-1 overflow-y-auto',
+                  showEmptyChatGrid
+                    ? 'bg-transparent'
+                    : 'bg-surface-chat-background',
+                )}
                 style={
                   {
                     paddingBottom:

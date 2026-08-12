@@ -1,4 +1,3 @@
-import { GridTexture } from '@/components/ui/grid-texture'
 import { findSelectableModel, type BaseModel } from '@/config/models'
 import { useChatPrint } from '@/hooks/use-chat-print'
 import {
@@ -401,7 +400,6 @@ export function ChatMessages({
   if (messages.length === 0 && !isWaitingForResponse) {
     return (
       <div className="relative flex min-h-full w-full flex-col items-center overflow-y-auto">
-        <GridTexture />
         {/* Asymmetric spacers bias the panel above center so the model menu,
             which opens below the input, has room on tall screens. */}
         <div className="flex-[2]" />
