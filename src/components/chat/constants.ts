@@ -34,7 +34,7 @@ export const CONSTANTS = {
   ASYNC_STATE_DELAY_MS: 50,
   // Sidebar widths
   CHAT_SIDEBAR_WIDTH_PX: 300,
-  CHAT_SIDEBAR_COLLAPSED_WIDTH_PX: 48,
+  CHAT_SIDEBAR_COLLAPSED_WIDTH_PX: 64,
   // Duration of the expanded sidebar slide in/out (seconds)
   CHAT_SIDEBAR_SLIDE_DURATION_S: 0.2,
   // Collapsed rail fade timings (seconds). The fade-in waits for the expanded

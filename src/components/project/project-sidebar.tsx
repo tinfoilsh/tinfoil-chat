@@ -9,6 +9,10 @@ import { TypingAnimation } from '@/components/chat/typing-animation'
 import { PiSpinnerThin } from '@/components/icons/lazy-icons'
 import { Link } from '@/components/link'
 import { Logo } from '@/components/logo'
+import {
+  SIDEBAR_PATTERN_EDGE_WIDTH_PX,
+  SidebarPatternEdge,
+} from '@/components/ui/sidebar-pattern-edge'
 import { cn } from '@/components/ui/utils'
 import {
   getProjectColor,
@@ -704,15 +708,13 @@ export function ProjectSidebar({
       {/* Collapsed sidebar rail - always visible on desktop when sidebar is closed */}
       {!isMobile && !isOpen && (
         <div
-          className={cn(
-            'fixed left-0 top-0 z-40 flex h-dvh flex-col border-r',
-            'border-border-subtle bg-surface-sidebar text-content-primary',
-          )}
+          className="fixed left-0 top-0 z-40 flex h-dvh flex-col bg-surface-sidebar text-content-primary"
           style={{
             width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
             ...sidebarTintStyle,
           }}
         >
+          <SidebarPatternEdge isDarkMode={isDarkMode} />
           {/* Folder icon - shows expand icon on hover */}
           <div className="flex h-16 flex-none items-center justify-center">
             <button
@@ -759,16 +761,18 @@ export function ProjectSidebar({
       <div
         inert={!isOpen}
         className={cn(
-          'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden border-r',
+          'fixed z-40 flex h-dvh w-[85vw] flex-col overflow-hidden',
           isOpen ? 'translate-x-0' : '-translate-x-full',
-          'border-border-subtle bg-surface-sidebar text-content-primary',
+          'bg-surface-sidebar text-content-primary',
           'transition-all duration-200 ease-in-out',
         )}
         style={{
           maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
+          paddingRight: `${SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
           ...sidebarTintStyle,
         }}
       >
+        <SidebarPatternEdge isDarkMode={isDarkMode} />
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-3">

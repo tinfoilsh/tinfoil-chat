@@ -54,6 +54,10 @@ import { CONSTANTS } from './constants'
 import { useDrag } from './drag-context'
 
 import { useProject } from '@/components/project/project-context'
+import {
+  SIDEBAR_PATTERN_EDGE_WIDTH_PX,
+  SidebarPatternEdge,
+} from '@/components/ui/sidebar-pattern-edge'
 import { cn } from '@/components/ui/utils'
 import {
   getProjectColor,
@@ -825,15 +829,13 @@ export function ChatSidebar({
                 duration: CONSTANTS.CHAT_SIDEBAR_RAIL_FADE_OUT_DURATION_S,
               },
             }}
-            className={cn(
-              'fixed left-0 top-0 z-40 flex h-dvh flex-col border-r',
-              'border-border-subtle bg-surface-sidebar text-content-primary',
-            )}
+            className="fixed left-0 top-0 z-40 flex h-dvh flex-col bg-surface-sidebar text-content-primary"
             style={{
               width: `${CONSTANTS.CHAT_SIDEBAR_COLLAPSED_WIDTH_PX}px`,
               ...sidebarTintStyle,
             }}
           >
+            <SidebarPatternEdge isDarkMode={isDarkMode} />
             {/* Logo icon - shows expand icon on hover */}
             <div className="flex h-16 flex-none items-center justify-center">
               <button
@@ -960,19 +962,20 @@ export function ChatSidebar({
         aria-label="Chat history"
         inert={!isOpen}
         className={cn(
-          'fixed z-40 flex h-dvh flex-col overflow-hidden border-r',
+          'fixed z-40 flex h-dvh flex-col overflow-hidden',
           // On mobile: slide in/out. On desktop: always positioned, just toggle width
           isMobile
             ? isOpen
               ? 'translate-x-0'
               : '-translate-x-full'
             : 'translate-x-0',
-          'border-border-subtle bg-surface-sidebar text-content-primary',
+          'bg-surface-sidebar text-content-primary',
           isInitialLoad ? '' : 'transition-all duration-200 ease-in-out',
         )}
         style={{
           width: isMobile ? '85vw' : `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
           maxWidth: `${CONSTANTS.CHAT_SIDEBAR_WIDTH_PX}px`,
+          paddingRight: `${SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
           // On desktop when closed, hide behind the collapsed rail
           left:
             !isMobile && !isOpen
@@ -981,6 +984,7 @@ export function ChatSidebar({
           ...sidebarTintStyle,
         }}
       >
+        <SidebarPatternEdge isDarkMode={isDarkMode} />
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between p-4">
           <div className="flex items-center gap-3">
