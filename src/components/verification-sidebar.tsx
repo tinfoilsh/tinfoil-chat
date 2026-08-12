@@ -116,7 +116,24 @@ export function VerifierSidebar({
       isRetryingRef.current = false
     }
 
-    if (!success) onVerificationCompleteRef.current(false)
+    if (success) return
+
+    // Retries exhausted. A previously successful attestation may still be
+    // cached (e.g. the panel was opened while offline after startup
+    // verification succeeded), and getVerificationDocument returns it
+    // without network work — don't downgrade that to a failure.
+    try {
+      const cachedDoc = await getVerificationDocument()
+      if (cachedDoc?.securityVerified === true) {
+        setVerificationDocument(cachedDoc)
+        onVerificationUpdateRef.current?.(cachedDoc)
+        onVerificationCompleteRef.current(true)
+        return
+      }
+    } catch {
+      // No cached verification available; report the failure below.
+    }
+    onVerificationCompleteRef.current(false)
   }, [])
 
   useEffect(() => {
