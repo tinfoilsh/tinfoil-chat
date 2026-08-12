@@ -32,6 +32,7 @@ const DefaultMessageComponent = ({
   isDarkMode,
   isLastMessage,
   isStreaming,
+  activeArtifactToolCallId,
   hideActions,
   onEditMessage,
   onRegenerateMessage,
@@ -341,6 +342,7 @@ const DefaultMessageComponent = ({
                     ]}
                     isStreaming={!!isStreaming && !!isLastMessage}
                     isDarkMode={isDarkMode}
+                    activeArtifactToolCallId={activeArtifactToolCallId}
                     onRetry={
                       onRegenerateMessage && messageIndex > 0
                         ? () => onRegenerateMessage(messageIndex - 1)

@@ -1,7 +1,13 @@
+import { CONSTANTS } from '@/components/chat/constants'
 import { GenUIToolCallRenderer } from '@/components/chat/genui/GenUIToolCallRenderer'
 import { GENUI_WIDGETS_BY_NAME } from '@/components/chat/genui/registry'
 import { ArtifactRetryError } from '@/components/chat/genui/retry'
 import type { GenUIRenderContext } from '@/components/chat/genui/types'
+import {
+  artifactPreviewTargetsEqual,
+  OPEN_ARTIFACT_PREVIEW_EVENT,
+  type ArtifactPreviewSidebarEventDetail,
+} from '@/components/chat/genui/widgets/ArtifactPreview'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,12 +22,52 @@ const validMessageCompose = JSON.stringify({
   variants: [{ label: 'Concise', body: 'Thanks, I will confirm.' }],
 })
 
+const artifact = {
+  title: 'Snake game',
+  description: 'An interactive game',
+  source: { type: 'html' as const, html: '<main>Snake</main>' },
+}
+
+const validArtifactPreview = JSON.stringify(artifact)
+const artifactPreviewListeners: EventListener[] = []
+
+function setWindowWidth(width: number): void {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: width,
+  })
+}
+
+function renderArtifactPreview({ isStreaming }: { isStreaming: boolean }) {
+  const listener = vi.fn<(event: Event) => void>()
+  artifactPreviewListeners.push(listener)
+  window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+  render(
+    <GenUIToolCallRenderer
+      isStreaming={isStreaming}
+      toolCalls={[
+        {
+          id: 'artifact-1',
+          name: 'render_artifact_preview',
+          arguments: validArtifactPreview,
+        },
+      ]}
+    />,
+  )
+  return listener
+}
+
 describe('GenUIToolCallRenderer', () => {
   beforeEach(() => {
     logErrorMock.mockReset()
+    setWindowWidth(CONSTANTS.MOBILE_BREAKPOINT)
   })
 
   afterEach(() => {
+    for (const listener of artifactPreviewListeners) {
+      window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+    }
+    artifactPreviewListeners.length = 0
     vi.restoreAllMocks()
   })
 
@@ -43,6 +89,123 @@ describe('GenUIToolCallRenderer', () => {
     expect(
       screen.queryByText(/Generating message compose/),
     ).not.toBeInTheDocument()
+  })
+
+  it('opens a generated artifact automatically on desktop', () => {
+    const listener = renderArtifactPreview({ isStreaming: true })
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    const event = listener.mock
+      .calls[0][0] as CustomEvent<ArtifactPreviewSidebarEventDetail>
+    expect(event.detail).toEqual({
+      action: 'open',
+      artifact,
+      toolCallId: 'artifact-1',
+    })
+  })
+
+  it('does not auto-open generated artifacts on mobile', () => {
+    setWindowWidth(CONSTANTS.MOBILE_BREAKPOINT - 1)
+    const listener = renderArtifactPreview({ isStreaming: true })
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('does not auto-open artifacts from chat history', () => {
+    const listener = renderArtifactPreview({ isStreaming: false })
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('keeps artifact card clicks as sidebar toggles', () => {
+    const listener = renderArtifactPreview({ isStreaming: false })
+    fireEvent.click(screen.getByRole('button', { name: /Snake game/ }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    const event = listener.mock
+      .calls[0][0] as CustomEvent<ArtifactPreviewSidebarEventDetail>
+    expect(event.detail).toEqual({
+      action: 'toggle',
+      artifact,
+      toolCallId: 'artifact-1',
+    })
+  })
+
+  it('highlights only the open artifact and shows its full description', () => {
+    const secondArtifact = {
+      ...artifact,
+      title: 'Second artifact',
+      description:
+        'A longer artifact description that should wrap across as many lines as needed.',
+      source: { type: 'html' as const, html: '<main>Second</main>' },
+    }
+    const toolCalls = [
+      {
+        id: 'artifact-1',
+        name: 'render_artifact_preview',
+        arguments: validArtifactPreview,
+      },
+      {
+        id: 'artifact-2',
+        name: 'render_artifact_preview',
+        arguments: JSON.stringify(secondArtifact),
+      },
+    ]
+    const { rerender } = render(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        activeArtifactToolCallId="artifact-2"
+        toolCalls={toolCalls}
+      />,
+    )
+
+    const firstButton = screen.getByRole('button', { name: /Snake game/ })
+    const secondButton = screen.getByRole('button', {
+      name: /Second artifact/,
+    })
+    const description = screen.getByText(secondArtifact.description)
+    expect(firstButton).toHaveAttribute('aria-pressed', 'false')
+    expect(secondButton).toHaveAttribute('aria-pressed', 'true')
+    expect(secondButton.parentElement).toHaveClass('border-brand-accent-dark')
+    expect(description).toHaveClass('whitespace-pre-wrap', 'break-words')
+    expect(description).not.toHaveClass('truncate')
+
+    rerender(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        activeArtifactToolCallId="artifact-1"
+        toolCalls={toolCalls}
+      />,
+    )
+    expect(firstButton).toHaveAttribute('aria-pressed', 'true')
+    expect(secondButton).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('distinguishes identical artifacts by tool call', () => {
+    expect(
+      artifactPreviewTargetsEqual(
+        artifact,
+        'artifact-1',
+        artifact,
+        'artifact-2',
+      ),
+    ).toBe(false)
+    expect(
+      artifactPreviewTargetsEqual(
+        artifact,
+        'artifact-1',
+        artifact,
+        'artifact-1',
+      ),
+    ).toBe(true)
+    expect(
+      artifactPreviewTargetsEqual(
+        artifact,
+        'artifact-1',
+        { ...artifact, description: 'Updated description' },
+        'artifact-1',
+      ),
+    ).toBe(false)
   })
 
   it('shows a simple generating state without raw data or a character count', () => {

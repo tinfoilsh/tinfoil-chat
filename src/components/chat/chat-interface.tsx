@@ -123,9 +123,10 @@ import {
 import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
 import { selectPendingInputToolCallFromChat } from './genui/pending-input-tool-call'
 import {
-  artifactDetailsEqual,
+  artifactPreviewTargetsEqual,
   OPEN_ARTIFACT_PREVIEW_EVENT,
   type ArtifactPreviewSidebarDetail,
+  type ArtifactPreviewSidebarEventDetail,
 } from './genui/widgets/ArtifactPreview'
 import {
   canToggleTemporaryChat,
@@ -575,6 +576,9 @@ export function ChatInterface({
   )
   const [artifactPreview, setArtifactPreview] =
     useState<ArtifactPreviewSidebarDetail | null>(null)
+  const [activeArtifactToolCallId, setActiveArtifactToolCallId] = useState<
+    string | null
+  >(null)
 
   const [webSearchAvailable, setWebSearchAvailable] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -1441,29 +1445,34 @@ export function ChatInterface({
   // slide-over and closes any other right-side panel so only one is visible.
   useEffect(() => {
     const handleOpenArtifactPreview = (
-      event: CustomEvent<ArtifactPreviewSidebarDetail>,
+      event: CustomEvent<ArtifactPreviewSidebarEventDetail>,
     ) => {
       if (!event.detail) return
+      const { action, artifact, toolCallId } = event.detail
       // Toggle: clicking the inline card while its artifact is already open
       // closes the sidebar instead of re-opening it.
-      setArtifactPreview((prev) => {
-        const sameArtifact =
-          prev !== null &&
-          isArtifactSidebarOpen &&
-          artifactDetailsEqual(prev, event.detail)
-        if (sameArtifact) {
-          setIsArtifactSidebarOpen(false)
-          return prev
-        }
-        setIsArtifactSidebarOpen(true)
-        setIsVerifierSidebarOpen(false)
-        setIsSettingsModalOpen(false)
-        setIsAskSidebarOpen(false)
-        if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-          setIsSidebarOpen(false)
-        }
-        return event.detail
-      })
+      const sameArtifact =
+        artifactPreview !== null &&
+        isArtifactSidebarOpen &&
+        artifactPreviewTargetsEqual(
+          artifactPreview,
+          activeArtifactToolCallId,
+          artifact,
+          toolCallId,
+        )
+      if (action === 'toggle' && sameArtifact) {
+        setIsArtifactSidebarOpen(false)
+        return
+      }
+      setArtifactPreview(artifact)
+      setActiveArtifactToolCallId(toolCallId ?? null)
+      setIsArtifactSidebarOpen(true)
+      setIsVerifierSidebarOpen(false)
+      setIsSettingsModalOpen(false)
+      setIsAskSidebarOpen(false)
+      if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+        setIsSidebarOpen(false)
+      }
     }
     window.addEventListener(
       OPEN_ARTIFACT_PREVIEW_EVENT,
@@ -1475,7 +1484,13 @@ export function ChatInterface({
         handleOpenArtifactPreview as EventListener,
       )
     }
-  }, [windowWidth, setIsSidebarOpen, isArtifactSidebarOpen])
+  }, [
+    windowWidth,
+    setIsSidebarOpen,
+    isArtifactSidebarOpen,
+    artifactPreview,
+    activeArtifactToolCallId,
+  ])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   // Keyed on the chat id, not the chat object: the object's identity changes
@@ -3724,6 +3739,9 @@ export function ChatInterface({
                     chatId={currentChat.id}
                     isWaitingForResponse={isWaitingForResponse}
                     isStreamingResponse={isStreaming}
+                    activeArtifactToolCallId={
+                      isArtifactSidebarOpen ? activeArtifactToolCallId : null
+                    }
                     isPremium={isPremium}
                     models={models}
                     onSubmit={handleSubmit}
