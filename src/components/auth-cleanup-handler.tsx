@@ -33,6 +33,7 @@ export function AuthCleanupHandler() {
     message: string
     retryStorage: boolean
   } | null>(null)
+  const [cleanupRetrying, setCleanupRetrying] = useState(false)
   const hasCheckedRef = useRef(false)
   const pendingSignoutCleanupRef = useRef<number | null>(null)
   const pendingUserSwitchCleanupRef = useRef<Promise<void> | null>(null)
@@ -137,6 +138,10 @@ export function AuthCleanupHandler() {
 
   useEffect(() => {
     if (!isLoaded) return
+    if (cleanupError) {
+      clearPendingSignoutCleanup()
+      return
+    }
 
     if (isSignedIn && user?.id) {
       clearPendingSignoutCleanup()
@@ -249,10 +254,11 @@ export function AuthCleanupHandler() {
                 return
               }
 
-              setCleanupError(null)
+              setCleanupRetrying(true)
               void retryFailedStorageCleanup()
                 .then(() => window.location.reload())
                 .catch(() => {
+                  setCleanupRetrying(false)
                   setCleanupError({
                     message:
                       'Local data still could not be cleared after another tab changed accounts.',
@@ -260,9 +266,10 @@ export function AuthCleanupHandler() {
                   })
                 })
             }}
+            disabled={cleanupRetrying}
             className="mt-6 rounded-lg bg-brand-accent-dark px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-accent-dark/90"
           >
-            Retry cleanup
+            {cleanupRetrying ? 'Retrying cleanup...' : 'Retry cleanup'}
           </button>
         </div>
       </div>

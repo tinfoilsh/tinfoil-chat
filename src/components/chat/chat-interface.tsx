@@ -711,16 +711,16 @@ export function ChatInterface({
       return
     }
 
-    if (activeProject?.id) {
-      setPendingProjectUpload(null)
-      setShowAddToProjectModal(false)
-      toast({
-        title: 'Upload canceled',
-        description: 'The file was not attached because the project changed.',
-        variant: 'destructive',
-        position: 'top-right',
-      })
-    }
+    setPendingProjectUpload(null)
+    setShowAddToProjectModal(false)
+    toast({
+      title: 'Upload canceled',
+      description: activeProject?.id
+        ? 'The file was not attached because the project changed.'
+        : 'The file was not attached because project mode ended.',
+      variant: 'destructive',
+      position: 'top-right',
+    })
   }, [
     activeProject?.id,
     loadingProject,

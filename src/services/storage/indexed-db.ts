@@ -183,8 +183,19 @@ export class IndexedDBStorage {
   private initializationPromise: Promise<void> | null = null
   private saveQueue: Promise<unknown> = Promise.resolve()
   private saveGeneration = 0
+  // Account cleanup always reloads; keep this instance fail-closed until then.
   private accountResetStarted = false
   private accountResetPromise: Promise<void> | null = null
+  private activeSaveGeneration: number | null = null
+  private readonly accountResetSignal: Promise<never>
+  private rejectAccountReads!: (reason: Error) => void
+
+  constructor() {
+    this.accountResetSignal = new Promise((_, reject) => {
+      this.rejectAccountReads = reject
+    })
+    void this.accountResetSignal.catch(() => {})
+  }
 
   async initialize(): Promise<void> {
     if (this.db) return
@@ -308,6 +319,29 @@ export class IndexedDBStorage {
     return this.db
   }
 
+  private async waitForSaveQueue(): Promise<void> {
+    if (this.accountResetStarted) {
+      throw new Error('IndexedDB read superseded by account change')
+    }
+    await this.saveQueue.catch(() => {})
+    if (this.accountResetStarted) {
+      throw new Error('IndexedDB read superseded by account change')
+    }
+  }
+
+  private protectRead<T>(read: Promise<T>): Promise<T> {
+    return Promise.race([read, this.accountResetSignal])
+  }
+
+  private assertActiveSaveGeneration(): void {
+    if (
+      this.accountResetStarted ||
+      this.activeSaveGeneration !== this.saveGeneration
+    ) {
+      throw new Error('IndexedDB write superseded by account change')
+    }
+  }
+
   /**
    * Serialize a write behind every previously queued one. The
    * returned promise is the caller's view of the operation (typed
@@ -333,11 +367,18 @@ export class IndexedDBStorage {
           action: `${action}.queueRecovery`,
         })
       })
-      .then(() => {
+      .then(async () => {
         if (saveGeneration !== this.saveGeneration) {
           throw new Error('IndexedDB write superseded by account change')
         }
-        return operation()
+        this.activeSaveGeneration = saveGeneration
+        try {
+          return await operation()
+        } finally {
+          if (this.activeSaveGeneration === saveGeneration) {
+            this.activeSaveGeneration = null
+          }
+        }
       })
     this.saveQueue = result
     return result
@@ -356,6 +397,9 @@ export class IndexedDBStorage {
     }
 
     this.accountResetStarted = true
+    this.rejectAccountReads(
+      new Error('IndexedDB read superseded by account change'),
+    )
     this.saveGeneration += 1
     this.saveQueue = Promise.resolve()
     this.initializationPromise = null
@@ -506,7 +550,9 @@ export class IndexedDBStorage {
       markContentChangesAsLocal?: boolean
     } = {},
   ): Promise<void> {
+    this.assertActiveSaveGeneration()
     const db = await this.ensureDB()
+    this.assertActiveSaveGeneration()
 
     // Don't save blank chats to IndexedDB
     if ((chat as StoredChat).isBlankChat === true) {
@@ -675,17 +721,20 @@ export class IndexedDBStorage {
   }
 
   async getChat(id: string): Promise<StoredChat | null> {
-    await this.saveQueue.catch(() => {})
-    const chat = await this.getChatInternal(id)
-    if (chat) {
-      this.updateLastAccessed(id).catch((error) =>
-        logError('Failed to update last accessed time', error, {
-          component: 'IndexedDBStorage',
-          metadata: { chatId: id },
-        }),
-      )
-    }
-    return chat
+    await this.waitForSaveQueue()
+    return this.protectRead(
+      this.getChatInternal(id).then((chat) => {
+        if (chat) {
+          this.updateLastAccessed(id).catch((error) =>
+            logError('Failed to update last accessed time', error, {
+              component: 'IndexedDBStorage',
+              metadata: { chatId: id },
+            }),
+          )
+        }
+        return chat
+      }),
+    )
   }
 
   async deleteChat(id: string): Promise<void> {
@@ -737,30 +786,31 @@ export class IndexedDBStorage {
   }
 
   async deleteAllNonLocalChats(): Promise<number> {
-    const db = await this.ensureDB()
+    return this.enqueueSave('deleteAllNonLocalChats', async () => {
+      const db = await this.ensureDB()
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.openCursor()
+        let deletedCount = 0
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readwrite')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store.openCursor()
-      let deletedCount = 0
-
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
-        if (cursor) {
-          const chat = cursor.value as StoredChat
-          if (!chat.isLocalOnly) {
-            cursor.delete()
-            deletedCount++
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
+          if (cursor) {
+            const chat = cursor.value as StoredChat
+            if (!chat.isLocalOnly) {
+              cursor.delete()
+              deletedCount++
+            }
+            cursor.continue()
+          } else {
+            resolve(deletedCount)
           }
-          cursor.continue()
-        } else {
-          resolve(deletedCount)
         }
-      }
 
-      request.onerror = () =>
-        reject(new Error('Failed to delete non-local chats'))
+        request.onerror = () =>
+          reject(new Error('Failed to delete non-local chats'))
+      })
     })
   }
 
@@ -797,33 +847,37 @@ export class IndexedDBStorage {
   }
 
   async getAllChatIds(): Promise<string[]> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store.getAllKeys()
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.getAllKeys()
 
-      request.onsuccess = () => {
-        resolve((request.result as IDBValidKey[]).map((k) => String(k)))
-      }
-      request.onerror = () => reject(new Error('Failed to list chat IDs'))
-    })
+        request.onsuccess = () => {
+          resolve((request.result as IDBValidKey[]).map((k) => String(k)))
+        }
+        request.onerror = () => reject(new Error('Failed to list chat IDs'))
+      }),
+    )
   }
 
   async getChatCount(): Promise<number> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store.count()
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.count()
 
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(new Error('Failed to count chats'))
-    })
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(new Error('Failed to count chats'))
+      }),
+    )
   }
 
   async deleteAllChats(): Promise<number> {
@@ -853,181 +907,195 @@ export class IndexedDBStorage {
   // local-only rows). Cheaper than getAllChats when the caller only
   // needs the total — avoids deserializing every stored message.
   async getCloudChatCount(): Promise<number> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store.openCursor()
-      let count = 0
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.openCursor()
+        let count = 0
 
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result
-        if (cursor) {
-          const chat = cursor.value
-          if (!chat.isLocalOnly) {
-            count++
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest).result
+          if (cursor) {
+            const chat = cursor.value
+            if (!chat.isLocalOnly) {
+              count++
+            }
+            cursor.continue()
+          } else {
+            resolve(count)
           }
-          cursor.continue()
-        } else {
-          resolve(count)
         }
-      }
 
-      request.onerror = () => reject(new Error('Failed to count chats'))
-    })
+        request.onerror = () => reject(new Error('Failed to count chats'))
+      }),
+    )
   }
 
   async getProjectChatCount(projectId: string): Promise<number> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store
-        .index(CHATS_PROJECT_INDEX)
-        .openCursor(IDBKeyRange.only(projectId))
-      let count = 0
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store
+          .index(CHATS_PROJECT_INDEX)
+          .openCursor(IDBKeyRange.only(projectId))
+        let count = 0
 
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (!cursor) {
-          resolve(count)
-          return
+        request.onsuccess = () => {
+          const cursor = request.result
+          if (!cursor) {
+            resolve(count)
+            return
+          }
+          const chat = cursor.value as StoredChat
+          if (!chat.isLocalOnly) {
+            count += 1
+          }
+          cursor.continue()
         }
-        const chat = cursor.value as StoredChat
-        if (!chat.isLocalOnly) {
-          count += 1
-        }
-        cursor.continue()
-      }
-      request.onerror = () =>
-        reject(new Error('Failed to count cached project chats'))
-    })
+        request.onerror = () =>
+          reject(new Error('Failed to count cached project chats'))
+      }),
+    )
   }
 
   async hasPendingChatRecoveries(): Promise<boolean> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store.openCursor()
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.openCursor()
 
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>)
-          .result
-        if (!cursor) {
-          resolve(false)
-          return
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>)
+            .result
+          if (!cursor) {
+            resolve(false)
+            return
+          }
+          const chat = cursor.value as StoredChat
+          if ((chat.pendingRecoveries?.length ?? 0) > 0) {
+            resolve(true)
+            return
+          }
+          cursor.continue()
         }
-        const chat = cursor.value as StoredChat
-        if ((chat.pendingRecoveries?.length ?? 0) > 0) {
-          resolve(true)
-          return
-        }
-        cursor.continue()
-      }
 
-      request.onerror = () =>
-        reject(new Error('Failed to inspect pending chat recoveries'))
-    })
+        request.onerror = () =>
+          reject(new Error('Failed to inspect pending chat recoveries'))
+      }),
+    )
   }
 
   async isChatHistoryAuthoritative(
     expectedCloudVersions: ReadonlyMap<string, number>,
   ): Promise<boolean> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      const request = store.openCursor()
-      const missingCloudVersions = new Map(expectedCloudVersions)
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        const request = store.openCursor()
+        const missingCloudVersions = new Map(expectedCloudVersions)
 
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>)
-          .result
-        if (!cursor) {
-          resolve(missingCloudVersions.size === 0)
-          return
-        }
-        const chat = cursor.value as StoredChat
-        if (!chat.isLocalOnly) {
-          const expectedVersion = missingCloudVersions.get(chat.id)
-          if (
-            chat.locallyModified ||
-            chat.decryptionFailed ||
-            expectedVersion === undefined ||
-            chat.syncVersion !== expectedVersion
-          ) {
-            resolve(false)
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>)
+            .result
+          if (!cursor) {
+            resolve(missingCloudVersions.size === 0)
             return
           }
-          missingCloudVersions.delete(chat.id)
+          const chat = cursor.value as StoredChat
+          if (!chat.isLocalOnly) {
+            const expectedVersion = missingCloudVersions.get(chat.id)
+            if (
+              chat.locallyModified ||
+              chat.decryptionFailed ||
+              expectedVersion === undefined ||
+              chat.syncVersion !== expectedVersion
+            ) {
+              resolve(false)
+              return
+            }
+            missingCloudVersions.delete(chat.id)
+          }
+          cursor.continue()
         }
-        cursor.continue()
-      }
 
-      request.onerror = () =>
-        reject(new Error('Failed to verify local chat history'))
-    })
+        request.onerror = () =>
+          reject(new Error('Failed to verify local chat history'))
+      }),
+    )
   }
 
   async getAllChats(): Promise<StoredChat[]> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const store = transaction.objectStore(CHATS_STORE)
-      // Sort by ID (primary key) which contains reverse timestamp
-      const request = store.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([CHATS_STORE], 'readonly')
+        const store = transaction.objectStore(CHATS_STORE)
+        // Sort by ID (primary key) which contains reverse timestamp
+        const request = store.openCursor(null, 'next') // Ascending order on reverse timestamp = most recent first
 
-      const chats: StoredChat[] = []
+        const chats: StoredChat[] = []
 
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result
-        if (cursor) {
-          try {
-            chats.push(deserializeStoredChat(cursor.value as StoredChat))
-            cursor.continue()
-          } catch (error) {
-            reject(error)
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest).result
+          if (cursor) {
+            try {
+              chats.push(deserializeStoredChat(cursor.value as StoredChat))
+              cursor.continue()
+            } catch (error) {
+              reject(error)
+            }
+          } else {
+            resolve(chats)
           }
-        } else {
-          resolve(chats)
         }
-      }
 
-      request.onerror = () => reject(new Error('Failed to get all chats'))
-    })
+        request.onerror = () => reject(new Error('Failed to get all chats'))
+      }),
+    )
   }
 
   async getProjectsForUser(userId: string): Promise<Project[]> {
-    await this.saveQueue.catch(() => {})
+    await this.waitForSaveQueue()
     const db = await this.ensureDB()
 
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([PROJECTS_STORE], 'readonly')
-      const store = transaction.objectStore(PROJECTS_STORE)
-      const request = store.index(PROJECTS_USER_INDEX).getAll(userId)
+    return this.protectRead(
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readonly')
+        const store = transaction.objectStore(PROJECTS_STORE)
+        const request = store.index(PROJECTS_USER_INDEX).getAll(userId)
 
-      request.onsuccess = () => {
-        const projects = (request.result as StoredProject[])
-          .map((record) => record.project)
-          .sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-          )
-        resolve(projects)
-      }
-      request.onerror = () => reject(new Error('Failed to get cached projects'))
-    })
+        request.onsuccess = () => {
+          const projects = (request.result as StoredProject[])
+            .map((record) => record.project)
+            .sort(
+              (a, b) =>
+                new Date(b.updatedAt).getTime() -
+                new Date(a.updatedAt).getTime(),
+            )
+          resolve(projects)
+        }
+        request.onerror = () =>
+          reject(new Error('Failed to get cached projects'))
+      }),
+    )
   }
 
   async replaceProjectsForUser(

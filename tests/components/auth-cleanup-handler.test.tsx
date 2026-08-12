@@ -196,19 +196,55 @@ describe('AuthCleanupHandler', () => {
   })
 
   it('retries a failed reset signaled by another tab', async () => {
+    let finishRetry!: () => void
+    mockRetryFailedStorageCleanup.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishRetry = resolve
+      }),
+    )
     render(createElement(AuthCleanupHandler))
 
     act(() => {
       window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
     })
     fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' }))
+
+    expect(
+      screen.getByRole('alertdialog', {
+        name: 'Unable to clear local data',
+      }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Retrying cleanup...' }),
+    ).toBeTruthy()
+    expect(window.location.reload).not.toHaveBeenCalled()
+
     await act(async () => {
+      finishRetry()
       await Promise.resolve()
       await Promise.resolve()
     })
 
     expect(mockRetryFailedStorageCleanup).toHaveBeenCalledTimes(1)
     expect(window.location.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels scheduled sign-out cleanup when reset failure is reported', async () => {
+    localStorage.setItem(AUTH_ACTIVE_USER_ID, 'user_123')
+    render(createElement(AuthCleanupHandler))
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+    })
+    act(() => {
+      window.dispatchEvent(new CustomEvent(ACCOUNT_RESET_FAILED_EVENT))
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+    })
+
+    expect(mockPerformSignoutCleanup).not.toHaveBeenCalled()
   })
 
   it('restores a cross-tab reset failure reported before mount', async () => {

@@ -194,6 +194,72 @@ describe('IndexedDBStorage account reset', () => {
     expect(saveInternal).not.toHaveBeenCalled()
   })
 
+  it('rejects reads after an account reset starts', async () => {
+    const storage = new IndexedDBStorage()
+    const { transaction } = prepareReset(storage)
+    const reset = storage.resetForAccountChange()
+
+    await expect(storage.getAllChats()).rejects.toThrow(
+      'IndexedDB read superseded by account change',
+    )
+    await expect(storage.getProjectsForUser('user_123')).rejects.toThrow(
+      'IndexedDB read superseded by account change',
+    )
+
+    await completeReset(transaction)
+    await reset
+  })
+
+  it('rejects reads that were already in flight when reset started', async () => {
+    const storage = new IndexedDBStorage()
+    let finishRead!: (value: string) => void
+    const protectedRead = (storage as any).protectRead(
+      new Promise<string>((resolve) => {
+        finishRead = resolve
+      }),
+    )
+    const { transaction } = prepareReset(storage)
+
+    const reset = storage.resetForAccountChange()
+    finishRead('stale data')
+
+    await expect(protectedRead).rejects.toThrow(
+      'IndexedDB read superseded by account change',
+    )
+    await completeReset(transaction)
+    await reset
+  })
+
+  it('rejects a final write after reset interrupts a multi-stage mutation', async () => {
+    const storage = new IndexedDBStorage()
+    let finishRead!: (chat: any) => void
+    const getChat = vi.spyOn(storage as any, 'getChatInternal').mockReturnValue(
+      new Promise((resolve) => {
+        finishRead = resolve
+      }),
+    )
+
+    const update = storage.updateChatProject('chat_123', 'project_123')
+    await vi.waitFor(() => expect(getChat).toHaveBeenCalledTimes(1))
+    const { transaction } = prepareReset(storage)
+    const reset = storage.resetForAccountChange()
+
+    finishRead({
+      id: 'chat_123',
+      title: 'Old account chat',
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastAccessedAt: Date.now(),
+    })
+
+    await expect(update).rejects.toThrow(
+      'IndexedDB write superseded by account change',
+    )
+    await completeReset(transaction)
+    await reset
+  })
+
   it('aborts a stalled reset transaction before rejecting', async () => {
     vi.useFakeTimers()
     const storage = new IndexedDBStorage()
