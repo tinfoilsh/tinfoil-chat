@@ -208,6 +208,48 @@ describe('IndexedDB pending sync index', () => {
       'Document text',
     )
 
+    await storage.applyRemoteChatIfFresh({
+      chat: {
+        ...storedChat('with-attachment'),
+        messages: [
+          {
+            role: 'user',
+            content: 'Read this remotely',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'attachment-1',
+                type: 'document',
+                fileName: 'document.pdf',
+              },
+            ],
+          },
+        ],
+      },
+      syncVersion: 2,
+      expectedLocalUpdatedAt: undefined,
+    })
+    expect(
+      (await storage.getChat('with-attachment'))?.messages[0].attachments?.[0]
+        .base64,
+    ).toBe(base64)
+
+    const chatWithoutAttachment = await storage.getChat('with-attachment')
+    if (!chatWithoutAttachment) throw new Error('Expected stored chat')
+    chatWithoutAttachment.messages[0].attachments = []
+    await storage.saveChat(chatWithoutAttachment)
+    const payloadCountAfterRemoval = await new Promise<number>(
+      (resolve, reject) => {
+        const request = db
+          .transaction('attachmentPayloads')
+          .objectStore('attachmentPayloads')
+          .count()
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => resolve(request.result)
+      },
+    )
+    expect(payloadCountAfterRemoval).toBe(0)
+
     await storage.deleteChat('with-attachment')
     const payloadCount = await new Promise<number>((resolve, reject) => {
       const request = db

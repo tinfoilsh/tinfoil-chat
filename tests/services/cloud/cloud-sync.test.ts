@@ -84,6 +84,7 @@ vi.mock('@/services/storage/indexed-db', () => ({
     isChatHistoryAuthoritative: (...args: any[]) =>
       mockIsChatHistoryAuthoritative(...args),
     getUnsyncedChats: (...args: any[]) => mockGetUnsyncedChats(...args),
+    getUnsyncedChatMetadata: (...args: any[]) => mockGetUnsyncedChats(...args),
     saveChat: (...args: any[]) => mockSaveChat(...args),
     saveExistingChat: (...args: any[]) => mockSaveExistingChat(...args),
     markAsSynced: (...args: any[]) => mockMarkAsSynced(...args),
