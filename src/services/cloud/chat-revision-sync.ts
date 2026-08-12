@@ -26,7 +26,7 @@ import { isUploadableChat } from './sync-predicates'
 
 const REVISION_PAGE_LIMIT = 250
 const CONTENT_BATCH_SIZE = 100
-const BOOTSTRAP_RECENT_CONTENT_LIMIT = 50
+export const BOOTSTRAP_RECENT_CONTENT_LIMIT = 50
 const DECIMAL_REVISION_PATTERN = /^\d+$/
 
 export interface RevisionSyncResult {
@@ -341,9 +341,18 @@ async function uploadPendingWork(
   ensureCurrent(isCurrent)
   for (const chat of chats) {
     if (!isUploadableChat(chat, (id) => adapter.isStreaming(id))) continue
-    await adapter.upload(chat)
-    ensureCurrent(isCurrent)
-    uploaded++
+    try {
+      await adapter.upload(chat)
+      ensureCurrent(isCurrent)
+      uploaded++
+    } catch (error) {
+      // Same policy as deletes: one failing chat stays pending for
+      // the next cycle without starving the rest of the queue.
+      if (!isCurrent()) throw error
+      errors.push(
+        `Failed to upload chat ${chat.id}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
   return { uploaded, errors }
 }
