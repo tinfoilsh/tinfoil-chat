@@ -1,4 +1,9 @@
-import { chatContentFingerprint } from '@/services/storage/indexed-db'
+import {
+  chatContentFingerprint,
+  chatNeedsSync,
+  resolveStoredLocalOnly,
+  snapshotChatForStorage,
+} from '@/services/storage/indexed-db'
 import { describe, expect, it } from 'vitest'
 
 describe('chatContentFingerprint', () => {
@@ -166,5 +171,68 @@ describe('chatContentFingerprint', () => {
       ],
     })
     expect(fp1).not.toBe(fp2)
+  })
+})
+
+describe('chatNeedsSync', () => {
+  it('indexes dirty and never-synced cloud chats', () => {
+    expect(chatNeedsSync({ locallyModified: true, syncedAt: Date.now() })).toBe(
+      1,
+    )
+    expect(chatNeedsSync({ locallyModified: false })).toBe(1)
+  })
+
+  it('does not index clean, local-only, or undecryptable chats', () => {
+    expect(
+      chatNeedsSync({ locallyModified: false, syncedAt: Date.now() }),
+    ).toBe(0)
+    expect(chatNeedsSync({ locallyModified: true, isLocalOnly: true })).toBe(0)
+    expect(
+      chatNeedsSync({ locallyModified: true, decryptionFailed: true }),
+    ).toBe(0)
+  })
+})
+
+describe('snapshotChatForStorage', () => {
+  it('copies mutable containers without serializing attachment payloads', () => {
+    const base64 = 'A'.repeat(10_000)
+    const chat = {
+      id: 'chat-1',
+      title: 'Chat',
+      createdAt: '2026-08-12T00:00:00.000Z',
+      updatedAt: '2026-08-12T00:00:00.000Z',
+      messages: [
+        {
+          role: 'user' as const,
+          content: 'hello',
+          timestamp: new Date('2026-08-12T00:00:00.000Z'),
+          attachments: [
+            {
+              id: 'attachment-1',
+              type: 'document' as const,
+              fileName: 'document.pdf',
+              base64,
+              pages: [
+                { page: 1, text: 'page', image: base64, is_scanned: true },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const snapshot = snapshotChatForStorage(chat)
+    chat.messages[0].attachments[0].pages[0].text = 'changed'
+
+    expect(snapshot.messages[0].attachments?.[0].pages?.[0].text).toBe('page')
+    expect(snapshot.messages[0].attachments?.[0].base64).toBe(base64)
+  })
+})
+
+describe('resolveStoredLocalOnly', () => {
+  it('preserves explicit local-only storage without deriving it from sync state', () => {
+    expect(resolveStoredLocalOnly(false, true)).toBe(true)
+    expect(resolveStoredLocalOnly(true, false)).toBe(true)
+    expect(resolveStoredLocalOnly(false, false)).toBe(false)
   })
 })

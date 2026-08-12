@@ -1,5 +1,4 @@
 import type { Chat } from '@/components/chat/types'
-import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
@@ -55,18 +54,6 @@ export class ChatStorageService {
 
     const chatToSave = chat
 
-    // Check if this is a new chat (first time saving) and mark as local if intended or sync is disabled
-    const existingChat = await indexedDBStorage.getChat(chatToSave.id)
-
-    // Check if chat should be local-only
-    // 1. If it's already marked as local
-    // 2. If cloud sync is disabled globally
-    // 3. If the existing chat is already local
-    const shouldMarkAsLocal =
-      chatToSave.isLocalOnly ||
-      !isCloudSyncEnabled() ||
-      existingChat?.isLocalOnly
-
     // Save the chat. pendingSave is a transient UI flag that drives the
     // "Syncing with cloud" badge; persisting it makes the badge resurface
     // on every reload, so strip it before writing to storage.
@@ -78,7 +65,7 @@ export class ChatStorageService {
           ? chatToSave.createdAt.toISOString()
           : chatToSave.createdAt,
       updatedAt: new Date().toISOString(),
-      isLocalOnly: shouldMarkAsLocal || (existingChat?.isLocalOnly ?? false),
+      isLocalOnly: chatToSave.isLocalOnly === true,
     }
 
     await indexedDBStorage.saveChat(storageChat)
@@ -130,6 +117,7 @@ export class ChatStorageService {
     const {
       lastAccessedAt,
       locallyModified,
+      syncPending,
       syncVersion,
       decryptionFailed,
       version,
@@ -280,6 +268,7 @@ export class ChatStorageService {
       ({
         lastAccessedAt,
         locallyModified,
+        syncPending,
         syncVersion,
         decryptionFailed,
         version,
@@ -306,6 +295,7 @@ export class ChatStorageService {
     return storedChats.map(
       ({
         lastAccessedAt,
+        syncPending,
         syncVersion,
         version,
         pendingSave,

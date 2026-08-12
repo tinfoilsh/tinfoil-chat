@@ -68,6 +68,47 @@ describe('UploadCoalescer', () => {
       expect(prepareFn).toHaveBeenCalledWith('chat-3', expect.any(String))
     })
 
+    it('bounds concurrent uploads across different chats', async () => {
+      const resolvers: Array<() => void> = []
+      let active = 0
+      let peakActive = 0
+      const attemptFn = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            active++
+            peakActive = Math.max(peakActive, active)
+            resolvers.push(() => {
+              active--
+              resolve()
+            })
+          }),
+      )
+      const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
+        maxConcurrency: 2,
+      })
+
+      const uploads = ['chat-1', 'chat-2', 'chat-3', 'chat-4'].map((chatId) =>
+        coalescer.enqueueAndWait(chatId),
+      )
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(attemptFn).toHaveBeenCalledTimes(2)
+      expect(coalescer.activeUploadCount).toBe(2)
+
+      resolvers.shift()?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(3)
+
+      while (resolvers.length > 0) {
+        resolvers.shift()?.()
+        await vi.advanceTimersByTimeAsync(0)
+      }
+      await Promise.all(uploads)
+
+      expect(peakActive).toBe(2)
+      expect(coalescer.activeUploadCount).toBe(0)
+    })
+
     it('completes without an attempt when prepare returns null', async () => {
       const prepareFn = vi.fn().mockResolvedValue(null)
       const coalescer = new UploadCoalescer(prepareFn)
