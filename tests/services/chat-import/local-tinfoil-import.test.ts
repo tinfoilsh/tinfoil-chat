@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from 'fflate'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
 
@@ -29,6 +29,46 @@ function conversation(attachments?: unknown[]) {
 }
 
 describe('parseLocalTinfoilExport', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('parses exports in a worker when workers are available', async () => {
+    const postMessage = vi.fn()
+    const terminate = vi.fn()
+    class ImportWorker {
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: (() => void) | null = null
+
+      postMessage(message: unknown, transfer: Transferable[]) {
+        postMessage(message, transfer)
+        queueMicrotask(() => {
+          this.onmessage?.({
+            data: { ok: true, conversations: conversation() },
+          } as MessageEvent)
+        })
+      }
+
+      terminate() {
+        terminate()
+      }
+    }
+    vi.stubGlobal('Worker', ImportWorker)
+    const file = new File(
+      [JSON.stringify(conversation())],
+      'conversations.json',
+    )
+
+    const chats = await parseLocalTinfoilExport(file, options)
+
+    expect(chats).toHaveLength(1)
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ fileName: 'conversations.json' }),
+      [expect.any(ArrayBuffer)],
+    )
+    expect(terminate).toHaveBeenCalledOnce()
+  })
+
   it('imports conversations.json as local-only chats', async () => {
     const file = new File(
       [JSON.stringify(conversation())],

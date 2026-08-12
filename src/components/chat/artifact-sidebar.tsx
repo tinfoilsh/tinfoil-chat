@@ -84,12 +84,14 @@ export function ArtifactSidebar({
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
 
     return () => {
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
     }
   }, [clampWidth, isResizing, onWidthChange])
 
