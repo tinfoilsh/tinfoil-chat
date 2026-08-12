@@ -24,6 +24,7 @@ describe('IndexedDBStorage account reset', () => {
     const clear = vi.fn(() => ({ onerror: null }))
     const clearProjects = vi.fn(() => ({ onerror: null }))
     const clearPayloads = vi.fn(() => ({ onerror: null }))
+    const clearSummaries = vi.fn(() => ({ onerror: null }))
     const transaction: FakeResetTransaction = {
       oncomplete: null,
       onerror: null,
@@ -35,14 +36,22 @@ describe('IndexedDBStorage account reset', () => {
             ? clear
             : storeName === 'projects'
               ? clearProjects
-              : clearPayloads,
+              : storeName === 'attachmentPayloads'
+                ? clearPayloads
+                : clearSummaries,
       }),
     }
     const resetDb = {
       transaction: vi.fn(() => transaction),
     }
     vi.spyOn(storage as any, 'ensureDB').mockResolvedValue(resetDb)
-    return { clear, clearProjects, clearPayloads, transaction }
+    return {
+      clear,
+      clearProjects,
+      clearPayloads,
+      clearSummaries,
+      transaction,
+    }
   }
 
   async function completeReset(transaction: FakeResetTransaction) {
@@ -62,7 +71,7 @@ describe('IndexedDBStorage account reset', () => {
 
   it('bypasses a stalled write queue and closes the old connection', async () => {
     const storage = new IndexedDBStorage()
-    const { clear, clearProjects, clearPayloads, transaction } =
+    const { clear, clearProjects, clearPayloads, clearSummaries, transaction } =
       prepareReset(storage)
     const close = vi.fn()
     Object.assign(storage as any, {
@@ -76,6 +85,7 @@ describe('IndexedDBStorage account reset', () => {
     await vi.waitFor(() => expect(clear).toHaveBeenCalledTimes(1))
     expect(clearProjects).toHaveBeenCalledTimes(1)
     expect(clearPayloads).toHaveBeenCalledTimes(1)
+    expect(clearSummaries).toHaveBeenCalledTimes(1)
     await completeReset(transaction)
     await reset
   })

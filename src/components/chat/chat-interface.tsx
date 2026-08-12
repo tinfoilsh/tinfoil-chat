@@ -2936,8 +2936,6 @@ export function ChatInterface({
     )
   }
 
-  // Config loading is handled by the combined loading screen above.
-
   // Show decryption failed message when accessing a chat that couldn't be decrypted
   if (initialChatId && initialChatDecryptionFailed) {
     return (

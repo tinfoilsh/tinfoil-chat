@@ -112,6 +112,8 @@ export function useChatStorage({
           initialChats[0],
       }
     })
+  const currentChatRef = useRef(currentChat)
+  currentChatRef.current = currentChat
 
   // Create persistence manager
   const persistenceManager = useMemo(
@@ -139,9 +141,13 @@ export function useChatStorage({
       recoveryIds?.forEach((id) => pendingRecoveryReloadIdsRef.current.add(id))
       const reloadGeneration = ++reloadGenerationRef.current
       try {
+        const current = currentChatRef.current
+        const needsFullReload =
+          !!recoveryIds?.length ||
+          (!current.isBlankChat && !!current.pendingRecoveries?.length)
         const loadedChats = await loadChats(
           storeHistory && !!isSignedIn,
-          !recoveryIds?.length,
+          !needsFullReload,
         )
         if (reloadGeneration !== reloadGenerationRef.current) {
           return
@@ -544,12 +550,10 @@ export function useChatStorage({
         if (!hydratedChat) return
         setChats((previous) =>
           previous.map((candidate) =>
-            candidate.id === hydratedChat.id ? hydratedChat : candidate,
+            candidate === chat ? hydratedChat : candidate,
           ),
         )
-        setCurrentChat((current) =>
-          current.id === hydratedChat.id ? hydratedChat : current,
-        )
+        setCurrentChat((current) => (current === chat ? hydratedChat : current))
       } catch (error) {
         logError('Failed to load selected chat', error, {
           component: 'useChatStorage',
