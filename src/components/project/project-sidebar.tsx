@@ -808,7 +808,7 @@ export function ProjectSidebar({
         {/* Header */}
         <div className="flex h-16 flex-none items-center justify-between border-b border-border-subtle p-4">
           <div className="flex items-center gap-3">
-            <Link href="/" title="Home" className="-ml-1 flex items-center">
+            <Link href="/" title="Home" className="ml-1 flex items-center">
               <Logo className="h-6 w-auto" dark={isDarkMode} />
             </Link>
             {/* Settings button */}
