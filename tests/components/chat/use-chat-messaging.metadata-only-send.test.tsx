@@ -213,3 +213,40 @@ describe('useChatMessaging metadata-only sends', () => {
     ).toEqual(['Earlier question', 'Earlier answer', 'New prompt'])
   })
 })
+
+describe('useChatMessaging before model config loads', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    sendChatStreamMock.mockResolvedValue(completedStream())
+  })
+
+  it('refuses to dispatch while no models are available', async () => {
+    const initialChat = hydratedChat()
+    const { result } = renderHook(() => {
+      const [currentChat, setCurrentChat] = useState(initialChat)
+      const [chats, setChats] = useState([initialChat])
+      const messaging = useChatMessaging({
+        systemPrompt: '',
+        storeHistory: true,
+        models: [],
+        selectedModel: '',
+        chats,
+        currentChat,
+        setChats,
+        setCurrentChat,
+      })
+      return { currentChat, messaging }
+    })
+
+    await act(async () => {
+      await result.current.messaging.handleQuery('Too early')
+    })
+
+    expect(sendChatStreamMock).not.toHaveBeenCalled()
+    expect(saveChatMock).not.toHaveBeenCalled()
+    expect(saveChatAndSyncMock).not.toHaveBeenCalled()
+    expect(result.current.currentChat.messages).toHaveLength(
+      storedMessages.length,
+    )
+  })
+})

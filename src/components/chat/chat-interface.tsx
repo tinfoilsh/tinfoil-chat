@@ -1046,10 +1046,17 @@ export function ChatInterface({
     loadingState,
     handleQuery,
     isRateLimited,
+    // Sends need a resolvable model; while the model config is still
+    // loading behind the interactive shell, park messages in the queue
+    // instead of firing requests guaranteed to fail.
     isDispatchBlocked: () =>
+      models.length === 0 ||
       hasPendingRecoveryRef.current ||
       (currentChatId ? isChatRecoveryActive(currentChatId) : false),
-    dispatchBlocked: hasPendingRecovery || activeRecoveryTurnIds.length > 0,
+    dispatchBlocked:
+      models.length === 0 ||
+      hasPendingRecovery ||
+      activeRecoveryTurnIds.length > 0,
     onRateLimited: handleQueueRateLimited,
     cancelGeneration,
   })
