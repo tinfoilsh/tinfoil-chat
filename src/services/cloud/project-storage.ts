@@ -809,7 +809,12 @@ export class ProjectStorageService {
       }
       cursor = status.next_cursor
     } while (cursor)
-    return { documents: Array.from(documentsById.values()) }
+    // Replacing a Map value keeps its original insertion position, so
+    // re-sort to preserve the updated_at ordering of the walk.
+    const documents = Array.from(documentsById.values()).sort((a, b) =>
+      a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0,
+    )
+    return { documents }
   }
 
   async getDocumentSyncStatus(

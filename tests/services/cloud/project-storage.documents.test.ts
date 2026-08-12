@@ -119,10 +119,12 @@ describe('ProjectStorageService documents', () => {
             etag: '2',
             updated_at: '2026-01-01T00:00:02.000Z',
           },
+          // Stale copy arriving after the fresher page-1 row: the
+          // freshest copy must win, not the last occurrence.
           {
             id: 'project-1/doc-2',
-            etag: '2',
-            updated_at: '2026-01-01T00:00:03.000Z',
+            etag: '0',
+            updated_at: '2025-12-31T00:00:00.000Z',
           },
         ],
         next_cursor: undefined,
@@ -130,15 +132,13 @@ describe('ProjectStorageService documents', () => {
 
     const { documents } = await storage.listDocuments('project-1')
 
-    expect(documents).toHaveLength(2)
-    expect(documents.map((doc) => doc.id).sort()).toEqual(['doc-1', 'doc-2'])
-    // The freshest copy of each row wins.
-    expect(documents.find((doc) => doc.id === 'doc-1')?.updatedAt).toBe(
-      '2026-01-01T00:00:02.000Z',
-    )
-    expect(documents.find((doc) => doc.id === 'doc-2')?.updatedAt).toBe(
-      '2026-01-01T00:00:03.000Z',
-    )
+    // The freshest copy of each row wins, ordered by updated_at.
+    expect(
+      documents.map((doc) => ({ id: doc.id, updatedAt: doc.updatedAt })),
+    ).toEqual([
+      { id: 'doc-2', updatedAt: '2026-01-01T00:00:01.000Z' },
+      { id: 'doc-1', updatedAt: '2026-01-01T00:00:02.000Z' },
+    ])
   })
 
   it('excludes other projects\u2019 documents from the listing', async () => {
