@@ -241,7 +241,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   // Measure content height for smooth animation
   useLayoutEffect(() => {
     if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight)
+      const measuredHeight = contentRef.current.scrollHeight
+      setContentHeight((prevHeight) =>
+        // Same never-shrink guard as the ResizeObserver below: this effect
+        // re-runs on every streaming chunk, and shrinking mid-stream causes
+        // scroll resets when content temporarily contracts.
+        isThinking ? Math.max(prevHeight, measuredHeight) : measuredHeight,
+      )
       const resizeObserver = new ResizeObserver(() => {
         if (contentRef.current) {
           setContentHeight((prevHeight) => {
