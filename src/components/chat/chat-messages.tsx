@@ -330,7 +330,6 @@ export function ChatMessages({
   const [expandedArchiveChatId, setExpandedArchiveChatId] = useState<
     string | null
   >(null)
-  const showArchivedMessages = expandedArchiveChatId === chatId
 
   const preparePrint = useCallback(async () => {
     await new Promise<void>((resolve) => {
@@ -514,6 +513,13 @@ export function ChatMessages({
       pendingRecoveryTurnIds.has(turnId),
     ),
   )
+  const archiveHasActiveRecovery = archivedMessages.some(
+    (message) =>
+      message.turnId !== undefined &&
+      pendingRecoveryTurnIds.has(message.turnId),
+  )
+  const showArchivedMessages =
+    expandedArchiveChatId === chatId || archiveHasActiveRecovery
   const hasActiveRecovery =
     activeRecoveryTurns.size > 0 ||
     recoveryDrafts.some((draft) => pendingRecoveryTurnIds.has(draft.turnId))
@@ -630,7 +636,9 @@ export function ChatMessages({
               </div>
             )}
 
-            <MessagesSeparator isDarkMode={isDarkMode} />
+            {showArchivedMessages && (
+              <MessagesSeparator isDarkMode={isDarkMode} />
+            )}
           </>
         )}
 

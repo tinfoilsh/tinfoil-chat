@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,6 +37,7 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   thinkingDuration,
 }: ThoughtProcessProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [renderContent, setRenderContent] = useState(false)
   const contentId = useId()
 
   const contentRef = useRef<HTMLDivElement>(null)
@@ -52,6 +54,14 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   const handleToggle = () => {
     setIsExpanded((prev) => !prev)
   }
+
+  useEffect(() => {
+    if (isExpanded) {
+      setRenderContent(true)
+    } else if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setRenderContent(false)
+    }
+  }, [isExpanded])
 
   const generateSummary = useCallback(
     async (
@@ -229,8 +239,9 @@ export const ThoughtProcess = memo(function ThoughtProcess({
   }, [isThinking])
 
   // Measure content height for smooth animation
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight)
       const resizeObserver = new ResizeObserver(() => {
         if (contentRef.current) {
           setContentHeight((prevHeight) => {
@@ -247,15 +258,15 @@ export const ThoughtProcess = memo(function ThoughtProcess({
       resizeObserver.observe(contentRef.current)
       return () => resizeObserver.disconnect()
     }
-  }, [thoughts, isThinking, isExpanded])
+  }, [thoughts, isThinking, isExpanded, renderContent])
 
   const { remarkPlugins, rehypePlugins } = useMathPlugins()
   const sanitizedThoughts = useMemo(() => {
-    if (!isExpanded) return ''
+    if (!renderContent) return ''
     const preprocessed = preprocessMarkdown(thoughts)
     const processedThoughts = processLatexTags(preprocessed)
     return sanitizeUnsupportedMathBlocks(processedThoughts)
-  }, [isExpanded, thoughts])
+  }, [renderContent, thoughts])
 
   if (shouldDiscard || (!thoughts.trim() && !isThinking)) {
     return null
@@ -333,8 +344,13 @@ export const ThoughtProcess = memo(function ThoughtProcess({
         style={{
           maxHeight: isExpanded ? `${contentHeight}px` : '0px',
         }}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && !isExpanded) {
+            setRenderContent(false)
+          }
+        }}
       >
-        {isExpanded && (
+        {renderContent && (
           <div
             ref={contentRef}
             className="ml-2 border-l-2 border-border-subtle py-2 pl-3 pr-1 text-sm text-content-primary/70"
