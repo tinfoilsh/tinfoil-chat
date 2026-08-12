@@ -29,12 +29,32 @@ const artifact = {
 }
 
 const validArtifactPreview = JSON.stringify(artifact)
+const artifactPreviewListeners: EventListener[] = []
 
 function setWindowWidth(width: number): void {
   Object.defineProperty(window, 'innerWidth', {
     configurable: true,
     value: width,
   })
+}
+
+function renderArtifactPreview({ isStreaming }: { isStreaming: boolean }) {
+  const listener = vi.fn<(event: Event) => void>()
+  artifactPreviewListeners.push(listener)
+  window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+  render(
+    <GenUIToolCallRenderer
+      isStreaming={isStreaming}
+      toolCalls={[
+        {
+          id: 'artifact-1',
+          name: 'render_artifact_preview',
+          arguments: validArtifactPreview,
+        },
+      ]}
+    />,
+  )
+  return listener
 }
 
 describe('GenUIToolCallRenderer', () => {
@@ -44,6 +64,10 @@ describe('GenUIToolCallRenderer', () => {
   })
 
   afterEach(() => {
+    for (const listener of artifactPreviewListeners) {
+      window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+    }
+    artifactPreviewListeners.length = 0
     vi.restoreAllMocks()
   })
 
@@ -68,21 +92,7 @@ describe('GenUIToolCallRenderer', () => {
   })
 
   it('opens a generated artifact automatically on desktop', () => {
-    const listener = vi.fn()
-    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
-
-    render(
-      <GenUIToolCallRenderer
-        isStreaming
-        toolCalls={[
-          {
-            id: 'artifact-1',
-            name: 'render_artifact_preview',
-            arguments: validArtifactPreview,
-          },
-        ]}
-      />,
-    )
+    const listener = renderArtifactPreview({ isStreaming: true })
 
     expect(listener).toHaveBeenCalledTimes(1)
     const event = listener.mock
@@ -92,68 +102,23 @@ describe('GenUIToolCallRenderer', () => {
       artifact,
       toolCallId: 'artifact-1',
     })
-    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
   })
 
   it('does not auto-open generated artifacts on mobile', () => {
     setWindowWidth(CONSTANTS.MOBILE_BREAKPOINT - 1)
-    const listener = vi.fn()
-    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
-
-    render(
-      <GenUIToolCallRenderer
-        isStreaming
-        toolCalls={[
-          {
-            id: 'artifact-1',
-            name: 'render_artifact_preview',
-            arguments: validArtifactPreview,
-          },
-        ]}
-      />,
-    )
+    const listener = renderArtifactPreview({ isStreaming: true })
 
     expect(listener).not.toHaveBeenCalled()
-    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
   })
 
   it('does not auto-open artifacts from chat history', () => {
-    const listener = vi.fn()
-    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
-
-    render(
-      <GenUIToolCallRenderer
-        isStreaming={false}
-        toolCalls={[
-          {
-            id: 'artifact-1',
-            name: 'render_artifact_preview',
-            arguments: validArtifactPreview,
-          },
-        ]}
-      />,
-    )
+    const listener = renderArtifactPreview({ isStreaming: false })
 
     expect(listener).not.toHaveBeenCalled()
-    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
   })
 
   it('keeps artifact card clicks as sidebar toggles', () => {
-    const listener = vi.fn()
-    window.addEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
-
-    render(
-      <GenUIToolCallRenderer
-        isStreaming={false}
-        toolCalls={[
-          {
-            id: 'artifact-1',
-            name: 'render_artifact_preview',
-            arguments: validArtifactPreview,
-          },
-        ]}
-      />,
-    )
+    const listener = renderArtifactPreview({ isStreaming: false })
     fireEvent.click(screen.getByRole('button', { name: /Snake game/ }))
 
     expect(listener).toHaveBeenCalledTimes(1)
@@ -164,7 +129,6 @@ describe('GenUIToolCallRenderer', () => {
       artifact,
       toolCallId: 'artifact-1',
     })
-    window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
   })
 
   it('highlights only the open artifact and shows its full description', () => {
