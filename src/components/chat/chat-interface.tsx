@@ -1451,30 +1451,28 @@ export function ChatInterface({
       const { action, artifact, toolCallId } = event.detail
       // Toggle: clicking the inline card while its artifact is already open
       // closes the sidebar instead of re-opening it.
-      setArtifactPreview((prev) => {
-        const sameArtifact =
-          prev !== null &&
-          isArtifactSidebarOpen &&
-          artifactPreviewTargetsEqual(
-            prev,
-            activeArtifactToolCallId,
-            artifact,
-            toolCallId,
-          )
-        if (action === 'toggle' && sameArtifact) {
-          setIsArtifactSidebarOpen(false)
-          return prev
-        }
-        setActiveArtifactToolCallId(toolCallId ?? null)
-        setIsArtifactSidebarOpen(true)
-        setIsVerifierSidebarOpen(false)
-        setIsSettingsModalOpen(false)
-        setIsAskSidebarOpen(false)
-        if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
-          setIsSidebarOpen(false)
-        }
-        return artifact
-      })
+      const sameArtifact =
+        artifactPreview !== null &&
+        isArtifactSidebarOpen &&
+        artifactPreviewTargetsEqual(
+          artifactPreview,
+          activeArtifactToolCallId,
+          artifact,
+          toolCallId,
+        )
+      if (action === 'toggle' && sameArtifact) {
+        setIsArtifactSidebarOpen(false)
+        return
+      }
+      setArtifactPreview(artifact)
+      setActiveArtifactToolCallId(toolCallId ?? null)
+      setIsArtifactSidebarOpen(true)
+      setIsVerifierSidebarOpen(false)
+      setIsSettingsModalOpen(false)
+      setIsAskSidebarOpen(false)
+      if (windowWidth < CONSTANTS.SINGLE_SIDEBAR_BREAKPOINT) {
+        setIsSidebarOpen(false)
+      }
     }
     window.addEventListener(
       OPEN_ARTIFACT_PREVIEW_EVENT,
@@ -1490,6 +1488,7 @@ export function ChatInterface({
     windowWidth,
     setIsSidebarOpen,
     isArtifactSidebarOpen,
+    artifactPreview,
     activeArtifactToolCallId,
   ])
 

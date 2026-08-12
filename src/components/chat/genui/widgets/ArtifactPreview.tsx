@@ -120,7 +120,10 @@ export function artifactPreviewTargetsEqual(
   incomingToolCallId?: string,
 ): boolean {
   if (currentToolCallId && incomingToolCallId) {
-    return currentToolCallId === incomingToolCallId
+    return (
+      currentToolCallId === incomingToolCallId &&
+      artifactDetailsEqual(currentArtifact, incomingArtifact)
+    )
   }
   return artifactDetailsEqual(currentArtifact, incomingArtifact)
 }

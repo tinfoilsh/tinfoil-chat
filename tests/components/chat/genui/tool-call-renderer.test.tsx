@@ -198,6 +198,14 @@ describe('GenUIToolCallRenderer', () => {
         'artifact-1',
       ),
     ).toBe(true)
+    expect(
+      artifactPreviewTargetsEqual(
+        artifact,
+        'artifact-1',
+        { ...artifact, description: 'Updated description' },
+        'artifact-1',
+      ),
+    ).toBe(false)
   })
 
   it('shows a simple generating state without raw data or a character count', () => {
