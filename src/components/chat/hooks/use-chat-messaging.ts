@@ -657,7 +657,12 @@ export function useChatMessaging({
       // Track if this is the first message for a blank chat
       let updatedChat = { ...currentChat }
       const isBlankChat = currentChat.isBlankChat === true
-      const isFirstMessage = currentChat.messages.length === 0
+      // Metadata-only chats haven't loaded their messages, so consult the
+      // stored count: treating them as first-message would regenerate the
+      // title over an existing conversation.
+      const isFirstMessage = currentChat.isMetadataOnly
+        ? (currentChat.messageCount ?? 0) === 0
+        : currentChat.messages.length === 0
       let updatedMessages: Message[] = []
 
       // Reset title generation for new chats
@@ -836,8 +841,49 @@ export function useChatMessaging({
         }, 0)
       } else {
         // Not a blank chat, just update messages
+        // A metadata-only selection hasn't loaded its stored messages yet;
+        // appending to its placeholder empty history would show (and
+        // persist) a conversation containing only this turn. Hydrate from
+        // storage first so the send builds on the full history.
+        if (updatedChat.isMetadataOnly && storeHistory) {
+          let hydratedChat: Chat | null = null
+          try {
+            hydratedChat = await chatStorage.getChat(updatedChat.id)
+          } catch (error) {
+            logError('Failed to hydrate chat before sending', error, {
+              component: 'useChatMessaging',
+              action: 'handleQuery.hydrateBeforeSend',
+              metadata: { chatId: updatedChat.id },
+            })
+          }
+          if (!hydratedChat) {
+            // Nothing was sent or shown yet, so give the typed text back.
+            setInput(query)
+            setStreamErrorFor({
+              message: 'Failed to load this chat. Please try again.',
+              code: null,
+            })
+            if (pendingStreamId !== null) {
+              streamingTracker.endPendingStream(pendingStreamId)
+            }
+            patchStatus(streamChatIdRef.current, {
+              loadingState: 'idle',
+              isWaitingForResponse: false,
+              isStreaming: false,
+              isThinking: false,
+            })
+            clearController(streamChatIdRef.current, controller)
+            return
+          }
+          updatedChat = {
+            ...updatedChat,
+            messages: hydratedChat.messages,
+            isMetadataOnly: false,
+          }
+        }
+
         // Use baseMessages if provided (e.g., from editMessage), otherwise use currentChat.messages
-        const existingMessages = baseMessages ?? currentChat.messages
+        const existingMessages = baseMessages ?? updatedChat.messages
         updatedMessages = userMessage
           ? [...existingMessages, userMessage]
           : [...existingMessages]
