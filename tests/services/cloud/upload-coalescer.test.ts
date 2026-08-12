@@ -109,6 +109,66 @@ describe('UploadCoalescer', () => {
       expect(coalescer.activeUploadCount).toBe(0)
     })
 
+    it('waits for uploads that are queued behind the concurrency limit', async () => {
+      const resolvers: Array<() => void> = []
+      const attemptFn = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvers.push(resolve)
+          }),
+      )
+      const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
+        maxConcurrency: 1,
+      })
+      coalescer.enqueue('chat-1')
+      coalescer.enqueue('chat-2')
+
+      let completed = false
+      const waiting = coalescer.waitForUpload('chat-2').then(() => {
+        completed = true
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(completed).toBe(false)
+      expect(attemptFn).toHaveBeenCalledTimes(1)
+
+      resolvers.shift()?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(2)
+      expect(completed).toBe(false)
+
+      resolvers.shift()?.()
+      await waiting
+      expect(completed).toBe(true)
+    })
+
+    it('keeps stale workers counted until they settle after clear', async () => {
+      const resolvers: Array<() => void> = []
+      const attemptFn = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvers.push(resolve)
+          }),
+      )
+      const coalescer = new UploadCoalescer(prepareWith(attemptFn), {
+        maxConcurrency: 1,
+      })
+      coalescer.enqueue('old-chat')
+      await vi.advanceTimersByTimeAsync(0)
+
+      coalescer.clear()
+      coalescer.enqueue('new-chat')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(1)
+
+      resolvers.shift()?.()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(attemptFn).toHaveBeenCalledTimes(2)
+
+      const waiting = coalescer.waitForUpload('new-chat')
+      resolvers.shift()?.()
+      await waiting
+    })
+
     it('completes without an attempt when prepare returns null', async () => {
       const prepareFn = vi.fn().mockResolvedValue(null)
       const coalescer = new UploadCoalescer(prepareFn)
@@ -472,7 +532,7 @@ describe('UploadCoalescer', () => {
       expect(pendingIds).toHaveLength(2)
     })
 
-    it('clears all state', async () => {
+    it('clears pending state without forgetting active workers', async () => {
       const attemptFn = vi.fn().mockReturnValue(new Promise(() => {}))
       const coalescer = new UploadCoalescer(prepareWith(attemptFn))
 
@@ -483,7 +543,7 @@ describe('UploadCoalescer', () => {
 
       coalescer.clear()
 
-      expect(coalescer.activeUploadCount).toBe(0)
+      expect(coalescer.activeUploadCount).toBe(2)
       expect(coalescer.getPendingChatIds()).toHaveLength(0)
     })
 

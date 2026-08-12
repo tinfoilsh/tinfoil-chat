@@ -52,7 +52,6 @@ interface ChatUploadState {
   dirty: boolean
   /** The currently in-flight upload promise, if any */
   inFlight: Promise<void> | null
-  /** Whether this chat is waiting for an available worker slot */
   queued: boolean
   /** Number of consecutive failures */
   failureCount: number
@@ -197,8 +196,11 @@ export class UploadCoalescer {
     const workerGeneration = this.generation
     state.queued = false
     this.activeWorkers++
-    state.inFlight = Promise.resolve()
-    const workerPromise = (async () => {
+    let completeWorker!: () => void
+    state.inFlight = new Promise<void>((resolve) => {
+      completeWorker = resolve
+    })
+    void (async () => {
       try {
         while (state.dirty && workerGeneration === this.generation) {
           // Clear dirty flag before upload
@@ -259,14 +261,10 @@ export class UploadCoalescer {
           this.states.delete(chatId)
         }
 
-        if (workerGeneration === this.generation) {
-          this.activeWorkers--
-          this.startQueuedWorkers()
-        }
+        this.activeWorkers--
+        this.startQueuedWorkers()
       }
-    })()
-
-    if (state.inFlight !== null) state.inFlight = workerPromise
+    })().then(completeWorker, completeWorker)
   }
 
   /**
@@ -412,7 +410,6 @@ export class UploadCoalescer {
    */
   clear(): void {
     this.generation++
-    this.activeWorkers = 0
     this.queuedChatIds = []
     const cancellationError = new Error('Upload canceled after account change')
     for (const state of this.states.values()) {
@@ -432,8 +429,8 @@ export class UploadCoalescer {
    */
   async waitForUpload(chatId: string): Promise<void> {
     const state = this.states.get(chatId)
-    if (state?.inFlight) {
-      await state.inFlight
+    if (state?.dirty || state?.queued || state?.inFlight) {
+      await this.waitForResult(state)
     }
   }
 
@@ -444,8 +441,8 @@ export class UploadCoalescer {
   async waitForAllUploads(): Promise<void> {
     const promises: Promise<void>[] = []
     for (const state of this.states.values()) {
-      if (state.inFlight) {
-        promises.push(state.inFlight)
+      if (state.dirty || state.queued || state.inFlight) {
+        promises.push(this.waitForResult(state))
       }
     }
     await Promise.all(promises)

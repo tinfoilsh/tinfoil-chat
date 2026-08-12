@@ -234,5 +234,6 @@ describe('resolveStoredLocalOnly', () => {
     expect(resolveStoredLocalOnly(false, true)).toBe(true)
     expect(resolveStoredLocalOnly(true, false)).toBe(true)
     expect(resolveStoredLocalOnly(false, false)).toBe(false)
+    expect(resolveStoredLocalOnly(false, true, true)).toBe(false)
   })
 })
