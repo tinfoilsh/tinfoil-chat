@@ -1,10 +1,7 @@
-import { strFromU8, unzipSync } from 'fflate'
-
 import type { Attachment, Chat, Message } from '@/components/chat/types'
 import { uint8ArrayToBase64 } from '@/utils/binary-codec'
+import { parseTinfoilExportBytes } from './local-tinfoil-import-parser'
 
-const CONVERSATIONS_FILE = 'conversations.json'
-const MANIFEST_FILE = 'manifest.json'
 export const LOCAL_IMPORT_MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 
 interface TinfoilExportedAttachment {
@@ -41,12 +38,6 @@ export interface LocalTinfoilImportOptions {
   isCloudSyncEnabled: boolean
 }
 
-function isZip(file: File): boolean {
-  return (
-    file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip'
-  )
-}
-
 interface ImportWorkerResponse {
   ok: boolean
   conversations?: TinfoilExportedConversation[]
@@ -54,44 +45,18 @@ interface ImportWorkerResponse {
   error?: string
 }
 
+class ImportWorkerUnavailableError extends Error {}
+
 async function readExportOnMainThread(file: File): Promise<{
   conversations: TinfoilExportedConversation[]
   entries?: Record<string, Uint8Array>
 }> {
-  if (!isZip(file)) {
-    const conversations = JSON.parse(await file.text())
-    if (!Array.isArray(conversations)) {
-      throw new Error('Invalid Tinfoil export format')
-    }
-    return { conversations }
-  }
-
-  let uncompressedBytes = 0
-  const entries = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-    filter: (entry) => {
-      const isImportEntry =
-        entry.name === CONVERSATIONS_FILE ||
-        entry.name === MANIFEST_FILE ||
-        entry.name.startsWith('attachments/')
-      if (!isImportEntry) return false
-
-      uncompressedBytes += entry.originalSize
-      if (uncompressedBytes > LOCAL_IMPORT_MAX_ARCHIVE_BYTES) {
-        throw new Error('The uncompressed export is too large')
-      }
-      return true
-    },
+  return parseTinfoilExportBytes<TinfoilExportedConversation>({
+    bytes: new Uint8Array(await file.arrayBuffer()),
+    fileName: file.name,
+    mimeType: file.type,
+    maxArchiveBytes: LOCAL_IMPORT_MAX_ARCHIVE_BYTES,
   })
-  const conversationsEntry = entries[CONVERSATIONS_FILE]
-  if (!conversationsEntry) {
-    throw new Error('The Tinfoil export is missing conversations.json')
-  }
-
-  const conversations = JSON.parse(strFromU8(conversationsEntry))
-  if (!Array.isArray(conversations)) {
-    throw new Error('Invalid Tinfoil export format')
-  }
-  return { conversations, entries }
 }
 
 async function readExport(file: File): Promise<{
@@ -106,10 +71,29 @@ async function readExport(file: File): Promise<{
   }
   if (typeof Worker === 'undefined') return readExportOnMainThread(file)
 
+  try {
+    return await readExportInWorker(file)
+  } catch (error) {
+    if (error instanceof ImportWorkerUnavailableError) {
+      return readExportOnMainThread(file)
+    }
+    throw error
+  }
+}
+
+async function readExportInWorker(file: File): Promise<{
+  conversations: TinfoilExportedConversation[]
+  entries?: Record<string, Uint8Array>
+}> {
   const buffer = await file.arrayBuffer()
-  const worker = new Worker(
-    new URL('./local-tinfoil-import.worker.ts', import.meta.url),
-  )
+  let worker: Worker
+  try {
+    worker = new Worker(
+      new URL('./local-tinfoil-import.worker.ts', import.meta.url),
+    )
+  } catch {
+    throw new ImportWorkerUnavailableError()
+  }
 
   return new Promise((resolve, reject) => {
     worker.onmessage = (event: MessageEvent<ImportWorkerResponse>) => {
@@ -129,7 +113,7 @@ async function readExport(file: File): Promise<{
     }
     worker.onerror = () => {
       worker.terminate()
-      reject(new Error('Failed to process the Tinfoil export'))
+      reject(new ImportWorkerUnavailableError())
     }
     try {
       worker.postMessage(
@@ -141,9 +125,9 @@ async function readExport(file: File): Promise<{
         },
         [buffer],
       )
-    } catch (error) {
+    } catch {
       worker.terminate()
-      reject(error)
+      reject(new ImportWorkerUnavailableError())
     }
   })
 }

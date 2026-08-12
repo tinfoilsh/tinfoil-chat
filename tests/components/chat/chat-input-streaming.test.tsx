@@ -1,7 +1,7 @@
 import { ChatInput } from '@/components/chat/chat-input'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/components/project', () => ({
   ProjectModeBanner: () => null,
@@ -22,6 +22,51 @@ vi.mock('@/components/chat/hooks/use-chat-font', () => ({
 }))
 
 describe('ChatInput streaming action', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('stops a microphone stream granted after unmount', async () => {
+    let grantPermission!: (stream: MediaStream) => void
+    const stop = vi.fn()
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: vi.fn(
+          () =>
+            new Promise<MediaStream>((resolve) => {
+              grantPermission = resolve
+            }),
+        ),
+      },
+    })
+    const { unmount } = render(
+      <ChatInput
+        input=""
+        setInput={vi.fn()}
+        handleSubmit={vi.fn()}
+        loadingState="idle"
+        cancelGeneration={vi.fn()}
+        inputRef={createRef<HTMLTextAreaElement>()}
+        handleInputFocus={vi.fn()}
+        inputMinHeight="40px"
+        isDarkMode
+        isPremium
+        audioModel="audio-model"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
+    unmount()
+
+    await act(async () => {
+      grantPermission({
+        getTracks: () => [{ stop }],
+      } as unknown as MediaStream)
+    })
+
+    expect(stop).toHaveBeenCalledOnce()
+  })
+
   it('shows Stop while a recovered response is streaming', () => {
     const cancelGeneration = vi.fn()
     render(

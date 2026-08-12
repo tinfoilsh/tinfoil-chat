@@ -2,6 +2,7 @@ import { strToU8, zipSync } from 'fflate'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { parseLocalTinfoilExport } from '@/services/chat-import/local-tinfoil-import'
+import { collectTransferableBuffers } from '@/services/chat-import/local-tinfoil-import-parser'
 
 const options = {
   generateChatId: () => 'imported-chat',
@@ -31,6 +32,17 @@ function conversation(attachments?: unknown[]) {
 describe('parseLocalTinfoilExport', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('deduplicates shared buffers before worker transfer', () => {
+    const buffer = new ArrayBuffer(8)
+
+    expect(
+      collectTransferableBuffers({
+        first: new Uint8Array(buffer, 0, 4),
+        second: new Uint8Array(buffer, 4, 4),
+      }),
+    ).toEqual([buffer])
   })
 
   it('parses exports in a worker when workers are available', async () => {
@@ -67,6 +79,24 @@ describe('parseLocalTinfoilExport', () => {
       [expect.any(ArrayBuffer)],
     )
     expect(terminate).toHaveBeenCalledOnce()
+  })
+
+  it('falls back when a worker cannot start', async () => {
+    class UnavailableWorker {
+      constructor() {
+        throw new DOMException('Unavailable', 'NotSupportedError')
+      }
+    }
+    vi.stubGlobal('Worker', UnavailableWorker)
+    const file = new File(
+      [JSON.stringify(conversation())],
+      'conversations.json',
+    )
+
+    const chats = await parseLocalTinfoilExport(file, options)
+
+    expect(chats).toHaveLength(1)
+    expect(chats[0].title).toBe('Portable chat')
   })
 
   it('imports conversations.json as local-only chats', async () => {

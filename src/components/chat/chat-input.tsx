@@ -281,11 +281,14 @@ export function ChatInput({
   const [isTranscribing, setIsTranscribing] = useState(false)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const recordingSessionRef = useRef(0)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    const recordingSession = recordingSessionRef
     return () => {
+      recordingSession.current++
       if (recordingTimeoutRef.current) {
         clearTimeout(recordingTimeoutRef.current)
         recordingTimeoutRef.current = null
@@ -559,6 +562,7 @@ export function ChatInput({
   }
 
   const startRecording = useCallback(async () => {
+    const recordingSession = ++recordingSessionRef.current
     let stream: MediaStream | null = null
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -569,6 +573,10 @@ export function ChatInput({
           noiseSuppression: true,
         },
       })
+      if (recordingSession !== recordingSessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       mediaStreamRef.current = stream
 
       if (!isWebMAudioSupported()) {
@@ -631,6 +639,7 @@ export function ChatInput({
     } catch (err) {
       stream?.getTracks().forEach((track) => track.stop())
       if (mediaStreamRef.current === stream) mediaStreamRef.current = null
+      if (recordingSession !== recordingSessionRef.current) return
       toast({
         title: 'Recording Error',
         description:
