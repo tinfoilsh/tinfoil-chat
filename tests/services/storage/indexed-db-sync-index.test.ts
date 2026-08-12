@@ -262,4 +262,94 @@ describe('IndexedDB pending sync index', () => {
     expect(payloadCount).toBe(0)
     db.close()
   })
+
+  it('hydrates attachment payloads through mutateChat without reinlining them', async () => {
+    const storage = new IndexedDBStorage()
+    await storage.initialize()
+    const base64 = 'B'.repeat(20_000)
+    await storage.saveChat(
+      storedChat('mutated-attachment', {
+        messages: [
+          {
+            role: 'user',
+            content: 'Read this',
+            timestamp: new Date('2026-08-12T00:00:00.000Z'),
+            attachments: [
+              {
+                id: 'attachment-1',
+                type: 'document',
+                fileName: 'document.pdf',
+                base64,
+                textContent: 'Document text',
+                pages: [
+                  {
+                    page: 1,
+                    text: 'Page text',
+                    image: base64,
+                    is_scanned: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const mutated = await storage.mutateChat('mutated-attachment', (chat) => ({
+      chat: {
+        ...chat,
+        messages: [
+          ...chat.messages,
+          {
+            role: 'assistant',
+            content: 'Recovered response',
+            timestamp: '2026-08-12T00:00:01.000Z',
+          },
+        ],
+      },
+      changed: true,
+    }))
+
+    const mutatedAttachment = mutated?.messages[0].attachments?.[0]
+    expect(mutatedAttachment?.base64).toBe(base64)
+    expect(mutatedAttachment?.textContent).toBe('Document text')
+    expect(mutatedAttachment?.pages?.[0].image).toBe(base64)
+    expect(mutated?.messages[1].content).toBe('Recovered response')
+
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+    const rawChat = await new Promise<StoredChat>((resolve, reject) => {
+      const request = db
+        .transaction('chats')
+        .objectStore('chats')
+        .get('mutated-attachment')
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result as StoredChat)
+    })
+    const rawAttachment = rawChat.messages[0].attachments?.[0] as
+      (Record<string, unknown> & { storagePayloadId?: string }) | undefined
+    expect(rawAttachment?.base64).toBeUndefined()
+    expect(rawAttachment?.textContent).toBeUndefined()
+    expect(rawAttachment?.pages).toBeUndefined()
+    expect(rawAttachment?.storagePayloadId).toBeTruthy()
+    expect(rawChat.messages[1].content).toBe('Recovered response')
+
+    const payloadCount = await new Promise<number>((resolve, reject) => {
+      const request = db
+        .transaction('attachmentPayloads')
+        .objectStore('attachmentPayloads')
+        .count()
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+    expect(payloadCount).toBe(1)
+
+    const hydrated = await storage.getChat('mutated-attachment')
+    expect(hydrated?.messages[0].attachments?.[0].base64).toBe(base64)
+    db.close()
+  })
 })
