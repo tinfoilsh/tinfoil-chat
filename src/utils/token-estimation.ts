@@ -11,6 +11,11 @@ export const CONTEXT_WINDOW_USAGE_RATIO = 0.9
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 64000
 
+export type ContextWindowConfig = {
+  contextWindowTokens?: number
+  contextWindow?: string
+}
+
 // Roughly estimate token count based on character length (≈4 chars per token)
 export function estimateTokenCount(text: string | undefined): number {
   if (!text) return 0
@@ -38,20 +43,25 @@ export function parseContextWindowTokens(contextWindow?: string): number {
   return tokens
 }
 
-export function getSmallestContextWindow(
-  contextWindows: Array<string | undefined>,
-): string | undefined {
-  if (contextWindows.length === 0) return undefined
-  let smallest = contextWindows[0]
-  for (let index = 1; index < contextWindows.length; index++) {
-    const candidate = contextWindows[index]
-    if (
-      parseContextWindowTokens(candidate) < parseContextWindowTokens(smallest)
-    ) {
-      smallest = candidate
-    }
+export function resolveContextWindowTokens(
+  config: ContextWindowConfig | undefined,
+): number {
+  const configuredTokens = config?.contextWindowTokens
+  if (
+    Number.isFinite(configuredTokens) &&
+    configuredTokens !== undefined &&
+    configuredTokens >= MIN_PLAUSIBLE_CONTEXT_WINDOW_TOKENS
+  ) {
+    return Math.round(configuredTokens)
   }
-  return smallest
+  return parseContextWindowTokens(config?.contextWindow)
+}
+
+export function getSmallestContextWindowTokens(
+  configs: ContextWindowConfig[],
+): number | undefined {
+  if (configs.length === 0) return undefined
+  return Math.min(...configs.map(resolveContextWindowTokens))
 }
 
 export type TokenEstimationOptions = {
@@ -100,17 +110,18 @@ export function estimateMessageTokens(
   return tokens
 }
 
-export function getContextTokenBudget(contextWindow?: string): number {
+export function getContextTokenBudget(contextWindowTokens?: number): number {
   return Math.floor(
-    parseContextWindowTokens(contextWindow) * CONTEXT_WINDOW_USAGE_RATIO,
+    (contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS) *
+      CONTEXT_WINDOW_USAGE_RATIO,
   )
 }
 
 export function getHistoryTokenBudget(
-  contextWindow?: string,
+  contextWindowTokens?: number,
   pendingTokens = 0,
 ): number {
-  return Math.max(0, getContextTokenBudget(contextWindow) - pendingTokens)
+  return Math.max(0, getContextTokenBudget(contextWindowTokens) - pendingTokens)
 }
 
 /**
@@ -144,9 +155,9 @@ export function findContextStartIndex(
  */
 export function selectMessagesWithinBudget(
   messages: Message[],
-  contextWindow?: string,
+  contextWindowTokens?: number,
   options: TokenEstimationOptions = {},
 ): Message[] {
-  const budget = getContextTokenBudget(contextWindow)
+  const budget = getContextTokenBudget(contextWindowTokens)
   return messages.slice(findContextStartIndex(messages, budget, options))
 }

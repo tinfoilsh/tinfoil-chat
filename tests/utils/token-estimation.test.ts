@@ -7,7 +7,9 @@ import {
   findContextStartIndex,
   getContextTokenBudget,
   getHistoryTokenBudget,
+  getSmallestContextWindowTokens,
   parseContextWindowTokens,
+  resolveContextWindowTokens,
   selectMessagesWithinBudget,
 } from '@/utils/token-estimation'
 import { describe, expect, it } from 'vitest'
@@ -55,16 +57,48 @@ describe('parseContextWindowTokens', () => {
   })
 })
 
+describe('resolveContextWindowTokens', () => {
+  it('prefers numeric model metadata', () => {
+    expect(
+      resolveContextWindowTokens({
+        contextWindowTokens: 128000,
+        contextWindow: '1k tokens',
+      }),
+    ).toBe(128000)
+  })
+
+  it('falls back to legacy display metadata', () => {
+    expect(resolveContextWindowTokens({ contextWindow: '256k tokens' })).toBe(
+      256000,
+    )
+    expect(
+      resolveContextWindowTokens({
+        contextWindowTokens: 0,
+        contextWindow: '32k tokens',
+      }),
+    ).toBe(32000)
+  })
+
+  it('finds the smallest mixed-format context window', () => {
+    expect(
+      getSmallestContextWindowTokens([
+        { contextWindowTokens: 256000, contextWindow: '1k tokens' },
+        { contextWindow: '128k tokens' },
+      ]),
+    ).toBe(128000)
+  })
+})
+
 describe('getContextTokenBudget', () => {
   it('reserves headroom below the full context window', () => {
-    expect(getContextTokenBudget('100k tokens')).toBe(
+    expect(getContextTokenBudget(100000)).toBe(
       Math.floor(100000 * CONTEXT_WINDOW_USAGE_RATIO),
     )
   })
 
   it('reserves pending input tokens before budgeting persisted history', () => {
-    expect(getHistoryTokenBudget('1k tokens', 250)).toBe(650)
-    expect(getHistoryTokenBudget('1k tokens', 1000)).toBe(0)
+    expect(getHistoryTokenBudget(1000, 250)).toBe(650)
+    expect(getHistoryTokenBudget(1000, 1000)).toBe(0)
   })
 })
 
@@ -181,7 +215,7 @@ describe('selectMessagesWithinBudget', () => {
       makeMessage('assistant', 1600),
       makeMessage('user', 1600),
     ]
-    const selected = selectMessagesWithinBudget(messages, '1k tokens')
+    const selected = selectMessagesWithinBudget(messages, 1000)
     expect(selected).toHaveLength(2)
     expect(selected[0]).toBe(messages[1])
     expect(selected[1]).toBe(messages[2])

@@ -8,6 +8,7 @@ import {
 import {
   findContextStartIndex,
   getHistoryTokenBudget,
+  resolveContextWindowTokens,
 } from '@/utils/token-estimation'
 import 'katex/dist/katex.min.css'
 import React, { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -28,7 +29,7 @@ type ChatMessagesProps = {
   recoveryDrafts?: ReadonlyArray<{ turnId: string; message: Message }>
   activeRecoveryTurnIds?: readonly string[]
   reasoningHistoryPolicy?: ReasoningHistoryPolicy
-  contextWindow?: string
+  contextWindowTokens?: number
   pendingContextTokens?: number
   isDarkMode: boolean
   chatId: string
@@ -269,7 +270,7 @@ export function ChatMessages({
   recoveryDrafts = [],
   activeRecoveryTurnIds = [],
   reasoningHistoryPolicy = REASONING_HISTORY_POLICIES.none,
-  contextWindow,
+  contextWindowTokens,
   pendingContextTokens = 0,
   isDarkMode,
   chatId,
@@ -369,7 +370,8 @@ export function ChatMessages({
   // Separate messages into archived and live sections - memoize this calculation
   const { archivedMessages, liveMessages } = useMemo(() => {
     const budget = getHistoryTokenBudget(
-      contextWindow ?? currentModel?.contextWindow,
+      contextWindowTokens ??
+        resolveContextWindowTokens(currentModel ?? undefined),
       pendingContextTokens,
     )
     const startIndex = findContextStartIndex(messages, budget, {
@@ -382,8 +384,8 @@ export function ChatMessages({
     }
   }, [
     messages,
-    contextWindow,
-    currentModel?.contextWindow,
+    contextWindowTokens,
+    currentModel,
     reasoningHistoryPolicy,
     pendingContextTokens,
   ])

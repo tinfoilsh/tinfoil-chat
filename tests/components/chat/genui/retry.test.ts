@@ -39,7 +39,7 @@ vi.mock('@/utils/error-handling', () => ({ logError: logErrorMock }))
 
 const model = {
   modelName: 'gpt-oss-120b',
-  contextWindow: '64k',
+  contextWindowTokens: 64000,
 } as BaseModel
 
 function message(role: Message['role'], content: string): Message {
@@ -124,7 +124,7 @@ describe('artifact retry', () => {
     const recent = 'b'.repeat(200)
     const selected = selectArtifactRetryContext(
       [message('user', older), message('assistant', recent)],
-      '1k',
+      1000,
       'm'.repeat(3200),
     )
 
@@ -139,7 +139,7 @@ describe('artifact retry', () => {
     }
 
     expect(
-      selectArtifactRetryContext([contextualMessage], '1k', 'm'.repeat(3200)),
+      selectArtifactRetryContext([contextualMessage], 1000, 'm'.repeat(3200)),
     ).toEqual([{ role: 'assistant', content: 'visible' }])
   })
 

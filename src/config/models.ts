@@ -8,7 +8,10 @@ import {
   REASONING_HISTORY_POLICIES,
   type ReasoningHistoryPolicy,
 } from '@/utils/reasoning-history'
-import { getSmallestContextWindow } from '@/utils/token-estimation'
+import {
+  getSmallestContextWindowTokens,
+  resolveContextWindowTokens,
+} from '@/utils/token-estimation'
 
 const DEV_MODELS: BaseModel[] = [
   {
@@ -114,6 +117,7 @@ export type BaseModel = {
   details?: string
   parameters?: string
   contextWindow?: string
+  contextWindowTokens?: number
   recommendedUse?: string
   supportedLanguages?: string
   type: 'chat' | 'code' | 'embedding' | 'audio' | 'tts' | 'document' | 'title'
@@ -172,6 +176,11 @@ export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
   const add = (tier: AutoTier, modelName: string, name: string): void => {
     const members = tierModels(models, tier)
     if (members.length === 0) return
+    const smallestMember = members.reduce((smallest, member) =>
+      resolveContextWindowTokens(member) < resolveContextWindowTokens(smallest)
+        ? member
+        : smallest,
+    )
     entries.push({
       modelName,
       image: '',
@@ -186,9 +195,8 @@ export const getAutoModels = (models: BaseModel[]): BaseModel[] => {
       isAuto: true,
       tier,
       multimodal: members.some((m) => m.multimodal === true),
-      contextWindow: getSmallestContextWindow(
-        members.map((member) => member.contextWindow),
-      ),
+      contextWindow: smallestMember.contextWindow,
+      contextWindowTokens: resolveContextWindowTokens(smallestMember),
     })
   }
   add('smart', AUTO_SMART_ID, 'Auto · Smart')
@@ -263,14 +271,10 @@ export const getReasoningHistoryPolicy = (
   )
 }
 
-export const getResolvedModelContextWindow = (
+export const getResolvedModelContextWindowTokens = (
   selection: ResolvedModelSelection,
-): string | undefined => {
-  return getSmallestContextWindow(
-    getResolvedCandidates(selection).map(
-      (candidate) => candidate.contextWindow,
-    ),
-  )
+): number | undefined => {
+  return getSmallestContextWindowTokens(getResolvedCandidates(selection))
 }
 
 /**
