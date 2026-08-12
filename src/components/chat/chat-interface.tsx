@@ -123,7 +123,7 @@ import {
 import { GenUIInputAreaRenderer } from './genui/GenUIInputAreaRenderer'
 import { selectPendingInputToolCallFromChat } from './genui/pending-input-tool-call'
 import {
-  artifactDetailsEqual,
+  artifactPreviewTargetsEqual,
   OPEN_ARTIFACT_PREVIEW_EVENT,
   type ArtifactPreviewSidebarDetail,
   type ArtifactPreviewSidebarEventDetail,
@@ -576,6 +576,9 @@ export function ChatInterface({
   )
   const [artifactPreview, setArtifactPreview] =
     useState<ArtifactPreviewSidebarDetail | null>(null)
+  const [activeArtifactToolCallId, setActiveArtifactToolCallId] = useState<
+    string | null
+  >(null)
 
   const [webSearchAvailable, setWebSearchAvailable] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -1445,18 +1448,24 @@ export function ChatInterface({
       event: CustomEvent<ArtifactPreviewSidebarEventDetail>,
     ) => {
       if (!event.detail) return
-      const { action, artifact } = event.detail
+      const { action, artifact, toolCallId } = event.detail
       // Toggle: clicking the inline card while its artifact is already open
       // closes the sidebar instead of re-opening it.
       setArtifactPreview((prev) => {
         const sameArtifact =
           prev !== null &&
           isArtifactSidebarOpen &&
-          artifactDetailsEqual(prev, artifact)
+          artifactPreviewTargetsEqual(
+            prev,
+            activeArtifactToolCallId,
+            artifact,
+            toolCallId,
+          )
         if (action === 'toggle' && sameArtifact) {
           setIsArtifactSidebarOpen(false)
           return prev
         }
+        setActiveArtifactToolCallId(toolCallId ?? null)
         setIsArtifactSidebarOpen(true)
         setIsVerifierSidebarOpen(false)
         setIsSettingsModalOpen(false)
@@ -1477,7 +1486,12 @@ export function ChatInterface({
         handleOpenArtifactPreview as EventListener,
       )
     }
-  }, [windowWidth, setIsSidebarOpen, isArtifactSidebarOpen])
+  }, [
+    windowWidth,
+    setIsSidebarOpen,
+    isArtifactSidebarOpen,
+    activeArtifactToolCallId,
+  ])
 
   // Auto-focus input when component mounts and is ready (no autoscroll)
   // Keyed on the chat id, not the chat object: the object's identity changes
@@ -3726,6 +3740,9 @@ export function ChatInterface({
                     chatId={currentChat.id}
                     isWaitingForResponse={isWaitingForResponse}
                     isStreamingResponse={isStreaming}
+                    activeArtifactToolCallId={
+                      isArtifactSidebarOpen ? activeArtifactToolCallId : null
+                    }
                     isPremium={isPremium}
                     models={models}
                     onSubmit={handleSubmit}

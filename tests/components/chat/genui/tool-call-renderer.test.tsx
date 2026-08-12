@@ -4,6 +4,7 @@ import { GENUI_WIDGETS_BY_NAME } from '@/components/chat/genui/registry'
 import { ArtifactRetryError } from '@/components/chat/genui/retry'
 import type { GenUIRenderContext } from '@/components/chat/genui/types'
 import {
+  artifactPreviewTargetsEqual,
   OPEN_ARTIFACT_PREVIEW_EVENT,
   type ArtifactPreviewSidebarEventDetail,
 } from '@/components/chat/genui/widgets/ArtifactPreview'
@@ -86,7 +87,11 @@ describe('GenUIToolCallRenderer', () => {
     expect(listener).toHaveBeenCalledTimes(1)
     const event = listener.mock
       .calls[0][0] as CustomEvent<ArtifactPreviewSidebarEventDetail>
-    expect(event.detail).toEqual({ action: 'open', artifact })
+    expect(event.detail).toEqual({
+      action: 'open',
+      artifact,
+      toolCallId: 'artifact-1',
+    })
     window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
   })
 
@@ -154,8 +159,81 @@ describe('GenUIToolCallRenderer', () => {
     expect(listener).toHaveBeenCalledTimes(1)
     const event = listener.mock
       .calls[0][0] as CustomEvent<ArtifactPreviewSidebarEventDetail>
-    expect(event.detail).toEqual({ action: 'toggle', artifact })
+    expect(event.detail).toEqual({
+      action: 'toggle',
+      artifact,
+      toolCallId: 'artifact-1',
+    })
     window.removeEventListener(OPEN_ARTIFACT_PREVIEW_EVENT, listener)
+  })
+
+  it('highlights only the open artifact and shows its full description', () => {
+    const secondArtifact = {
+      ...artifact,
+      title: 'Second artifact',
+      description:
+        'A longer artifact description that should wrap across as many lines as needed.',
+      source: { type: 'html' as const, html: '<main>Second</main>' },
+    }
+    const toolCalls = [
+      {
+        id: 'artifact-1',
+        name: 'render_artifact_preview',
+        arguments: validArtifactPreview,
+      },
+      {
+        id: 'artifact-2',
+        name: 'render_artifact_preview',
+        arguments: JSON.stringify(secondArtifact),
+      },
+    ]
+    const { rerender } = render(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        activeArtifactToolCallId="artifact-2"
+        toolCalls={toolCalls}
+      />,
+    )
+
+    const firstButton = screen.getByRole('button', { name: /Snake game/ })
+    const secondButton = screen.getByRole('button', {
+      name: /Second artifact/,
+    })
+    const description = screen.getByText(secondArtifact.description)
+    expect(firstButton).toHaveAttribute('aria-pressed', 'false')
+    expect(secondButton).toHaveAttribute('aria-pressed', 'true')
+    expect(secondButton.parentElement).toHaveClass('border-brand-accent-dark')
+    expect(description).toHaveClass('whitespace-pre-wrap', 'break-words')
+    expect(description).not.toHaveClass('truncate')
+
+    rerender(
+      <GenUIToolCallRenderer
+        isStreaming={false}
+        activeArtifactToolCallId="artifact-1"
+        toolCalls={toolCalls}
+      />,
+    )
+    expect(firstButton).toHaveAttribute('aria-pressed', 'true')
+    expect(secondButton).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('distinguishes identical artifacts by tool call', () => {
+    expect(
+      artifactPreviewTargetsEqual(
+        artifact,
+        'artifact-1',
+        artifact,
+        'artifact-2',
+      ),
+    ).toBe(false)
+    expect(
+      artifactPreviewTargetsEqual(
+        artifact,
+        'artifact-1',
+        artifact,
+        'artifact-1',
+      ),
+    ).toBe(true)
   })
 
   it('shows a simple generating state without raw data or a character count', () => {

@@ -34,6 +34,7 @@ type ChatMessagesProps = {
   chatId: string
   isWaitingForResponse?: boolean
   isStreamingResponse?: boolean
+  activeArtifactToolCallId?: string | null
   isPremium?: boolean
   models?: BaseModel[]
   onSubmit?: (e: React.FormEvent) => void
@@ -75,6 +76,23 @@ type ChatMessagesProps = {
   onSelectPromptPreset?: (presetId: string | null) => void
 }
 
+function getMessageActiveArtifactToolCallId(
+  message: Message,
+  activeArtifactToolCallId?: string | null,
+): string | null {
+  if (!activeArtifactToolCallId) return null
+  const isActive =
+    message.toolCalls?.some(
+      (toolCall) => toolCall.id === activeArtifactToolCallId,
+    ) ||
+    message.timeline?.some(
+      (block) =>
+        block.type === 'tool_call' &&
+        block.toolCallId === activeArtifactToolCallId,
+    )
+  return isActive ? activeArtifactToolCallId : null
+}
+
 // Optimized wrapper component that receives expanded state from parent
 const ChatMessage = memo(
   function ChatMessage({
@@ -84,6 +102,7 @@ const ChatMessage = memo(
     isDarkMode,
     isLastMessage = false,
     isStreaming = false,
+    activeArtifactToolCallId,
     hideActions = false,
     onEditMessage,
     onRegenerateMessage,
@@ -95,6 +114,7 @@ const ChatMessage = memo(
     isDarkMode: boolean
     isLastMessage?: boolean
     isStreaming?: boolean
+    activeArtifactToolCallId?: string | null
     hideActions?: boolean
     onEditMessage?: (messageIndex: number, newContent: string) => void
     onRegenerateMessage?: (messageIndex: number) => void
@@ -115,6 +135,7 @@ const ChatMessage = memo(
         isDarkMode={isDarkMode}
         isLastMessage={isLastMessage}
         isStreaming={isStreaming}
+        activeArtifactToolCallId={activeArtifactToolCallId}
         hideActions={hideActions}
         onEditMessage={onEditMessage}
         onRegenerateMessage={onRegenerateMessage}
@@ -133,6 +154,8 @@ const ChatMessage = memo(
       prevProps.isDarkMode === nextProps.isDarkMode &&
       prevProps.isLastMessage === nextProps.isLastMessage &&
       prevProps.isStreaming === nextProps.isStreaming &&
+      prevProps.activeArtifactToolCallId ===
+        nextProps.activeArtifactToolCallId &&
       prevProps.hideActions === nextProps.hideActions &&
       prevProps.onEditMessage === nextProps.onEditMessage &&
       prevProps.onRegenerateMessage === nextProps.onRegenerateMessage &&
@@ -252,6 +275,7 @@ export function ChatMessages({
   chatId,
   isWaitingForResponse = false,
   isStreamingResponse = false,
+  activeArtifactToolCallId,
   isPremium,
   models,
   onSubmit,
@@ -492,6 +516,10 @@ export function ChatMessages({
             isDarkMode={isDarkMode}
             isLastMessage
             isStreaming
+            activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
+              draft,
+              activeArtifactToolCallId,
+            )}
           />
         )}
         {!draft && <RecoveryMessage />}
@@ -524,6 +552,10 @@ export function ChatMessages({
                       isDarkMode={isDarkMode}
                       isLastMessage={Boolean(recoveryDraft)}
                       isStreaming={Boolean(recoveryDraft)}
+                      activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
+                        recoveryDraft ?? message,
+                        activeArtifactToolCallId,
+                      )}
                       onEditMessage={recoveryDraft ? undefined : onEditMessage}
                       onRegenerateMessage={
                         recoveryDraft ? undefined : onRegenerateMessage
@@ -562,6 +594,10 @@ export function ChatMessages({
                   Boolean(recoveryDraft) ||
                   (i === liveMessages.length - 1 && isStreamingResponse)
                 }
+                activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
+                  recoveryDraft ?? message,
+                  activeArtifactToolCallId,
+                )}
                 onEditMessage={recoveryDraft ? undefined : onEditMessage}
                 onRegenerateMessage={
                   recoveryDraft ? undefined : onRegenerateMessage

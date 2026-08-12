@@ -38,8 +38,10 @@ export function defineGenUIWidget<Schema extends ZodTypeAny>(
  * Context passed to all widgets when rendering.
  */
 export interface GenUIRenderContext {
+  isActive?: boolean
   isDarkMode?: boolean
   isStreaming?: boolean
+  toolCallId?: string
 }
 
 /**

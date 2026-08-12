@@ -54,6 +54,7 @@ interface GenUIToolCallRendererProps {
   toolCalls: GenUIToolCall[]
   isStreaming: boolean
   isDarkMode?: boolean
+  activeArtifactToolCallId?: string | null
   /**
    * If provided, a "Try again" button is shown on parse-failure cards and
    * will regenerate the assistant message that produced the failed tool
@@ -80,19 +81,25 @@ function parseInput(
 }
 
 function GenUIWidgetContent({
+  toolCallId,
   toolName,
   input,
+  isActive,
   isDarkMode,
   isStreaming,
 }: {
+  toolCallId: string
   toolName: string
   input: unknown
+  isActive: boolean
   isDarkMode?: boolean
   isStreaming: boolean
 }) {
   const rendered = renderGenUIInline(toolName, input, {
+    isActive,
     isDarkMode,
     isStreaming,
+    toolCallId,
   })
   if (rendered === null) throw new Error('Widget render returned null')
   return rendered
@@ -102,6 +109,7 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
   toolCalls,
   isStreaming,
   isDarkMode,
+  activeArtifactToolCallId,
   onRetry,
   onRetryToolCall,
 }: GenUIToolCallRendererProps) {
@@ -159,8 +167,10 @@ export const GenUIToolCallRenderer = memo(function GenUIToolCallRenderer({
             >
               <div className="my-4">
                 <GenUIWidgetContent
+                  toolCallId={tc.id}
                   toolName={tc.name}
                   input={parsedInput.data}
+                  isActive={activeArtifactToolCallId === tc.id}
                   isDarkMode={isDarkMode}
                   isStreaming={isStreaming}
                 />

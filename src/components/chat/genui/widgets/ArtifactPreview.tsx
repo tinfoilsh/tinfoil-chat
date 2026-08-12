@@ -78,18 +78,20 @@ export interface ArtifactPreviewSidebarDetail {
 export interface ArtifactPreviewSidebarEventDetail {
   artifact: ArtifactPreviewSidebarDetail
   action: 'open' | 'toggle'
+  toolCallId?: string
 }
 
 export function openArtifactPreviewSidebar(
   detail: ArtifactPreviewSidebarDetail,
   action: ArtifactPreviewSidebarEventDetail['action'] = 'toggle',
+  toolCallId?: string,
 ): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(
     new CustomEvent<ArtifactPreviewSidebarEventDetail>(
       OPEN_ARTIFACT_PREVIEW_EVENT,
       {
-        detail: { artifact: detail, action },
+        detail: { artifact: detail, action, toolCallId },
       },
     ),
   )
@@ -109,6 +111,18 @@ export function artifactDetailsEqual(
   if (a.footer !== b.footer) return false
   if (a.source.type !== b.source.type) return false
   return sourceToCopyString(a.source) === sourceToCopyString(b.source)
+}
+
+export function artifactPreviewTargetsEqual(
+  currentArtifact: ArtifactPreviewSidebarDetail,
+  currentToolCallId: string | null,
+  incomingArtifact: ArtifactPreviewSidebarDetail,
+  incomingToolCallId?: string,
+): boolean {
+  if (currentToolCallId && incomingToolCallId) {
+    return currentToolCallId === incomingToolCallId
+  }
+  return artifactDetailsEqual(currentArtifact, incomingArtifact)
 }
 
 /**
@@ -415,8 +429,14 @@ function ArtifactPreviewInlineCard({
   description,
   source,
   footer,
+  isSelected = false,
   shouldAutoOpen,
-}: z.infer<typeof schema> & { shouldAutoOpen?: boolean }) {
+  toolCallId,
+}: z.infer<typeof schema> & {
+  isSelected?: boolean
+  shouldAutoOpen?: boolean
+  toolCallId?: string
+}) {
   const hasAutoOpenedRef = useRef(false)
   const detail = useMemo<ArtifactPreviewSidebarDetail>(
     () => ({ title, description, source, footer }),
@@ -434,25 +454,38 @@ function ArtifactPreviewInlineCard({
       return
     }
     hasAutoOpenedRef.current = true
-    openArtifactPreviewSidebar(detail, 'open')
-  }, [detail, shouldAutoOpen])
+    openArtifactPreviewSidebar(detail, 'open', toolCallId)
+  }, [detail, shouldAutoOpen, toolCallId])
 
   return (
-    <div className="my-3 flex w-full items-center rounded-lg border border-border-subtle bg-surface-card text-left transition-colors hover:bg-surface-chat-background">
+    <div
+      className={cn(
+        'my-3 flex w-full items-center rounded-lg border bg-surface-card text-left transition-colors',
+        isSelected
+          ? 'border-brand-accent-dark bg-brand-accent-dark/10 dark:border-brand-accent-light dark:bg-brand-accent-light/10'
+          : 'border-border-subtle hover:bg-surface-chat-background',
+      )}
+    >
       <button
         type="button"
-        onClick={() => openArtifactPreviewSidebar(detail)}
+        onClick={() => openArtifactPreviewSidebar(detail, 'toggle', toolCallId)}
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 self-stretch px-4 py-4 text-left"
+        aria-pressed={isSelected}
       >
         <FileText
-          className="h-6 w-6 flex-shrink-0 text-content-muted"
+          className={cn(
+            'h-6 w-6 flex-shrink-0',
+            isSelected
+              ? 'text-brand-accent-dark dark:text-brand-accent-light'
+              : 'text-content-muted',
+          )}
           aria-hidden
         />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium text-content-primary">
             {displayTitle}
           </span>
-          <span className="truncate text-xs text-content-muted">
+          <span className="whitespace-pre-wrap break-words text-xs leading-relaxed text-content-muted">
             {subtitle}
           </span>
         </span>
@@ -476,7 +509,12 @@ export const widget = defineGenUIWidget({
     'Display a visual artifact in a side panel: a hosted URL, a self-contained HTML snippet, or Markdown. Use for content worth inspecting at full size — interactive demos, long-form documents, or rich HTML mockups. For SVG illustrations and Mermaid diagrams, emit a fenced `svg` or `mermaid` code block in the regular assistant message instead. The chat shows a compact summary card; clicking it opens the full artifact in the right sidebar.',
   schema,
   promptHint: 'large artifacts (markdown/html/url) opened in a side panel',
-  render: (args, { isStreaming }) => (
-    <ArtifactPreviewInlineCard {...args} shouldAutoOpen={isStreaming} />
+  render: (args, { isActive, isStreaming, toolCallId }) => (
+    <ArtifactPreviewInlineCard
+      {...args}
+      isSelected={isActive}
+      shouldAutoOpen={isStreaming}
+      toolCallId={toolCallId}
+    />
   ),
 })
