@@ -3101,6 +3101,9 @@ export function ChatInterface({
     )
   }
 
+  const showEmptyChatGrid =
+    (currentChat?.messages.length ?? 0) === 0 && !isWaitingForResponse
+
   return (
     <div
       className="flex overflow-hidden bg-surface-chat-background"
@@ -3669,8 +3672,7 @@ export function ChatInterface({
                 : '',
             )}
           >
-            {(currentChat?.messages.length ?? 0) === 0 &&
-              !isWaitingForResponse && <GridTexture />}
+            {showEmptyChatGrid && <GridTexture />}
             {/* Rate Limit Banner (desktop) — on mobile this renders as a
                 floating pill above the chat input instead. */}
             {shouldShowRateLimitBanner(rateLimit) && (
@@ -3720,8 +3722,7 @@ export function ChatInterface({
                 aria-label="Conversation"
                 className={cn(
                   'relative z-0 flex-1 overflow-y-auto',
-                  (currentChat?.messages.length ?? 0) === 0 &&
-                    !isWaitingForResponse
+                  showEmptyChatGrid
                     ? 'bg-transparent'
                     : 'bg-surface-chat-background',
                 )}

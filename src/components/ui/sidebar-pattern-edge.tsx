@@ -18,7 +18,6 @@ export function SidebarPatternEdge({ isDarkMode }: { isDarkMode: boolean }) {
       className="pointer-events-none absolute inset-y-0 right-0 z-20"
       style={{
         width: `${SIDEBAR_PATTERN_EDGE_WIDTH_PX}px`,
-        backgroundColor: 'hsl(var(--surface-sidebar))',
         backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(tile)}")`,
         backgroundRepeat: 'repeat-y',
         borderLeft: `${BORDER_WIDTH_PX}px solid ${color}`,
