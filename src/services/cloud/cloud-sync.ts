@@ -456,6 +456,7 @@ export class CloudSyncService {
           await this.uploadCoalescer.enqueueAndWait(chat.id)
           await this.assertUploadFinalized(chat.id, generation, userId)
         },
+        waitForUpload: (id) => this.uploadCoalescer.waitForUpload(id),
       },
       userId,
       () => this.isCurrentGeneration(generation),
@@ -821,6 +822,13 @@ export class CloudSyncService {
   ): Promise<void> {
     if (!(await cloudStorage.isAuthenticated())) return
     try {
+      // Settle any in-flight upload first. Deleting while a create
+      // push is in flight makes the enclave see "already gone" and
+      // acknowledge the intent before the push commits, resurrecting
+      // the chat on the next event replay. The local row is already
+      // deleted at this point, so no NEW upload can start — only the
+      // frozen in-flight attempt needs to drain.
+      await this.uploadCoalescer.waitForUpload(chatId)
       await cloudStorage.deleteChat(chatId, idempotencyKey)
       const userId = this.readActiveUserId()
       if (userId) {

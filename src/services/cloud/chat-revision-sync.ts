@@ -38,6 +38,13 @@ export interface RevisionSyncResult {
 export interface RevisionUploadAdapter {
   upload(chat: StoredChat): Promise<void>
   isStreaming(id: string): boolean
+  /**
+   * Resolve once no upload for this chat is in flight. Deletes MUST
+   * settle in-flight uploads first: a create push racing the delete
+   * makes the enclave observe "already gone", acknowledge the intent,
+   * and then commit the push — resurrecting the deleted chat.
+   */
+  waitForUpload(id: string): Promise<void>
 }
 
 function parseRevision(revision: string): bigint {
@@ -310,6 +317,8 @@ async function uploadPendingWork(
   const deletes = await indexedDBStorage.getPendingDeletes(userId)
   ensureCurrent(isCurrent)
   for (const entry of deletes) {
+    await adapter.waitForUpload(entry.id)
+    ensureCurrent(isCurrent)
     await cloudStorage.deleteChat(entry.id, entry.idempotencyKey)
     ensureCurrent(isCurrent)
     await indexedDBStorage.acknowledgePendingDelete(entry.id, userId)

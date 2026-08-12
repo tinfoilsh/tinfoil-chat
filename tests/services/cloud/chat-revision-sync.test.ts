@@ -75,6 +75,9 @@ describe('chat revision synchronization', () => {
   const adapter = {
     upload: vi.fn(),
     isStreaming: vi.fn<(id: string) => boolean>(() => false),
+    waitForUpload: vi.fn<(id: string) => Promise<void>>(() =>
+      Promise.resolve(),
+    ),
   }
 
   beforeEach(() => {
@@ -448,6 +451,25 @@ describe('chat revision synchronization', () => {
       'deleted-chat',
       userId,
     )
+  })
+
+  it('settles in-flight uploads before issuing a durable delete', async () => {
+    const order: string[] = []
+    hasPendingSyncWork.mockResolvedValue(true)
+    getPendingDeletes.mockResolvedValue([
+      { id: 'racing-chat', userId, idempotencyKey: 'delete-key' },
+    ])
+    adapter.waitForUpload.mockImplementation(async () => {
+      order.push('wait-upload')
+    })
+    deleteChat.mockImplementation(async () => {
+      order.push('delete')
+    })
+
+    await drainChatRevisionSync(adapter, userId)
+
+    expect(adapter.waitForUpload).toHaveBeenCalledWith('racing-chat')
+    expect(order).toEqual(['wait-upload', 'delete'])
   })
 
   it('skips streaming chats and counts only completed uploads', async () => {
