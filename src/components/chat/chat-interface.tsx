@@ -1208,7 +1208,11 @@ export function ChatInterface({
         if (active && doc) {
           setVerificationDocument(doc)
           setVerificationStatus(
-            doc.securityVerified === true ? 'verified' : 'failed',
+            doc.securityVerified === true
+              ? 'verified'
+              : doc.securityVerified === false
+                ? 'failed'
+                : 'pending',
           )
         } else if (active) {
           setVerificationStatus('failed')

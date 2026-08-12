@@ -16,6 +16,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -325,14 +326,35 @@ export function ChatMessages({
   const prevShowScrollButtonRef = React.useRef(showScrollButton)
   const messageCountWhenSpacerSetRef = React.useRef<number | null>(null)
   const printRef = useRef<HTMLDivElement>(null)
+  const printReadyResolverRef = useRef<(() => void) | null>(null)
   const [printRequested, setPrintRequested] = useState(false)
 
   const preparePrint = useCallback(async () => {
-    setPrintRequested(true)
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await new Promise<void>((resolve) => {
+      printReadyResolverRef.current = resolve
+      setPrintRequested(true)
+    })
   }, [])
 
-  const cleanupPrint = useCallback(() => setPrintRequested(false), [])
+  useLayoutEffect(() => {
+    if (!printRequested || !printRef.current) return
+    printReadyResolverRef.current?.()
+    printReadyResolverRef.current = null
+  }, [printRequested])
+
+  useEffect(() => {
+    const resolver = printReadyResolverRef
+    return () => {
+      resolver.current?.()
+      resolver.current = null
+    }
+  }, [])
+
+  const cleanupPrint = useCallback(() => {
+    printReadyResolverRef.current?.()
+    printReadyResolverRef.current = null
+    setPrintRequested(false)
+  }, [])
 
   useChatPrint({
     printRef,
