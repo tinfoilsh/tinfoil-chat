@@ -313,15 +313,27 @@ async function uploadPendingWork(
   adapter: RevisionUploadAdapter,
   userId: string,
   isCurrent: () => boolean,
-): Promise<number> {
+): Promise<{ uploaded: number; errors: string[] }> {
+  const errors: string[] = []
   const deletes = await indexedDBStorage.getPendingDeletes(userId)
   ensureCurrent(isCurrent)
   for (const entry of deletes) {
-    await adapter.waitForUpload(entry.id)
-    ensureCurrent(isCurrent)
-    await cloudStorage.deleteChat(entry.id, entry.idempotencyKey)
-    ensureCurrent(isCurrent)
-    await indexedDBStorage.acknowledgePendingDelete(entry.id, userId)
+    try {
+      await adapter.waitForUpload(entry.id)
+      ensureCurrent(isCurrent)
+      await cloudStorage.deleteChat(entry.id, entry.idempotencyKey)
+      ensureCurrent(isCurrent)
+      await indexedDBStorage.acknowledgePendingDelete(entry.id, userId)
+    } catch (error) {
+      // A failing delete keeps its intent queued for the next cycle
+      // but must not starve the remaining deletes or the uploads
+      // below — except when the account changed, which invalidates
+      // the whole drain.
+      if (!isCurrent()) throw error
+      errors.push(
+        `Failed to delete chat ${entry.id}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
 
   let uploaded = 0
@@ -333,7 +345,7 @@ async function uploadPendingWork(
     ensureCurrent(isCurrent)
     uploaded++
   }
-  return uploaded
+  return { uploaded, errors }
 }
 
 export async function drainChatRevisionSync(
@@ -372,6 +384,8 @@ export async function drainChatRevisionSync(
       isCurrent,
     )
   }
-  result.uploaded = await uploadPendingWork(adapter, userId, isCurrent)
+  const work = await uploadPendingWork(adapter, userId, isCurrent)
+  result.uploaded = work.uploaded
+  result.errors.push(...work.errors)
   return result
 }

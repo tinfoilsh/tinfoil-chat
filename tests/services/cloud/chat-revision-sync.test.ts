@@ -430,9 +430,10 @@ describe('chat revision synchronization', () => {
       .mockRejectedValueOnce(new Error('temporary failure'))
       .mockResolvedValueOnce(undefined)
 
-    await expect(drainChatRevisionSync(adapter, userId)).rejects.toThrow(
-      'temporary failure',
-    )
+    const failed = await drainChatRevisionSync(adapter, userId)
+    expect(failed.errors).toEqual([
+      expect.stringContaining('temporary failure'),
+    ])
     expect(acknowledgePendingDelete).not.toHaveBeenCalled()
 
     await drainChatRevisionSync(adapter, userId)
@@ -470,6 +471,30 @@ describe('chat revision synchronization', () => {
 
     expect(adapter.waitForUpload).toHaveBeenCalledWith('racing-chat')
     expect(order).toEqual(['wait-upload', 'delete'])
+  })
+
+  it('keeps uploading when one durable delete fails', async () => {
+    hasPendingSyncWork.mockResolvedValue(true)
+    getPendingDeletes.mockResolvedValue([
+      { id: 'poison-chat', userId, idempotencyKey: 'poison-key' },
+      { id: 'healthy-chat', userId, idempotencyKey: 'healthy-key' },
+    ])
+    deleteChat
+      .mockRejectedValueOnce(new Error('row is wedged'))
+      .mockResolvedValueOnce(undefined)
+    getPendingUploadChats.mockResolvedValue([{ id: 'dirty-chat' }])
+
+    const result = await drainChatRevisionSync(adapter, userId)
+
+    expect(deleteChat).toHaveBeenCalledTimes(2)
+    expect(acknowledgePendingDelete).toHaveBeenCalledTimes(1)
+    expect(acknowledgePendingDelete).toHaveBeenCalledWith(
+      'healthy-chat',
+      userId,
+    )
+    expect(adapter.upload).toHaveBeenCalledWith({ id: 'dirty-chat' })
+    expect(result.uploaded).toBe(1)
+    expect(result.errors).toEqual([expect.stringContaining('poison-chat')])
   })
 
   it('skips streaming chats and counts only completed uploads', async () => {
