@@ -542,11 +542,16 @@ export function useChatMessaging({
         statusByChatRef.current[currentChat?.id ?? ''] ?? IDLE_STREAM_STATUS
 
       // Allow empty query if systemPromptOverride, attachments, or a quote are provided
+      // No models means the config hasn't loaded yet; without it no model
+      // can be resolved, so refuse the dispatch instead of firing a
+      // request guaranteed to fail. (The message queue also blocks
+      // dispatch on this, so queued sends wait rather than drop.)
       if (
         (!query.trim() &&
           !systemPromptOverride &&
           !attachments?.length &&
           !quote) ||
+        models.length === 0 ||
         targetChatStatus.loadingState !== 'idle' ||
         isRecoveryActive
       )
