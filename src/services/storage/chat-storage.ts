@@ -174,6 +174,11 @@ export class ChatStorageService {
             id,
             idempotencyKey,
             userId,
+            // A never-synced chat with an in-flight create push still
+            // needs a durable delete intent: the push can commit after
+            // the local row is gone, and without the intent the chat
+            // would resurrect on the next event replay.
+            { forceQueue: cloudSync.hasPendingUpload(id) },
           )
         : false
     if (!idempotencyKey) {
@@ -292,7 +297,8 @@ export class ChatStorageService {
     let notificationSent = false
     if (await cloudStorage.isAuthenticated()) {
       try {
-        const result = await cloudStorage.deleteAllChats()
+        const guard = cloudSync.createAccountOperationGuard()
+        const result = await cloudStorage.deleteAllChats(guard)
         cloudDeleted = result.deleted
         notificationSent = result.notificationSent ?? false
       } catch (error) {

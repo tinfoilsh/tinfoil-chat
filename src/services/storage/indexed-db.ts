@@ -792,10 +792,30 @@ export function derivePendingUpload(
     chat.decryptionFailed !== true &&
     chat.dataCorrupted !== true &&
     chat.isMetadataOnly !== true &&
+    // A malformed legacy row must fail closed without aborting DB migration.
     Array.isArray(chat.messages) &&
     chat.messages.length > 0
     ? 1
     : 0
+}
+
+/**
+ * Whether the server may hold a row for this chat, i.e. a delete must
+ * be propagated remotely rather than being purely local. Single
+ * source of truth for the sync-delete eligibility predicate.
+ */
+function chatKnownToServer(
+  chat: Pick<StoredChat, 'syncedAt' | 'syncVersion'>,
+): boolean {
+  return chat.syncedAt != null || (chat.syncVersion ?? 0) > 0
+}
+
+function syncDeleteOutboxEntry(
+  id: string,
+  userId: string,
+  idempotencyKey: string,
+): SyncDeleteOutboxEntry {
+  return { id, userId, idempotencyKey, createdAt: Date.now() }
 }
 
 function activeUserId(): string | undefined {
@@ -1848,12 +1868,9 @@ export class IndexedDBStorage {
           existingIntent.onsuccess = () => {
             if (abortIfStale() || existingIntent.result) return
             try {
-              const putRequest = outbox.put({
-                id,
-                userId,
-                idempotencyKey: createIdempotencyKey(),
-                createdAt: Date.now(),
-              } satisfies SyncDeleteOutboxEntry)
+              const putRequest = outbox.put(
+                syncDeleteOutboxEntry(id, userId, createIdempotencyKey()),
+              )
               putRequest.onsuccess = () => {
                 abortIfStale()
               }
@@ -1879,11 +1896,7 @@ export class IndexedDBStorage {
               (chat.projectId === projectId || remoteIdSet.has(chat.id))
             ) {
               deletedIds.add(chat.id)
-              if (
-                remoteIdSet.has(chat.id) ||
-                chat.syncedAt != null ||
-                (chat.syncVersion ?? 0) > 0
-              ) {
+              if (remoteIdSet.has(chat.id) || chatKnownToServer(chat)) {
                 stageDeleteIntent(chat.id)
               }
               const deleteRequest = cursor.delete()
@@ -2041,33 +2054,6 @@ export class IndexedDBStorage {
           reject(new Error('Failed to count cached project chats'))
       }),
     )
-  }
-
-  async getProjectChatCount(projectId: string): Promise<number> {
-    await this.saveQueue.catch(() => {})
-    const db = await this.ensureDB()
-
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CHATS_STORE], 'readonly')
-      const request = transaction
-        .objectStore(CHATS_STORE)
-        .index(CHATS_PROJECT_INDEX)
-        .openCursor(IDBKeyRange.only(projectId))
-      let count = 0
-
-      request.onsuccess = () => {
-        const cursor = request.result
-        if (!cursor) {
-          resolve(count)
-          return
-        }
-        const chat = cursor.value as StoredChat
-        if (!chat.isLocalOnly) count++
-        cursor.continue()
-      }
-      request.onerror = () =>
-        reject(new Error('Failed to count cached project chats'))
-    })
   }
 
   async hasPendingChatRecoveries(): Promise<boolean> {
@@ -3233,6 +3219,16 @@ export class IndexedDBStorage {
     id: string,
     idempotencyKey: string,
     userId: string,
+    options: {
+      /**
+       * Queue the delete intent even for a never-synced chat. Used
+       * when an upload for this chat is in flight: the create push
+       * may commit after the local row is gone, so the remote delete
+       * must still run (after the upload settles) or the chat would
+       * resurrect on the next event replay.
+       */
+      forceQueue?: boolean
+    } = {},
   ): Promise<boolean> {
     return this.enqueueSave('deleteChatWithPendingIntent', async () => {
       const db = await this.ensureDB()
@@ -3262,14 +3258,9 @@ export class IndexedDBStorage {
             chat &&
             !chat.isLocalOnly &&
             chat.syncUserId === userId &&
-            (chat.syncedAt != null || (chat.syncVersion ?? 0) > 0)
+            (options.forceQueue === true || chatKnownToServer(chat))
           ) {
-            outbox.put({
-              id,
-              userId,
-              idempotencyKey,
-              createdAt: Date.now(),
-            } satisfies SyncDeleteOutboxEntry)
+            outbox.put(syncDeleteOutboxEntry(id, userId, idempotencyKey))
             queued = true
           }
         }
@@ -3311,19 +3302,12 @@ export class IndexedDBStorage {
         const request = transaction.objectStore(CHATS_STORE).get(id)
         request.onsuccess = () => {
           const chat = request.result as StoredChat | undefined
-          if (
-            !chat ||
-            chat.syncUserId !== userId ||
-            (chat.syncedAt == null && (chat.syncVersion ?? 0) === 0)
-          ) {
+          if (!chat || chat.syncUserId !== userId || !chatKnownToServer(chat)) {
             return
           }
-          transaction.objectStore(SYNC_OUTBOX_STORE).put({
-            id,
-            userId,
-            idempotencyKey,
-            createdAt: Date.now(),
-          } satisfies SyncDeleteOutboxEntry)
+          transaction
+            .objectStore(SYNC_OUTBOX_STORE)
+            .put(syncDeleteOutboxEntry(id, userId, idempotencyKey))
           queued = true
         }
         transaction.oncomplete = () => resolve(queued)
@@ -3334,18 +3318,20 @@ export class IndexedDBStorage {
   }
 
   async acknowledgePendingDelete(id: string, userId: string): Promise<void> {
-    const db = await this.ensureDB()
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(SYNC_OUTBOX_STORE, 'readwrite')
-      const store = transaction.objectStore(SYNC_OUTBOX_STORE)
-      const key: [string, string] = [userId, id]
-      const request = store.get(key)
-      request.onsuccess = () => {
-        if (request.result) store.delete(key)
-      }
-      transaction.oncomplete = () => resolve()
-      transaction.onerror = () =>
-        reject(new Error('Failed to acknowledge pending delete'))
+    return this.enqueueSave('acknowledgePendingDelete', async () => {
+      const db = await this.ensureDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(SYNC_OUTBOX_STORE, 'readwrite')
+        const store = transaction.objectStore(SYNC_OUTBOX_STORE)
+        const key: [string, string] = [userId, id]
+        const request = store.get(key)
+        request.onsuccess = () => {
+          if (request.result) store.delete(key)
+        }
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () =>
+          reject(new Error('Failed to acknowledge pending delete'))
+      })
     })
   }
 
@@ -3552,7 +3538,7 @@ export class IndexedDBStorage {
             return
           }
           if (!state) {
-            if (chat.syncedAt != null || (chat.syncVersion ?? 0) > 0) {
+            if (chatKnownToServer(chat)) {
               cursor.delete()
               summaries.delete(chat.id)
               deleteAttachmentPayloadsForChat(payloads, chat.id)

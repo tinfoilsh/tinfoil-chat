@@ -515,6 +515,15 @@ export class CloudSyncService {
     if (currentSync) await currentSync
   }
 
+  /**
+   * Whether an upload for this chat is queued or in flight. Used by
+   * the delete path to decide if a delete intent must be queued even
+   * for a never-synced chat (the racing create push may still commit).
+   */
+  hasPendingUpload(chatId: string): boolean {
+    return this.uploadCoalescer.hasPendingUpload(chatId)
+  }
+
   async backupChat(chatId: string): Promise<void> {
     const generation = this.accountGeneration
     if (!(await cloudStorage.isAuthenticated())) return
