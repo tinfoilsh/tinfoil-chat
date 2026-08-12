@@ -93,6 +93,7 @@ const UPLOAD_MAX_RETRIES = 3
 const REMOTE_LIST_MAX_ATTEMPTS = 2
 const UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR =
   'Skipped uploading local changes: remote deletions could not be reconciled'
+const CROSS_TAB_SYNC_LOCK = 'tinfoil-cloud-sync'
 const isStreaming = (id: string) => streamingTracker.isStreaming(id)
 
 export class CloudSyncService {
@@ -101,6 +102,7 @@ export class CloudSyncService {
   private uploadCoalescer: UploadCoalescer
   private streamingCallbacks: Set<string> = new Set()
   private accountGeneration = 0
+  private crossTabReloadQueued = false
   /**
    * Set once per session after the first successful syncAllChats so
    * the enclave-driven legacy-blob migration (§8.7.2 trigger 1) runs
@@ -131,8 +133,10 @@ export class CloudSyncService {
         if (e.key === SYNC_CHAT_STATUS) {
           // Another tab updated sync status, invalidate our cache
           this.chatSyncCache.invalidate()
+          this.queueCrossTabReload()
         } else if (e.key === SYNC_ALL_CHATS_STATUS) {
           this.allChatsSyncCache.invalidate()
+          this.queueCrossTabReload()
         } else if (e.key?.startsWith(SYNC_PROJECT_CHAT_STATUS_PREFIX)) {
           // Another tab updated project sync status, invalidate that project's cache
           const projectId = e.key.slice(SYNC_PROJECT_CHAT_STATUS_PREFIX.length)
@@ -140,6 +144,7 @@ export class CloudSyncService {
           if (existingCache) {
             existingCache.invalidate()
           }
+          this.queueCrossTabReload()
         }
       })
     }
@@ -154,6 +159,15 @@ export class CloudSyncService {
       this.projectSyncCaches.set(projectId, cache)
     }
     return cache
+  }
+
+  private queueCrossTabReload(): void {
+    if (this.crossTabReloadQueued) return
+    this.crossTabReloadQueued = true
+    queueMicrotask(() => {
+      this.crossTabReloadQueued = false
+      chatEvents.emit({ reason: 'sync', ids: [] })
+    })
   }
 
   private isCurrentGeneration(generation: number): boolean {
@@ -182,6 +196,27 @@ export class CloudSyncService {
    * Throws if a sync is already in progress.
    */
   private async withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      return navigator.locks.request(
+        CROSS_TAB_SYNC_LOCK,
+        { ifAvailable: true, mode: 'exclusive' },
+        async (lock) => {
+          if (!lock) {
+            logInfo('[CloudSync] Sync active in another tab, skipping', {
+              component: 'CloudSync',
+              action: 'withSyncLock',
+            })
+            throw new SyncInProgressError()
+          }
+          return this.withInstanceSyncLock(fn)
+        },
+      )
+    }
+
+    return this.withInstanceSyncLock(fn)
+  }
+
+  private async withInstanceSyncLock<T>(fn: () => Promise<T>): Promise<T> {
     if (this.syncLock) {
       logInfo('[CloudSync] Sync already in progress, skipping', {
         component: 'CloudSync',

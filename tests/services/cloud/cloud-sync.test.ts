@@ -3,13 +3,16 @@ import {
   SYNC_CHAT_STATUS,
   SYNC_PROJECT_CHAT_STATUS_PREFIX,
 } from '@/constants/storage-keys'
-import { CloudSyncService } from '@/services/cloud/cloud-sync'
+import {
+  CloudSyncService,
+  SyncInProgressError,
+} from '@/services/cloud/cloud-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import {
   SyncEnclaveError,
   SyncNetworkError,
 } from '@/services/sync-enclave/sync-enclave-client'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetAllChats = vi.fn()
 const mockGetCloudChatCount = vi.fn()
@@ -296,6 +299,58 @@ describe('CloudSyncService', () => {
       reconciled: true,
       failed: false,
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('coordinates sync ownership through the Web Locks API', async () => {
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock | null) => Promise<string>,
+      ) => callback({ name: 'tinfoil-cloud-sync', mode: 'exclusive' }),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    await expect(
+      (service as any).withSyncLock(async () => 'synced'),
+    ).resolves.toBe('synced')
+    expect(request).toHaveBeenCalledWith(
+      'tinfoil-cloud-sync',
+      { ifAvailable: true, mode: 'exclusive' },
+      expect.any(Function),
+    )
+  })
+
+  it('skips sync when another tab owns the Web Lock', async () => {
+    const request = vi.fn(
+      async (
+        _name: string,
+        _options: LockOptions,
+        callback: (lock: Lock | null) => Promise<unknown>,
+      ) => callback(null),
+    )
+    vi.stubGlobal('navigator', { locks: { request } })
+    const service = new CloudSyncService()
+
+    await expect(
+      (service as any).withSyncLock(async () => 'synced'),
+    ).rejects.toBeInstanceOf(SyncInProgressError)
+  })
+
+  it('coalesces cross-tab storage updates into one chat refresh', async () => {
+    const service = new CloudSyncService()
+
+    ;(service as any).queueCrossTabReload()
+    ;(service as any).queueCrossTabReload()
+    await Promise.resolve()
+
+    expect(mockChatEventsEmit).toHaveBeenCalledTimes(1)
+    expect(mockChatEventsEmit).toHaveBeenCalledWith({ reason: 'sync', ids: [] })
   })
 
   describe('backupChat', () => {
