@@ -416,6 +416,14 @@ export function useCloudSync(options?: UseCloudSyncOptions) {
                 action: 'setEncryptionKey.resetSyncMetadata',
               },
             )
+            // The cloud is already wiped and the NEW key registered.
+            // Rolling back to the previous key here would strand the
+            // account: the old key matches nothing on the server any
+            // more. Commit the new key and surface the reset failure;
+            // the stale local sync metadata self-heals through CAS
+            // 409s on the next sync.
+            rolledBack = true
+            encryptionService.persistCurrentKeyState()
             throw resetError
           }
         }
