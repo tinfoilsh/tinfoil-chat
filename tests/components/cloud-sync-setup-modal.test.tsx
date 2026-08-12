@@ -1,5 +1,9 @@
 import { CloudSyncSetupModal } from '@/components/modals/cloud-sync-setup-modal'
 import { encryptionService } from '@/services/encryption/encryption-service'
+import {
+  isCloudSyncEnabled,
+  setCloudSyncEnabled,
+} from '@/utils/cloud-sync-settings'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -155,6 +159,17 @@ describe('CloudSyncSetupModal onboarding', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not disable an existing cloud sync setting when dismissed', () => {
+    const onClose = vi.fn()
+    setCloudSyncEnabled(true)
+    render(<CloudSyncSetupModal {...baseProps} onClose={onClose} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Maybe later' }))
+
+    expect(isCloudSyncEnabled()).toBe(true)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 

@@ -158,7 +158,6 @@ export function CloudSyncSetupModal({
   }
 
   const handleMaybeLater = () => {
-    persistCloudSyncEnabled(false)
     localStorage.setItem(SETTINGS_HAS_SEEN_CLOUD_SYNC_MODAL, 'true')
     onClose()
   }
