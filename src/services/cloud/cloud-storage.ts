@@ -673,7 +673,7 @@ export class CloudStorageService {
     })
   }
 
-  async deleteAllChats(): Promise<{
+  async deleteAllChats(guard?: AccountOperationGuard): Promise<{
     deleted: number
     notificationSent?: boolean
   }> {
@@ -681,11 +681,13 @@ export class CloudStorageService {
     let cursor: string | undefined
     const ids: string[] = []
     do {
+      guard?.assertCurrent()
       const status = await revisionSnapshot({ cursor, limit: 500 })
       ids.push(...status.items.map((item) => item.id))
       cursor = status.next_cursor
     } while (cursor)
     for (const id of ids) {
+      guard?.assertCurrent()
       // Unconditional delete (ifMatch: null) matches single-chat
       // `deleteChat` and the "nuke everything" semantic of this
       // entry point. A CAS-guarded delete would 412 on any chat
