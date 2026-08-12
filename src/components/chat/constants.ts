@@ -33,8 +33,8 @@ export const CONSTANTS = {
   // State update delay for async operations
   ASYNC_STATE_DELAY_MS: 50,
   // Sidebar widths
-  CHAT_SIDEBAR_WIDTH_PX: 300,
-  CHAT_SIDEBAR_COLLAPSED_WIDTH_PX: 64,
+  CHAT_SIDEBAR_WIDTH_PX: 225,
+  CHAT_SIDEBAR_COLLAPSED_WIDTH_PX: 48,
   // Collapsed rail fade timings (seconds).
   CHAT_SIDEBAR_RAIL_FADE_IN_DURATION_S: 0.15,
   CHAT_SIDEBAR_RAIL_FADE_IN_DELAY_S: 0.04,
