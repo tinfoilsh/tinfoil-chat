@@ -214,7 +214,7 @@ export class CloudSyncService {
 
     try {
       // First check if we have local unsynced changes
-      const unsyncedChats = await indexedDBStorage.getUnsyncedChats()
+      const unsyncedChats = await indexedDBStorage.getUnsyncedChatMetadata()
       const chatsNeedingUpload = unsyncedChats.filter((chat) => {
         // Filter by project if specified
         if (projectId) {

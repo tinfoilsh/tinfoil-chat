@@ -280,21 +280,18 @@ function attachmentHasPayload(attachment: Attachment): boolean {
 function normalizeAttachmentPayloads(chat: Chat): {
   messages: Message[]
   payloads: StoredAttachmentPayload[]
-  replacePayloads: boolean
+  referencedPayloadIds: Set<string>
 } {
   const payloads: StoredAttachmentPayload[] = []
-  let hasStoredReferences = false
-  let hasHydratedPayloads = false
+  const referencedPayloadIds = new Set<string>()
 
   const messages = chat.messages.map((message) => ({
     ...message,
     attachments: message.attachments?.map((attachment) => {
       const storedAttachment = attachment as StoredAttachmentReference
-      if (storedAttachment.storagePayloadId) hasStoredReferences = true
-      if (attachmentHasPayload(attachment)) hasHydratedPayloads = true
-
       const payloadId =
         storedAttachment.storagePayloadId ?? `${chat.id}:${attachment.id}`
+      referencedPayloadIds.add(payloadId)
       const { base64, thumbnailBase64, textContent, pages, ...metadata } =
         storedAttachment
 
@@ -319,7 +316,40 @@ function normalizeAttachmentPayloads(chat: Chat): {
   return {
     messages,
     payloads,
-    replacePayloads: hasHydratedPayloads || !hasStoredReferences,
+    referencedPayloadIds,
+  }
+}
+
+function inheritAttachmentPayloadReferences(
+  chat: Chat,
+  existing: StoredChat | null | undefined,
+): Chat {
+  if (!existing) return chat
+  const payloadIdByAttachmentId = new Map<string, string>()
+  for (const message of existing.messages) {
+    for (const attachment of message.attachments ?? []) {
+      const storedAttachment = attachment as StoredAttachmentReference
+      if (storedAttachment.storagePayloadId) {
+        payloadIdByAttachmentId.set(
+          storedAttachment.id,
+          storedAttachment.storagePayloadId,
+        )
+      }
+    }
+  }
+
+  return {
+    ...chat,
+    messages: chat.messages.map((message) => ({
+      ...message,
+      attachments: message.attachments?.map((attachment) => {
+        if (attachmentHasPayload(attachment)) return attachment
+        const storagePayloadId = payloadIdByAttachmentId.get(attachment.id)
+        return storagePayloadId
+          ? { ...attachment, storagePayloadId }
+          : attachment
+      }),
+    })),
   }
 }
 
@@ -943,20 +973,21 @@ export class IndexedDBStorage {
           putRequest.onerror = () => reject(new Error('Failed to save chat'))
         }
 
-        if (!normalizedAttachments.replacePayloads) {
-          writeChatAndPayloads()
-          return
-        }
-
         const payloadCursor = payloadStore
           .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
           .openCursor(IDBKeyRange.only(chat.id))
         payloadCursor.onerror = () =>
-          reject(new Error('Failed to replace attachment payloads'))
+          reject(new Error('Failed to reconcile attachment payloads'))
         payloadCursor.onsuccess = () => {
           const cursor = payloadCursor.result
           if (cursor) {
-            cursor.delete()
+            if (
+              !normalizedAttachments.referencedPayloadIds.has(
+                String(cursor.primaryKey),
+              )
+            ) {
+              cursor.delete()
+            }
             cursor.continue()
             return
           }
@@ -990,29 +1021,37 @@ export class IndexedDBStorage {
   }
 
   private async getChatInternal(id: string): Promise<StoredChat | null> {
-    const chat = await this.getStoredChatInternal(id)
-    if (!chat) return null
     const db = await this.ensureDB()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(
-        [ATTACHMENT_PAYLOADS_STORE],
+        [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
         'readonly',
       )
-      const request = transaction
+      let chat: StoredChat | null = null
+      let payloads: StoredAttachmentPayload[] = []
+      const chatRequest = transaction.objectStore(CHATS_STORE).get(id)
+      const payloadRequest = transaction
         .objectStore(ATTACHMENT_PAYLOADS_STORE)
         .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
         .getAll(IDBKeyRange.only(id))
 
-      request.onsuccess = () =>
-        resolve(
-          hydrateAttachmentPayloads(
-            chat,
-            request.result as StoredAttachmentPayload[],
-          ),
-        )
-      request.onerror = () =>
+      chatRequest.onsuccess = () => {
+        try {
+          const stored = chatRequest.result as StoredChat | undefined
+          chat = stored ? deserializeStoredChat(stored) : null
+        } catch (error) {
+          reject(error)
+        }
+      }
+      chatRequest.onerror = () => reject(new Error('Failed to get chat'))
+      payloadRequest.onsuccess = () => {
+        payloads = payloadRequest.result as StoredAttachmentPayload[]
+      }
+      payloadRequest.onerror = () =>
         reject(new Error('Failed to get attachment payloads'))
+      transaction.oncomplete = () =>
+        resolve(chat ? hydrateAttachmentPayloads(chat, payloads) : null)
     })
   }
 
@@ -1576,6 +1615,14 @@ export class IndexedDBStorage {
   }
 
   async getUnsyncedChats(): Promise<StoredChat[]> {
+    const metadata = await this.getUnsyncedChatMetadata()
+    const hydrated = await Promise.all(
+      metadata.map((chat) => this.getChatInternal(chat.id)),
+    )
+    return hydrated.filter((chat): chat is StoredChat => chat !== null)
+  }
+
+  async getUnsyncedChatMetadata(): Promise<StoredChat[]> {
     await this.ensureSyncPendingIndex()
     await this.waitForSaveQueue()
     const db = await this.ensureDB()
@@ -1766,16 +1813,47 @@ export class IndexedDBStorage {
         // so the next upload re-stamps it.
         chat.clockVersion = opts.syncVersion
       }
+      const normalizedAttachments = normalizeAttachmentPayloads(chat)
+      chat.messages = normalizedAttachments.messages
 
       return new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction([CHATS_STORE], 'readwrite')
+        const transaction = db.transaction(
+          [CHATS_STORE, ATTACHMENT_PAYLOADS_STORE],
+          'readwrite',
+        )
         const store = transaction.objectStore(CHATS_STORE)
+        const payloadStore = transaction.objectStore(ATTACHMENT_PAYLOADS_STORE)
         transaction.oncomplete = () => resolve()
         transaction.onerror = () =>
           reject(new Error('Failed to finalize upload'))
 
-        const request = store.put(updateSyncPending(chat))
-        request.onerror = () => reject(new Error('Failed to finalize upload'))
+        const writeChatAndPayloads = () => {
+          for (const payload of normalizedAttachments.payloads) {
+            payloadStore.put(payload)
+          }
+          const request = store.put(updateSyncPending(chat))
+          request.onerror = () => reject(new Error('Failed to finalize upload'))
+        }
+        const payloadCursor = payloadStore
+          .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
+          .openCursor(IDBKeyRange.only(chat.id))
+        payloadCursor.onerror = () =>
+          reject(new Error('Failed to reconcile finalized attachments'))
+        payloadCursor.onsuccess = () => {
+          const cursor = payloadCursor.result
+          if (cursor) {
+            if (
+              !normalizedAttachments.referencedPayloadIds.has(
+                String(cursor.primaryKey),
+              )
+            ) {
+              cursor.delete()
+            }
+            cursor.continue()
+            return
+          }
+          writeChatAndPayloads()
+        }
       })
     })
   }
@@ -1826,7 +1904,9 @@ export class IndexedDBStorage {
         }
       }
 
-      const normalizedAttachments = normalizeAttachmentPayloads(opts.chat)
+      const normalizedAttachments = normalizeAttachmentPayloads(
+        inheritAttachmentPayloadReferences(opts.chat, existing),
+      )
       const messagesForStorage = normalizedAttachments.messages.map((msg) => ({
         ...msg,
         timestamp:
@@ -1876,20 +1956,21 @@ export class IndexedDBStorage {
             reject(new Error('Failed to apply remote chat'))
         }
 
-        if (!normalizedAttachments.replacePayloads) {
-          writeChatAndPayloads()
-          return
-        }
-
         const payloadCursor = payloadStore
           .index(ATTACHMENT_PAYLOADS_CHAT_INDEX)
           .openCursor(IDBKeyRange.only(opts.chat.id))
         payloadCursor.onerror = () =>
-          reject(new Error('Failed to replace remote attachment payloads'))
+          reject(new Error('Failed to reconcile remote attachment payloads'))
         payloadCursor.onsuccess = () => {
           const cursor = payloadCursor.result
           if (cursor) {
-            cursor.delete()
+            if (
+              !normalizedAttachments.referencedPayloadIds.has(
+                String(cursor.primaryKey),
+              )
+            ) {
+              cursor.delete()
+            }
             cursor.continue()
             return
           }
