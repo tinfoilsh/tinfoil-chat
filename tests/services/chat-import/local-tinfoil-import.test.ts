@@ -81,6 +81,36 @@ describe('parseLocalTinfoilExport', () => {
     expect(terminate).toHaveBeenCalledOnce()
   })
 
+  it('falls back when a worker response fails to deserialize', async () => {
+    const terminate = vi.fn()
+    class MessageErrorWorker {
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: (() => void) | null = null
+      onmessageerror: (() => void) | null = null
+
+      postMessage() {
+        queueMicrotask(() => {
+          this.onmessageerror?.()
+        })
+      }
+
+      terminate() {
+        terminate()
+      }
+    }
+    vi.stubGlobal('Worker', MessageErrorWorker)
+    const file = new File(
+      [JSON.stringify(conversation())],
+      'conversations.json',
+    )
+
+    const chats = await parseLocalTinfoilExport(file, options)
+
+    expect(chats).toHaveLength(1)
+    expect(chats[0].title).toBe('Portable chat')
+    expect(terminate).toHaveBeenCalledOnce()
+  })
+
   it('falls back when a worker cannot start', async () => {
     class UnavailableWorker {
       constructor() {

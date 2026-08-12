@@ -115,6 +115,10 @@ async function readExportInWorker(file: File): Promise<{
       worker.terminate()
       reject(new ImportWorkerUnavailableError())
     }
+    worker.onmessageerror = () => {
+      worker.terminate()
+      reject(new ImportWorkerUnavailableError())
+    }
     try {
       worker.postMessage(
         {
