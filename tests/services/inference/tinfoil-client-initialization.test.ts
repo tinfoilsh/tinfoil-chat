@@ -82,7 +82,7 @@ describe('tinfoil client initialization', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('prevents a reset initialization from publishing its client', async () => {
+  it('retries concurrent waiters against a fresh client after a reset', async () => {
     let resolveReady: () => void = () => {}
     mocks.ready.mockReturnValueOnce(
       new Promise<void>((resolve) => {
@@ -90,20 +90,19 @@ describe('tinfoil client initialization', () => {
       }),
     )
 
-    const staleInitialization = getVerificationDocument()
-    const staleRejection = expect(staleInitialization).rejects.toMatchObject({
-      name: 'AbortError',
-    })
+    const concurrentWaiter = getVerificationDocument()
     await vi.waitFor(() => expect(mocks.ready).toHaveBeenCalledTimes(1))
 
     resetTinfoilClient()
     resolveReady()
-    await staleRejection
 
-    await expect(getVerificationDocument()).resolves.toEqual({
+    // The waiter must not surface an abort: it re-initializes against the
+    // post-reset generation (a second SecureClient) and resolves.
+    await expect(concurrentWaiter).resolves.toEqual({
       securityVerified: true,
     })
     expect(mocks.secureClientConstructed).toHaveBeenCalledTimes(2)
+    expect(mocks.ready).toHaveBeenCalledTimes(2)
   })
 
   it('settles when attestation never completes', async () => {

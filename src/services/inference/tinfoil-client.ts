@@ -437,9 +437,11 @@ export async function refreshRateLimit(): Promise<void> {
 
 export function resetTinfoilClient(): void {
   sessionCacheGeneration++
-  abortInitialization(
-    new DOMException('Tinfoil client was reset', 'AbortError'),
-  )
+  // Abort with the same retryable error as invalidateSessionCache so
+  // concurrent waiters in ensureInitialized re-initialize against the new
+  // generation instead of surfacing what downstream would classify as a
+  // user abort.
+  abortInitialization(new SessionCacheInvalidatedError())
   clientInstance = null
   secureClient = null
   lastSessionToken = null
