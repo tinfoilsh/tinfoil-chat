@@ -23,20 +23,26 @@ describe('IndexedDBStorage account reset', () => {
   function prepareReset(storage: IndexedDBStorage) {
     const clear = vi.fn(() => ({ onerror: null }))
     const clearProjects = vi.fn(() => ({ onerror: null }))
+    const clearPayloads = vi.fn(() => ({ onerror: null }))
     const transaction: FakeResetTransaction = {
       oncomplete: null,
       onerror: null,
       onabort: null,
       abort: vi.fn(),
       objectStore: (storeName) => ({
-        clear: storeName === 'chats' ? clear : clearProjects,
+        clear:
+          storeName === 'chats'
+            ? clear
+            : storeName === 'projects'
+              ? clearProjects
+              : clearPayloads,
       }),
     }
     const resetDb = {
       transaction: vi.fn(() => transaction),
     }
     vi.spyOn(storage as any, 'ensureDB').mockResolvedValue(resetDb)
-    return { clear, clearProjects, transaction }
+    return { clear, clearProjects, clearPayloads, transaction }
   }
 
   async function completeReset(transaction: FakeResetTransaction) {
@@ -55,7 +61,8 @@ describe('IndexedDBStorage account reset', () => {
 
   it('bypasses a stalled write queue and closes the old connection', async () => {
     const storage = new IndexedDBStorage()
-    const { clear, clearProjects, transaction } = prepareReset(storage)
+    const { clear, clearProjects, clearPayloads, transaction } =
+      prepareReset(storage)
     const close = vi.fn()
     Object.assign(storage as any, {
       db: { close },
@@ -67,6 +74,7 @@ describe('IndexedDBStorage account reset', () => {
     expect(close).toHaveBeenCalledTimes(1)
     await vi.waitFor(() => expect(clear).toHaveBeenCalledTimes(1))
     expect(clearProjects).toHaveBeenCalledTimes(1)
+    expect(clearPayloads).toHaveBeenCalledTimes(1)
     await completeReset(transaction)
     await reset
   })
@@ -248,11 +256,13 @@ describe('IndexedDBStorage account reset', () => {
   it('rejects a final write after reset interrupts a multi-stage mutation', async () => {
     const storage = new IndexedDBStorage()
     let finishRead!: (chat: any) => void
-    const getChat = vi.spyOn(storage as any, 'getChatInternal').mockReturnValue(
-      new Promise((resolve) => {
-        finishRead = resolve
-      }),
-    )
+    const getChat = vi
+      .spyOn(storage as any, 'getStoredChatInternal')
+      .mockReturnValue(
+        new Promise((resolve) => {
+          finishRead = resolve
+        }),
+      )
 
     const update = storage.updateChatProject('chat_123', 'project_123')
     await vi.waitFor(() => expect(getChat).toHaveBeenCalledTimes(1))
@@ -301,10 +311,16 @@ describe('IndexedDBStorage account reset', () => {
       onerror: (() => void) | null
     }
     const openCursor = vi.fn(() => cursorRequest)
+    const payloadRequest = { onsuccess: null, onerror: null, result: [] }
+    const transaction = {
+      oncomplete: null,
+      objectStore: (storeName: string) =>
+        storeName === 'chats'
+          ? { openCursor }
+          : { getAll: () => payloadRequest },
+    }
     vi.spyOn(storage as any, 'ensureDB').mockResolvedValue({
-      transaction: () => ({
-        objectStore: () => ({ openCursor }),
-      }),
+      transaction: () => transaction,
     })
 
     const chats = storage.getAllChats()
