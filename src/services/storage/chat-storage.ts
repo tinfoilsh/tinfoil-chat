@@ -1,4 +1,5 @@
 import type { Chat } from '@/components/chat/types'
+import { isCloudSyncEnabled } from '@/utils/cloud-sync-settings'
 import { logError, logInfo } from '@/utils/error-handling'
 import { cloudStorage } from '../cloud/cloud-storage'
 import { cloudSync } from '../cloud/cloud-sync'
@@ -65,7 +66,10 @@ export class ChatStorageService {
           ? chatToSave.createdAt.toISOString()
           : chatToSave.createdAt,
       updatedAt: new Date().toISOString(),
-      isLocalOnly: chatToSave.isLocalOnly === true,
+      // The user's global opt-out is invariant (§9.6 R6): while cloud
+      // sync is disabled, every save classifies as local-only so the
+      // chat never enters the cloud write path.
+      isLocalOnly: chatToSave.isLocalOnly === true || !isCloudSyncEnabled(),
     }
 
     await indexedDBStorage.saveChat(storageChat)
