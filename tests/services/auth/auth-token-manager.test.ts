@@ -94,26 +94,4 @@ describe('AuthTokenManager', () => {
 
     await expect(read).rejects.toBeInstanceOf(AuthTokenUnavailableError)
   })
-
-  it('keeps persistent auth handling single-flight across resets', async () => {
-    let resolveHandler!: () => void
-    const handler = vi.fn(
-      () => new Promise<void>((resolve) => (resolveHandler = resolve)),
-    )
-    const manager = new AuthTokenManager()
-    manager.registerPersistentAuthHandler(handler)
-
-    const firstHandling = manager.handlePersistentAuthFailure()
-    manager.handlePersistentAuthFailure()
-    await vi.waitFor(() => expect(handler).toHaveBeenCalledOnce())
-
-    manager.reset()
-    manager.handlePersistentAuthFailure()
-    resolveHandler()
-    await firstHandling
-    expect(handler).toHaveBeenCalledOnce()
-
-    manager.handlePersistentAuthFailure()
-    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(2))
-  })
 })

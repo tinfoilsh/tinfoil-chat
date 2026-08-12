@@ -61,7 +61,9 @@ function describeStatus(health: SyncHealthSnapshot): {
       detail:
         health.gate.reason === 'attestation'
           ? "The sync server couldn't be verified. Retrying automatically."
-          : 'Having trouble reaching the cloud. Retrying automatically.',
+          : health.gate.reason === 'auth'
+            ? 'The sync server is not accepting your session right now. Retrying automatically.'
+            : 'Having trouble reaching the cloud. Retrying automatically.',
       cta: null,
     }
   }

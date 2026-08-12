@@ -23,7 +23,7 @@
  * so React consumers can use `useSyncExternalStore`.
  */
 
-export type SyncPausedReason = 'attestation' | 'network'
+export type SyncPausedReason = 'attestation' | 'network' | 'auth'
 
 export type SyncActionReason =
   'key-recovery' | 'key-mismatch' | 'key-conflict' | 'account-blocked'

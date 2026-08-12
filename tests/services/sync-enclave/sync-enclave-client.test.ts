@@ -14,7 +14,7 @@ const {
   mockGetVerificationDocument,
   mockGetValidToken,
   mockRefreshToken,
-  mockHandlePersistentAuthFailure,
+  mockReportSyncPaused,
 } = vi.hoisted(() => ({
   mockSecureClientConstructor: vi.fn(),
   mockReady: vi.fn(),
@@ -26,7 +26,7 @@ const {
   }),
   mockGetValidToken: vi.fn().mockResolvedValue('test-jwt'),
   mockRefreshToken: vi.fn().mockResolvedValue('fresh-jwt'),
-  mockHandlePersistentAuthFailure: vi.fn(),
+  mockReportSyncPaused: vi.fn(),
 }))
 
 vi.mock('tinfoil', () => ({
@@ -46,8 +46,11 @@ vi.mock('@/services/auth', () => ({
   authTokenManager: {
     getValidToken: mockGetValidToken,
     refreshToken: mockRefreshToken,
-    handlePersistentAuthFailure: mockHandlePersistentAuthFailure,
   },
+}))
+
+vi.mock('@/services/cloud/sync-health', () => ({
+  reportSyncPaused: mockReportSyncPaused,
 }))
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -66,7 +69,7 @@ describe('SyncEnclaveClient', () => {
     mockFetch.mockReset()
     mockGetValidToken.mockReset().mockResolvedValue('test-jwt')
     mockRefreshToken.mockReset().mockResolvedValue('fresh-jwt')
-    mockHandlePersistentAuthFailure.mockReset()
+    mockReportSyncPaused.mockReset()
   })
 
   afterEach(() => {
@@ -190,7 +193,7 @@ describe('SyncEnclaveClient', () => {
     )
   })
 
-  it('throws persistent authentication after a replayed 401', async () => {
+  it('pauses sync instead of signing out after a replayed 401', async () => {
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')
     mockFetch.mockResolvedValue(jsonResponse({ code: 'AUTH' }, { status: 401 }))
@@ -202,10 +205,10 @@ describe('SyncEnclaveClient', () => {
       status: 401,
     })
     expect(mockFetch).toHaveBeenCalledTimes(2)
-    expect(mockHandlePersistentAuthFailure).toHaveBeenCalledOnce()
+    expect(mockReportSyncPaused).toHaveBeenCalledWith('auth')
   })
 
-  it('does not sign out when forced refresh fails before replay', async () => {
+  it('does not pause sync when forced refresh fails before replay', async () => {
     const { getSyncEnclaveClient } =
       await import('@/services/sync-enclave/sync-enclave-client')
     mockFetch.mockResolvedValueOnce(
@@ -218,7 +221,7 @@ describe('SyncEnclaveClient', () => {
       'refresh failed',
     )
     expect(mockFetch).toHaveBeenCalledOnce()
-    expect(mockHandlePersistentAuthFailure).not.toHaveBeenCalled()
+    expect(mockReportSyncPaused).not.toHaveBeenCalled()
   })
 
   it('parses non-2xx responses into SyncEnclaveError with code + details', async () => {
