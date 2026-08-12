@@ -1,3 +1,4 @@
+import { CLOUD_SYNC } from '@/config'
 import {
   SYNC_CHAT_DELETES_WATERMARK,
   SYNC_CHAT_STATUS,
@@ -6,7 +7,7 @@ import {
 import {
   CloudSyncService,
   CROSS_TAB_SYNC_LOCK,
-  CROSS_TAB_SYNC_LOCK_OPTIONS,
+  SyncInProgressError,
 } from '@/services/cloud/cloud-sync'
 import { deletedChatsTracker } from '@/services/storage/deleted-chats-tracker'
 import {
@@ -311,7 +312,7 @@ describe('CloudSyncService', () => {
       async (
         _name: string,
         _options: LockOptions,
-        callback: (lock: Lock | null) => Promise<string>,
+        callback: (lock: Lock) => Promise<string>,
       ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
     )
     vi.stubGlobal('navigator', { locks: { request } })
@@ -322,44 +323,143 @@ describe('CloudSyncService', () => {
     ).resolves.toBe('synced')
     expect(request).toHaveBeenCalledWith(
       CROSS_TAB_SYNC_LOCK,
-      CROSS_TAB_SYNC_LOCK_OPTIONS,
+      expect.objectContaining({
+        mode: 'exclusive',
+        signal: expect.any(AbortSignal),
+      }),
       expect.any(Function),
     )
   })
 
-  it('skips sync when another tab owns the Web Lock', async () => {
+  it('waits for the Web Lock held by another tab, then syncs', async () => {
+    let grantLock!: () => void
+    const lockReleased = new Promise<void>((resolve) => {
+      grantLock = resolve
+    })
     const request = vi.fn(
       async (
         _name: string,
         _options: LockOptions,
-        callback: (lock: Lock | null) => Promise<unknown>,
-      ) => callback(null),
+        callback: (lock: Lock) => Promise<string>,
+      ) => {
+        await lockReleased
+        return callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' })
+      },
     )
     vi.stubGlobal('navigator', { locks: { request } })
     const service = new CloudSyncService()
 
-    await expect(
-      (service as any).withSyncLock(async () => 'synced'),
-    ).resolves.toBeUndefined()
+    const fn = vi.fn(async () => 'synced')
+    const pending = (service as any).withSyncLock(fn) as Promise<string>
+    await Promise.resolve()
+    expect(fn).not.toHaveBeenCalled()
+
+    grantLock()
+    await expect(pending).resolves.toBe('synced')
   })
 
-  it('skips smart sync before network checks when another tab owns the lock', async () => {
+  it('throws SyncInProgressError when waiting for the lock times out', async () => {
+    vi.useFakeTimers()
+    try {
+      const request = vi.fn(
+        (_name: string, options: LockOptions) =>
+          new Promise((_resolve, reject) => {
+            options.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            )
+          }),
+      )
+      vi.stubGlobal('navigator', { locks: { request } })
+      const service = new CloudSyncService()
+
+      const pending = service.smartSync()
+      const assertion =
+        expect(pending).rejects.toBeInstanceOf(SyncInProgressError)
+      await vi.advanceTimersByTimeAsync(CLOUD_SYNC.CROSS_TAB_SYNC_LOCK_TIMEOUT)
+      await assertion
+      expect(mockIsAuthenticated).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not abort a sync that already acquired the lock', async () => {
+    vi.useFakeTimers()
+    try {
+      const request = vi.fn(
+        async (
+          _name: string,
+          _options: LockOptions,
+          callback: (lock: Lock) => Promise<string>,
+        ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
+      )
+      vi.stubGlobal('navigator', { locks: { request } })
+      const service = new CloudSyncService()
+
+      let finishSync!: () => void
+      const pending = (service as any).withSyncLock(
+        () =>
+          new Promise<string>((resolve) => {
+            finishSync = () => resolve('synced')
+          }),
+      ) as Promise<string>
+      await vi.advanceTimersByTimeAsync(
+        CLOUD_SYNC.CROSS_TAB_SYNC_LOCK_TIMEOUT * 2,
+      )
+
+      finishSync()
+      await expect(pending).resolves.toBe('synced')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('throws SyncInProgressError for a reentrant sync in the same tab', async () => {
     const request = vi.fn(
       async (
         _name: string,
         _options: LockOptions,
-        callback: (lock: Lock | null) => Promise<unknown>,
-      ) => callback(null),
+        callback: (lock: Lock) => Promise<string>,
+      ) => callback({ name: CROSS_TAB_SYNC_LOCK, mode: 'exclusive' }),
     )
     vi.stubGlobal('navigator', { locks: { request } })
     const service = new CloudSyncService()
 
-    await expect(service.smartSync()).resolves.toEqual({
-      uploaded: 0,
-      downloaded: 0,
-      errors: [],
-    })
-    expect(mockIsAuthenticated).not.toHaveBeenCalled()
+    let finishFirst!: () => void
+    const first = (service as any).withSyncLock(
+      () =>
+        new Promise<string>((resolve) => {
+          finishFirst = () => resolve('first')
+        }),
+    ) as Promise<string>
+    await vi.waitFor(() => expect(request).toHaveBeenCalled())
+
+    await expect(
+      (service as any).withSyncLock(async () => 'second'),
+    ).rejects.toBeInstanceOf(SyncInProgressError)
+
+    finishFirst()
+    await expect(first).resolves.toBe('first')
+  })
+
+  it('falls back to the in-tab lock when Web Locks are unavailable', async () => {
+    vi.stubGlobal('navigator', {})
+    const service = new CloudSyncService()
+
+    let finishFirst!: () => void
+    const first = (service as any).withSyncLock(
+      () =>
+        new Promise<string>((resolve) => {
+          finishFirst = () => resolve('first')
+        }),
+    ) as Promise<string>
+
+    await expect(
+      (service as any).withSyncLock(async () => 'second'),
+    ).rejects.toBeInstanceOf(SyncInProgressError)
+
+    finishFirst()
+    await expect(first).resolves.toBe('first')
   })
 
   it('coalesces cross-tab storage updates into one chat refresh', async () => {

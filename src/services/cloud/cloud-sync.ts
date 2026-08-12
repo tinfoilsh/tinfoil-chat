@@ -1,4 +1,4 @@
-import { PAGINATION } from '@/config'
+import { CLOUD_SYNC, PAGINATION } from '@/config'
 import {
   AUTH_ACTIVE_USER_ID,
   MIGRATION_EXHAUSTED_KEYSET_PREFIX,
@@ -95,14 +95,9 @@ const UPLOADS_SKIPPED_UNRECONCILED_DELETIONS_ERROR =
   'Skipped uploading local changes: remote deletions could not be reconciled'
 export const CROSS_TAB_SYNC_LOCK = 'tinfoil-cloud-sync'
 export const CROSS_TAB_SYNC_LOCK_OPTIONS = {
-  ifAvailable: true,
   mode: 'exclusive',
 } as const
 const isStreaming = (id: string) => streamingTracker.isStreaming(id)
-
-function emptySyncResult(): SyncResult {
-  return { uploaded: 0, downloaded: 0, errors: [] }
-}
 
 export class CloudSyncService {
   private syncLock: Promise<void> | null = null
@@ -203,31 +198,16 @@ export class CloudSyncService {
 
   /**
    * Execute a function with sync lock protection.
-   * Only one sync operation can run at a time.
-   * Throws if a sync is already in progress.
+   * Only one sync operation can run at a time across all tabs.
+   * Throws SyncInProgressError if a sync is already in progress in this
+   * tab, or if waiting for another tab's sync times out.
    */
-  private async withSyncLock<T>(fn: () => Promise<T>): Promise<T | undefined> {
-    if (typeof navigator !== 'undefined' && navigator.locks) {
-      return navigator.locks.request(
-        CROSS_TAB_SYNC_LOCK,
-        CROSS_TAB_SYNC_LOCK_OPTIONS,
-        async (lock) => {
-          if (!lock) {
-            logInfo('[CloudSync] Sync active in another tab, skipping', {
-              component: 'CloudSync',
-              action: 'withSyncLock',
-            })
-            return undefined
-          }
-          return this.trackSync(fn)
-        },
-      )
-    }
-
-    return this.withInstanceSyncLock(fn)
-  }
-
-  private async withInstanceSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+  private async withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
+    // A sync already running (or queued) in this tab keeps the
+    // pre-cross-tab contract: throw immediately so callers can
+    // waitForCurrentSync() and retry. Web Locks are not reentrant, so
+    // this check must come before the lock request to avoid the same
+    // tab queueing on itself.
     if (this.syncLock) {
       logInfo('[CloudSync] Sync already in progress, skipping', {
         component: 'CloudSync',
@@ -236,7 +216,49 @@ export class CloudSyncService {
       throw new SyncInProgressError()
     }
 
-    return this.trackSync(fn)
+    if (typeof navigator === 'undefined' || !navigator.locks) {
+      return this.trackSync(fn)
+    }
+
+    // Queue for the cross-tab lock instead of skipping so callers that
+    // need a real result (initial sync pagination, manual deep sync,
+    // post-eviction resync) still get one when another tab is mid-sync.
+    // The wait is bounded so a hung leader tab cannot stall sync in
+    // every other tab; on timeout we throw SyncInProgressError, which
+    // existing callers already handle. The timer only bounds the
+    // waiting phase: it is cleared once the lock is granted so a
+    // long-running sync of our own is never aborted. trackSync wraps
+    // the wait as well, so waitForCurrentSync() covers queued attempts.
+    return this.trackSync(async () => {
+      const abortController = new AbortController()
+      let acquired = false
+      const waitTimer = setTimeout(
+        () => abortController.abort(),
+        CLOUD_SYNC.CROSS_TAB_SYNC_LOCK_TIMEOUT,
+      )
+      try {
+        return await navigator.locks.request(
+          CROSS_TAB_SYNC_LOCK,
+          { ...CROSS_TAB_SYNC_LOCK_OPTIONS, signal: abortController.signal },
+          () => {
+            acquired = true
+            clearTimeout(waitTimer)
+            return fn()
+          },
+        )
+      } catch (error) {
+        if (!acquired && abortController.signal.aborted) {
+          logInfo('[CloudSync] Timed out waiting for sync in another tab', {
+            component: 'CloudSync',
+            action: 'withSyncLock',
+          })
+          throw new SyncInProgressError()
+        }
+        throw error
+      } finally {
+        clearTimeout(waitTimer)
+      }
+    })
   }
 
   private async trackSync<T>(fn: () => Promise<T>): Promise<T> {
@@ -521,10 +543,7 @@ export class CloudSyncService {
 
   // Perform a delta sync - only fetch chats that changed since last sync
   async syncChangedChats(): Promise<SyncResult> {
-    return (
-      (await this.withSyncLock(() => this.doSyncChangedChats())) ??
-      emptySyncResult()
-    )
+    return this.withSyncLock(() => this.doSyncChangedChats())
   }
 
   private async doSyncChangedChats(): Promise<SyncResult> {
@@ -1285,10 +1304,7 @@ export class CloudSyncService {
 
   // Sync all chats (upload local changes, download remote changes)
   async syncAllChats(options?: { deep?: boolean }): Promise<SyncResult> {
-    return (
-      (await this.withSyncLock(() => this.doSyncAllChats(options))) ??
-      emptySyncResult()
-    )
+    return this.withSyncLock(() => this.doSyncAllChats(options))
   }
 
   private async listChatsWithRetry(options: {
@@ -1743,10 +1759,7 @@ export class CloudSyncService {
    * @param projectId - Optional project ID. If provided, syncs project chats.
    */
   async smartSync(projectId?: string): Promise<SyncResult> {
-    return (
-      (await this.withSyncLock(() => this.doSmartSync(projectId))) ??
-      emptySyncResult()
-    )
+    return this.withSyncLock(() => this.doSmartSync(projectId))
   }
 
   private async doSmartSync(projectId?: string): Promise<SyncResult> {
@@ -2104,10 +2117,7 @@ export class CloudSyncService {
   }
 
   async syncProjectChats(projectId: string): Promise<SyncResult> {
-    return (
-      (await this.withSyncLock(() => this.doSyncProjectChats(projectId))) ??
-      emptySyncResult()
-    )
+    return this.withSyncLock(() => this.doSyncProjectChats(projectId))
   }
 
   private async doSyncProjectChats(
@@ -2225,11 +2235,7 @@ export class CloudSyncService {
    * Perform a delta sync for project chats - only fetch chats that changed since last sync.
    */
   async syncProjectChatsChanged(projectId: string): Promise<SyncResult> {
-    return (
-      (await this.withSyncLock(() =>
-        this.doSyncProjectChatsChanged(projectId),
-      )) ?? emptySyncResult()
-    )
+    return this.withSyncLock(() => this.doSyncProjectChatsChanged(projectId))
   }
 
   private async doSyncProjectChatsChanged(
