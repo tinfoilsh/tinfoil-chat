@@ -1,6 +1,7 @@
 import { createUpdateChatWithHistoryCheck } from '@/components/chat/hooks/chat-persistence'
 import { useChatCollection } from '@/components/chat/hooks/use-chat-collection'
 import type { Chat, Message } from '@/components/chat/types'
+import { sessionChatStorage } from '@/services/storage/session-storage'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -182,5 +183,21 @@ describe('useChatCollection', () => {
     expect(result.current.currentChat.id).toBe(second.id)
     expect(result.current.currentChat.messages).toEqual([])
     expect(result.current.chats[0].messages).toEqual([streamedMessage])
+  })
+
+  it('does not synchronously persist guest chats during streaming updates', () => {
+    vi.mocked(sessionChatStorage.saveChat).mockClear()
+    const chat = createChat()
+    const updateChat = createUpdateChatWithHistoryCheck({
+      storeHistory: false,
+      chatsRef: { current: [chat] },
+      currentChatRef: { current: chat },
+    })
+
+    updateChat(vi.fn(), chat, vi.fn(), chat.id, [], {
+      skipStorageSave: true,
+    })
+
+    expect(sessionChatStorage.saveChat).not.toHaveBeenCalled()
   })
 })

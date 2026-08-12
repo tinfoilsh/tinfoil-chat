@@ -96,7 +96,13 @@ function reduceChatCollection(
       typeof action.action === 'function'
         ? action.action(previousChats)
         : action.action
-    const availableKeys = [...state.orderedKeys]
+    const availableKeysByIdentity = new Map<string, EntityKey[]>()
+    for (const key of state.orderedKeys) {
+      const identity = chatIdentity(getEntity(state.entities, key))
+      const keys = availableKeysByIdentity.get(identity)
+      if (keys) keys.push(key)
+      else availableKeysByIdentity.set(identity, [key])
+    }
     const entities = new Map<EntityKey, Chat>()
     const currentChat = getEntity(state.entities, state.currentKey)
     const currentIdentity = chatIdentity(currentChat)
@@ -104,13 +110,11 @@ function reduceChatCollection(
 
     const orderedKeys = nextChats.map((chat) => {
       const identity = chatIdentity(chat)
-      const existingIndex = availableKeys.findIndex(
-        (key) => chatIdentity(getEntity(state.entities, key)) === identity,
-      )
+      const existingKey = availableKeysByIdentity.get(identity)?.shift()
       let key: EntityKey
 
-      if (existingIndex >= 0) {
-        key = availableKeys.splice(existingIndex, 1)[0]
+      if (existingKey) {
+        key = existingKey
       } else if (identity === currentIdentity) {
         key = state.currentKey
       } else {
