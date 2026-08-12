@@ -1,6 +1,8 @@
 import { ChatMessages } from '@/components/chat/chat-messages'
-import { render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mockFindContextStartIndex = vi.hoisted(() => vi.fn(() => 0))
 
 vi.mock('@/config/models', () => ({
   findSelectableModel: (_id: string, models: unknown[]) => models[0],
@@ -43,7 +45,7 @@ vi.mock('@/hooks/use-chat-print', () => ({
 }))
 
 vi.mock('@/utils/token-estimation', () => ({
-  findContextStartIndex: () => 0,
+  findContextStartIndex: mockFindContextStartIndex,
   getContextTokenBudget: () => 1000,
   getHistoryTokenBudget: () => 1000,
   resolveContextWindowTokens: () => 1000,
@@ -82,6 +84,32 @@ const baseProps = {
 }
 
 describe('ChatMessages recovery indicator', () => {
+  beforeEach(() => {
+    mockFindContextStartIndex.mockReturnValue(0)
+  })
+
+  it('defers archived message rendering until requested', () => {
+    mockFindContextStartIndex.mockReturnValue(2)
+    const archivedMessages = [
+      { ...messages[0], turnId: 'archived-1', content: 'First' },
+      { ...messages[0], turnId: 'archived-2', content: 'Second' },
+      { ...messages[0], turnId: 'live', content: 'Latest' },
+    ]
+
+    render(
+      <ChatMessages
+        {...baseProps}
+        messages={archivedMessages}
+        pendingRecoveries={[]}
+      />,
+    )
+
+    expect(screen.queryByTestId('message-archived-1')).not.toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show 2 earlier messages' }),
+    )
+    expect(screen.getByTestId('message-archived-1')).toBeInTheDocument()
+  })
   it('renders the recovery widget immediately after its user turn', async () => {
     render(<ChatMessages {...baseProps} />)
 

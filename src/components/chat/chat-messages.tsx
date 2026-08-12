@@ -327,6 +327,10 @@ export function ChatMessages({
   const printRef = useRef<HTMLDivElement>(null)
   const printReadyResolverRef = useRef<(() => void) | null>(null)
   const [printRequested, setPrintRequested] = useState(false)
+  const [expandedArchiveChatId, setExpandedArchiveChatId] = useState<
+    string | null
+  >(null)
+  const showArchivedMessages = expandedArchiveChatId === chatId
 
   const preparePrint = useCallback(async () => {
     await new Promise<void>((resolve) => {
@@ -579,39 +583,53 @@ export function ChatMessages({
         {/* Archived Messages - only shown if there are more than the max prompt messages */}
         {archivedMessages.length > 0 && (
           <>
-            <div className={`opacity-70`}>
-              {archivedMessages.map((message, i) => {
-                const key = getMessageKey(`${chatId}-archived`, message, i)
-                const recoveryDraft = recoveryDraftForMessage(message)
-                return (
-                  <React.Fragment key={key}>
-                    <ChatMessage
-                      message={recoveryDraft ?? message}
-                      messageIndex={i}
-                      model={currentModel}
-                      isDarkMode={isDarkMode}
-                      isLastMessage={Boolean(recoveryDraft)}
-                      isStreaming={Boolean(recoveryDraft)}
-                      activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
-                        recoveryDraft ?? message,
-                        activeArtifactToolCallId,
-                      )}
-                      onEditMessage={recoveryDraft ? undefined : onEditMessage}
-                      onRegenerateMessage={
-                        recoveryDraft ? undefined : onRegenerateMessage
-                      }
-                      onRetryToolCall={
-                        recoveryDraft ? undefined : onRetryToolCall
-                      }
-                    />
-                    {showRecoveryStatusAfter(message) && <RecoveryMessage />}
-                    {renderRecoveryAfter(message, i)}
-                  </React.Fragment>
-                )
-              })}
-            </div>
+            {!showArchivedMessages && (
+              <div className="flex justify-center px-4 pb-8">
+                <button
+                  type="button"
+                  onClick={() => setExpandedArchiveChatId(chatId)}
+                  className="hover:bg-surface-secondary rounded-full border border-border-subtle bg-surface-chat px-4 py-2 text-sm text-content-secondary transition-colors hover:text-content-primary"
+                >
+                  Show {archivedMessages.length} earlier messages
+                </button>
+              </div>
+            )}
+            {showArchivedMessages && (
+              <div className="opacity-70">
+                {archivedMessages.map((message, i) => {
+                  const key = getMessageKey(`${chatId}-archived`, message, i)
+                  const recoveryDraft = recoveryDraftForMessage(message)
+                  return (
+                    <React.Fragment key={key}>
+                      <ChatMessage
+                        message={recoveryDraft ?? message}
+                        messageIndex={i}
+                        model={currentModel}
+                        isDarkMode={isDarkMode}
+                        isLastMessage={Boolean(recoveryDraft)}
+                        isStreaming={Boolean(recoveryDraft)}
+                        activeArtifactToolCallId={getMessageActiveArtifactToolCallId(
+                          recoveryDraft ?? message,
+                          activeArtifactToolCallId,
+                        )}
+                        onEditMessage={
+                          recoveryDraft ? undefined : onEditMessage
+                        }
+                        onRegenerateMessage={
+                          recoveryDraft ? undefined : onRegenerateMessage
+                        }
+                        onRetryToolCall={
+                          recoveryDraft ? undefined : onRetryToolCall
+                        }
+                      />
+                      {showRecoveryStatusAfter(message) && <RecoveryMessage />}
+                      {renderRecoveryAfter(message, i)}
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+            )}
 
-            {/* Separator */}
             <MessagesSeparator isDarkMode={isDarkMode} />
           </>
         )}
